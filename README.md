@@ -1,45 +1,36 @@
-## COMPASS
+# atlas
 
-COregistered Multi-temPorAl Sar Slc
+Algorithms and Tools for LAnd Surface Deformation using InSAR
 
 🚨 This toolbox is still in **pre-alpha** stage and undergoing **rapid development**. 🚨
 
-### Install
+## Install
 
-The following will install COMPASS into a conda environment.
+The following will install `atlas` into a conda environment.
 
 1. Download source code:
 
 ```bash
-git clone https://github.com/opera-adt/COMPASS.git
+git clone https://github.com/opera-adt/atlas.git && cd atlas
 ```
 
 2. Install dependencies:
 
 ```bash
-conda install -c conda-forge --file COMPASS/requirements.txt
-python -m pip install git+https://github.com/opera-adt/s1-reader.git
+conda install -c conda-forge --file requirements.txt
 ```
 
 3. Install `COMPASS` via pip:
 
 ```bash
 # run "pip install -e" to install in development mode
-python -m pip install ./COMPASS
+python -m pip install .
 ```
 
-### Usage
+## Usage
 
-The following commands generate coregistered SLC in radar or geo-coordinates from terminal:
-
-```bash
-s1_cslc.py --grid geo   <path to s1_cslc_geo   yaml file>
-s1_cslc.py --grid radar <path to s1_cslc_radar yaml file for reference burst>
-s1_cslc.py --grid radar <path to s1_cslc_radar yaml file for secondary burst>
-```
-
-### License
-**Copyright (c) 2021** California Institute of Technology (“Caltech”). U.S. Government
+## License
+**Copyright (c) 2022** California Institute of Technology (“Caltech”). U.S. Government
 sponsorship acknowledged.
 
 All rights reserved.
