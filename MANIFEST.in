@@ -1,1 +1,1 @@
-recursive-include src/compass/* *.yaml
+recursive-include src/atlas/* *.yaml

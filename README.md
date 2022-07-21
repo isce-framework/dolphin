@@ -20,7 +20,7 @@ git clone https://github.com/opera-adt/atlas.git && cd atlas
 conda install -c conda-forge --file requirements.txt
 ```
 
-3. Install `COMPASS` via pip:
+3. Install `atlas` via pip:
 
 ```bash
 # run "pip install -e" to install in development mode
