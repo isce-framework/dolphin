@@ -1,11 +1,9 @@
-import os
 import errno
+import os
 
 
 def mkdir_p(path):
-    """Emulates bash `mkdir -p`, in python style
-    Used for igrams directory creation
-    """
+    """Emulates bash `mkdir -p`, in python style."""
     try:
         os.makedirs(path)
     except OSError as exc:
