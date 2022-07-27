@@ -3,3 +3,19 @@ requires = [
     "setuptools>=42"
 ]
 build-backend = "setuptools.build_meta"
+
+
+[tool.black]
+target-version = ["py38", "py39", "py310"]
+preview = true
+
+[tool.isort]
+profile = "black"
+known_first_party = ["tophu"]
+
+[tool.mypy]
+python_version = "3.8"
+ignore_missing_imports = true
+
+[tool.pydocstyle]
+ignore = "D100,D102,D104,D105,D203,D204,D213,D413"
