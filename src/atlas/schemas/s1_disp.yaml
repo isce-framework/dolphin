@@ -1,7 +1,7 @@
 common:
 
   input_vrt_file: str()
-  input_mask_file: str(required=False)
+  mask_file: str(required=False)
   weight_file: str()
   nmap_count_file: str()
 

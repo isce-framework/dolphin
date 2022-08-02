@@ -1,7 +1,7 @@
 common:
   input_vrt_file:
-  input_weight_file: 'nmap'
-  input_mask_file: ''
+  weight_file: 'nmap'
+  mask_file: ''
   nmap_count_file: 'count'
 
   # Output folders for each stage
@@ -12,8 +12,9 @@ common:
     yhalf: 5
 
   # Processing options
-  lines_per_block: 64
-  ram: 512
+  processing:
+    lines_per_block: 64
+    ram: 512
 
 
 nmap:

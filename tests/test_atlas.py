@@ -3,9 +3,7 @@ from pathlib import Path
 import pytest
 import yamale
 
-
-def test_import():
-    import atlas  # noqa: F401
+import atlas.utils
 
 
 # Using fixtures for these to avoid nagivating the paths from tests/ to src/
@@ -31,7 +29,11 @@ def test_yaml_loading(schema_file, defaults_file):
     with pytest.raises(yamale.yamale_error.YamaleError):
         yamale.validate(schema, defaults)
 
-    data_min = yamale.make_data(Path(__file__).parent / "data/s1_disp_minimal.yaml")
-    yamale.validate(schema, data_min)
-    data_full = yamale.make_data(Path(__file__).parent / "data/s1_disp_full.yaml")
-    yamale.validate(schema, data_full)
+    # Check that the updating of defaults works
+    minimal_path = Path(__file__).parent / "data/s1_disp_minimal.yaml"
+    min_data = atlas.utils.load_yaml(minimal_path, workflow_name="s1_disp")
+    assert min_data["nmap"]["pvalue"] == 0.05
+
+    # data_min = atlas.utils.load_and_validate_yaml(minimal_path)
+    # updated = atlas.utils.deep_update(original=defaults[0][0], supplied=data_min)
+    # yamale.validate(schema, updated)
