@@ -73,17 +73,20 @@ def create_vrt_stack(
 
         fid.write("</VRTDataset>")
 
+    # Set the geotransform and projection
+    ds = gdal.Open(outfile, gdal.GA_Update)
+    ds.SetGeoTransform(gt)
+    ds.SetProjection(proj)
+    ds.SetSpatialRef(srs)
+    ds = None
+
     if target_extent is None and subset_bbox is None:
         return
     elif target_extent is not None and subset_bbox is not None:
         raise ValueError("Cannot specify both target_extent and subset_bbox")
 
     # Otherwise, subset the VRT to the target extent using gdal_translate
-    # Set the geotransform and projection
     ds = gdal.Open(outfile, gdal.GA_Update)
-    ds.SetGeoTransform(gt)
-    ds.SetProjection(proj)
-    ds.SetSpatialRef(srs)
     if target_extent is not None:
         assert len(target_extent) == 4
         # projWin is (ulx, uly, lrx, lry), so need to reorder
@@ -91,23 +94,20 @@ def create_vrt_stack(
         projwin = xmin, ymax, xmax, ymin
         options = gdal.TranslateOptions(projWin=projwin)
     elif subset_bbox:
-        options = gdal.TranslateOptions(srcWin=subset_bbox)
+        options = gdal.TranslateOptions(srcWin=_bbox_to_srcwin(subset_bbox))
 
     temp_file = outfile + ".tmp.vrt"
     gdal.Translate(temp_file, ds, options=options)
+    gdal.Warp(temp_file, ds, options=options)
     ds = None
     os.rename(temp_file, outfile)
 
 
-def get_subset_bbox(xsize, ysize, subset_bbox=None):
-    """Get the subset bounding box for a given target extent.
+def _bbox_to_srcwin(subset_bbox=None):
+    """Convert a gdalwarp -te option to a gdal_translate -srcwin option.
 
     Parameters
     ----------
-    xsize : int
-        size of the x dimension of the image
-    ysize : int
-        size of the y dimension of the image
     subset_bbox : tuple[int], optional
         Desired bounding box of subset as (left, bottom, right, top)
 
@@ -115,15 +115,12 @@ def get_subset_bbox(xsize, ysize, subset_bbox=None):
     -------
     xoff, yoff, xsize_sub, ysize_sub : tuple[int]
     """
-    if subset_bbox is not None:
-        left, bottom, right, top = subset_bbox
-        # -te xmin ymin xmax ymax
-        xoff = left
-        yoff = top
-        xsize_sub = right - left
-        ysize_sub = bottom - top
-    else:
-        xoff, yoff, xsize_sub, ysize_sub = 0, 0, xsize, ysize
+    # -te xmin ymin xmax ymax
+    left, bottom, right, top = subset_bbox
+    xoff = left
+    yoff = top
+    xsize_sub = right - left
+    ysize_sub = bottom - top
 
     return xoff, yoff, xsize_sub, ysize_sub
 
