@@ -28,16 +28,20 @@ def create_vrt_stack(
         Desired bounding box of subset as (left, bottom, right, top)
     target_extent : tuple[int], optional
         Desired bounding box in the `-te` gdal format, (xmin, ymin, xmax, ymax)
-    outfile : str, optional
-        _description_, by default "slcs_base.vrt"
-    use_abs_path : bool, optional
-        _description_, by default True
+    outfile : str, optional (default = "slcs_base.vrt")
+        Name of output file to write
+    use_abs_path : bool, optional (default = True)
+        Write the filepaths in the VRT as absolute
     """
     # Use the first file in the stack to get size, transform info
     ds = gdal.Open(file_list[0])
-    xsize = ds.RasterXSize
-    ysize = ds.RasterYSize
+    xsize, ysize = ds.RasterXSize, ds.RasterYSize
+    # Save the transform info for later
+    gt = ds.GetGeoTransform()
+    proj = ds.GetProjection()
+    srs = ds.GetSpatialRef()
     ds = None
+
     print("write vrt file for stack directory")
     xoff, yoff, xsize_sub, ysize_sub = get_subset_bbox(
         xsize, ysize, subset_bbox=subset_bbox, target_extent=target_extent
@@ -66,6 +70,13 @@ def create_vrt_stack(
             fid.write(outstr)
 
         fid.write("</VRTDataset>")
+
+    # Set the geotransform and projection
+    ds = gdal.Open(outfile, gdal.GA_Update)
+    ds.SetGeoTransform(gt)
+    ds.SetProjection(proj)
+    ds.SetSpatialRef(srs)
+    ds = None
 
 
 def get_subset_bbox(xsize, ysize, subset_bbox=None, target_extent=None):
