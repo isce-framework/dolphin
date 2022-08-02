@@ -13,8 +13,8 @@ SENTINEL_WAVELENGTH = 0.05546576
 
 def create_vrt_stack(
     file_list: list,
-    subset_bbox: Optional[Tuple[int]] = None,
-    target_extent: Optional[Tuple[int]] = None,
+    subset_bbox: Optional[Tuple[int, int, int, int]] = None,
+    target_extent: Optional[Tuple[float, float, float, float]] = None,
     outfile: str = "slcs_base.vrt",
     use_abs_path: bool = True,
 ):
@@ -25,9 +25,10 @@ def create_vrt_stack(
     file_list : list
         Names of files to stack
     subset_bbox : tuple[int], optional
-        Desired bounding box of subset as (left, bottom, right, top)
+        Desired bounding box (in pixels) of subset as (left, bottom, right, top)
     target_extent : tuple[int], optional
-        Desired bounding box in the `-te` gdal format, (xmin, ymin, xmax, ymax)
+        Target extent: alternative way to subset the stack like the `-te` gdal option:
+            (xmin, ymin, xmax, ymax) in units of the SLCs' SRS (e.g. UTM coordinates)
     outfile : str, optional (default = "slcs_base.vrt")
         Name of output file to write
     use_abs_path : bool, optional (default = True)
@@ -42,10 +43,11 @@ def create_vrt_stack(
     srs = ds.GetSpatialRef()
     ds = None
 
+    xoff, yoff, xsize_sub, ysize_sub = 0, 0, xsize, ysize
     print("write vrt file for stack directory")
-    xoff, yoff, xsize_sub, ysize_sub = get_subset_bbox(
-        xsize, ysize, subset_bbox=subset_bbox, target_extent=target_extent
-    )
+    # xoff, yoff, xsize_sub, ysize_sub = get_subset_bbox(
+    #     xsize, ysize, subset_bbox=subset_bbox
+    # )
     with open(outfile, "w") as fid:
         fid.write(f'<VRTDataset rasterXSize="{xsize_sub}" rasterYSize="{ysize_sub}">\n')
 
@@ -71,15 +73,33 @@ def create_vrt_stack(
 
         fid.write("</VRTDataset>")
 
+    if target_extent is None and subset_bbox is None:
+        return
+    elif target_extent is not None and subset_bbox is not None:
+        raise ValueError("Cannot specify both target_extent and subset_bbox")
+
+    # Otherwise, subset the VRT to the target extent using gdal_translate
     # Set the geotransform and projection
     ds = gdal.Open(outfile, gdal.GA_Update)
     ds.SetGeoTransform(gt)
     ds.SetProjection(proj)
     ds.SetSpatialRef(srs)
+    if target_extent is not None:
+        assert len(target_extent) == 4
+        # projWin is (ulx, uly, lrx, lry), so need to reorder
+        xmin, ymin, xmax, ymax = target_extent
+        projwin = xmin, ymax, xmax, ymin
+        options = gdal.TranslateOptions(projWin=projwin)
+    elif subset_bbox:
+        options = gdal.TranslateOptions(srcWin=subset_bbox)
+
+    temp_file = outfile + ".tmp.vrt"
+    gdal.Translate(temp_file, ds, options=options)
     ds = None
+    os.rename(temp_file, outfile)
 
 
-def get_subset_bbox(xsize, ysize, subset_bbox=None, target_extent=None):
+def get_subset_bbox(xsize, ysize, subset_bbox=None):
     """Get the subset bounding box for a given target extent.
 
     Parameters
@@ -90,8 +110,6 @@ def get_subset_bbox(xsize, ysize, subset_bbox=None, target_extent=None):
         size of the y dimension of the image
     subset_bbox : tuple[int], optional
         Desired bounding box of subset as (left, bottom, right, top)
-    target_extent : tuple[int], optional
-        Desired bounding box in the `-te` gdal format, (xmin, ymin, xmax, ymax)
 
     Returns
     -------
@@ -99,15 +117,11 @@ def get_subset_bbox(xsize, ysize, subset_bbox=None, target_extent=None):
     """
     if subset_bbox is not None:
         left, bottom, right, top = subset_bbox
+        # -te xmin ymin xmax ymax
         xoff = left
         yoff = top
         xsize_sub = right - left
         ysize_sub = bottom - top
-    elif target_extent is not None:
-        # -te xmin ymin xmax ymax
-        xoff, yoff, xmax, ymax = target_extent
-        xsize_sub = xmax - xoff
-        ysize_sub = ymax - yoff
     else:
         xoff, yoff, xsize_sub, ysize_sub = 0, 0, xsize, ysize
 
@@ -128,43 +142,46 @@ def get_cli_args():
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
-        "--in-vrts",
+        "--in-files",
         nargs="*",
-        help="Merged directory of tops stack generation",
+        help="Names of GDAL-readable SLC files to include in stack.",
     )
     parser.add_argument(
-        "--in-vrts-file",
-        type=str,
-        help="Alternative to --in-vrts: filename with list of SLC files to use",
+        "--in-textfile",
+        help=(
+            "Newline-delimited text file listing locations of SLC files"
+            "Alternative to --in-files."
+        ),
     )
     parser.add_argument(
         "--out-dir",
-        type=str,
         default="stack",
         help="Directory where the vrt stack will be stored",
     )
     parser.add_argument(
         "--out-vrt-name",
-        type=str,
         default="slcs_base.vrt",
         help="Name of output SLC containing all images",
     )
     parser.add_argument(
+        "-b",
         "--subset-bbox",
         type=int,
         nargs=4,
         metavar=("left", "bottom", "right", "top"),
         default=None,
-        help="Bounding box to subset the stack to. None == no subset",
+        help="Bounding box (in pixels) to subset the stack. None = no subset",
     )
     parser.add_argument(
+        "-te",
         "--target-extent",
-        type=int,
+        type=float,
         nargs=4,
         metavar=("xmin", "ymin", "xmax", "ymax"),
         default=None,
         help=(
-            "Target extent (like GDAL's `-te` option), alternative to subset the stack."
+            "Target extent (like GDAL's `-te` option) in units of the SLC's SRS"
+            " (i.e., in UTM coordinates). An alternative way to subset the stack."
         ),
     )
     args = parser.parse_args()
@@ -172,17 +189,16 @@ def get_cli_args():
 
 
 if __name__ == "__main__":
-    # Parse command line
     args = get_cli_args()
 
-    # Get ann list and slc list
-    if args.in_vrts is not None:
-        file_list = sorted(args.in_vrts)
-    elif args.in_vrts_file is not None:
-        with open(args.in_vrts_file) as f:
+    # Get slc list from text file or command line
+    if args.in_files is not None:
+        file_list = sorted(args.in_files)
+    elif args.in_textfile is not None:
+        with open(args.in_textfile) as f:
             file_list = sorted(f.read().splitlines())
     else:
-        raise ValueError("Need to pass either --in-vrts or --in-vrts-file")
+        raise ValueError("Need to pass either --in-files or --in-textfile")
 
     num_slc = len(file_list)
     print("Number of SLCs Used: ", num_slc)
