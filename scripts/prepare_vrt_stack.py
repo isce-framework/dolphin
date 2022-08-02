@@ -11,7 +11,7 @@ from atlas import utils
 SENTINEL_WAVELENGTH = 0.05546576
 
 
-def create_vrt_stack(
+def create_vrt_stack_manual(
     file_list: list,
     subset_bbox: Optional[Tuple[int, int, int, int]] = None,
     target_extent: Optional[Tuple[float, float, float, float]] = None,
@@ -78,6 +78,7 @@ def create_vrt_stack(
     ds.SetGeoTransform(gt)
     ds.SetProjection(proj)
     ds.SetSpatialRef(srs)
+    xres, yres = gt[1], gt[5]
     ds = None
 
     if target_extent is None and subset_bbox is None:
@@ -88,19 +89,98 @@ def create_vrt_stack(
     # Otherwise, subset the VRT to the target extent using gdal_translate
     ds = gdal.Open(outfile, gdal.GA_Update)
     if target_extent is not None:
-        assert len(target_extent) == 4
-        # projWin is (ulx, uly, lrx, lry), so need to reorder
-        xmin, ymin, xmax, ymax = target_extent
-        projwin = xmin, ymax, xmax, ymin
-        options = gdal.TranslateOptions(projWin=projwin)
+        # assert len(target_extent) == 4
+        # # projWin is (ulx, uly, lrx, lry), so need to reorder
+        # xmin, ymin, xmax, ymax = target_extent
+        # projwin = xmin, ymax, xmax, ymin
+        # options = gdal.TranslateOptions(projWin=projwin)
+        options = gdal.WarpOptions(outputBounds=target_extent, xRes=xres, yRes=yres)
     elif subset_bbox:
-        options = gdal.TranslateOptions(srcWin=_bbox_to_srcwin(subset_bbox))
+        # options = gdal.TranslateOptions(srcWin=_bbox_to_srcwin(subset_bbox))
+        options = gdal.WarpOptions(
+            outputBounds=subset_bbox, outputBoundsSRS="", xRes=xres, yRes=yres
+        )
 
     temp_file = outfile + ".tmp.vrt"
-    gdal.Translate(temp_file, ds, options=options)
+    # gdal.Translate(temp_file, ds, options=options)
     gdal.Warp(temp_file, ds, options=options)
     ds = None
-    os.rename(temp_file, outfile)
+    ds = gdal.Open(temp_file)
+    # os.rename(temp_file, outfile)
+
+
+def _rowcol_to_xy(row, col, ds=None, filename=None):
+    """Convert a row and column index to coordinates in the georeferenced space.
+
+    Reference: https://gdal.org/tutorials/geotransforms_tut.html
+    """
+    if ds is None:
+        ds = gdal.Open(filename)
+    gt = ds.GetGeoTransform()
+    x = gt[0] + col * gt[1] + row * gt[2]
+    y = gt[3] + col * gt[4] + row * gt[5]
+    return x, y
+
+
+def create_vrt_stack(
+    file_list: list,
+    subset_bbox: Optional[Tuple[int, int, int, int]] = None,
+    target_extent: Optional[Tuple[float, float, float, float]] = None,
+    outfile: str = "slcs_base.vrt",
+    use_abs_path: bool = True,
+):
+    """Create a VRT stack from a list of SLC files.
+
+    Parameters
+    ----------
+    file_list : list
+        Names of files to stack
+    subset_bbox : tuple[int], optional
+        Desired bounding box (in pixels) of subset as (left, bottom, right, top)
+    target_extent : tuple[int], optional
+        Target extent: alternative way to subset the stack like the `-te` gdal option:
+            (xmin, ymin, xmax, ymax) in units of the SLCs' SRS (e.g. UTM coordinates)
+    outfile : str, optional (default = "slcs_base.vrt")
+        Name of output file to write
+    use_abs_path : bool, optional (default = True)
+        Write the filepaths in the VRT as absolute
+    """
+    if subset_bbox is not None and target_extent is not None:
+        raise ValueError("Cannot specify both subset_bbox and target_extent")
+
+    if use_abs_path:
+        file_list = [os.path.abspath(f) for f in file_list]
+
+    ds = gdal.Open(file_list[0])
+    if subset_bbox is not None:
+        target_extent = _bbox_to_te(subset_bbox, ds=ds)
+    ds = None
+
+    options = gdal.BuildVRTOptions(separate=True, outputBounds=target_extent)
+    gdal.BuildVRT(outfile, file_list, options=options)
+
+    # Get the list of files (the first will be the VRT name `outfile`)
+    file_list = gdal.Info(outfile, format="json")["files"][1:]
+    ds = gdal.Open(outfile, gdal.GA_Update)
+    for idx, filename in enumerate(file_list, start=1):
+        date = _get_date(filename)
+        bnd = ds.GetRasterBand(idx)
+        # Set the metadata in the SLC domain
+        metadata = {
+            "Date": date,
+            "Wavelength": SENTINEL_WAVELENGTH,
+            "AcquisitionTime": date,
+        }
+        bnd.SetMetadata(metadata, "slc")
+        bnd = None
+
+
+def _bbox_to_te(subset_bbox, ds=None, filename=None):
+    """Convert pixel bounding box to target extent box, in georeferenced coordinates."""
+    left, bottom, right, top = subset_bbox  # in pixels
+    xmin, ymin = _rowcol_to_xy(bottom, left, ds=ds, filename=filename)
+    xmax, ymax = _rowcol_to_xy(top, right, ds=ds, filename=filename)
+    return xmin, ymin, xmax, ymax
 
 
 def _bbox_to_srcwin(subset_bbox=None):
