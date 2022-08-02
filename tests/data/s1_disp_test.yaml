@@ -1,5 +1,5 @@
 nmap:
-  input_file:
+  input_file: 'stack_test.vrt'
   input_mask_file: ''
   output_directory: 'nmap'
   output_weight_file: 'nmap'

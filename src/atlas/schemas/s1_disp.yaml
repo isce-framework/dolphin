@@ -1,0 +1,19 @@
+nmap:
+  input_file: str()
+  input_mask_file: str(required=False)
+  output_directory: str()
+  output_weight_file: str()
+  output_count_file: str()
+  lines_per_block: int(min=0)
+  ram: int(min=64)
+  window: include('nmap_window_options', required=False)
+  pvalue: num(required=False, min=0.0, max=1.0)
+  stat_method: enum('KS2', 'AD2', required=False)
+  no_gpu: bool(required=False)
+
+
+---
+
+nmap_window_options:
+  xhalf: int(min=1)
+  yhalf: int(min=1)

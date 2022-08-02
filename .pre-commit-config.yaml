@@ -11,6 +11,7 @@ repos:
       - id: check-docstring-first
       - id: check-merge-conflict
       - id: check-yaml
+        args: [--allow-multiple-documents]
       - id: debug-statements
       - id: end-of-file-fixer
       - id: file-contents-sorter
@@ -38,6 +39,8 @@ repos:
     rev: "v0.950"
     hooks:
       - id: mypy
+        additional_dependencies:
+        - types-pkg_resources
 
   - repo: https://github.com/PyCQA/pydocstyle
     rev: "6.1.1"
