@@ -1,14 +1,30 @@
-nmap:
-  input_file:
+common:
+  input_vrt_file:
+  input_weight_file: 'nmap'
   input_mask_file: ''
-  output_directory: 'nmap'
-  output_weight_file: 'nmap'
-  output_count_file: 'count'
-  lines_per_block: 64
-  ram: 512
+  nmap_count_file: 'count'
+
+  # Output folders for each stage
+  nmap_directory: 'nmap'
+  evd_directory: 'wrapped_phase'
   window:
     xhalf: 11
     yhalf: 5
+
+  # Processing options
+  lines_per_block: 64
+  ram: 512
+
+
+nmap:
+  # Minimum p-value for labeling neighbors.
   pvalue: 0.05
   stat_method: 'KS2'
+  # Explicitly do not use GPU
   no_gpu: false
+
+evd:
+  # Minimum number of neighbors for computation
+  minimum_neighbors: 5
+  # Decomposition method to use - MLE / EVD
+  method: 'mle'
