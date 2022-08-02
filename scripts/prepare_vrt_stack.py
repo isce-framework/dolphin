@@ -123,7 +123,10 @@ def _get_date(filename):
 
 def get_cli_args():
     """Set up the command line interface."""
-    parser = argparse.ArgumentParser(description="Convert SLC stack to single VRT")
+    parser = argparse.ArgumentParser(
+        description="Convert SLC stack to single VRT",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
     parser.add_argument(
         "--in-vrts",
         nargs="*",
@@ -138,13 +141,13 @@ def get_cli_args():
         "--out-dir",
         type=str,
         default="stack",
-        help="Directory where the vrt stack will be stored (default is %(default)s)",
+        help="Directory where the vrt stack will be stored",
     )
     parser.add_argument(
         "--out-vrt-name",
         type=str,
         default="slcs_base.vrt",
-        help="Name of output SLC containing all images (defaul = %(default)s)",
+        help="Name of output SLC containing all images",
     )
     parser.add_argument(
         "--subset-bbox",
@@ -152,7 +155,7 @@ def get_cli_args():
         nargs=4,
         metavar=("left", "bottom", "right", "top"),
         default=None,
-        help="Bounding box to subset the stack to (default is full stack)",
+        help="Bounding box to subset the stack to. None == no subset",
     )
     parser.add_argument(
         "--target-extent",
