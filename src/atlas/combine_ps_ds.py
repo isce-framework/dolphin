@@ -7,6 +7,8 @@ from osgeo import gdal
 
 from atlas.utils import Pathlike, get_dates
 
+gdal.UseExceptions()
+
 
 def run_combine(
     *,
@@ -19,25 +21,23 @@ def run_combine(
     ps_temp_coh: float,
 ):
     """Run workflow step to combine PS and DS phases."""
-    # Create the temporal coherence file, filling in high values for PS
-    fill_temp_coh(ps_file, temp_coh_file, temp_coh_ps_ds_file, ps_temp_coh)
-
     # Create the interferogram list
     pl_slc_files = Path(pl_directory).glob("*.slc")
     pl_date_dict = _make_date_file_dict(pl_slc_files)
 
-    ds_orig_slc = gdal.Open(input_vrt_file)
+    ds_orig_slc = gdal.Open(str(input_vrt_file))
     # The first file will be `stack_vrt_file`, the rest are the bands
     orig_slc_files = gdal.Info(ds_orig_slc, format="json")["files"][1:]
+    xsize, ysize = ds_orig_slc.RasterXSize, ds_orig_slc.RasterYSize
     orig_date_dict = _make_date_file_dict(orig_slc_files)
+    ds_orig_slc = None
+
     assert len(pl_date_dict) == len(orig_date_dict)
 
     date_list = list(pl_date_dict.keys())
     date12_list = _make_ifg_list(date_list, "single-reference")
 
-    xsize, ysize = ds_orig_slc.RasterXSize, ds_orig_slc.RasterYSize
-
-    ds_psfile = gdal.Open(ps_file)
+    ds_psfile = gdal.Open(str(ps_file))
     bnd_ps = ds_psfile.GetRasterBand(1)
 
     driver = gdal.GetDriverByName("ENVI")
@@ -45,30 +45,35 @@ def run_combine(
         # output file witth both PS and DS pixels
         output_file = Path(output_folder) / f"{date_1}_{date_2}.int"
         # dataset for the output PS-DS integrated wrapped phase
-        ds_out = driver.Create(output_file, xsize, ysize, 1, gdal.GDT_CFloat32)
+        ds_out = driver.Create(str(output_file), xsize, ysize, 1, gdal.GDT_CFloat32)
         bnd_out = ds_out.GetRasterBand(1)
 
         # get the current two SLCs, both original and phase-linked
         pl_file_1 = pl_date_dict[date_1]
         pl_file_2 = pl_date_dict[date_2]
-        bnd_pl_1 = gdal.Open(pl_directory / pl_file_1).GetRasterBand(1)
-        bnd_pl_2 = gdal.Open(pl_directory / pl_file_2).GetRasterBand(1)
+        ds_pl_1 = gdal.Open(str(pl_file_1))
+        ds_pl_2 = gdal.Open(str(pl_file_2))
+        bnd_pl_1 = ds_pl_1.GetRasterBand(1)
+        bnd_pl_2 = ds_pl_2.GetRasterBand(1)
 
         orig_file_1 = orig_date_dict[date_1]
         orig_file_2 = orig_date_dict[date_2]
-        bnd_orig_1 = gdal.Open(orig_file_1).GetRasterBand(1)
-        bnd_orig_2 = gdal.Open(orig_file_2).GetRasterBand(1)
+        ds_orig_1 = gdal.Open(str(orig_file_1))
+        ds_orig_2 = gdal.Open(str(orig_file_2))
+        bnd_orig_1 = ds_orig_1.GetRasterBand(1)
+        bnd_orig_2 = ds_orig_2.GetRasterBand(1)
 
         # integrate PS to DS for this pair and write to file block by block
         xsize, ysize = ds_out.RasterXSize, ds_out.RasterYSize
         x0, y0, xwindow, ywindow = _get_block_window(xsize, ysize, max_lines=1000)
         while y0 < ysize:
+            # Limit the y window to remaining lines
             cur_ywin = ywindow if (y0 + ywindow) < ysize else ysize - y0
             ps_arr = bnd_ps.ReadAsArray(x0, y0, xwindow, cur_ywin)
 
-            ifg_out = _form_ifg(bnd_pl_1, bnd_pl_2, x0, y0, xwindow, ywindow)
+            ifg_out = _form_ifg(bnd_pl_1, bnd_pl_2, x0, y0, xwindow, cur_ywin)
             # Form the original full-res ifg
-            ifg_orig = _form_ifg(bnd_orig_1, bnd_orig_2, x0, y0, xwindow, ywindow)
+            ifg_orig = _form_ifg(bnd_orig_1, bnd_orig_2, x0, y0, xwindow, cur_ywin)
             # But only take the values at thhe PS pixels
             ps_mask = ps_arr == 1
             ifg_out[ps_mask] = ifg_orig[ps_mask]
@@ -77,10 +82,9 @@ def run_combine(
             y0 += ywindow
 
         # close the datasets
-        ds_orig_slc = None
         ds_out = bnd_out = None
-        bnd_pl_1 = bnd_pl_2 = None
-        bnd_orig_1 = bnd_orig_2 = None
+        ds_pl_1 = ds_pl_2 = bnd_pl_1 = bnd_pl_2 = None
+        ds_orig_1 = ds_orig_2 = bnd_orig_1 = bnd_orig_2 = None
 
 
 def _form_ifg(bnd_1, bnd_2, x0, y0, xwindow, ywindow):
@@ -156,6 +160,9 @@ def fill_temp_coh(
         y0 += ywindow
 
     ds_out = bnd_out = ds_psfile = bnd_ps = None
+
+    # Create the temporal coherence file, filling in high values for PS
+    fill_temp_coh(ps_file, temp_coh_file, temp_coh_ps_ds_file, ps_temp_coh)
 
 
 def _get_block_window(xsize, ysize, max_lines=1000):
