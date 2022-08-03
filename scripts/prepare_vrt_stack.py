@@ -1,11 +1,11 @@
 #!/usr/bin/env python
 import argparse
-import re
 from pathlib import Path
 from typing import Optional, Tuple
 
 from osgeo import gdal
 
+from atlas import utils
 from atlas.log import get_log
 
 SENTINEL_WAVELENGTH = 0.05546576
@@ -54,7 +54,7 @@ def create_vrt_stack(
     file_list = gdal.Info(outfile, format="json")["files"][1:]
     ds = gdal.Open(outfile, gdal.GA_Update)
     for idx, filename in enumerate(file_list, start=1):
-        date = _get_date(filename)
+        date = utils.get_dates(filename)[0]
         bnd = ds.GetRasterBand(idx)
         # Set the metadata in the SLC domain
         metadata = {
@@ -85,13 +85,6 @@ def _rowcol_to_xy(row, col, ds=None, filename=None):
     x = gt[0] + col * gt[1] + row * gt[2]
     y = gt[3] + col * gt[4] + row * gt[5]
     return x, y
-
-
-def _get_date(filename):
-    match = re.search(r"\d{4}\d{2}\d{2}", filename)
-    if not match:
-        raise ValueError(f"{filename} does not contain date as YYYYMMDD")
-    return match.group()
 
 
 def get_cli_args():
