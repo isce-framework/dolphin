@@ -30,3 +30,16 @@ def test_yaml_loading(schema_file, defaults_file):
     minimal_path = Path(__file__).parent / "data/s1_disp_minimal.yaml"
     min_data = atlas.config.load_yaml(minimal_path, workflow_name="s1_disp")
     assert min_data["nmap"]["pvalue"] == 0.05
+
+    default_dict = yamale.make_data(defaults_file)[0][0]
+    for k, v in default_dict.items():
+        if k != "input_vrt_file":
+            assert min_data[k] == v
+
+
+def test_yaml_save(tmp_path):
+    minimal_path = Path(__file__).parent / "data/s1_disp_minimal.yaml"
+    min_data = atlas.config.load_yaml(minimal_path, workflow_name="s1_disp")
+
+    temp_file = tmp_path / "out.yaml"
+    atlas.config.save_yaml(temp_file, min_data)

@@ -42,6 +42,23 @@ def load_yaml(input_path: Pathlike, *, workflow_name: str = "s1_disp"):
     return updated
 
 
+def save_yaml(output_path: Pathlike, data: dict):
+    """Save a yaml file for a workflow.
+
+    Used to record the default-filled version of a supplied yaml.
+
+    Parameters
+    ----------
+    data : dict
+        Dictionary containing the yaml data
+    output_path : Pathlike
+        Path to the yaml file to save
+    """
+    parser = YAML(typ="safe")
+    with open(output_path, "w") as f:
+        parser.dump(data, f)
+
+
 def get_workflow_yaml_path(name: str = "s1_disp.yaml", yaml_type: str = "schemas"):
     """Get the path to a yaml schema or default file.
 
