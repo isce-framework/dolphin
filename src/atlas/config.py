@@ -1,13 +1,12 @@
-import errno
-import os
 from copy import deepcopy
+from os import PathLike
 from pathlib import Path
 from typing import Union
 
 import yamale
 from ruamel.yaml import YAML
 
-Pathlike = Union[os.PathLike[str], str]
+Pathlike = Union[PathLike[str], str]
 
 
 def load_yaml(input_path: Pathlike, *, workflow_name: str = "s1_disp"):
@@ -30,20 +29,20 @@ def load_yaml(input_path: Pathlike, *, workflow_name: str = "s1_disp"):
     with open(input_path, "r") as f:
         supplied = parser.load(f)
 
-    defaults_path = get_yaml_file(name=workflow_name, yaml_type="defaults")
+    defaults_path = get_workflow_yaml_path(name=workflow_name, yaml_type="defaults")
     with open(defaults_path, "r") as f:
         defaults = parser.load(f)
 
     updated = deep_update(defaults=defaults, supplied=supplied)
     # d = yamale.make_data([(updated, None)])
 
-    schema_path = get_yaml_file(name=workflow_name, yaml_type="schemas")
+    schema_path = get_workflow_yaml_path(name=workflow_name, yaml_type="schemas")
     schema = yamale.make_schema(schema_path)
     yamale.validate(schema, [(updated, None)])
     return updated
 
 
-def get_yaml_file(name: str = "s1_disp.yaml", yaml_type: str = "schemas"):
+def get_workflow_yaml_path(name: str = "s1_disp.yaml", yaml_type: str = "schemas"):
     """Get the path to a yaml schema or default file.
 
     Parameters
@@ -99,14 +98,3 @@ def deep_update(*, defaults: dict, supplied: dict, copy: bool = True):
             updated[key] = val
 
     return updated
-
-
-def mkdir_p(path: Pathlike):
-    """Emulates bash `mkdir -p`, in python style."""
-    try:
-        os.makedirs(path)
-    except OSError as exc:
-        if exc.errno == errno.EEXIST and os.path.isdir(path):
-            pass
-        else:
-            raise
