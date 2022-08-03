@@ -8,9 +8,10 @@ ps_file: 'ps_pixels'
 
 # Output folders for each stage
 directories:
-  wrapped_output: 'wrapped_phase'
+  wrapped: 'wrapped_phase'
   nmap: 'nmap'
   ps: 'PS'
+  integrate: 'PS_DS'
 
 # Multilook window size
 window:
@@ -21,6 +22,8 @@ processing:
   # Options for how large of chunks to use at a time
   lines_per_block: 64
   ram: 512
+  # Explicitly do not use GPU
+  no_gpu: false
 
 # Options specific to stages of the workflow:
 # ##########################################
@@ -41,8 +44,6 @@ nmap:
   # Minimum p-value for labeling neighbors.
   pvalue: 0.05
   stat_method: 'KS2'
-  # Explicitly do not use GPU
-  no_gpu: false
 
 # Relevant Fringe command example:
 # evd.py -i stack/slcs_base.vrt -o EVD -x 11 -y 5 -w nmap/nmap
