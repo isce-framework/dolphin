@@ -3,22 +3,19 @@ from pathlib import Path
 import pytest
 import yamale
 
-import atlas.utils
+import atlas.config
+from atlas.config import get_workflow_yaml_path
 
 
 # Using fixtures for these to avoid nagivating the paths from tests/ to src/
 @pytest.fixture
 def schema_file():
-    from atlas.utils import get_yaml_file
-
-    return get_yaml_file("s1_disp.yaml", yaml_type="schemas")
+    return get_workflow_yaml_path("s1_disp.yaml", yaml_type="schemas")
 
 
 @pytest.fixture
 def defaults_file():
-    from atlas.utils import get_yaml_file
-
-    return get_yaml_file("s1_disp.yaml", yaml_type="defaults")
+    return get_workflow_yaml_path("s1_disp.yaml", yaml_type="defaults")
 
 
 def test_yaml_loading(schema_file, defaults_file):
@@ -31,5 +28,5 @@ def test_yaml_loading(schema_file, defaults_file):
 
     # Check that the updating of defaults works
     minimal_path = Path(__file__).parent / "data/s1_disp_minimal.yaml"
-    min_data = atlas.utils.load_yaml(minimal_path, workflow_name="s1_disp")
+    min_data = atlas.config.load_yaml(minimal_path, workflow_name="s1_disp")
     assert min_data["nmap"]["pvalue"] == 0.05
