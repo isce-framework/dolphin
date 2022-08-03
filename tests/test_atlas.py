@@ -33,7 +33,3 @@ def test_yaml_loading(schema_file, defaults_file):
     minimal_path = Path(__file__).parent / "data/s1_disp_minimal.yaml"
     min_data = atlas.utils.load_yaml(minimal_path, workflow_name="s1_disp")
     assert min_data["nmap"]["pvalue"] == 0.05
-
-    # data_min = atlas.utils.load_and_validate_yaml(minimal_path)
-    # updated = atlas.utils.deep_update(original=defaults[0][0], supplied=data_min)
-    # yamale.validate(schema, updated)

@@ -3,10 +3,16 @@ input_vrt_file:
 weight_file: 'nmap'
 mask_file: ''
 nmap_count_file: 'count'
+ps_pixel_file: 'ps_pixels'
+
 
 # Output folders for each stage
-nmap_directory: 'nmap'
-evd_directory: 'wrapped_phase'
+directories:
+  wrapped_output: 'wrapped_phase'
+  nmap: 'nmap'
+  ps: 'PS'
+
+# Multilook window size
 window:
   xhalf: 11
   yhalf: 5
@@ -16,7 +22,20 @@ processing:
   lines_per_block: 64
   ram: 512
 
+# Options specific to stages of the workflow:
+# ##########################################
 
+# Relevant Fringe command example:
+# ampdispersion.py -i stack/slcs_base.vrt -o ampDispersion/ampdispersion -m ampDispersion/mean
+# gdal_calc.py --calc="a<0.42"  -a=ampDispersion/ampdispersion  --outfile ampDispersion/ps_pixels --format ENVI --type Byte --overwrite
+ps:
+  amp_dispersion_file: 'amp_dispersion'
+  amp_mean_file: 'mean'
+  amp_dispersion_threshold: 0.42
+
+
+# Relevant Fringe command example:
+# nmap.py -i stack/slcs_base.vrt -o nmap/nmap -c nmap/count -x 11 -y 5
 nmap:
   # Minimum p-value for labeling neighbors.
   pvalue: 0.05
@@ -24,8 +43,16 @@ nmap:
   # Explicitly do not use GPU
   no_gpu: false
 
+# Relevant Fringe command example:
+# evd.py -i stack/slcs_base.vrt -o EVD -x 11 -y 5 -w nmap/nmap
 evd:
   # Minimum number of neighbors for computation
   minimum_neighbors: 5
   # Decomposition method to use - MLE / EVD
   method: 'mle'
+
+# Relevant Fringe commands:
+# integratePS.py -s stack/slcs_base.vrt -d EVD -t EVD/tcorr.bin -p ampDispersion/ps_pixels -o PS_DS --unwrap_method snaphu
+integrate:
+  temp_coh_file: 'tcorr.bin'
+  unwrap_method: 'snaphu'
