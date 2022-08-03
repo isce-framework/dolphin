@@ -1,20 +1,20 @@
-common:
-  input_vrt_file:
-  weight_file: 'nmap'
-  mask_file: ''
-  nmap_count_file: 'count'
+# Options common to multiple workflow steps
+input_vrt_file:
+weight_file: 'nmap'
+mask_file: ''
+nmap_count_file: 'count'
 
-  # Output folders for each stage
-  nmap_directory: 'nmap'
-  evd_directory: 'wrapped_phase'
-  window:
-    xhalf: 11
-    yhalf: 5
+# Output folders for each stage
+nmap_directory: 'nmap'
+evd_directory: 'wrapped_phase'
+window:
+  xhalf: 11
+  yhalf: 5
 
-  # Processing options
-  processing:
-    lines_per_block: 64
-    ram: 512
+processing:
+  # Options for how large of chunks to use at a time
+  lines_per_block: 64
+  ram: 512
 
 
 nmap:

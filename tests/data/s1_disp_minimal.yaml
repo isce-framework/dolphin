@@ -1,2 +1,1 @@
-common:
-  input_vrt_file: 'stack_test.vrt'
+input_vrt_file: 'stack_test.vrt'

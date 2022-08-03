@@ -7,10 +7,10 @@ from typing import Union
 import yamale
 from ruamel.yaml import YAML
 
-Pathlike = Union[Path, str]
+Pathlike = Union[os.PathLike[str], str]
 
 
-def load_yaml(input_path, *, workflow_name="s1_disp"):
+def load_yaml(input_path: Pathlike, *, workflow_name: str = "s1_disp"):
     """Load and validate a yaml file for a workflow.
 
     Parameters
@@ -43,7 +43,7 @@ def load_yaml(input_path, *, workflow_name="s1_disp"):
     return updated
 
 
-def get_yaml_file(name: Pathlike = "s1_disp.yaml", yaml_type: str = "schemas"):
+def get_yaml_file(name: str = "s1_disp.yaml", yaml_type: str = "schemas"):
     """Get the path to a yaml schema or default file.
 
     Parameters

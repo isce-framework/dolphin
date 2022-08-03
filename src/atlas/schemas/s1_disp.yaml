@@ -1,18 +1,16 @@
-common:
+input_vrt_file: str()
+mask_file: str(required=False)
+weight_file: str()
+nmap_count_file: str()
 
-  input_vrt_file: str()
-  mask_file: str(required=False)
-  weight_file: str()
-  nmap_count_file: str()
+nmap_directory: str()
+evd_directory: str()
 
-  nmap_directory: str()
-  evd_directory: str()
+window:
+  xhalf: int(min=1)
+  yhalf: int(min=1)
 
-  window:
-    xhalf: int(min=1)
-    yhalf: int(min=1)
-
-  processing: include('processing_options')
+processing: include('processing_options')
 
 
 evd:
