@@ -5,13 +5,6 @@ nmap_count_file: str()
 ps_file: str()
 
 
-directories:
-  wrapped: str()
-  nmap: str()
-  ps: str()
-  integrate: str()
-
-
 window:
   xhalf: int(min=1)
   yhalf: int(min=1)
@@ -23,21 +16,29 @@ processing:
 
 
 ps:
+  directory: str()
   amp_disp_file: str()
   amp_mean_file: str()
   amp_dispersion_threshold: num(min=0.0)
   normalizing_reference_band: int(min=1)
 
 nmap:
+  directory: str()
   pvalue: num(required=False, min=0.0, max=1.0)
   stat_method: enum('KS2', 'AD2', required=False)
 
-evd:
+phase_linking:
+  directory: str()
   minimum_neighbors: int(min=1)
   method: enum('mle', 'evd')
   compressed_slc_file: str()
-
-integrate:
   temp_coh_file: str()
-  unwrap_method: str()
+
+combine_ps_ds:
+  directory: str()
+  temp_coh_file: str()
   ps_temp_coh: num(min=0.0, max=1.0)
+
+unwrap:
+  directory: str()
+  unwrap_method: str()

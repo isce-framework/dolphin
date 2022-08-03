@@ -1,4 +1,4 @@
-"""Module for estimating wrapped phase from the DS in a stack of SLCS."""
+"""Estimate wrapped phase from the DS in a stack of SLCS."""
 import os
 
 # nmap.py -i stack/slcs_base.vrt -o nmap/nmap -c nmap/count -x 11 -y 5
@@ -45,7 +45,7 @@ def run_evd(
     compressed_slc_filename,
     output_folder,
     window,
-    evd_opts,
+    pl_opts,
     processing_opts,
 ):
     """Run the EVD algorithm on a stack of SLCs using FRInGE."""
@@ -63,8 +63,8 @@ def run_evd(
     aa.outputFolder = aa.outputCompressedSlcFolder = output_folder
     aa.compSlc = compressed_slc_filename  # "compslc.bin"
 
-    aa.minimumNeighbors = evd_opts["minimum_neighbors"]
-    aa.method = evd_opts["method"]
+    aa.minimumNeighbors = pl_opts["minimum_neighbors"]
+    aa.method = pl_opts["method"]
 
     aa.halfWindowX = window["xhalf"]
     aa.halfWindowY = window["yhalf"]

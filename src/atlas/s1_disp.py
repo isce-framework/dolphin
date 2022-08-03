@@ -2,7 +2,7 @@
 import argparse
 from pathlib import Path
 
-from atlas import config, ps, wrapped
+from atlas import combine_ps_ds, config, phase_linking, ps
 from atlas.log import get_log, log_runtime
 
 logger = get_log()
@@ -21,8 +21,8 @@ def run(config_file: str):
     filled_cfg_path = Path(config_file).with_suffix(".filled.yaml")
     config.save_yaml(filled_cfg_path, config.add_atlas_section(cfg))
 
-    # First make the amplitude dispersion file
-    ps_path = Path(cfg["directories"]["ps"]).absolute()
+    # 1. First make the amplitude dispersion file
+    ps_path = Path(cfg["ps"]["directory"]).absolute()
     ps_path.mkdir(parents=True, exist_ok=True)
     amp_disp_file = ps_path / cfg["ps"]["amp_disp_file"]
     amp_mean_file = ps_path / cfg["ps"]["amp_mean_file"]
@@ -38,7 +38,7 @@ def run(config_file: str):
             processing_opts=cfg["processing"],
         )
 
-    # PS creation
+    # 2. PS selection
     ps_output = ps_path / cfg["ps_file"]
     threshold = cfg["ps"]["amp_dispersion_threshold"]
     if ps_output.exists():
@@ -51,8 +51,8 @@ def run(config_file: str):
             amp_dispersion_threshold=threshold,
         )
 
-    # nmap creation
-    nmap_path = Path(cfg["directories"]["nmap"]).absolute()
+    # 3. nmap: find SHP neighborhoods
+    nmap_path = Path(cfg["nmap"]["directory"]).absolute()
     nmap_path.mkdir(parents=True, exist_ok=True)
     weight_file = nmap_path / cfg["weight_file"]
     nmap_count_file = nmap_path / cfg["nmap_count_file"]
@@ -61,7 +61,7 @@ def run(config_file: str):
         logger.info(f"Skipping making existing NMAP file {weight_file}")
     else:
         logger.info(f"Creating NMAP file {weight_file}")
-        wrapped.run_nmap(
+        phase_linking.run_nmap(
             input_vrt_file=cfg["input_vrt_file"],
             mask_file=cfg["mask_file"],
             weight_file=str(weight_file),
@@ -71,23 +71,38 @@ def run(config_file: str):
             processing_opts=cfg["processing"],
         )
 
-    # EVD step
-    wrapped_path = Path(cfg["directories"]["wrapped"]).absolute()
+    # 4. phase linking/EVD step
+    pl_path = Path(cfg["phase_linking"]["directory"]).absolute()
     # For some reason fringe skips this one if the directory exists...
-    # wrapped_path.mkdir(parents=True, exist_ok=True)
-    compressed_slc_file = wrapped_path / cfg["evd"]["compressed_slc_file"]
+    # pl_path.mkdir(parents=True, exist_ok=True)
+    compressed_slc_file = pl_path / cfg["phase_linking"]["compressed_slc_file"]
     if compressed_slc_file.exists():
         logger.info(f"Skipping making existing EVD file {compressed_slc_file}")
     else:
         logger.info(f"Making EVD file {compressed_slc_file}")
-        wrapped.run_evd(
+        phase_linking.run_evd(
             input_vrt_file=cfg["input_vrt_file"],
             weight_file=str(weight_file),
             compressed_slc_filename=str(compressed_slc_file.name),
-            output_folder=str(wrapped_path),
+            output_folder=str(pl_path),
             window=cfg["window"],
-            evd_opts=cfg["evd"],
+            pl_opts=cfg["phase_linking"],
             processing_opts=cfg["processing"],
+        )
+
+    # 5. Combinine PS and DS phases and forming interferograms
+    ps_ds_path = Path(cfg["combine_ps_ds"]["directory"]).absolute()
+    ps_ds_path.mkdir(parents=True, exist_ok=True)
+    temp_coh_file = ps_ds_path / cfg["combine_ps_ds"]["temp_coh_file"]
+    if temp_coh_file.exists():
+        logger.info(f"Skipping combine_ps_ds step, {temp_coh_file} exists")
+    else:
+        logger.info(f"Running combine ps/ds step into {ps_ds_path}")
+        combine_ps_ds.run_combine(
+            output_folder=ps_ds_path,
+            ps_file=ps_output,
+            pl_directory=pl_path,
+            temp_coh_file=temp_coh_file,
         )
 
 
