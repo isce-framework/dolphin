@@ -39,11 +39,15 @@ def test_yaml_loading(schema_file, defaults_file):
 
 
 def test_yaml_save(tmp_path):
+    from ruamel.yaml import YAML
+
     minimal_path = Path(__file__).parent / "data/s1_disp_minimal.yaml"
     min_data = atlas.config.load_workflow_yaml(minimal_path, workflow_name="s1_disp")
 
     temp_file = tmp_path / "out.yaml"
     atlas.config.save_yaml(temp_file, min_data)
+    y = YAML()
+    assert y.load(temp_file) == min_data
 
 
 def test_atlas_cfg_section():

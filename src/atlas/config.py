@@ -1,13 +1,11 @@
 import datetime
 from copy import deepcopy
-from os import PathLike
 from pathlib import Path
-from typing import Union
 
 import yamale
 from ruamel.yaml import YAML
 
-Pathlike = Union[PathLike[str], str]
+from atlas.utils import Pathlike
 
 
 def load_workflow_yaml(input_path: Pathlike, *, workflow_name: str = "s1_disp"):
@@ -55,9 +53,9 @@ def save_yaml(output_path: Pathlike, data: dict):
     output_path : Pathlike
         Path to the yaml file to save
     """
-    parser = YAML(typ="safe")
+    y = YAML()
     with open(output_path, "w") as f:
-        parser.dump(data, f)
+        y.dump(data, f)
 
 
 def add_atlas_section(cfg):
