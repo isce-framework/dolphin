@@ -3,7 +3,7 @@ input_vrt_file:
 weight_file: 'nmap'
 mask_file: ''
 nmap_count_file: 'count'
-ps_pixel_file: 'ps_pixels'
+ps_file: 'ps_pixels'
 
 
 # Output folders for each stage
@@ -32,6 +32,7 @@ ps:
   amp_dispersion_file: 'amp_dispersion'
   amp_mean_file: 'mean'
   amp_dispersion_threshold: 0.42
+  normalizing_reference_band: 1
 
 
 # Relevant Fringe command example:
@@ -50,6 +51,7 @@ evd:
   minimum_neighbors: 5
   # Decomposition method to use - MLE / EVD
   method: 'mle'
+  compressed_slc_file: 'compslc.bin'
 
 # Relevant Fringe commands:
 # integratePS.py -s stack/slcs_base.vrt -d EVD -t EVD/tcorr.bin -p ampDispersion/ps_pixels -o PS_DS --unwrap_method snaphu

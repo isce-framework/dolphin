@@ -2,7 +2,7 @@ input_vrt_file: str()
 mask_file: str(required=False)
 weight_file: str()
 nmap_count_file: str()
-ps_pixel_file: str()
+ps_file: str()
 
 
 directories:
@@ -24,6 +24,7 @@ ps:
   amp_dispersion_file: str()
   amp_mean_file: str()
   amp_dispersion_threshold: num(min=0.0)
+  normalizing_reference_band: int(min=1)
 
 nmap:
   pvalue: num(required=False, min=0.0, max=1.0)
@@ -33,6 +34,7 @@ nmap:
 evd:
   minimum_neighbors: int(min=1)
   method: enum('mle', 'evd')
+  compressed_slc_file: str()
 
 integrate:
   temp_coh_file: str()
