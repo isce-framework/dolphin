@@ -6,6 +6,8 @@ from atlas import utils
 
 
 def test_get_dates():
+    assert ["20200303", "20210101"] == utils.get_dates("20200303_20210101.int")
+
     assert "20200303" == utils.get_dates("20200303.slc")[0]
     assert "20200303" == utils.get_dates(Path("20200303.slc"))[0]
     # Check that it's the filename, not the path
