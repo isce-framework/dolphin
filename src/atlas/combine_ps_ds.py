@@ -26,12 +26,12 @@ def run_combine(
     """Run workflow step to combine PS and DS phases."""
     # Create the interferogram list
     pl_slc_files = Path(pl_directory).glob("*.slc")
-    pl_date_dict = _make_date_file_dict(pl_slc_files)
+    pl_date_dict = {get_dates(p)[0]: p for p in pl_slc_files}
 
     ds_orig_stack = gdal.Open(str(input_vrt_file))
     assert len(pl_date_dict) == ds_orig_stack.RasterCount
 
-    date_list = list(pl_date_dict.keys())
+    date_list = [k for k in pl_date_dict.keys() if k]
     date12_list = _make_ifg_list(date_list, "single-reference")
 
     ds_psfile = gdal.Open(str(ps_file))
@@ -91,6 +91,10 @@ def run_combine(
         bnd_orig_1 = bnd_orig_2 = None
     ds_orig_stack = None
 
+    # Create the temporal coherence file, filling in high values for PS
+    fill_temp_coh(ps_file, temp_coh_file, temp_coh_ps_ds_file, ps_temp_coh)
+    return
+
 
 def _form_ifg(bnd_1, bnd_2, x0, y0, xwindow, ywindow):
     # crossmultiply two SLCs
@@ -98,24 +102,6 @@ def _form_ifg(bnd_1, bnd_2, x0, y0, xwindow, ywindow):
     slc_1 = bnd_1.ReadAsArray(x0, y0, xwindow, ywindow)
     slc_2 = bnd_2.ReadAsArray(x0, y0, xwindow, ywindow)
     return slc_1 * slc_2.conj()
-
-
-def _get_stack_file_list(stack_vrt_file):
-    """Read in the dates and files contained in the bands of the VRT file."""
-    ds = gdal.Open(stack_vrt_file)
-    # The first file will be `stack_vrt_file`, the rest are the bands
-    file_list = gdal.Info(ds, format="json")["files"][1:]
-    ds = None
-    return file_list
-
-
-def _make_date_file_dict(file_list):
-    file_paths = [Path(f) for f in file_list]
-    dates = [get_dates(p)[0] for p in file_paths]
-    # mapping from date to filename
-    # filename_only = [str(f.name) for f in file_paths]
-    # return {d: f for d, f in zip(dates, filename_only)}
-    return {d: f for d, f in zip(dates, file_paths)}
 
 
 def fill_temp_coh(
@@ -164,9 +150,6 @@ def fill_temp_coh(
 
     ds_out = bnd_out = ds_psfile = bnd_ps = None
 
-    # Create the temporal coherence file, filling in high values for PS
-    fill_temp_coh(ps_file, temp_coh_file, temp_coh_ps_ds_file, ps_temp_coh)
-
 
 def _get_block_window(xsize, ysize, max_lines=1000):
     x0, y0 = 0, 0
@@ -176,7 +159,8 @@ def _get_block_window(xsize, ysize, max_lines=1000):
 
 
 def _make_ifg_list(
-    date_list: List[str], how="single-reference"
+    date_list: List[str],
+    how="single-reference",
 ) -> List[Tuple[str, str]]:
     """Create a list of interferogram names from a list of dates."""
     if how == "single-reference":
@@ -187,6 +171,8 @@ def _make_ifg_list(
 
 def _single_reference_network(date_list: List[str]) -> List[Tuple[str, str]]:
     """Create a list of interferogram names from a list of dates."""
+    if len(date_list) < 2:
+        raise ValueError("Need at least two dates to make an interferogram list")
     ref = date_list[0]
     # return [f"{ref}_{date}" for date in date_list[1:]]
     return [(ref, date) for date in date_list[1:]]
