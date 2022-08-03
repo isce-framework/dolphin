@@ -1,3 +1,4 @@
+import datetime
 from pathlib import Path
 
 import pytest
@@ -28,7 +29,7 @@ def test_yaml_loading(schema_file, defaults_file):
 
     # Check that the updating of defaults works
     minimal_path = Path(__file__).parent / "data/s1_disp_minimal.yaml"
-    min_data = atlas.config.load_yaml(minimal_path, workflow_name="s1_disp")
+    min_data = atlas.config.load_workflow_yaml(minimal_path, workflow_name="s1_disp")
     assert min_data["nmap"]["pvalue"] == 0.05
 
     default_dict = yamale.make_data(defaults_file)[0][0]
@@ -39,7 +40,17 @@ def test_yaml_loading(schema_file, defaults_file):
 
 def test_yaml_save(tmp_path):
     minimal_path = Path(__file__).parent / "data/s1_disp_minimal.yaml"
-    min_data = atlas.config.load_yaml(minimal_path, workflow_name="s1_disp")
+    min_data = atlas.config.load_workflow_yaml(minimal_path, workflow_name="s1_disp")
 
     temp_file = tmp_path / "out.yaml"
     atlas.config.save_yaml(temp_file, min_data)
+
+
+def test_atlas_cfg_section():
+    minimal_path = Path(__file__).parent / "data/s1_disp_minimal.yaml"
+    min_data = atlas.config.load_workflow_yaml(minimal_path, workflow_name="s1_disp")
+    cfg_augmented = atlas.config.add_atlas_section(min_data)
+
+    now = str(datetime.datetime.now())
+    # '2022-08-03 08:47:28.834660' , ignore microseconds
+    assert cfg_augmented["atlas"]["runtime"][:-7] == now[:-7]

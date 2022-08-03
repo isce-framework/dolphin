@@ -1,3 +1,4 @@
+import datetime
 from copy import deepcopy
 from os import PathLike
 from pathlib import Path
@@ -9,7 +10,7 @@ from ruamel.yaml import YAML
 Pathlike = Union[PathLike[str], str]
 
 
-def load_yaml(input_path: Pathlike, *, workflow_name: str = "s1_disp"):
+def load_workflow_yaml(input_path: Pathlike, *, workflow_name: str = "s1_disp"):
     """Load and validate a yaml file for a workflow.
 
     Parameters
@@ -59,6 +60,30 @@ def save_yaml(output_path: Pathlike, data: dict):
         parser.dump(data, f)
 
 
+def add_atlas_section(cfg):
+    """Add package and runtime metadata to a loaded config.
+
+    Parameters
+    ----------
+    cfg : dict
+        Loaded configuration dict from `load_yaml`
+
+    Returns
+    -------
+    cfg : dict
+        Configuration dict with added "atlas" section
+    """
+    from atlas import __version__
+
+    atlas_cfg = {
+        "version": __version__,
+        "runtime": str(datetime.datetime.now()),
+        # TODO: anything else relevant?
+    }
+    cfg["atlas"] = atlas_cfg
+    return cfg
+
+
 def get_workflow_yaml_path(name: str = "s1_disp.yaml", yaml_type: str = "schemas"):
     """Get the path to a yaml schema or default file.
 
@@ -77,8 +102,6 @@ def get_workflow_yaml_path(name: str = "s1_disp.yaml", yaml_type: str = "schemas
     if yaml_type not in ["schemas", "defaults"]:
         raise ValueError("yaml_type must be one of ['schemas', 'defaults']")
     outpath = Path(__file__).parent / yaml_type / name
-    # if not name.endswith(".yaml"):
-    # name += ".yaml"
     if outpath.suffix != ".yaml":
         outpath = outpath.with_suffix(".yaml")
     return outpath

@@ -17,7 +17,9 @@ def run(config_file: str):
     config_file : str
         YAML file containing the workflow options.
     """
-    cfg = config.load_yaml(config_file, workflow_name="s1_disp")
+    cfg = config.load_workflow_yaml(config_file, workflow_name="s1_disp")
+    filled_cfg_path = Path(config_file).with_suffix(".filled.yaml")
+    config.save_yaml(filled_cfg_path, config.add_atlas_section(cfg))
 
     # First make the amplitude dispersion file
     ps_path = Path(cfg["directories"]["ps"]).absolute()
