@@ -2,12 +2,15 @@
 from pathlib import Path
 from typing import List, Tuple
 
-# import numpy as np
+import numpy as np
 from osgeo import gdal
 
+from atlas.log import get_log
 from atlas.utils import Pathlike, get_dates
 
 gdal.UseExceptions()
+
+logger = get_log()
 
 
 def run_combine(
@@ -25,14 +28,8 @@ def run_combine(
     pl_slc_files = Path(pl_directory).glob("*.slc")
     pl_date_dict = _make_date_file_dict(pl_slc_files)
 
-    ds_orig_slc = gdal.Open(str(input_vrt_file))
-    # The first file will be `stack_vrt_file`, the rest are the bands
-    orig_slc_files = gdal.Info(ds_orig_slc, format="json")["files"][1:]
-    xsize, ysize = ds_orig_slc.RasterXSize, ds_orig_slc.RasterYSize
-    orig_date_dict = _make_date_file_dict(orig_slc_files)
-    ds_orig_slc = None
-
-    assert len(pl_date_dict) == len(orig_date_dict)
+    ds_orig_stack = gdal.Open(str(input_vrt_file))
+    assert len(pl_date_dict) == ds_orig_stack.RasterCount
 
     date_list = list(pl_date_dict.keys())
     date12_list = _make_ifg_list(date_list, "single-reference")
@@ -40,6 +37,7 @@ def run_combine(
     ds_psfile = gdal.Open(str(ps_file))
     bnd_ps = ds_psfile.GetRasterBand(1)
 
+    xsize, ysize = ds_orig_stack.RasterXSize, ds_orig_stack.RasterYSize
     driver = gdal.GetDriverByName("ENVI")
     for date_1, date_2 in date12_list:
         # output file witth both PS and DS pixels
@@ -48,6 +46,7 @@ def run_combine(
         ds_out = driver.Create(str(output_file), xsize, ysize, 1, gdal.GDT_CFloat32)
         bnd_out = ds_out.GetRasterBand(1)
 
+        logger.info(f"Forming interferogram {output_file.stem} in {output_folder}")
         # get the current two SLCs, both original and phase-linked
         pl_file_1 = pl_date_dict[date_1]
         pl_file_2 = pl_date_dict[date_2]
@@ -56,12 +55,10 @@ def run_combine(
         bnd_pl_1 = ds_pl_1.GetRasterBand(1)
         bnd_pl_2 = ds_pl_2.GetRasterBand(1)
 
-        orig_file_1 = orig_date_dict[date_1]
-        orig_file_2 = orig_date_dict[date_2]
-        ds_orig_1 = gdal.Open(str(orig_file_1))
-        ds_orig_2 = gdal.Open(str(orig_file_2))
-        bnd_orig_1 = ds_orig_1.GetRasterBand(1)
-        bnd_orig_2 = ds_orig_2.GetRasterBand(1)
+        idx1 = date_list.index(date_1)
+        idx2 = date_list.index(date_2)
+        bnd_orig_1 = ds_orig_stack.GetRasterBand(idx1 + 1)
+        bnd_orig_2 = ds_orig_stack.GetRasterBand(idx2 + 1)
 
         # integrate PS to DS for this pair and write to file block by block
         xsize, ysize = ds_out.RasterXSize, ds_out.RasterYSize
@@ -71,20 +68,28 @@ def run_combine(
             cur_ywin = ywindow if (y0 + ywindow) < ysize else ysize - y0
             ps_arr = bnd_ps.ReadAsArray(x0, y0, xwindow, cur_ywin)
 
-            ifg_out = _form_ifg(bnd_pl_1, bnd_pl_2, x0, y0, xwindow, cur_ywin)
             # Form the original full-res ifg
             ifg_orig = _form_ifg(bnd_orig_1, bnd_orig_2, x0, y0, xwindow, cur_ywin)
-            # But only take the values at thhe PS pixels
+            # TODO do I want to keep the amplitude=1 ?
+            ifg_out = _form_ifg(bnd_pl_1, bnd_pl_2, x0, y0, xwindow, cur_ywin)
+            # Use the original ifg's amplitude values:
+            ifg_out = np.abs(ifg_orig) * np.exp(1j * np.angle(ifg_out))
+
+            # breakpoint()
+            # But only take the values at the PS pixels
             ps_mask = ps_arr == 1
             ifg_out[ps_mask] = ifg_orig[ps_mask]
             bnd_out.WriteArray(ifg_out, x0, y0)
+            bnd_out.FlushCache()
 
             y0 += ywindow
 
         # close the datasets
         ds_out = bnd_out = None
         ds_pl_1 = ds_pl_2 = bnd_pl_1 = bnd_pl_2 = None
-        ds_orig_1 = ds_orig_2 = bnd_orig_1 = bnd_orig_2 = None
+        # ds_orig_1 = ds_orig_2 = bnd_orig_1 = bnd_orig_2 = None
+        bnd_orig_1 = bnd_orig_2 = None
+    ds_orig_stack = None
 
 
 def _form_ifg(bnd_1, bnd_2, x0, y0, xwindow, ywindow):
@@ -93,8 +98,6 @@ def _form_ifg(bnd_1, bnd_2, x0, y0, xwindow, ywindow):
     slc_1 = bnd_1.ReadAsArray(x0, y0, xwindow, ywindow)
     slc_2 = bnd_2.ReadAsArray(x0, y0, xwindow, ywindow)
     return slc_1 * slc_2.conj()
-    # # This will normalize to 1 amplitude:
-    # return np.exp(1j * np.angle(slc_2 * np.conjugate(slc_i)))
 
 
 def _get_stack_file_list(stack_vrt_file):
