@@ -1,16 +1,16 @@
 #!/usr/bin/env python
 import argparse
-import os
 import re
+from pathlib import Path
 from typing import Optional, Tuple
 
 from osgeo import gdal
 
-from atlas import log, utils
+from atlas.log import get_log
 
 SENTINEL_WAVELENGTH = 0.05546576
 
-logger = log.get_log()
+logger = get_log()
 
 
 def create_vrt_stack(
@@ -40,7 +40,7 @@ def create_vrt_stack(
         raise ValueError("Cannot specify both subset_bbox and target_extent")
 
     if use_abs_path:
-        file_list = [os.path.abspath(f) for f in file_list]
+        file_list = [str(Path(f).absolute()) for f in file_list]
 
     ds = gdal.Open(file_list[0])
     if subset_bbox is not None:
@@ -163,8 +163,10 @@ if __name__ == "__main__":
     logger.info("Number of SLCs found: ", num_slc)
 
     # Set up single stack file
-    utils.mkdir_p(args.out_dir)
-    outfile = os.path.join(args.out_dir, args.out_vrt_name)
+    out_dir = Path(args.out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    outfile = str(out_dir / args.out_vrt_name)
     create_vrt_stack(
         file_list,
         outfile=outfile,

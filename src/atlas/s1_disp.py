@@ -2,7 +2,7 @@
 import argparse
 from pathlib import Path
 
-from atlas import ps, utils, wrapped
+from atlas import config, ps, wrapped
 from atlas.log import get_log, log_runtime
 
 logger = get_log()
@@ -17,7 +17,7 @@ def run(config_file: str):
     config_file : str
         YAML file containing the workflow options.
     """
-    cfg = utils.load_yaml(config_file, workflow_name="s1_disp")
+    cfg = config.load_yaml(config_file, workflow_name="s1_disp")
 
     # First make the amplitude dispersion file
     ps_path = Path(cfg["directories"]["ps"]).absolute()
