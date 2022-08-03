@@ -6,120 +6,11 @@ from typing import Optional, Tuple
 
 from osgeo import gdal
 
-from atlas import utils
+from atlas import log, utils
 
 SENTINEL_WAVELENGTH = 0.05546576
 
-
-def create_vrt_stack_manual(
-    file_list: list,
-    subset_bbox: Optional[Tuple[int, int, int, int]] = None,
-    target_extent: Optional[Tuple[float, float, float, float]] = None,
-    outfile: str = "slcs_base.vrt",
-    use_abs_path: bool = True,
-):
-    """Create a VRT stack from a list of SLC files.
-
-    Parameters
-    ----------
-    file_list : list
-        Names of files to stack
-    subset_bbox : tuple[int], optional
-        Desired bounding box (in pixels) of subset as (left, bottom, right, top)
-    target_extent : tuple[int], optional
-        Target extent: alternative way to subset the stack like the `-te` gdal option:
-            (xmin, ymin, xmax, ymax) in units of the SLCs' SRS (e.g. UTM coordinates)
-    outfile : str, optional (default = "slcs_base.vrt")
-        Name of output file to write
-    use_abs_path : bool, optional (default = True)
-        Write the filepaths in the VRT as absolute
-    """
-    # Use the first file in the stack to get size, transform info
-    ds = gdal.Open(file_list[0])
-    xsize, ysize = ds.RasterXSize, ds.RasterYSize
-    # Save the transform info for later
-    gt = ds.GetGeoTransform()
-    proj = ds.GetProjection()
-    srs = ds.GetSpatialRef()
-    ds = None
-
-    xoff, yoff, xsize_sub, ysize_sub = 0, 0, xsize, ysize
-    print("write vrt file for stack directory")
-    # xoff, yoff, xsize_sub, ysize_sub = get_subset_bbox(
-    #     xsize, ysize, subset_bbox=subset_bbox
-    # )
-    with open(outfile, "w") as fid:
-        fid.write(f'<VRTDataset rasterXSize="{xsize_sub}" rasterYSize="{ysize_sub}">\n')
-
-        for idx, filename in enumerate(file_list, start=1):
-            if use_abs_path:
-                filename = os.path.abspath(filename)
-            date = _get_date(filename)
-            outstr = f"""    <VRTRasterBand dataType="CFloat32" band="{idx}">
-        <SimpleSource>
-            <SourceFilename>{filename}</SourceFilename>
-            <SourceBand>1</SourceBand>
-            <SourceProperties RasterXSize="{xsize}" RasterYSize="{ysize}" DataType="CFloat32"/>
-            <SrcRect xOff="{xoff}" yOff="{yoff}" xSize="{xsize_sub}" ySize="{ysize_sub}"/>
-            <DstRect xOff="0" yOff="0" xSize="{xsize_sub}" ySize="{ysize_sub}"/>
-        </SimpleSource>
-        <Metadata domain="slc">
-            <MDI key="Date">{date}</MDI>
-            <MDI key="Wavelength">{SENTINEL_WAVELENGTH}</MDI>
-            <MDI key="AcquisitionTime">{date}</MDI>
-        </Metadata>
-    </VRTRasterBand>\n"""  # noqa: E501
-            fid.write(outstr)
-
-        fid.write("</VRTDataset>")
-
-    # Set the geotransform and projection
-    ds = gdal.Open(outfile, gdal.GA_Update)
-    ds.SetGeoTransform(gt)
-    ds.SetProjection(proj)
-    ds.SetSpatialRef(srs)
-    xres, yres = gt[1], gt[5]
-    ds = None
-
-    if target_extent is None and subset_bbox is None:
-        return
-    elif target_extent is not None and subset_bbox is not None:
-        raise ValueError("Cannot specify both target_extent and subset_bbox")
-
-    # Otherwise, subset the VRT to the target extent using gdal_translate
-    ds = gdal.Open(outfile, gdal.GA_Update)
-    if target_extent is not None:
-        # assert len(target_extent) == 4
-        # # projWin is (ulx, uly, lrx, lry), so need to reorder
-        # xmin, ymin, xmax, ymax = target_extent
-        # projwin = xmin, ymax, xmax, ymin
-        # options = gdal.TranslateOptions(projWin=projwin)
-        options = gdal.WarpOptions(outputBounds=target_extent, xRes=xres, yRes=yres)
-    elif subset_bbox:
-        # options = gdal.TranslateOptions(srcWin=_bbox_to_srcwin(subset_bbox))
-        options = gdal.WarpOptions(
-            outputBounds=subset_bbox, outputBoundsSRS="", xRes=xres, yRes=yres
-        )
-
-    temp_file = outfile + ".tmp.vrt"
-    # gdal.Translate(temp_file, ds, options=options)
-    gdal.Warp(temp_file, ds, options=options)
-    ds = None
-    ds = gdal.Open(temp_file)
-    # os.rename(temp_file, outfile)
-
-
-def _rowcol_to_xy(row, col, ds=None, filename=None):
-    """Convert a row and column index to coordinates in the georeferenced space.
-
-    Reference: https://gdal.org/tutorials/geotransforms_tut.html
-    """
-    if ds is None:
-        ds = gdal.Open(filename)
-    gt = ds.GetGeoTransform()
-    x = gt[0] + col * gt[1] + row * gt[2]
-    y = gt[3] + col * gt[4] + row * gt[5]
-    return x, y
+logger = log.get_log()
 
 
 def create_vrt_stack(
@@ -183,26 +74,17 @@ def _bbox_to_te(subset_bbox, ds=None, filename=None):
     return xmin, ymin, xmax, ymax
 
 
-def _bbox_to_srcwin(subset_bbox=None):
-    """Convert a gdalwarp -te option to a gdal_translate -srcwin option.
+def _rowcol_to_xy(row, col, ds=None, filename=None):
+    """Convert a row and column index to coordinates in the georeferenced space.
 
-    Parameters
-    ----------
-    subset_bbox : tuple[int], optional
-        Desired bounding box of subset as (left, bottom, right, top)
-
-    Returns
-    -------
-    xoff, yoff, xsize_sub, ysize_sub : tuple[int]
+    Reference: https://gdal.org/tutorials/geotransforms_tut.html
     """
-    # -te xmin ymin xmax ymax
-    left, bottom, right, top = subset_bbox
-    xoff = left
-    yoff = top
-    xsize_sub = right - left
-    ysize_sub = bottom - top
-
-    return xoff, yoff, xsize_sub, ysize_sub
+    if ds is None:
+        ds = gdal.Open(filename)
+    gt = ds.GetGeoTransform()
+    x = gt[0] + col * gt[1] + row * gt[2]
+    y = gt[3] + col * gt[4] + row * gt[5]
+    return x, y
 
 
 def _get_date(filename):
@@ -278,7 +160,7 @@ if __name__ == "__main__":
         raise ValueError("Need to pass either --in-files or --in-textfile")
 
     num_slc = len(file_list)
-    print("Number of SLCs Used: ", num_slc)
+    logger.info("Number of SLCs found: ", num_slc)
 
     # Set up single stack file
     utils.mkdir_p(args.out_dir)
