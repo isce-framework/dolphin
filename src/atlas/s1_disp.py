@@ -93,16 +93,22 @@ def run(config_file: str):
     # 5. Combinine PS and DS phases and forming interferograms
     ps_ds_path = Path(cfg["combine_ps_ds"]["directory"]).absolute()
     ps_ds_path.mkdir(parents=True, exist_ok=True)
-    temp_coh_file = ps_ds_path / cfg["combine_ps_ds"]["temp_coh_file"]
-    if temp_coh_file.exists():
+    # Temp coh file made in last step:
+    temp_coh_file = pl_path / cfg["phase_linking"]["temp_coh_file"]
+    # Final coh file to be created here
+    temp_coh_ps_ds_file = ps_ds_path / cfg["combine_ps_ds"]["temp_coh_file"]
+    if temp_coh_ps_ds_file.exists():
         logger.info(f"Skipping combine_ps_ds step, {temp_coh_file} exists")
     else:
         logger.info(f"Running combine ps/ds step into {ps_ds_path}")
         combine_ps_ds.run_combine(
-            output_folder=ps_ds_path,
+            input_vrt_file=cfg["input_vrt_file"],
             ps_file=ps_output,
             pl_directory=pl_path,
             temp_coh_file=temp_coh_file,
+            temp_coh_ps_ds_file=temp_coh_ps_ds_file,
+            output_folder=ps_ds_path,
+            ps_temp_coh=cfg["combine_ps_ds"]["ps_temp_coh"],
         )
 
 
