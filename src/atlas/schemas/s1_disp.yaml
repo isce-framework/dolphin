@@ -21,7 +21,7 @@ processing:
 
 
 ps:
-  amp_dispersion_file: str()
+  amp_disp_file: str()
   amp_mean_file: str()
   amp_dispersion_threshold: num(min=0.0)
   normalizing_reference_band: int(min=1)

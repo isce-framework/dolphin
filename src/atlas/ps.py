@@ -26,10 +26,11 @@ def create_amp_dispersion(
     aa.run()
 
 
-def create_ps(*, outfile, amp_dispersion_threshold: float = 0.42):
+def create_ps(*, outfile, amp_disp_file, amp_dispersion_threshold: float = 0.42):
     """Create the PS file using the existing amplitude dispersion file."""
     gdal_calc.Calc(
         [f"a<{amp_dispersion_threshold}"],
+        a=amp_disp_file,
         outfile=outfile,
         format="ENVI",
         type="Byte",

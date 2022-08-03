@@ -29,7 +29,7 @@ processing:
 # ampdispersion.py -i stack/slcs_base.vrt -o ampDispersion/ampdispersion -m ampDispersion/mean
 # gdal_calc.py --calc="a<0.42"  -a=ampDispersion/ampdispersion  --outfile ampDispersion/ps_pixels --format ENVI --type Byte --overwrite
 ps:
-  amp_dispersion_file: 'amp_dispersion'
+  amp_disp_file: 'amp_dispersion'
   amp_mean_file: 'mean'
   amp_dispersion_threshold: 0.42
   normalizing_reference_band: 1
