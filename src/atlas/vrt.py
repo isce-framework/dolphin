@@ -13,7 +13,7 @@ SENTINEL_WAVELENGTH = 0.05546576
 logger = get_log()
 
 
-def create_vrt_stack(
+def create_stack(
     file_list: list,
     subset_bbox: Optional[Tuple[int, int, int, int]] = None,
     target_extent: Optional[Tuple[float, float, float, float]] = None,
@@ -140,7 +140,8 @@ def get_cli_args():
     return args
 
 
-if __name__ == "__main__":
+def main():
+    """Run the command line interface."""
     args = get_cli_args()
 
     # Get slc list from text file or command line
@@ -153,16 +154,20 @@ if __name__ == "__main__":
         raise ValueError("Need to pass either --in-files or --in-textfile")
 
     num_slc = len(file_list)
-    logger.info("Number of SLCs found: ", num_slc)
+    logger.info(f"Number of SLCs found: {num_slc}")
 
     # Set up single stack file
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
     outfile = str(out_dir / args.out_vrt_name)
-    create_vrt_stack(
+    create_stack(
         file_list,
         outfile=outfile,
         subset_bbox=args.subset_bbox,
         target_extent=args.target_extent,
     )
+
+
+if __name__ == "__main__":
+    main()
