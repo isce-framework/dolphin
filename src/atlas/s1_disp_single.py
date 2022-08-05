@@ -9,7 +9,7 @@ logger = get_log()
 
 @log_runtime
 def run(cfg: dict):
-    """Run the displacement workflow on a stack of SLCs.
+    """Run the displacement workflow on one incremental SLC.
 
     Parameters
     ----------

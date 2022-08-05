@@ -174,5 +174,4 @@ def _single_reference_network(date_list: List[str]) -> List[Tuple[str, str]]:
     if len(date_list) < 2:
         raise ValueError("Need at least two dates to make an interferogram list")
     ref = date_list[0]
-    # return [f"{ref}_{date}" for date in date_list[1:]]
     return [(ref, date) for date in date_list[1:]]

@@ -64,7 +64,7 @@ def run_evd(
     aa.compSlc = compressed_slc_filename  # "compslc.bin"
 
     aa.minimumNeighbors = pl_opts["minimum_neighbors"]
-    aa.method = pl_opts["method"]
+    aa.method = pl_opts["method"].upper()
 
     aa.halfWindowX = window["xhalf"]
     aa.halfWindowY = window["yhalf"]
