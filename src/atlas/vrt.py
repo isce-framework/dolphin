@@ -5,6 +5,8 @@ from typing import Optional, Tuple
 
 from osgeo import gdal
 
+gdal.UseExceptions()
+
 from atlas import utils
 from atlas.log import get_log
 
@@ -41,29 +43,92 @@ def create_stack(
 
     if use_abs_path:
         file_list = [str(Path(f).absolute()) for f in file_list]
-
+    # Use the first file in the stack to get size, transform info
     ds = gdal.Open(file_list[0])
-    if subset_bbox is not None:
-        target_extent = _bbox_to_te(subset_bbox, ds=ds)
+    xsize = ds.RasterXSize
+    ysize = ds.RasterYSize
+    dtype = gdal.GetDataTypeName(ds.GetRasterBand(1).DataType)  # Should be CFloat32
+    # Save these for setting at the end
+    gt = ds.GetGeoTransform()
+    proj = ds.GetProjection()
+    srs = ds.GetSpatialRef()
     ds = None
 
-    options = gdal.BuildVRTOptions(separate=True, outputBounds=target_extent)
-    gdal.BuildVRT(outfile, file_list, options=options)
+    xoff, yoff, xsize_sub, ysize_sub = _get_subset_bbox(
+        xsize,
+        ysize,
+        subset_bbox=subset_bbox,
+        target_extent=target_extent,
+        filename=file_list[0],
+    )
 
-    # Get the list of files (the first will be the VRT name `outfile`)
-    file_list = gdal.Info(outfile, format="json")["files"][1:]
+    with open(outfile, "w") as fid:
+        fid.write(f'<VRTDataset rasterXSize="{xsize_sub}" rasterYSize="{ysize_sub}">\n')
+
+        for idx, filename in enumerate(file_list, start=1):
+            filename = str(Path(filename).absolute())
+            date = utils.get_dates(filename)[0]
+            outstr = f"""    <VRTRasterBand dataType="{dtype}" band="{idx}">
+        <SimpleSource>
+            <SourceFilename>{filename}</SourceFilename>
+            <SourceBand>1</SourceBand>
+            <SourceProperties RasterXSize="{xsize}" RasterYSize="{ysize}" DataType="{dtype}"/>
+            <SrcRect xOff="{xoff}" yOff="{yoff}" xSize="{xsize_sub}" ySize="{ysize_sub}"/>
+            <DstRect xOff="0" yOff="0" xSize="{xsize_sub}" ySize="{ysize_sub}"/>
+        </SimpleSource>
+        <Metadata domain="slc">
+            <MDI key="Date">{date}</MDI>
+            <MDI key="Wavelength">{SENTINEL_WAVELENGTH}</MDI>
+            <MDI key="AcquisitionTime">{date}</MDI>
+        </Metadata>
+    </VRTRasterBand>\n"""  # noqa: E501
+            fid.write(outstr)
+
+        fid.write("</VRTDataset>")
+
+    # Set the georeferencing metadata
     ds = gdal.Open(outfile, gdal.GA_Update)
-    for idx, filename in enumerate(file_list, start=1):
-        date = utils.get_dates(filename)[0]
-        bnd = ds.GetRasterBand(idx)
-        # Set the metadata in the SLC domain
-        metadata = {
-            "Date": date,
-            "Wavelength": SENTINEL_WAVELENGTH,
-            "AcquisitionTime": date,
-        }
-        bnd.SetMetadata(metadata, "slc")
-        bnd = None
+    ds.SetGeoTransform(gt)
+    ds.SetProjection(proj)
+    ds.SetSpatialRef(srs)
+    ds = None
+
+
+def _get_subset_bbox(xsize, ysize, subset_bbox=None, target_extent=None, filename=None):
+    """Get the subset bounding box for a given target extent.
+
+    Parameters
+    ----------
+    xsize : int
+        size of the x dimension of the image
+    ysize : int
+        size of the y dimension of the image
+    subset_bbox : tuple[int], optional
+        Desired bounding box of subset as (left, bottom, right, top)
+    target_extent : tuple[int], optional
+        Target extent: alternative way to subset the stack like the `-te` gdal option:
+    filename : str, optional
+        Name of file to get the bounding box from, if providing `target_extent`
+
+    Returns
+    -------
+    xoff, yoff, xsize_sub, ysize_sub : tuple[int]
+    """
+    # If target extent is provided, convert to pixel bounding box
+    if target_extent is not None:
+        subset_bbox = _te_to_bbox(target_extent, filename=filename)
+
+    if subset_bbox is not None:
+        left, bottom, right, top = subset_bbox
+        xoff = left
+        yoff = top
+        xsize_sub = right - left
+        ysize_sub = bottom - top
+
+    else:
+        xoff, yoff, xsize_sub, ysize_sub = 0, 0, xsize, ysize
+
+    return xoff, yoff, xsize_sub, ysize_sub
 
 
 def _bbox_to_te(subset_bbox, ds=None, filename=None):
@@ -74,17 +139,42 @@ def _bbox_to_te(subset_bbox, ds=None, filename=None):
     return xmin, ymin, xmax, ymax
 
 
-def _rowcol_to_xy(row, col, ds=None, filename=None):
-    """Convert a row and column index to coordinates in the georeferenced space.
+def _te_to_bbox(target_extent, ds=None, filename=None):
+    """Convert target extent to pixel bounding box, in georeferenced coordinates."""
+    xmin, ymin, xmax, ymax = target_extent  # in georeferenced coordinates
+    left, bottom = _xy_to_rowcol(xmin, ymin, ds=ds, filename=filename)
+    right, top = _xy_to_rowcol(xmax, ymax, ds=ds, filename=filename)
+    return left, bottom, right, top
 
-    Reference: https://gdal.org/tutorials/geotransforms_tut.html
-    """
+
+def _rowcol_to_xy(row, col, ds=None, filename=None):
+    """Convert a row and column index to coordinates in the georeferenced space."""
     if ds is None:
         ds = gdal.Open(filename)
-    gt = ds.GetGeoTransform()
-    x = gt[0] + col * gt[1] + row * gt[2]
-    y = gt[3] + col * gt[4] + row * gt[5]
+        gt = ds.GetGeoTransform()
+        ds = None
+    else:
+        gt = ds.GetGeoTransform()
+    return _apply_gt(gt, col, row)
+
+
+def _apply_gt(gt, xpixel, ypixel):
+    # Reference: https://gdal.org/tutorials/geotransforms_tut.html
+    x = gt[0] + xpixel * gt[1] + ypixel * gt[2]
+    y = gt[3] + xpixel * gt[4] + ypixel * gt[5]
     return x, y
+
+
+def _xy_to_rowcol(x, y, ds=None, filename=None):
+    """Convert coordinates in the georeferenced space to a row and column index."""
+    if ds is None:
+        ds = gdal.Open(filename)
+        gt = ds.GetGeoTransform()
+        ds = None
+    else:
+        gt = ds.GetGeoTransform()
+    gt = gdal.InvGeoTransform(ds.GetGeoTransform())
+    return _apply_gt(gt, x, y)
 
 
 def get_cli_args():
