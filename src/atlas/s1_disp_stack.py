@@ -18,17 +18,16 @@ def run(cfg: dict):
     """
     # 1. First make the amplitude dispersion file
     ps_path = Path(cfg["ps"]["directory"]).absolute()
-    # 1. First make the amplitude dispersion file
-    ps_path = Path(cfg["ps"]["directory"]).absolute()
     ps_path.mkdir(parents=True, exist_ok=True)
     amp_disp_file = ps_path / cfg["ps"]["amp_disp_file"]
     amp_mean_file = ps_path / cfg["ps"]["amp_mean_file"]
+    input_vrt_file = str(Path(cfg["input_vrt_file"]).absolute())
     if amp_disp_file.exists():
         logger.info(f"Skipping existing amplitude dispersion file {amp_disp_file}")
     else:
         logger.info(f"Making amplitude dispersion file {amp_disp_file}")
         ps.create_amp_dispersion(
-            input_vrt_file=cfg["input_vrt_file"],
+            input_vrt_file=input_vrt_file,
             output_file=str(amp_disp_file),
             amp_mean_file=str(amp_mean_file),
             reference_band=cfg["ps"]["normalizing_reference_band"],
@@ -59,7 +58,7 @@ def run(cfg: dict):
     else:
         logger.info(f"Creating NMAP file {weight_file}")
         phase_linking.run_nmap(
-            input_vrt_file=cfg["input_vrt_file"],
+            input_vrt_file=input_vrt_file,
             mask_file=cfg["mask_file"],
             weight_file=str(weight_file),
             nmap_count_file=str(nmap_count_file),

@@ -59,7 +59,7 @@ def get_cli_args():
 def main():
     """Get the command line arguments and run the workflow."""
     args = get_cli_args()
-    run(args.config_file)
+    run(args.config_file, name=args.name)
 
 
 if __name__ == "__main__":
