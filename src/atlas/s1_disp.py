@@ -38,7 +38,7 @@ def run(config_file: str, name: str = "single"):
 def get_cli_args():
     """Set up the command line interface."""
     parser = argparse.ArgumentParser(
-        description="Run a displacement worflow",
+        description="Run a displacement workflow",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(

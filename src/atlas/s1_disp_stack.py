@@ -86,7 +86,7 @@ def run(cfg: dict):
             processing_opts=cfg["processing"],
         )
 
-    # 5. Combinine PS and DS phases and forming interferograms
+    # 5. Combine PS and DS phases and forming interferograms
     ps_ds_path = Path(cfg["combine_ps_ds"]["directory"]).absolute()
     ps_ds_path.mkdir(parents=True, exist_ok=True)
     # Temp coh file made in last step:
