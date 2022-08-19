@@ -1,4 +1,5 @@
 """Combine estimated DS phases with PS phases to form interferograms."""
+from os import fspath
 from pathlib import Path
 from typing import List, Tuple
 
@@ -28,13 +29,13 @@ def run_combine(
     pl_slc_files = Path(pl_directory).glob("*.slc")
     pl_date_dict = {get_dates(p)[0]: p for p in pl_slc_files}
 
-    ds_orig_stack = gdal.Open(str(slc_vrt_file))
+    ds_orig_stack = gdal.Open(fspath(slc_vrt_file))
     assert len(pl_date_dict) == ds_orig_stack.RasterCount
 
     date_list = [k for k in pl_date_dict.keys() if k]
     date12_list = _make_ifg_list(date_list, "single-reference")
 
-    ds_psfile = gdal.Open(str(ps_file))
+    ds_psfile = gdal.Open(fspath(ps_file))
     bnd_ps = ds_psfile.GetRasterBand(1)
 
     xsize, ysize = ds_orig_stack.RasterXSize, ds_orig_stack.RasterYSize
@@ -50,8 +51,8 @@ def run_combine(
         # get the current two SLCs, both original and phase-linked
         pl_file_1 = pl_date_dict[date_1]
         pl_file_2 = pl_date_dict[date_2]
-        ds_pl_1 = gdal.Open(str(pl_file_1))
-        ds_pl_2 = gdal.Open(str(pl_file_2))
+        ds_pl_1 = gdal.Open(fspath(pl_file_1))
+        ds_pl_2 = gdal.Open(fspath(pl_file_2))
         bnd_pl_1 = ds_pl_1.GetRasterBand(1)
         bnd_pl_2 = ds_pl_2.GetRasterBand(1)
 
@@ -124,12 +125,12 @@ def fill_temp_coh(
         Value to fill in at the PS pixels in the merged temporal coherence file.
     """
     # Start with a copy of the PS temporal coherence file
-    ds_in = gdal.Open(str(temp_coh_file))
+    ds_in = gdal.Open(fspath(temp_coh_file))
     driver = gdal.GetDriverByName("ENVI")
-    ds_out = driver.CreateCopy(str(temp_coh_ps_ds_file), ds_in)
+    ds_out = driver.CreateCopy(fspath(temp_coh_ps_ds_file), ds_in)
     ds_in = None
 
-    ds_psfile = gdal.Open(str(ps_file))
+    ds_psfile = gdal.Open(fspath(ps_file))
     bnd_ps = ds_psfile.GetRasterBand(1)
     bnd_out = ds_out.GetRasterBand(1)
 

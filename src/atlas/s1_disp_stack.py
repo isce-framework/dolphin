@@ -3,23 +3,10 @@ from glob import glob
 from os import fspath
 from pathlib import Path
 
-from atlas import combine_ps_ds, phase_linking, ps, vrt  # , unwrap
+from atlas import combine_ps_ds, phase_linking, ps, unwrap, vrt
 from atlas.log import get_log, log_runtime
 
 logger = get_log()
-# input_file_group:
-#   cslc_files:
-
-# dynamic_ancillary_file_group:
-#   dem_file:
-#   mask_files: []
-#   amp_disp_file:
-#   amp_mean_file:
-
-# product_path_group:
-#   product_path:
-#   scratch_path: 'scratch'
-#   sas_output_file:
 
 
 @log_runtime
@@ -158,8 +145,8 @@ def run(full_cfg: dict):
     # 6. Unwrap interferograms
     unwrap_path = scratch_dir / cfg["unwrap"]["directory"]
     unwrap_path.mkdir(parents=True, exist_ok=True)
-    # unwrap.run(
-    #     ifg_path=ps_ds_path,
-    #     coh_file=temp_coh_ps_ds_file,
-    #     output_path=unwrap_path,
-    # )
+    unwrap.run(
+        ifg_path=ps_ds_path,
+        output_path=unwrap_path,
+        corfile=temp_coh_ps_ds_file,
+    )
