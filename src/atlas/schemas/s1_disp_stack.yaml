@@ -1,44 +1,106 @@
-input_vrt_file: str()
-mask_file: str(required=False)
-weight_file: str()
-nmap_count_file: str()
-ps_file: str()
+runconfig:
+  name: str()
+
+  groups:
+    pge_name_group:
+      pge_name: enum('DISP_S1_PGE')
+
+    input_file_group:
+      # Required. List of CSLC files (min=1)
+      clsc_files: list(str(), min=1)
 
 
-window:
-  xhalf: int(min=1)
-  yhalf: int(min=1)
+    dynamic_ancillary_file_group:
+      # Digital Elevation Model.
+      dem_file: str(required=False)
+      # water/shadow/other mask file
+      mask_files: list(str(), min=0, required=False)
+      # running total of mean/ amplitude dispersion for PS
+      amp_disp_file: str(required=False)
+      amp_mean_file: str(required=False)
 
-processing:
+    product_path_group:
+      # Directory where PGE will place results
+      product_path: str()
+      # Directory where SAS can write temporary data
+      scratch_path: str()
+      # Intermediate file name. SAS writes the output to this file.
+      # PGE may rename the product according to file naming convention
+      sas_output_file: str()
+
+    primary_executable:
+      product_type: enum('DISP_S1')
+
+    # Worker options (e.g. enable/disable GPU processing, select GPU device ID)
+    worker: include('worker_options', required=False)
+
+    # This section includes parameters to tweak the workflow
+    processing: include('processing_options', required=False)
+
+
+---
+worker_options:
+  # To prevent downloading DEM / other data automatically. Default True
+  internet_access: bool(required=False)
+  # Enable/Disable GPU processing capabilities. Default False
+  gpu_enabled: bool(required=False)
+  # Index of the GPU to use for processing, optional. Defaults to the
+  # first available CUDA device. Ignored if *gpu_enabled* is False.
+  gpu_id: int(min=0, required=False)
+
+processing_options:
+  # Format of output file
+  output_format: enum('ENVI', 'GTiff', 'HDF5', required=False)
+
+  # temporary files during workflow processing at multiple stages
+  weight_file: str()
+  nmap_count_file: str()
+  ps_file: str()
+
+  # Options for how large of chunks to use at a time
   lines_per_block: int(min=0)
   ram: int(min=64)
-  no_gpu: bool(required=False)
+
+  window:
+    xhalf: int(min=1)
+    yhalf: int(min=1)
+
+  # Options for each step in the workflow
+  ps: include('ps_options', required=False)
+  nmap: include('nmap_options', required=False)
+  phase_linking: include('phase_linking_options', required=False)
+  combine_ps_ds: include('combine_ps_ds_options', required=False)
+  unwrap: include('unwrap_options', required=False)
 
 
-ps:
+ps_options:
   directory: str()
-  amp_disp_file: str()
-  amp_mean_file: str()
   amp_dispersion_threshold: num(min=0.0)
   normalizing_reference_band: int(min=1)
 
-nmap:
+nmap_options:
   directory: str()
+  # Minimum p-value for labeling neighbors.
   pvalue: num(required=False, min=0.0, max=1.0)
   stat_method: enum('KS2', 'AD2', required=False)
 
-phase_linking:
+phase_linking_options:
   directory: str()
+  # Minimum number of neighbors for computation
   minimum_neighbors: int(min=1)
+  # Decomposition method to use - MLE / EVD
   method: enum('mle', 'evd')
   compressed_slc_file: str()
   temp_coh_file: str()
 
-combine_ps_ds:
+combine_ps_ds_options:
   directory: str()
+  # File that takes the phase_linking temp_coh file, fill in high coherence for PS
   temp_coh_file: str()
+  # Value to set the temporal coherence of the PS pixels
   ps_temp_coh: num(min=0.0, max=1.0)
 
-unwrap:
+unwrap_options:
   directory: str()
   unwrap_method: str()
+  tiles: list(int())

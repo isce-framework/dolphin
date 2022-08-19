@@ -1,1 +1,16 @@
-input_vrt_file: 'stack_test.vrt'
+runconfig:
+  name: disp_s1_workflow_default
+
+  groups:
+    input_file_group:
+      clsc_files:
+        - './t48_iw3_b148_20220111_VV.slc'
+        - './t48_iw3_b148_20220201_VV.slc'
+
+    product_path_group:
+      # Directory where PGE will place results
+      product_path: 'output'
+      # Directory where SAS can write temporary data
+      # Intermediate file name. SAS writes the output to this file.
+      # PGE may rename the product according to file naming convention
+      sas_output_file: 'unwrapped_20220201.unw'

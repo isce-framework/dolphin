@@ -1,66 +1,71 @@
-# Options common to multiple workflow steps
-input_vrt_file:
-weight_file: 'nmap'
-mask_file: ''
-nmap_count_file: 'count'
-ps_file: 'ps_pixels'
+runconfig:
+  name: disp_s1_workflow_default
+
+  groups:
+    pge_name_group:
+      pge_name: DISP_S1_PGE
+
+    input_file_group:
+      clsc_files:
+
+    dynamic_ancillary_file_group:
+      dem_file:
+      mask_files: []
+      amp_disp_file:
+      amp_mean_file:
+
+    product_path_group:
+      product_path:
+      scratch_path: 'scratch'
+      sas_output_file:
+
+    primary_executable:
+      product_type: DISP_S1
+
+    worker:
+      internet_access: False
+      gpu_enabled: False
+      gpu_id: 0
+
+    processing:
+      output_format: 'ENVI'
+
+      # temporary files during workflow processing at multiple stages
+      weight_file: 'nmap'
+      nmap_count_file: 'count'
+      ps_file: 'ps_pixels'
+
+      lines_per_block: 64
+      ram: 512
+
+      window:
+        xhalf: 11
+        yhalf: 5
 
 
-# Multilook window size
-window:
-  xhalf: 11
-  yhalf: 5
+      ps:
+        directory: 'PS'
+        amp_dispersion_threshold: 0.42
+        normalizing_reference_band: 1
 
-processing:
-  # Options for how large of chunks to use at a time
-  lines_per_block: 64
-  ram: 512
-  # Explicitly do not use GPU
-  no_gpu: false
+      nmap:
+        directory: 'nmap'
+        pvalue: 0.05
+        stat_method: 'KS2'
 
-# Options specific to stages of the workflow:
-# ##########################################
+      phase_linking:
+        directory: 'linked_phase'
+        minimum_neighbors: 5
+        method: 'mle'
+        compressed_slc_file: 'compslc.bin'
+        temp_coh_file: 'tcorr.bin'
 
-# Relevant Fringe command example:
-# ampdispersion.py -i stack/slcs_base.vrt -o ampDispersion/ampdispersion -m ampDispersion/mean
-# gdal_calc.py --calc='a<0.42'  -a=ampDispersion/ampdispersion  --outfile ampDispersion/ps_pixels --format ENVI --type Byte --overwrite
-ps:
-  directory: 'PS'
-  amp_disp_file: 'amp_dispersion'
-  amp_mean_file: 'mean'
-  amp_dispersion_threshold: 0.42
-  normalizing_reference_band: 1
+      combine_ps_ds:
+        directory: 'PS_DS'
+        temp_coh_file: 'tcorr_ps_ds.bin'
+        ps_temp_coh: 0.95
 
-
-# Relevant Fringe command example:
-# nmap.py -i stack/slcs_base.vrt -o nmap/nmap -c nmap/count -x 11 -y 5
-nmap:
-  directory: 'nmap'
-  # Minimum p-value for labeling neighbors.
-  pvalue: 0.05
-  stat_method: 'KS2'
-
-# Relevant Fringe command example:
-# evd.py -i stack/slcs_base.vrt -o EVD -x 11 -y 5 -w nmap/nmap
-phase_linking:
-  directory: 'linked_phase'
-  # Minimum number of neighbors for computation
-  minimum_neighbors: 5
-  # Decomposition method to use - MLE / EVD
-  method: 'mle'
-  compressed_slc_file: 'compslc.bin'
-  # Note: this temp_coh_file name is hardcoded into fringe right now.
-  temp_coh_file: 'tcorr.bin'
-
-# Relevant Fringe commands:
-# integratePS.py -s stack/slcs_base.vrt -d EVD -t EVD/tcorr.bin -p ampDispersion/ps_pixels -o PS_DS --unwrap_method snaphu
-combine_ps_ds:
-  directory: 'PS_DS'
-  # File that takes the phase_linking temp_coh file, fill in high coherence for PS
-  temp_coh_file: 'tcorr_ps_ds.bin'
-  # Value to set the temporal coherence of the PS pixels
-  ps_temp_coh: 0.95
-
-unwrap:
-  directory: 'unwrapped'
-  unwrap_method: 'snaphu'
+      unwrap:
+        directory: 'unwrapped'
+        unwrap_method: 'snaphu'
+        tiles: [1, 1]

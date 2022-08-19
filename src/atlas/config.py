@@ -78,7 +78,7 @@ def add_atlas_section(cfg):
         "runtime": str(datetime.datetime.now()),
         # TODO: anything else relevant?
     }
-    cfg["atlas"] = atlas_cfg
+    cfg["runconfig"]["groups"]["processing"]["atlas"] = atlas_cfg
     return cfg
 
 

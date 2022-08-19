@@ -31,7 +31,7 @@ def run(cfg: dict):
             output_file=str(amp_disp_file),
             amp_mean_file=str(amp_mean_file),
             reference_band=cfg["ps"]["normalizing_reference_band"],
-            processing_opts=cfg["processing"],
+            processing_opts=cfg["cpu_resources"],
         )
 
     # 2. PS selection
@@ -64,7 +64,7 @@ def run(cfg: dict):
             nmap_count_file=str(nmap_count_file),
             window=cfg["window"],
             nmap_opts=cfg["nmap"],
-            processing_opts=cfg["processing"],
+            processing_opts=cfg["cpu_resources"],
         )
 
     # 4. phase linking/EVD step
@@ -83,7 +83,7 @@ def run(cfg: dict):
             output_folder=str(pl_path),
             window=cfg["window"],
             pl_opts=cfg["phase_linking"],
-            processing_opts=cfg["processing"],
+            processing_opts=cfg["cpu_resources"],
         )
 
     # 5. Combine PS and DS phases and forming interferograms

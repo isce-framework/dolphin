@@ -45,12 +45,14 @@ def test_yaml_stack():
     min_data = atlas.config.load_workflow_yaml(
         minimal_path, workflow_name="s1_disp_stack"
     )
-    assert min_data["nmap"]["pvalue"] == 0.05
+    min_proc_dict = min_data["runconfig"]["groups"]["processing"]
+    assert min_proc_dict["nmap"]["pvalue"] == 0.05
 
     default_dict = yamale.make_data(defaults_file)[0][0]
-    for k, v in default_dict.items():
-        if k != "input_vrt_file":
-            assert min_data[k] == v
+    default_proc = default_dict["runconfig"]["groups"]["processing"]
+    for k, v in default_proc.items():
+        # if k != "input_vrt_file":
+        assert min_proc_dict[k] == v
 
 
 def test_yaml_save(tmp_path):
@@ -76,4 +78,5 @@ def test_atlas_cfg_section():
 
     now = str(datetime.datetime.now())
     # '2022-08-03 08:47:28.834660' , ignore microseconds
-    assert cfg_augmented["atlas"]["runtime"][:-7] == now[:-7]
+    proc_dict = cfg_augmented["runconfig"]["groups"]["processing"]
+    assert proc_dict["atlas"]["runtime"][:-7] == now[:-7]
