@@ -6,14 +6,14 @@
 
 
 def create_amp_dispersion(
-    *, input_vrt_file, output_file, amp_mean_file, reference_band, processing_opts
+    *, slc_vrt_file, output_file, amp_mean_file, reference_band, processing_opts
 ):
     """Create the amplitude dispersion file using FRInGE."""
     import ampdispersionlib
 
     aa = ampdispersionlib.Ampdispersion()
 
-    aa.inputDS = input_vrt_file
+    aa.inputDS = slc_vrt_file
     aa.outputDS = output_file
     aa.meanampDS = amp_mean_file
 

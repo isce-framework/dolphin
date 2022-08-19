@@ -9,7 +9,7 @@ logger = get_log()
 
 
 @log_runtime
-def run(config_file: str, name: str = "single"):
+def run(config_file: str, name: str = "stack"):
     """Run the displacement workflow.
 
     Parameters
@@ -28,11 +28,11 @@ def run(config_file: str, name: str = "single"):
     if name == "single":
         from atlas import s1_disp_single
 
-        s1_disp_single.run(cfg)
+        s1_disp_single.run(cfg["runconfig"]["groups"])
     elif name == "stack":
         from atlas import s1_disp_stack
 
-        s1_disp_stack.run(cfg)
+        s1_disp_stack.run(cfg["runconfig"]["groups"])
 
 
 def get_cli_args():

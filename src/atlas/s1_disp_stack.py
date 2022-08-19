@@ -1,33 +1,66 @@
 #!/usr/bin/env python
 from pathlib import Path
 
-from atlas import combine_ps_ds, phase_linking, ps  # , unwrap
+from atlas import combine_ps_ds, phase_linking, ps, vrt  # , unwrap
 from atlas.log import get_log, log_runtime
 
 logger = get_log()
+# input_file_group:
+#   clsc_files:
+
+# dynamic_ancillary_file_group:
+#   dem_file:
+#   mask_files: []
+#   amp_disp_file:
+#   amp_mean_file:
+
+# product_path_group:
+#   product_path:
+#   scratch_path: 'scratch'
+#   sas_output_file:
 
 
 @log_runtime
-def run(cfg: dict):
+def run(full_cfg: dict):
     """Run the displacement workflow on a stack of SLCs.
 
     Parameters
     ----------
-    cfg : dict
+    full_cfg : dict
         Loaded configuration from YAML workflow file.
     """
+    cfg = full_cfg["processing"]
+    output_dir = Path(full_cfg["product_path_group"]["product_path"]).absolute()
+    output_dir.mkdir(parents=True, exist_ok=True)
+    scratch_dir = Path(full_cfg["product_path_group"]["scratch_path"]).absolute()
+    scratch_dir.mkdir(parents=True, exist_ok=True)
+    # sas_output_file = full_cfg["product_path_group"]["sas_output_file"]
+
+    input_files = full_cfg["input_file_group"]["clsc_files"]
+    amp_disp_file = full_cfg["dynamic_ancillary_file_group"]["amp_disp_file"]
+    amp_mean_file = full_cfg["dynamic_ancillary_file_group"]["amp_mean_file"]
+    # dem_file = full_cfg["dynamic_ancillary_file_group"]["dem_file"]
+    # mask_files = full_cfg["dynamic_ancillary_file_group"]["mask_files"]
+
+    # 0. Make a VRT pointing to the input SLC files
+    slc_vrt_file = scratch_dir / "slc_stack.vrt"
+    vrt.create_stack(
+        input_files,
+        outfile=slc_vrt_file,
+    )
+
     # 1. First make the amplitude dispersion file
-    ps_path = Path(cfg["ps"]["directory"]).absolute()
+    ps_path = scratch_dir / cfg["ps"]["directory"]
     ps_path.mkdir(parents=True, exist_ok=True)
     amp_disp_file = ps_path / cfg["ps"]["amp_disp_file"]
     amp_mean_file = ps_path / cfg["ps"]["amp_mean_file"]
-    input_vrt_file = str(Path(cfg["input_vrt_file"]).absolute())
+
     if amp_disp_file.exists():
         logger.info(f"Skipping existing amplitude dispersion file {amp_disp_file}")
     else:
         logger.info(f"Making amplitude dispersion file {amp_disp_file}")
         ps.create_amp_dispersion(
-            input_vrt_file=input_vrt_file,
+            slc_vrt_file=str(slc_vrt_file),
             output_file=str(amp_disp_file),
             amp_mean_file=str(amp_mean_file),
             reference_band=cfg["ps"]["normalizing_reference_band"],
@@ -48,7 +81,7 @@ def run(cfg: dict):
         )
 
     # 3. nmap: find SHP neighborhoods
-    nmap_path = Path(cfg["nmap"]["directory"]).absolute()
+    nmap_path = scratch_dir / cfg["nmap"]["directory"]
     nmap_path.mkdir(parents=True, exist_ok=True)
     weight_file = nmap_path / cfg["weight_file"]
     nmap_count_file = nmap_path / cfg["nmap_count_file"]
@@ -58,7 +91,7 @@ def run(cfg: dict):
     else:
         logger.info(f"Creating NMAP file {weight_file}")
         phase_linking.run_nmap(
-            input_vrt_file=input_vrt_file,
+            slc_vrt_file=slc_vrt_file,
             mask_file=cfg["mask_file"],
             weight_file=str(weight_file),
             nmap_count_file=str(nmap_count_file),
@@ -68,7 +101,7 @@ def run(cfg: dict):
         )
 
     # 4. phase linking/EVD step
-    pl_path = Path(cfg["phase_linking"]["directory"]).absolute()
+    pl_path = scratch_dir / cfg["phase_linking"]["directory"]
     # For some reason fringe skips this one if the directory exists...
     # pl_path.mkdir(parents=True, exist_ok=True)
     compressed_slc_file = pl_path / cfg["phase_linking"]["compressed_slc_file"]
@@ -77,7 +110,7 @@ def run(cfg: dict):
     else:
         logger.info(f"Making EVD file {compressed_slc_file}")
         phase_linking.run_evd(
-            input_vrt_file=cfg["input_vrt_file"],
+            slc_vrt_file=cfg["slc_vrt_file"],
             weight_file=str(weight_file),
             compressed_slc_filename=str(compressed_slc_file.name),
             output_folder=str(pl_path),
@@ -87,7 +120,7 @@ def run(cfg: dict):
         )
 
     # 5. Combine PS and DS phases and forming interferograms
-    ps_ds_path = Path(cfg["combine_ps_ds"]["directory"]).absolute()
+    ps_ds_path = scratch_dir / cfg["combine_ps_ds"]["directory"]
     ps_ds_path.mkdir(parents=True, exist_ok=True)
     # Temp coh file made in last step:
     temp_coh_file = pl_path / cfg["phase_linking"]["temp_coh_file"]
@@ -98,7 +131,7 @@ def run(cfg: dict):
     else:
         logger.info(f"Running combine ps/ds step into {ps_ds_path}")
         combine_ps_ds.run_combine(
-            input_vrt_file=cfg["input_vrt_file"],
+            slc_vrt_file=cfg["slc_vrt_file"],
             ps_file=ps_output,
             pl_directory=pl_path,
             temp_coh_file=temp_coh_file,
@@ -108,7 +141,7 @@ def run(cfg: dict):
         )
 
     # 6. Unwrap interferograms
-    unwrap_path = Path(cfg["unwrap"]["directory"]).absolute()
+    unwrap_path = scratch_dir / cfg["unwrap"]["directory"]
     unwrap_path.mkdir(parents=True, exist_ok=True)
     # unwrap.run(
     #     ifg_path=ps_ds_path,

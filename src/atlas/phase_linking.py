@@ -6,7 +6,7 @@ import os
 
 def run_nmap(
     *,
-    input_vrt_file,
+    slc_vrt_file,
     weight_file,
     nmap_count_file,
     window,
@@ -19,7 +19,7 @@ def run_nmap(
 
     aa = nmaplib.Nmap()
 
-    aa.inputDS = input_vrt_file
+    aa.inputDS = slc_vrt_file
     aa.weightsDS = weight_file
     aa.countDS = nmap_count_file
     if mask_file:
@@ -40,7 +40,7 @@ def run_nmap(
 
 def run_evd(
     *,
-    input_vrt_file,
+    slc_vrt_file,
     weight_file,
     compressed_slc_filename,
     output_folder,
@@ -57,7 +57,7 @@ def run_evd(
     aa = evdlib.Evd()
 
     # Explicit wiring. Can be automated later.
-    aa.inputDS = input_vrt_file
+    aa.inputDS = slc_vrt_file
     aa.weightsDS = weight_file
 
     aa.outputFolder = aa.outputCompressedSlcFolder = output_folder

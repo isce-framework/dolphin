@@ -15,7 +15,7 @@ logger = get_log()
 
 def run_combine(
     *,
-    input_vrt_file: Pathlike,
+    slc_vrt_file: Pathlike,
     ps_file: Pathlike,
     pl_directory: Pathlike,
     temp_coh_file: Pathlike,
@@ -28,7 +28,7 @@ def run_combine(
     pl_slc_files = Path(pl_directory).glob("*.slc")
     pl_date_dict = {get_dates(p)[0]: p for p in pl_slc_files}
 
-    ds_orig_stack = gdal.Open(str(input_vrt_file))
+    ds_orig_stack = gdal.Open(str(slc_vrt_file))
     assert len(pl_date_dict) == ds_orig_stack.RasterCount
 
     date_list = [k for k in pl_date_dict.keys() if k]

@@ -9,6 +9,7 @@ gdal.UseExceptions()
 
 from atlas import utils
 from atlas.log import get_log
+from atlas.utils import Pathlike
 
 SENTINEL_WAVELENGTH = 0.05546576
 
@@ -19,7 +20,7 @@ def create_stack(
     file_list: list,
     subset_bbox: Optional[Tuple[int, int, int, int]] = None,
     target_extent: Optional[Tuple[float, float, float, float]] = None,
-    outfile: str = "slcs_base.vrt",
+    outfile: Pathlike = "slcs_base.vrt",
     use_abs_path: bool = True,
 ):
     """Create a VRT stack from a list of SLC files.
