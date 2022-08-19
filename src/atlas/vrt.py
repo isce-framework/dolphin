@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 import argparse
+import os
 from pathlib import Path
 from typing import Optional, Tuple
 
@@ -43,7 +44,7 @@ def create_stack(
         raise ValueError("Cannot specify both subset_bbox and target_extent")
 
     if use_abs_path:
-        file_list = [str(Path(f).absolute()) for f in file_list]
+        file_list = [os.fspath(Path(f).absolute()) for f in file_list]
     # Use the first file in the stack to get size, transform info
     ds = gdal.Open(file_list[0])
     xsize = ds.RasterXSize
@@ -88,7 +89,7 @@ def create_stack(
         fid.write("</VRTDataset>")
 
     # Set the georeferencing metadata
-    ds = gdal.Open(outfile, gdal.GA_Update)
+    ds = gdal.Open(os.fspath(outfile), gdal.GA_Update)
     ds.SetGeoTransform(gt)
     ds.SetProjection(proj)
     ds.SetSpatialRef(srs)

@@ -14,8 +14,8 @@ runconfig:
     dynamic_ancillary_file_group:
       dem_file:
       mask_files: []
-      amp_disp_file:
-      amp_mean_file:
+      amp_disp_file: "amp_dispersion"
+      amp_mean_file: "mean"
 
     product_path_group:
       product_path:
@@ -38,8 +38,8 @@ runconfig:
       nmap_count_file: 'count'
       ps_file: 'ps_pixels'
 
-      lines_per_block: 64
-      ram: 512
+      lines_per_block: 128
+      ram: 1024
 
       window:
         xhalf: 11

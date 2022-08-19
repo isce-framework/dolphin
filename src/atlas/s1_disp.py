@@ -23,7 +23,8 @@ def run(config_file: str, name: str = "stack"):
 
     """
     cfg = config.load_workflow_yaml(config_file, workflow_name=f"s1_disp_{name}")
-    filled_cfg_path = Path(config_file).with_suffix(".filled.yaml")
+    cfg_path = Path(config_file)
+    filled_cfg_path = cfg_path.with_name(cfg_path.stem + "_filled" + cfg_path.suffix)
     config.save_yaml(filled_cfg_path, config.add_atlas_section(cfg))
     if name == "single":
         from atlas import s1_disp_single

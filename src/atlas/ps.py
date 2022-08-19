@@ -6,7 +6,13 @@
 
 
 def create_amp_dispersion(
-    *, slc_vrt_file, output_file, amp_mean_file, reference_band, processing_opts
+    *,
+    slc_vrt_file,
+    output_file,
+    amp_mean_file,
+    reference_band,
+    lines_per_block=1000,
+    ram=1024,
 ):
     """Create the amplitude dispersion file using FRInGE."""
     import ampdispersionlib
@@ -17,8 +23,8 @@ def create_amp_dispersion(
     aa.outputDS = output_file
     aa.meanampDS = amp_mean_file
 
-    aa.blocksize = processing_opts["lines_per_block"]
-    aa.memsize = processing_opts["ram"]
+    aa.blocksize = lines_per_block
+    aa.memsize = ram
     aa.refband = reference_band
 
     aa.run()

@@ -11,8 +11,10 @@ def run_nmap(
     nmap_count_file,
     window,
     nmap_opts,
-    processing_opts,
     mask_file=None,
+    lines_per_block=128,
+    ram=1024,
+    no_gpu=False,
 ):
     """Find the SHP neighborhoods of pixels in the stack of SLCs using FRInGE."""
     import nmaplib
@@ -31,9 +33,9 @@ def run_nmap(
     aa.minimumProbability = nmap_opts["pvalue"]
     aa.method = nmap_opts["stat_method"]
 
-    aa.blocksize = processing_opts["lines_per_block"]
-    aa.memsize = processing_opts["ram"]
-    aa.noGPU = processing_opts["no_gpu"]
+    aa.blocksize = lines_per_block
+    aa.memsize = ram
+    aa.noGPU = no_gpu
 
     aa.run()
 
@@ -46,7 +48,8 @@ def run_evd(
     output_folder,
     window,
     pl_opts,
-    processing_opts,
+    lines_per_block=128,
+    ram=1024,
 ):
     """Run the EVD algorithm on a stack of SLCs using FRInGE."""
     import evdlib
@@ -69,7 +72,7 @@ def run_evd(
     aa.halfWindowX = window["xhalf"]
     aa.halfWindowY = window["yhalf"]
 
-    aa.blocksize = processing_opts["lines_per_block"]
-    aa.memsize = processing_opts["ram"]
+    aa.blocksize = lines_per_block
+    aa.memsize = ram
 
     aa.run()

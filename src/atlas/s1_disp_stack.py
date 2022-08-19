@@ -1,4 +1,6 @@
 #!/usr/bin/env python
+from glob import glob
+from os import fspath
 from pathlib import Path
 
 from atlas import combine_ps_ds, phase_linking, ps, vrt  # , unwrap
@@ -35,6 +37,7 @@ def run(full_cfg: dict):
     scratch_dir = Path(full_cfg["product_path_group"]["scratch_path"]).absolute()
     scratch_dir.mkdir(parents=True, exist_ok=True)
     # sas_output_file = full_cfg["product_path_group"]["sas_output_file"]
+    gpu_enabled = full_cfg["worker"]["gpu_enabled"]
 
     input_file_list = full_cfg["input_file_group"]["cslc_file_list"]
     input_file_path = full_cfg["input_file_group"]["cslc_file_path"]
@@ -45,10 +48,8 @@ def run(full_cfg: dict):
         input_file_path = Path(input_file_path).absolute()
         ext = full_cfg["input_file_group"]["cslc_file_ext"]
         # TODO : somehow accomodate inputs other than ENVI
-        input_file_list = input_file_path.glob("*" + ext)
+        input_file_list = sorted(glob(fspath(input_file_path / f"*{ext}")))
 
-    amp_disp_file = full_cfg["dynamic_ancillary_file_group"]["amp_disp_file"]
-    amp_mean_file = full_cfg["dynamic_ancillary_file_group"]["amp_mean_file"]
     # dem_file = full_cfg["dynamic_ancillary_file_group"]["dem_file"]
     # mask_files = full_cfg["dynamic_ancillary_file_group"]["mask_files"]
 
@@ -62,19 +63,20 @@ def run(full_cfg: dict):
     # 1. First make the amplitude dispersion file
     ps_path = scratch_dir / cfg["ps"]["directory"]
     ps_path.mkdir(parents=True, exist_ok=True)
-    amp_disp_file = ps_path / cfg["ps"]["amp_disp_file"]
-    amp_mean_file = ps_path / cfg["ps"]["amp_mean_file"]
+    amp_disp_file = ps_path / full_cfg["dynamic_ancillary_file_group"]["amp_disp_file"]
+    amp_mean_file = ps_path / full_cfg["dynamic_ancillary_file_group"]["amp_mean_file"]
 
     if amp_disp_file.exists():
         logger.info(f"Skipping existing amplitude dispersion file {amp_disp_file}")
     else:
         logger.info(f"Making amplitude dispersion file {amp_disp_file}")
         ps.create_amp_dispersion(
-            slc_vrt_file=str(slc_vrt_file),
-            output_file=str(amp_disp_file),
-            amp_mean_file=str(amp_mean_file),
+            slc_vrt_file=fspath(slc_vrt_file),
+            output_file=fspath(amp_disp_file),
+            amp_mean_file=fspath(amp_mean_file),
             reference_band=cfg["ps"]["normalizing_reference_band"],
-            processing_opts=cfg["cpu_resources"],
+            lines_per_block=cfg["lines_per_block"],
+            ram=cfg["ram"],
         )
 
     # 2. PS selection
@@ -85,8 +87,8 @@ def run(full_cfg: dict):
     else:
         logger.info(f"Creating persistent scatterer file {ps_output}")
         ps.create_ps(
-            outfile=ps_output,
-            amp_disp_file=amp_disp_file,
+            outfile=fspath(ps_output),
+            amp_disp_file=fspath(amp_disp_file),
             amp_dispersion_threshold=threshold,
         )
 
@@ -101,13 +103,15 @@ def run(full_cfg: dict):
     else:
         logger.info(f"Creating NMAP file {weight_file}")
         phase_linking.run_nmap(
-            slc_vrt_file=slc_vrt_file,
-            mask_file=cfg["mask_file"],
-            weight_file=str(weight_file),
-            nmap_count_file=str(nmap_count_file),
+            slc_vrt_file=fspath(slc_vrt_file),
+            # mask_file=cfg["mask_file"], # TODO : add mask file if needed
+            weight_file=fspath(weight_file),
+            nmap_count_file=fspath(nmap_count_file),
             window=cfg["window"],
             nmap_opts=cfg["nmap"],
-            processing_opts=cfg["cpu_resources"],
+            lines_per_block=cfg["lines_per_block"],
+            ram=cfg["ram"],
+            no_gpu=not gpu_enabled,
         )
 
     # 4. phase linking/EVD step
@@ -120,13 +124,14 @@ def run(full_cfg: dict):
     else:
         logger.info(f"Making EVD file {compressed_slc_file}")
         phase_linking.run_evd(
-            slc_vrt_file=cfg["slc_vrt_file"],
-            weight_file=str(weight_file),
-            compressed_slc_filename=str(compressed_slc_file.name),
-            output_folder=str(pl_path),
+            slc_vrt_file=fspath(slc_vrt_file),
+            weight_file=fspath(weight_file),
+            compressed_slc_filename=fspath(compressed_slc_file.name),
+            output_folder=fspath(pl_path),
             window=cfg["window"],
             pl_opts=cfg["phase_linking"],
-            processing_opts=cfg["cpu_resources"],
+            lines_per_block=cfg["lines_per_block"],
+            ram=cfg["ram"],
         )
 
     # 5. Combine PS and DS phases and forming interferograms
@@ -141,8 +146,8 @@ def run(full_cfg: dict):
     else:
         logger.info(f"Running combine ps/ds step into {ps_ds_path}")
         combine_ps_ds.run_combine(
-            slc_vrt_file=cfg["slc_vrt_file"],
-            ps_file=ps_output,
+            slc_vrt_file=fspath(slc_vrt_file),
+            ps_file=fspath(ps_output),
             pl_directory=pl_path,
             temp_coh_file=temp_coh_file,
             temp_coh_ps_ds_file=temp_coh_ps_ds_file,
