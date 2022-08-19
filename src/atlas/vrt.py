@@ -20,7 +20,7 @@ def create_stack(
     file_list: list,
     subset_bbox: Optional[Tuple[int, int, int, int]] = None,
     target_extent: Optional[Tuple[float, float, float, float]] = None,
-    outfile: Pathlike = "slcs_base.vrt",
+    outfile: Pathlike = "slc_stack.vrt",
     use_abs_path: bool = True,
 ):
     """Create a VRT stack from a list of SLC files.
@@ -34,7 +34,7 @@ def create_stack(
     target_extent : tuple[int], optional
         Target extent: alternative way to subset the stack like the `-te` gdal option:
             (xmin, ymin, xmax, ymax) in units of the SLCs' SRS (e.g. UTM coordinates)
-    outfile : str, optional (default = "slcs_base.vrt")
+    outfile : str, optional (default = "slc_stack.vrt")
         Name of output file to write
     use_abs_path : bool, optional (default = True)
         Write the filepaths in the VRT as absolute
@@ -203,7 +203,7 @@ def get_cli_args():
     )
     parser.add_argument(
         "--out-vrt-name",
-        default="slcs_base.vrt",
+        default="slc_stack.vrt",
         help="Name of output SLC containing all images",
     )
     parser.add_argument(

@@ -6,7 +6,10 @@ runconfig:
       pge_name: DISP_S1_PGE
 
     input_file_group:
-      clsc_files:
+      cslc_file_list:
+      cslc_file_path:
+      cslc_file_ext: '.slc'
+
 
     dynamic_ancillary_file_group:
       dem_file:

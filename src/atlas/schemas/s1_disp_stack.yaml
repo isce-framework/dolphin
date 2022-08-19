@@ -7,7 +7,10 @@ runconfig:
 
     input_file_group:
       # Required. List of CSLC files (min=1)
-      clsc_files: list(str(), min=1)
+      cslc_file_list: list(str(), min=1, required=False)
+      # Or a path to the location
+      cslc_file_path: str(required=False)
+      cslc_file_ext: str(required=False)
 
 
     dynamic_ancillary_file_group:

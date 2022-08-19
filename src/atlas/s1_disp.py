@@ -48,7 +48,7 @@ def get_cli_args():
     parser.add_argument(
         "-n",
         "--name",
-        default="single",
+        default="stack",
         choices=["single", "stack"],
         help="Name workflow to run.",
     )

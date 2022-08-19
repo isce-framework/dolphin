@@ -6,7 +6,7 @@ from atlas.log import get_log, log_runtime
 
 logger = get_log()
 # input_file_group:
-#   clsc_files:
+#   cslc_files:
 
 # dynamic_ancillary_file_group:
 #   dem_file:
@@ -36,7 +36,17 @@ def run(full_cfg: dict):
     scratch_dir.mkdir(parents=True, exist_ok=True)
     # sas_output_file = full_cfg["product_path_group"]["sas_output_file"]
 
-    input_files = full_cfg["input_file_group"]["clsc_files"]
+    input_file_list = full_cfg["input_file_group"]["cslc_file_list"]
+    input_file_path = full_cfg["input_file_group"]["cslc_file_path"]
+    if not input_file_list:
+        if not input_file_path:
+            raise ValueError("Must specify either cslc_file_list or cslc_file_path")
+
+        input_file_path = Path(input_file_path).absolute()
+        ext = full_cfg["input_file_group"]["cslc_file_ext"]
+        # TODO : somehow accomodate inputs other than ENVI
+        input_file_list = input_file_path.glob("*" + ext)
+
     amp_disp_file = full_cfg["dynamic_ancillary_file_group"]["amp_disp_file"]
     amp_mean_file = full_cfg["dynamic_ancillary_file_group"]["amp_mean_file"]
     # dem_file = full_cfg["dynamic_ancillary_file_group"]["dem_file"]
@@ -45,7 +55,7 @@ def run(full_cfg: dict):
     # 0. Make a VRT pointing to the input SLC files
     slc_vrt_file = scratch_dir / "slc_stack.vrt"
     vrt.create_stack(
-        input_files,
+        file_list=input_file_list,
         outfile=slc_vrt_file,
     )
 

@@ -3,7 +3,7 @@ runconfig:
 
   groups:
     input_file_group:
-      clsc_files:
+      cslc_file_list:
         - './t48_iw3_b148_20220111_VV.slc'
         - './t48_iw3_b148_20220201_VV.slc'
 
