@@ -92,7 +92,7 @@ phase_linking_options:
   # Minimum number of neighbors for computation
   minimum_neighbors: int(min=1)
   # Decomposition method to use - MLE / EVD
-  method: enum('mle', 'evd')
+  method: enum('mle', 'evd', 'phase_link', 'pl')
   compressed_slc_file: str()
   temp_coh_file: str()
 

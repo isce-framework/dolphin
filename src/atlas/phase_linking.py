@@ -53,11 +53,18 @@ def run_evd(
 ):
     """Run the EVD algorithm on a stack of SLCs using FRInGE."""
     import evdlib
+    import phase_linklib
 
     # TODO: Check into how the multiple EVD threads are spawned
     os.environ["OPENBLAS_NUM_THREADS"] = "1"
 
-    aa = evdlib.Evd()
+    method = pl_opts["method"].upper()
+    if method in ["EVD", "MLE"]:
+        aa = evdlib.Evd()
+    elif method in ("PHASE_LINK", "PL"):
+        aa = phase_linklib.Phaselink()
+    else:
+        raise ValueError(f"Unknown method: {method}")
 
     # Explicit wiring. Can be automated later.
     aa.inputDS = slc_vrt_file
