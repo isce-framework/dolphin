@@ -5,6 +5,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from os import fspath
 from pathlib import Path
 
+import numpy as np
 from osgeo import gdal
 from tqdm import tqdm
 
@@ -13,32 +14,62 @@ from atlas.utils import Pathlike
 
 logger = get_log()
 
+gdal.UseExceptions()
+
 
 def unwrap(
     intfile: Pathlike,
     corfile: Pathlike,
     outfile: Pathlike,
-    width: int,
     do_tile: bool = False,
 ):
     """Unwrap a single interferogram."""
     conncomp_name = Path(intfile).with_suffix(".conncomp")
+    alt_line_data = True
     cmd = _snaphu_cmd(
         intfile,
         corfile,
         outfile,
         conncomp_name,
         do_tile=do_tile,
+        alt_line_data=alt_line_data,
     )
     logger.info(cmd)
+    tmp_file = _nan_to_zero(intfile)
     subprocess.check_call(cmd, shell=True)
-    # if os.path.exists(intfile + ".rsc"):
-    # shutil.copy(intfile + ".rsc", outfile + ".rsc")
-    # TODO: Need to make it gdal readable first
-    # _set_unw_zeros(outfile, intfile)
+    _save_with_metadata(tmp_file, outfile, alt_line_data=alt_line_data)
+    _set_unw_zeros(outfile, tmp_file)
+    os.remove(tmp_file)
 
 
-def _snaphu_cmd(intfile, corname, outname, conncomp_name, do_tile=False):
+def _nan_to_zero(infile):
+    """Make a copy of infile and replace NaNs with 0."""
+    in_p = Path(infile)
+    tmp_file = (in_p.parent) / (in_p.stem + "_tmp" + in_p.suffix)
+
+    ds_in = gdal.Open(fspath(infile))
+    drv = ds_in.GetDriver()
+    ds_out = drv.CreateCopy(fspath(tmp_file), ds_in)
+
+    bnd = ds_in.GetRasterBand(1)
+    nodata = bnd.GetNoDataValue()
+    arr = bnd.ReadAsArray()
+    mask = np.logical_or(np.isnan(arr), arr == nodata)
+    arr[mask] = 0
+    ds_out.GetRasterBand(1).WriteArray(arr)
+    ds_out = None
+    # cmd = (
+    #     f"gdal_calc.py -A {infile} --outfile={tmp_file} --overwrite "
+    #     "--NoDataValue 0 --format ROI_PAC --calc='np.isnan(A)*0 + (~np.isnan(A))*A' "
+    # )
+    # logger.info(cmd)
+    # subprocess.check_call(cmd, shell=True)
+    return tmp_file
+
+
+def _snaphu_cmd(
+    intfile, corname, outname, conncomp_name, do_tile=False, alt_line_data=True
+):
     conf_name = outname.with_suffix(outname.suffix + ".snaphu_conf")
     width = _get_width(intfile)
     # Need to specify the conncomp file format in a config file
@@ -46,8 +77,13 @@ def _snaphu_cmd(intfile, corname, outname, conncomp_name, do_tile=False):
 INFILE {intfile}
 LINELENGTH {width}
 OUTFILE {outname}
-CONNCOMPFILE {conncomp_name} # TODO: snaphu has a bug for tiling conncomps
+CONNCOMPFILE {conncomp_name}   # TODO: snaphu has a bug for tiling conncomps
 """
+    if alt_line_data:
+        conf_string += "OUTFILEFORMAT		ALT_LINE_DATA\n"
+    else:
+        conf_string += "OUTFILEFORMAT		FLOAT_DATA\n"
+
     # Need to specify the input file format in a config file
     # the rest of the options are overwritten by command line options
     # conf_string += "INFILEFORMAT     COMPLEX_DATA\n"
@@ -106,6 +142,39 @@ def _set_unw_zeros(unw_filename, ifg_filename):
     subprocess.check_call(f"rm -f {tmp_file}.rsc", shell=True)
 
 
+def _save_with_metadata(infile, outfile, alt_line_data=True):
+    """Write out a metadata file for `outfile` using the `infile` metadata."""
+    ds = gdal.Open(infile)
+    rows = ds.RasterYSize
+    cols = ds.RasterXSize
+
+    data = np.fromfile(infile, dtype=np.float32)
+    if alt_line_data:
+        amp = data.reshape((rows, 2 * cols))[:, :cols]
+        phase = data.reshape((rows, 2 * cols))[:, cols:]
+        driver = "ROI_PAC"
+        nbands = 2
+    else:
+        amp = None
+        phase = data.reshape((rows, cols))
+        driver = "ENVI"
+        nbands = 1
+
+    gdal_dt = gdal.GetDataTypeByName("Float32")
+    drv = gdal.GetDriverByName(driver)
+    ds_out = drv.Create(outfile, cols, rows, nbands, gdal_dt)
+    if amp is None:
+        bnd = ds_out.GetRasterBand(1)
+        bnd.WriteArray(phase)
+    else:
+        bnd = ds_out.GetRasterBand(1)
+        bnd.WriteArray(amp)
+        bnd = ds_out.GetRasterBand(2)
+        bnd.WriteArray(phase)
+    bnd = ds_out = None
+    # print("saving to", outname, "with driver", driver)
+
+
 @log_runtime
 def run(
     ifg_path: Pathlike,
@@ -120,9 +189,9 @@ def run(
 
     Parameters
     ----------
-    ifg_path : _type_
+    ifg_path : Pathlike
         Path to input interferograms
-    output_path : _type_
+    output_path : Pathlike
         Path to output directory
     corfile : str, optional
         location of temporal correlation, by default "tcorr_ps_ds.bin"

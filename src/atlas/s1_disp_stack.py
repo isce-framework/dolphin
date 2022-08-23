@@ -42,10 +42,15 @@ def run(full_cfg: dict):
 
     # 0. Make a VRT pointing to the input SLC files
     slc_vrt_file = scratch_dir / "slc_stack.vrt"
-    vrt.create_stack(
-        file_list=input_file_list,
-        outfile=slc_vrt_file,
-    )
+
+    if slc_vrt_file.exists():
+        logger.info(f"Skipping creating VRT to SLC stack {slc_vrt_file}")
+    else:
+        logger.info(f"Creating VRT to SLC stack file {slc_vrt_file}")
+        vrt.create_stack(
+            file_list=input_file_list,
+            outfile=slc_vrt_file,
+        )
 
     # 1. First make the amplitude dispersion file
     ps_path = scratch_dir / cfg["ps"]["directory"]
@@ -58,9 +63,9 @@ def run(full_cfg: dict):
     else:
         logger.info(f"Making amplitude dispersion file {amp_disp_file}")
         ps.create_amp_dispersion(
-            slc_vrt_file=fspath(slc_vrt_file),
-            output_file=fspath(amp_disp_file),
-            amp_mean_file=fspath(amp_mean_file),
+            slc_vrt_file=slc_vrt_file,
+            output_file=amp_disp_file,
+            amp_mean_file=amp_mean_file,
             reference_band=cfg["ps"]["normalizing_reference_band"],
             lines_per_block=cfg["lines_per_block"],
             ram=cfg["ram"],
@@ -74,8 +79,8 @@ def run(full_cfg: dict):
     else:
         logger.info(f"Creating persistent scatterer file {ps_output}")
         ps.create_ps(
-            outfile=fspath(ps_output),
-            amp_disp_file=fspath(amp_disp_file),
+            output_file=ps_output,
+            amp_disp_file=amp_disp_file,
             amp_dispersion_threshold=threshold,
         )
 
@@ -90,10 +95,10 @@ def run(full_cfg: dict):
     else:
         logger.info(f"Creating NMAP file {weight_file}")
         phase_linking.run_nmap(
-            slc_vrt_file=fspath(slc_vrt_file),
+            slc_vrt_file=slc_vrt_file,
             # mask_file=cfg["mask_file"], # TODO : add mask file if needed
-            weight_file=fspath(weight_file),
-            nmap_count_file=fspath(nmap_count_file),
+            weight_file=weight_file,
+            nmap_count_file=nmap_count_file,
             window=cfg["window"],
             nmap_opts=cfg["nmap"],
             lines_per_block=cfg["lines_per_block"],
@@ -111,10 +116,10 @@ def run(full_cfg: dict):
     else:
         logger.info(f"Making EVD file {compressed_slc_file}")
         phase_linking.run_evd(
-            slc_vrt_file=fspath(slc_vrt_file),
-            weight_file=fspath(weight_file),
-            compressed_slc_filename=fspath(compressed_slc_file.name),
-            output_folder=fspath(pl_path),
+            slc_vrt_file=slc_vrt_file,
+            weight_file=weight_file,
+            compressed_slc_file=compressed_slc_file,
+            output_folder=pl_path,
             window=cfg["window"],
             pl_opts=cfg["phase_linking"],
             lines_per_block=cfg["lines_per_block"],
@@ -133,8 +138,8 @@ def run(full_cfg: dict):
     else:
         logger.info(f"Running combine ps/ds step into {ps_ds_path}")
         combine_ps_ds.run_combine(
-            slc_vrt_file=fspath(slc_vrt_file),
-            ps_file=fspath(ps_output),
+            slc_vrt_file=slc_vrt_file,
+            ps_file=ps_output,
             pl_directory=pl_path,
             temp_coh_file=temp_coh_file,
             temp_coh_ps_ds_file=temp_coh_ps_ds_file,

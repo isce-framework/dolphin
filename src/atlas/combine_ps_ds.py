@@ -44,7 +44,7 @@ def run_combine(
         # output file witth both PS and DS pixels
         output_file = Path(output_folder) / f"{date_1}_{date_2}.int"
         # dataset for the output PS-DS integrated wrapped phase
-        ds_out = driver.Create(str(output_file), xsize, ysize, 1, gdal.GDT_CFloat32)
+        ds_out = driver.Create(fspath(output_file), xsize, ysize, 1, gdal.GDT_CFloat32)
         bnd_out = ds_out.GetRasterBand(1)
 
         logger.info(f"Forming interferogram {output_file.stem} in {output_folder}")

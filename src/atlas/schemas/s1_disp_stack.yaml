@@ -54,6 +54,7 @@ worker_options:
 processing_options:
   # Format of output file
   output_format: enum('ENVI', 'GTiff', 'HDF5', required=False)
+  bbox_latlon: list(num, min=4, max=4, required=False)
 
   # temporary files during workflow processing at multiple stages
   weight_file: str()

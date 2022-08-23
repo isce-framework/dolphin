@@ -32,6 +32,7 @@ runconfig:
 
     processing:
       output_format: 'ENVI'
+      bbox_latlon:
 
       # temporary files during workflow processing at multiple stages
       weight_file: 'nmap'
