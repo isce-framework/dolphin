@@ -1,4 +1,3 @@
-import datetime
 import re
 from os import PathLike, fspath
 from pathlib import Path
@@ -45,20 +44,3 @@ def copy_projection(src_file: Pathlike, dst_file: Pathlike) -> None:
         ds_dst.GetRasterBand(1).SetNoDataValue(nodata)
 
     ds_src = ds_dst = None
-
-
-def parse_ifglist_strings(date_pairs):
-    """Parse an interferogram string, or list of strings, into date pairs."""
-    # If we passed filename YYYYmmdd_YYYYmmdd.int
-    if isinstance(date_pairs, str):
-        dates = re.findall(r"\d{8}", date_pairs)
-        dates = list(sorted(set(dates)))
-        if len(dates) != 2:
-            raise ValueError("{} must contain 2 YYYYmmdd dates".format(date_pairs))
-        return (_parse(dates[0]), _parse(dates[1]))
-    else:
-        return [parse_ifglist_strings(d) for d in date_pairs]
-
-
-def _parse(datestr):
-    return datetime.datetime.strptime(datestr, "%Y%m%d").date()

@@ -145,6 +145,7 @@ def run(full_cfg: dict):
             temp_coh_ps_ds_file=temp_coh_ps_ds_file,
             output_folder=ps_ds_path,
             ps_temp_coh=cfg["combine_ps_ds"]["ps_temp_coh"],
+            ifg_network_options=cfg["combine_ps_ds"]["ifg_network_options"],
         )
 
     # 6. Unwrap interferograms

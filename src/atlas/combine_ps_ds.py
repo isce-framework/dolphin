@@ -1,11 +1,11 @@
 """Combine estimated DS phases with PS phases to form interferograms."""
 from os import fspath
 from pathlib import Path
-from typing import List, Tuple
 
 import numpy as np
 from osgeo import gdal
 
+from atlas import network
 from atlas.log import get_log
 from atlas.utils import Pathlike, get_dates
 
@@ -23,6 +23,7 @@ def run_combine(
     temp_coh_ps_ds_file: Pathlike,
     output_folder: Pathlike,
     ps_temp_coh: float,
+    ifg_network_options: dict,
 ):
     """Run workflow step to combine PS and DS phases."""
     # Create the interferogram list
@@ -33,7 +34,7 @@ def run_combine(
     assert len(pl_date_dict) == ds_orig_stack.RasterCount
 
     date_list = [k for k in pl_date_dict.keys() if k]
-    date12_list = _make_ifg_list(date_list, "single-reference")
+    date12_list = network.make_ifg_list(date_list, **ifg_network_options)
 
     ds_psfile = gdal.Open(fspath(ps_file))
     bnd_ps = ds_psfile.GetRasterBand(1)
@@ -157,22 +158,3 @@ def _get_block_window(xsize, ysize, max_lines=1000):
     xwindow = xsize
     ywindow = min(max_lines, ysize)
     return x0, y0, xwindow, ywindow
-
-
-def _make_ifg_list(
-    date_list: List[str],
-    how="single-reference",
-) -> List[Tuple[str, str]]:
-    """Create a list of interferogram names from a list of dates."""
-    if how == "single-reference":
-        return _single_reference_network(date_list)
-    else:
-        raise NotImplementedError(f"{how} network not implemented")
-
-
-def _single_reference_network(date_list: List[str]) -> List[Tuple[str, str]]:
-    """Create a list of interferogram names from a list of dates."""
-    if len(date_list) < 2:
-        raise ValueError("Need at least two dates to make an interferogram list")
-    ref = date_list[0]
-    return [(ref, date) for date in date_list[1:]]

@@ -68,6 +68,10 @@ runconfig:
         directory: 'PS_DS'
         temp_coh_file: 'tcorr_ps_ds.bin'
         ps_temp_coh: 0.95
+        ifg_network_options:
+          reference_idx: 0
+          max_bandwidth:
+          max_temporal_baseline:
 
       unwrap:
         directory: 'unwrapped'

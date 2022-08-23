@@ -103,6 +103,16 @@ combine_ps_ds_options:
   temp_coh_file: str()
   # Value to set the temporal coherence of the PS pixels
   ps_temp_coh: num(min=0.0, max=1.0)
+  # Options for forming the interferogram network:
+  ifg_network_options: include('ifg_network_options', required=False)
+
+ifg_network_options:
+  # Use a single-reference network:
+  reference_idx: int(min=0, required=False)
+  # Form the nearest-n neighbor interferograms
+  max_bandwidth: int(min=1, required=False)
+  # Limit the temporal baseline
+  max_temporal_baseline:  int(min=0, required=False)
 
 unwrap_options:
   directory: str()
