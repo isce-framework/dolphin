@@ -24,7 +24,7 @@ def unwrap(
     do_tile: bool = False,
 ):
     """Unwrap a single interferogram."""
-    conncomp_name = Path(intfile).with_suffix(".conncomp")
+    conncomp_name = Path(intfile).with_suffix(".unw.conncomp")
     alt_line_data = True
     cmd = _snaphu_cmd(
         intfile,
@@ -38,6 +38,7 @@ def unwrap(
     tmp_file = _nan_to_zero(intfile)
     subprocess.check_call(cmd, shell=True)
     _save_with_metadata(tmp_file, outfile, alt_line_data=alt_line_data)
+    _save_with_metadata(tmp_file, conncomp_name, alt_line_data=False, out_dtype="Byte")
     _set_unw_zeros(outfile, tmp_file)
     os.remove(tmp_file)
 
@@ -142,13 +143,15 @@ def _set_unw_zeros(unw_filename, ifg_filename):
     subprocess.check_call(f"rm -f {tmp_file}.rsc", shell=True)
 
 
-def _save_with_metadata(infile, outfile, alt_line_data=True):
+def _save_with_metadata(
+    infile, outfile, alt_line_data=True, in_dtype=np.float32, out_dtype="Float32"
+):
     """Write out a metadata file for `outfile` using the `infile` metadata."""
     ds = gdal.Open(infile)
     rows = ds.RasterYSize
     cols = ds.RasterXSize
 
-    data = np.fromfile(infile, dtype=np.float32)
+    data = np.fromfile(infile, dtype=in_dtype)
     if alt_line_data:
         amp = data.reshape((rows, 2 * cols))[:, :cols]
         phase = data.reshape((rows, 2 * cols))[:, cols:]
@@ -160,7 +163,7 @@ def _save_with_metadata(infile, outfile, alt_line_data=True):
         driver = "ENVI"
         nbands = 1
 
-    gdal_dt = gdal.GetDataTypeByName("Float32")
+    gdal_dt = gdal.GetDataTypeByName(out_dtype)
     drv = gdal.GetDriverByName(driver)
     ds_out = drv.Create(outfile, cols, rows, nbands, gdal_dt)
     if amp is None:

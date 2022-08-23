@@ -9,13 +9,13 @@ def slc_list():
 
 
 def test_single_reference_network(slc_list):
-    ifg_list = network.single_reference_network(slc_list, ref_idx=0)
+    ifg_list = network.single_reference_network(slc_list, reference_idx=0)
     assert ifg_list == [
         ("20220101", "20220201"),
         ("20220101", "20220301"),
         ("20220101", "20220401"),
     ]
-    ifg_list = network.single_reference_network(slc_list, ref_idx=1)
+    ifg_list = network.single_reference_network(slc_list, reference_idx=1)
     assert ifg_list == [
         ("20220101", "20220201"),
         ("20220201", "20220301"),

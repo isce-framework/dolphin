@@ -10,27 +10,27 @@ logger = get_log()
 
 def make_ifg_list(
     slc_list: List[str],
-    ref_idx: int = None,
-    bandwidth: int = None,
-    temporal_baseline: float = None,
+    max_bandwidth: int = None,
+    max_temporal_baseline: float = None,
+    reference_idx: int = None,
 ) -> List[Tuple]:
     """Form a list of interferogram names from a list of dates."""
     slc_list = sorted(slc_list)
-    if ref_idx is not None:
-        return single_reference_network(slc_list, ref_idx)
-    elif bandwidth is not None:
-        return limit_by_bandwidth(slc_list, bandwidth)
-    elif temporal_baseline is not None:
-        return limit_by_temporal_baseline(slc_list, temporal_baseline)
+    if max_bandwidth is not None:
+        return limit_by_bandwidth(slc_list, max_bandwidth)
+    elif max_temporal_baseline is not None:
+        return limit_by_temporal_baseline(slc_list, max_temporal_baseline)
+    elif reference_idx is not None:
+        return single_reference_network(slc_list, reference_idx)
     else:
         raise ValueError("No valid ifg list generation method specified")
 
 
-def single_reference_network(date_list: List[str], ref_idx=0) -> List[Tuple]:
+def single_reference_network(date_list: List[str], reference_idx=0) -> List[Tuple]:
     """Form a list of single-reference interferograms."""
     if len(date_list) < 2:
         raise ValueError("Need at least two dates to make an interferogram list")
-    ref = date_list[ref_idx]
+    ref = date_list[reference_idx]
     ifgs = [tuple(sorted([ref, date])) for date in date_list if date != ref]
     return ifgs
 
