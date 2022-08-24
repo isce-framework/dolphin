@@ -118,3 +118,4 @@ unwrap_options:
   directory: str()
   unwrap_method: str()
   tiles: list(int())
+  init_method: str()

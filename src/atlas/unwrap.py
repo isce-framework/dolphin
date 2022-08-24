@@ -24,6 +24,7 @@ def unwrap(
     out_file: Pathlike,
     mask_file: Optional[Pathlike],
     do_tile: bool = False,
+    init_method: str = "mcf",
 ):
     """Unwrap a single interferogram."""
     conncomp_file = Path(out_file).with_suffix(".unw.conncomp")
@@ -37,6 +38,7 @@ def unwrap(
         mask_file,
         do_tile=do_tile,
         alt_line_data=alt_line_data,
+        init_method=init_method,
     )
     logger.info(cmd)
     subprocess.check_call(cmd, shell=True)
@@ -81,6 +83,7 @@ def _snaphu_cmd(
     mask_file,
     do_tile=False,
     alt_line_data=True,
+    init_method="mcf",
 ):
     conf_name = out_file.with_suffix(out_file.suffix + ".snaphu_conf")
     width = _get_width(ifg_file)
@@ -127,6 +130,8 @@ CONNCOMPFILE {conncomp_file}   # TODO: snaphu has a bug for tiling conncomps
             nprocs *= 2
     if nprocs > 1:
         conf_string += f"NPROC {nprocs}\n"
+
+    conf_string += f"INIT_METHOD {init_method.upper()}\n"
 
     with open(conf_name, "w") as f:
         f.write(conf_string)
@@ -203,6 +208,7 @@ def run(
     overwrite: bool = False,
     no_tile: bool = True,
     create_isce_headers: bool = False,
+    init_method: str = "mcf",
 ):
     """Run snaphu on all interferograms in a directory.
 
@@ -224,11 +230,16 @@ def run(
         don't perform tiling on big interferograms, by default True
     create_isce_headers : bool, optional
         Create .xml files for isce, by default False
+    init_method : str, choices = {"mcf", "mst"}
+        SNAPHU initialization method, by default "mcf"
     """
     filenames = list(Path(ifg_path).glob("*.int"))
     if len(filenames) == 0:
         logger.error("No files found. Exiting.")
         return
+
+    if init_method.lower() not in ("mcf", "mst"):
+        raise ValueError(f"Invalid init_method {init_method}")
 
     output_path = Path(output_path)
 
@@ -262,6 +273,7 @@ def run(
                 outf,
                 mask_file,
                 not no_tile,
+                init_method,
             )
             for inf, outf in zip(in_files, out_files)
         ]
