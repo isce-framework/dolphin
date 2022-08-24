@@ -1,9 +1,8 @@
-import datetime
 import itertools
-import re
 from typing import List, Tuple
 
 from atlas.log import get_log
+from atlas.utils import parse_slc_strings
 
 logger = get_log()
 
@@ -76,7 +75,7 @@ def limit_by_temporal_baseline(slc_date_list: List[str], max_baseline: float = N
         Pairs of (date1, date2) ifgs
     """
     ifg_strs = _all_pairs(slc_date_list)
-    ifg_dates = _all_pairs(_parse_slc_strings(slc_date_list))
+    ifg_dates = _all_pairs(parse_slc_strings(slc_date_list))
     baselines = [_temp_baseline(ifg) for ifg in ifg_dates]
     return [ifg for ifg, b in zip(ifg_strs, baselines) if b <= max_baseline]
 
@@ -88,20 +87,3 @@ def _all_pairs(slclist):
 
 def _temp_baseline(ifg_pair):
     return (ifg_pair[1] - ifg_pair[0]).days
-
-
-def _parse_slc_strings(slc_str):
-    """Parse a string, or list of strings, with YYYYmmdd as date."""
-    # The re.search will find YYYYMMDD anywhere in string
-    if isinstance(slc_str, str):
-        match = re.search(r"\d{8}", slc_str)
-        if not match:
-            raise ValueError(f"{slc_str} does not contain date as YYYYMMDD")
-        return _parse(match.group())
-    else:
-        # If it's an iterable of strings, run on each one
-        return [_parse_slc_strings(s) for s in slc_str if s]
-
-
-def _parse(datestr):
-    return datetime.datetime.strptime(datestr, "%Y%m%d").date()

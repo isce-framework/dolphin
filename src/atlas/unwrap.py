@@ -4,13 +4,14 @@ import subprocess
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from os import fspath
 from pathlib import Path
+from typing import Optional
 
 import numpy as np
 from osgeo import gdal
 from tqdm import tqdm
 
 from atlas.log import get_log, log_runtime
-from atlas.utils import Pathlike
+from atlas.utils import Pathlike, numpy_to_gdal_type
 
 logger = get_log()
 
@@ -18,29 +19,33 @@ gdal.UseExceptions()
 
 
 def unwrap(
-    intfile: Pathlike,
-    corfile: Pathlike,
-    outfile: Pathlike,
+    ifg_file: Pathlike,
+    cor_file: Pathlike,
+    out_file: Pathlike,
+    mask_file: Optional[Pathlike],
     do_tile: bool = False,
 ):
     """Unwrap a single interferogram."""
-    conncomp_name = Path(intfile).with_suffix(".unw.conncomp")
+    conncomp_file = Path(out_file).with_suffix(".unw.conncomp")
     alt_line_data = True
+    tmp_intfile = _nan_to_zero(ifg_file)
     cmd = _snaphu_cmd(
-        intfile,
-        corfile,
-        outfile,
-        conncomp_name,
+        fspath(tmp_intfile),
+        cor_file,
+        out_file,
+        conncomp_file,
+        mask_file,
         do_tile=do_tile,
         alt_line_data=alt_line_data,
     )
     logger.info(cmd)
-    tmp_file = _nan_to_zero(intfile)
     subprocess.check_call(cmd, shell=True)
-    _save_with_metadata(tmp_file, outfile, alt_line_data=alt_line_data)
-    _save_with_metadata(tmp_file, conncomp_name, alt_line_data=False, out_dtype="Byte")
-    _set_unw_zeros(outfile, tmp_file)
-    os.remove(tmp_file)
+    _save_with_metadata(
+        tmp_intfile, out_file, alt_line_data=alt_line_data, dtype="float32"
+    )
+    _save_with_metadata(tmp_intfile, conncomp_file, alt_line_data=False, dtype="byte")
+    _set_unw_zeros(out_file, tmp_intfile)
+    os.remove(tmp_intfile)
 
 
 def _nan_to_zero(infile):
@@ -60,7 +65,7 @@ def _nan_to_zero(infile):
     ds_out.GetRasterBand(1).WriteArray(arr)
     ds_out = None
     # cmd = (
-    #     f"gdal_calc.py -A {infile} --outfile={tmp_file} --overwrite "
+    #     f"gdal_calc.py -A {infile} --out_file={tmp_file} --overwrite "
     #     "--NoDataValue 0 --format ROI_PAC --calc='np.isnan(A)*0 + (~np.isnan(A))*A' "
     # )
     # logger.info(cmd)
@@ -69,16 +74,22 @@ def _nan_to_zero(infile):
 
 
 def _snaphu_cmd(
-    intfile, corname, outname, conncomp_name, do_tile=False, alt_line_data=True
+    ifg_file,
+    cor_file,
+    out_file,
+    conncomp_file,
+    mask_file,
+    do_tile=False,
+    alt_line_data=True,
 ):
-    conf_name = outname.with_suffix(outname.suffix + ".snaphu_conf")
-    width = _get_width(intfile)
+    conf_name = out_file.with_suffix(out_file.suffix + ".snaphu_conf")
+    width = _get_width(ifg_file)
     # Need to specify the conncomp file format in a config file
     conf_string = f"""STATCOSTMODE SMOOTH
-INFILE {intfile}
+INFILE {ifg_file}
 LINELENGTH {width}
-OUTFILE {outname}
-CONNCOMPFILE {conncomp_name}   # TODO: snaphu has a bug for tiling conncomps
+OUTFILE {out_file}
+CONNCOMPFILE {conncomp_file}   # TODO: snaphu has a bug for tiling conncomps
 """
     if alt_line_data:
         conf_string += "OUTFILEFORMAT		ALT_LINE_DATA\n"
@@ -90,7 +101,10 @@ CONNCOMPFILE {conncomp_name}   # TODO: snaphu has a bug for tiling conncomps
     # conf_string += "INFILEFORMAT     COMPLEX_DATA\n"
     # conf_string += "CORRFILEFORMAT   ALT_LINE_DATA"
     conf_string += "CORRFILEFORMAT   FLOAT_DATA\n"
-    conf_string += f"CORRFILE	{corname}\n"
+    conf_string += f"CORRFILE	{cor_file}\n"
+
+    if mask_file:
+        conf_string += f"BYTEMASKFILE {mask_file}\n"
 
     # Calculate the tiles sizes/number of processes to use, separate for width/height
     nprocs = 1
@@ -104,7 +118,7 @@ CONNCOMPFILE {conncomp_name}   # TODO: snaphu has a bug for tiling conncomps
             nprocs *= 2
             # cmd += " -S --tile 2 2 400 400 --nproc 4"
 
-        height = os.path.getsize(intfile) / width / 8
+        height = os.path.getsize(ifg_file) / width / 8
         if height > 1000:
             conf_string += "NTILEROW 3\nROWOVRLP 400\n"
             nprocs *= 3
@@ -121,9 +135,9 @@ CONNCOMPFILE {conncomp_name}   # TODO: snaphu has a bug for tiling conncomps
     return cmd
 
 
-def _get_width(intfile):
+def _get_width(ifg_file):
     """Get the width of the interferogram."""
-    ds = gdal.Open(fspath(intfile))
+    ds = gdal.Open(fspath(ifg_file))
     width = ds.RasterXSize
     ds = None
     return width
@@ -133,7 +147,7 @@ def _set_unw_zeros(unw_filename, ifg_filename):
     """Set areas that are 0 in the ifg to be 0 in the unw."""
     tmp_file = unw_filename.replace(".unw", "_tmp.unw")
     cmd = (
-        f"gdal_calc.py --quiet --outfile={tmp_file} --type=Float32 --format=ROI_PAC "
+        f"gdal_calc.py --quiet --out_file={tmp_file} --type=Float32 --format=ROI_PAC "
         f'--allBands=A -A {unw_filename} -B {ifg_filename} --calc "A * (B!=0)"'
     )
     print(f"Setting zeros for {unw_filename}")
@@ -143,15 +157,15 @@ def _set_unw_zeros(unw_filename, ifg_filename):
     subprocess.check_call(f"rm -f {tmp_file}.rsc", shell=True)
 
 
-def _save_with_metadata(
-    infile, outfile, alt_line_data=True, in_dtype=np.float32, out_dtype="Float32"
-):
-    """Write out a metadata file for `outfile` using the `infile` metadata."""
-    ds = gdal.Open(infile)
+def _save_with_metadata(meta_file, data_file, alt_line_data=True, dtype="float32"):
+    """Write out a metadata file for `data_file` using the `meta_file` metadata."""
+    ds = gdal.Open(fspath(meta_file))
     rows = ds.RasterYSize
     cols = ds.RasterXSize
 
-    data = np.fromfile(infile, dtype=in_dtype)
+    # read in using fromfile, since we can't use gdal yet
+    dtype = np.dtype(str(dtype).lower())
+    data = np.fromfile(data_file, dtype=dtype)
     if alt_line_data:
         amp = data.reshape((rows, 2 * cols))[:, :cols]
         phase = data.reshape((rows, 2 * cols))[:, cols:]
@@ -163,9 +177,11 @@ def _save_with_metadata(
         driver = "ENVI"
         nbands = 1
 
-    gdal_dt = gdal.GetDataTypeByName(out_dtype)
+    gdal_dt = numpy_to_gdal_type(dtype)
     drv = gdal.GetDriverByName(driver)
-    ds_out = drv.Create(outfile, cols, rows, nbands, gdal_dt)
+    options = ["SUFFIX=ADD"] if driver == "ENVI" else []
+    ds_out = drv.Create(fspath(data_file), cols, rows, nbands, gdal_dt, options=options)
+    # print("saving to", data_file, "with driver", driver)
     if amp is None:
         bnd = ds_out.GetRasterBand(1)
         bnd.WriteArray(phase)
@@ -175,14 +191,14 @@ def _save_with_metadata(
         bnd = ds_out.GetRasterBand(2)
         bnd.WriteArray(phase)
     bnd = ds_out = None
-    # print("saving to", outname, "with driver", driver)
 
 
 @log_runtime
 def run(
     ifg_path: Pathlike,
     output_path: Pathlike,
-    corfile: Pathlike = "tcorr_ps_ds.bin",
+    cor_file: Pathlike = "tcorr_ps_ds.bin",
+    mask_file: Pathlike = None,
     max_jobs: int = 20,
     overwrite: bool = False,
     no_tile: bool = True,
@@ -196,8 +212,10 @@ def run(
         Path to input interferograms
     output_path : Pathlike
         Path to output directory
-    corfile : str, optional
+    cor_file : str, optional
         location of temporal correlation, by default "tcorr_ps_ds.bin"
+    mask_file : Pathlike, optional
+        Path to mask file, by default None
     max_jobs : int, optional
         Maximum parallel processes, by default 20
     overwrite : bool, optional
@@ -232,13 +250,17 @@ def run(
         out_files.append(outf)
     logger.info(f"{len(out_files)} left to unwrap")
 
+    if mask_file:
+        mask_file = Path(mask_file).absolute()
+
     with ThreadPoolExecutor(max_workers=max_jobs) as exc:
         futures = [
             exc.submit(
                 unwrap,
                 inf,
-                corfile,
+                cor_file,
                 outf,
+                mask_file,
                 not no_tile,
             )
             for inf, outf in zip(in_files, out_files)

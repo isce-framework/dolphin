@@ -38,7 +38,6 @@ def run(full_cfg: dict):
         input_file_list = sorted(glob(fspath(input_file_path / f"*{ext}")))
 
     # dem_file = full_cfg["dynamic_ancillary_file_group"]["dem_file"]
-    # mask_files = full_cfg["dynamic_ancillary_file_group"]["mask_files"]
 
     # 0. Make a VRT pointing to the input SLC files
     slc_vrt_file = scratch_dir / "slc_stack.vrt"
@@ -149,10 +148,14 @@ def run(full_cfg: dict):
         )
 
     # 6. Unwrap interferograms
+    # TODO: either combine, or figure out if we need multiple masks
+    # TODO: Do we create a new mask file here based on temporal coherence?
+    mask_files = full_cfg["dynamic_ancillary_file_group"]["mask_files"]
     unwrap_path = scratch_dir / cfg["unwrap"]["directory"]
     unwrap_path.mkdir(parents=True, exist_ok=True)
     unwrap.run(
         ifg_path=ps_ds_path,
         output_path=unwrap_path,
-        corfile=temp_coh_ps_ds_file,
+        cor_file=temp_coh_ps_ds_file,
+        mask_file=mask_files[0],
     )

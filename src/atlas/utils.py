@@ -1,7 +1,10 @@
+import datetime
 import re
 from os import PathLike, fspath
 from pathlib import Path
 from typing import List, Union
+
+import numpy as np
 
 Pathlike = Union[PathLike[str], str]
 
@@ -44,3 +47,31 @@ def copy_projection(src_file: Pathlike, dst_file: Pathlike) -> None:
         ds_dst.GetRasterBand(1).SetNoDataValue(nodata)
 
     ds_src = ds_dst = None
+
+
+def numpy_to_gdal_type(np_dtype):
+    """Convert numpy dtype to gdal type."""
+    from osgeo import gdal_array, gdalconst
+
+    # Wrap in np.dtype in case string is passed
+    np_dtype = np.dtype(str(np_dtype).lower())
+    if np.issubdtype(bool, np_dtype):
+        return gdalconst.GDT_Byte
+    return gdal_array.NumericTypeCodeToGDALTypeCode(np_dtype)
+
+
+def parse_slc_strings(slc_str):
+    """Parse a string, or list of strings, with YYYYmmdd as date."""
+    # The re.search will find YYYYMMDD anywhere in string
+    if isinstance(slc_str, str):
+        match = re.search(r"\d{8}", slc_str)
+        if not match:
+            raise ValueError(f"{slc_str} does not contain date as YYYYMMDD")
+        return _parse(match.group())
+    else:
+        # If it's an iterable of strings, run on each one
+        return [parse_slc_strings(s) for s in slc_str if s]
+
+
+def _parse(datestr):
+    return datetime.datetime.strptime(datestr, "%Y%m%d").date()
