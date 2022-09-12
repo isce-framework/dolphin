@@ -150,7 +150,7 @@ def _get_width(ifg_file):
 
 def _set_unw_zeros(unw_filename, ifg_filename):
     """Set areas that are 0 in the ifg to be 0 in the unw."""
-    tmp_file = unw_filename.replace(".unw", "_tmp.unw")
+    tmp_file = str(unw_filename).replace(".unw", "_tmp.unw")
     cmd = (
         f"gdal_calc.py --quiet --out_file={tmp_file} --type=Float32 --format=ROI_PAC "
         f'--allBands=A -A {unw_filename} -B {ifg_filename} --calc "A * (B!=0)"'
