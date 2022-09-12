@@ -5,7 +5,7 @@ from pathlib import Path
 import yamale
 from ruamel.yaml import YAML
 
-from atlas.utils import Pathlike
+from dolphin.utils import Pathlike
 
 
 def load_workflow_yaml(input_path: Pathlike, *, workflow_name: str = "s1_disp"):
@@ -58,7 +58,7 @@ def save_yaml(output_path: Pathlike, data: dict):
         y.dump(data, f)
 
 
-def add_atlas_section(cfg):
+def add_dolphin_section(cfg):
     """Add package and runtime metadata to a loaded config.
 
     Parameters
@@ -69,16 +69,16 @@ def add_atlas_section(cfg):
     Returns
     -------
     cfg : dict
-        Configuration dict with added "atlas" section
+        Configuration dict with added "dolphin" section
     """
-    from atlas import __version__
+    from dolphin import __version__
 
-    atlas_cfg = {
+    dolphin_cfg = {
         "version": __version__,
         "runtime": str(datetime.datetime.now()),
         # TODO: anything else relevant?
     }
-    cfg["runconfig"]["groups"]["processing"]["atlas"] = atlas_cfg
+    cfg["runconfig"]["groups"]["processing"]["dolphin"] = dolphin_cfg
     return cfg
 
 

@@ -1,7 +1,7 @@
 """Find the persistent scatterers in a stack of SLCS."""
 from os import fspath
 
-from atlas.utils import Pathlike, copy_projection
+from dolphin.utils import Pathlike, copy_projection
 
 
 def create_amp_dispersion(

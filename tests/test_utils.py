@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from atlas import utils
+from dolphin import utils
 
 
 def test_get_dates():

@@ -10,8 +10,8 @@ import numpy as np
 from osgeo import gdal
 from tqdm import tqdm
 
-from atlas.log import get_log, log_runtime
-from atlas.utils import Pathlike, numpy_to_gdal_type
+from dolphin.log import get_log, log_runtime
+from dolphin.utils import Pathlike, numpy_to_gdal_type
 
 logger = get_log()
 

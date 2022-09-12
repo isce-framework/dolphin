@@ -11,7 +11,7 @@ preview = true
 
 [tool.isort]
 profile = "black"
-known_first_party = ["tophu"]
+known_first_party = ["dolphin"]
 
 [tool.mypy]
 python_version = "3.8"

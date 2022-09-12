@@ -3,8 +3,8 @@ from glob import glob
 from os import fspath
 from pathlib import Path
 
-from atlas import combine_ps_ds, phase_linking, ps, unwrap, vrt
-from atlas.log import get_log, log_runtime
+from dolphin import combine_ps_ds, phase_linking, ps, unwrap, vrt
+from dolphin.log import get_log, log_runtime
 
 logger = get_log()
 

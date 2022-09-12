@@ -8,7 +8,7 @@ import numpy as np
 
 Pathlike = Union[PathLike[str], str]
 
-from atlas.log import get_log
+from dolphin.log import get_log
 
 logger = get_log()
 

@@ -2,8 +2,8 @@
 import argparse
 from pathlib import Path
 
-from atlas import config
-from atlas.log import get_log, log_runtime
+from dolphin import config
+from dolphin.log import get_log, log_runtime
 
 logger = get_log()
 
@@ -27,11 +27,11 @@ def run(config_file: str, name: str = "stack"):
     filled_cfg_path = cfg_path.with_name(cfg_path.stem + "_filled" + cfg_path.suffix)
     config.save_yaml(filled_cfg_path, config.add_atlas_section(cfg))
     if name == "single":
-        from atlas import s1_disp_single
+        from dolphin import s1_disp_single
 
         s1_disp_single.run(cfg["runconfig"]["groups"])
     elif name == "stack":
-        from atlas import s1_disp_stack
+        from dolphin import s1_disp_stack
 
         s1_disp_stack.run(cfg["runconfig"]["groups"])
 

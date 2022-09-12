@@ -1,6 +1,6 @@
 import pytest
 
-from atlas import network
+from dolphin import network
 
 
 @pytest.fixture

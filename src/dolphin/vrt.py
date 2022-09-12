@@ -8,9 +8,9 @@ from osgeo import gdal
 
 gdal.UseExceptions()
 
-from atlas import utils
-from atlas.log import get_log
-from atlas.utils import Pathlike
+from dolphin import utils
+from dolphin.log import get_log
+from dolphin.utils import Pathlike
 
 SENTINEL_WAVELENGTH = 0.05546576
 

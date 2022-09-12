@@ -5,9 +5,9 @@ from pathlib import Path
 import numpy as np
 from osgeo import gdal
 
-from atlas import network
-from atlas.log import get_log
-from atlas.utils import Pathlike, get_dates
+from dolphin import network
+from dolphin.log import get_log
+from dolphin.utils import Pathlike, get_dates
 
 gdal.UseExceptions()
 
@@ -99,7 +99,7 @@ def run_combine(
 
 
 def _form_ifg(bnd_1, bnd_2, x0, y0, xwindow, ywindow):
-    # crossmultiply two SLCs
+    # cross multiply two SLCs
     # TODO: need to use actual crossmul module to avoid aliasing
     slc_1 = bnd_1.ReadAsArray(x0, y0, xwindow, ywindow)
     slc_2 = bnd_2.ReadAsArray(x0, y0, xwindow, ywindow)

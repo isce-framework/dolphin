@@ -1,8 +1,8 @@
 import itertools
 from typing import List, Tuple
 
-from atlas.log import get_log
-from atlas.utils import parse_slc_strings
+from dolphin.log import get_log
+from dolphin.utils import parse_slc_strings
 
 logger = get_log()
 

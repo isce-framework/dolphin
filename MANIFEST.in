@@ -1,1 +1,1 @@
-recursive-include src/atlas/* *.yaml
+recursive-include src/dolphin/* *.yaml
