@@ -49,3 +49,70 @@ def create_ps(
         quiet=True,
     )
     copy_projection(amp_disp_file, output_file)
+
+
+def update_amp_disp(
+    amp_mean_file: Pathlike, amp_disp_file: Pathlike, new_slc_file: Pathlike, N=None
+):
+    """Update the amplitude dispersion for the new SLC.
+
+    Uses Welford's method to update the mean and variance.
+
+    See https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Welford's_online_algorithm  # noqa: E501
+    or https://changyaochen.github.io/welford/ for derivation.
+
+    mu_{n+1} = mu_n + (x_{n+1} - mu_n) / (n+1)
+    var_{n+1} = var_n + ((x_{n+1} - mu_n) * (x_{n+1} - mu_{n+1}) - var_n) / (n+1)
+
+    v1 = v0 + (x1 - m0) * (x1 - m1)
+
+    References
+    ----------
+    Welford, B. P. "Note on a method for calculating corrected sums of squares and
+    products." Technometrics 4.3 (1962): 419-420.
+    """
+    import numpy as np
+    from osgeo import gdal
+
+    # N = int(gdal.Info(fspath(amp_mean_file), format="json")["metadata"]["N"])
+    ds_mean = gdal.Open(fspath(amp_mean_file), gdal.GA_Update)
+    if N is None:
+        try:
+            # Get the number of SLCs used to create the mean amplitude
+            N = int(ds_mean.GetMetadataItem("N"))
+        except KeyError:
+            ds_mean = None
+            raise ValueError("Cannot find N in metadata of mean amplitude file")
+
+    bnd_mean = ds_mean.GetRasterBand(1)
+    mean_n = bnd_mean.ReadAsArray()
+
+    ds_ampdisp = gdal.Open(fspath(amp_disp_file), gdal.GA_Update)
+    bnd_ampdisp = ds_ampdisp.GetRasterBand(1)
+    ampdisp = bnd_ampdisp.ReadAsArray()
+
+    # Get the new data amplitude
+    ds_new_slc = gdal.Open(fspath(new_slc_file))
+    bnd_new_slc = ds_new_slc.GetRasterBand(1)
+    new_amp = np.abs(bnd_new_slc.ReadAsArray())
+    bnd_new_slc = ds_new_slc = None
+
+    # Get the variance from the amplitude dispersion
+    # d = sigma / mu, so sigma^2 = d^2 * mu^2
+    var_n = ampdisp**2 * mean_n**2
+
+    # Update the mean
+    mean_n1 = mean_n + (new_amp - mean_n) / (N + 1)
+    # Update the variance
+    var_n1 = var_n + ((new_amp - mean_n) * (new_amp - mean_n1) - var_n) / (N + 1)
+
+    # Update both files with the new values
+    bnd_mean.WriteArray(mean_n1)
+    bnd_ampdisp.WriteArray(np.sqrt(var_n1 / mean_n1**2))
+
+    # Update the metadata with the new N
+    ds_ampdisp.SetMetadataItem("N", str(N + 1))
+    ds_mean.SetMetadataItem("N", str(N + 1))
+
+    # Close the files to save the changes
+    bnd_mean = bnd_ampdisp = ds_mean = ds_ampdisp = None

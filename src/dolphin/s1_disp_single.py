@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # from pathlib import Path
 
-# from atlas import combine_ps_ds, phase_linking, ps  # , unwrap
+# from dolphin import combine_ps_ds, phase_linking, ps  # , unwrap
 from dolphin.log import get_log, log_runtime
 
 logger = get_log()

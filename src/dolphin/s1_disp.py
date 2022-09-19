@@ -16,16 +16,13 @@ def run(config_file: str, name: str = "stack"):
     ----------
     config_file : str
         YAML file containing the workflow options.
-    name : str
+    name : str, choices = ["single", "stack"]
         Name of the workflow to run.
-
-    workflow: str, choices = ["single", "stack"]
-
     """
     cfg = config.load_workflow_yaml(config_file, workflow_name=f"s1_disp_{name}")
     cfg_path = Path(config_file)
     filled_cfg_path = cfg_path.with_name(cfg_path.stem + "_filled" + cfg_path.suffix)
-    config.save_yaml(filled_cfg_path, config.add_atlas_section(cfg))
+    config.save_yaml(filled_cfg_path, config.add_dolphin_section(cfg))
     if name == "single":
         from dolphin import s1_disp_single
 

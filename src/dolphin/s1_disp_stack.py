@@ -34,7 +34,7 @@ def run(full_cfg: dict):
 
         input_file_path = Path(input_file_path).absolute()
         ext = full_cfg["input_file_group"]["cslc_file_ext"]
-        # TODO : somehow accomodate inputs other than ENVI
+        # TODO : somehow accommodate inputs other than ENVI
         input_file_list = sorted(glob(fspath(input_file_path / f"*{ext}")))
 
     # dem_file = full_cfg["dynamic_ancillary_file_group"]["dem_file"]
