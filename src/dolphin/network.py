@@ -12,10 +12,14 @@ def make_ifg_list(
     max_bandwidth: int = None,
     max_temporal_baseline: float = None,
     reference_idx: int = None,
+    final_only: bool = False,
 ) -> List[Tuple]:
     """Form a list of interferogram names from a list of dates."""
     slc_list = sorted(slc_list)
-    if max_bandwidth is not None:
+    if final_only:
+        # Just form the final nearest-neighbor ifg
+        return [tuple(slc_list[-2:])]
+    elif max_bandwidth is not None:
         return limit_by_bandwidth(slc_list, max_bandwidth)
     elif max_temporal_baseline is not None:
         return limit_by_temporal_baseline(slc_list, max_temporal_baseline)

@@ -42,7 +42,7 @@ def run_combine(
     xsize, ysize = ds_orig_stack.RasterXSize, ds_orig_stack.RasterYSize
     driver = gdal.GetDriverByName("ENVI")
     for date_1, date_2 in date12_list:
-        # output file witth both PS and DS pixels
+        # output file with both PS and DS pixels
         output_file = Path(output_folder) / f"{date_1}_{date_2}.int"
         # dataset for the output PS-DS integrated wrapped phase
         ds_out = driver.Create(fspath(output_file), xsize, ysize, 1, gdal.GDT_CFloat32)
