@@ -52,7 +52,9 @@ def create_ps(
 
 
 def update_amp_disp(
-    amp_mean_file: Pathlike, amp_disp_file: Pathlike, new_slc_file: Pathlike, N=None
+    amp_mean_file: Pathlike,
+    amp_disp_file: Pathlike,
+    slc_vrt_file: Pathlike,
 ):
     """Update the amplitude dispersion for the new SLC.
 
@@ -76,13 +78,12 @@ def update_amp_disp(
 
     # N = int(gdal.Info(fspath(amp_mean_file), format="json")["metadata"]["N"])
     ds_mean = gdal.Open(fspath(amp_mean_file), gdal.GA_Update)
-    if N is None:
-        try:
-            # Get the number of SLCs used to create the mean amplitude
-            N = int(ds_mean.GetMetadataItem("N"))
-        except KeyError:
-            ds_mean = None
-            raise ValueError("Cannot find N in metadata of mean amplitude file")
+    try:
+        # Get the number of SLCs used to create the mean amplitude
+        N = int(ds_mean.GetMetadataItem("N"))
+    except KeyError:
+        ds_mean = None
+        raise ValueError("Cannot find N in metadata of mean amplitude file")
 
     bnd_mean = ds_mean.GetRasterBand(1)
     mean_n = bnd_mean.ReadAsArray()
@@ -92,10 +93,12 @@ def update_amp_disp(
     ampdisp = bnd_ampdisp.ReadAsArray()
 
     # Get the new data amplitude
-    ds_new_slc = gdal.Open(fspath(new_slc_file))
-    bnd_new_slc = ds_new_slc.GetRasterBand(1)
+    ds_slc_stack = gdal.Open(fspath(slc_vrt_file))
+    nbands = ds_slc_stack.RasterCount
+    # The last band should be the new SLC
+    bnd_new_slc = ds_slc_stack.GetRasterBand(nbands)
     new_amp = np.abs(bnd_new_slc.ReadAsArray())
-    bnd_new_slc = ds_new_slc = None
+    bnd_new_slc = ds_slc_stack = None
 
     # Get the variance from the amplitude dispersion
     # d = sigma / mu, so sigma^2 = d^2 * mu^2
