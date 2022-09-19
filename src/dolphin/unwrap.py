@@ -57,7 +57,7 @@ def _nan_to_zero(infile):
 
     ds_in = gdal.Open(fspath(infile))
     drv = ds_in.GetDriver()
-    ds_out = drv.CreateCopy(fspath(tmp_file), ds_in)
+    ds_out = drv.CreateCopy(fspath(tmp_file), ds_in, options=["SUFFIX=ADD"])
 
     bnd = ds_in.GetRasterBand(1)
     nodata = bnd.GetNoDataValue()
@@ -131,7 +131,7 @@ CONNCOMPFILE {conncomp_file}   # TODO: snaphu has a bug for tiling conncomps
     if nprocs > 1:
         conf_string += f"NPROC {nprocs}\n"
 
-    conf_string += f"INIT_METHOD {init_method.upper()}\n"
+    conf_string += f"INITMETHOD {init_method.upper()}\n"
 
     with open(conf_name, "w") as f:
         f.write(conf_string)
@@ -152,14 +152,15 @@ def _set_unw_zeros(unw_filename, ifg_filename):
     """Set areas that are 0 in the ifg to be 0 in the unw."""
     tmp_file = str(unw_filename).replace(".unw", "_tmp.unw")
     cmd = (
-        f"gdal_calc.py --quiet --out_file={tmp_file} --type=Float32 --format=ROI_PAC "
+        f"gdal_calc.py --quiet --outfile={tmp_file} --type=Float32 --format=ROI_PAC "
         f'--allBands=A -A {unw_filename} -B {ifg_filename} --calc "A * (B!=0)"'
     )
     print(f"Setting zeros for {unw_filename}")
     print(cmd)
     subprocess.check_call(cmd, shell=True)
     subprocess.check_call(f"mv {tmp_file} {unw_filename}", shell=True)
-    subprocess.check_call(f"rm -f {tmp_file}.rsc", shell=True)
+    # remove the header file
+    subprocess.check_call(f"rm -f {tmp_file}.*", shell=True)
 
 
 def _save_with_metadata(meta_file, data_file, alt_line_data=True, dtype="float32"):

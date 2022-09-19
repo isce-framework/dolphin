@@ -3,7 +3,7 @@ from glob import glob
 from os import fspath
 from pathlib import Path
 
-from dolphin import combine_ps_ds, phase_linking, ps, unwrap, vrt
+from dolphin import combine_ps_ds, phase_linking, ps, unwrap, utils, vrt
 from dolphin.log import get_log, log_runtime
 
 logger = get_log()
@@ -151,11 +151,16 @@ def run(full_cfg: dict):
     # TODO: either combine, or figure out if we need multiple masks
     # TODO: Do we create a new mask file here based on temporal coherence?
     mask_files = full_cfg["dynamic_ancillary_file_group"]["mask_files"]
+    if len(mask_files) >= 1:
+        combined_mask_file = utils.combine_mask_files(mask_files, scratch_dir)
+    else:
+        combined_mask_file = None
+
     unwrap_path = scratch_dir / cfg["unwrap"]["directory"]
     unwrap_path.mkdir(parents=True, exist_ok=True)
     unwrap.run(
         ifg_path=ps_ds_path,
         output_path=unwrap_path,
         cor_file=temp_coh_ps_ds_file,
-        mask_file=mask_files[0],
+        mask_file=combined_mask_file,
     )

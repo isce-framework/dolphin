@@ -3,7 +3,8 @@ import fire
 
 
 def fill_cfg(
-    input_path,
+    slc_file_path,
+    slc_file_ext: str = ".slc",
     output: str = "runconfig.yaml",
     scratch_path: str = "scratch",
     xhalf: int = None,
@@ -23,7 +24,8 @@ def fill_cfg(
 
   groups:
     input_file_group:
-      cslc_file_path: "{input_path}"
+      cslc_file_path: "{slc_file_path}"
+      cslc_file_ext: "{slc_file_ext}"
 
     product_path_group:
       product_path: 'output'
