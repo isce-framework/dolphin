@@ -2,6 +2,12 @@
 from os import fspath
 from pathlib import Path
 
+import numpy as np
+from osgeo import gdal
+from osgeo_utils import gdal_calc
+
+gdal.UseExceptions()
+
 from dolphin.utils import Pathlike, copy_projection
 
 
@@ -38,8 +44,6 @@ def create_ps(
     amp_dispersion_threshold: float = 0.42,
 ):
     """Create the PS file using the existing amplitude dispersion file."""
-    from osgeo_utils import gdal_calc
-
     gdal_calc.Calc(
         [f"a<{amp_dispersion_threshold}"],
         a=fspath(amp_disp_file),
@@ -87,13 +91,11 @@ def update_amp_disp(
     Welford, B. P. "Note on a method for calculating corrected sums of squares and
     products." Technometrics 4.3 (1962): 419-420.
     """
-    import numpy as np
-    from osgeo import gdal
-
-    gdal.UseExceptions()
-
-    output_mean_file = Path(output_directory) / Path(amp_mean_file).name
-    output_disp_file = Path(output_directory) / Path(amp_disp_file).name
+    output_directory = Path(output_directory)
+    if not output_directory.exists():
+        output_directory.mkdir(parents=True, exist_ok=True)
+    output_mean_file = output_directory / Path(amp_mean_file).name
+    output_disp_file = output_directory / Path(amp_disp_file).name
 
     _check_output_files(output_mean_file, output_disp_file)
 

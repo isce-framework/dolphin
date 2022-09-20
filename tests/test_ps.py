@@ -64,7 +64,6 @@ def test_update_amp_disp(tmp_path, slc_stack):
     _write_zeros(amp_mean_file, slc_stack.shape[1:])
 
     out_path = tmp_path / "output"
-    out_path.mkdir()
 
     amp_stack = np.abs(slc_stack)
 

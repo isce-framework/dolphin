@@ -24,7 +24,7 @@ def run(full_cfg: dict):
     scratch_dir = Path(full_cfg["product_path_group"]["scratch_path"]).absolute()
     scratch_dir.mkdir(parents=True, exist_ok=True)
     # sas_output_file = full_cfg["product_path_group"]["sas_output_file"]
-    gpu_enabled = full_cfg["worker"]["gpu_enabled"]
+    # gpu_enabled = full_cfg["worker"]["gpu_enabled"]
 
     input_file_list = full_cfg["input_file_group"]["cslc_file_list"]
     input_file_path = full_cfg["input_file_group"]["cslc_file_path"]
@@ -79,27 +79,23 @@ def run(full_cfg: dict):
             amp_dispersion_threshold=threshold,
         )
 
-    # 3. nmap: find SHP neighborhoods
+    # 3. nmap: SHP neighborhoods
     nmap_path = scratch_dir / cfg["nmap"]["directory"]
     nmap_path.mkdir(parents=True, exist_ok=True)
-    weight_file = nmap_path / cfg["weight_file"]
-    nmap_count_file = nmap_path / cfg["nmap_count_file"]
-    threshold = cfg["ps"]["amp_dispersion_threshold"]
-    if weight_file.exists():
-        logger.info(f"Skipping making existing NMAP file {weight_file}")
-    else:
-        logger.info(f"Creating NMAP file {weight_file}")
-        phase_linking.run_nmap(
-            slc_vrt_file=slc_vrt_file,
-            # mask_file=cfg["mask_file"], # TODO : add mask file if needed
-            weight_file=weight_file,
-            nmap_count_file=nmap_count_file,
-            window=cfg["window"],
-            nmap_opts=cfg["nmap"],
-            lines_per_block=cfg["lines_per_block"],
-            ram=cfg["ram"],
-            no_gpu=not gpu_enabled,
-        )
+    # Make the dummy nmap/count files
+    # TODO: is there ever a time where we'll run a SHP finder on just a subset?
+    ysize, xsize = utils.get_raster_xysize(amp_disp_file)
+    weight_filename = nmap_path / cfg["weight_file"]
+    count_filename = nmap_path / cfg["nmap_count_file"]
+    phase_linking.create_full_nmap_files(
+        xsize,
+        ysize,
+        cfg["half_window_x"],
+        cfg["half_window_y"],
+        output_dir=nmap_path,
+        nmap_filename=weight_filename,
+        count_filename=count_filename,
+    )
 
     # 4. phase linking/EVD step
     pl_path = scratch_dir / cfg["phase_linking"]["directory"]
@@ -112,7 +108,7 @@ def run(full_cfg: dict):
         logger.info(f"Making EVD file {compressed_slc_file}")
         phase_linking.run_evd(
             slc_vrt_file=slc_vrt_file,
-            weight_file=weight_file,
+            weight_file=nmap_path / weight_filename,
             compressed_slc_file=compressed_slc_file,
             output_folder=pl_path,
             window=cfg["window"],

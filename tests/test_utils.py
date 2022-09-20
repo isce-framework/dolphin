@@ -20,3 +20,15 @@ def test_get_dates():
 
     with pytest.raises(ValueError):
         utils.get_dates("/usr/19990101/notadate.tif")
+
+
+def test_get_raster_xysize(tmp_path):
+    from osgeo import gdal
+
+    xsize, ysize = 10, 20
+    # Create a test raster
+    driver = gdal.GetDriverByName("ENVI")
+    ds = driver.Create(str(tmp_path / "test.bin"), xsize, ysize, 1, gdal.GDT_Float32)
+    ds = None  # noqa
+
+    assert (xsize, ysize) == utils.get_raster_xysize(tmp_path / "test.bin")

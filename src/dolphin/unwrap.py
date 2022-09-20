@@ -11,7 +11,7 @@ from osgeo import gdal
 from tqdm import tqdm
 
 from dolphin.log import get_log, log_runtime
-from dolphin.utils import Pathlike, numpy_to_gdal_type
+from dolphin.utils import Pathlike, get_raster_xysize, numpy_to_gdal_type
 
 logger = get_log()
 
@@ -86,7 +86,7 @@ def _snaphu_cmd(
     init_method="mcf",
 ):
     conf_name = out_file.with_suffix(out_file.suffix + ".snaphu_conf")
-    width = _get_width(ifg_file)
+    width, _ = get_raster_xysize(ifg_file)
     # Need to specify the conncomp file format in a config file
     conf_string = f"""STATCOSTMODE SMOOTH
 INFILE {ifg_file}
@@ -140,14 +140,6 @@ CONNCOMPFILE {conncomp_file}   # TODO: snaphu has a bug for tiling conncomps
     return cmd
 
 
-def _get_width(ifg_file):
-    """Get the width of the interferogram."""
-    ds = gdal.Open(fspath(ifg_file))
-    width = ds.RasterXSize
-    ds = None
-    return width
-
-
 def _set_unw_zeros(unw_filename, ifg_filename):
     """Set areas that are 0 in the ifg to be 0 in the unw."""
     tmp_file = str(unw_filename).replace(".unw", "_tmp.unw")
@@ -165,9 +157,7 @@ def _set_unw_zeros(unw_filename, ifg_filename):
 
 def _save_with_metadata(meta_file, data_file, alt_line_data=True, dtype="float32"):
     """Write out a metadata file for `data_file` using the `meta_file` metadata."""
-    ds = gdal.Open(fspath(meta_file))
-    rows = ds.RasterYSize
-    cols = ds.RasterXSize
+    cols, rows = get_raster_xysize(meta_file)
 
     # read in using fromfile, since we can't use gdal yet
     dtype = np.dtype(str(dtype).lower())
@@ -244,11 +234,8 @@ def run(
 
     output_path = Path(output_path)
 
-    ds = gdal.Open(fspath(filenames[0]))
-    cols = ds.RasterXSize
-    rows = ds.RasterYSize
+    cols, rows = get_raster_xysize(filenames[0])
     shape = (rows, cols)
-    ds = None
 
     ext_unw = ".unw"
     all_out_files = [(output_path / f.name).with_suffix(ext_unw) for f in filenames]

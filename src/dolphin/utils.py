@@ -2,7 +2,7 @@ import datetime
 import re
 from os import PathLike, fspath
 from pathlib import Path
-from typing import List, Union
+from typing import List, Tuple, Union
 
 import numpy as np
 
@@ -148,3 +148,14 @@ def combine_mask_files(
     ds_out = None
 
     return output_file
+
+
+def get_raster_xysize(filename: Pathlike) -> Tuple[int, int]:
+    """Get the xsize/ysize of a GDAL-readable raster."""
+    from osgeo import gdal
+
+    gdal.UseExceptions()
+    ds = gdal.Open(fspath(filename))
+    xsize, ysize = ds.RasterXSize, ds.RasterYSize
+    ds = None
+    return xsize, ysize
