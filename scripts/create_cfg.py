@@ -5,6 +5,7 @@ import fire
 def fill_cfg(
     slc_file_path,
     slc_file_ext: str = ".slc",
+    num_slcs: int = 5,
     output: str = "runconfig.yaml",
     scratch_path: str = "scratch",
     xhalf: int = None,

@@ -63,6 +63,9 @@ def test_update_amp_disp(tmp_path, slc_stack):
     _write_zeros(amp_disp_file, slc_stack.shape[1:])
     _write_zeros(amp_mean_file, slc_stack.shape[1:])
 
+    out_path = tmp_path / "output"
+    out_path.mkdir()
+
     amp_stack = np.abs(slc_stack)
 
     for i in range(slc_stack.shape[0]):
@@ -72,15 +75,22 @@ def test_update_amp_disp(tmp_path, slc_stack):
             amp_mean_file=amp_mean_file,
             amp_disp_file=amp_disp_file,
             slc_vrt_file=slc_vrt_file,
+            output_directory=out_path,
         )
-        computed_mean = _read_file(amp_mean_file)
-        computed_disp = _read_file(amp_disp_file)
+        new_amp_file = out_path / amp_mean_file.name
+        new_disp_file = out_path / amp_disp_file.name
+        computed_mean = _read_file(new_amp_file)
+        computed_disp = _read_file(new_disp_file)
 
         mean = amp_stack[: i + 1].mean(axis=0)
         sigma = amp_stack[: i + 1].std(axis=0)
 
         np.testing.assert_array_almost_equal(mean, computed_mean)
         np.testing.assert_array_almost_equal(sigma / mean, computed_disp)
+
+        # Move the new files to the old files
+        new_amp_file.rename(amp_mean_file)
+        new_disp_file.rename(amp_disp_file)
 
     # # Run on the entire stack
     # dolphin.ps.create_amp_dispersion(

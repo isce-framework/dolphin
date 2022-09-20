@@ -1,5 +1,6 @@
 """Find the persistent scatterers in a stack of SLCS."""
 from os import fspath
+from pathlib import Path
 
 from dolphin.utils import Pathlike, copy_projection
 
@@ -55,6 +56,7 @@ def update_amp_disp(
     amp_mean_file: Pathlike,
     amp_disp_file: Pathlike,
     slc_vrt_file: Pathlike,
+    output_directory: Pathlike = "",
 ):
     """Update the amplitude dispersion for the new SLC.
 
@@ -68,6 +70,18 @@ def update_amp_disp(
 
     v1 = v0 + (x1 - m0) * (x1 - m1)
 
+    Inputs
+    ------
+    amp_mean_file : Pathlike
+        The existing mean amplitude file.
+    amp_disp_file : Pathlike
+        The existing amplitude dispersion file.
+    slc_vrt_file : Pathlike
+        The VRT file pointing to the stack of SLCs.
+        Assumes that the final band is the new SLC to be added.
+    output_directory : Pathlike, optional
+        The output directory for the updated files, by default "".
+
     References
     ----------
     Welford, B. P. "Note on a method for calculating corrected sums of squares and
@@ -76,23 +90,27 @@ def update_amp_disp(
     import numpy as np
     from osgeo import gdal
 
-    # N = int(gdal.Info(fspath(amp_mean_file), format="json")["metadata"]["N"])
-    ds_mean = gdal.Open(fspath(amp_mean_file), gdal.GA_Update)
+    gdal.UseExceptions()
+
+    output_mean_file = Path(output_directory) / Path(amp_mean_file).name
+    output_disp_file = Path(output_directory) / Path(amp_disp_file).name
+
+    _check_output_files(output_mean_file, output_disp_file)
+
+    ds_mean = gdal.Open(fspath(amp_mean_file), gdal.GA_ReadOnly)
+    ds_ampdisp = gdal.Open(fspath(amp_disp_file), gdal.GA_ReadOnly)
     # Get the number of SLCs used to create the mean amplitude
     try:
         # Use the ENVI metadata domain for ENVI files
         md_domain = "ENVI" if ds_mean.GetDriver().ShortName == "ENVI" else ""
         N = int(ds_mean.GetMetadataItem("N", md_domain))
     except KeyError:
-        ds_mean = None
+        ds_mean = ds_ampdisp = None  # Close files before raising error
         raise ValueError("Cannot find N in metadata of mean amplitude file")
 
-    bnd_mean = ds_mean.GetRasterBand(1)
-    mean_n = bnd_mean.ReadAsArray()
-
-    ds_ampdisp = gdal.Open(fspath(amp_disp_file), gdal.GA_Update)
-    bnd_ampdisp = ds_ampdisp.GetRasterBand(1)
-    ampdisp = bnd_ampdisp.ReadAsArray()
+    driver = ds_mean.GetDriver()
+    mean_n = ds_mean.GetRasterBand(1).ReadAsArray()
+    ampdisp = ds_ampdisp.GetRasterBand(1).ReadAsArray()
 
     # Get the new data amplitude
     ds_slc_stack = gdal.Open(fspath(slc_vrt_file))
@@ -101,6 +119,12 @@ def update_amp_disp(
     bnd_new_slc = ds_slc_stack.GetRasterBand(nbands)
     new_amp = np.abs(bnd_new_slc.ReadAsArray())
     bnd_new_slc = ds_slc_stack = None
+
+    # Make the output files
+    ds_mean_out = driver.CreateCopy(fspath(output_mean_file), ds_mean)
+    ds_ampdisp_out = driver.CreateCopy(fspath(output_disp_file), ds_ampdisp)
+    bnd_mean = ds_mean_out.GetRasterBand(1)
+    bnd_ampdisp = ds_ampdisp_out.GetRasterBand(1)
 
     # Get the variance from the amplitude dispersion
     # d = sigma / mu, so sigma^2 = d^2 * mu^2
@@ -121,3 +145,12 @@ def update_amp_disp(
 
     # Close the files to save the changes
     bnd_mean = bnd_ampdisp = ds_mean = ds_ampdisp = None
+    ds_mean = ds_ampdisp = None
+
+
+def _check_output_files(*files):
+    """Check if the output files already exist."""
+    err_msg = "Output mean file {} already exists. Please delete before running."
+    for f in files:
+        if f.exists():
+            raise FileExistsError(err_msg.format(f))

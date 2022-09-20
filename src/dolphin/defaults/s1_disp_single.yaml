@@ -9,7 +9,9 @@ runconfig:
       cslc_file_list:
       cslc_file_path:
       cslc_file_ext: '.slc'
+      number_of_cslc_files: 1
       compressed_slc_file_list: []
+
 
 
     dynamic_ancillary_file_group:
@@ -33,7 +35,7 @@ runconfig:
 
     processing:
       output_format: 'ENVI'
-      bbox_latlon:
+      # bbox_latlon:
 
       # temporary files during workflow processing at multiple stages
       weight_file: 'nmap'

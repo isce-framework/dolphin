@@ -8,9 +8,10 @@ runconfig:
     input_file_group:
       # Required. List of CSLC files (min=1)
       cslc_file_list: list(str(), min=1, required=False)
-      # Or a path to the location
+      # Or a path to the location, with a specified number to pull
       cslc_file_path: str(required=False)
       cslc_file_ext: str(required=False)
+      number_of_cslc_files: int(required=False)
       # Compressed SLC files as input
       compressed_slc_file_list: list(str(), min=1, required=False)
 
@@ -56,7 +57,7 @@ worker_options:
 processing_options:
   # Format of output file
   output_format: enum('ENVI', 'GTiff', 'HDF5', required=False)
-  bbox_latlon: list(num, min=4, max=4, required=False)
+  # bbox_latlon: list(num, min=4, max=4, required=False)
 
   # temporary files during workflow processing at multiple stages
   weight_file: str()
