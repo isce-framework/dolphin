@@ -26,7 +26,7 @@ def _write_zeros(file, shape):
     ds = driver.Create(str(file), shape[1], shape[0], 1, gdal.GDT_Float32)
     bnd = ds.GetRasterBand(1)
     bnd.WriteArray(np.zeros(shape))
-    ds.SetMetadataItem("N", "0")
+    ds.SetMetadataItem("N", "0", "ENVI")
     ds = bnd = None
 
 

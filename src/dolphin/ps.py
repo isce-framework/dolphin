@@ -78,9 +78,11 @@ def update_amp_disp(
 
     # N = int(gdal.Info(fspath(amp_mean_file), format="json")["metadata"]["N"])
     ds_mean = gdal.Open(fspath(amp_mean_file), gdal.GA_Update)
+    # Get the number of SLCs used to create the mean amplitude
     try:
-        # Get the number of SLCs used to create the mean amplitude
-        N = int(ds_mean.GetMetadataItem("N"))
+        # Use the ENVI metadata domain for ENVI files
+        md_domain = "ENVI" if ds_mean.GetDriver().ShortName == "ENVI" else ""
+        N = int(ds_mean.GetMetadataItem("N", md_domain))
     except KeyError:
         ds_mean = None
         raise ValueError("Cannot find N in metadata of mean amplitude file")
@@ -114,8 +116,8 @@ def update_amp_disp(
     bnd_ampdisp.WriteArray(np.sqrt(var_n1 / mean_n1**2))
 
     # Update the metadata with the new N
-    ds_ampdisp.SetMetadataItem("N", str(N + 1))
-    ds_mean.SetMetadataItem("N", str(N + 1))
+    ds_ampdisp.SetMetadataItem("N", str(N + 1), md_domain)
+    ds_mean.SetMetadataItem("N", str(N + 1), md_domain)
 
     # Close the files to save the changes
     bnd_mean = bnd_ampdisp = ds_mean = ds_ampdisp = None
