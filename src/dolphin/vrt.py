@@ -122,6 +122,10 @@ class VRTStack:
         ds.SetSpatialRef(self.srs)
         ds = None
 
+    def add_file(self, new_file):
+        """Add a new file to the stack and re-sort."""
+        self.file_list = sorted(self.file_list + [new_file])
+
     def set_subset(
         self, pixel_bbox=None, target_extent=None, latlon_bbox=None, filename=None
     ):
