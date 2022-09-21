@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 import argparse
-import os
+from os import fspath
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Optional, Sequence, Tuple
 
 from osgeo import gdal
 
@@ -24,10 +24,10 @@ class VRTStack:
     ----------
     file_list : list
         Names of files to stack
-    outfile : str, optional (default = "slc_stack.vrt")
+    outfile : Path, optional (default = Path("slc_stack.vrt"))
         Name of output file to write
     use_abs_path : bool, optional (default = True)
-        Write the filepaths in the VRT as absolute
+        Write the filepaths of the SLCs in the VRT as "relative=0"
     pixel_bbox : tuple[int], optional
         Desired bounding box (in pixels) of subset as (left, bottom, right, top)
     target_extent : tuple[int], optional
@@ -35,24 +35,31 @@ class VRTStack:
             (xmin, ymin, xmax, ymax) in units of the SLCs' SRS (e.g. UTM coordinates)
     latlon_bbox : tuple[int], optional
         Bounding box in lat/lon coordinates: (left, bottom, right, top)
+    sort_files : bool, optional (default = True)
+        Sort the files in `file_list`. Assumes that the naming convention
+        will sort the files in increasing time order.
     """
 
     def __init__(
         self,
-        file_list: List[Pathlike],
+        file_list: Sequence[Pathlike],
         outfile: Pathlike = "slc_stack.vrt",
         use_abs_path: bool = True,
         pixel_bbox: Optional[Tuple[int, int, int, int]] = None,
         target_extent: Optional[Tuple[float, float, float, float]] = None,
         latlon_bbox: Optional[Tuple[float, float, float, float]] = None,
+        sort_files: bool = True,
     ):
         """Initialize a VRTStack object for a list of files, optionally subsetting."""
+        if sort_files:
+            file_list = sorted(fspath(Path(f)) for f in file_list)
         if use_abs_path:
-            file_list = [os.fspath(Path(f).absolute()) for f in file_list]
+            file_list = [Path(f).absolute() for f in file_list]
         self.file_list = file_list
-        self.outfile = outfile
+        self.outfile = Path(outfile).absolute()
+
         # Use the first file in the stack to get size, transform info
-        ds = gdal.Open(file_list[0])
+        ds = gdal.Open(fspath(file_list[0]))
         self.xsize = ds.RasterXSize
         self.ysize = ds.RasterYSize
         # Should be CFloat32
@@ -109,7 +116,7 @@ class VRTStack:
             fid.write("</VRTDataset>")
 
         # Set the georeferencing metadata
-        ds = gdal.Open(os.fspath(self.outfile), gdal.GA_Update)
+        ds = gdal.Open(fspath(self.outfile), gdal.GA_Update)
         ds.SetGeoTransform(self.gt)
         ds.SetProjection(self.proj)
         ds.SetSpatialRef(self.srs)
@@ -119,6 +126,8 @@ class VRTStack:
         self, pixel_bbox=None, target_extent=None, latlon_bbox=None, filename=None
     ):
         """Save the subset bounding box for a given target extent.
+
+        Sets the attributes `xoff`, `yoff`, `xsize_sub`, `ysize_sub` for the subset.
 
         Parameters
         ----------
@@ -131,9 +140,6 @@ class VRTStack:
         filename : str, optional
             Name of file to get the bounding box from, if providing `target_extent`
 
-        Returns
-        -------
-        xoff, yoff, xsize_sub, ysize_sub : tuple[int]
         """
         if all(
             (pixel_bbox is not None, target_extent is not None, latlon_bbox is not None)
@@ -149,21 +155,16 @@ class VRTStack:
         if target_extent is not None:
             # convert UTM -> pixels
             pixel_bbox = VRTStack._te_to_bbox(target_extent, filename=filename)
+
         if pixel_bbox is not None:
             left, bottom, right, top = pixel_bbox
-            xoff = left
-            yoff = top
-            xsize_sub = right - left
-            ysize_sub = bottom - top
+            self.xoff = left
+            self.yoff = top
+            self.xsize_sub = right - left
+            self.ysize_sub = bottom - top
         else:
-            self.xoff, self.yoff, self.xsize_sub, self.ysize_sub = (
-                0,
-                0,
-                self.xsize,
-                self.ysize,
-            )
-
-        return xoff, yoff, xsize_sub, ysize_sub
+            self.xoff, self.yoff = 0.0, 0.0
+            self.xsize_sub, self.ysize_sub = self.xsize, self.ysize
 
     @staticmethod
     def _latlon_bbox_to_te(
@@ -190,7 +191,7 @@ class VRTStack:
         from pyproj import Transformer
 
         if epsg is None:
-            ds = gdal.Open(filename)
+            ds = gdal.Open(fspath(filename))
             srs_out = ds.GetSpatialRef()
             epsg = int(srs_out.GetAttrValue("AUTHORITY", 1))
             ds = None
@@ -219,7 +220,7 @@ class VRTStack:
     def _xy_to_rowcol(x, y, ds=None, filename=None):
         """Convert coordinates in the georeferenced space to a row and column index."""
         if ds is None:
-            ds = gdal.Open(filename)
+            ds = gdal.Open(fspath(filename))
             gt = ds.GetGeoTransform()
             ds = None
         else:

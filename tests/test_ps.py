@@ -6,16 +6,6 @@ import dolphin.ps
 
 
 @pytest.fixture
-def slc_stack():
-    shape = (30, 10, 10)
-    sigma = 0.5
-    data = np.random.normal(0, sigma, size=shape)
-    # Phase doesn't matter here
-    complex_data = data * np.exp(1j * np.zeros_like(data))
-    return complex_data
-
-
-@pytest.fixture
 def amp_mean_file(tmp_path):
     out = tmp_path / "amp_mean.tif"
     return out
