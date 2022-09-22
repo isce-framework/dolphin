@@ -86,8 +86,8 @@ def create_full_nmap_files(
     # set all nmap weights to 1 by have all bits set to 1.
     # 0xFFFFFFFF = 4294967295
     uint32_max = 2**32 - 1
-    for b in range(1, n_bands + 1):
-        ds_nmap.GetRasterBand(b).WriteArray(
+    for idx in range(n_bands):
+        ds_nmap.GetRasterBand(idx + 1).WriteArray(
             np.full((ysize, xsize), uint32_max, dtype=np.uint32)
         )
 
@@ -97,7 +97,8 @@ def create_full_nmap_files(
 
     for ds in [ds_nmap, ds_count]:
         ds.SetMetadata(
-            {"HALFWINDOWX": str(half_window_x), "HALFWINDOWY": str(half_window_y)}
+            {"HALFWINDOWX": str(half_window_x), "HALFWINDOWY": str(half_window_y)},
+            "ENVI",
         )
     ds_nmap = ds_count = None
 

@@ -178,6 +178,15 @@ def combine_mask_files(
     return output_file
 
 
+def load_gdal(filename, band=None):
+    """Load a gdal file into a numpy array."""
+    from osgeo import gdal
+
+    gdal.UseExceptions()
+    ds = gdal.Open(fspath(filename))
+    return ds.ReadAsArray() if band is None else ds.GetRasterBand(band).ReadAsArray()
+
+
 def get_raster_xysize(filename: Pathlike) -> Tuple[int, int]:
     """Get the xsize/ysize of a GDAL-readable raster."""
     from osgeo import gdal

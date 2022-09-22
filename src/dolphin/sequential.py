@@ -4,11 +4,12 @@ from math import nan
 from pathlib import Path
 from typing import List
 
+import numpy as np
 from osgeo_utils import gdal_calc
 from phlight.phase_link_gpu import compress, run_mle_gpu
 
 from dolphin.log import get_log
-from dolphin.utils import Pathlike, save_arr_like
+from dolphin.utils import Pathlike, get_raster_xysize, load_gdal, save_arr_like
 from dolphin.vrt import VRTStack
 
 logger = get_log()
@@ -22,7 +23,9 @@ def run_evd_sequential(
     output_folder: Pathlike,
     window: dict,
     ministack_size: int = 10,
+    mask_file: Pathlike = None,
     # lines_per_block: int = 128,
+    beta: float = 0.1,
 ):
     """Estimate wrapped phase using batches of ministacks."""
     # TODO: work in blocks?
@@ -33,6 +36,12 @@ def run_evd_sequential(
 
     comp_slc_files: List[Pathlike] = []
     output_slc_files = defaultdict(list)  # Map of {ministack_index: [output_slc_files]}
+
+    if mask_file is not None:
+        mask = load_gdal(mask_file).astype(bool)
+    else:
+        xsize, ysize = get_raster_xysize(v_all.file_list[0])
+        mask = np.zeros((ysize, xsize), dtype=bool)
 
     for mini_idx, all_idx in enumerate(range(0, len(file_list_all), ministack_size)):
         cur_files = file_list_all[all_idx : all_idx + ministack_size]
@@ -58,6 +67,8 @@ def run_evd_sequential(
         cur_mle_stack = run_mle_gpu(
             cur_data,
             half_window=(window["xhalf"], window["yhalf"]),
+            beta=beta,
+            mask=mask,
         )
         logger.info(f"Finished ministack {mini_idx} of size {cur_mle_stack.shape}.")
         # Save each of the MLE estimates (ignoring the compressed SLCs)
@@ -127,6 +138,7 @@ def run_evd_sequential(
                 B=adjustment_fname,
                 calc="A * exp(1j * angle(B))",
                 quiet=True,
+                overwrite=True,
             )
             # TODO: need to copy projection?
             # TODO: delete old?
