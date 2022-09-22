@@ -55,6 +55,7 @@ def save_arr_like(*, arr, like_filename, output_name, driver="GTiff"):
 
     if arr.ndim == 2:
         arr = arr[np.newaxis, ...]
+    ysize, xsize = arr.shape[-2:]
     nbands = arr.shape[0]
     gdal.UseExceptions()
     ds = gdal.Open(fspath(like_filename))
@@ -63,8 +64,8 @@ def save_arr_like(*, arr, like_filename, output_name, driver="GTiff"):
     drv = gdal.GetDriverByName(driver)
     out_ds = drv.Create(
         fspath(output_name),
-        ds.RasterXSize,
-        ds.RasterYSize,
+        xsize,
+        ysize,
         nbands,
         numpy_to_gdal_type(arr.dtype),
     )
