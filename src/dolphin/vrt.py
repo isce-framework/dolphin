@@ -52,11 +52,12 @@ class VRTStack:
     ):
         """Initialize a VRTStack object for a list of files, optionally subsetting."""
         if sort_files:
-            file_list = sorted(fspath(Path(f)) for f in file_list)
+            # Sort by the filename, not the whole path
+            file_list = sorted([Path(f) for f in file_list], key=lambda f: Path(f).stem)
         if use_abs_path:
-            file_list = [Path(f).absolute() for f in file_list]
+            file_list = [Path(f).resolve() for f in file_list]
         self.file_list = file_list
-        self.outfile = Path(outfile).absolute()
+        self.outfile = Path(outfile).resolve()
 
         # Use the first file in the stack to get size, transform info
         ds = gdal.Open(fspath(file_list[0]))
@@ -95,7 +96,7 @@ class VRTStack:
             )
 
             for idx, filename in enumerate(self.file_list, start=1):
-                filename = str(Path(filename).absolute())
+                filename = str(Path(filename).resolve())
                 date = utils.get_dates(filename)[0]
                 outstr = f"""    <VRTRasterBand dataType="{self.dtype}" band="{idx}">
             <SimpleSource>
@@ -121,6 +122,18 @@ class VRTStack:
         ds.SetProjection(self.proj)
         ds.SetSpatialRef(self.srs)
         ds = None
+
+    def read(self):
+        """Read in the SLC stack."""
+        # TODO: Implement iterating, reading in chunks, block iterator
+        if not self.outfile:
+            raise ValueError("No output file specified")
+        if not self.outfile.exists():
+            self.write()
+        ds = gdal.Open(fspath(self.outfile))
+        stack = ds.ReadAsArray()
+        ds = None
+        return stack
 
     def add_file(self, new_file):
         """Add a new file to the stack and re-sort."""
@@ -169,6 +182,15 @@ class VRTStack:
         else:
             self.xoff, self.yoff = 0.0, 0.0
             self.xsize_sub, self.ysize_sub = self.xsize, self.ysize
+
+    @classmethod
+    def from_vrt_file(cls, vrt_file, new_outfile="slc_stack.vrt", **kwargs):
+        """Create a new VRTStack using an existing VRT file."""
+        ds = gdal.Open(fspath(vrt_file))
+        # First item is the `vrt_file` itself
+        file_list = [Path(f) for f in ds.GetFileList()[1:]]
+        ds = None
+        return cls(file_list, outfile=new_outfile, **kwargs)
 
     @staticmethod
     def _latlon_bbox_to_te(
@@ -231,6 +253,12 @@ class VRTStack:
             gt = ds.GetGeoTransform()
         gt = gdal.InvGeoTransform(ds.GetGeoTransform())
         return VRTStack._apply_gt(gt, x, y)
+
+    def __len__(self):
+        return len(self.file_list)
+
+    def __str__(self):
+        return f"VRTStack({len(self.file_list)} files, outfile={self.outfile})"
 
 
 def get_cli_args():

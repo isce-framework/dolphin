@@ -49,6 +49,33 @@ def copy_projection(src_file: Pathlike, dst_file: Pathlike) -> None:
     ds_src = ds_dst = None
 
 
+def save_arr_like(*, arr, like_filename, output_name, driver="GTiff"):
+    """Save an array to a file, copying projection/nodata from `like_filename`."""
+    from osgeo import gdal
+
+    if arr.ndim == 2:
+        arr = arr[np.newaxis, ...]
+    nbands = arr.shape[0]
+    gdal.UseExceptions()
+    ds = gdal.Open(fspath(like_filename))
+    if driver is None:
+        driver = ds.GetDriver().ShortName
+    drv = gdal.GetDriverByName(driver)
+    out_ds = drv.Create(
+        fspath(output_name),
+        ds.RasterXSize,
+        ds.RasterYSize,
+        nbands,
+        numpy_to_gdal_type(arr.dtype),
+    )
+    out_ds.SetGeoTransform(ds.GetGeoTransform())
+    out_ds.SetProjection(ds.GetProjection())
+    for i in range(nbands):
+        out_ds.GetRasterBand(i + 1).WriteArray(arr[i])
+    # TODO: copy other metadata
+    ds = out_ds = None
+
+
 def numpy_to_gdal_type(np_dtype):
     """Convert numpy dtype to gdal type."""
     from osgeo import gdal_array, gdalconst
