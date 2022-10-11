@@ -60,7 +60,7 @@ def fill_cfg(
     if pl_method is not None:
         print(f"{pl_method = }")
         filled += f"""
-      phase_linking:
+      phase_link:
         minimum_neighbors: 5
         method: {pl_method}
 """

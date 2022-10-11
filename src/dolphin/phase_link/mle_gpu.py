@@ -1,0 +1,201 @@
+from cmath import isnan
+from cmath import sqrt as csqrt
+from math import ceil
+from typing import Tuple
+
+import cupy as cp
+import h5py
+import numpy as np
+from numba import cuda
+
+# TODO: make a version which has the same API as the CPU
+
+
+def run_mle_gpu(
+    slc_stack: np.ndarray,
+    half_window: Tuple[int, int],
+    beta: float = 0.0,
+    mask: np.ndarray = None,
+    output_cov_file: str = None,
+) -> np.ndarray:
+    """Estimate the linked phase for a stack using the MLE estimator.
+
+    Parameters
+    ----------
+    slc_stack : np.ndarray
+        The slc stack
+    half_window : Tuple[int, int]
+        The half window size
+    beta : float, optional
+        The regularization parameter, by default 0.0
+    mask : np.ndarray, optional
+        A mask of pixels to ignore when estimating the covariance.
+        Pixels with `True` (or 1) are ignored, by default None
+        If None, all pixels are used, by default None.
+
+    output_cov_file : str, optional
+        HDF5 filename to save the estimated covariance at each pixel.
+
+    Returns
+    -------
+    np.ndarray
+        The estimated linked phase
+    """
+    from phlight.phase_link import mle_stack
+
+    num_slc, rows, cols = slc_stack.shape
+
+    if mask is None:
+        mask = np.zeros((rows, cols), dtype=bool)
+    else:
+        mask = mask.astype(bool)
+    # Make a copy, and set the masked pixels to np.nan
+    slc_stack_copy = slc_stack.copy()
+    slc_stack_copy[:, mask] = np.nan
+
+    # Copy the read-only data to the device
+    d_slc_stack = cuda.to_device(slc_stack_copy)
+
+    # Make a buffer for each pixel's coherence matrix
+    d_C_buf = cp.zeros((rows, cols, num_slc, num_slc), dtype=np.complex64)
+
+    # Divide up the stack using a 2D grid
+    threads_per_block = (16, 16)
+    blocks_x = ceil(rows / threads_per_block[0])
+    blocks_y = ceil(cols / threads_per_block[1])
+    blocks = (blocks_x, blocks_y)
+
+    estimate_c_gpu[blocks, threads_per_block](d_slc_stack, half_window, d_C_buf)
+
+    if output_cov_file:
+        # Copy back to the host
+        C_buf = d_C_buf.get()
+        print(f"Saving covariance matrix at each pixel to {output_cov_file}")
+        with h5py.File(output_cov_file, "w") as f:
+            f.create_dataset("C", data=C_buf)
+
+    # Estimate the phase
+    output_phase = mle_stack(d_C_buf, beta)
+    return np.exp(1j * output_phase.get())
+
+
+@cuda.jit
+def estimate_c_gpu(slc_stack, half_window, C_buf):
+    """GPU kernel for estimating the linked phase at one pixel."""
+    # Get the global position within the 2D GPU grid
+    i, j = cuda.grid(2)
+    N, rows, cols = slc_stack.shape
+    # Check if we are within the bounds of the array
+    if i >= rows or j >= cols:
+        return
+    # Get the half window size
+    half_x, half_y = half_window
+    # if i - half_x < 0 or i + half_x >= rows
+
+    # Get the window
+    # Clamp min indexes to 0
+    rstart = max(i - half_y, 0)
+    cstart = max(j - half_x, 0)
+    # Clamp max indexes to the array size
+    rend = min(i + half_y + 1, rows)
+    cent = min(j + half_x + 1, cols)
+    # print(i, j, ':(', rstart, rend, '), (', cstart, cent, ')')
+
+    # Clamp the window to the image bounds
+    samples_stack = slc_stack[:, rstart:rend, cstart:cent]
+
+    # estimate the coherence matrix, store in current pixel's buffer
+    C = C_buf[i, j, :, :]
+    coh_mat(samples_stack, C)
+
+
+@cuda.jit(device=True)
+def coh_mat(samples_stack, cov_mat):
+    """Given a (n_slc, n_samps) samples, estimate the coherence matrix."""
+    nslc = cov_mat.shape[0]
+    # Iterate over the upper triangle of the output matrix
+    for i_slc in range(nslc):
+        for j_slc in range(i_slc + 1, nslc):
+            numer = 0.0
+            a1 = 0.0
+            a2 = 0.0
+            # At each C_ij, iterate over the samples in the window
+            for rs in range(samples_stack.shape[1]):
+                for cs in range(samples_stack.shape[2]):
+                    s1 = samples_stack[i_slc, rs, cs]
+                    s2 = samples_stack[j_slc, rs, cs]
+                    if isnan(s1) or isnan(s2):
+                        continue
+                    numer += s1 * s2.conjugate()
+                    a1 += s1 * s1.conjugate()
+                    a2 += s2 * s2.conjugate()
+
+            c = numer / csqrt(a1 * a2)
+            cov_mat[i_slc, j_slc] = c
+            cov_mat[j_slc, i_slc] = c.conjugate()
+        cov_mat[i_slc, i_slc] = 1.0
+
+
+def run_mle_multilooked_gpu(
+    slc_stack: np.ndarray,
+    half_window: Tuple[int, int],
+    beta: float = 0.0,
+    output_cov_file: str = None,
+):
+    """Estimate a down-sampled version of the linked phase using the MLE estimator."""
+    from dolphin.utils import half_window_to_full
+
+    from .mle import full_cov_multilooked, mle_stack
+
+    d_slc_stack = cp.asarray(slc_stack)
+    window = half_window_to_full(half_window)
+    # window is (xsize, ysize), want as (row looks, col looks)
+    looks = (window[1], window[0])
+
+    # Get the covariance at each pixel on the GPU
+    d_C_buf = full_cov_multilooked(d_slc_stack, looks)
+
+    if output_cov_file:
+        # Copy back to the host
+        C_buf = d_C_buf.get()
+        print(f"Saving covariance matrix at each pixel to {output_cov_file}")
+        with h5py.File(output_cov_file, "w") as f:
+            f.create_dataset("C", data=C_buf)
+
+    # Estimate the phase
+    phase = mle_stack(d_C_buf, beta)
+    return np.exp(1j * phase.get())
+
+
+# def run(
+#     slc_stack_file: np.ndarray,
+#     half_window: Tuple[int, int],
+#     beta: float = 0.0,
+#     mask: np.ndarray = None,
+#     output_cov_file: str = None,
+# ):
+#     pass
+
+
+def compress(
+    slc_stack: np.ndarray,
+    mle_estimate: np.ndarray,
+):
+    """Compress the stack of SLC data using the estimated phase.
+
+    Parameters
+    ----------
+    slc_stack : np.array
+        The stack of complex SLC data, shape (nslc, rows, cols)
+    mle_estimate : np.array
+        The estimated phase from `run_mle_gpu`, shape (nslc, rows, cols)
+
+    Returns
+    -------
+    np.array
+        The compressed SLC data, shape (rows, cols)
+    """
+    xp = cp.get_array_module(slc_stack)
+    # For each pixel, project the SLCs onto the estimated phase
+    # by performing a pixel-wise complex dot product
+    return xp.nansum(slc_stack * xp.conjugate(mle_estimate), axis=0)

@@ -3,7 +3,7 @@ from glob import glob
 from os import fspath
 from pathlib import Path
 
-from dolphin import combine_ps_ds, phase_linking, ps, unwrap, utils, vrt
+from dolphin import combine_ps_ds, phase_link, ps, unwrap, utils, vrt
 from dolphin.log import get_log, log_runtime
 
 logger = get_log()
@@ -87,7 +87,7 @@ def run(full_cfg: dict):
     ysize, xsize = utils.get_raster_xysize(amp_disp_file)
     weight_filename = nmap_path / cfg["weight_file"]
     count_filename = nmap_path / cfg["nmap_count_file"]
-    phase_linking.create_full_nmap_files(
+    phase_link.create_full_nmap_files(
         xsize,
         ysize,
         cfg["half_window_x"],
@@ -106,7 +106,7 @@ def run(full_cfg: dict):
         logger.info(f"Skipping making existing EVD file {compressed_slc_file}")
     else:
         logger.info(f"Making EVD file {compressed_slc_file}")
-        phase_linking.run_evd(
+        phase_link.run_evd(
             slc_vrt_file=slc_vrt_file,
             weight_file=nmap_path / weight_filename,
             compressed_slc_file=compressed_slc_file,
