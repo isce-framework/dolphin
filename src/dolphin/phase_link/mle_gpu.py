@@ -15,7 +15,9 @@ def run_mle_gpu(
     slc_stack: np.ndarray,
     half_window: Tuple[int, int],
     beta: float = 0.0,
+    reference_idx: int = 0,
     mask: np.ndarray = None,
+    ps_mask: np.ndarray = None,
     output_cov_file: str = None,
 ) -> np.ndarray:
     """Estimate the linked phase for a stack using the MLE estimator.
@@ -28,11 +30,19 @@ def run_mle_gpu(
         The half window size
     beta : float, optional
         The regularization parameter, by default 0.0
+    reference_idx : int, optional
+        The index of the (non compressed) reference SLC, by default 0
     mask : np.ndarray, optional
-        A mask of pixels to ignore when estimating the covariance.
+        A mask of bad pixels to ignore when estimating the covariance.
         Pixels with `True` (or 1) are ignored, by default None
         If None, all pixels are used, by default None.
-
+    ps_mask : np.ndarray, optional
+        A mask of pixels marking persistent scatterers (PS) to
+        also ignore when multilooking.
+        Pixels with `True` (or 1) are PS and will be ignored (combined
+        with `mask`).
+        The phase from these pixels will be inserted back
+        into the final estimate directly from `slc_stack`.
     output_cov_file : str, optional
         HDF5 filename to save the estimated covariance at each pixel.
 
@@ -49,14 +59,20 @@ def run_mle_gpu(
         mask = np.zeros((rows, cols), dtype=bool)
     else:
         mask = mask.astype(bool)
+    if ps_mask is None:
+        ps_mask = np.zeros((rows, cols), dtype=bool)
+    else:
+        ps_mask = ps_mask.astype(bool)
+    ignore_mask = np.logical_or(mask, ps_mask)
     # Make a copy, and set the masked pixels to np.nan
     slc_stack_copy = slc_stack.copy()
-    slc_stack_copy[:, mask] = np.nan
+    slc_stack_copy[:, ignore_mask] = np.nan
 
     # Copy the read-only data to the device
     d_slc_stack = cuda.to_device(slc_stack_copy)
 
     # Make a buffer for each pixel's coherence matrix
+    # d_ means "device_", i.e. on the GPU
     d_C_buf = cp.zeros((rows, cols, num_slc, num_slc), dtype=np.complex64)
 
     # Divide up the stack using a 2D grid
@@ -74,9 +90,22 @@ def run_mle_gpu(
         with h5py.File(output_cov_file, "w") as f:
             f.create_dataset("C", data=C_buf)
 
-    # Estimate the phase
-    output_phase = mle_stack(d_C_buf, beta)
-    return np.exp(1j * output_phase.get())
+    d_output_phase = mle_stack(d_C_buf, beta=beta, reference_idx=reference_idx)
+    # copy back to host
+    output_phase = d_output_phase.get()
+    # and set the PS pixel phases if using a PS mask
+    if np.any(ps_mask):
+        ps_ref = slc_stack[0][ps_mask]
+        for i in range(num_slc):
+            # print(np.all(ref_ps_phase - np.angle(slc_stack[i])[ps_mask] < 1e-6))
+            output_phase[i][ps_mask] = np.angle(slc_stack[i][ps_mask] * np.conj(ps_ref))
+            # output_phase[i][ps_mask] = np.angle(slc_stack[i])[ps_mask]
+            # output_phase[i] = np.where(
+            #     ps_mask, np.angle(slc_stack[i]), output_phase[i]
+            # )
+
+    # Finally, use the amplitude from the original SLCs
+    return np.abs(slc_stack) * np.exp(1j * output_phase)
 
 
 @cuda.jit
@@ -99,7 +128,6 @@ def estimate_c_gpu(slc_stack, half_window, C_buf):
     # Clamp max indexes to the array size
     rend = min(i + half_y + 1, rows)
     cent = min(j + half_x + 1, cols)
-    # print(i, j, ':(', rstart, rend, '), (', cstart, cent, ')')
 
     # Clamp the window to the image bounds
     samples_stack = slc_stack[:, rstart:rend, cstart:cent]
@@ -141,11 +169,11 @@ def run_mle_multilooked_gpu(
     half_window: Tuple[int, int],
     beta: float = 0.0,
     output_cov_file: str = None,
+    reference_idx: int = 0,
 ):
     """Estimate a down-sampled version of the linked phase using the MLE estimator."""
-    from dolphin.utils import half_window_to_full
-
-    from .mle import full_cov_multilooked, mle_stack
+    from phlight.phase_link import full_cov_multilooked, mle_stack
+    from phlight.utils import half_window_to_full
 
     d_slc_stack = cp.asarray(slc_stack)
     window = half_window_to_full(half_window)
@@ -163,7 +191,7 @@ def run_mle_multilooked_gpu(
             f.create_dataset("C", data=C_buf)
 
     # Estimate the phase
-    phase = mle_stack(d_C_buf, beta)
+    phase = mle_stack(d_C_buf, beta=beta, reference_idx=reference_idx)
     return np.exp(1j * phase.get())
 
 
@@ -198,4 +226,4 @@ def compress(
     xp = cp.get_array_module(slc_stack)
     # For each pixel, project the SLCs onto the estimated phase
     # by performing a pixel-wise complex dot product
-    return xp.nansum(slc_stack * xp.conjugate(mle_estimate), axis=0)
+    return xp.nanmean(slc_stack * xp.conjugate(mle_estimate), axis=0)

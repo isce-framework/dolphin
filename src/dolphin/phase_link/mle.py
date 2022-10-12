@@ -138,7 +138,7 @@ def full_cov_multilooked(slcs, looks):
         The full covariance matrix for each pixel, shape (rows, cols, nslc, nslc)
         i.e. C[i, j] is the covariance matrix for pixel (i, j)
     """
-    from dolphin.utils import take_looks
+    from phlight.utils import take_looks
 
     try:
         import cupy as cp
@@ -161,7 +161,7 @@ def full_cov_multilooked(slcs, looks):
     return xp.transpose(C, (2, 3, 0, 1))
 
 
-def mle_stack(C_arrays, beta=0.1):
+def mle_stack(C_arrays: np.ndarray, beta: float = 0.0, reference_idx: float = 0):
     """Estimate the linked phase for a stack of covariance matrices.
 
     Will use cupy if available, (and if the input is a cupy array).
@@ -174,6 +174,11 @@ def mle_stack(C_arrays, beta=0.1):
     beta : float, optional
         The regularization parameter for inverting Gamma = |C|
         The regularization is applied as (1 - beta) * Gamma + beta * I
+    reference_idx : int, optional
+        The index of the reference acquisition, by default 0
+        If the SLC stack from which `C_arrays` was computed contained
+        compressed SLCs at the stack, then this should be the index
+        of the first non-compressed SLC.
 
     Returns
     -------
@@ -201,11 +206,11 @@ def mle_stack(C_arrays, beta=0.1):
     Gamma_inv = xp.linalg.inv(Gamma)
     _, v = xp.linalg.eigh(Gamma_inv * C_arrays)
 
-    # smallest eigenvalue is idx 0
-    # reference to the first acquisition
-    evd_estimate = v[..., 0][:, :, :, None] * xp.conjugate(
-        v[..., 0, 0][:, :, None, None]
-    )
+    # smallest eigenvalue is idx 0 (third axis).
+    # 4th axis is each element of the eigenvector
+    # reference the other elements to `reference_idx`
+    ref = v[:, :, 0, reference_idx][:, :, None, None]
+    evd_estimate = v[..., 0][:, :, :, None] * xp.conjugate(ref)
     # Return the phase (still as a GPU array), remove final singleton dimension
     phase_stack = xp.squeeze(xp.angle(evd_estimate), axis=-1)
     # # Reference all phases to the first acquisition
