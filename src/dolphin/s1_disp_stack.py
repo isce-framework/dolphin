@@ -3,7 +3,7 @@ from glob import glob
 from os import fspath
 from pathlib import Path
 
-from dolphin import combine_ps_ds, phase_linking, ps, unwrap, utils, vrt
+from dolphin import combine_ps_ds, phase_link, ps, unwrap, utils, vrt
 from dolphin.log import get_log, log_runtime
 
 logger = get_log()
@@ -93,7 +93,7 @@ def run(full_cfg: dict):
         logger.info(f"Skipping making existing NMAP file {weight_file}")
     else:
         logger.info(f"Creating NMAP file {weight_file}")
-        phase_linking.run_nmap(
+        phase_link.run_nmap(
             slc_vrt_file=slc_vrt_file,
             # mask_file=cfg["mask_file"], # TODO : add mask file if needed
             weight_file=weight_file,
@@ -114,7 +114,7 @@ def run(full_cfg: dict):
         logger.info(f"Skipping making existing EVD file {compressed_slc_file}")
     else:
         logger.info(f"Making EVD file {compressed_slc_file}")
-        phase_linking.run_evd(
+        phase_link.run_evd(
             slc_vrt_file=slc_vrt_file,
             weight_file=weight_file,
             compressed_slc_file=compressed_slc_file,

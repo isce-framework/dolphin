@@ -196,3 +196,171 @@ def get_raster_xysize(filename: Pathlike) -> Tuple[int, int]:
     xsize, ysize = ds.RasterXSize, ds.RasterYSize
     ds = None
     return xsize, ysize
+
+
+def half_window_to_full(half_window):
+    """Convert a half window to a full window."""
+    return (2 * half_window[0] + 1, 2 * half_window[1] + 1)
+
+
+def take_looks(arr, row_looks, col_looks, func_type="nansum"):
+    """Downsample a numpy matrix by summing blocks of (row_looks, col_looks).
+
+    Parameters
+    ----------
+    arr : np.array
+        2D array of an image
+    row_looks : int
+        the reduction rate in row direction
+    col_looks : int
+        the reduction rate in col direction
+    func_type : str, optional
+        the numpy function to use for downsampling, by default "nansum"
+
+    Returns
+    -------
+    ndarray
+        The downsampled array, shape = ceil(rows / row_looks, cols / col_looks)
+
+    Notes
+    -----
+    Cuts off values if the size isn't divisible by num looks.
+    Will use cupy if available and if `arr` is a cupy array on the GPU.
+    """
+    try:
+        import cupy as cp
+
+        xp = cp.get_array_module(arr)
+    except ImportError:
+        print("cupy not installed, using numpy")
+        xp = np
+
+    if row_looks == 1 and col_looks == 1:
+        return arr
+    if arr.ndim >= 3:
+        return xp.stack([take_looks(a, row_looks, col_looks) for a in arr])
+
+    rows, cols = arr.shape
+    new_rows = rows // row_looks
+    new_cols = cols // col_looks
+
+    row_cutoff = rows % row_looks
+    col_cutoff = cols % col_looks
+
+    if row_cutoff != 0:
+        arr = arr[:-row_cutoff, :]
+    if col_cutoff != 0:
+        arr = arr[:, :-col_cutoff]
+
+    func = getattr(xp, func_type)
+    return func(
+        xp.reshape(arr, (new_rows, row_looks, new_cols, col_looks)), axis=(3, 1)
+    )
+
+
+def read_blocks(
+    filename,
+    block_shape: Tuple[int, int],
+    band=None,
+    overlaps: Tuple[int, int] = (0, 0),
+    start_offsets: Tuple[int, int] = (0, 0),
+):
+    """Read blocks of a raster into a generator.
+
+    Parameters
+    ----------
+    filename : str or Path
+        path to raster file
+    block_shape : tuple[int, int]
+        (height, width), size of accessing blocks (default (None, None))
+    band : int, optional
+        band to read (default None, whole stack)
+    overlaps : tuple[int, int], optional
+        (row_overlap, col_overlap), number of pixels to re-include
+        after sliding the block (default (0, 0))
+    start_offsets : tuple[int, int], optional
+        (row_start, col_start), start reading from this offset
+
+    Yields
+    ------
+    Iterator of data from slices
+
+    """
+    import rasterio as rio
+    from rasterio.windows import Window
+
+    with rio.open(filename) as src:
+        block_iter = block_iterator(
+            src.shape,
+            block_shape,
+            overlaps=overlaps,
+            start_offsets=start_offsets,
+        )
+        for win_slice in block_iter:
+            window = Window.from_slices(*win_slice)
+            yield src.read(band, window=window)
+
+
+def block_iterator(
+    arr_shape,
+    block_shape: Tuple[int, int],
+    overlaps: Tuple[int, int] = (0, 0),
+    start_offsets: Tuple[int, int] = (0, 0),
+):
+    """Create a generator to get indexes for accessing blocks of a raster.
+
+    Parameters
+    ----------
+    arr_shape : Tuple[int, int]
+        (num_rows, num_cols), full size of array to access
+    block_shape : Tuple[int, int]
+        (height, width), size of accessing blocks
+    overlaps : Tuple[int, int]
+        (row_overlap, col_overlap), number of pixels to re-include
+        after sliding the block (default (0, 0))
+    start_offsets : Tuple[int, int]
+        Offsets to start reading from (default (0, 0))
+
+    Yields
+    ------
+    Iterator of ((row_start, row_stop), (col_start, col_stop))
+
+    Examples
+    --------
+    >>> list(block_iterator((180, 250), (100, 100)))
+    [((0, 100), (0, 100)), ((0, 100), (100, 200)), ((0, 100), (200, 250)), \
+((100, 180), (0, 100)), ((100, 180), (100, 200)), ((100, 180), (200, 250))]
+    >>> list(block_iterator((180, 250), (100, 100), overlaps=(10, 10)))
+    [((0, 100), (0, 100)), ((0, 100), (90, 190)), ((0, 100), (180, 250)), \
+((90, 180), (0, 100)), ((90, 180), (90, 190)), ((90, 180), (180, 250))]
+
+    """
+    rows, cols = arr_shape
+    row_off, col_off = start_offsets
+    row_overlap, col_overlap = overlaps
+    height, width = block_shape
+
+    if height is None:
+        height = rows
+    if width is None:
+        width = cols
+
+    # Check we're not moving backwards with the overlap:
+    if row_overlap >= height:
+        raise ValueError(f"row_overlap {row_overlap} must be less than {height}")
+    if col_overlap >= width:
+        raise ValueError(f"col_overlap {col_overlap} must be less than {width}")
+    while row_off < rows:
+        while col_off < cols:
+            row_end = min(row_off + height, rows)  # Dont yield something OOB
+            col_end = min(col_off + width, cols)
+            yield ((row_off, row_end), (col_off, col_end))
+
+            col_off += width
+            if col_off < cols:  # dont bring back if already at edge
+                col_off -= col_overlap
+
+        row_off += height
+        if row_off < rows:
+            row_off -= row_overlap
+        col_off = 0

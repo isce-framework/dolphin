@@ -6,9 +6,9 @@ from typing import List
 
 import numpy as np
 from osgeo_utils import gdal_calc
-from phlight.phase_link_gpu import compress, run_mle_gpu
 
 from dolphin.log import get_log
+from dolphin.phase_link.mle_gpu import compress, run_mle_gpu
 from dolphin.utils import Pathlike, get_raster_xysize, load_gdal, save_arr_like
 from dolphin.vrt import VRTStack
 
