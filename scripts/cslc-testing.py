@@ -2,8 +2,6 @@
 import itertools
 import os
 import re
-
-# import shutil
 import subprocess
 from copy import copy
 from pathlib import Path
@@ -14,6 +12,8 @@ import numpy as np
 import s1reader
 import shapely
 from osgeo import gdal
+
+from dolphin import utils
 
 gdal.UseExceptions()
 
@@ -35,9 +35,11 @@ def form_ifg_isce3(
     width = ref_slc_raster.width
     length = ref_slc_raster.length
 
-    if Path(output_filename).suffix == ".tif":
+    ifg_ext = utils.full_suffix(output_filename)
+
+    if ifg_ext == ".tif":
         driver = "GTiff"
-    elif Path(output_filename).suffix == ".int":
+    elif ifg_ext == ".int":
         driver = "ISCE"
     else:
         driver = "ENVI"
@@ -49,18 +51,23 @@ def form_ifg_isce3(
         gdal.GDT_CFloat32,
         driver,
     )
+    coherence_filename = Path(str(output_filename).replace(ifg_ext, ".cor.tif"))
     coherence = isce3.io.Raster(
-        "coherence.bin",
+        str(coherence_filename),
         width // col_looks,
         length // row_looks,
         1,
         gdal.GDT_Float32,
-        "ISCE",
+        "GTiff",
     )
 
     print(f"Running crossmul on input sized ({length = }, {width = })")
+    print(
+        f"Forming {output_filename}, {coherence_filename} with {row_looks = },"
+        f" {col_looks = }"
+    )
+    # print(f"{cm.az_looks = }, {cm.range_looks = }, {cm.lines_per_block = }")
     cm = isce3.signal.Crossmul(col_looks, row_looks)
-    print(f"{cm.az_looks = }, {cm.range_looks = }, {cm.lines_per_block = }")
     cm.crossmul(ref_slc_raster, sec_slc_raster, igram, coherence)
 
     igram.close_dataset()
@@ -70,8 +77,23 @@ def form_ifg_isce3(
         str(ref_filename), str(output_filename), ylooks=row_looks, xlooks=col_looks
     )
     copy_projection_gdal(
-        str(ref_filename), "coherence.bin", ylooks=row_looks, xlooks=col_looks
+        str(ref_filename), str(coherence_filename), ylooks=row_looks, xlooks=col_looks
     )
+
+
+def make_all_ifgs_stitched(looks=(10, 20), slc_dir="stitched", ifg_subdir="ifgs"):
+    slc_files = list(sorted(Path(f"{slc_dir}/").glob("*.slc")))
+
+    ifg_dir = Path(f"{slc_dir}/{ifg_subdir}/")
+    ifg_dir.mkdir(exist_ok=True)
+    out_names = []
+    for f1, f2 in itertools.combinations(slc_files, 2):
+        date1 = re.search(r"\d{8}", str(f1)).group()
+        date2 = re.search(r"\d{8}", str(f2)).group()
+        out_name = ifg_dir / f"{date1}_{date2}.int.tif"
+        form_ifg_isce3(f1, f2, out_name, *looks)
+        out_names.append(out_name)
+    return out_names
 
 
 def make_all_burst_ifgs(looks=(10, 20), slc_dir="stack", ifg_subdir="ifgs"):
@@ -93,20 +115,20 @@ def make_all_burst_ifgs(looks=(10, 20), slc_dir="stack", ifg_subdir="ifgs"):
     return out_names
 
 
-def make_all_ifgs(looks=(10, 20), slc_dir="stitched", ifg_subdir="ifgs"):
-    slc_files = list(sorted(Path(f"{slc_dir}/").glob("*.slc")))
+def merge_burst_ifgs(slc_dir="stack", ifg_subdir="ifgs", merged_ifg_dir="merged_ifgs"):
+    # Make output directory
+    Path(f"{slc_dir}/{merged_ifg_dir}").mkdir(exist_ok=True)
+    # Get the dates of all SLCs
+    dates = [p.name for p in sorted(next(Path(slc_dir).glob("t*iw*")).glob("./2*"))]
 
-    ifg_dir = Path(f"{slc_dir}/{ifg_subdir}/")
-    ifg_dir.mkdir(exist_ok=True)
-    out_names = []
-    for f1, f2 in itertools.combinations(slc_files, 2):
-        date1 = re.search(r"\d{8}", str(f1)).group()
-        date2 = re.search(r"\d{8}", str(f2)).group()
-        out_name = ifg_dir / f"{date1}_{date2}.int.tif"
-        print(f"Forming {out_name}")
-        form_ifg_isce3(f1, f2, out_name, *looks)
-        out_names.append(out_name)
-    return out_names
+    for d1, d2 in itertools.combinations(dates, 2):
+        ifg_date = f"{d1}_{d2}"
+        for ext in [".int.tif", ".cor.tif"]:
+            output = f"{slc_dir}/{merged_ifg_dir}/{ifg_date}{ext}"
+            inputs = f"{slc_dir}/*/{ifg_subdir}/{ifg_date}{ext}"
+            cmd = f"gdal_merge.py -init nan -n nan -o {output} {inputs}"
+            print(cmd)
+            subprocess.run(cmd, shell=True, check=True)
 
 
 def copy_projection_gdal(src_file, dst_file, ylooks=1, xlooks=1) -> None:
@@ -151,12 +173,12 @@ def main():
     Path("orbits").mkdir(exist_ok=True)
 
     orbit_files = list(sorted(Path("orbits").glob("*EOF")))
-    if not orbit_files:
+    if not orbit_files or len(orbit_files) < len(fnames):
         orbit_files = [
             s1reader.s1_orbit.download_orbit(fname, "orbits") for fname in fnames
         ]
 
-    if not Path("elevation.dem").exists():
+    if not Path("elevation.tif").exists():
         burst_lists = [
             s1reader.load_bursts(fnames[0], orbit_files[0], swath_num=i)
             for i in [1, 2, 3]
@@ -166,19 +188,20 @@ def main():
         bbox_frame = shapely.ops.unary_union(all_borders).bounds
 
         bbox_str = " ".join((str(s) for s in bbox_frame))
-        cmd = f"sardem --bbox {bbox_str} --data-source COP"
+        cmd = (
+            f"sardem --bbox {bbox_str} --data-source COP -o elevation.tif -of GTiff -ot"
+            " Float32"
+        )
+        # TODO: Do i actually just want the AOI to be the bounds? aoi.wkt
         print(cmd)
         subprocess.check_call(cmd, shell=True)
 
-    # TODO: GDAL has a bug where ENVI files don't save the EPSG:4326 information...
-    subprocess.check_call("gdal_translate elevation.dem elevation.tif", shell=True)
-
     subprocess.check_call(
         "/home/staniewi/repos/COMPASS/src/compass/s1_geo_stack.py --slc-dir data/"
-        " --dem-file elevation.tif --orbit-dir ./orbits/",
+        " --dem-file elevation.tif --orbit-dir ./orbits/ --aoi aoi.wkt ",
         shell=True,
     )
-    # Run all the generated fiels to geocode
+    # Run all the generated files to geocode
     subprocess.check_call(
         "for f in stack/run_files/*sh; do bash $f >> process.log 2>&1; done", shell=True
     )
@@ -192,10 +215,10 @@ def main():
     )
 
     # Form all possible interferogram pairs
-    make_all_ifgs(looks=(10, 20))
+    make_all_ifgs_stitched(looks=(10, 20))
 
 
 if __name__ == "__main__":
     main()
-    # TODO: get path, get nunmber looks, save plot
+    # TODO: get path, get number looks, save plot
     # Get date
