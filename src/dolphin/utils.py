@@ -1,3 +1,4 @@
+import copy
 import datetime
 import re
 from os import PathLike, fspath
@@ -198,6 +199,56 @@ def get_raster_xysize(filename: Pathlike) -> Tuple[int, int]:
     return xsize, ysize
 
 
+def full_suffix(filename: Pathlike):
+    """Get the full suffix of a filename, including multiple dots.
+
+    Parameters
+    ----------
+    filename : str or Path
+        path to file
+
+    Returns
+    -------
+    str
+        The full suffix, including multiple dots.
+
+    Examples
+    --------
+    >>> full_suffix('test.tif')
+    '.tif'
+    >>> full_suffix('test.tar.gz')
+    '.tar.gz'
+    """
+    fpath = Path(filename)
+    return "".join(fpath.suffixes)
+
+
+# def get_block_shape_gdal(filename: Pathlike) -> Tuple[int, int]:
+#     """Get the block shape (row_block, col_block) of a GDAL-readable raster."""
+#     from osgeo import gdal
+
+#     gdal.UseExceptions()
+#     ds = gdal.Open(fspath(filename))
+#     nbands = ds.RasterCount
+#     shapes = []
+#     for i in range(1, nbands + 1):
+#         block_xy = ds.GetRasterBand(i).GetBlockSize()
+#         # Reverse order to match numpy convention
+#         shapes.append(block_xy[::-1])
+
+#     # Check that all bands have the same block shape
+#     if all([s == shapes[0] for s in shapes]):
+#         block_shape = shapes[0]
+#     else:
+#         print("Warning: bands have different block shapes.")
+#         print("Using smallest from each dimension.")
+#         # If not, take the smallest block shape
+#         block_shape = tuple(np.array(shapes).min(axis=0))
+
+#     ds = None
+#     return block_shape
+
+
 def half_window_to_full(half_window):
     """Convert a half window to a full window."""
     return (2 * half_window[0] + 1, 2 * half_window[1] + 1)
@@ -258,14 +309,14 @@ def take_looks(arr, row_looks, col_looks, func_type="nansum"):
     )
 
 
-def read_blocks(
+def iter_blocks(
     filename,
     block_shape: Tuple[int, int],
     band=None,
     overlaps: Tuple[int, int] = (0, 0),
     start_offsets: Tuple[int, int] = (0, 0),
 ):
-    """Read blocks of a raster into a generator.
+    """Read blocks of a raster as a generator.
 
     Parameters
     ----------
@@ -284,13 +335,12 @@ def read_blocks(
     Yields
     ------
     Iterator of data from slices
-
     """
     import rasterio as rio
     from rasterio.windows import Window
 
     with rio.open(filename) as src:
-        block_iter = block_iterator(
+        block_iter = slice_iterator(
             src.shape,
             block_shape,
             overlaps=overlaps,
@@ -301,7 +351,7 @@ def read_blocks(
             yield src.read(band, window=window)
 
 
-def block_iterator(
+def slice_iterator(
     arr_shape,
     block_shape: Tuple[int, int],
     overlaps: Tuple[int, int] = (0, 0),
@@ -327,13 +377,12 @@ def block_iterator(
 
     Examples
     --------
-    >>> list(block_iterator((180, 250), (100, 100)))
+    >>> list(slice_iterator((180, 250), (100, 100)))
     [((0, 100), (0, 100)), ((0, 100), (100, 200)), ((0, 100), (200, 250)), \
 ((100, 180), (0, 100)), ((100, 180), (100, 200)), ((100, 180), (200, 250))]
-    >>> list(block_iterator((180, 250), (100, 100), overlaps=(10, 10)))
+    >>> list(slice_iterator((180, 250), (100, 100), overlaps=(10, 10)))
     [((0, 100), (0, 100)), ((0, 100), (90, 190)), ((0, 100), (180, 250)), \
 ((90, 180), (0, 100)), ((90, 180), (90, 190)), ((90, 180), (180, 250))]
-
     """
     rows, cols = arr_shape
     row_off, col_off = start_offsets
@@ -364,3 +413,75 @@ def block_iterator(
         if row_off < rows:
             row_off -= row_overlap
         col_off = 0
+
+
+def get_max_block_shape(
+    filename, nstack: int, max_bytes=100e6, default_tile_size=(256, 256)
+):
+    """Find shape to load from GDAL-readable `filename` with memory size < `max_bytes`.
+
+    Attempts to get an integer number of tiles from the file to avoid partial tiles.
+
+    Parameters
+    ----------
+    filename : str
+        GDAL-readable file name containing 3D dataset.
+    nstack: int
+        number of bands in dataset.
+    max_bytes : float, optional)
+        target size of memory (in Bytes) for each block.
+        Defaults to 100e6.
+    default_tile_size : tuple/list, optional
+        If `filename` is not tiled/chunked, size to use as chunks.
+        Defaults to (256, 256).
+
+    Returns
+    -------
+    tuple[int]:
+        (num_rows, num_cols) shape of blocks to load from `vrt_file`
+    """
+    import rasterio as rio
+
+    with rio.open(filename) as src:
+        shape = src.shape
+        if src.block_shapes:
+            block_shape = list(src.block_shapes[0])
+            # If it's written by line, load at least 16 lines at a time
+            block_shape[0] = max(16, block_shape[0])
+            block_shape[1] = max(16, block_shape[1])
+        else:
+            block_shape = default_tile_size
+
+        nbytes = np.dtype(src.dtypes[0]).itemsize
+
+    full_shape = [nstack, *shape]
+    chunk_3d = [nstack, *block_shape]
+    return _get_stack_block_shape(full_shape, chunk_3d, nbytes, max_bytes)
+
+
+def _get_stack_block_shape(full_shape, chunk_size, nbytes, max_bytes):
+    """Find size of 3D chunk to load while staying at ~`max_bytes` bytes of RAM."""
+    chunks_per_block = max_bytes / (np.prod(chunk_size) * nbytes)
+    row_chunks, col_chunks = 1, 1
+    cur_block_shape = list(copy.copy(chunk_size))
+    while chunks_per_block > 1:
+        # First keep incrementing the number of rows we grab at once time
+        if row_chunks * chunk_size[1] < full_shape[1]:
+            row_chunks += 1
+            cur_block_shape[1] = min(row_chunks * chunk_size[1], full_shape[1])
+        # Then increase the column size if still haven't hit `max_bytes`
+        elif col_chunks * chunk_size[2] < full_shape[2]:
+            col_chunks += 1
+            cur_block_shape[2] = min(col_chunks * chunk_size[2], full_shape[2])
+        else:
+            break
+        chunks_per_block = max_bytes / (np.prod(cur_block_shape) * nbytes)
+    return cur_block_shape[-2:]
+
+
+def get_block_shape(filename):
+    """Get the raster's block shape on disk."""
+    import rasterio as rio
+
+    with rio.open(filename) as src:
+        return src.block_shapes[0]

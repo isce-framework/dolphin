@@ -6,14 +6,13 @@ from typing import Optional, Sequence, Tuple
 
 from osgeo import gdal
 
-gdal.UseExceptions()
-
 from dolphin import utils
 from dolphin.log import get_log
 from dolphin.utils import Pathlike
 
 SENTINEL_WAVELENGTH = 0.05546576
 
+gdal.UseExceptions()
 logger = get_log()
 
 
@@ -53,7 +52,11 @@ class VRTStack:
         """Initialize a VRTStack object for a list of files, optionally subsetting."""
         if sort_files:
             # Sort by the filename, not the whole path
-            file_list = sorted([Path(f) for f in file_list], key=lambda f: Path(f).stem)
+            file_list = sorted(
+                [Path(f) for f in file_list],
+                # Make sure compressed slcs are at the beginning of the stack
+                key=lambda f: Path(f).stem.replace("compressed_", ""),
+            )
         if use_abs_path:
             file_list = [Path(f).resolve() for f in file_list]
         self.file_list = file_list
@@ -98,20 +101,31 @@ class VRTStack:
             for idx, filename in enumerate(self.file_list, start=1):
                 filename = str(Path(filename).resolve())
                 date = utils.get_dates(filename)[0]
-                outstr = f"""    <VRTRasterBand dataType="{self.dtype}" band="{idx}">
-            <SimpleSource>
-                <SourceFilename>{filename}</SourceFilename>
-                <SourceBand>1</SourceBand>
-                <SourceProperties RasterXSize="{self.xsize}" RasterYSize="{self.ysize}" DataType="{self.dtype}"/>
-                <SrcRect xOff="{self.xoff}" yOff="{self.yoff}" xSize="{self.xsize_sub}" ySize="{self.ysize_sub}"/>
-                <DstRect xOff="0" yOff="0" xSize="{self.xsize_sub}" ySize="{self.ysize_sub}"/>
-            </SimpleSource>
-            <Metadata domain="slc">
-                <MDI key="Date">{date}</MDI>
-                <MDI key="Wavelength">{SENTINEL_WAVELENGTH}</MDI>
-                <MDI key="AcquisitionTime">{date}</MDI>
-            </Metadata>
-        </VRTRasterBand>\n"""  # noqa: E501
+
+                block_shape = utils.get_block_shape(filename)
+                # blocks in a vrt have a min of 16, max of 2**14=16384
+                # https://github.com/OSGeo/gdal/blob/2530defa1e0052827bc98696e7806037a6fec86e/frmts/vrt/vrtrasterband.cpp#L339
+                if any([b < 16 for b in block_shape]) or any(
+                    [b > 16384 for b in block_shape]
+                ):
+                    block_str = ""
+                else:
+                    block_str = (
+                        f'blockXSize="{block_shape[1]}" blockYSize="{block_shape[0]}"'
+                    )
+                outstr = f"""  <VRTRasterBand dataType="{self.dtype}" band="{idx}" {block_str}>
+    <SimpleSource>
+      <SourceFilename>{filename}</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SrcRect xOff="{self.xoff}" yOff="{self.yoff}" xSize="{self.xsize_sub}" ySize="{self.ysize_sub}"/>
+      <DstRect xOff="0" yOff="0" xSize="{self.xsize_sub}" ySize="{self.ysize_sub}"/>
+    </SimpleSource>
+    <Metadata domain="slc">
+      <MDI key="Date">{date}</MDI>
+      <MDI key="Wavelength">{SENTINEL_WAVELENGTH}</MDI>
+      <MDI key="AcquisitionTime">{date}</MDI>
+    </Metadata>
+  </VRTRasterBand>\n"""  # noqa: E501
                 fid.write(outstr)
 
             fid.write("</VRTDataset>")
@@ -123,7 +137,7 @@ class VRTStack:
         ds.SetSpatialRef(self.srs)
         ds = None
 
-    def read(self):
+    def read_stack(self):
         """Read in the SLC stack."""
         # TODO: Implement iterating, reading in chunks, block iterator
         if not self.outfile:
@@ -134,6 +148,9 @@ class VRTStack:
         stack = ds.ReadAsArray()
         ds = None
         return stack
+
+    def __fspath__(self):
+        return fspath(self.outfile)
 
     def add_file(self, new_file):
         """Add a new file to the stack and re-sort."""
@@ -180,7 +197,7 @@ class VRTStack:
             self.xsize_sub = right - left
             self.ysize_sub = bottom - top
         else:
-            self.xoff, self.yoff = 0.0, 0.0
+            self.xoff, self.yoff = 0, 0
             self.xsize_sub, self.ysize_sub = self.xsize, self.ysize
 
     @classmethod
@@ -257,8 +274,29 @@ class VRTStack:
     def __len__(self):
         return len(self.file_list)
 
-    def __str__(self):
-        return f"VRTStack({len(self.file_list)} files, outfile={self.outfile})"
+    def __repr__(self):
+        outname = fspath(self.outfile) if self.outfile else "(not written)"
+        return f"VRTStack({len(self.file_list)} bands, outfile={outname})"
+
+    def get_block_shape(self, max_bytes=100e6, default_chunk_size=(None, 256, 256)):
+        return utils.get_max_block_shape(
+            self.file_list[0],
+            len(self),
+            max_bytes=max_bytes,
+            default_tile_size=default_chunk_size,
+        )
+
+    def iter_blocks(
+        self,
+        overlaps: Tuple[int, int] = (0, 0),
+        start_offsets: Tuple[int, int] = (0, 0),
+    ):
+        yield from utils.iter_blocks(
+            self.outfile,
+            self.get_block_shape()[-2:],
+            overlaps=overlaps,
+            start_offsets=start_offsets,
+        )
 
 
 def get_cli_args():

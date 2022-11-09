@@ -28,10 +28,11 @@ def test_create(vrt_stack):
     ds = None
 
 
-def test_read(vrt_stack, slc_stack):
+def test_read_stack(vrt_stack, slc_stack):
     ds = gdal.Open(str(vrt_stack.outfile))
     read_stack = ds.ReadAsArray()
     np.testing.assert_array_almost_equal(read_stack, slc_stack)
+    np.testing.assert_array_almost_equal(vrt_stack.read_stack(), slc_stack)
 
 
 def test_sort_order(slc_file_list):
