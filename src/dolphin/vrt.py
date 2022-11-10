@@ -294,7 +294,7 @@ class VRTStack:
     ):
         yield from utils.iter_blocks(
             self.outfile,
-            self.get_block_shape()[-2:],
+            self.get_block_shape(),
             overlaps=overlaps,
             start_offsets=start_offsets,
         )

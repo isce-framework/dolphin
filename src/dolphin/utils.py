@@ -305,19 +305,30 @@ def iter_blocks(
     ------
     Iterator of data from slices
     """
-    import rasterio as rio
-    from rasterio.windows import Window
+    ds = gdal.Open(fspath(filename))
+    if band is None:
+        # Read all bands
+        read_func = ds.ReadAsArray
+    else:
+        # Read from single band
+        read_func = ds.GetRasterBand(band).ReadAsArray
 
-    with rio.open(filename) as src:
-        block_iter = slice_iterator(
-            src.shape,
-            block_shape,
-            overlaps=overlaps,
-            start_offsets=start_offsets,
+    # Set up the generator of ((row_start, row_end), (col_start, col_end))
+    slice_gen = slice_iterator(
+        (ds.RasterYSize, ds.RasterXSize),
+        block_shape,
+        overlaps=overlaps,
+        start_offsets=start_offsets,
+    )
+    for rows, cols in slice_gen:
+        cur_block = read_func(
+            xoff=cols[0],
+            yoff=rows[0],
+            win_xsize=cols[1] - cols[0],
+            win_ysize=rows[1] - rows[0],
         )
-        for win_slice in block_iter:
-            window = Window.from_slices(*win_slice)
-            yield src.read(band, window=window)
+        yield cur_block
+    ds = None
 
 
 def slice_iterator(
