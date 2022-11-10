@@ -8,7 +8,8 @@ import numpy as np
 from osgeo_utils import gdal_calc
 
 from dolphin.log import get_log
-from dolphin.phase_link.mle_gpu import compress, run_mle_gpu
+from dolphin.phase_link.mle import compress
+from dolphin.phase_link.mle_gpu import run_mle_gpu
 from dolphin.utils import Pathlike, get_raster_xysize, load_gdal, save_arr_like
 from dolphin.vrt import VRTStack
 
@@ -54,7 +55,7 @@ def run_evd_sequential(
         # Make a new output folder for each ministack
         cur_output_folder = output_folder / start_end
         cur_output_folder.mkdir(parents=True, exist_ok=True)
-        logger.info(f"Processing {len(cur_files)} files into {cur_output_folder}")
+        logger.info(f"Processing {len(cur_files)} files, output: {cur_output_folder}")
 
         # Add the existing compressed SLC files to the start
         cur_files = comp_slc_files + cur_files
@@ -65,7 +66,7 @@ def run_evd_sequential(
             f"{cur_vrt}: from {Path(cur_vrt.file_list[mini_idx]).name} to"
             f" {Path(cur_vrt.file_list[-1]).name}"
         )
-        cur_data = cur_vrt.read()
+        cur_data = cur_vrt.read_stack()
 
         # Run the phase linking process on the current ministack
         cur_mle_stack = run_mle_gpu(
@@ -93,6 +94,9 @@ def run_evd_sequential(
         # Compress the ministack using only the non-compressed SLCs
         cur_comp_slc = compress(cur_data[mini_idx:], cur_mle_stack[mini_idx:])
         # Save the compressed SLC
+        # Note: this is the first compressed SLC in the next ministack,
+        # and it will be in correct sorted order assuming `start_end`
+        # is before the next ministack's start
         cur_comp_slc_file = cur_output_folder / f"compressed_{start_end}.bin"
         logger.info(f"Saving compressed SLC to {cur_comp_slc_file}")
         save_arr_like(
@@ -111,13 +115,14 @@ def run_evd_sequential(
         comp_slc_files, outfile=output_folder / "compressed_stack.vrt"
     )
     logger.info(f"Running EVD on compressed files: {adjustment_vrt_stack}")
-    comp_data = adjustment_vrt_stack.read()
+    comp_data = adjustment_vrt_stack.read_stack()
     comp_mle_result = run_mle_gpu(
         comp_data,
         half_window=(window["xhalf"], window["yhalf"]),
     )
     comp_output_folder = output_folder / "adjustments"
     comp_output_folder.mkdir(parents=True, exist_ok=True)
+    adjusted_comp_slc_files = []
     for fname, cur_image in zip(adjustment_vrt_stack.file_list, comp_mle_result):
         name = Path(fname).stem
         cur_filename = comp_output_folder / f"{name}.bin"
@@ -127,15 +132,15 @@ def run_evd_sequential(
             output_name=cur_filename,
             driver="ENVI",
         )
+        adjusted_comp_slc_files.append(cur_filename)
 
     # Compensate for the offsets between ministacks (aka "datum adjustments")
     final_output_folder = output_folder / "final"
     final_output_folder.mkdir(parents=True, exist_ok=True)
     for mini_idx, slc_files in output_slc_files.items():
-        adjustment_fname = comp_slc_files[mini_idx]
+        adjustment_fname = adjusted_comp_slc_files[mini_idx]
         driver = "ENVI"
         for slc_fname in slc_files:
-            # name = slc_fname.stem
             logger.info(f"Compensating {slc_fname} with {adjustment_fname}")
             outfile = final_output_folder / f"{slc_fname.name}"
 
@@ -145,7 +150,7 @@ def run_evd_sequential(
                 outfile=outfile,
                 A=slc_fname,
                 B=adjustment_fname,
-                calc="A * exp(1j * angle(B))",
+                calc="abs(A) * exp(1j * (angle(A) + angle(B)))",
                 quiet=True,
                 overwrite=True,
             )

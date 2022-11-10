@@ -4,6 +4,8 @@ import numpy as np
 import numpy.linalg as la
 from numba import njit
 
+from dolphin.utils import take_looks
+
 logger = logging.getLogger(__name__)
 
 
@@ -138,8 +140,6 @@ def full_cov_multilooked(slcs, looks):
         The full covariance matrix for each pixel, shape (rows, cols, nslc, nslc)
         i.e. C[i, j] is the covariance matrix for pixel (i, j)
     """
-    from phlight.utils import take_looks
-
     try:
         import cupy as cp
 
@@ -204,16 +204,49 @@ def mle_stack(C_arrays: np.ndarray, beta: float = 0.0, reference_idx: float = 0)
         Gamma = (1 - beta) * Gamma + beta * Id
 
     Gamma_inv = xp.linalg.inv(Gamma)
-    _, v = xp.linalg.eigh(Gamma_inv * C_arrays)
+    _, V = xp.linalg.eigh(Gamma_inv * C_arrays)
 
-    # smallest eigenvalue is idx 0 (third axis).
-    # 4th axis is each element of the eigenvector
-    # reference the other elements to `reference_idx`
-    ref = v[:, :, 0, reference_idx][:, :, None, None]
-    evd_estimate = v[..., 0][:, :, :, None] * xp.conjugate(ref)
-    # Return the phase (still as a GPU array), remove final singleton dimension
-    phase_stack = xp.squeeze(xp.angle(evd_estimate), axis=-1)
-    # # Reference all phases to the first acquisition
-    # phase_stack -= phase_stack[..., 0][:, :, None]
+    # The shape of V is (rows, cols, nslc, nslc)
+    # at pixel (r, c), the columns of V[r, c] are the eigenvectors.
+    # They're ordered by increasing eigenvalue, so the first column is the
+    # eigenvector corresponding to the smallest eigenvalue (our phase solution).
+    evd_estimate = V[:, :, :, 0]
+    # The phase estimate on the reference day will be size (rows, cols)
+    ref = evd_estimate[:, :, reference_idx]
+    # Make sure each still has 3 dims, then reference all phases to `ref`
+    evd_estimate = evd_estimate * xp.conjugate(ref[:, :, None])
+
+    # Return the phase (still as a GPU array)
+    phase_stack = xp.angle(evd_estimate)
     # Move the SLC dimension to the front (to match the SLC stack shape)
     return np.moveaxis(phase_stack, -1, 0)
+
+
+def compress(
+    slc_stack: np.ndarray,
+    mle_estimate: np.ndarray,
+):
+    """Compress the stack of SLC data using the estimated phase.
+
+    Parameters
+    ----------
+    slc_stack : np.array
+        The stack of complex SLC data, shape (nslc, rows, cols)
+    mle_estimate : np.array
+        The estimated phase from `run_mle_gpu`, shape (nslc, rows, cols)
+
+    Returns
+    -------
+    np.array
+        The compressed SLC data, shape (rows, cols)
+    """
+    try:
+        import cupy as cp
+
+        xp = cp.get_array_module(slc_stack)
+    except ImportError:
+        logger.debug("cupy not installed, falling back to numpy")
+        xp = np
+    # For each pixel, project the SLCs onto the estimated phase
+    # by performing a pixel-wise complex dot product
+    return xp.nanmean(slc_stack * xp.conjugate(mle_estimate), axis=0)

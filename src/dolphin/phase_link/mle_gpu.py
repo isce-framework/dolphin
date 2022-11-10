@@ -8,6 +8,10 @@ import h5py
 import numpy as np
 from numba import cuda
 
+from dolphin.utils import half_window_to_full
+
+from .mle import full_cov_multilooked, mle_stack
+
 # TODO: make a version which has the same API as the CPU
 
 
@@ -25,11 +29,12 @@ def run_mle_gpu(
     Parameters
     ----------
     slc_stack : np.ndarray
-        The slc stack
+        The SLC stack, with shape (n_images, n_rows, n_cols)
     half_window : Tuple[int, int]
-        The half window size
+        The half window size as [half_x, half_y] in pixels.
+        The full window size is 2 * half_window + 1 for x, y.
     beta : float, optional
-        The regularization parameter, by default 0.0
+        The regularization parameter, by default 0.0.
     reference_idx : int, optional
         The index of the (non compressed) reference SLC, by default 0
     mask : np.ndarray, optional
@@ -51,8 +56,6 @@ def run_mle_gpu(
     np.ndarray
         The estimated linked phase
     """
-    from phlight.phase_link import mle_stack
-
     num_slc, rows, cols = slc_stack.shape
 
     if mask is None:
@@ -172,9 +175,6 @@ def run_mle_multilooked_gpu(
     reference_idx: int = 0,
 ):
     """Estimate a down-sampled version of the linked phase using the MLE estimator."""
-    from phlight.phase_link import full_cov_multilooked, mle_stack
-    from phlight.utils import half_window_to_full
-
     d_slc_stack = cp.asarray(slc_stack)
     window = half_window_to_full(half_window)
     # window is (xsize, ysize), want as (row looks, col looks)
@@ -203,27 +203,3 @@ def run_mle_multilooked_gpu(
 #     output_cov_file: str = None,
 # ):
 #     pass
-
-
-def compress(
-    slc_stack: np.ndarray,
-    mle_estimate: np.ndarray,
-):
-    """Compress the stack of SLC data using the estimated phase.
-
-    Parameters
-    ----------
-    slc_stack : np.array
-        The stack of complex SLC data, shape (nslc, rows, cols)
-    mle_estimate : np.array
-        The estimated phase from `run_mle_gpu`, shape (nslc, rows, cols)
-
-    Returns
-    -------
-    np.array
-        The compressed SLC data, shape (rows, cols)
-    """
-    xp = cp.get_array_module(slc_stack)
-    # For each pixel, project the SLCs onto the estimated phase
-    # by performing a pixel-wise complex dot product
-    return xp.nanmean(slc_stack * xp.conjugate(mle_estimate), axis=0)
