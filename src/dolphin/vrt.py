@@ -150,6 +150,7 @@ class VRTStack:
         return stack
 
     def __fspath__(self):
+        # Allows os.fspath() to work on the object, enabling rasterio.open()
         return fspath(self.outfile)
 
     def add_file(self, new_file):

@@ -38,35 +38,6 @@ def test_get_raster_xysize(raster_100_by_200):
     assert (200, 100) == utils.get_raster_xysize(raster_100_by_200)
 
 
-def test_get_raster_block_sizes(raster_100_by_200, tiled_raster_100_by_200):
-    assert utils.get_block_size(tiled_raster_100_by_200) == [32, 32]
-    assert utils.get_block_size(raster_100_by_200) == [200, 1]
-    # for utils.get_max_block_shape, the rasters are 8 bytes per pixel
-    nstack = 10
-    # if we have 1 GB, the whole raster should fit in memory
-    bs = utils.get_max_block_shape(tiled_raster_100_by_200, nstack, max_bytes=1e9)
-    assert bs == [100, 200]
-
-    # one tile should be 8 * 32 * 32 * 10 = 81920 bytes
-    bytes_per_tile = 8 * 32 * 32 * nstack
-    bs = utils.get_max_block_shape(
-        tiled_raster_100_by_200, nstack, max_bytes=bytes_per_tile
-    )
-    assert bs == [32, 32]
-
-    # with a little more, we should get 2 tiles
-    bs = utils.get_max_block_shape(
-        tiled_raster_100_by_200, nstack, max_bytes=1 + bytes_per_tile
-    )
-    assert bs == [32, 64]
-
-    # 200 / 32 = 6.25, so with 7, it should add a new row
-    bs = utils.get_max_block_shape(
-        tiled_raster_100_by_200, nstack, max_bytes=7 * bytes_per_tile
-    )
-    assert bs == [64, 200]
-
-
 def test_take_looks():
     arr = np.array([[0.1, 0.01, 2], [3, 4, 1 + 1j]])
 
@@ -91,3 +62,61 @@ def test_masked_looks(slc_samples):
     s2 = np.squeeze(utils.take_looks(slc_stack_masked, 11, 11))
 
     np.testing.assert_array_almost_equal(s1, s2, decimal=5)
+
+
+def test_get_raster_block_sizes(raster_100_by_200, tiled_raster_100_by_200):
+    assert utils.get_block_size(tiled_raster_100_by_200) == [32, 32]
+    assert utils.get_block_size(raster_100_by_200) == [200, 1]
+    # for utils.get_max_block_shape, the rasters are 8 bytes per pixel
+    # if we have 1 GB, the whole raster should fit in memory
+    bs = utils.get_max_block_shape(tiled_raster_100_by_200, 1, max_bytes=1e9)
+    assert bs == (100, 200)
+
+    # for untiled, the block size is one line
+    bs = utils.get_max_block_shape(raster_100_by_200, 1, max_bytes=0)
+    # The function forces at least 16 lines to be read at a time
+    assert bs == (16, 200)
+    bs = utils.get_max_block_shape(raster_100_by_200, 1, max_bytes=8 * 17 * 200)
+    assert bs == (32, 200)
+
+    # Pretend we have a stack of 10 images
+    nstack = 10
+    # one tile should be 8 * 32 * 32 * 10 = 81920 bytes
+    bytes_per_tile = 8 * 32 * 32 * nstack
+    bs = utils.get_max_block_shape(
+        tiled_raster_100_by_200, nstack, max_bytes=bytes_per_tile
+    )
+    assert bs == (32, 32)
+
+    # with a little more, we should get 2 tiles
+    bs = utils.get_max_block_shape(
+        tiled_raster_100_by_200, nstack, max_bytes=1 + bytes_per_tile
+    )
+    assert bs == (32, 64)
+
+    # 200 / 32 = 6.25, so with 7, it should add a new row
+    bs = utils.get_max_block_shape(
+        tiled_raster_100_by_200, nstack, max_bytes=7 * bytes_per_tile
+    )
+    assert bs == (64, 200)
+
+
+def test_iterate_blocks(tiled_raster_100_by_200):
+    # Try the whole raster
+    bs = utils.get_max_block_shape(tiled_raster_100_by_200, 1, max_bytes=1e9)
+    blocks = list(utils.iter_blocks(tiled_raster_100_by_200, bs, band=1))
+    assert len(blocks) == 1
+    assert blocks[0].shape == (100, 200)
+
+    # now one block at a time
+    max_bytes = 8 * 32 * 32
+    bs = utils.get_max_block_shape(tiled_raster_100_by_200, 1, max_bytes=max_bytes)
+    blocks = list(utils.iter_blocks(tiled_raster_100_by_200, bs, band=1))
+    row_blocks = 100 // 32 + 1
+    col_blocks = 200 // 32 + 1
+    expected_num_blocks = row_blocks * col_blocks
+    assert len(blocks) == expected_num_blocks
+    assert blocks[0].shape == (32, 32)
+    # at the ends, the blocks are smaller
+    assert blocks[6].shape == (32, 8)
+    assert blocks[-1].shape == (4, 8)

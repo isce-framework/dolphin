@@ -384,7 +384,7 @@ def slice_iterator(
         col_off = 0
 
 
-def get_max_block_shape(filename, nstack: int, max_bytes=100e6):
+def get_max_block_shape(filename, nstack: int, max_bytes=100e6) -> Tuple[int, int]:
     """Find shape to load from GDAL-readable `filename` with memory size < `max_bytes`.
 
     Attempts to get an integer number of tiles from the file to avoid partial tiles.
@@ -438,7 +438,7 @@ def _get_stack_block_shape(full_shape, chunk_size, nbytes, max_bytes):
         else:
             break
         chunks_per_block = max_bytes / (np.prod(cur_block_shape) * nbytes)
-    return cur_block_shape[-2:]
+    return tuple(cur_block_shape[-2:])
 
 
 def get_block_size(filename):
