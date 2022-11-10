@@ -76,7 +76,11 @@ def save_arr_like(*, arr, like_filename, output_name, driver="GTiff"):
 def numpy_to_gdal_type(np_dtype):
     """Convert numpy dtype to gdal type."""
     # Wrap in np.dtype in case string is passed
-    np_dtype = np.dtype(str(np_dtype).lower())
+    if isinstance(np_dtype, str):
+        np_dtype = np.dtype(np_dtype.lower())
+    elif isinstance(np_dtype, type):
+        np_dtype = np.dtype(np_dtype)
+
     if np.issubdtype(bool, np_dtype):
         return gdalconst.GDT_Byte
     return gdal_array.NumericTypeCodeToGDALTypeCode(np_dtype)
@@ -212,29 +216,6 @@ def full_suffix(filename: Pathlike):
     """
     fpath = Path(filename)
     return "".join(fpath.suffixes)
-
-
-# def get_block_shape_gdal(filename: Pathlike) -> Tuple[int, int]:
-#     """Get the block shape (row_block, col_block) of a GDAL-readable raster."""
-#     ds = gdal.Open(fspath(filename))
-#     nbands = ds.RasterCount
-#     shapes = []
-#     for i in range(1, nbands + 1):
-#         block_xy = ds.GetRasterBand(i).GetBlockSize()
-#         # Reverse order to match numpy convention
-#         shapes.append(block_xy[::-1])
-
-#     # Check that all bands have the same block shape
-#     if all([s == shapes[0] for s in shapes]):
-#         block_shape = shapes[0]
-#     else:
-#         print("Warning: bands have different block shapes.")
-#         print("Using smallest from each dimension.")
-#         # If not, take the smallest block shape
-#         block_shape = tuple(np.array(shapes).min(axis=0))
-
-#     ds = None
-#     return block_shape
 
 
 def half_window_to_full(half_window):
@@ -423,12 +404,13 @@ def get_max_block_shape(filename, nstack: int, max_bytes=100e6):
     tuple[int]:
         (num_rows, num_cols) shape of blocks to load from `vrt_file`
     """
-    ds = gdal.Open(filename)
-    shape = (ds.RasterYSize, ds.RasterXSize)
-    blockX, blockY = ds.GetRasterBand(1).GetBlockSize()
+    blockX, blockY = get_block_size(filename)
     # If it's written by line, load at least 16 lines at a time
     blockX = max(16, blockX)
     blockY = max(16, blockY)
+
+    ds = gdal.Open(fspath(filename))
+    shape = (ds.RasterYSize, ds.RasterXSize)
     # get the data type from the raster
     dt = gdal_to_numpy_type(ds.GetRasterBand(1).DataType)
     # get the size of the data type
@@ -445,14 +427,14 @@ def _get_stack_block_shape(full_shape, chunk_size, nbytes, max_bytes):
     row_chunks, col_chunks = 1, 1
     cur_block_shape = list(copy.copy(chunk_size))
     while chunks_per_block > 1:
-        # First keep incrementing the number of rows we grab at once time
-        if row_chunks * chunk_size[1] < full_shape[1]:
-            row_chunks += 1
-            cur_block_shape[1] = min(row_chunks * chunk_size[1], full_shape[1])
-        # Then increase the column size if still haven't hit `max_bytes`
-        elif col_chunks * chunk_size[2] < full_shape[2]:
+        # First keep incrementing the number of columns we grab at once time
+        if col_chunks * chunk_size[2] < full_shape[2]:
             col_chunks += 1
             cur_block_shape[2] = min(col_chunks * chunk_size[2], full_shape[2])
+        # Then increase the row size if still haven't hit `max_bytes`
+        elif row_chunks * chunk_size[1] < full_shape[1]:
+            row_chunks += 1
+            cur_block_shape[1] = min(row_chunks * chunk_size[1], full_shape[1])
         else:
             break
         chunks_per_block = max_bytes / (np.prod(cur_block_shape) * nbytes)
@@ -460,9 +442,11 @@ def _get_stack_block_shape(full_shape, chunk_size, nbytes, max_bytes):
 
 
 def get_block_size(filename):
-    """Get the raster's (blockXsize, blockYsize) on disk.
-
-    Assumes all bands have the same block size.
-    """
-    ds = gdal.Open(filename)
-    return ds.GetRasterBand(1).GetBlockSize()
+    """Get the raster's (blockXsize, blockYsize) on disk."""
+    ds = gdal.Open(fspath(filename))
+    block_size = ds.GetRasterBand(1).GetBlockSize()
+    for i in range(2, ds.RasterCount + 1):
+        if block_size != ds.GetRasterBand(i).GetBlockSize():
+            print(f"Warning: {filename} bands have different block shapes.")
+            break
+    return block_size

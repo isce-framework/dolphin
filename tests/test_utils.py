@@ -23,8 +23,48 @@ def test_get_dates():
         utils.get_dates("/usr/19990101/notadate.tif")
 
 
+def test_get_types():
+    np_dtype = np.dtype("complex64")
+    assert 10 == utils.numpy_to_gdal_type(np_dtype)
+    assert np_dtype == utils.gdal_to_numpy_type(10)
+
+    # round trip float32
+    assert utils.gdal_to_numpy_type(utils.numpy_to_gdal_type(np.float32)) == np.float32
+
+
 def test_get_raster_xysize(raster_100_by_200):
+    arr = utils.load_gdal(raster_100_by_200)
+    assert arr.shape == (100, 200)
     assert (200, 100) == utils.get_raster_xysize(raster_100_by_200)
+
+
+def test_get_raster_block_sizes(raster_100_by_200, tiled_raster_100_by_200):
+    assert utils.get_block_size(tiled_raster_100_by_200) == [32, 32]
+    assert utils.get_block_size(raster_100_by_200) == [200, 1]
+    # for utils.get_max_block_shape, the rasters are 8 bytes per pixel
+    nstack = 10
+    # if we have 1 GB, the whole raster should fit in memory
+    bs = utils.get_max_block_shape(tiled_raster_100_by_200, nstack, max_bytes=1e9)
+    assert bs == [100, 200]
+
+    # one tile should be 8 * 32 * 32 * 10 = 81920 bytes
+    bytes_per_tile = 8 * 32 * 32 * nstack
+    bs = utils.get_max_block_shape(
+        tiled_raster_100_by_200, nstack, max_bytes=bytes_per_tile
+    )
+    assert bs == [32, 32]
+
+    # with a little more, we should get 2 tiles
+    bs = utils.get_max_block_shape(
+        tiled_raster_100_by_200, nstack, max_bytes=1 + bytes_per_tile
+    )
+    assert bs == [32, 64]
+
+    # 200 / 32 = 6.25, so with 7, it should add a new row
+    bs = utils.get_max_block_shape(
+        tiled_raster_100_by_200, nstack, max_bytes=7 * bytes_per_tile
+    )
+    assert bs == [64, 200]
 
 
 def test_take_looks():

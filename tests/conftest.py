@@ -67,7 +67,29 @@ def raster_100_by_200(tmp_path):
     # Create a test raster
     driver = gdal.GetDriverByName("ENVI")
     filename = str(tmp_path / "test.bin")
-    ds = driver.Create(filename, xsize, ysize, 1, gdal.GDT_Float32)
+    ds = driver.Create(filename, xsize, ysize, 1, gdal.GDT_CFloat32)
+    ds.FlushCache()
+    ds = None
+    return filename
+
+
+@pytest.fixture
+def tiled_raster_100_by_200(tmp_path):
+    ysize, xsize = 100, 200
+    tile_size = [32, 32]
+    creation_options = [
+        "COMPRESS=DEFLATE",
+        "ZLEVEL=5",
+        "TILED=YES",
+        f"BLOCKXSIZE={tile_size[0]}",
+        f"BLOCKYSIZE={tile_size[1]}",
+    ]
+    # Create a test raster
+    driver = gdal.GetDriverByName("GTiff")
+    filename = str(tmp_path / "test.tif")
+    ds = driver.Create(
+        filename, xsize, ysize, 1, gdal.GDT_CFloat32, options=creation_options
+    )
     ds.FlushCache()
     ds = None
     return filename

@@ -27,6 +27,19 @@ conda install -c conda-forge --file requirements.txt
 python -m pip install .
 ```
 
+For development:
+
+```bash
+# run "pip install -e" to install in development mode
+python -m pip install -e .[dev]
+# Get pre-commit hooks so that linting/formatting is done automatically
+pre-commit install
+
+# After making changes, check the tests:
+pytest
+```
+
+
 ## Usage
 
 ## License
