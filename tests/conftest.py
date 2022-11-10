@@ -7,7 +7,8 @@ from dolphin.phase_link import simulate
 simulate.seed(1234)
 NUM_ACQ = 30
 
-@pytest.fixture
+
+@pytest.fixture(scope="session")
 def slc_stack():
     shape = (NUM_ACQ, 10, 10)
     sigma = 0.5
@@ -17,7 +18,7 @@ def slc_stack():
     return complex_data
 
 
-@pytest.fixture
+@pytest.fixture()
 def slc_file_list(tmp_path, slc_stack):
     shape = slc_stack.shape
     # Write to a file
@@ -35,6 +36,7 @@ def slc_file_list(tmp_path, slc_stack):
 
 
 # Phase linking fixtures for one neighborhood tests
+
 
 @pytest.fixture
 def C_truth():
@@ -54,3 +56,18 @@ def slc_samples(C_truth):
     C, _ = C_truth
     ns = 11 * 11
     return simulate.simulate_neighborhood_stack(C, ns)
+
+
+# General utils on loading data/attributes
+
+
+@pytest.fixture
+def raster_100_by_200(tmp_path):
+    ysize, xsize = 100, 200
+    # Create a test raster
+    driver = gdal.GetDriverByName("ENVI")
+    filename = str(tmp_path / "test.bin")
+    ds = driver.Create(filename, xsize, ysize, 1, gdal.GDT_Float32)
+    ds.FlushCache()
+    ds = None
+    return filename

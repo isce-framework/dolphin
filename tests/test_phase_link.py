@@ -3,8 +3,8 @@ from math import ceil
 import numpy as np
 import pytest
 
-from dolphin import phase_link
 from dolphin.phase_link import simulate
+from dolphin.phase_link.mle import coh_mat, evd, full_cov_multilooked, mle, mle_stack
 from dolphin.utils import take_looks
 
 try:
@@ -50,7 +50,7 @@ def test_full_cov(shape=(10, 100, 100), looks=(5, 5)):
     # t0 = time.time()
     C1 = full_cov(slcs, looks)
     # t1 = time.time()
-    C2_cpu = phase_link.full_cov_multilooked(slcs, looks)
+    C2_cpu = full_cov_multilooked(slcs, looks)
     # t2 = time.time()
     # print(f"CPU: {t1 - t0:.2f}, GPU: {t2 - t1:.2f} seconds")
     np.testing.assert_array_almost_equal(C1, C2_cpu)
@@ -59,7 +59,7 @@ def test_full_cov(shape=(10, 100, 100), looks=(5, 5)):
         pytest.skip("GPU version not available")
 
     d_slcs = cp.asarray(slcs)
-    C2_gpu = phase_link.full_cov_multilooked(d_slcs, looks)
+    C2_gpu = full_cov_multilooked(d_slcs, looks)
     np.testing.assert_array_almost_equal(C1, C2_gpu.get())
 
     # Set up the full res version using numba
@@ -80,15 +80,15 @@ def test_full_cov(shape=(10, 100, 100), looks=(5, 5)):
 
 @pytest.fixture
 def C_hat(slc_samples):
-    return phase_link.coh_mat(slc_samples)
+    return coh_mat(slc_samples)
 
 
 # @pytest.mark.skip
 def test_estimation(C_truth, C_hat):
     _, truth = C_truth
 
-    est_evd = np.angle(phase_link.evd(C_hat))
-    est_mle = np.angle(phase_link.mle(C_hat))
+    est_evd = np.angle(evd(C_hat))
+    est_mle = np.angle(mle(C_hat))
 
     err_deg = 10
     assert np.degrees(simulate.rmse(truth, est_evd)) < err_deg
@@ -99,7 +99,7 @@ def test_estimation(C_truth, C_hat):
 @pytest.mark.skipif(not GPU_AVAILABLE, reason="GPU not available")
 def test_estimation_gpu(slc_samples, C_hat):
     # Calc the CPU version
-    est_mle = np.angle(phase_link.mle(C_hat))
+    est_mle = np.angle(mle(C_hat))
 
     # Get the GPU version
     slc_stack = slc_samples.reshape(NUM_ACQ, 11, 11)
@@ -124,8 +124,8 @@ def test_mask(slc_samples, C_truth):
     slc_samples_masked = slc_stack[:, ~mask]
 
     _, truth = C_truth
-    C_hat = phase_link.coh_mat(slc_samples_masked)
-    est_mle = np.angle(phase_link.mle(C_hat))
+    C_hat = coh_mat(slc_samples_masked)
+    est_mle = np.angle(mle(C_hat))
 
     err_deg = 10
     assert np.degrees(simulate.rmse(truth, est_mle)) < err_deg
@@ -134,10 +134,10 @@ def test_mask(slc_samples, C_truth):
     slc_stack_masked[:, mask] = np.nan
 
     # take_looks should ignore nans
-    C_full = phase_link.full_cov_multilooked(slc_stack_masked, looks=(11, 11))
+    C_full = full_cov_multilooked(slc_stack_masked, looks=(11, 11))
     np.testing.assert_array_almost_equal(np.squeeze(C_full), C_hat)
 
-    est_multilooked = np.squeeze(phase_link.mle_stack(C_full))
+    est_multilooked = np.squeeze(mle_stack(C_full))
     np.testing.assert_array_almost_equal(est_mle, est_multilooked, decimal=1)
 
     # if not GPU_AVAILABLE:

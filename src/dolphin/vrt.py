@@ -102,16 +102,16 @@ class VRTStack:
                 filename = str(Path(filename).resolve())
                 date = utils.get_dates(filename)[0]
 
-                block_shape = utils.get_block_shape(filename)
+                block_size = utils.get_block_size(filename)
                 # blocks in a vrt have a min of 16, max of 2**14=16384
                 # https://github.com/OSGeo/gdal/blob/2530defa1e0052827bc98696e7806037a6fec86e/frmts/vrt/vrtrasterband.cpp#L339
-                if any([b < 16 for b in block_shape]) or any(
-                    [b > 16384 for b in block_shape]
+                if any([b < 16 for b in block_size]) or any(
+                    [b > 16384 for b in block_size]
                 ):
                     block_str = ""
                 else:
                     block_str = (
-                        f'blockXSize="{block_shape[1]}" blockYSize="{block_shape[0]}"'
+                        f'blockXSize="{block_size[0]}" blockYSize="{block_size[1]}"'
                     )
                 outstr = f"""  <VRTRasterBand dataType="{self.dtype}" band="{idx}" {block_str}>
     <SimpleSource>

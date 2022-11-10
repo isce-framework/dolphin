@@ -6,11 +6,12 @@ from pathlib import Path
 from typing import List, Tuple, Union
 
 import numpy as np
-
-Pathlike = Union[PathLike[str], str]
+from osgeo import gdal, gdal_array, gdalconst
 
 from dolphin.log import get_log
 
+Pathlike = Union[PathLike[str], str]
+gdal.UseExceptions()
 logger = get_log()
 
 
@@ -24,10 +25,6 @@ def get_dates(filename: Pathlike) -> List[Union[None, str]]:
 
 def copy_projection(src_file: Pathlike, dst_file: Pathlike) -> None:
     """Copy projection/geotransform from `src_file` to `dst_file`."""
-    from osgeo import gdal
-
-    gdal.UseExceptions()
-
     ds_src = gdal.Open(fspath(src_file))
     projection = ds_src.GetProjection()
     geotransform = ds_src.GetGeoTransform()
@@ -52,8 +49,6 @@ def copy_projection(src_file: Pathlike, dst_file: Pathlike) -> None:
 
 def save_arr_like(*, arr, like_filename, output_name, driver="GTiff"):
     """Save an array to a file, copying projection/nodata from `like_filename`."""
-    from osgeo import gdal
-
     if arr.ndim == 2:
         arr = arr[np.newaxis, ...]
     ysize, xsize = arr.shape[-2:]
@@ -80,13 +75,18 @@ def save_arr_like(*, arr, like_filename, output_name, driver="GTiff"):
 
 def numpy_to_gdal_type(np_dtype):
     """Convert numpy dtype to gdal type."""
-    from osgeo import gdal_array, gdalconst
-
     # Wrap in np.dtype in case string is passed
     np_dtype = np.dtype(str(np_dtype).lower())
     if np.issubdtype(bool, np_dtype):
         return gdalconst.GDT_Byte
     return gdal_array.NumericTypeCodeToGDALTypeCode(np_dtype)
+
+
+def gdal_to_numpy_type(gdal_type):
+    """Convert gdal type to numpy type."""
+    if isinstance(gdal_type, str):
+        gdal_type = gdal.GetDataTypeByName(gdal_type)
+    return gdal_array.GDALTypeCodeToNumericTypeCode(gdal_type)
 
 
 def parse_slc_strings(slc_str):
@@ -133,9 +133,6 @@ def combine_mask_files(
     -------
     output_file : Path
     """
-    from osgeo import gdal
-
-    gdal.UseExceptions()
     output_file = Path(scratch_dir) / output_file_name
 
     ds = gdal.Open(fspath(mask_files[0]))
@@ -181,18 +178,12 @@ def combine_mask_files(
 
 def load_gdal(filename, band=None):
     """Load a gdal file into a numpy array."""
-    from osgeo import gdal
-
-    gdal.UseExceptions()
     ds = gdal.Open(fspath(filename))
     return ds.ReadAsArray() if band is None else ds.GetRasterBand(band).ReadAsArray()
 
 
 def get_raster_xysize(filename: Pathlike) -> Tuple[int, int]:
     """Get the xsize/ysize of a GDAL-readable raster."""
-    from osgeo import gdal
-
-    gdal.UseExceptions()
     ds = gdal.Open(fspath(filename))
     xsize, ysize = ds.RasterXSize, ds.RasterYSize
     ds = None
@@ -225,9 +216,6 @@ def full_suffix(filename: Pathlike):
 
 # def get_block_shape_gdal(filename: Pathlike) -> Tuple[int, int]:
 #     """Get the block shape (row_block, col_block) of a GDAL-readable raster."""
-#     from osgeo import gdal
-
-#     gdal.UseExceptions()
 #     ds = gdal.Open(fspath(filename))
 #     nbands = ds.RasterCount
 #     shapes = []
@@ -415,9 +403,7 @@ def slice_iterator(
         col_off = 0
 
 
-def get_max_block_shape(
-    filename, nstack: int, max_bytes=100e6, default_tile_size=(256, 256)
-):
+def get_max_block_shape(filename, nstack: int, max_bytes=100e6):
     """Find shape to load from GDAL-readable `filename` with memory size < `max_bytes`.
 
     Attempts to get an integer number of tiles from the file to avoid partial tiles.
@@ -431,31 +417,25 @@ def get_max_block_shape(
     max_bytes : float, optional)
         target size of memory (in Bytes) for each block.
         Defaults to 100e6.
-    default_tile_size : tuple/list, optional
-        If `filename` is not tiled/chunked, size to use as chunks.
-        Defaults to (256, 256).
 
     Returns
     -------
     tuple[int]:
         (num_rows, num_cols) shape of blocks to load from `vrt_file`
     """
-    import rasterio as rio
-
-    with rio.open(filename) as src:
-        shape = src.shape
-        if src.block_shapes:
-            block_shape = list(src.block_shapes[0])
-            # If it's written by line, load at least 16 lines at a time
-            block_shape[0] = max(16, block_shape[0])
-            block_shape[1] = max(16, block_shape[1])
-        else:
-            block_shape = default_tile_size
-
-        nbytes = np.dtype(src.dtypes[0]).itemsize
+    ds = gdal.Open(filename)
+    shape = (ds.RasterYSize, ds.RasterXSize)
+    blockX, blockY = ds.GetRasterBand(1).GetBlockSize()
+    # If it's written by line, load at least 16 lines at a time
+    blockX = max(16, blockX)
+    blockY = max(16, blockY)
+    # get the data type from the raster
+    dt = gdal_to_numpy_type(ds.GetRasterBand(1).DataType)
+    # get the size of the data type
+    nbytes = np.dtype(dt).itemsize
 
     full_shape = [nstack, *shape]
-    chunk_3d = [nstack, *block_shape]
+    chunk_3d = [nstack, blockY, blockX]
     return _get_stack_block_shape(full_shape, chunk_3d, nbytes, max_bytes)
 
 
@@ -479,9 +459,10 @@ def _get_stack_block_shape(full_shape, chunk_size, nbytes, max_bytes):
     return cur_block_shape[-2:]
 
 
-def get_block_shape(filename):
-    """Get the raster's block shape on disk."""
-    import rasterio as rio
+def get_block_size(filename):
+    """Get the raster's (blockXsize, blockYsize) on disk.
 
-    with rio.open(filename) as src:
-        return src.block_shapes[0]
+    Assumes all bands have the same block size.
+    """
+    ds = gdal.Open(filename)
+    return ds.GetRasterBand(1).GetBlockSize()
