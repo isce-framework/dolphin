@@ -279,12 +279,11 @@ class VRTStack:
         outname = fspath(self.outfile) if self.outfile else "(not written)"
         return f"VRTStack({len(self.file_list)} bands, outfile={outname})"
 
-    def get_block_shape(self, max_bytes=100e6, default_chunk_size=(None, 256, 256)):
+    def get_block_shape(self, max_bytes=100e6):
         return utils.get_max_block_shape(
             self.file_list[0],
             len(self),
             max_bytes=max_bytes,
-            default_tile_size=default_chunk_size,
         )
 
     def iter_blocks(

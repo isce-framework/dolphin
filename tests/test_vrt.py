@@ -74,3 +74,9 @@ def test_add_file(vrt_stack, slc_stack):
     ds = gdal.Open(str(vrt_stack.outfile))
     read_stack = ds.ReadAsArray()
     assert read_stack.shape[0] == slc_stack.shape[0] + 2
+
+
+# TODO: target extent
+# TODO: latlon_bbox
+# def get_block_shape(self, max_bytes=100e6, default_chunk_size=(None, 256, 256)):
+# def iter_blocks(

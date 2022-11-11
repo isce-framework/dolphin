@@ -11,6 +11,8 @@ dependencies = [
     "numpy",
     "ruamel.yaml",
     "yamale",
+    "h5py",
+    # "gdal",  # TODO: worth adding here even though it should be through conda?
 ]
 classifiers = [
     "Development Status :: 2 - Pre-Alpha",
@@ -32,6 +34,8 @@ dev = [
     "pre-commit",
     "black",
     "flake8",
+    # For the cfg creation script
+    "fire",
 ]
 
 
