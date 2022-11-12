@@ -27,7 +27,7 @@ def run_combine(
 ):
     """Run workflow step to combine PS and DS phases."""
     # Create the interferogram list
-    pl_slc_files = Path(pl_directory).glob("*.slc")
+    pl_slc_files = Path(pl_directory).glob("*.slc.tif")
     pl_date_dict = {get_dates(p)[0]: p for p in pl_slc_files}
 
     ds_orig_stack = gdal.Open(fspath(slc_vrt_file))
@@ -80,6 +80,7 @@ def run_combine(
             # breakpoint()
             # But only take the values at the PS pixels
             ps_mask = ps_arr == 1
+            # ps_mask = np.zeros_like(ifg_orig, dtype=bool)
             ifg_out[ps_mask] = ifg_orig[ps_mask]
             bnd_out.WriteArray(ifg_out, x0, y0)
             bnd_out.FlushCache()
@@ -94,7 +95,7 @@ def run_combine(
     ds_orig_stack = None
 
     # Create the temporal coherence file, filling in high values for PS
-    fill_temp_coh(ps_file, temp_coh_file, temp_coh_ps_ds_file, ps_temp_coh)
+    # fill_temp_coh(ps_file, temp_coh_file, temp_coh_ps_ds_file, ps_temp_coh)
     return
 
 

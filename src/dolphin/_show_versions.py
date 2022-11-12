@@ -8,8 +8,6 @@ import importlib
 import platform
 import sys
 
-from rich import print
-
 
 def _get_sys_info():
     """System information.
@@ -28,22 +26,39 @@ def _get_sys_info():
     return dict(blob)
 
 
-def _get_gdal_info():
-    """Information on system GDAL.
+def _get_opera_info():
+    """Information on system on core modules.
 
     Returns
     -------
     dict:
-        system GDAL information
+        dolphin / opera module information
     """
     # pylint: disable=import-outside-toplevel
     import dolphin
 
     blob = [
         ("dolphin", dolphin.__version__),
+        # optionals
+        ("isce3", _get_version("isce3")),
+        ("compass", _get_version("compass")),
     ]
 
     return dict(blob)
+
+
+def _get_version(modname):
+    try:
+        if modname in sys.modules:
+            mod = sys.modules[modname]
+        else:
+            mod = importlib.import_module(modname)
+        try:
+            return mod.__version__
+        except AttributeError:
+            return mod.version
+    except ImportError:
+        return None
 
 
 def _get_deps_info():
@@ -55,33 +70,15 @@ def _get_deps_info():
         version information on relevant Python libraries
     """
     deps = [
-        "osgeo.gdal",
         "numpy",
+        "osgeo.gdal",
+        "pyproj",
+        "h5py",
         "ruamel_yaml",
         "yamale",
-        "h5py",
         "setuptools",
     ]
-
-    def get_version(module):
-        try:
-            return module.__version__
-        except AttributeError:
-            return module.version
-
-    deps_info = {}
-
-    for modname in deps:
-        try:
-            if modname in sys.modules:
-                mod = sys.modules[modname]
-            else:
-                mod = importlib.import_module(modname)
-            deps_info[modname] = get_version(mod)
-        except ImportError:
-            deps_info[modname] = None
-
-    return deps_info
+    return {name: _get_version(name) for name in deps}
 
 
 def _print_info_dict(info_dict):
@@ -98,7 +95,7 @@ def show_versions():
     > python -c "import dolphin; dolphin.show_versions()"
     """
     print("dolphin info:")
-    _print_info_dict(_get_gdal_info())
+    _print_info_dict(_get_opera_info())
     print("\nSystem:")
     _print_info_dict(_get_sys_info())
     print("\nPython deps:")

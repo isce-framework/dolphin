@@ -13,6 +13,7 @@ def test_get_deps_info():
     deps_info = _get_deps_info()
 
     assert "osgeo.gdal" in deps_info
+    assert "pyproj" in deps_info
     assert "numpy" in deps_info
     assert "ruamel_yaml" in deps_info
     assert "yamale" in deps_info

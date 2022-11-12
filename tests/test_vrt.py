@@ -14,6 +14,8 @@ def vrt_stack(tmp_path, slc_file_list):
     vrt_file = tmp_path / "test.vrt"
     s = VRTStack(slc_file_list, outfile=vrt_file)
     s.write()
+
+    assert s.shape == (30, 10, 10)
     return s
 
 

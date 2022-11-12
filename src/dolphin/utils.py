@@ -228,6 +228,7 @@ def iter_blocks(
     band=None,
     overlaps: Tuple[int, int] = (0, 0),
     start_offsets: Tuple[int, int] = (0, 0),
+    return_slices: bool = False,
 ):
     """Read blocks of a raster as a generator.
 
@@ -244,10 +245,18 @@ def iter_blocks(
         after sliding the block (default (0, 0))
     start_offsets : tuple[int, int], optional
         (row_start, col_start), start reading from this offset
+    return_slices : bool, optional (default False)
+        return the (row, col) slice indicating the position of the current block
 
     Yields
     ------
-    Iterator of data from slices
+    ndarray:
+        Current block being loaded
+
+    tuple[slice, slice]:
+        ((row_start, row_end), (col_start, col_end)) slice indicating
+        the position of the current block.
+        (Only returned if return_slices is True)
     """
     ds = gdal.Open(fspath(filename))
     if band is None:
@@ -265,18 +274,20 @@ def iter_blocks(
         start_offsets=start_offsets,
     )
     for rows, cols in slice_gen:
-        xoff = cols[0]
-        yoff = rows[0]
-        xsize = cols[1] - cols[0]
-        ysize = rows[1] - rows[0]
-        # weirdly, band ReadAsArray has different param names than ds.ReadAsArray
+        xoff = cols.start
+        yoff = rows.start
+        xsize = cols.stop - cols.start
+        ysize = rows.stop - rows.start
         cur_block = read_func(
             xoff,
             yoff,
             xsize,
             ysize,
         )
-        yield cur_block
+        if return_slices:
+            yield cur_block, (slice(rows), slice(cols))
+        else:
+            yield cur_block
     ds = None
 
 
@@ -302,17 +313,21 @@ def slice_iterator(
 
     Yields
     ------
-    Tuple[Tuple[int, int], Tuple[int, int]]
-        Iterator of ((row_start, row_stop), (col_start, col_stop))
+    Tuple[slice, slice]
+        Iterator of (slice(row_start, row_stop), slice(col_start, col_stop))
 
     Examples
     --------
     >>> list(slice_iterator((180, 250), (100, 100)))
-    [((0, 100), (0, 100)), ((0, 100), (100, 200)), ((0, 100), (200, 250)), \
-((100, 180), (0, 100)), ((100, 180), (100, 200)), ((100, 180), (200, 250))]
+    [(slice(0, 100, None), slice(0, 100, None)), (slice(0, 100, None), \
+slice(100, 200, None)), (slice(0, 100, None), slice(200, 250, None)), \
+(slice(100, 180, None), slice(0, 100, None)), (slice(100, 180, None), \
+slice(100, 200, None)), (slice(100, 180, None), slice(200, 250, None))]
     >>> list(slice_iterator((180, 250), (100, 100), overlaps=(10, 10)))
-    [((0, 100), (0, 100)), ((0, 100), (90, 190)), ((0, 100), (180, 250)), \
-((90, 180), (0, 100)), ((90, 180), (90, 190)), ((90, 180), (180, 250))]
+    [(slice(0, 100, None), slice(0, 100, None)), (slice(0, 100, None), \
+slice(90, 190, None)), (slice(0, 100, None), slice(180, 250, None)), \
+(slice(90, 180, None), slice(0, 100, None)), (slice(90, 180, None), \
+slice(90, 190, None)), (slice(90, 180, None), slice(180, 250, None))]
     """
     rows, cols = arr_shape
     row_off, col_off = start_offsets
@@ -333,7 +348,7 @@ def slice_iterator(
         while col_off < cols:
             row_end = min(row_off + height, rows)  # Dont yield something OOB
             col_end = min(col_off + width, cols)
-            yield ((row_off, row_end), (col_off, col_end))
+            yield (slice(row_off, row_end), slice(col_off, col_end))
 
             col_off += width
             if col_off < cols:  # dont bring back if already at edge

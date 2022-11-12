@@ -3,7 +3,7 @@ from glob import glob
 from os import fspath
 from pathlib import Path
 
-from dolphin import combine_ps_ds, phase_link, ps, unwrap, utils, vrt
+from dolphin import combine_ps_ds, phase_link, ps, sequential, unwrap, utils, vrt
 from dolphin.log import get_log, log_runtime
 
 logger = get_log()
@@ -41,15 +41,13 @@ def run(full_cfg: dict):
 
     # 0. Make a VRT pointing to the input SLC files
     slc_vrt_file = scratch_dir / "slc_stack.vrt"
+    vrt_stack = vrt.VRTStack(input_file_list, outfile=slc_vrt_file)
 
     if slc_vrt_file.exists():
         logger.info(f"Skipping creating VRT to SLC stack {slc_vrt_file}")
     else:
         logger.info(f"Creating VRT to SLC stack file {slc_vrt_file}")
-        vrt.create_stack(
-            file_list=input_file_list,
-            outfile=slc_vrt_file,
-        )
+        vrt_stack.write()
 
     # 1. First make the amplitude dispersion file
     ps_path = scratch_dir / cfg["ps"]["directory"]
@@ -92,17 +90,19 @@ def run(full_cfg: dict):
     if weight_file.exists():
         logger.info(f"Skipping making existing NMAP file {weight_file}")
     else:
+        # Make the dummy nmap/count files
         logger.info(f"Creating NMAP file {weight_file}")
         phase_link.run_nmap(
             slc_vrt_file=slc_vrt_file,
-            # mask_file=cfg["mask_file"], # TODO : add mask file if needed
             weight_file=weight_file,
-            nmap_count_file=nmap_count_file,
+            count_file=nmap_count_file,
             window=cfg["window"],
+            skip_shp=cfg["nmap"]["skip_shp"],
             nmap_opts=cfg["nmap"],
             lines_per_block=cfg["lines_per_block"],
             ram=cfg["ram"],
             no_gpu=not gpu_enabled,
+            # mask_file=cfg["mask_file"], # TODO : add mask file if needed
         )
 
     # 4. phase linking/EVD step
@@ -113,16 +113,28 @@ def run(full_cfg: dict):
     if compressed_slc_file.exists():
         logger.info(f"Skipping making existing EVD file {compressed_slc_file}")
     else:
-        logger.info(f"Making EVD file {compressed_slc_file}")
-        phase_link.run_evd(
+        # logger.info(f"Making EVD file {compressed_slc_file}")
+        # phase_link.run_evd(
+        #     slc_vrt_file=slc_vrt_file,
+        #     weight_file=weight_file,
+        #     compressed_slc_file=compressed_slc_file,
+        #     output_folder=pl_path,
+        #     window=cfg["window"],
+        #     pl_opts=cfg["phase_linking"],
+        #     lines_per_block=cfg["lines_per_block"],
+        #     ram=cfg["ram"],
+        # )
+        sequential.run_evd_sequential(
             slc_vrt_file=slc_vrt_file,
-            weight_file=weight_file,
-            compressed_slc_file=compressed_slc_file,
+            # weight_file: Pathlike,
             output_folder=pl_path,
             window=cfg["window"],
-            pl_opts=cfg["phase_linking"],
-            lines_per_block=cfg["lines_per_block"],
-            ram=cfg["ram"],
+            # ministack_size=10,
+            ministack_size=cfg["phase_linking"]["ministack_size"],
+            # mask_file: Pathlike = None,
+            # ps_mask_file=ps_output,
+            # beta=0.1,
+            # beta=cgf["phase_linking"]["beta"],
         )
 
     # 5. Combine PS and DS phases and forming interferograms

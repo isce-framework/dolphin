@@ -12,6 +12,7 @@ dependencies = [
     "ruamel.yaml",
     "yamale",
     "h5py",
+    # "pyproj",
     # "gdal",  # TODO: worth adding here even though it should be through conda?
 ]
 classifiers = [

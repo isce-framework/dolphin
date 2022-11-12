@@ -280,6 +280,7 @@ class VRTStack:
         start_offsets: Tuple[int, int] = (0, 0),
         block_shape: Optional[Tuple[int, int]] = None,
         max_bytes: Optional[float] = DEFAULT_BLOCK_BYTES,
+        return_slices: bool = False,
     ):
         """Iterate over blocks of the stack.
 
@@ -300,6 +301,8 @@ class VRTStack:
             internal chunking/tiling structure.
         max_bytes : Optional[int], optional
             RAM size (in Bytes) to attempt to stay under with each loaded block.
+        return_slices : bool, optional (default False)
+            return the (row, col) slice indicating the position of the current block
 
         Yields
         ------
@@ -313,6 +316,7 @@ class VRTStack:
             block_shape=block_shape,
             overlaps=overlaps,
             start_offsets=start_offsets,
+            return_slices=return_slices,
         )
 
     def _get_block_shape(self, max_bytes=DEFAULT_BLOCK_BYTES):

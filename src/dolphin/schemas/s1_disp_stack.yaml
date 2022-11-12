@@ -84,6 +84,8 @@ ps_options:
 
 nmap_options:
   directory: str()
+  # To skip the SHP testing and use rectangular windows:
+  skip_shp: bool(required=False)
   # Minimum p-value for labeling neighbors.
   pvalue: num(required=False, min=0.0, max=1.0)
   stat_method: enum('KS2', 'AD2', required=False)
@@ -96,6 +98,7 @@ phase_linking_options:
   method: enum('mle', 'evd', 'phase_link', 'pl')
   compressed_slc_file: str()
   temp_coh_file: str()
+  ministack_size: int(min=1)
 
 combine_ps_ds_options:
   directory: str()

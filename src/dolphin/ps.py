@@ -8,7 +8,8 @@ from osgeo_utils import gdal_calc
 
 gdal.UseExceptions()
 
-from dolphin.utils import Pathlike, copy_projection
+from dolphin.io import copy_projection
+from dolphin.utils import Pathlike
 
 
 def create_amp_dispersion(
@@ -152,7 +153,7 @@ def update_amp_disp(
 
 def _check_output_files(*files):
     """Check if the output files already exist."""
-    err_msg = "Output mean file {} already exists. Please delete before running."
+    err_msg = "Output file {} already exists. Please delete before running."
     for f in files:
         if f.exists():
             raise FileExistsError(err_msg.format(f))

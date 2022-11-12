@@ -54,6 +54,7 @@ runconfig:
 
       nmap:
         directory: 'nmap'
+        skip_shp: True
         pvalue: 0.05
         stat_method: 'KS2'
 
@@ -63,6 +64,7 @@ runconfig:
         method: 'mle'
         compressed_slc_file: 'compslc.bin'
         temp_coh_file: 'tcorr.bin'
+        ministack_size: 10
 
       combine_ps_ds:
         directory: 'PS_DS'

@@ -1,13 +1,22 @@
 from os import fspath
+from pathlib import Path
+from typing import List
 
 import numpy as np
 from osgeo import gdal
 
 from dolphin.log import get_log
 from dolphin.utils import Pathlike, numpy_to_gdal_type
+from dolphin.vrt import VRTStack
 
 gdal.UseExceptions()
 logger = get_log()
+
+
+def load_gdal(filename, band=None):
+    """Load a gdal file into a numpy array."""
+    ds = gdal.Open(fspath(filename))
+    return ds.ReadAsArray() if band is None else ds.GetRasterBand(band).ReadAsArray()
 
 
 def copy_projection(src_file: Pathlike, dst_file: Pathlike) -> None:
@@ -40,7 +49,7 @@ def save_arr_like(*, arr, like_filename, output_name, driver="GTiff"):
         arr = arr[np.newaxis, ...]
     ysize, xsize = arr.shape[-2:]
     nbands = arr.shape[0]
-    gdal.UseExceptions()
+
     ds = gdal.Open(fspath(like_filename))
     if driver is None:
         driver = ds.GetDriver().ShortName
@@ -60,7 +69,53 @@ def save_arr_like(*, arr, like_filename, output_name, driver="GTiff"):
     ds = out_ds = None
 
 
-def load_gdal(filename, band=None):
-    """Load a gdal file into a numpy array."""
-    ds = gdal.Open(fspath(filename))
-    return ds.ReadAsArray() if band is None else ds.GetRasterBand(band).ReadAsArray()
+def setup_output_folder(
+    vrt_stack: VRTStack,
+    driver="GTiff",
+    dtype="complex64",
+) -> List[Path]:
+    """Create empty output files for each band in `vrt_stack`.
+
+    Used to prepare output for block processing.
+
+    Parameters
+    ----------
+    vrt_stack : VRTStack
+        object containing the current stack of SLCs
+    driver : str, optional
+        Name of GDAL driver, by default "GTiff"
+    dtype : str, optional
+        Numpy datatype of output files, by default "complex64"
+
+    Returns
+    -------
+    List[Pathlike]
+        List of saved empty files.
+    """
+    output_folder = vrt_stack.outfile.parent
+    _, ysize, xsize = vrt_stack.shape
+
+    in_ds = gdal.Open(fspath(vrt_stack.file_list[0]))
+    output_files = []
+    for filename in vrt_stack.file_list:
+        slc_name = Path(filename).stem
+        # TODO: get extension from cfg
+        output_path = output_folder / f"{slc_name}.slc.tif"
+
+        drv = gdal.GetDriverByName(driver)
+        out_ds = drv.Create(
+            fspath(output_path),
+            xsize,
+            ysize,
+            1,
+            numpy_to_gdal_type(dtype),
+        )
+        out_ds.SetGeoTransform(in_ds.GetGeoTransform())
+        out_ds.SetProjection(in_ds.GetProjection())
+        # TODO: copy other metadata
+
+        output_files.append(output_path)
+        out_ds.FlushCache()
+        out_ds = None
+    in_ds = None
+    return output_files
