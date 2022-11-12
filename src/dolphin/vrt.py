@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-import argparse
 from os import fspath
 from pathlib import Path
 from typing import Optional, Sequence, Tuple
@@ -8,7 +7,7 @@ from osgeo import gdal
 
 from dolphin import utils
 from dolphin.log import get_log
-from dolphin.utils import Pathlike
+from dolphin.utils import Pathlike, get_raster_xysize
 
 SENTINEL_WAVELENGTH = 0.05546576
 
@@ -24,9 +23,9 @@ class VRTStack:
 
     Attributes
     ----------
-    file_list : list
+    file_list : list[pathlib.Path]
         Names of files to stack
-    outfile : Path, optional (default = Path("slc_stack.vrt"))
+    outfile : pathlib.Path, optional (default = Path("slc_stack.vrt"))
         Name of output file to write
     use_abs_path : bool, optional (default = True)
         Write the filepaths of the SLCs in the VRT as "relative=0"
@@ -341,109 +340,14 @@ class VRTStack:
             return VRTStack._get_non_vrt_file(file_list[1])
         return filename
 
+    @property
+    def shape(self):
+        """Get the 3D shape of the stack."""
+        return (len(self),) + get_raster_xysize(self.file_list[0])
+
     def __len__(self):
         return len(self.file_list)
 
     def __repr__(self):
         outname = fspath(self.outfile) if self.outfile else "(not written)"
         return f"VRTStack({len(self.file_list)} bands, outfile={outname})"
-
-
-def get_cli_args():
-    """Set up the command line interface."""
-    parser = argparse.ArgumentParser(
-        description="Convert SLC stack to single VRT",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-    )
-    parser.add_argument(
-        "--in-files",
-        nargs="*",
-        help="Names of GDAL-readable SLC files to include in stack.",
-    )
-    parser.add_argument(
-        "--in-textfile",
-        help=(
-            "Newline-delimited text file listing locations of SLC files"
-            "Alternative to --in-files."
-        ),
-    )
-    parser.add_argument(
-        "--out-dir",
-        default="stack",
-        help="Directory where the vrt stack will be stored",
-    )
-    parser.add_argument(
-        "--out-vrt-name",
-        default="slc_stack.vrt",
-        help="Name of output SLC containing all images",
-    )
-    parser.add_argument(
-        "-b",
-        "--pixel-bbox",
-        type=int,
-        nargs=4,
-        metavar=("left", "bottom", "right", "top"),
-        default=None,
-        help="Bounding box (in pixels) to subset the stack. None = no subset",
-    )
-    parser.add_argument(
-        "-te",
-        "--target-extent",
-        type=float,
-        nargs=4,
-        metavar=("xmin", "ymin", "xmax", "ymax"),
-        default=None,
-        help=(
-            "Target extent (like GDAL's `-te` option) in units of the SLC's SRS"
-            " (i.e., in UTM coordinates). An alternative way to subset the stack."
-        ),
-    )
-    parser.add_argument(
-        "-bl",
-        "--latlon-bbox",
-        type=float,
-        nargs=4,
-        metavar=("lonmin", "latmin", "lonmax", "latmax"),
-        default=None,
-        help=(
-            "Target extent in longitude/latitude. An alternative way to subset the"
-            " stack."
-        ),
-    )
-    args = parser.parse_args()
-    return args
-
-
-def main():
-    """Run the command line interface."""
-    args = get_cli_args()
-
-    # Get slc list from text file or command line
-    if args.in_files is not None:
-        file_list = sorted(args.in_files)
-    elif args.in_textfile is not None:
-        with open(args.in_textfile) as f:
-            file_list = sorted(f.read().splitlines())
-    else:
-        raise ValueError("Need to pass either --in-files or --in-textfile")
-
-    num_slc = len(file_list)
-    logger.info(f"Number of SLCs found: {num_slc}")
-
-    # Set up single stack file
-    out_dir = Path(args.out_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
-
-    outfile = str(out_dir / args.out_vrt_name)
-    stack = VRTStack(
-        file_list,
-        outfile=outfile,
-        pixel_bbox=args.pixel_bbox,
-        target_extent=args.target_extent,
-        latlon_bbox=args.latlon_bbox,
-    )
-    stack.write()
-
-
-if __name__ == "__main__":
-    main()
