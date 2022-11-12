@@ -12,7 +12,7 @@ NUM_ACQ = 30
 def slc_stack():
     shape = (NUM_ACQ, 10, 10)
     sigma = 0.5
-    data = np.random.normal(0, sigma, size=shape)
+    data = np.random.normal(0, sigma, size=shape).astype(np.complex64)
     # Phase doesn't matter here
     complex_data = data * np.exp(1j * np.zeros_like(data))
     return complex_data
@@ -86,10 +86,20 @@ def tiled_raster_100_by_200(tmp_path):
     ]
     # Create a test raster
     driver = gdal.GetDriverByName("GTiff")
-    filename = str(tmp_path / "test.tif")
+    filename = tmp_path / "20220101test.tif"
     ds = driver.Create(
-        filename, xsize, ysize, 1, gdal.GDT_CFloat32, options=creation_options
+        str(filename), xsize, ysize, 1, gdal.GDT_CFloat32, options=creation_options
     )
     ds.FlushCache()
     ds = None
     return filename
+
+
+@pytest.fixture
+def tiled_file_list(tiled_raster_100_by_200):
+    tmp_path = tiled_raster_100_by_200.parent
+    outname2 = tmp_path / "20220102test.tif"
+    gdal.Translate(str(outname2), str(tiled_raster_100_by_200))
+    outname3 = tmp_path / "20220103test.tif"
+    gdal.Translate(str(outname3), str(tiled_raster_100_by_200))
+    return [tiled_raster_100_by_200, outname2, outname3]

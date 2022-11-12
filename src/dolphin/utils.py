@@ -265,11 +265,16 @@ def iter_blocks(
         start_offsets=start_offsets,
     )
     for rows, cols in slice_gen:
+        xoff = cols[0]
+        yoff = rows[0]
+        xsize = cols[1] - cols[0]
+        ysize = rows[1] - rows[0]
+        # weirdly, band ReadAsArray has different param names than ds.ReadAsArray
         cur_block = read_func(
-            xoff=cols[0],
-            yoff=rows[0],
-            win_xsize=cols[1] - cols[0],
-            win_ysize=rows[1] - rows[0],
+            xoff,
+            yoff,
+            xsize,
+            ysize,
         )
         yield cur_block
     ds = None
@@ -297,7 +302,8 @@ def slice_iterator(
 
     Yields
     ------
-    Iterator of ((row_start, row_stop), (col_start, col_stop))
+    Tuple[Tuple[int, int], Tuple[int, int]]
+        Iterator of ((row_start, row_stop), (col_start, col_stop))
 
     Examples
     --------
@@ -339,7 +345,9 @@ def slice_iterator(
         col_off = 0
 
 
-def get_max_block_shape(filename, nstack: int, max_bytes=100e6) -> Tuple[int, int]:
+def get_max_block_shape(
+    filename, nstack: int, max_bytes: float = 100e6
+) -> Tuple[int, int]:
     """Find shape to load from GDAL-readable `filename` with memory size < `max_bytes`.
 
     Attempts to get an integer number of tiles from the file to avoid partial tiles.

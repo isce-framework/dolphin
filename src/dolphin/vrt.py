@@ -16,6 +16,9 @@ gdal.UseExceptions()
 logger = get_log()
 
 
+DEFAULT_BLOCK_BYTES = 100e6
+
+
 class VRTStack:
     """Class for creating VRTs from a list of raster files.
 
@@ -272,31 +275,78 @@ class VRTStack:
         gt = gdal.InvGeoTransform(ds.GetGeoTransform())
         return VRTStack._apply_gt(gt, x, y)
 
+    def iter_blocks(
+        self,
+        overlaps: Tuple[int, int] = (0, 0),
+        start_offsets: Tuple[int, int] = (0, 0),
+        block_shape: Optional[Tuple[int, int]] = None,
+        max_bytes: Optional[float] = DEFAULT_BLOCK_BYTES,
+    ):
+        """Iterate over blocks of the stack.
+
+        Loads all images for one window at a time into memory.
+
+        Parameters
+        ----------
+        overlaps : Tuple[int, int], optional
+            Pixels to overlap each block by (rows, cols)
+            By default (0, 0)
+        start_offsets : Tuple[int, int], optional
+            (row, col) number of pixels to offset initial block
+            By default (0, 0)
+        block_shape : Optional[Tuple[int, int]], optional
+            If provided, force the blocks to load in the given shape.
+            Otherwise, calculates how much blocks are possible to load
+            while staying under `max_bytes` that align wit the data's
+            internal chunking/tiling structure.
+        max_bytes : Optional[int], optional
+            RAM size (in Bytes) to attempt to stay under with each loaded block.
+
+        Yields
+        ------
+        Tuple[Tuple[int, int], Tuple[int, int]]
+            Iterator of ((row_start, row_stop), (col_start, col_stop))
+        """
+        if block_shape is None:
+            block_shape = self._get_block_shape(max_bytes=max_bytes)
+        yield from utils.iter_blocks(
+            self.outfile,
+            block_shape=block_shape,
+            overlaps=overlaps,
+            start_offsets=start_offsets,
+        )
+
+    def _get_block_shape(self, max_bytes=DEFAULT_BLOCK_BYTES):
+        test_file = self._get_non_vrt_file(self.file_list[0])
+
+        return utils.get_max_block_shape(
+            # Note that we're using the actual first file, not the VRT
+            # since the VRT always has the same block size.
+            test_file,
+            len(self),
+            max_bytes=max_bytes,
+        )
+
+    @staticmethod
+    def _get_non_vrt_file(filename: Pathlike):
+        """Get one of the files within a VRT.
+
+        If the file is not a VRT, return the file itself.
+        Will traverse nested VRTs.
+        """
+        if Path(filename).suffix == ".vrt":
+            file_list = gdal.Info(fspath(filename), format="json")["files"]
+            if len(file_list) <= 1:
+                raise ValueError(f"VRT file {filename} contains no files")
+            return VRTStack._get_non_vrt_file(file_list[1])
+        return filename
+
     def __len__(self):
         return len(self.file_list)
 
     def __repr__(self):
         outname = fspath(self.outfile) if self.outfile else "(not written)"
         return f"VRTStack({len(self.file_list)} bands, outfile={outname})"
-
-    def get_block_shape(self, max_bytes=100e6):
-        return utils.get_max_block_shape(
-            self.file_list[0],
-            len(self),
-            max_bytes=max_bytes,
-        )
-
-    def iter_blocks(
-        self,
-        overlaps: Tuple[int, int] = (0, 0),
-        start_offsets: Tuple[int, int] = (0, 0),
-    ):
-        yield from utils.iter_blocks(
-            self.outfile,
-            self.get_block_shape(),
-            overlaps=overlaps,
-            start_offsets=start_offsets,
-        )
 
 
 def get_cli_args():

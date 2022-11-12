@@ -42,6 +42,10 @@ def test_sort_order(slc_file_list):
     assert vrt_stack.file_list == [Path(f) for f in slc_file_list]
 
 
+# TODO: target extent
+# TODO: latlon_bbox
+
+
 def test_add_file(vrt_stack, slc_stack):
     # Repeat the data, but create a new file
     slc = slc_stack[0]
@@ -76,7 +80,31 @@ def test_add_file(vrt_stack, slc_stack):
     assert read_stack.shape[0] == slc_stack.shape[0] + 2
 
 
-# TODO: target extent
-# TODO: latlon_bbox
-# def get_block_shape(self, max_bytes=100e6, default_chunk_size=(None, 256, 256)):
-# def iter_blocks(
+def test_iter_blocks(vrt_stack, slc_stack):
+    blocks = list(vrt_stack.iter_blocks(block_shape=(5, 5)))
+    # (10, 10) total shape, breaks into 5x5 blocks
+    assert len(blocks) == 4
+    for b in blocks:
+        assert b.shape == (len(vrt_stack), 5, 5)
+        assert b.shape[0] == slc_stack.shape[0]
+
+
+def test_tiled_iter_blocks(tmp_path, tiled_file_list):
+    outfile = tmp_path / "stack.vrt"
+    vrt_stack = VRTStack(tiled_file_list, outfile=outfile)
+    vrt_stack.write()
+    max_bytes = len(vrt_stack) * 32 * 32 * 8
+    blocks = list(vrt_stack.iter_blocks(max_bytes=max_bytes))
+    # (100, 200) total shape, breaks into 32x32 blocks
+    assert len(blocks) == 28
+    for i, b in enumerate(blocks, start=1):
+        if i % 7 == 0:
+            # last col
+            if i > 21:  # Last row
+                assert b.shape == (len(vrt_stack), 4, 8)
+            else:
+                assert b.shape == (len(vrt_stack), 32, 8)
+
+    max_bytes = len(vrt_stack) * 32 * 32 * 8 * 4
+    blocks = list(vrt_stack.iter_blocks(max_bytes=max_bytes))
+    assert len(blocks) == 8

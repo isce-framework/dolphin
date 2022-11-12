@@ -3,16 +3,53 @@ import os
 from os import fspath
 from pathlib import Path
 
-from dolphin.utils import Pathlike, copy_projection
+import numpy as np
+from osgeo import gdal
+
+from dolphin.io import copy_projection
+from dolphin.utils import Pathlike, get_raster_xysize
 
 # nmap.py -i stack/slcs_base.vrt -o nmap/nmap -c nmap/count -x 11 -y 5
+gdal.UseExceptions()
 
 
 def run_nmap(
     *,
     slc_vrt_file: Pathlike,
     weight_file: Pathlike,
-    nmap_count_file: Pathlike,
+    count_file: Pathlike,
+    window: dict,
+    skip_shp: bool = True,
+    nmap_opts: dict = {},
+    mask_file: Pathlike = None,
+    lines_per_block: int = 128,
+    ram: int = 1024,
+    no_gpu: bool = False,
+):
+    """Create neighborhood count and weight files for a stack of SLCs."""
+    if skip_shp:
+        create_full_nmap_files(
+            window, slc_vrt_file, weight_file=weight_file, count_file=count_file
+        )
+    else:
+        run_nmap_fringe(
+            slc_vrt_file=slc_vrt_file,
+            weight_file=weight_file,
+            count_file=count_file,
+            window=window,
+            nmap_opts=nmap_opts,
+            mask_file=mask_file,
+            lines_per_block=lines_per_block,
+            ram=ram,
+            no_gpu=no_gpu,
+        )
+
+
+def run_nmap_fringe(
+    *,
+    slc_vrt_file: Pathlike,
+    weight_file: Pathlike,
+    count_file: Pathlike,
     window: dict,
     nmap_opts: dict,
     mask_file: Pathlike = None,
@@ -27,7 +64,7 @@ def run_nmap(
 
     aa.inputDS = fspath(slc_vrt_file)
     aa.weightsDS = fspath(weight_file)
-    aa.countDS = fspath(nmap_count_file)
+    aa.countDS = fspath(count_file)
     if mask_file:
         aa.maskDS = fspath(mask_file)
 
@@ -43,34 +80,28 @@ def run_nmap(
 
     aa.run()
 
-    copy_projection(slc_vrt_file, nmap_count_file)
+    copy_projection(slc_vrt_file, count_file)
     copy_projection(slc_vrt_file, weight_file)
 
 
 def create_full_nmap_files(
-    xsize,
-    ysize,
-    half_window_x,
-    half_window_y,
-    output_dir="nmap",
-    nmap_filename="nmap",
-    count_filename="count",
+    window: dict,
+    slc_vrt_file: Pathlike = "",
+    xsize: int = None,
+    ysize: int = None,
+    weight_file: Pathlike = "./nmap",
+    count_file: Pathlike = "./count",
 ):
     """Make dummy SHP nmap/count files with all neighborhoods set to 1.
 
     Used to avoid running nmap if you just want to multi-look a window.
     """
-    import numpy as np
-    from osgeo import gdal
+    if not xsize or not ysize:
+        ysize, xsize = get_raster_xysize(slc_vrt_file)
 
-    gdal.UseExceptions()
-
-    output_dir = Path(output_dir)
-    if not output_dir.exists():
-        output_dir.mkdir(parents=True, exist_ok=True)
-    nmap_file = output_dir / f"{nmap_filename}"
-    count_file = output_dir / f"{count_filename}"
-
+    half_window_x = window["xhalf"]
+    half_window_y = window["yhalf"]
+    # Full window sizes
     wy = 1 + half_window_y * 2
     wx = 1 + half_window_x * 2
 
@@ -79,7 +110,7 @@ def create_full_nmap_files(
     # number of uint32 bytes needed to store weights
     n_bands = int(np.ceil(wx * wy / 32))
     ds_nmap = drv.Create(
-        fspath(nmap_file), xsize, ysize, n_bands, gdal.GDT_UInt32, options
+        fspath(weight_file), xsize, ysize, n_bands, gdal.GDT_UInt32, options
     )
     ds_count = drv.Create(fspath(count_file), xsize, ysize, 1, gdal.GDT_Int16, options)
 
