@@ -1,0 +1,6 @@
+pytest
+pre-commit
+black
+flake8
+# For the cfg creation script
+fire
