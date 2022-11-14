@@ -115,13 +115,17 @@ def test_estimation(C_truth, est_mle_cpu, est_evd_cpu):
 def test_estimation_gpu(slc_samples, est_mle_cpu):
     # Get the GPU version
     slc_stack = slc_samples.reshape(NUM_ACQ, 11, 11)
-    est_mle_gpu_ml = mle_gpu.run_mle_multilooked_gpu(slc_stack, half_window=(5, 5))
+    est_mle_gpu_ml, temp_coh = mle_gpu.run_mle_multilooked_gpu(
+        slc_stack, half_window=(5, 5)
+    )
     assert est_mle_gpu_ml.shape == (len(est_mle_cpu), 1, 1)
+    assert temp_coh.shape == (1, 1)
     est_phase_gpu = np.angle(np.squeeze(est_mle_gpu_ml))
     np.testing.assert_array_almost_equal(est_mle_cpu, est_phase_gpu, decimal=3)
 
-    est_mle_gpu_fullres = mle_gpu.run_mle_gpu(slc_stack, half_window=(5, 5))
+    est_mle_gpu_fullres, temp_coh = mle_gpu.run_mle_gpu(slc_stack, half_window=(5, 5))
     assert est_mle_gpu_fullres.shape == (len(est_mle_cpu), 11, 11)
+    assert temp_coh.shape == (11, 11)
     # The middle pixel should be the same, since it had the full window
     est_phase_gpu2 = np.angle(est_mle_gpu_fullres[:, 5, 5])
     np.testing.assert_array_almost_equal(est_mle_cpu, est_phase_gpu2, decimal=3)
@@ -172,6 +176,7 @@ def test_temp_coh():
             add_signal=True,
             signal_std=sigma,
         )
+        # Get the explicit for-loop version
         temp_coh = simulate.estimate_temp_coh(np.exp(1j * truth), C)
         assert t_low <= temp_coh <= t_high
         out_tc.append(temp_coh)

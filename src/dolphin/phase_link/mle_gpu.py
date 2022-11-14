@@ -4,13 +4,12 @@ from math import ceil
 from typing import Tuple
 
 import cupy as cp
-import h5py
 import numpy as np
 from numba import cuda
 
 from dolphin.utils import half_window_to_full
 
-from .mle import full_cov_multilooked, mle_stack
+from .mle import estimate_temp_coh, full_cov_multilooked, mle_stack
 
 # TODO: make a version which has the same API as the CPU
 
@@ -23,7 +22,7 @@ def run_mle_gpu(
     mask: np.ndarray = None,
     ps_mask: np.ndarray = None,
     output_cov_file: str = None,
-) -> np.ndarray:
+) -> Tuple[np.ndarray, np.ndarray]:
     """Estimate the linked phase for a stack using the MLE estimator.
 
     Parameters
@@ -53,8 +52,10 @@ def run_mle_gpu(
 
     Returns
     -------
-    np.ndarray
-        The estimated linked phase
+    mle_est : np.ndarray[np.complex64]
+        The estimated linked phase, with shape (n_images, n_rows, n_cols)
+    temp_coh : np.ndarray[np.float32]
+        The temporal coherence at each pixel, shape (n_rows, n_cols)
     """
     num_slc, rows, cols = slc_stack.shape
 
@@ -76,7 +77,7 @@ def run_mle_gpu(
 
     # Make a buffer for each pixel's coherence matrix
     # d_ means "device_", i.e. on the GPU
-    d_C_buf = cp.zeros((rows, cols, num_slc, num_slc), dtype=np.complex64)
+    d_C_arrays = cp.zeros((rows, cols, num_slc, num_slc), dtype=np.complex64)
 
     # Divide up the stack using a 2D grid
     threads_per_block = (16, 16)
@@ -84,31 +85,29 @@ def run_mle_gpu(
     blocks_y = ceil(cols / threads_per_block[1])
     blocks = (blocks_x, blocks_y)
 
-    estimate_c_gpu[blocks, threads_per_block](d_slc_stack, half_window, d_C_buf)
+    estimate_c_gpu[blocks, threads_per_block](d_slc_stack, half_window, d_C_arrays)
 
     if output_cov_file:
         # Copy back to the host
-        C_buf = d_C_buf.get()
-        print(f"Saving covariance matrix at each pixel to {output_cov_file}")
-        with h5py.File(output_cov_file, "w") as f:
-            f.create_dataset("C", data=C_buf)
+        # _save_covariance(d_C_arrays, output_cov_file)
+        pass
 
-    d_output_phase = mle_stack(d_C_buf, beta=beta, reference_idx=reference_idx)
-    # copy back to host
+    d_output_phase = mle_stack(d_C_arrays, beta=beta, reference_idx=reference_idx)
+    d_cpx_phase = cp.exp(1j * d_output_phase)
+
+    # Get the temporal coherence
+    d_temp_coh = estimate_temp_coh(d_cpx_phase, d_C_arrays)
+
+    # copy back to host to set the PS pixels (if a PS mask is passed)
     output_phase = d_output_phase.get()
-    # and set the PS pixel phases if using a PS mask
     if np.any(ps_mask):
         ps_ref = slc_stack[0][ps_mask]
         for i in range(num_slc):
-            # print(np.all(ref_ps_phase - np.angle(slc_stack[i])[ps_mask] < 1e-6))
             output_phase[i][ps_mask] = np.angle(slc_stack[i][ps_mask] * np.conj(ps_ref))
-            # output_phase[i][ps_mask] = np.angle(slc_stack[i])[ps_mask]
-            # output_phase[i] = np.where(
-            #     ps_mask, np.angle(slc_stack[i]), output_phase[i]
-            # )
 
-    # Finally, use the amplitude from the original SLCs
-    return np.abs(slc_stack) * np.exp(1j * output_phase)
+    # use the amplitude from the original SLCs
+    mle_est = np.abs(slc_stack) * np.exp(1j * output_phase)
+    return mle_est, d_temp_coh.get()
 
 
 @cuda.jit
@@ -181,18 +180,19 @@ def run_mle_multilooked_gpu(
     looks = (window[1], window[0])
 
     # Get the covariance at each pixel on the GPU
-    d_C_buf = full_cov_multilooked(d_slc_stack, looks)
+    d_C_arrays = full_cov_multilooked(d_slc_stack, looks)
 
     if output_cov_file:
         # Copy back to the host
-        C_buf = d_C_buf.get()
-        print(f"Saving covariance matrix at each pixel to {output_cov_file}")
-        with h5py.File(output_cov_file, "w") as f:
-            f.create_dataset("C", data=C_buf)
+        # _save_covariance(d_C_arrays, output_cov_file)
+        pass
 
     # Estimate the phase
-    phase = mle_stack(d_C_buf, beta=beta, reference_idx=reference_idx)
-    return np.exp(1j * phase.get())
+    phase = mle_stack(d_C_arrays, beta=beta, reference_idx=reference_idx)
+    d_cpx_phase = cp.exp(1j * phase)
+    # Get the temporal coherence
+    d_temp_coh = estimate_temp_coh(d_cpx_phase, d_C_arrays)
+    return d_cpx_phase.get(), d_temp_coh.get()
 
 
 # def run(
@@ -203,3 +203,10 @@ def run_mle_multilooked_gpu(
 #     output_cov_file: str = None,
 # ):
 #     pass
+
+# def _save_covariance(d_C_arrays, output_cov_file):
+#     # TODO: convert to UInt8 to compress
+#     C_buf = d_C_arrays.get()
+#     print(f"Saving covariance matrix at each pixel to {output_cov_file}")
+#     with h5py.File(output_cov_file, "w") as f:
+#         f.create_dataset("C", data=C_buf)

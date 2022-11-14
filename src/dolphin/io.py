@@ -1,6 +1,6 @@
 from os import fspath
 from pathlib import Path
-from typing import List, Optional, Tuple, Union
+from typing import List, Optional, Union
 
 import numpy as np
 from osgeo import gdal
@@ -53,33 +53,61 @@ def copy_projection(src_file: Pathlike, dst_file: Pathlike) -> None:
     ds_src = ds_dst = None
 
 
-def save_arr_like(*, arr, like_filename, output_name, driver="GTiff", options=None):
-    """Save an array to a file, copying projection/nodata from `like_filename`."""
-    if arr.ndim == 2:
-        arr = arr[np.newaxis, ...]
-    ysize, xsize = arr.shape[-2:]
-    nbands = arr.shape[0]
+def save_arr_like(
+    *,
+    arr,
+    like_filename,
+    output_name,
+    driver="GTiff",
+    options=None,
+    nbands=None,
+    dtype=None,
+):
+    """Save an array to a file, copying projection/nodata from `like_filename`.
 
-    ds = gdal.Open(fspath(like_filename))
+    If arr is None, create an empty file with the same x/y shape as `like_filename`.
+
+    """
+    ds_like = gdal.Open(fspath(like_filename))
+    if arr is not None:
+        if arr.ndim == 2:
+            arr = arr[np.newaxis, ...]
+        ysize, xsize = arr.shape[-2:]
+        nbands = arr.shape[0]
+        gdal_dtype = numpy_to_gdal_type(arr.dtype)
+    else:
+        xsize, ysize = ds_like.RasterXSize, ds_like.RasterYSize
+        if nbands is None:
+            nbands = ds_like.RasterCount
+        if dtype is not None:
+            gdal_dtype = numpy_to_gdal_type(dtype)
+        else:
+            gdal_dtype = ds_like.GetRasterBand(1).DataType
+
     if driver is None:
-        driver = ds.GetDriver().ShortName
+        driver = ds_like.GetDriver().ShortName
     if options is None and driver == "GTiff":
         options = DEFAULT_TIFF_OPTIONS
+
     drv = gdal.GetDriverByName(driver)
-    out_ds = drv.Create(
+    ds_out = drv.Create(
         fspath(output_name),
         xsize,
         ysize,
         nbands,
-        numpy_to_gdal_type(arr.dtype),
+        gdal_dtype,
         options=options or [],
     )
-    out_ds.SetGeoTransform(ds.GetGeoTransform())
-    out_ds.SetProjection(ds.GetProjection())
-    for i in range(nbands):
-        out_ds.GetRasterBand(i + 1).WriteArray(arr[i])
+
+    ds_out.SetGeoTransform(ds_like.GetGeoTransform())
+    ds_out.SetProjection(ds_like.GetProjection())
+
+    # Write the actual data
+    if arr is not None:
+        for i in range(nbands):
+            ds_out.GetRasterBand(i + 1).WriteArray(arr[i])
     # TODO: copy other metadata
-    ds = out_ds = None
+    ds_like = ds_out = None
 
 
 def setup_output_folder(
@@ -87,10 +115,9 @@ def setup_output_folder(
     driver: str = "GTiff",
     dtype="complex64",
     start_idx: int = 0,
-    make_compressed: bool = True,
     creation_options: Optional[List] = None,
-) -> Tuple[List[Path], Optional[Path]]:
-    """Create empty output files for each band in `vrt_stack`.
+) -> List[Path]:
+    """Create empty output files for each band after `start_idx` in `vrt_stack`.
 
     Also creates an empty file for the compressed SLC.
     Used to prepare output for block processing.
@@ -107,8 +134,6 @@ def setup_output_folder(
         Index of vrt_stack to begin making output files.
         This should match the ministack index to avoid re-creating the
         past compressed SLCs.
-    make_compressed : bool, optional
-        Whether to create an empty file for the compressed SLC, by default True
     creation_options : list, optional
         List of options to pass to the GDAL driver, by default None
 
@@ -118,63 +143,25 @@ def setup_output_folder(
         List of saved empty files.
     """
     output_folder = vrt_stack.outfile.parent
-    _, ysize, xsize = vrt_stack.shape
 
-    if creation_options is None and driver == "GTiff":
-        creation_options = DEFAULT_TIFF_OPTIONS
-
-    in_ds = gdal.Open(fspath(vrt_stack.file_list[start_idx]))
     output_files = []
     for filename in vrt_stack.file_list[start_idx:]:
         slc_name = Path(filename).stem
         # TODO: get extension from cfg
         output_path = output_folder / f"{slc_name}.slc.tif"
 
-        drv = gdal.GetDriverByName(driver)
-        out_ds = drv.Create(
-            fspath(output_path),
-            xsize,
-            ysize,
-            1,
-            numpy_to_gdal_type(dtype),
+        save_arr_like(
+            arr=None,
+            like_filename=vrt_stack.outfile,
+            output_name=output_path,
+            driver=driver,
+            nbands=1,
+            dtype=dtype,
             options=creation_options,
         )
-        out_ds.SetGeoTransform(in_ds.GetGeoTransform())
-        out_ds.SetProjection(in_ds.GetProjection())
-        # TODO: copy other metadata
 
         output_files.append(output_path)
-        out_ds.FlushCache()
-        out_ds = None
-
-    if not make_compressed:
-        # Skip creating the compressed SLC
-        in_ds = None
-        return output_files, None
-
-    # Make the compressed SLC file
-    # Note: this is the first compressed SLC in the next ministack,
-    # and it will be in correct sorted order assuming `start_end`
-    # is before the next ministack's start
-    start_end = output_folder.name
-    comp_slc_file = output_folder / f"compressed_{start_end}.tif"
-
-    drv = gdal.GetDriverByName(driver)
-    out_ds = drv.Create(
-        fspath(comp_slc_file),
-        xsize,
-        ysize,
-        1,
-        numpy_to_gdal_type(dtype),
-        options=creation_options or [],
-    )
-    out_ds.SetGeoTransform(in_ds.GetGeoTransform())
-    out_ds.SetProjection(in_ds.GetProjection())
-    out_ds.FlushCache()
-    # TODO: copy other metadata
-
-    in_ds = out_ds = None
-    return output_files, comp_slc_file
+    return output_files
 
 
 def save_block(

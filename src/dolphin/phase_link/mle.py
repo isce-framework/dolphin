@@ -263,4 +263,6 @@ def estimate_temp_coh(est, C_arrays):
     nslc = C_angles.shape[-1]
     rows, cols = xp.triu_indices(nslc, k=1)
     upper_diffs = differences[:, :, rows, cols]
-    return xp.abs(xp.sum(upper_diffs, axis=-1) / upper_diffs.shape[-1])
+    # get number of non-nan values
+    count = xp.count_nonzero(~xp.isnan(upper_diffs), axis=-1)
+    return xp.abs(xp.nansum(upper_diffs, axis=-1)) / count
