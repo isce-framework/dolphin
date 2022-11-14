@@ -4,7 +4,14 @@ import numpy as np
 import pytest
 
 from dolphin.phase_link import simulate
-from dolphin.phase_link.mle import coh_mat, evd, full_cov_multilooked, mle, mle_stack
+from dolphin.phase_link.mle import (
+    coh_mat,
+    estimate_temp_coh,
+    evd,
+    full_cov_multilooked,
+    mle,
+    mle_stack,
+)
 from dolphin.utils import take_looks
 
 try:
@@ -148,3 +155,36 @@ def test_mask(slc_samples, C_truth):
     # if not GPU_AVAILABLE:
     #     pytest.skip("GPU version not available")
     # # Now check both GPU versions
+
+
+def test_temp_coh():
+    sigmas = [0.01, 0.1, 1, 10]
+    expected_tcoh_bounds = [(0.99, 1), (0.9, 0.99), (0.3, 0.5), (0.0, 0.3)]
+    out_tc = []
+    out_C = []
+    out_truth = []
+    for sigma, (t_low, t_high) in zip(sigmas, expected_tcoh_bounds):
+        C, truth = simulate.simulate_C(
+            num_acq=30,
+            Tau0=72,
+            gamma_inf=0.95,
+            gamma0=0.99,
+            add_signal=True,
+            signal_std=sigma,
+        )
+        temp_coh = simulate.estimate_temp_coh(np.exp(1j * truth), C)
+        assert t_low <= temp_coh <= t_high
+        out_tc.append(temp_coh)
+        out_C.append(C)
+        out_truth.append(truth)
+
+    # Test the block version of the function
+    # Just repeat the first C matrix and first estimate
+    C_arrays = np.array(out_C).reshape((2, 2, 30, 30))
+    est_arrays = np.exp(1j * np.array(out_truth).reshape((2, 2, 30)))
+    # mimic the shape of (nslc, rows, cols)
+    est_arrays = np.moveaxis(est_arrays, -1, 0)
+    tc_image = estimate_temp_coh(est_arrays, C_arrays)
+
+    expected_tc_image = np.array(out_tc).reshape((2, 2))
+    np.testing.assert_array_almost_equal(tc_image, expected_tc_image)

@@ -250,3 +250,42 @@ def compress(
     # For each pixel, project the SLCs onto the estimated phase
     # by performing a pixel-wise complex dot product
     return xp.nanmean(slc_stack * xp.conjugate(mle_estimate), axis=0)
+
+
+def estimate_temp_coh(est, C_arrays):
+    """Estimate the temporal coherence of the neighborhood.
+
+    Parameters
+    ----------
+    est : np.array
+        The estimated phase from `run_mle_gpu`, shape (nslc, rows, cols)
+    C_arrays : np.array, shape = (rows, cols, nslc, nslc)
+        The sample covariance matrix at each pixel (e.g. from `full_cov_multilooked`)
+
+    Returns
+    -------
+    float
+        The temporal coherence of the time series compared to cov_matrix.
+    """
+    try:
+        import cupy as cp
+
+        xp = cp.get_array_module(C_arrays)
+    except ImportError:
+        logger.debug("cupy not installed, falling back to numpy")
+        xp = np
+
+    # Move to match the SLC dimension at the end for the covariances
+    est_arrays = xp.moveaxis(est, 0, -1)
+    # Get only the phase of the covariance (not correlation/magnitude)
+    C_angles = np.exp(1j * xp.angle(C_arrays))
+
+    est_phase_diffs = xp.einsum("jka, jkb->jkab", est_arrays, est_arrays.conj())
+    # shape will be (rows, cols, nslc, nslc)
+    differences = C_angles * est_phase_diffs.conj()
+
+    # Get just the upper triangle of the differences (not the diagonal)
+    nslc = C_angles.shape[-1]
+    rows, cols = xp.triu_indices(nslc, k=1)
+    upper_diffs = differences[:, :, rows, cols]
+    return xp.abs(xp.sum(upper_diffs, axis=-1) / upper_diffs.shape[-1])

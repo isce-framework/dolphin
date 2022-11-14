@@ -291,6 +291,14 @@ def iter_blocks(
             xsize,
             ysize,
         )
+        if skip_empty:
+            if np.isnan(nodata):
+                nodata_mask = np.isnan(cur_block)
+            else:
+                cur_block == nodata
+            if np.all(nodata_mask):
+                continue
+
         if return_slices:
             yield cur_block, (rows, cols)
         else:
