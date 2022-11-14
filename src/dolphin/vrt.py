@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+from math import nan
 from os import fspath
 from pathlib import Path
 from typing import Optional, Sequence, Tuple
@@ -139,13 +140,15 @@ class VRTStack:
         ds.SetSpatialRef(self.srs)
         ds = None
 
-    def read_stack(self):
-        """Read in the SLC stack."""
-        # TODO: Implement iterating, reading in chunks, block iterator
+    def _check_exists(self):
         if not self.outfile:
             raise ValueError("No output file specified")
         if not self.outfile.exists():
             self.write()
+
+    def read_stack(self):
+        """Read in the SLC stack."""
+        self._check_exists()
         ds = gdal.Open(fspath(self.outfile))
         stack = ds.ReadAsArray()
         ds = None
@@ -281,6 +284,8 @@ class VRTStack:
         block_shape: Optional[Tuple[int, int]] = None,
         max_bytes: Optional[float] = DEFAULT_BLOCK_BYTES,
         return_slices: bool = False,
+        skip_empty: bool = True,
+        nodata: float = nan,
     ):
         """Iterate over blocks of the stack.
 
@@ -302,13 +307,19 @@ class VRTStack:
         max_bytes : Optional[int], optional
             RAM size (in Bytes) to attempt to stay under with each loaded block.
         return_slices : bool, optional (default False)
-            return the (row, col) slice indicating the position of the current block
+            return (row_slice, col_slice) indicating the position of the current block.
+        skip_empty : bool, optional (default True)
+            Skip blocks that are entirely empty (all NaNs)
+        nodata : float, optional (default np.nan)
+            Value to use for nodata to determine if a block is empty.
+            Not used if `skip_empty` is False.
 
         Yields
         ------
         Tuple[Tuple[int, int], Tuple[int, int]]
             Iterator of ((row_start, row_stop), (col_start, col_stop))
         """
+        self._check_exists()
         if block_shape is None:
             block_shape = self._get_block_shape(max_bytes=max_bytes)
         yield from utils.iter_blocks(
@@ -317,6 +328,8 @@ class VRTStack:
             overlaps=overlaps,
             start_offsets=start_offsets,
             return_slices=return_slices,
+            skip_empty=skip_empty,
+            nodata=nodata,
         )
 
     def _get_block_shape(self, max_bytes=DEFAULT_BLOCK_BYTES):

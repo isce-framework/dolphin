@@ -229,6 +229,8 @@ def iter_blocks(
     overlaps: Tuple[int, int] = (0, 0),
     start_offsets: Tuple[int, int] = (0, 0),
     return_slices: bool = False,
+    skip_empty: bool = True,
+    nodata: float = np.nan,
 ):
     """Read blocks of a raster as a generator.
 
@@ -247,6 +249,11 @@ def iter_blocks(
         (row_start, col_start), start reading from this offset
     return_slices : bool, optional (default False)
         return the (row, col) slice indicating the position of the current block
+    skip_empty : bool, optional (default True)
+        Skip blocks that are entirely empty (all NaNs)
+    nodata : float, optional (default np.nan)
+        Value to use for nodata to determine if a block is empty.
+        Not used if `skip_empty` is False.
 
     Yields
     ------
@@ -285,7 +292,7 @@ def iter_blocks(
             ysize,
         )
         if return_slices:
-            yield cur_block, (slice(rows), slice(cols))
+            yield cur_block, (rows, cols)
         else:
             yield cur_block
     ds = None

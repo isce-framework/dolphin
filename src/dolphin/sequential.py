@@ -27,6 +27,7 @@ def run_evd_sequential(
     mask_file: Pathlike = None,
     ps_mask_file: Pathlike = None,
     beta: float = 0.1,
+    max_bytes: float = 100e6,
 ):
     """Estimate wrapped phase using batches of ministacks."""
     output_folder = Path(output_folder)
@@ -34,7 +35,7 @@ def run_evd_sequential(
     file_list_all = v_all.file_list
     logger.info(f"{v_all}: from {v_all.file_list[0]} to {v_all.file_list[-1]}")
 
-    comp_slc_files: List[Pathlike] = []
+    comp_slc_files: List[Path] = []
     output_slc_files = defaultdict(list)  # Map of {ministack_index: [output_slc_files]}
 
     if mask_file is not None:
@@ -61,8 +62,9 @@ def run_evd_sequential(
         # Make a new output folder for each ministack
         cur_output_folder = output_folder / start_end
         cur_output_folder.mkdir(parents=True, exist_ok=True)
-        logger.info(f"Processing {len(cur_files)} files, output: {cur_output_folder}")
-
+        msg = f"Processing {len(cur_files)} files + {len(comp_slc_files)} compressed. "
+        msg += f"Output folder: {cur_output_folder}"
+        logger.info(msg)
         # Add the existing compressed SLC files to the start
         cur_files = comp_slc_files + cur_files
         cur_vrt = VRTStack(cur_files, outfile=cur_output_folder / f"{start_end}.vrt")
@@ -72,15 +74,26 @@ def run_evd_sequential(
             f"{cur_vrt}: from {Path(cur_vrt.file_list[mini_idx]).name} to"
             f" {Path(cur_vrt.file_list[-1]).name}"
         )
-
         # Set up the output folder with empty files to write into
-        cur_output_files = io.setup_output_folder(cur_vrt, driver="GTiff")
+        cur_output_files, cur_comp_slc_file = io.setup_output_folder(
+            cur_vrt, driver="GTiff", start_idx=mini_idx, make_compressed=True
+        )
+        # Save these for the final adjustment later
+        output_slc_files[mini_idx] = cur_output_files
+        # Keep the list of compressed SLCs to prepend to next VRTStack.file_list
+        assert cur_comp_slc_file is not None  # note: this is for mypy
+        comp_slc_files.append(cur_comp_slc_file)
 
         # Iterate over the ministack in blocks
         # Note the overlap to redo the edge effects
-        block_gen = cur_vrt.iter_blocks(overlaps=(yhalf, xhalf), return_slices=True)
+        block_gen = cur_vrt.iter_blocks(
+            overlaps=(yhalf, xhalf),
+            return_slices=True,
+            max_bytes=max_bytes,
+            skip_empty=True,
+        )
         for cur_data, (rows, cols) in block_gen:
-            logger.info(
+            logger.debug(
                 f"Processing block {rows.start}:{rows.stop}, {cols.start}:{cols.stop}"
             )
 
@@ -90,81 +103,75 @@ def run_evd_sequential(
                 half_window=(xhalf, yhalf),
                 beta=beta,
                 reference_idx=mini_idx,
-                mask=mask,
-                ps_mask=ps_mask,
+                mask=mask[rows, cols],
+                ps_mask=ps_mask[rows, cols],
             )
 
             # Save each of the MLE estimates (ignoring the compressed SLCs)
-            for filename, cur_image in zip(
-                cur_output_files[mini_idx:], cur_mle_stack[mini_idx:]
-            ):
-                slc_name = filename.stem
-                # TODO: get extension from cfg
-                cur_filename = cur_output_folder / f"{slc_name}.slc.tif"
-                # Save the MLE estimate using the slc_vrt_file's geotransform
-                io.save_arr_like(
-                    arr=cur_image,
-                    like_filename=slc_vrt_file,
-                    output_name=cur_filename,
-                    # driver="ENVI",
-                    driver="GTiff",
-                )
-                output_slc_files[mini_idx].append(cur_filename)
+            assert len(cur_mle_stack[mini_idx:]) == len(cur_output_files)
+            io.save_block(cur_mle_stack[mini_idx:], cur_output_files, rows, cols)
 
             # Compress the ministack using only the non-compressed SLCs
             cur_comp_slc = compress(cur_data[mini_idx:], cur_mle_stack[mini_idx:])
             # Save the compressed SLC
-            # Note: this is the first compressed SLC in the next ministack,
-            # and it will be in correct sorted order assuming `start_end`
-            # is before the next ministack's start
-            cur_comp_slc_file = cur_output_folder / f"compressed_{start_end}.bin"
-            logger.info(f"Saving compressed SLC to {cur_comp_slc_file}")
-            io.save_arr_like(
-                arr=cur_comp_slc,
-                like_filename=slc_vrt_file,
-                output_name=cur_comp_slc_file,
-                driver="ENVI",
-            )
+            logger.debug(f"Saving compressed block SLC to {cur_comp_slc_file}")
+            io.save_block(cur_comp_slc, cur_comp_slc_file, rows, cols)
 
         logger.info(f"Finished ministack {mini_idx} of size {cur_vrt.shape}.")
 
-        # Add it to the list of compressed SLCs so we can
-        # prepend it to the VRTStack.file_list
-        comp_slc_files.append(cur_comp_slc_file)
-
     # Find the offsets between stacks by doing a phase linking only compressed SLCs
-    adjustment_vrt_stack = VRTStack(
-        comp_slc_files, outfile=output_folder / "compressed_stack.vrt"
-    )
-    logger.info(f"Running EVD on compressed files: {adjustment_vrt_stack}")
-    comp_data = adjustment_vrt_stack.read_stack()
-    comp_mle_result = run_mle_gpu(
-        comp_data,
-        half_window=(window["xhalf"], window["yhalf"]),
-    )
     comp_output_folder = output_folder / "adjustments"
     comp_output_folder.mkdir(parents=True, exist_ok=True)
-    adjusted_comp_slc_files = []
-    for fname, cur_image in zip(adjustment_vrt_stack.file_list, comp_mle_result):
-        name = Path(fname).stem
-        cur_filename = comp_output_folder / f"{name}.bin"
-        io.save_arr_like(
-            arr=cur_image,
-            like_filename=slc_vrt_file,
-            output_name=cur_filename,
-            driver="ENVI",
+    adjustment_vrt_stack = VRTStack(
+        comp_slc_files, outfile=comp_output_folder / "compressed_stack.vrt"
+    )
+    logger.info(f"Running EVD on compressed files: {adjustment_vrt_stack}")
+
+    ##############################################
+    # Set up the output folder with empty files to write into
+    adjusted_comp_slc_files, _ = io.setup_output_folder(
+        adjustment_vrt_stack,
+        driver="GTiff",
+        start_idx=0,
+        make_compressed=False,
+    )
+
+    # Iterate over the ministack in blocks
+    # Note the overlap to redo the edge effects
+    block_gen = adjustment_vrt_stack.iter_blocks(
+        overlaps=(yhalf, xhalf),
+        return_slices=True,
+        max_bytes=max_bytes,
+        skip_empty=True,
+    )
+    for cur_data, (rows, cols) in block_gen:
+        logger.info(
+            f"Processing block {rows.start}:{rows.stop}, {cols.start}:{cols.stop}"
         )
-        adjusted_comp_slc_files.append(cur_filename)
+
+        # Run the phase linking process on the current ministack
+        cur_mle_stack = run_mle_gpu(
+            cur_data,
+            half_window=(xhalf, yhalf),
+            beta=beta,
+            reference_idx=0,
+            mask=mask[rows, cols],
+            ps_mask=ps_mask[rows, cols],
+        )
+
+        # Save each of the MLE estimates (ignoring the compressed SLCs)
+        io.save_block(cur_mle_stack, adjusted_comp_slc_files, rows, cols)
 
     # TODO: TCORR!
     # Compensate for the offsets between ministacks (aka "datum adjustments")
-    # final_output_folder = output_folder / "final"
+    final_output_folder = output_folder / "final"
     # TODO: do i need to separate out these?
-    final_output_folder = output_folder
+    # final_output_folder = output_folder
     final_output_folder.mkdir(parents=True, exist_ok=True)
     for mini_idx, slc_files in output_slc_files.items():
         adjustment_fname = adjusted_comp_slc_files[mini_idx]
-        driver = "ENVI"
+        # driver = "ENVI"
+        driver = "GTiff"
         for slc_fname in slc_files:
             logger.info(f"Compensating {slc_fname} with {adjustment_fname}")
             outfile = final_output_folder / f"{slc_fname.name}"
@@ -178,6 +185,7 @@ def run_evd_sequential(
                 calc="abs(A) * exp(1j * (angle(A) + angle(B)))",
                 quiet=True,
                 overwrite=True,
+                creation_options=io.DEFAULT_TIFF_OPTIONS,
             )
             # TODO: need to copy projection?
             # TODO: delete old?

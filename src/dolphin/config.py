@@ -72,10 +72,12 @@ def add_dolphin_section(cfg):
         Configuration dict with added "dolphin" section
     """
     from dolphin import __version__
+    from dolphin._show_versions import _get_sys_info
 
     dolphin_cfg = {
         "version": __version__,
         "runtime": str(datetime.datetime.now()),
+        "sys_info": _get_sys_info(),
         # TODO: anything else relevant?
     }
     cfg["runconfig"]["groups"]["processing"]["dolphin"] = dolphin_cfg
