@@ -4,7 +4,7 @@ import numpy as np
 import numpy.linalg as la
 from numba import njit
 
-from dolphin.utils import take_looks
+from dolphin.utils import get_array_module, take_looks
 
 logger = logging.getLogger(__name__)
 
@@ -140,13 +140,7 @@ def full_cov_multilooked(slcs, looks):
         The full covariance matrix for each pixel, shape (rows, cols, nslc, nslc)
         i.e. C[i, j] is the covariance matrix for pixel (i, j)
     """
-    try:
-        import cupy as cp
-
-        xp = cp.get_array_module(slcs)
-    except ImportError:
-        logger.debug("No GPU available or cupy not installed. Using numpy")
-        xp = np
+    xp = get_array_module(slcs)
 
     # Perform an outer product of the slcs and their conjugate, then multilook
     numer = take_looks(
@@ -185,13 +179,7 @@ def mle_stack(C_arrays: np.ndarray, beta: float = 0.0, reference_idx: float = 0)
     np.array, shape = (nslc, rows, cols)
         The estimated linked phase, same shape as the input slcs (possibly multilooked)
     """
-    try:
-        import cupy as cp
-
-        xp = cp.get_array_module(C_arrays)
-    except ImportError:
-        logger.debug("cupy not installed, falling back to numpy")
-        xp = np
+    xp = get_array_module(C_arrays)
     # estimate the wrapped phase based on the EMI paper
     # *smallest* eigenvalue decomposition of the (|Gamma|^-1  *  C) matrix
     Gamma = xp.abs(C_arrays)
@@ -240,13 +228,7 @@ def compress(
     np.array
         The compressed SLC data, shape (rows, cols)
     """
-    try:
-        import cupy as cp
-
-        xp = cp.get_array_module(slc_stack)
-    except ImportError:
-        logger.debug("cupy not installed, falling back to numpy")
-        xp = np
+    xp = get_array_module(slc_stack)
     # For each pixel, project the SLCs onto the estimated phase
     # by performing a pixel-wise complex dot product
     return xp.nanmean(slc_stack * xp.conjugate(mle_estimate), axis=0)
@@ -267,14 +249,7 @@ def estimate_temp_coh(est, C_arrays):
     float
         The temporal coherence of the time series compared to cov_matrix.
     """
-    try:
-        import cupy as cp
-
-        xp = cp.get_array_module(C_arrays)
-    except ImportError:
-        logger.debug("cupy not installed, falling back to numpy")
-        xp = np
-
+    xp = get_array_module(C_arrays)
     # Move to match the SLC dimension at the end for the covariances
     est_arrays = xp.moveaxis(est, 0, -1)
     # Get only the phase of the covariance (not correlation/magnitude)

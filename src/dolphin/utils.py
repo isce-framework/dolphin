@@ -167,6 +167,22 @@ def half_window_to_full(half_window):
     return (2 * half_window[0] + 1, 2 * half_window[1] + 1)
 
 
+def get_array_module(arr):
+    """Get the array module (numpy or cupy) for the given array.
+
+    References
+    ----------
+    https://docs.cupy.dev/en/stable/user_guide/basic.html#how-to-write-cpu-gpu-agnostic-code
+    """
+    try:
+        import cupy as cp
+
+        xp = cp.get_array_module(arr)
+    except ImportError:
+        logger.debug("cupy not installed, falling back to numpy")
+    return xp
+
+
 def take_looks(arr, row_looks, col_looks, func_type="nansum"):
     """Downsample a numpy matrix by summing blocks of (row_looks, col_looks).
 
