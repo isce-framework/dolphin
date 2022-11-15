@@ -1,5 +1,4 @@
 """Estimate wrapped phase using batches of ministacks."""
-import string
 from collections import defaultdict
 from math import nan
 from pathlib import Path
@@ -218,28 +217,19 @@ def run_evd_sequential(
             # TODO: delete old?
 
     # Average the temporal coherence files in each ministack
-    # Get a sequence of "A", "B", "C", etc. for gdal_calc
-    # note: string.ascii_letters = 'abcd...xyzABC...XYZ'
-    name_dict = dict(zip(string.ascii_letters, tcorr_files))
-    # TODO: how should i fix this when we have more than 52 ministacks?
-    # 52 * 20 = 1040, so we should be fine for a while
-    assert len(tcorr_files) <= 52
-    names = name_dict.keys()
-    # Get the numpy string taking the nanmean of all rasters
-    # e.g. "nanmean(stack(A, B, C, D), axis=0)"
-    calc_str = f"nanmean(stack( ({','.join(names)}), axis=0))"
+    # Can pass the list of files to gdal_calc, which interprets it
+    # as a multi-band file
 
-    driver = "GTiff"
     output_tcorr_file = final_output_folder / "tcorr_average.tif"
     logger.info(f"Averaging temporal coherence files into: {output_tcorr_file}")
-    # Make a dict so we can unpack any number of files
     gdal_calc.Calc(
         NoDataValue=nan,
-        format=driver,
+        format="GTiff",
         outfile=output_tcorr_file,
+        type="Float32",
         quiet=True,
         overwrite=True,
         creation_options=io.DEFAULT_TIFF_OPTIONS,
-        calc=calc_str,
-        **name_dict,
+        A=tcorr_files,
+        calc="numpy.nanmean(A, axis=0)",
     )
