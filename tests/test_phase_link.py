@@ -100,14 +100,16 @@ def test_full_cov_gpu(shape=(10, 100, 100), looks=(5, 5)):
 
 
 def test_full_cov_nans(shape=(10, 100, 100), looks=(5, 5)):
+    num_slc, _, _ = shape
     slcs = np.random.rand(*shape) + 1j * np.random.rand(*shape)
 
+    C = coh_mat(slcs.reshape(num_slc, -1))
     # Nans for one pixel in all SLCs
-    num_slc, _, _ = shape
     slc_stack_nan = slcs.copy()
     slc_stack_nan[:, 1, 1] = np.nan
     slc_samples_nan = slc_stack_nan.reshape(num_slc, -1)
-    coh_mat(slc_samples_nan)
+    C_nan = coh_mat(slc_samples_nan)
+    assert np.max(np.abs(C - C_nan)) < 0.01
 
     # Nans for an entire SLC
     # This should raise an error if we pass a dead SLC

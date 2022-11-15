@@ -6,7 +6,7 @@ from pathlib import Path
 from dolphin import combine_ps_ds, phase_link, ps, sequential, unwrap, utils, vrt
 from dolphin.log import get_log, log_runtime
 
-logger = get_log()
+logger = get_log(debug=True)
 
 
 @log_runtime
@@ -109,18 +109,22 @@ def run(full_cfg: dict):
     pl_path = scratch_dir / cfg["phase_linking"]["directory"]
     # For some reason fringe skips this one if the directory exists...
     # pl_path.mkdir(parents=True, exist_ok=True)
-    compressed_slc_file = pl_path / cfg["phase_linking"]["compressed_slc_file"]
-    if compressed_slc_file.exists():
-        logger.info(f"Skipping making existing EVD file {compressed_slc_file}")
+    # compressed_slc_file = pl_path / cfg["phase_linking"]["compressed_slc_file"]
+    # if compressed_slc_file.exists():
+    # logger.info(f"Skipping making existing EVD file {compressed_slc_file}")
+    existing_files = list(pl_path.glob("*.slc.tif"))  # TODO: get ext from config
+    if len(existing_files) > 0:
+        logger.info(f"Skipping EVD step, {len(existing_files)} files already exist")
     else:
         logger.info(f"Running sequential EMI step in {pl_path}")
-        sequential.run_evd_sequential(
+        pl_path = sequential.run_evd_sequential(
             slc_vrt_file=slc_vrt_file,
             # weight_file: Pathlike,
             output_folder=pl_path,
             window=cfg["window"],
             # ministack_size=10,
             ministack_size=cfg["phase_linking"]["ministack_size"],
+            max_bytes=1e6 * cfg["ram"],
             # mask_file: Pathlike = None,
             # ps_mask_file=ps_output,
             # beta=0.1,
@@ -130,22 +134,35 @@ def run(full_cfg: dict):
     # 5. Combine PS and DS phases and forming interferograms
     ps_ds_path = scratch_dir / cfg["combine_ps_ds"]["directory"]
     ps_ds_path.mkdir(parents=True, exist_ok=True)
+
     # Temp coh file made in last step:
-    temp_coh_file = pl_path / cfg["phase_linking"]["temp_coh_file"]
+    # temp_coh_file = pl_path / cfg["phase_linking"]["temp_coh_file"]
+    temp_coh_file = pl_path / "tcorr_average.tif"
     # Final coh file to be created here
-    temp_coh_ps_ds_file = ps_ds_path / cfg["combine_ps_ds"]["temp_coh_file"]
-    if temp_coh_ps_ds_file.exists():
-        logger.info(f"Skipping combine_ps_ds step, {temp_coh_file} exists")
+    # temp_coh_ps_ds_file = ps_ds_path / cfg["combine_ps_ds"]["temp_coh_file"]
+    # if temp_coh_ps_ds_file.exists():
+    existing_ifgs = list(ps_ds_path.glob("*.int*"))
+    if len(existing_ifgs) > 0:
+        logger.info(f"Skipping combine_ps_ds step, {len(existing_ifgs)} exists")
     else:
         logger.info(f"Running combine ps/ds step into {ps_ds_path}")
-        combine_ps_ds.run_combine(
+        # # Old way based on fringe to form ifgs and insert PS phases
+        # combine_ps_ds.run_combine(
+        #     slc_vrt_file=slc_vrt_file,
+        #     ps_file=ps_output,
+        #     pl_directory=pl_path,
+        #     temp_coh_file=temp_coh_file,
+        #     temp_coh_ps_ds_file=temp_coh_ps_ds_file,
+        #     output_folder=ps_ds_path,
+        #     ps_temp_coh=cfg["combine_ps_ds"]["ps_temp_coh"],
+        #     ifg_network_options=cfg["combine_ps_ds"]["ifg_network_options"],
+        # )
+
+        # The python MLE function handles the temp coh, and the PS phase insertion
+        combine_ps_ds.form_ifgs(
             slc_vrt_file=slc_vrt_file,
-            ps_file=ps_output,
             pl_directory=pl_path,
-            temp_coh_file=temp_coh_file,
-            temp_coh_ps_ds_file=temp_coh_ps_ds_file,
             output_folder=ps_ds_path,
-            ps_temp_coh=cfg["combine_ps_ds"]["ps_temp_coh"],
             ifg_network_options=cfg["combine_ps_ds"]["ifg_network_options"],
         )
 
@@ -158,11 +175,16 @@ def run(full_cfg: dict):
     else:
         combined_mask_file = None
 
+    if not cfg["unwrap"]["run_unwrap"]:
+        logger.info("Skipping unwrap step")
+        return
+
     unwrap_path = scratch_dir / cfg["unwrap"]["directory"]
     unwrap_path.mkdir(parents=True, exist_ok=True)
     unwrap.run(
         ifg_path=ps_ds_path,
         output_path=unwrap_path,
-        cor_file=temp_coh_ps_ds_file,
+        # cor_file=temp_coh_ps_ds_file,
+        cor_file=temp_coh_file,
         mask_file=combined_mask_file,
     )

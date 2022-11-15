@@ -4,14 +4,57 @@ from pathlib import Path
 
 import numpy as np
 from osgeo import gdal
+from osgeo_utils import gdal_calc
 
-from dolphin import network
+from dolphin import io, network
 from dolphin.log import get_log
 from dolphin.utils import Pathlike, get_dates
 
 gdal.UseExceptions()
 
 logger = get_log()
+
+
+def form_ifgs(
+    *,
+    slc_vrt_file: Pathlike,
+    pl_directory: Pathlike,
+    output_folder: Pathlike,
+    ifg_network_options: dict,
+    driver: str = "GTiff",
+):
+    """Run workflow step to combine PS and DS phases."""
+    # Create the interferogram list
+    pl_slc_files = Path(pl_directory).glob("*.slc.tif")
+    pl_date_dict = {get_dates(p)[0]: p for p in pl_slc_files}
+
+    ds_orig_stack = gdal.Open(fspath(slc_vrt_file))
+    assert len(pl_date_dict) == ds_orig_stack.RasterCount
+
+    date_list = [k for k in pl_date_dict.keys() if k]
+    date12_list = network.make_ifg_list(date_list, **ifg_network_options)
+
+    for date_1, date_2 in date12_list:
+        # output file with both PS and DS pixels
+        output_file = Path(output_folder) / f"{date_1}_{date_2}.int"
+        slc1_path = pl_date_dict[date_1]
+        slc2_path = pl_date_dict[date_2]
+        logger.info(
+            f"Forming interferogram {output_file.stem} in {output_folder} between"
+            f" {slc1_path} and {slc2_path}"
+        )
+
+        gdal_calc.Calc(
+            NoDataValue=np.nan,
+            format=driver,
+            outfile=output_file,
+            A=fspath(slc1_path),
+            B=fspath(slc2_path),
+            calc="A * B.conj()",
+            quiet=True,
+            overwrite=True,
+            creation_options=io.DEFAULT_TIFF_OPTIONS,
+        )
 
 
 def run_combine(
@@ -95,7 +138,7 @@ def run_combine(
     ds_orig_stack = None
 
     # Create the temporal coherence file, filling in high values for PS
-    # fill_temp_coh(ps_file, temp_coh_file, temp_coh_ps_ds_file, ps_temp_coh)
+    fill_temp_coh(ps_file, temp_coh_file, temp_coh_ps_ds_file, ps_temp_coh)
     return
 
 

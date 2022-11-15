@@ -118,6 +118,7 @@ ifg_network_options:
   max_temporal_baseline:  int(min=0, required=False)
 
 unwrap_options:
+  run_unwrap: bool(required=False)
   directory: str()
   unwrap_method: str()
   tiles: list(int())

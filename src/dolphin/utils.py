@@ -366,7 +366,7 @@ def iter_blocks(
             if np.isnan(nodata):
                 nodata_mask = np.isnan(cur_block)
             else:
-                cur_block == nodata
+                nodata_mask = cur_block == nodata
             if np.all(nodata_mask):
                 continue
 
@@ -447,7 +447,7 @@ slice(90, 190, None)), (slice(90, 180, None), slice(180, 250, None))]
 
 
 def get_max_block_shape(
-    filename, nstack: int, max_bytes: float = 100e6
+    filename, nstack: int, max_bytes: float = 64e6
 ) -> Tuple[int, int]:
     """Find shape to load from GDAL-readable `filename` with memory size < `max_bytes`.
 
@@ -461,7 +461,7 @@ def get_max_block_shape(
         number of bands in dataset.
     max_bytes : float, optional)
         target size of memory (in Bytes) for each block.
-        Defaults to 100e6.
+        Defaults to 64e6.
 
     Returns
     -------

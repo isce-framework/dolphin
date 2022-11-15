@@ -14,6 +14,12 @@ from .mle import estimate_temp_coh, full_cov, mle_stack
 # TODO: make a version which has the same API as the CPU
 
 
+class MLERuntimeError(Exception):
+    """Exception raised for running the MLE GPU code."""
+
+    pass
+
+
 def run_mle_gpu(
     slc_stack: np.ndarray,
     half_window: Tuple[int, int],
@@ -63,6 +69,9 @@ def run_mle_gpu(
         mask = np.zeros((rows, cols), dtype=bool)
     else:
         mask = mask.astype(bool)
+    # Make sure we also are ignoring pixels which are nans for all SLCs
+    mask |= np.all(np.isnan(slc_stack), axis=0)
+
     if ps_mask is None:
         ps_mask = np.zeros((rows, cols), dtype=bool)
     else:
@@ -100,7 +109,9 @@ def run_mle_gpu(
     d_cpx_phase = cp.exp(1j * d_output_phase)
 
     # Get the temporal coherence
-    d_temp_coh = estimate_temp_coh(d_cpx_phase, d_C_arrays)
+    temp_coh = estimate_temp_coh(d_cpx_phase, d_C_arrays).get()
+    # Set no data pixels to np.nan
+    temp_coh[mask] = np.nan
 
     # copy back to host to set the PS pixels (if a PS mask is passed)
     output_phase = d_output_phase.get()
@@ -108,10 +119,17 @@ def run_mle_gpu(
         ps_ref = slc_stack[0][ps_mask]
         for i in range(num_slc):
             output_phase[i][ps_mask] = np.angle(slc_stack[i][ps_mask] * np.conj(ps_ref))
+        # Force PS pixels to have high temporal coherence
+        temp_coh[ps_mask] = 1
+
+    # # https://docs.cupy.dev/en/stable/user_guide/memory.html
+    # may just be cached a lot of the huge memory available on aurora
+    # But if we need to free GPU memory:
+    # cp.get_default_memory_pool().free_all_blocks()
 
     # use the amplitude from the original SLCs
     mle_est = np.abs(slc_stack) * np.exp(1j * output_phase)
-    return mle_est, d_temp_coh.get()
+    return mle_est, temp_coh
 
 
 @cuda.jit
@@ -212,9 +230,9 @@ def _check_all_nans(slc_stack):
     """Check for all NaNs in each SLC of the stack."""
     nans = np.isnan(slc_stack)
     # Check that there are no SLCS which are all nans:
-    bad_slc_idxs = np.where(np.all(nans, axis=(1, 2)))
+    bad_slc_idxs = np.where(np.all(nans, axis=(1, 2)))[0]
     if bad_slc_idxs.size > 0:
-        raise ValueError(f"SLC stack[{bad_slc_idxs}] has are all NaNs.")
+        raise MLERuntimeError(f"SLC stack[{bad_slc_idxs}] has are all NaNs.")
 
 
 # def run(

@@ -40,7 +40,7 @@ runconfig:
       ps_file: 'ps_pixels'
 
       lines_per_block: 128
-      ram: 1024
+      ram: 64
 
       window:
         xhalf: 11
@@ -76,6 +76,7 @@ runconfig:
           max_temporal_baseline:
 
       unwrap:
+        run_unwrap: False
         directory: 'unwrapped'
         unwrap_method: 'snaphu'
         tiles: [1, 1]

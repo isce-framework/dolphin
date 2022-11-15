@@ -112,7 +112,7 @@ def raster_with_nan(tmpdir, tiled_raster_100_by_200):
     start_arr = load_gdal(tiled_raster_100_by_200)
     nan_arr = start_arr.copy()
     nan_arr[0, 0] = np.nan
-    output_name = tmpdir / "with_nans.tif"
+    output_name = tmpdir / "with_one_nan.tif"
     save_arr_like(
         arr=nan_arr, like_filename=tiled_raster_100_by_200, output_name=output_name
     )
@@ -127,5 +127,19 @@ def raster_with_nan_block(tmpdir, tiled_raster_100_by_200):
     nan_arr[:32, :32] = np.nan
     save_arr_like(
         arr=nan_arr, like_filename=tiled_raster_100_by_200, output_name=output_name
+    )
+    return output_name
+
+
+@pytest.fixture
+def raster_with_zero_block(tmpdir, tiled_raster_100_by_200):
+    # One full block of 32x32 is nan
+    output_name = tmpdir / "with_zeros.tif"
+    out_arr = load_gdal(tiled_raster_100_by_200)
+    out_arr[:] = 1.0
+
+    out_arr[:32, :32] = 0
+    save_arr_like(
+        arr=out_arr, like_filename=tiled_raster_100_by_200, output_name=output_name
     )
     return output_name

@@ -2,15 +2,16 @@
 from collections import defaultdict
 from math import nan
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 import numpy as np
 from osgeo_utils import gdal_calc
+from tqdm.auto import tqdm
 
 from dolphin import io
 from dolphin.log import get_log
 from dolphin.phase_link.mle import compress
-from dolphin.phase_link.mle_gpu import run_mle_gpu
+from dolphin.phase_link.mle_gpu import MLERuntimeError, run_mle_gpu
 from dolphin.utils import Pathlike, get_raster_xysize
 from dolphin.vrt import VRTStack
 
@@ -24,10 +25,10 @@ def run_evd_sequential(
     output_folder: Pathlike,
     window: dict,
     ministack_size: int = 10,
-    mask_file: Pathlike = None,
-    ps_mask_file: Pathlike = None,
+    mask_file: Optional[Pathlike] = None,
+    ps_mask_file: Optional[Pathlike] = None,
     beta: float = 0.1,
-    max_bytes: float = 100e6,
+    max_bytes: float = 32e6,
 ):
     """Estimate wrapped phase using batches of ministacks."""
     output_folder = Path(output_folder)
@@ -109,28 +110,40 @@ def run_evd_sequential(
         # Iterate over the ministack in blocks
         # Note the overlap to redo the edge effects
         # TODO: adjust the writing to avoid the overlap
+        overlaps = (yhalf, xhalf)
+        num_blocks = cur_vrt._get_num_blocks(max_bytes=max_bytes, overlaps=overlaps)
         block_gen = cur_vrt.iter_blocks(
-            overlaps=(yhalf, xhalf),
+            overlaps=overlaps,
             return_slices=True,
-            max_bytes=max_bytes,
+            # Note: dividing by len(stack) since cov is shape (rows, cols, nslc, nslc)
+            max_bytes=max_bytes / len(cur_vrt),
             skip_empty=True,
+            nodata=0,
             # TODO: get the nodata value from the vrt stack
             # this involves verifying that COMPASS correctly sets the nodata value
         )
-        for cur_data, (rows, cols) in block_gen:
+        for cur_data, (rows, cols) in tqdm(block_gen, total=num_blocks):
+            if np.all(cur_data == 0):
+                continue
             logger.debug(
                 f"Processing block {rows.start}:{rows.stop}, {cols.start}:{cols.stop}"
             )
 
             # Run the phase linking process on the current ministack
-            cur_mle_stack, tcorr = run_mle_gpu(
-                cur_data,
-                half_window=(xhalf, yhalf),
-                beta=beta,
-                reference_idx=mini_idx,
-                mask=mask[rows, cols],
-                ps_mask=ps_mask[rows, cols],
-            )
+            try:
+                cur_mle_stack, tcorr = run_mle_gpu(
+                    cur_data,
+                    half_window=(xhalf, yhalf),
+                    beta=beta,
+                    reference_idx=mini_idx,
+                    mask=mask[rows, cols],
+                    ps_mask=ps_mask[rows, cols],
+                )
+            except MLERuntimeError:
+                # note: this is a warning instead of info, since it should
+                # get caught at the "skip_empty" step
+                logger.warning("No valid pixels in block. Skipping.")
+                continue
 
             # Save each of the MLE estimates (ignoring the compressed SLCs)
             assert len(cur_mle_stack[mini_idx:]) == len(cur_output_files)
@@ -166,7 +179,8 @@ def run_evd_sequential(
     block_gen = adjustment_vrt_stack.iter_blocks(
         overlaps=(yhalf, xhalf),
         return_slices=True,
-        max_bytes=max_bytes,
+        # Note: dividing by len of stack because cov is shape (rows, cols, nslc, nslc)
+        max_bytes=max_bytes / len(adjustment_vrt_stack),
         skip_empty=True,
     )
     for cur_data, (rows, cols) in block_gen:
@@ -233,3 +247,5 @@ def run_evd_sequential(
         A=tcorr_files,
         calc="numpy.nanmean(A, axis=0)",
     )
+
+    return final_output_folder

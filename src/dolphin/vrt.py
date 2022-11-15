@@ -16,7 +16,7 @@ gdal.UseExceptions()
 logger = get_log()
 
 
-DEFAULT_BLOCK_BYTES = 100e6
+DEFAULT_BLOCK_BYTES = 32e6
 
 
 class VRTStack:
@@ -341,6 +341,28 @@ class VRTStack:
             test_file,
             len(self),
             max_bytes=max_bytes,
+        )
+
+    def _get_num_blocks(
+        self,
+        max_bytes=DEFAULT_BLOCK_BYTES,
+        overlaps: Tuple[int, int] = (0, 0),
+        start_offsets: Tuple[int, int] = (0, 0),
+    ):
+        """Get the number of blocks that will be loaded when iterating over the stack.
+
+        Assumes no empty blocks will be skipped.
+        """
+        block_shape = self._get_block_shape(max_bytes=max_bytes)
+        return len(
+            list(
+                utils.slice_iterator(
+                    arr_shape=self.shape[-2:],
+                    block_shape=block_shape,
+                    overlaps=overlaps,
+                    start_offsets=start_offsets,
+                )
+            )
         )
 
     @staticmethod

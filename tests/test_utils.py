@@ -155,7 +155,12 @@ def test_iterate_blocks(tiled_raster_100_by_200):
     assert blocks[-1].shape == (4, 8)
 
 
-def test_iterate_nans(raster_with_nan, raster_with_nan_block, tiled_raster_100_by_200):
+def test_iterate_nodata(
+    raster_with_nan,
+    raster_with_nan_block,
+    raster_with_zero_block,
+    tiled_raster_100_by_200,
+):
     # load one block at a time
     max_bytes = 8 * 32 * 32
     bs = utils.get_max_block_shape(tiled_raster_100_by_200, 1, max_bytes=max_bytes)
@@ -170,12 +175,18 @@ def test_iterate_nans(raster_with_nan, raster_with_nan_block, tiled_raster_100_b
     blocks = list(
         utils.iter_blocks(raster_with_nan, bs, band=1, skip_empty=True, nodata=np.nan)
     )
-    assert len(blocks) == expected_num_blocks - 1
+    assert len(blocks) == expected_num_blocks
 
     # Now check entire block for a skipped block
     blocks = list(
         utils.iter_blocks(
             raster_with_nan_block, bs, band=1, skip_empty=True, nodata=np.nan
         )
+    )
+    assert len(blocks) == expected_num_blocks - 1
+
+    # Now check entire block for a skipped block
+    blocks = list(
+        utils.iter_blocks(raster_with_zero_block, bs, band=1, skip_empty=True, nodata=0)
     )
     assert len(blocks) == expected_num_blocks - 1
