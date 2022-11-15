@@ -1,4 +1,5 @@
 import logging
+from typing import Optional, Tuple
 
 import numpy as np
 import numpy.linalg as la
@@ -124,8 +125,14 @@ def _reg_beta(C, beta=1e-1):
     return (1 - beta) * C + beta * np.eye(C.shape[0], dtype=C.dtype)
 
 
-def full_cov_multilooked(slcs, looks):
-    """Estimate the full covariance matrix for each pixel.
+# TODO: make a version with same API as GPU?
+# estimate_c_gpu(slc_stack, half_window, C_buf):
+def full_cov(
+    slcs: np.ndarray,
+    looks: Tuple[int, int],
+    strides: Tuple[Optional[int], Optional[int]] = (None, None),
+):
+    """Estimate the full-res covariance matrix for each pixel.
 
     Parameters
     ----------
@@ -133,25 +140,31 @@ def full_cov_multilooked(slcs, looks):
         The stack of complex SLC data, shape (nslc, rows, cols)
     looks : np.array
         The number of looks as (row looks, col_looks)
+    strides : int, optional
+        the sliding rate in row direction. If None, equal to row_looks
+    col_stride : int, optional
+        the sliding rate in col direction. If None, equal to col_looks
 
     Returns
     -------
     C: np.array
-        The full covariance matrix for each pixel, shape (rows, cols, nslc, nslc)
-        i.e. C[i, j] is the covariance matrix for pixel (i, j)
+        The full covariance matrix for each pixel.
+        i.e. C[i, j] is the covariance matrix for multilooked-pixel (i, j)
+        shape = (rows // looks[0], cols // looks[1], nslc, nslc)
     """
     xp = get_array_module(slcs)
-
     # Perform an outer product of the slcs and their conjugate, then multilook
     numer = take_looks(
-        xp.einsum("ajk, bjk-> abjk", slcs, slcs.conj(), optimize=True), *looks
+        xp.einsum("ajk, bjk-> abjk", slcs, slcs.conj(), optimize=True), *looks, *strides
     )
 
     # Do the same for the powers
-    s_pow_looked = take_looks(xp.abs(slcs) ** 2, *looks)
+    s_pow_looked = take_looks(xp.abs(slcs) ** 2, *looks, *strides)
     denom = xp.einsum("ajk, bjk-> abjk", s_pow_looked, s_pow_looked, optimize=True)
 
+    # TODO: what to do with nans, or all 0s?
     C = numer / xp.sqrt(denom)
+    # Convert the order to (rows, cols, nslc, nslc)
     return xp.transpose(C, (2, 3, 0, 1))
 
 
@@ -164,7 +177,7 @@ def mle_stack(C_arrays: np.ndarray, beta: float = 0.0, reference_idx: float = 0)
     Parameters
     ----------
     C_arrays : np.array, shape = (rows, cols, nslc, nslc)
-        The sample covariance matrix at each pixel (e.g. from `full_cov_multilooked`)
+        The sample covariance matrix at each pixel (e.g. from `full_cov`)
     beta : float, optional
         The regularization parameter for inverting Gamma = |C|
         The regularization is applied as (1 - beta) * Gamma + beta * I
@@ -242,7 +255,7 @@ def estimate_temp_coh(est, C_arrays):
     est : np.array
         The estimated phase from `run_mle_gpu`, shape (nslc, rows, cols)
     C_arrays : np.array, shape = (rows, cols, nslc, nslc)
-        The sample covariance matrix at each pixel (e.g. from `full_cov_multilooked`)
+        The sample covariance matrix at each pixel (e.g. from `full_cov`)
 
     Returns
     -------

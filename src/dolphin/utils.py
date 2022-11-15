@@ -183,7 +183,9 @@ def get_array_module(arr):
     return xp
 
 
-def take_looks(arr, row_looks, col_looks, func_type="nansum"):
+def take_looks(
+    arr, row_looks, col_looks, row_stride=None, col_stride=None, func_type="nansum"
+):
     """Downsample a numpy matrix by summing blocks of (row_looks, col_looks).
 
     Parameters
@@ -194,6 +196,10 @@ def take_looks(arr, row_looks, col_looks, func_type="nansum"):
         the reduction rate in row direction
     col_looks : int
         the reduction rate in col direction
+    row_stride : int, optional
+        the sliding rate in row direction. If None, equal to row_looks
+    col_stride : int, optional
+        the sliding rate in col direction. If None, equal to col_looks
     func_type : str, optional
         the numpy function to use for downsampling, by default "nansum"
 
@@ -207,19 +213,31 @@ def take_looks(arr, row_looks, col_looks, func_type="nansum"):
     Cuts off values if the size isn't divisible by num looks.
     Will use cupy if available and if `arr` is a cupy array on the GPU.
     """
-    try:
-        import cupy as cp
-
-        xp = cp.get_array_module(arr)
-    except ImportError:
-        print("cupy not installed, using numpy")
-        xp = np
+    xp = get_array_module(arr)
 
     if row_looks == 1 and col_looks == 1:
         return arr
-    if arr.ndim >= 3:
-        return xp.stack([take_looks(a, row_looks, col_looks) for a in arr])
 
+    if row_stride is None:
+        row_stride = row_looks
+    if col_stride is None:
+        col_stride = col_looks
+    if (row_stride, col_stride) != (row_looks, col_looks):
+        if xp != np:
+            raise NotImplementedError(
+                "Sliding looks is not implemented for cupy arrays yet."
+            )
+        return take_looks_bn(
+            arr, row_looks, col_looks, row_stride, col_stride, func_type
+        )
+
+    if arr.ndim >= 3:
+        return xp.stack(
+            [
+                take_looks(a, row_looks, col_looks, row_stride, col_stride, func_type)
+                for a in arr
+            ]
+        )
     rows, cols = arr.shape
     new_rows = rows // row_looks
     new_cols = cols // col_looks
@@ -236,6 +254,43 @@ def take_looks(arr, row_looks, col_looks, func_type="nansum"):
     return func(
         xp.reshape(arr, (new_rows, row_looks, new_cols, col_looks)), axis=(3, 1)
     )
+
+
+def take_looks_bn(
+    arr, row_looks, col_looks, row_stride=None, col_stride=None, func_type="sum"
+):
+    """Multi-look window with different step sizes than look sizes."""
+    import bottleneck as bn
+
+    if row_stride is None:
+        row_stride = row_looks
+    if col_stride is None:
+        col_stride = col_looks
+
+    func_name = func_type.replace("nan", "")  # bottleneck always ignores nans
+    if func_name not in ("sum", "mean", "median", "max"):
+        raise ValueError(f"func_type {func_type} not supported")
+
+    func = getattr(bn, f"move_{func_name}")
+
+    # Pad at the end so we can get a centered mean
+    r_pad = row_looks - row_looks // 2 - 1
+    c_pad = col_looks - col_looks // 2 - 1
+    # dont pad the earlier dimensions, just the last two we'll be multilooking
+    pad_widths = (arr.ndim - 2) * ((0, 0),) + ((0, r_pad), (0, c_pad))
+    arr0 = np.pad(arr, pad_width=pad_widths, mode="constant", constant_values=np.nan)
+    # bottleneck doesn't support multi-axis, so we have to do it in two steps:
+    # across cols
+    a1 = func(arr0, col_looks, axis=-1, min_count=1)[..., :, c_pad:]
+    # then rows
+    a2 = func(a1, row_looks, axis=-2, min_count=1)[..., r_pad:, :]
+    # note: if there are less than min_count non-nan values in the window, returns nan
+
+    # if we dont pad:
+    # return a2[..., (row_stride - 1) :: row_stride, (col_stride - 1) :: col_stride]
+    r_start = row_stride // 2
+    c_start = col_stride // 2
+    return a2[..., r_start::row_stride, c_start::col_stride]
 
 
 def iter_blocks(

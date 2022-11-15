@@ -8,7 +8,7 @@ from dolphin.phase_link.mle import (
     coh_mat,
     estimate_temp_coh,
     evd,
-    full_cov_multilooked,
+    full_cov,
     mle,
     mle_stack,
 )
@@ -58,7 +58,7 @@ def test_full_cov_cpu(shape=(10, 100, 100), looks=(5, 5)):
     expected_looked_size = tuple(floor(s / l) for s, l in zip((rows, cols), looks))
     assert C1.shape == (expected_looked_size + (num_slc, num_slc))
 
-    C1_cpu = full_cov_multilooked(slcs, looks)
+    C1_cpu = full_cov(slcs, looks)
     np.testing.assert_array_almost_equal(C1, C1_cpu)
 
     # Check the single pixel function
@@ -80,7 +80,7 @@ def test_full_cov_gpu(shape=(10, 100, 100), looks=(5, 5)):
     C1 = expected_full_cov(slcs, looks)
 
     d_slcs = cp.asarray(slcs)
-    C2_gpu = full_cov_multilooked(d_slcs, looks)
+    C2_gpu = full_cov(d_slcs, looks)
     np.testing.assert_array_almost_equal(C1, C2_gpu.get())
 
     # Set up the full res version using numba
@@ -110,8 +110,16 @@ def test_full_cov_nans(shape=(10, 100, 100), looks=(5, 5)):
     coh_mat(slc_samples_nan)
 
     # Nans for an entire SLC
+    # This should raise an error if we pass a dead SLC
     slc_stack_nan = slcs.copy()
     slc_stack_nan[1, :, :] = np.nan
+    slc_samples_nan = slc_stack_nan.reshape(num_slc, -1)
+    with pytest.raises(ZeroDivisionError):
+        coh_mat(slc_samples_nan)
+
+    # all nans should also raise an error
+    slc_stack_nan = slcs.copy()
+    slc_stack_nan[:, :, :] = np.nan
     slc_samples_nan = slc_stack_nan.reshape(num_slc, -1)
     with pytest.raises(ZeroDivisionError):
         coh_mat(slc_samples_nan)
@@ -124,7 +132,7 @@ def test_full_cov_nans_gpu(shape=(10, 100, 100), looks=(5, 5)):
     C1 = expected_full_cov(slcs, looks)
 
     d_slcs = cp.asarray(slcs)
-    C2_gpu = full_cov_multilooked(d_slcs, looks)
+    C2_gpu = full_cov(d_slcs, looks)
     np.testing.assert_array_almost_equal(C1, C2_gpu.get())
 
     # Set up the full res version using numba
@@ -207,7 +215,7 @@ def test_mask(slc_samples, C_truth):
     slc_stack_masked[:, mask] = np.nan
 
     # take_looks should ignore nans
-    C_full = full_cov_multilooked(slc_stack_masked, looks=(11, 11))
+    C_full = full_cov(slc_stack_masked, looks=(11, 11))
     np.testing.assert_array_almost_equal(np.squeeze(C_full), C_hat)
 
     est_multilooked = np.squeeze(mle_stack(C_full))

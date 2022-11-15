@@ -50,6 +50,38 @@ def test_take_looks():
     np.testing.assert_array_equal(downsampled, np.array([[0.055], [3.5]]))
 
 
+def test_take_looks_3d():
+    arr = np.array([[0.1, 0.01, 2], [3, 4, 1 + 1j]])
+    arr3d = np.stack([arr, arr, arr], axis=0)
+    downsampled = utils.take_looks(arr3d, 2, 1)
+    expected = np.array([[3.1, 4.01, 3.0 + 1.0j]])
+    for i in range(3):
+        np.testing.assert_array_equal(downsampled[i], expected)
+
+
+def test_take_looks_bn():
+    arr = np.arange(15**2).reshape(15, 15).astype(float)
+
+    looks = (5, 5)
+    a1 = utils.take_looks(arr, *looks, func_type="nanmean")
+    a2 = utils.take_looks_bn(arr, *looks, func_type="nanmean")
+    np.testing.assert_array_equal(a1, a2)
+
+    # Different sliding window
+    strides = (1, 1)
+    a2 = utils.take_looks_bn(arr, *looks, *strides, func_type="nanmean")
+    assert a2.shape == arr.shape
+    # to get the same result as normal take_looks, pick every `look`th element
+    a2_sub = a2[looks[0] // 2 :: looks[0], looks[1] // 2 :: looks[1]]
+    np.testing.assert_array_equal(a1, a2_sub)
+
+    # Test 3d
+    arr3d = np.stack([arr, arr, arr], axis=0)
+    a1 = utils.take_looks(arr3d, *looks, func_type="nanmean")
+    a2 = utils.take_looks_bn(arr3d, *looks, func_type="nanmean")
+    np.testing.assert_array_equal(a1, a2)
+
+
 def test_masked_looks(slc_samples):
     slc_stack = slc_samples.reshape(30, 11, 11)
     mask = np.zeros((11, 11), dtype=bool)

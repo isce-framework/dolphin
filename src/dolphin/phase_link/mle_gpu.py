@@ -1,15 +1,15 @@
 from cmath import isnan
 from cmath import sqrt as csqrt
 from math import ceil
-from typing import Tuple
+from typing import Optional, Tuple
 
 import cupy as cp
 import numpy as np
 from numba import cuda
 
-from dolphin.utils import half_window_to_full
+from dolphin.utils import Pathlike, half_window_to_full
 
-from .mle import estimate_temp_coh, full_cov_multilooked, mle_stack
+from .mle import estimate_temp_coh, full_cov, mle_stack
 
 # TODO: make a version which has the same API as the CPU
 
@@ -21,7 +21,7 @@ def run_mle_gpu(
     reference_idx: int = 0,
     mask: np.ndarray = None,
     ps_mask: np.ndarray = None,
-    output_cov_file: str = None,
+    output_cov_file: Optional[Pathlike] = None,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """Estimate the linked phase for a stack using the MLE estimator.
 
@@ -67,7 +67,11 @@ def run_mle_gpu(
         ps_mask = np.zeros((rows, cols), dtype=bool)
     else:
         ps_mask = ps_mask.astype(bool)
-    ignore_mask = np.logical_or(mask, ps_mask)
+    _check_all_nans(slc_stack)
+
+    # TODO: Any other masks we need?
+    ignore_mask = np.logical_or.reduce((mask, ps_mask))
+
     # Make a copy, and set the masked pixels to np.nan
     slc_stack_copy = slc_stack.copy()
     slc_stack_copy[:, ignore_mask] = np.nan
@@ -160,9 +164,17 @@ def coh_mat(samples_stack, cov_mat):
                     a1 += s1 * s1.conjugate()
                     a2 += s2 * s2.conjugate()
 
-            c = numer / csqrt(a1 * a2)
-            cov_mat[i_slc, j_slc] = c
-            cov_mat[j_slc, i_slc] = c.conjugate()
+            aprod = a1 * a2
+            # If one window is all NaNs, skip
+            if isnan(aprod) or abs(aprod) < 1e-6:
+                # TODO: advantage of using nan here?
+                # Seems like using 0 will ignore it in the estimation
+                # cov_mat[i_slc, j_slc] = cov_mat[j_slc, i_slc] = np.nan
+                cov_mat[i_slc, j_slc] = cov_mat[j_slc, i_slc] = 0
+            else:
+                c = numer / csqrt(aprod)
+                cov_mat[i_slc, j_slc] = c
+                cov_mat[j_slc, i_slc] = c.conjugate()
         cov_mat[i_slc, i_slc] = 1.0
 
 
@@ -170,7 +182,7 @@ def run_mle_multilooked_gpu(
     slc_stack: np.ndarray,
     half_window: Tuple[int, int],
     beta: float = 0.0,
-    output_cov_file: str = None,
+    output_cov_file: Optional[Pathlike] = None,
     reference_idx: int = 0,
 ):
     """Estimate a down-sampled version of the linked phase using the MLE estimator."""
@@ -180,9 +192,10 @@ def run_mle_multilooked_gpu(
     looks = (window[1], window[0])
 
     # Get the covariance at each pixel on the GPU
-    d_C_arrays = full_cov_multilooked(d_slc_stack, looks)
+    d_C_arrays = full_cov(d_slc_stack, looks)
 
     if output_cov_file:
+        # TODO: save the covariance matrix as uint8 for space
         # Copy back to the host
         # _save_covariance(d_C_arrays, output_cov_file)
         pass
@@ -193,6 +206,15 @@ def run_mle_multilooked_gpu(
     # Get the temporal coherence
     d_temp_coh = estimate_temp_coh(d_cpx_phase, d_C_arrays)
     return d_cpx_phase.get(), d_temp_coh.get()
+
+
+def _check_all_nans(slc_stack):
+    """Check for all NaNs in each SLC of the stack."""
+    nans = np.isnan(slc_stack)
+    # Check that there are no SLCS which are all nans:
+    bad_slc_idxs = np.where(np.all(nans, axis=(1, 2)))
+    if bad_slc_idxs.size > 0:
+        raise ValueError(f"SLC stack[{bad_slc_idxs}] has are all NaNs.")
 
 
 # def run(
