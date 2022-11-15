@@ -2,6 +2,7 @@ import numpy as np
 import pytest
 from osgeo import gdal
 
+from dolphin.io import load_gdal, save_arr_like
 from dolphin.phase_link import simulate
 
 simulate.seed(1234)
@@ -103,3 +104,28 @@ def tiled_file_list(tiled_raster_100_by_200):
     outname3 = tmp_path / "20220103test.tif"
     gdal.Translate(str(outname3), str(tiled_raster_100_by_200))
     return [tiled_raster_100_by_200, outname2, outname3]
+
+
+@pytest.fixture
+def raster_with_nan(tmpdir, tiled_raster_100_by_200):
+    # Raster with one nan pixel
+    start_arr = load_gdal(tiled_raster_100_by_200)
+    nan_arr = start_arr.copy()
+    nan_arr[0, 0] = np.nan
+    output_name = tmpdir / "with_nans.tif"
+    save_arr_like(
+        arr=nan_arr, like_filename=tiled_raster_100_by_200, output_name=output_name
+    )
+    return output_name
+
+
+@pytest.fixture
+def raster_with_nan_block(tmpdir, tiled_raster_100_by_200):
+    # One full block of 32x32 is nan
+    output_name = tmpdir / "with_nans.tif"
+    nan_arr = load_gdal(tiled_raster_100_by_200)
+    nan_arr[:32, :32] = np.nan
+    save_arr_like(
+        arr=nan_arr, like_filename=tiled_raster_100_by_200, output_name=output_name
+    )
+    return output_name

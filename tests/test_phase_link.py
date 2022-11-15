@@ -1,4 +1,4 @@
-from math import ceil
+from math import ceil, floor
 
 import numpy as np
 import pytest
@@ -37,7 +37,8 @@ def form_cov(slc1, slc2, looks):
     return num / np.sqrt(a1 * a2)
 
 
-def full_cov(slcs, looks):
+def expected_full_cov(slcs, looks):
+    # Manually (slowly) form the covariance matrix to compare to functions
     N = slcs.shape[0]
     rows, cols = take_looks(slcs[0], *looks).shape
     out = np.zeros((rows, cols, N, N), dtype=np.complex64)
@@ -49,21 +50,34 @@ def full_cov(slcs, looks):
     return out
 
 
-def test_full_cov(shape=(10, 100, 100), looks=(5, 5)):
-    # import time
-
+def test_full_cov_cpu(shape=(10, 100, 100), looks=(5, 5)):
+    # def test_full_cov_cpu(shape=(10, 5, 5), looks=(5, 5)):
     num_slc, rows, cols = shape
     slcs = np.random.rand(*shape) + 1j * np.random.rand(*shape)
-    # t0 = time.time()
-    C1 = full_cov(slcs, looks)
-    # t1 = time.time()
-    C2_cpu = full_cov_multilooked(slcs, looks)
-    # t2 = time.time()
-    # print(f"CPU: {t1 - t0:.2f}, GPU: {t2 - t1:.2f} seconds")
-    np.testing.assert_array_almost_equal(C1, C2_cpu)
+    C1 = expected_full_cov(slcs, looks)
+    expected_looked_size = tuple(floor(s / l) for s, l in zip((rows, cols), looks))
+    assert C1.shape == (expected_looked_size + (num_slc, num_slc))
 
-    if not GPU_AVAILABLE:
-        pytest.skip("GPU version not available")
+    C1_cpu = full_cov_multilooked(slcs, looks)
+    np.testing.assert_array_almost_equal(C1, C1_cpu)
+
+    # Check the single pixel function
+    rlooks, clooks = looks
+    for r in range(expected_looked_size[0]):
+        for c in range(expected_looked_size[1]):
+            rslice = slice(r * rlooks, (r + 1) * rlooks)
+            cslice = slice(c * clooks, (c + 1) * clooks)
+            cur_samples = slcs[:, rslice, cslice].reshape(num_slc, -1)
+            cur_C = coh_mat(cur_samples)
+            np.testing.assert_array_almost_equal(C1[r, c, :, :], cur_C)
+
+
+@pytest.mark.skipif(not GPU_AVAILABLE, reason="GPU not available")
+def test_full_cov_gpu(shape=(10, 100, 100), looks=(5, 5)):
+    num_slc, rows, cols = shape
+    slcs = np.random.rand(*shape) + 1j * np.random.rand(*shape)
+    # Get the CPU version for comparison
+    C1 = expected_full_cov(slcs, looks)
 
     d_slcs = cp.asarray(slcs)
     C2_gpu = full_cov_multilooked(d_slcs, looks)
@@ -83,6 +97,50 @@ def test_full_cov(shape=(10, 100, 100), looks=(5, 5)):
     C3_sub = C3[2 : -2 : looks[0], 2 : -2 : looks[0]]
     assert C3_sub.shape == C1.shape
     np.testing.assert_array_almost_equal(C1, C3_sub)
+
+
+def test_full_cov_nans(shape=(10, 100, 100), looks=(5, 5)):
+    slcs = np.random.rand(*shape) + 1j * np.random.rand(*shape)
+
+    # Nans for one pixel in all SLCs
+    num_slc, _, _ = shape
+    slc_stack_nan = slcs.copy()
+    slc_stack_nan[:, 1, 1] = np.nan
+    slc_samples_nan = slc_stack_nan.reshape(num_slc, -1)
+    coh_mat(slc_samples_nan)
+
+    # Nans for an entire SLC
+    slc_stack_nan = slcs.copy()
+    slc_stack_nan[1, :, :] = np.nan
+    slc_samples_nan = slc_stack_nan.reshape(num_slc, -1)
+    with pytest.raises(ZeroDivisionError):
+        coh_mat(slc_samples_nan)
+
+
+@pytest.mark.skipif(not GPU_AVAILABLE, reason="GPU not available")
+def test_full_cov_nans_gpu(shape=(10, 100, 100), looks=(5, 5)):
+    slcs = np.random.rand(*shape) + 1j * np.random.rand(*shape)
+    # Get the CPU version for comparison
+    C1 = expected_full_cov(slcs, looks)
+
+    d_slcs = cp.asarray(slcs)
+    C2_gpu = full_cov_multilooked(d_slcs, looks)
+    np.testing.assert_array_almost_equal(C1, C2_gpu.get())
+
+    # Set up the full res version using numba
+    num_slc, rows, cols = shape
+    d_C3 = cp.zeros((rows, cols, num_slc, num_slc), dtype=np.complex64)
+    threads_per_block = (16, 16)
+    blocks_x = ceil(shape[1] / threads_per_block[0])
+    blocks_y = ceil(shape[2] / threads_per_block[1])
+    blocks = (blocks_x, blocks_y)
+
+    half_window = (looks[1] // 2, looks[0] // 2)
+    mle_gpu.estimate_c_gpu[blocks, threads_per_block](d_slcs, half_window, d_C3)
+    C3 = d_C3.get()
+    assert C3.shape == (rows, cols, num_slc, num_slc)
+    C3_sub = C3[2 : -2 : looks[0], 2 : -2 : looks[0]]
+    assert C3_sub.shape == C1.shape
 
 
 # CPU versions of the MLE and EVD estimates
@@ -110,7 +168,6 @@ def test_estimation(C_truth, est_mle_cpu, est_evd_cpu):
     assert np.degrees(simulate.rmse(truth, est_mle_cpu)) < err_deg
 
 
-# @pytest.mark.skip
 @pytest.mark.skipif(not GPU_AVAILABLE, reason="GPU not available")
 def test_estimation_gpu(slc_samples, est_mle_cpu):
     # Get the GPU version
@@ -163,7 +220,7 @@ def test_mask(slc_samples, C_truth):
 
 def test_temp_coh():
     sigmas = [0.01, 0.1, 1, 10]
-    expected_tcoh_bounds = [(0.99, 1), (0.9, 0.99), (0.3, 0.5), (0.0, 0.3)]
+    expected_tcoh_bounds = [(0.99, 1), (0.9, 1.0), (0.3, 0.5), (0.0, 0.3)]
     out_tc = []
     out_C = []
     out_truth = []
