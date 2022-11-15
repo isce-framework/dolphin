@@ -113,17 +113,7 @@ def run(full_cfg: dict):
     if compressed_slc_file.exists():
         logger.info(f"Skipping making existing EVD file {compressed_slc_file}")
     else:
-        # logger.info(f"Making EVD file {compressed_slc_file}")
-        # phase_link.run_evd(
-        #     slc_vrt_file=slc_vrt_file,
-        #     weight_file=weight_file,
-        #     compressed_slc_file=compressed_slc_file,
-        #     output_folder=pl_path,
-        #     window=cfg["window"],
-        #     pl_opts=cfg["phase_linking"],
-        #     lines_per_block=cfg["lines_per_block"],
-        #     ram=cfg["ram"],
-        # )
+        logger.info(f"Running sequential EMI step in {pl_path}")
         sequential.run_evd_sequential(
             slc_vrt_file=slc_vrt_file,
             # weight_file: Pathlike,
