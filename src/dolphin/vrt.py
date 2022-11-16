@@ -6,7 +6,7 @@ from typing import Optional, Sequence, Tuple
 
 from osgeo import gdal
 
-from dolphin import utils
+from dolphin import io, utils
 from dolphin.log import get_log
 from dolphin.utils import Pathlike, get_raster_xysize
 
@@ -40,6 +40,8 @@ class VRTStack:
     sort_files : bool, optional (default = True)
         Sort the files in `file_list`. Assumes that the naming convention
         will sort the files in increasing time order.
+    nodata_mask_file : pathlib.Path, optional
+        Path to a file containing a mask of pixels containing nodata in all images.
     """
 
     def __init__(
@@ -64,6 +66,9 @@ class VRTStack:
             file_list = [Path(f).resolve() for f in file_list]
         self.file_list = file_list
         self.outfile = Path(outfile).resolve()
+        self.nodata_mask_file = (
+            self.outfile.parent / f"{self.outfile.stem}_nodata_mask.tif"
+        )
 
         # Use the first file in the stack to get size, transform info
         ds = gdal.Open(fspath(file_list[0]))
@@ -146,13 +151,10 @@ class VRTStack:
         if not self.outfile.exists():
             self.write()
 
-    def read_stack(self):
+    def read_stack(self, band: Optional[int] = None, subsample_factor: int = 1):
         """Read in the SLC stack."""
         self._check_exists()
-        ds = gdal.Open(fspath(self.outfile))
-        stack = ds.ReadAsArray()
-        ds = None
-        return stack
+        return io.load_gdal(self.outfile, band=band, subsample_factor=subsample_factor)
 
     def __fspath__(self):
         # Allows os.fspath() to work on the object, enabling rasterio.open()
@@ -286,6 +288,7 @@ class VRTStack:
         return_slices: bool = False,
         skip_empty: bool = True,
         nodata: float = nan,
+        use_nodata_mask: bool = True,
     ):
         """Iterate over blocks of the stack.
 
@@ -313,6 +316,9 @@ class VRTStack:
         nodata : float, optional (default np.nan)
             Value to use for nodata to determine if a block is empty.
             Not used if `skip_empty` is False.
+        use_nodata_mask : bool, optional (default True)
+            Use the nodata mask to determine if a block is empty.
+            Not used if `skip_empty` is False.
 
         Yields
         ------
@@ -322,6 +328,9 @@ class VRTStack:
         self._check_exists()
         if block_shape is None:
             block_shape = self._get_block_shape(max_bytes=max_bytes)
+            nodata_mask = None
+        if skip_empty and use_nodata_mask:
+            nodata_mask = io.get_stack_nodata_mask(self.outfile, nodata=nodata)
         yield from utils.iter_blocks(
             self.outfile,
             block_shape=block_shape,
@@ -330,6 +339,7 @@ class VRTStack:
             return_slices=return_slices,
             skip_empty=skip_empty,
             nodata=nodata,
+            nodata_mask=nodata_mask,
         )
 
     def _get_block_shape(self, max_bytes=DEFAULT_BLOCK_BYTES):
@@ -364,6 +374,17 @@ class VRTStack:
                 )
             )
         )
+
+    def _get_nodata_mask(self, nodata=nan, buffer_pixels=100):
+        if self.nodata_mask_file.exists():
+            return io.load_gdal(self.nodata_mask_file)
+        else:
+            return io.get_stack_nodata_mask(
+                self.outfile,
+                output_file=self.nodata_mask_file,
+                nodata=nodata,
+                buffer_pixels=buffer_pixels,
+            )
 
     @staticmethod
     def _get_non_vrt_file(filename: Pathlike):

@@ -88,7 +88,7 @@ def run_evd_sequential(
 
         # Create the empty compressed SLC file
         cur_comp_slc_file = cur_output_folder / f"compressed_{start_end}.tif"
-        io.save_arr_like(
+        io.save_arr(
             arr=None,
             like_filename=cur_vrt.outfile,
             output_name=cur_comp_slc_file,
@@ -98,7 +98,7 @@ def run_evd_sequential(
 
         # Create the empty compressed temporal coherence file
         tcorr_file = cur_output_folder / f"tcorr_{start_end}.tif"
-        io.save_arr_like(
+        io.save_arr(
             arr=None,
             like_filename=cur_vrt.outfile,
             output_name=tcorr_file,

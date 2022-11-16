@@ -3,7 +3,7 @@ import datetime
 import re
 from os import PathLike, fspath
 from pathlib import Path
-from typing import List, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
 import numpy as np
 from osgeo import gdal, gdal_array, gdalconst
@@ -302,6 +302,7 @@ def iter_blocks(
     return_slices: bool = False,
     skip_empty: bool = True,
     nodata: float = np.nan,
+    nodata_mask: Optional[np.ndarray] = None,
 ):
     """Read blocks of a raster as a generator.
 
@@ -325,6 +326,10 @@ def iter_blocks(
     nodata : float, optional (default np.nan)
         Value to use for nodata to determine if a block is empty.
         Not used if `skip_empty` is False.
+    nodata_mask : ndarray, optional
+        A boolean mask of the same shape as the raster, where True indicates
+        nodata. Ignored if `skip_empty` is False.
+        If provided, `nodata` is ignored.
 
     Yields
     ------
@@ -363,11 +368,13 @@ def iter_blocks(
             ysize,
         )
         if skip_empty:
-            if np.isnan(nodata):
-                nodata_mask = np.isnan(cur_block)
+            if nodata_mask is not None:
+                cur_mask = nodata_mask[rows, cols]
+            elif np.isnan(nodata):
+                cur_mask = np.isnan(cur_block)
             else:
-                nodata_mask = cur_block == nodata
-            if np.all(nodata_mask):
+                cur_mask = cur_block == nodata
+            if np.all(cur_mask):
                 continue
 
         if return_slices:
