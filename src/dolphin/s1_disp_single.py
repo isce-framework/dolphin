@@ -6,18 +6,19 @@ from pathlib import Path
 from dolphin import combine_ps_ds, phase_link, ps, unwrap, utils, vrt
 from dolphin.log import get_log, log_runtime
 
-logger = get_log()
-
 
 @log_runtime
-def run(full_cfg: dict):
+def run(full_cfg: dict, debug: bool = False):
     """Run the displacement workflow on one incremental SLC.
 
     Parameters
     ----------
     full_cfg : dict
         Loaded configuration from YAML workflow file.
+    debug : bool, optional
+        Enable debug logging, by default False.
     """
+    logger = get_log(debug=debug)
     cfg = full_cfg["processing"]
     output_dir = Path(full_cfg["product_path_group"]["product_path"]).absolute()
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -43,15 +44,13 @@ def run(full_cfg: dict):
 
     # 0. Make a VRT pointing to the input SLC files
     slc_vrt_file = scratch_dir / "slc_stack.vrt"
+    vrt_stack = vrt.VRTStack(input_file_list, outfile=slc_vrt_file)
 
     if slc_vrt_file.exists():
         logger.info(f"Skipping creating VRT to SLC stack {slc_vrt_file}")
     else:
         logger.info(f"Creating VRT to SLC stack file {slc_vrt_file}")
-        vrt.create_stack(
-            file_list=input_file_list,
-            outfile=slc_vrt_file,
-        )
+        vrt_stack.write()
 
     # 1. First make the amplitude dispersion file
     ps_path = scratch_dir / cfg["ps"]["directory"]
@@ -83,19 +82,25 @@ def run(full_cfg: dict):
     nmap_path = scratch_dir / cfg["nmap"]["directory"]
     nmap_path.mkdir(parents=True, exist_ok=True)
     # Make the dummy nmap/count files
-    # TODO: is there ever a time where we'll run a SHP finder on just a subset?
-    ysize, xsize = utils.get_raster_xysize(amp_disp_file)
-    weight_filename = nmap_path / cfg["weight_file"]
-    count_filename = nmap_path / cfg["nmap_count_file"]
-    phase_link.create_full_nmap_files(
-        xsize,
-        ysize,
-        cfg["half_window_x"],
-        cfg["half_window_y"],
-        output_dir=nmap_path,
-        nmap_filename=weight_filename,
-        count_filename=count_filename,
-    )
+    weight_file = nmap_path / cfg["weight_file"]
+    nmap_count_file = nmap_path / cfg["nmap_count_file"]
+    if weight_file.exists():
+        logger.info(f"Skipping making existing NMAP file {weight_file}")
+    else:
+        phase_link.run_nmap(
+            # TODO: Will we do SHP finding for the incremental update?
+            skip_shp=True,
+            # skip_shp=cfg["nmap"]["skip_shp"],
+            slc_vrt_file=slc_vrt_file,
+            weight_file=weight_file,
+            count_file=nmap_count_file,
+            window=cfg["window"],
+            nmap_opts=cfg["nmap"],
+            lines_per_block=cfg["lines_per_block"],
+            ram=cfg["ram"],
+            # no_gpu=not gpu_enabled,
+            # mask_file=cfg["mask_file"], # TODO : add mask file if needed
+        )
 
     # 4. phase linking/EVD step
     pl_path = scratch_dir / cfg["phase_linking"]["directory"]
@@ -108,7 +113,7 @@ def run(full_cfg: dict):
         logger.info(f"Making EVD file {compressed_slc_file}")
         phase_link.run_evd(
             slc_vrt_file=slc_vrt_file,
-            weight_file=nmap_path / weight_filename,
+            weight_file=weight_file,
             compressed_slc_file=compressed_slc_file,
             output_folder=pl_path,
             window=cfg["window"],

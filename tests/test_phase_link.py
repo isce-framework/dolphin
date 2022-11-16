@@ -130,27 +130,31 @@ def test_full_cov_nans(shape=(10, 100, 100), looks=(5, 5)):
 @pytest.mark.skipif(not GPU_AVAILABLE, reason="GPU not available")
 def test_full_cov_nans_gpu(shape=(10, 100, 100), looks=(5, 5)):
     slcs = np.random.rand(*shape) + 1j * np.random.rand(*shape)
-    # Get the CPU version for comparison
-    C1 = expected_full_cov(slcs, looks)
-
-    d_slcs = cp.asarray(slcs)
-    C2_gpu = full_cov(d_slcs, looks)
-    np.testing.assert_array_almost_equal(C1, C2_gpu.get())
 
     # Set up the full res version using numba
     num_slc, rows, cols = shape
-    d_C3 = cp.zeros((rows, cols, num_slc, num_slc), dtype=np.complex64)
     threads_per_block = (16, 16)
     blocks_x = ceil(shape[1] / threads_per_block[0])
     blocks_y = ceil(shape[2] / threads_per_block[1])
     blocks = (blocks_x, blocks_y)
+    d_slcs = cp.asarray(slcs)
+    d_C = cp.zeros((rows, cols, num_slc, num_slc), dtype=np.complex64)
 
     half_window = (looks[1] // 2, looks[0] // 2)
-    mle_gpu.estimate_c_gpu[blocks, threads_per_block](d_slcs, half_window, d_C3)
-    C3 = d_C3.get()
-    assert C3.shape == (rows, cols, num_slc, num_slc)
-    C3_sub = C3[2 : -2 : looks[0], 2 : -2 : looks[0]]
-    assert C3_sub.shape == C1.shape
+    mle_gpu.estimate_c_gpu[blocks, threads_per_block](d_slcs, half_window, d_C)
+    C_nonan = d_C.get()
+
+    slcs_nan = slcs.copy()
+    slcs_nan[:, 20, 20] = np.nan
+    d_slcs_nan = cp.asarray(slcs_nan)
+    d_C_nan = cp.zeros((rows, cols, num_slc, num_slc), dtype=np.complex64)
+    mle_gpu.estimate_c_gpu[blocks, threads_per_block](d_slcs_nan, half_window, d_C_nan)
+    C_nan = d_C_nan.get()
+
+    # Make sure it doesn't affect pixels far away
+    assert np.abs(C_nonan[5, 5] - C_nan[5, 5]).max() < 1e-6
+    # Should still be close to the non-nan version
+    assert np.max(np.abs(C_nonan - C_nan)) < 0.10
 
 
 # CPU versions of the MLE and EVD estimates

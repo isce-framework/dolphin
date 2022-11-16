@@ -6,18 +6,19 @@ from pathlib import Path
 from dolphin import combine_ps_ds, phase_link, ps, sequential, unwrap, utils, vrt
 from dolphin.log import get_log, log_runtime
 
-logger = get_log(debug=True)
-
 
 @log_runtime
-def run(full_cfg: dict):
+def run(full_cfg: dict, debug: bool = False):
     """Run the displacement workflow on a stack of SLCs.
 
     Parameters
     ----------
     full_cfg : dict
         Loaded configuration from YAML workflow file.
+    debug : bool, optional
+        Enable debug logging, by default False.
     """
+    logger = get_log(debug=debug)
     cfg = full_cfg["processing"]
     output_dir = Path(full_cfg["product_path_group"]["product_path"]).absolute()
     output_dir.mkdir(parents=True, exist_ok=True)

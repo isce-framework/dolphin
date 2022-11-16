@@ -3,13 +3,11 @@ import argparse
 from pathlib import Path
 
 from dolphin import config
-from dolphin.log import get_log, log_runtime
-
-logger = get_log()
+from dolphin.log import log_runtime
 
 
 @log_runtime
-def run(config_file: str, name: str = "stack"):
+def run(config_file: str, name: str = "stack", debug: bool = False):
     """Run the displacement workflow.
 
     Parameters
@@ -18,6 +16,8 @@ def run(config_file: str, name: str = "stack"):
         YAML file containing the workflow options.
     name : str, choices = ["single", "stack"]
         Name of the workflow to run.
+    debug : bool, optional
+        Enable debug logging, by default False.
     """
     cfg = config.load_workflow_yaml(config_file, workflow_name=f"s1_disp_{name}")
     cfg_path = Path(config_file)
@@ -26,11 +26,11 @@ def run(config_file: str, name: str = "stack"):
     if name == "single":
         from dolphin import s1_disp_single
 
-        s1_disp_single.run(cfg["runconfig"]["groups"])
+        s1_disp_single.run(cfg["runconfig"]["groups"], debug=debug)
     elif name == "stack":
         from dolphin import s1_disp_stack
 
-        s1_disp_stack.run(cfg["runconfig"]["groups"])
+        s1_disp_stack.run(cfg["runconfig"]["groups"], debug=debug)
 
 
 def get_cli_args():
@@ -50,6 +50,11 @@ def get_cli_args():
         choices=["single", "stack"],
         help="Name workflow to run.",
     )
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Print debug messages to the log.",
+    )
     args = parser.parse_args()
     return args
 
@@ -57,7 +62,7 @@ def get_cli_args():
 def main():
     """Get the command line arguments and run the workflow."""
     args = get_cli_args()
-    run(args.config_file, name=args.name)
+    run(args.config_file, name=args.name, debug=args.debug)
 
 
 if __name__ == "__main__":
