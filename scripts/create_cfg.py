@@ -1,18 +1,19 @@
 #!/usr/bin/env python
+from typing import Optional
+
 import fire
 
 
 def fill_cfg(
     slc_file_path,
-    slc_file_ext: str = ".slc",
-    num_slcs: int = 5,
+    slc_file_ext: str = ".tif",
     output: str = "runconfig.yaml",
     scratch_path: str = "scratch",
-    xhalf: int = None,
-    yhalf: int = None,
-    amp_disp_thresh: float = None,
-    pl_method: str = None,
-    nmap_pvalue: float = None,
+    xhalf: Optional[int] = None,
+    yhalf: Optional[int] = None,
+    amp_disp_thresh: Optional[float] = None,
+    pl_method: Optional[str] = None,
+    nmap_pvalue: Optional[float] = None,
 ):
     """Create a runconfig.yaml file for the disp_s1_workflow.
 

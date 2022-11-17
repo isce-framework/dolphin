@@ -28,6 +28,8 @@ class VRTStack:
         Names of files to stack
     outfile : pathlib.Path, optional (default = Path("slc_stack.vrt"))
         Name of output file to write
+    dates : list[datetime.date]
+        List of datetimes matched from the files in file_list
     use_abs_path : bool, optional (default = True)
         Write the filepaths of the SLCs in the VRT as "relative=0"
     pixel_bbox : tuple[int], optional
@@ -53,6 +55,7 @@ class VRTStack:
         target_extent: Optional[Tuple[float, float, float, float]] = None,
         latlon_bbox: Optional[Tuple[float, float, float, float]] = None,
         sort_files: bool = True,
+        file_date_fmt: str = "%Y%m%d",
     ):
         """Initialize a VRTStack object for a list of files, optionally subsetting."""
         if sort_files:
@@ -66,9 +69,15 @@ class VRTStack:
             file_list = [Path(f).resolve() for f in file_list]
         self.file_list = file_list
         self.outfile = Path(outfile).resolve()
+        self.nodata_value = io.get_nodata(file_list[0]) or nan
         self.nodata_mask_file = (
             self.outfile.parent / f"{self.outfile.stem}_nodata_mask.tif"
         )
+
+        # Extract the date/datetimes from the filenames
+        self.dates = [
+            utils.parse_slc_strings(f, fmt=file_date_fmt) for f in self.file_list
+        ]
 
         # Use the first file in the stack to get size, transform info
         ds = gdal.Open(fspath(file_list[0]))
@@ -106,9 +115,11 @@ class VRTStack:
                 f' rasterYSize="{self.ysize_sub}">\n'
             )
 
-            for idx, filename in enumerate(self.file_list, start=1):
+            for idx, (filename, date) in enumerate(
+                zip(self.file_list, self.dates), start=1
+            ):
                 filename = str(Path(filename).resolve())
-                date = utils.get_dates(filename)[0]
+                date_str = date.strftime("%Y%m%d")
 
                 block_size = utils.get_block_size(filename)
                 # blocks in a vrt have a min of 16, max of 2**14=16384
@@ -129,7 +140,7 @@ class VRTStack:
       <DstRect xOff="0" yOff="0" xSize="{self.xsize_sub}" ySize="{self.ysize_sub}"/>
     </SimpleSource>
     <Metadata domain="slc">
-      <MDI key="Date">{date}</MDI>
+      <MDI key="Date">{date_str}</MDI>
       <MDI key="Wavelength">{SENTINEL_WAVELENGTH}</MDI>
       <MDI key="AcquisitionTime">{date}</MDI>
     </Metadata>
@@ -163,6 +174,9 @@ class VRTStack:
     def add_file(self, new_file):
         """Add a new file to the stack and re-sort."""
         self.file_list = sorted(self.file_list + [new_file])
+
+    def get_stemless_file_list(self):
+        return [str(f).replace(utils.full_suffix(f), "") for f in self.file_list]
 
     def set_subset(
         self, pixel_bbox=None, target_extent=None, latlon_bbox=None, filename=None
@@ -328,9 +342,10 @@ class VRTStack:
         self._check_exists()
         if block_shape is None:
             block_shape = self._get_block_shape(max_bytes=max_bytes)
-            nodata_mask = None
+        ndm = None
         if skip_empty and use_nodata_mask:
-            nodata_mask = io.get_stack_nodata_mask(self.outfile, nodata=nodata)
+            ndm = self._get_nodata_mask(nodata=self.nodata_value, buffer_pixels=100)
+
         yield from utils.iter_blocks(
             self.outfile,
             block_shape=block_shape,
@@ -338,8 +353,8 @@ class VRTStack:
             start_offsets=start_offsets,
             return_slices=return_slices,
             skip_empty=skip_empty,
-            nodata=nodata,
-            nodata_mask=nodata_mask,
+            nodata=self.nodata_value,
+            nodata_mask=ndm,
         )
 
     def _get_block_shape(self, max_bytes=DEFAULT_BLOCK_BYTES):

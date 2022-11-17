@@ -7,7 +7,6 @@ from osgeo import gdal
 
 from dolphin.log import get_log
 from dolphin.utils import Pathlike, gdal_to_numpy_type, numpy_to_gdal_type
-from dolphin.vrt import VRTStack
 
 gdal.UseExceptions()
 logger = get_log()
@@ -88,6 +87,24 @@ def copy_projection(src_file: Pathlike, dst_file: Pathlike) -> None:
         ds_dst.GetRasterBand(1).SetNoDataValue(nodata)
 
     ds_src = ds_dst = None
+
+
+def get_nodata(filename: Pathlike) -> Optional[float]:
+    """Get the nodata value from a file.
+
+    Parameters
+    ----------
+    filename : Pathlike
+        Path to the file to load.
+
+    Returns
+    -------
+    Optional[float]
+        Nodata value, or None if not found.
+    """
+    ds = gdal.Open(fspath(filename))
+    nodata = ds.GetRasterBand(1).GetNoDataValue()
+    return nodata
 
 
 def save_arr(
@@ -180,7 +197,7 @@ def save_arr(
 
 
 def setup_output_folder(
-    vrt_stack: VRTStack,
+    vrt_stack,
     driver: str = "GTiff",
     dtype="complex64",
     start_idx: int = 0,
@@ -214,7 +231,9 @@ def setup_output_folder(
     output_folder = vrt_stack.outfile.parent
 
     output_files = []
-    for filename in vrt_stack.file_list[start_idx:]:
+    file_list_nostems = vrt_stack.get_stemless_file_list()
+
+    for filename in file_list_nostems[start_idx:]:
         slc_name = Path(filename).stem
         # TODO: get extension from cfg
         output_path = output_folder / f"{slc_name}.slc.tif"
@@ -309,8 +328,8 @@ def get_stack_nodata_mask(
     ds = gdal.Open(fspath(stack_filename))
     if compute_bands is None:
         count = ds.RasterCount
-        # Get the first, middle, and last file
-        compute_bands = list(sorted(set([1, count // 2, count])))
+        # Get the first and last file
+        compute_bands = list(sorted(set([1, count])))
 
     # Start with ones, then only keep pixels that are nodata
     # in all the bands we check (reducing using logical_and)

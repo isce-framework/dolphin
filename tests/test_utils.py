@@ -1,7 +1,7 @@
+import datetime
 from pathlib import Path
 
 import numpy as np
-import pytest
 
 from dolphin import utils
 from dolphin.io import load_gdal
@@ -20,8 +20,20 @@ def test_get_dates():
         "/usr/19990101/20200303_20210101.int"
     )
 
-    with pytest.raises(ValueError):
-        utils.get_dates("/usr/19990101/notadate.tif")
+    assert utils.get_dates("/usr/19990101/notadate.tif") is None
+
+
+def test_parse_slc_strings():
+    dt = datetime.date(2020, 3, 3)
+    assert utils.parse_slc_strings(Path("/usr/19990101/asdf20200303.tif")) == dt
+    assert utils.parse_slc_strings("/usr/19990101/asdf20200303.tif") == dt
+    assert utils.parse_slc_strings("20200303.tif") == dt
+    assert utils.parse_slc_strings("20200303") == dt
+    assert utils.parse_slc_strings("20200303.slc") == dt
+
+    assert utils.parse_slc_strings(["20200303.slc", "20200303.tif"]) == [dt, dt]
+
+    assert utils.parse_slc_strings("notadate.slc") is None
 
 
 def test_get_types():
@@ -134,7 +146,7 @@ def test_get_raster_block_sizes(raster_100_by_200, tiled_raster_100_by_200):
     assert bs == (64, 200)
 
 
-def test_iterate_blocks(tiled_raster_100_by_200):
+def test_iter_blocks(tiled_raster_100_by_200):
     # Try the whole raster
     bs = utils.get_max_block_shape(tiled_raster_100_by_200, 1, max_bytes=1e9)
     blocks = list(utils.iter_blocks(tiled_raster_100_by_200, bs, band=1))
@@ -155,7 +167,7 @@ def test_iterate_blocks(tiled_raster_100_by_200):
     assert blocks[-1].shape == (4, 8)
 
 
-def test_iterate_nodata(
+def test_iter_nodata(
     raster_with_nan,
     raster_with_nan_block,
     raster_with_zero_block,
@@ -188,5 +200,35 @@ def test_iterate_nodata(
     # Now check entire block for a skipped block
     blocks = list(
         utils.iter_blocks(raster_with_zero_block, bs, band=1, skip_empty=True, nodata=0)
+    )
+    assert len(blocks) == expected_num_blocks - 1
+
+
+def test_iter_blocks_nodata_mask(tiled_raster_100_by_200):
+    # load one block at a time
+    max_bytes = 8 * 32 * 32
+    bs = utils.get_max_block_shape(tiled_raster_100_by_200, 1, max_bytes=max_bytes)
+    blocks = list(utils.iter_blocks(tiled_raster_100_by_200, bs, band=1))
+    row_blocks = 100 // 32 + 1
+    col_blocks = 200 // 32 + 1
+    expected_num_blocks = row_blocks * col_blocks
+    assert len(blocks) == expected_num_blocks
+
+    nodata_mask = np.zeros((100, 200), dtype=np.bool)
+    nodata_mask[:5, :5] = True
+    # non-full-block should still all be loaded nan should be fine, will get loaded
+    blocks = list(
+        utils.iter_blocks(
+            tiled_raster_100_by_200, bs, skip_empty=True, nodata_mask=nodata_mask
+        )
+    )
+    assert len(blocks) == expected_num_blocks
+
+    nodata_mask[:32, :32] = True
+    # non-full-block should still all be loaded nan should be fine, will get loaded
+    blocks = list(
+        utils.iter_blocks(
+            tiled_raster_100_by_200, bs, skip_empty=True, nodata_mask=nodata_mask
+        )
     )
     assert len(blocks) == expected_num_blocks - 1

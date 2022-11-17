@@ -44,6 +44,23 @@ def test_sort_order(slc_file_list):
     assert vrt_stack.file_list == [Path(f) for f in slc_file_list]
 
 
+def test_dates(vrt_stack):
+    dates = vrt_stack.dates
+    assert len(dates) == len(vrt_stack)
+    d0 = 20220101
+    for d in dates:
+        assert d.strftime("%Y%m%d") == str(d0)
+        d0 += 1
+
+
+def test_get_stemless_file_list(vrt_stack):
+    # Get the stemless file list (no .slc.tif)
+    d0 = 20220101
+    for fn in vrt_stack.get_stemless_file_list():
+        assert Path(fn).name == str(d0)
+        d0 += 1
+
+
 # TODO: target extent
 # TODO: latlon_bbox
 

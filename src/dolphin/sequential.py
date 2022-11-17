@@ -7,6 +7,7 @@ from typing import Dict, List, Optional
 import numpy as np
 from osgeo_utils import gdal_calc
 from tqdm.auto import tqdm
+from tqdm.contrib.logging import logging_redirect_tqdm
 
 from dolphin import io
 from dolphin.log import get_log
@@ -34,6 +35,8 @@ def run_evd_sequential(
     output_folder = Path(output_folder)
     v_all = VRTStack.from_vrt_file(slc_vrt_file)
     file_list_all = v_all.file_list
+    date_list_all = v_all.dates
+
     logger.info(f"{v_all}: from {v_all.file_list[0]} to {v_all.file_list[-1]}")
 
     # Map of {ministack_index: [output_slc_files]}
@@ -56,11 +59,10 @@ def run_evd_sequential(
     # Solve each ministack using the current chunk (and the previous compressed SLCs)
     ministack_starts = range(0, len(file_list_all), ministack_size)
     for mini_idx, full_stack_idx in enumerate(ministack_starts):
-        cur_files = file_list_all[
-            full_stack_idx : full_stack_idx + ministack_size
-        ].copy()
-        name_start, name_end = cur_files[0].stem, cur_files[-1].stem
-        start_end = f"{name_start}_{name_end}"
+        cur_slice = slice(full_stack_idx, full_stack_idx + ministack_size)
+        cur_files = file_list_all[cur_slice].copy()
+        cur_dates = date_list_all[cur_slice].copy()
+        start_end = f"{cur_dates[0]}_{cur_dates[-1]}"
 
         # Make a new output folder for each ministack
         cur_output_folder = output_folder / start_end
@@ -125,9 +127,11 @@ def run_evd_sequential(
         for cur_data, (rows, cols) in tqdm(block_gen, total=num_blocks):
             if np.all(cur_data == 0):
                 continue
-            logger.debug(
-                f"Processing block {rows.start}:{rows.stop}, {cols.start}:{cols.stop}"
-            )
+            with logging_redirect_tqdm():
+                logger.debug(
+                    f"Processing block {rows.start}:{rows.stop},"
+                    f" {cols.start}:{cols.stop}"
+                )
 
             # Run the phase linking process on the current ministack
             try:
@@ -142,7 +146,8 @@ def run_evd_sequential(
             except MLERuntimeError:
                 # note: this is a warning instead of info, since it should
                 # get caught at the "skip_empty" step
-                logger.warning("No valid pixels in block. Skipping.")
+                with logging_redirect_tqdm():
+                    logger.warning("No valid pixels in block. Skipping.")
                 continue
 
             # Save each of the MLE estimates (ignoring the compressed SLCs)
@@ -154,8 +159,10 @@ def run_evd_sequential(
             # Compress the ministack using only the non-compressed SLCs
             cur_comp_slc = compress(cur_data[mini_idx:], cur_mle_stack[mini_idx:])
             # Save the compressed SLC block
-            logger.debug(f"Saving compressed block SLC to {cur_comp_slc_file}")
             io.save_block(cur_comp_slc, cur_comp_slc_file, rows, cols)
+            with logging_redirect_tqdm():
+                # logger.debug(f"Saved compressed block SLC to {cur_comp_slc_file}")
+                logger.debug("Finished block, loading next block...")
 
         logger.info(f"Finished ministack {mini_idx} of size {cur_vrt.shape}.")
 
@@ -184,9 +191,9 @@ def run_evd_sequential(
         skip_empty=True,
     )
     for cur_data, (rows, cols) in block_gen:
-        logger.debug(
-            f"Processing block {rows.start}:{rows.stop}, {cols.start}:{cols.stop}"
-        )
+        msg = f"Processing block {rows.start}:{rows.stop}, {cols.start}:{cols.stop}"
+        with logging_redirect_tqdm():
+            logger.debug(msg)
 
         # Run the phase linking process on the current ministack
         cur_mle_stack, tcorr = run_mle_gpu(
@@ -208,14 +215,18 @@ def run_evd_sequential(
     # TODO: do i need to separate out these?
     # final_output_folder = output_folder
     final_output_folder.mkdir(parents=True, exist_ok=True)
-    for mini_idx, slc_files in output_slc_files.items():
+    for mini_idx, slc_files in tqdm(output_slc_files.items()):
         adjustment_fname = adjusted_comp_slc_files[mini_idx]
         # driver = "ENVI"
         driver = "GTiff"
         for slc_fname in slc_files:
-            logger.info(f"Compensating {slc_fname} with {adjustment_fname}")
+            with logging_redirect_tqdm():
+                logger.info(f"Compensating {slc_fname} with {adjustment_fname}")
             outfile = final_output_folder / f"{slc_fname.name}"
 
+            # TODO: Use a derived VRT band like fringe
+            # gdal.SetConfigOption("GDAL_VRT_ENABLE_PYTHON", "YES")
+            # make sure that the abs value is the same to just to phase
             gdal_calc.Calc(
                 NoDataValue=nan,
                 format=driver,

@@ -23,9 +23,10 @@ def slc_stack():
 def slc_file_list(tmp_path, slc_stack):
     shape = slc_stack.shape
     # Write to a file
-    driver = gdal.GetDriverByName("ENVI")
+    # driver = gdal.GetDriverByName("ENVI")
+    driver = gdal.GetDriverByName("GTiff")
     start_date = 20220101
-    name_template = tmp_path / "{date}.slc"
+    name_template = tmp_path / "{date}.slc.tif"
     file_list = []
     for i in range(shape[0]):
         fname = str(name_template).format(date=str(start_date + i))
