@@ -46,11 +46,12 @@ def form_ifgs(
 
         gdal_calc.Calc(
             NoDataValue=np.nan,
+            hideNoData=True,  # ?? i don't quite get this option
             format=driver,
             outfile=output_file,
             A=fspath(slc1_path),
             B=fspath(slc2_path),
-            calc="A * B.conj()",
+            calc="A * numpy.conjugate(B)",
             quiet=True,
             overwrite=True,
             creation_options=io.DEFAULT_TIFF_OPTIONS,

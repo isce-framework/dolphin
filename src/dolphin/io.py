@@ -231,11 +231,13 @@ def setup_output_folder(
     output_folder = vrt_stack.outfile.parent
 
     output_files = []
-    file_list_nostems = vrt_stack.get_stemless_file_list()
+    # file_list_nostems = vrt_stack.get_stemless_file_list()
+    date_strs = [d.strftime("%Y%m%d") for d in vrt_stack.dates]
 
-    for filename in file_list_nostems[start_idx:]:
+    for filename in date_strs[start_idx:]:
         slc_name = Path(filename).stem
         # TODO: get extension from cfg
+        # output_path = output_folder / f"{slc_name}.slc.tif"
         output_path = output_folder / f"{slc_name}.slc.tif"
 
         save_arr(

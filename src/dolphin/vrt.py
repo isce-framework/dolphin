@@ -392,7 +392,7 @@ class VRTStack:
 
     def _get_nodata_mask(self, nodata=nan, buffer_pixels=100):
         if self.nodata_mask_file.exists():
-            return io.load_gdal(self.nodata_mask_file)
+            return io.load_gdal(self.nodata_mask_file).astype(bool)
         else:
             return io.get_stack_nodata_mask(
                 self.outfile,

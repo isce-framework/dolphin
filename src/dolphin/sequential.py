@@ -62,11 +62,13 @@ def run_evd_sequential(
         cur_slice = slice(full_stack_idx, full_stack_idx + ministack_size)
         cur_files = file_list_all[cur_slice].copy()
         cur_dates = date_list_all[cur_slice].copy()
-        start_end = f"{cur_dates[0]}_{cur_dates[-1]}"
 
-        # Make a new output folder for each ministack
+        # Make the current ministack output folder using the start/end dates
+        d0, d1 = cur_dates[0], cur_dates[-1]
+        start_end = f"{d0.strftime('%Y%m%d')}_{d1.strftime('%Y%m%d')}"
         cur_output_folder = output_folder / start_end
         cur_output_folder.mkdir(parents=True, exist_ok=True)
+
         msg = f"Processing {len(cur_files)} files + {len(comp_slc_files)} compressed. "
         msg += f"Output folder: {cur_output_folder}"
         logger.info(msg)
@@ -112,13 +114,18 @@ def run_evd_sequential(
         # Iterate over the ministack in blocks
         # Note the overlap to redo the edge effects
         # TODO: adjust the writing to avoid the overlap
+
+        # Note: dividing by len(stack) since cov is shape (rows, cols, nslc, nslc)
+        # so we need to load less to not overflow memory
+        stack_max_bytes = max_bytes / len(cur_vrt)
         overlaps = (yhalf, xhalf)
-        num_blocks = cur_vrt._get_num_blocks(max_bytes=max_bytes, overlaps=overlaps)
+        num_blocks = cur_vrt._get_num_blocks(
+            max_bytes=stack_max_bytes, overlaps=overlaps
+        )
         block_gen = cur_vrt.iter_blocks(
             overlaps=overlaps,
             return_slices=True,
-            # Note: dividing by len(stack) since cov is shape (rows, cols, nslc, nslc)
-            max_bytes=max_bytes / len(cur_vrt),
+            max_bytes=stack_max_bytes,
             skip_empty=True,
             nodata=0,
             # TODO: get the nodata value from the vrt stack
@@ -128,9 +135,10 @@ def run_evd_sequential(
             if np.all(cur_data == 0):
                 continue
             with logging_redirect_tqdm():
-                logger.debug(
-                    f"Processing block {rows.start}:{rows.stop},"
-                    f" {cols.start}:{cols.stop}"
+                tqdm.write(
+                    f"Processing block ({rows.start}:{rows.stop})/{ysize},"
+                    f" ({cols.start}:{cols.stop})/{xsize}",
+                    end="... ",
                 )
 
             # Run the phase linking process on the current ministack
@@ -146,8 +154,7 @@ def run_evd_sequential(
             except MLERuntimeError:
                 # note: this is a warning instead of info, since it should
                 # get caught at the "skip_empty" step
-                with logging_redirect_tqdm():
-                    logger.warning("No valid pixels in block. Skipping.")
+                logger.warning("No valid pixels in block. Skipping.")
                 continue
 
             # Save each of the MLE estimates (ignoring the compressed SLCs)
@@ -160,9 +167,8 @@ def run_evd_sequential(
             cur_comp_slc = compress(cur_data[mini_idx:], cur_mle_stack[mini_idx:])
             # Save the compressed SLC block
             io.save_block(cur_comp_slc, cur_comp_slc_file, rows, cols)
-            with logging_redirect_tqdm():
-                # logger.debug(f"Saved compressed block SLC to {cur_comp_slc_file}")
-                logger.debug("Finished block, loading next block...")
+            # logger.debug(f"Saved compressed block SLC to {cur_comp_slc_file}")
+            tqdm.write(" Finished block, loading next block.")
 
         logger.info(f"Finished ministack {mini_idx} of size {cur_vrt.shape}.")
 
@@ -215,11 +221,11 @@ def run_evd_sequential(
     # TODO: do i need to separate out these?
     # final_output_folder = output_folder
     final_output_folder.mkdir(parents=True, exist_ok=True)
-    for mini_idx, slc_files in tqdm(output_slc_files.items()):
+    for mini_idx, slc_files in output_slc_files.items():
         adjustment_fname = adjusted_comp_slc_files[mini_idx]
         # driver = "ENVI"
         driver = "GTiff"
-        for slc_fname in slc_files:
+        for slc_fname in tqdm(slc_files):
             with logging_redirect_tqdm():
                 logger.info(f"Compensating {slc_fname} with {adjustment_fname}")
             outfile = final_output_folder / f"{slc_fname.name}"
