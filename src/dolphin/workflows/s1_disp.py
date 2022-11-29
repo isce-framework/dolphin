@@ -2,8 +2,9 @@
 import argparse
 from pathlib import Path
 
-from dolphin import config
 from dolphin.log import log_runtime
+
+from . import config
 
 
 @log_runtime
@@ -24,11 +25,11 @@ def run(config_file: str, name: str = "stack", debug: bool = False):
     filled_cfg_path = cfg_path.with_name(cfg_path.stem + "_filled" + cfg_path.suffix)
     config.save_yaml(filled_cfg_path, config.add_dolphin_section(cfg))
     if name == "single":
-        from dolphin import s1_disp_single
-
-        s1_disp_single.run(cfg["runconfig"]["groups"], debug=debug)
+        # from dolphin.workflows import s1_disp_single
+        # TODO
+        raise NotImplementedError("Single interferogram workflow not yet implemented")
     elif name == "stack":
-        from dolphin import s1_disp_stack
+        from dolphin.workflows import s1_disp_stack
 
         s1_disp_stack.run(cfg["runconfig"]["groups"], debug=debug)
 

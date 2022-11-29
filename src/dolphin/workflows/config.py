@@ -32,7 +32,7 @@ def load_workflow_yaml(input_path: Pathlike, *, workflow_name: str = "s1_disp"):
     with open(defaults_path, "r") as f:
         defaults = parser.load(f)
 
-    updated = deep_update(defaults=defaults, supplied=supplied)
+    updated = _deep_update(defaults=defaults, supplied=supplied)
     # d = yamale.make_data([(updated, None)])
 
     schema_path = get_workflow_yaml_path(name=workflow_name, yaml_type="schemas")
@@ -107,7 +107,7 @@ def get_workflow_yaml_path(name: str = "s1_disp.yaml", yaml_type: str = "schemas
     return outpath
 
 
-def deep_update(*, defaults: dict, supplied: dict, copy: bool = True):
+def _deep_update(*, defaults: dict, supplied: dict, copy: bool = True):
     """Update the defaults of a dict with user-supplied dict.
 
     Parameters
@@ -133,7 +133,7 @@ def deep_update(*, defaults: dict, supplied: dict, copy: bool = True):
     updated = deepcopy(defaults) if copy else defaults
     for key, val in supplied.items():
         if isinstance(val, dict):
-            updated[key] = deep_update(defaults=updated.get(key, {}), supplied=val)
+            updated[key] = _deep_update(defaults=updated.get(key, {}), supplied=val)
         else:
             updated[key] = val
 
