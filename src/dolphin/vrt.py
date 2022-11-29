@@ -78,6 +78,8 @@ class VRTStack:
         self.dates = [
             utils.parse_slc_strings(f, fmt=file_date_fmt) for f in self.file_list
         ]
+        # for future parsing of dates with `add_file`
+        self._file_date_fmt = file_date_fmt
 
         # Use the first file in the stack to get size, transform info
         ds = gdal.Open(fspath(file_list[0]))
@@ -174,9 +176,9 @@ class VRTStack:
     def add_file(self, new_file):
         """Add a new file to the stack and re-sort."""
         self.file_list = sorted(self.file_list + [new_file])
-
-    def get_stemless_file_list(self):
-        return [str(f).replace(utils.full_suffix(f), "") for f in self.file_list]
+        self.dates = [
+            utils.parse_slc_strings(f, fmt=self._file_date_fmt) for f in self.file_list
+        ]
 
     def set_subset(
         self, pixel_bbox=None, target_extent=None, latlon_bbox=None, filename=None

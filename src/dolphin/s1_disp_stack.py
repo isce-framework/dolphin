@@ -88,7 +88,7 @@ def run(full_cfg: dict, debug: bool = False):
     weight_file = nmap_path / cfg["weight_file"]
     nmap_count_file = nmap_path / cfg["nmap_count_file"]
     threshold = cfg["ps"]["amp_dispersion_threshold"]
-    if weight_file.exists():
+    if not cfg["nmap"]["run_nmap"] or weight_file.exists():
         logger.info(f"Skipping making existing NMAP file {weight_file}")
     else:
         # Make the dummy nmap/count files
@@ -98,7 +98,6 @@ def run(full_cfg: dict, debug: bool = False):
             weight_file=weight_file,
             count_file=nmap_count_file,
             window=cfg["window"],
-            skip_shp=cfg["nmap"]["skip_shp"],
             nmap_opts=cfg["nmap"],
             lines_per_block=cfg["lines_per_block"],
             ram=cfg["ram"],

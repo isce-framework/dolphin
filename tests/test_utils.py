@@ -2,6 +2,7 @@ import datetime
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 from dolphin import utils
 from dolphin.io import load_gdal
@@ -20,7 +21,7 @@ def test_get_dates():
         "/usr/19990101/20200303_20210101.int"
     )
 
-    assert utils.get_dates("/usr/19990101/notadate.tif") is None
+    assert utils.get_dates("/usr/19990101/notadate.tif") == []
 
 
 def test_parse_slc_strings():
@@ -33,7 +34,8 @@ def test_parse_slc_strings():
 
     assert utils.parse_slc_strings(["20200303.slc", "20200303.tif"]) == [dt, dt]
 
-    assert utils.parse_slc_strings("notadate.slc") is None
+    with pytest.raises(ValueError):
+        utils.parse_slc_strings("notadate.tif")
 
 
 def test_get_types():

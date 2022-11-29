@@ -231,7 +231,6 @@ def setup_output_folder(
     output_folder = vrt_stack.outfile.parent
 
     output_files = []
-    # file_list_nostems = vrt_stack.get_stemless_file_list()
     date_strs = [d.strftime("%Y%m%d") for d in vrt_stack.dates]
 
     for filename in date_strs[start_idx:]:

@@ -75,6 +75,33 @@ def parse_slc_strings(slc_str: Union[Pathlike, List[Pathlike]], fmt="%Y%m%d"):
         return [parse_slc_strings(s, fmt=fmt) for s in slc_str if s]
 
 
+def rowcol_to_xy(row, col, ds=None, filename=None):
+    """Convert indexes in the image space to georeferenced coordinates."""
+    return _apply_gt(ds, filename, col, row)
+
+
+def xy_to_rowcol(x, y, ds=None, filename=None):
+    """Convert coordinates in the georeferenced space to a row and column index."""
+    return _apply_gt(ds, filename, x, y, inverse=True)
+
+
+def _apply_gt(ds=None, filename=None, x=None, y=None, inverse=False):
+    """Read the (possibly inverse) geotransform, apply to the x/y coordinates."""
+    if ds is None:
+        ds = gdal.Open(fspath(filename))
+        gt = ds.GetGeoTransform()
+        ds = None
+    else:
+        gt = ds.GetGeoTransform()
+
+    if inverse:
+        gt = gdal.InvGeoTransform(gt)
+    # Reference: https://gdal.org/tutorials/geotransforms_tut.html
+    x = gt[0] + x * gt[1] + y * gt[2]
+    y = gt[3] + x * gt[4] + y * gt[5]
+    return x, y
+
+
 def combine_mask_files(
     mask_files: List[Pathlike],
     scratch_dir: Pathlike,

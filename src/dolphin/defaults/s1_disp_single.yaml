@@ -56,6 +56,7 @@ runconfig:
         normalizing_reference_band: 1
 
       nmap:
+        run_nmap: False
         directory: 'nmap'
         pvalue: 0.05
         stat_method: 'KS2'

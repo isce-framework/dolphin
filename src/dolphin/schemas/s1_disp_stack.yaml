@@ -83,9 +83,9 @@ ps_options:
   normalizing_reference_band: int(min=1)
 
 nmap_options:
-  directory: str()
   # To skip the SHP testing and use rectangular windows:
-  skip_shp: bool(required=False)
+  run_nmap: bool(required=False)
+  directory: str()
   # Minimum p-value for labeling neighbors.
   pvalue: num(required=False, min=0.0, max=1.0)
   stat_method: enum('KS2', 'AD2', required=False)

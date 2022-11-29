@@ -84,13 +84,11 @@ def run(full_cfg: dict, debug: bool = False):
     # Make the dummy nmap/count files
     weight_file = nmap_path / cfg["weight_file"]
     nmap_count_file = nmap_path / cfg["nmap_count_file"]
-    if weight_file.exists():
+    # TODO: Will we do SHP finding for the incremental update?
+    if not cfg["nmap"]["run_nmap"] or weight_file.exists():
         logger.info(f"Skipping making existing NMAP file {weight_file}")
     else:
         phase_link.run_nmap(
-            # TODO: Will we do SHP finding for the incremental update?
-            skip_shp=True,
-            # skip_shp=cfg["nmap"]["skip_shp"],
             slc_vrt_file=slc_vrt_file,
             weight_file=weight_file,
             count_file=nmap_count_file,

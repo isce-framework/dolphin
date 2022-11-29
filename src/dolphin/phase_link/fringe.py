@@ -2,6 +2,7 @@
 import os
 from os import fspath
 from pathlib import Path
+from typing import Optional
 
 import numpy as np
 from osgeo import gdal
@@ -19,14 +20,15 @@ def run_nmap(
     weight_file: Pathlike,
     count_file: Pathlike,
     window: dict,
-    skip_shp: bool = True,
+    skip_shp: bool = False,
     nmap_opts: dict = {},
-    mask_file: Pathlike = None,
+    mask_file: Optional[Pathlike] = None,
     lines_per_block: int = 128,
     ram: int = 1024,
     no_gpu: bool = False,
 ):
     """Create neighborhood count and weight files for a stack of SLCs."""
+    # If we want to skip the SHP finding, make dummy files for fringe
     if skip_shp:
         create_full_nmap_files(
             window, slc_vrt_file, weight_file=weight_file, count_file=count_file
@@ -52,7 +54,7 @@ def run_nmap_fringe(
     count_file: Pathlike,
     window: dict,
     nmap_opts: dict,
-    mask_file: Pathlike = None,
+    mask_file: Optional[Pathlike] = None,
     lines_per_block: int = 128,
     ram: int = 1024,
     no_gpu: bool = False,
@@ -87,8 +89,8 @@ def run_nmap_fringe(
 def create_full_nmap_files(
     window: dict,
     slc_vrt_file: Pathlike = "",
-    xsize: int = None,
-    ysize: int = None,
+    xsize: Optional[int] = None,
+    ysize: Optional[int] = None,
     weight_file: Pathlike = "./nmap",
     count_file: Pathlike = "./count",
 ):

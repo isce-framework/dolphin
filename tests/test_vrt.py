@@ -53,14 +53,6 @@ def test_dates(vrt_stack):
         d0 += 1
 
 
-def test_get_stemless_file_list(vrt_stack):
-    # Get the stemless file list (no .slc.tif)
-    d0 = 20220101
-    for fn in vrt_stack.get_stemless_file_list():
-        assert Path(fn).name == str(d0)
-        d0 += 1
-
-
 # TODO: target extent
 # TODO: latlon_bbox
 
@@ -81,6 +73,7 @@ def test_add_file(vrt_stack, slc_stack):
     # Check that the new file is added to the VRT
     vrt_stack.add_file(new_path_past)
     assert len(vrt_stack.file_list) == slc_stack.shape[0] + 1
+    assert len(vrt_stack.dates) == slc_stack.shape[0] + 1
 
     # Make the file in the future
     new_path_future = (vrt_stack.outfile.parent / "20250101.slc").absolute()
