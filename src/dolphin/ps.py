@@ -63,20 +63,25 @@ def update_amp_disp(
     slc_vrt_file: Pathlike,
     output_directory: Pathlike = "",
 ):
-    """Update the amplitude dispersion for the new SLC.
+    r"""Update the amplitude dispersion for the new SLC.
 
     Uses Welford's method to update the mean and variance.
 
-    See https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Welford's_online_algorithm  # noqa: E501
-    or https://changyaochen.github.io/welford/ for derivation.
+    \[
+    \begin{align}
+    \mu_{n+1} &= \mu_n + (x_{n+1} - \mu_n) / (n+1)  \\
+    \text{var}_{n+1} &= \text{var}_n + ((x_{n+1} - \mu_n) * (x_{n+1} - \mu_{n+1}) - \text{var}_n) / (n+1) \\
+    v1 &= v0 + (x1 - m0) * (x1 - m1)
+    \end{align}
+    \]
 
-    mu_{n+1} = mu_n + (x_{n+1} - mu_n) / (n+1)
-    var_{n+1} = var_n + ((x_{n+1} - mu_n) * (x_{n+1} - mu_{n+1}) - var_n) / (n+1)
 
-    v1 = v0 + (x1 - m0) * (x1 - m1)
+    See <https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Welford's_online_algorithm>
+    or <https://changyaochen.github.io/welford/> for derivation.
 
-    Inputs
-    ------
+
+    Parameters
+    ----------
     amp_mean_file : Pathlike
         The existing mean amplitude file.
     amp_disp_file : Pathlike
@@ -91,7 +96,7 @@ def update_amp_disp(
     ----------
     Welford, B. P. "Note on a method for calculating corrected sums of squares and
     products." Technometrics 4.3 (1962): 419-420.
-    """
+    """  # noqa: E501
     output_directory = Path(output_directory)
     if not output_directory.exists():
         output_directory.mkdir(parents=True, exist_ok=True)

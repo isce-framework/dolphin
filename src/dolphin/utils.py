@@ -195,10 +195,10 @@ def full_suffix(filename: Pathlike):
 
     Examples
     --------
-    >>> full_suffix('test.tif')
-    '.tif'
-    >>> full_suffix('test.tar.gz')
-    '.tar.gz'
+        >>> full_suffix('test.tif')
+        '.tif'
+        >>> full_suffix('test.tar.gz')
+        '.tar.gz'
     """
     fpath = Path(filename)
     return "".join(fpath.suffixes)
@@ -456,13 +456,13 @@ def slice_iterator(
 
     Examples
     --------
-    >>> list(slice_iterator((180, 250), (100, 100)))
-    [(slice(0, 100, None), slice(0, 100, None)), (slice(0, 100, None), \
+        >>> list(slice_iterator((180, 250), (100, 100)))
+        [(slice(0, 100, None), slice(0, 100, None)), (slice(0, 100, None), \
 slice(100, 200, None)), (slice(0, 100, None), slice(200, 250, None)), \
 (slice(100, 180, None), slice(0, 100, None)), (slice(100, 180, None), \
 slice(100, 200, None)), (slice(100, 180, None), slice(200, 250, None))]
-    >>> list(slice_iterator((180, 250), (100, 100), overlaps=(10, 10)))
-    [(slice(0, 100, None), slice(0, 100, None)), (slice(0, 100, None), \
+        >>> list(slice_iterator((180, 250), (100, 100), overlaps=(10, 10)))
+        [(slice(0, 100, None), slice(0, 100, None)), (slice(0, 100, None), \
 slice(90, 190, None)), (slice(0, 100, None), slice(180, 250, None)), \
 (slice(90, 180, None), slice(0, 100, None)), (slice(90, 180, None), \
 slice(90, 190, None)), (slice(90, 180, None), slice(180, 250, None))]
@@ -510,9 +510,9 @@ def get_max_block_shape(
     filename : str
         GDAL-readable file name containing 3D dataset.
     nstack: int
-        number of bands in dataset.
-    max_bytes : float, optional)
-        target size of memory (in Bytes) for each block.
+        Number of bands in dataset.
+    max_bytes : float, optional
+        Target size of memory (in Bytes) for each block.
         Defaults to 64e6.
 
     Returns

@@ -1,0 +1,60 @@
+site_name: Documentation for dolphin
+
+theme:
+  # name: "readthedocs"
+  # name: "mkdocs"
+  # https://squidfunk.github.io/mkdocs-material
+  name: "material"
+  favicon: img/favicon.ico
+  logo: img/android-chrome-512x512.png
+  palette:
+    primary: cyan
+    # https://squidfunk.github.io/mkdocs-material/setup/changing-the-colors/#color-scheme
+    # red pink purple blue grey black teal cyan
+
+
+
+plugins:
+- search
+# plugin suggestions from here: https://mkdocstrings.github.io/recipes/
+- gen-files:
+    scripts:
+    - docs/gen_ref_pages.py
+# https://github.com/oprypin/mkdocs-literate-nav
+- literate-nav:
+    nav_file: SUMMARY.md
+# https://github.com/oprypin/mkdocs-section-index
+- section-index
+# https://mkdocstrings.github.io/python/usage/
+- mkdocstrings:
+    watch:
+      - src/dolphin
+    handlers:
+      python:
+        paths: [src]
+        options:
+          # docstring_section_style: table  # default
+          docstring_style: numpy
+          heading_level: 2
+
+
+
+
+# extra_css:
+#   - css/custom.css
+markdown_extensions:
+  - pymdownx.arithmatex:
+      generic: true
+
+extra_javascript:
+  - javascripts/mathjax.js
+  - https://polyfill.io/v3/polyfill.min.js?features=es6
+  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
+
+nav:
+- index.md
+- getting-started.md
+- tutorials.md
+- how-to-guides.md
+- Code Reference: reference/
+- explanation.md

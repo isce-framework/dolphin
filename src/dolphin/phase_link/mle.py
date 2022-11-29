@@ -141,9 +141,7 @@ def full_cov(
     looks : np.array
         The number of looks as (row looks, col_looks)
     strides : int, optional
-        the sliding rate in row direction. If None, equal to row_looks
-    col_stride : int, optional
-        the sliding rate in col direction. If None, equal to col_looks
+        the sliding rate in (row, col) direction. If None, equal to `looks`.
 
     Returns
     -------
