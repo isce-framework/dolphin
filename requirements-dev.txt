@@ -4,3 +4,10 @@ black
 flake8
 # For the cfg creation script
 fire
+# for mkdocs
+mkdocs
+mkdocstrings[python]
+mkdocs-material
+mkdocs-section-index
+mkdocs-gen-files
+mkdocs-literate-nav
