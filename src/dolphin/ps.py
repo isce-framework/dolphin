@@ -90,7 +90,7 @@ def update_amp_disp(
         The VRT file pointing to the stack of SLCs.
         Assumes that the final band is the new SLC to be added.
     output_directory : Pathlike, optional
-        The output directory for the updated files, by default "".
+        The output directory for the updated files, current directory by default.
 
     References
     ----------
