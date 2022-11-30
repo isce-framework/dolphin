@@ -27,8 +27,6 @@ plugins:
 - section-index
 # https://mkdocstrings.github.io/python/usage/
 - mkdocstrings:
-    watch:
-      - src/dolphin
     handlers:
       python:
         paths: [src]

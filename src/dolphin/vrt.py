@@ -42,8 +42,15 @@ class VRTStack:
     sort_files : bool, optional (default = True)
         Sort the files in `file_list`. Assumes that the naming convention
         will sort the files in increasing time order.
+    nodata_value : float, optional
+        Value to use for nodata. If not specified, will use the nodata value
+        from the first file in the stack, or nan if not specified in the raster.
     nodata_mask_file : pathlib.Path, optional
-        Path to a file containing a mask of pixels containing nodata in all images.
+        Path to file containing a mask of pixels containing with nodata
+        in every images. Used for skipping the loading of these pixels.
+    file_date_fmt : str, optional (default = "%Y%m%d")
+        Format string for parsing the dates from the filenames.
+        Passed to [dolphin.utils.parse_slc_strings][].
     """
 
     def __init__(
@@ -55,6 +62,7 @@ class VRTStack:
         target_extent: Optional[Tuple[float, float, float, float]] = None,
         latlon_bbox: Optional[Tuple[float, float, float, float]] = None,
         sort_files: bool = True,
+        nodata_value: Optional[float] = None,
         file_date_fmt: str = "%Y%m%d",
     ):
         """Initialize a VRTStack object for a list of files, optionally subsetting."""
@@ -69,7 +77,8 @@ class VRTStack:
             file_list = [Path(f).resolve() for f in file_list]
         self.file_list = file_list
         self.outfile = Path(outfile).resolve()
-        self.nodata_value = io.get_nodata(file_list[0]) or nan
+        if nodata_value is None:
+            self.nodata_value = io.get_nodata(file_list[0]) or nan
         self.nodata_mask_file = (
             self.outfile.parent / f"{self.outfile.stem}_nodata_mask.tif"
         )
@@ -79,7 +88,7 @@ class VRTStack:
             utils.parse_slc_strings(f, fmt=file_date_fmt) for f in self.file_list
         ]
         # for future parsing of dates with `add_file`
-        self._file_date_fmt = file_date_fmt
+        self.file_date_fmt = file_date_fmt
 
         # Use the first file in the stack to get size, transform info
         ds = gdal.Open(fspath(file_list[0]))
@@ -123,7 +132,7 @@ class VRTStack:
                 filename = str(Path(filename).resolve())
                 date_str = date.strftime("%Y%m%d")
 
-                block_size = utils.get_block_size(filename)
+                block_size = io.get_raster_block_size(filename)
                 # blocks in a vrt have a min of 16, max of 2**14=16384
                 # https://github.com/OSGeo/gdal/blob/2530defa1e0052827bc98696e7806037a6fec86e/frmts/vrt/vrtrasterband.cpp#L339
                 if any([b < 16 for b in block_size]) or any(
@@ -177,7 +186,7 @@ class VRTStack:
         """Add a new file to the stack and re-sort."""
         self.file_list = sorted(self.file_list + [new_file])
         self.dates = [
-            utils.parse_slc_strings(f, fmt=self._file_date_fmt) for f in self.file_list
+            utils.parse_slc_strings(f, fmt=self.file_date_fmt) for f in self.file_list
         ]
 
     def set_subset(
@@ -348,7 +357,7 @@ class VRTStack:
         if skip_empty and use_nodata_mask:
             ndm = self._get_nodata_mask(nodata=self.nodata_value, buffer_pixels=100)
 
-        yield from utils.iter_blocks(
+        yield from io.iter_blocks(
             self.outfile,
             block_shape=block_shape,
             overlaps=overlaps,
@@ -362,7 +371,7 @@ class VRTStack:
     def _get_block_shape(self, max_bytes=DEFAULT_BLOCK_BYTES):
         test_file = self._get_non_vrt_file(self.file_list[0])
 
-        return utils.get_max_block_shape(
+        return io.get_max_block_shape(
             # Note that we're using the actual first file, not the VRT
             # since the VRT always has the same block size.
             test_file,
@@ -383,7 +392,7 @@ class VRTStack:
         block_shape = self._get_block_shape(max_bytes=max_bytes)
         return len(
             list(
-                utils.slice_iterator(
+                io.slice_iterator(
                     arr_shape=self.shape[-2:],
                     block_shape=block_shape,
                     overlaps=overlaps,
