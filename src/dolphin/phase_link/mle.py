@@ -175,7 +175,7 @@ def mle_stack(C_arrays: np.ndarray, beta: float = 0.0, reference_idx: float = 0)
     Parameters
     ----------
     C_arrays : np.array, shape = (rows, cols, nslc, nslc)
-        The sample covariance matrix at each pixel (e.g. from `full_cov`)
+        The sample covariance matrix at each pixel (e.g. from [full_cov][])
     beta : float, optional
         The regularization parameter for inverting Gamma = |C|
         The regularization is applied as (1 - beta) * Gamma + beta * I
@@ -253,7 +253,7 @@ def estimate_temp_coh(est, C_arrays):
     est : np.array
         The estimated phase from `run_mle_gpu`, shape (nslc, rows, cols)
     C_arrays : np.array, shape = (rows, cols, nslc, nslc)
-        The sample covariance matrix at each pixel (e.g. from `full_cov`)
+        The sample covariance matrix at each pixel (e.g. from [full_cov][])
 
     Returns
     -------
