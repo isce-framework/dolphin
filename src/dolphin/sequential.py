@@ -36,6 +36,8 @@ def run_evd_sequential(
     ps_mask_file: Optional[Pathlike] = None,
     beta: float = 0.1,
     max_bytes: float = 32e6,
+    n_workers: int = 1,
+    no_gpu: bool = False,
 ):
     """Estimate wrapped phase using batches of ministacks."""
     output_folder = Path(output_folder)
@@ -156,6 +158,8 @@ def run_evd_sequential(
                     reference_idx=mini_idx,
                     mask=mask[rows, cols],
                     ps_mask=ps_mask[rows, cols],
+                    n_workers=n_workers,
+                    no_gpu=no_gpu,
                 )
             except PhaseLinkRuntimeError:
                 # note: this is a warning instead of info, since it should
@@ -215,6 +219,8 @@ def run_evd_sequential(
             reference_idx=0,
             mask=mask[rows, cols],
             ps_mask=ps_mask[rows, cols],
+            n_workers=n_workers,
+            no_gpu=no_gpu,
         )
 
         # Save each of the MLE estimates (ignoring the compressed SLCs)

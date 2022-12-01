@@ -24,6 +24,7 @@ def run_mle(
     ps_mask: np.ndarray = None,
     output_cov_file: Optional[Pathlike] = None,
     n_workers: int = 1,
+    no_gpu: bool = False,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """Estimate the linked phase for a stack using the MLE estimator.
 
@@ -57,6 +58,8 @@ def run_mle(
     n_workers : int, optional
         The number of workers to use for (CPU version) multiprocessing.
         If 1 (default), no multiprocessing is used.
+    no_gpu : bool, optional
+        If True, do not use the GPU even if it is available.
 
     Returns
     -------
@@ -96,17 +99,8 @@ def run_mle(
     slc_stack_copy[:, ignore_mask] = np.nan
 
     #######################################
-    if check_gpu_available():  # make a parameter to force CPU?
-        mle_est, temp_coh = _run_gpu(
-            slc_stack,
-            half_window,
-            strides,
-            beta,
-            reference_idx,
-            output_cov_file,
-            # is it worth passing the blocks-per-grid?
-        )
-    else:
+    gpu_is_available = check_gpu_available()
+    if no_gpu or not gpu_is_available:
         mle_est, temp_coh = _run_cpu(
             slc_stack,
             half_window,
@@ -115,6 +109,16 @@ def run_mle(
             reference_idx,
             output_cov_file,
             n_workers=n_workers,
+        )
+    else:
+        mle_est, temp_coh = _run_gpu(
+            slc_stack,
+            half_window,
+            strides,
+            beta,
+            reference_idx,
+            output_cov_file,
+            # is it worth passing the blocks-per-grid?
         )
 
     # Set no data pixels to np.nan

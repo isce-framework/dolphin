@@ -29,6 +29,7 @@ runconfig:
       internet_access: False
       gpu_enabled: False
       gpu_id: 0
+      n_workers: 16
 
     processing:
       output_format: 'ENVI'

@@ -48,7 +48,6 @@ def estimate_stack_covariance_cpu(
     slcs_shared[:] = slc_stack[:]
 
     out_rows, out_cols = compute_out_shape((rows, cols), strides)
-    print(f"out shape: {out_rows}, {out_cols}")
     C_arrays = pymp.shared.array((out_rows, out_cols, nslc, nslc), dtype=dtype)
 
     row_strides, col_strides = strides

@@ -50,6 +50,8 @@ worker_options:
   # Index of the GPU to use for processing, optional. Defaults to the
   # first available CUDA device. Ignored if *gpu_enabled* is False.
   gpu_id: int(min=0, required=False)
+  # Number of workers to use for processing. Default 16
+  n_workers: int(min=1, required=False)
 
 processing_options:
   # Format of output file

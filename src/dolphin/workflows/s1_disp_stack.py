@@ -26,6 +26,7 @@ def run(full_cfg: dict, debug: bool = False):
     scratch_dir.mkdir(parents=True, exist_ok=True)
     # sas_output_file = full_cfg["product_path_group"]["sas_output_file"]
     gpu_enabled = full_cfg["worker"]["gpu_enabled"]
+    n_workers = full_cfg["worker"]["n_workers"]
 
     input_file_list = full_cfg["input_file_group"]["cslc_file_list"]
     input_file_path = full_cfg["input_file_group"]["cslc_file_path"]
@@ -125,6 +126,8 @@ def run(full_cfg: dict, debug: bool = False):
             # ministack_size=10,
             ministack_size=cfg["phase_linking"]["ministack_size"],
             max_bytes=1e6 * cfg["ram"],
+            n_workers=n_workers,
+            no_gpu=not gpu_enabled,
             # mask_file: Pathlike = None,
             # ps_mask_file=ps_output,
             # beta=0.1,
