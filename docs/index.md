@@ -9,5 +9,5 @@
 1. [Getting started](./getting-started.md)
 1. [Tutorials](tutorials.md)
 1. [How-To Guides](how-to-guides.md)
-1. [Reference](reference.md)
-1. [Explanation](explanation.md)
+1. [Code Reference](reference/dolphin)
+1. [Background theory](background-theory.md)

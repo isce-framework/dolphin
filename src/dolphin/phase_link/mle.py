@@ -2,181 +2,148 @@ import logging
 from typing import Optional, Tuple
 
 import numpy as np
-import numpy.linalg as la
-from numba import njit
 
-from dolphin.utils import get_array_module, take_looks
+from dolphin.utils import Pathlike, check_gpu_available, get_array_module
 
 logger = logging.getLogger(__name__)
 
 
-# TODO: make a version with same API as GPU (multithreaded)
+class PhaseLinkRuntimeError(Exception):
+    """Exception raised while running the MLE solver."""
+
+    pass
 
 
-@njit(cache=True)
-def mle(cov_mat, beta=0.0):
-    """Estimate the linked phase using the MLE estimator.
+def run_mle(
+    slc_stack: np.ndarray,
+    half_window: Tuple[int, int],
+    strides: Tuple[int, int] = (1, 1),
+    beta: float = 0.0,
+    reference_idx: int = 0,
+    mask: np.ndarray = None,
+    ps_mask: np.ndarray = None,
+    output_cov_file: Optional[Pathlike] = None,
+    n_workers: int = 1,
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Estimate the linked phase for a stack using the MLE estimator.
 
     Parameters
     ----------
-    cov_mat : np.array
-        The sample covariance matrix
+    slc_stack : np.ndarray
+        The SLC stack, with shape (n_images, n_rows, n_cols)
+    half_window : Tuple[int, int]
+        The half window size as [half_x, half_y] in pixels.
+        The full window size is 2 * half_window + 1 for x, y.
+    strides : Tuple[int, int], optional
+        The (row, col) strides (in pixels) to use for the sliding window.
+        By default (1, 1)
     beta : float, optional
-        The regularization parameter, by default 0.0
+        The regularization parameter, by default 0.0.
+    reference_idx : int, optional
+        The index of the (non compressed) reference SLC, by default 0
+    mask : np.ndarray, optional
+        A mask of bad pixels to ignore when estimating the covariance.
+        Pixels with `True` (or 1) are ignored, by default None
+        If None, all pixels are used, by default None.
+    ps_mask : np.ndarray, optional
+        A mask of pixels marking persistent scatterers (PS) to
+        also ignore when multilooking.
+        Pixels with `True` (or 1) are PS and will be ignored (combined
+        with `mask`).
+        The phase from these pixels will be inserted back
+        into the final estimate directly from `slc_stack`.
+    output_cov_file : str, optional
+        HDF5 filename to save the estimated covariance at each pixel.
+    n_workers : int, optional
+        The number of workers to use for (CPU version) multiprocessing.
+        If 1 (default), no multiprocessing is used.
 
     Returns
     -------
-    np.array
-        The estimated linked phase
+    mle_est : np.ndarray[np.complex64]
+        The estimated linked phase, with shape (n_images, n_rows, n_cols)
+    temp_coh : np.ndarray[np.float32]
+        The temporal coherence at each pixel, shape (n_rows, n_cols)
     """
-    dtype = cov_mat.dtype
-    cov_mat = cov_mat.astype(dtype)
-    # estimate the wrapped phase based on the EMI paper
-    # *smallest* eigenvalue decomposition of the (|Gamma|^-1  *  C) matrix
-    Gamma = np.abs(cov_mat).astype(dtype)
-    if beta:
-        Gamma_inv = la.inv(_reg_beta(Gamma, beta)).astype(dtype)
+    from ._mle_cpu import run_cpu as _run_cpu
+    from ._mle_gpu import run_gpu as _run_gpu
+
+    num_slc, rows, cols = slc_stack.shape
+    # Common pre-processing for both CPU and GPU versions:
+
+    # Mask nodata pixels if given
+    if mask is None:
+        mask = np.zeros((rows, cols), dtype=bool)
     else:
-        Gamma_inv = la.inv(Gamma).astype(dtype)
-    _, v = la.eigh(Gamma_inv * cov_mat)
+        mask = mask.astype(bool)
+    # Make sure we also are ignoring pixels which are nans for all SLCs
+    mask |= np.all(np.isnan(slc_stack), axis=0)
 
-    # smallest eigenvalue is idx 0
-    # reference to the first acquisition
-    evd_estimate = v[:, 0] * np.conjugate(v[0, 0])
-    return evd_estimate.astype(dtype)
-
-
-@njit(cache=True)
-def evd(cov_mat):
-    """Estimate the linked phase the largest eigenvector of `cov_mat`."""
-    # estimate the wrapped phase based on the eigenvalue decomp of the cov. matrix
-    # n = len(cov_mat)
-    # lambda_, v = la.eigh(cov_mat, subset_by_index=[n - 1, n - 1])  # only scipy.linalg
-    # v = v.flatten()
-    lambda_, v = la.eigh(cov_mat)
-
-    # Biggest eigenvalue is the last one
-    # reference to the first acquisition
-    evd_estimate = v[:, -1] * np.conjugate(v[0, -1])
-
-    return evd_estimate.astype(cov_mat.dtype)
-
-
-@njit(cache=True)
-def coh_mat(neighbor_stack, cov_mat=None):
-    """Given a (n_slc, n_samps) samples, estimate the coherence matrix."""
-    nslc = neighbor_stack.shape[0]
-    if cov_mat is None:
-        cov_mat = np.zeros((nslc, nslc), dtype=np.complex64)
-    for ti in range(nslc):
-        for tj in range(ti + 1, nslc):
-            cov = _covariance(neighbor_stack[ti, :], neighbor_stack[tj, :])
-            cov_mat[ti, tj] = cov
-            cov_mat[tj, ti] = np.conjugate(cov)
-        cov_mat[ti, ti] = 1.0
-
-    return cov_mat
-
-
-@njit(cache=True)
-def _covariance(c1, c2):
-    a1 = np.nansum(np.abs(c1) ** 2)
-    a2 = np.nansum(np.abs(c2) ** 2)
-
-    cov = np.nansum(c1 * np.conjugate(c2)) / (np.sqrt(a1) * np.sqrt(a2))
-    return cov
-
-
-def regularize_C(C, how="beta", beta=0.1, alpha=1e-3):
-    """Regularize the sample covariance matrix.
-
-    Parameters
-    ----------
-    C : np.array
-        The sample covariance matrix
-    how : str, optional
-        The regularization method, by default "beta"
-    beta : float, optional
-        The regularization parameter for `how='beta'` , by default 0.1
-    alpha : float, optional
-        The regularization parameter for `how='eye'`, by default 1e-3
-
-    Returns
-    -------
-    np.array
-        The regularized covariance matrix
-    """
-    # Regularization
-    if how == "eye":
-        return _reg_eye(C, alpha)
-    elif how == "beta":
-        return _reg_beta(C, beta)
+    # Track the PS pixels, if given, and remove them from the stack
+    # This will prevent the large amplitude PS pixels from dominating
+    # the covariance estimation.
+    if ps_mask is None:
+        ps_mask = np.zeros((rows, cols), dtype=bool)
     else:
-        raise ValueError(f"Unknown regularization method: {how}")
+        ps_mask = ps_mask.astype(bool)
+    _check_all_nans(slc_stack)
+
+    # TODO: Any other masks we need?
+    ignore_mask = np.logical_or.reduce((mask, ps_mask))
+
+    # Make a copy, and set the masked pixels to np.nan
+    slc_stack_copy = slc_stack.copy()
+    slc_stack_copy[:, ignore_mask] = np.nan
+
+    #######################################
+    if check_gpu_available():  # make a parameter to force CPU?
+        mle_est, temp_coh = _run_gpu(
+            slc_stack,
+            half_window,
+            strides,
+            beta,
+            reference_idx,
+            output_cov_file,
+            # is it worth passing the blocks-per-grid?
+        )
+    else:
+        mle_est, temp_coh = _run_cpu(
+            slc_stack,
+            half_window,
+            strides,
+            beta,
+            reference_idx,
+            output_cov_file,
+            n_workers=n_workers,
+        )
+
+    # Set no data pixels to np.nan
+    temp_coh[mask] = np.nan
+
+    # Fill in the PS pixels from the original SLC stack, if it was given
+    if np.any(ps_mask):
+        ps_ref = slc_stack[0][ps_mask]
+        for i in range(num_slc):
+            mle_est[i][ps_mask] = slc_stack[i][ps_mask] * np.conj(ps_ref)
+        # Force PS pixels to have high temporal coherence
+        temp_coh[ps_mask] = 1
+
+    return mle_est, temp_coh
 
 
-@njit(cache=True)
-def _reg_eye(C, alpha=1e-3):
-    return (C + alpha * np.eye(C.shape[0])).astype(C.dtype)
-
-
-@njit(cache=True)
-def _reg_beta(C, beta=1e-1):
-    return (1 - beta) * C + beta * np.eye(C.shape[0], dtype=C.dtype)
-
-
-# TODO: make a version with same API as GPU?
-# estimate_c_gpu(slc_stack, half_window, C_buf):
-def full_cov(
-    slcs: np.ndarray,
-    looks: Tuple[int, int],
-    strides: Tuple[Optional[int], Optional[int]] = (None, None),
-):
-    """Estimate the full-res covariance matrix for each pixel.
-
-    Parameters
-    ----------
-    slcs : np.array
-        The stack of complex SLC data, shape (nslc, rows, cols)
-    looks : np.array
-        The number of looks as (row looks, col_looks)
-    strides : int, optional
-        the sliding rate in (row, col) direction. If None, equal to `looks`.
-
-    Returns
-    -------
-    C: np.array
-        The full covariance matrix for each pixel.
-        i.e. C[i, j] is the covariance matrix for multilooked-pixel (i, j)
-        shape = (rows // looks[0], cols // looks[1], nslc, nslc)
-    """
-    xp = get_array_module(slcs)
-    # Perform an outer product of the slcs and their conjugate, then multilook
-    numer = take_looks(
-        xp.einsum("ajk, bjk-> abjk", slcs, slcs.conj(), optimize=True), *looks, *strides
-    )
-
-    # Do the same for the powers
-    s_pow_looked = take_looks(xp.abs(slcs) ** 2, *looks, *strides)
-    denom = xp.einsum("ajk, bjk-> abjk", s_pow_looked, s_pow_looked, optimize=True)
-
-    # TODO: what to do with nans, or all 0s?
-    C = numer / xp.sqrt(denom)
-    # Convert the order to (rows, cols, nslc, nslc)
-    return xp.transpose(C, (2, 3, 0, 1))
-
-
-def mle_stack(C_arrays: np.ndarray, beta: float = 0.0, reference_idx: float = 0):
+def mle_stack(C_arrays, beta: float = 0.0, reference_idx: float = 0):
     """Estimate the linked phase for a stack of covariance matrices.
 
-    Will use cupy if available, (and if the input is a cupy array).
-    Otherwise, falls back to numpy.
+    This function is used for both the CPU and GPU versions after
+    covariance estimation.
+    Will use cupy if available, (and if the input is a GPU array).
+    Otherwise, uses numpy (for CPU version).
 
     Parameters
     ----------
-    C_arrays : np.array, shape = (rows, cols, nslc, nslc)
+    C_arrays : ndarray, shape = (rows, cols, nslc, nslc)
         The sample covariance matrix at each pixel
-        (e.g. from [`full_cov`][dolphin.phase_link.mle.full_cov])
+        (e.g. from [dolphin.phase_link.covariance.estimate_stack_covariance_cpu][])
     beta : float, optional
         The regularization parameter for inverting Gamma = |C|
         The regularization is applied as (1 - beta) * Gamma + beta * I
@@ -188,8 +155,15 @@ def mle_stack(C_arrays: np.ndarray, beta: float = 0.0, reference_idx: float = 0)
 
     Returns
     -------
-    np.array, shape = (nslc, rows, cols)
+    ndarray, shape = (nslc, rows, cols)
         The estimated linked phase, same shape as the input slcs (possibly multilooked)
+
+    References
+    ----------
+        [1] Ansari, H., De Zan, F., & Bamler, R. (2018). Efficient phase
+        estimation for interferogram stacks. IEEE Transactions on
+        Geoscience and Remote Sensing, 56(7), 4109-4125.
+
     """
     xp = get_array_module(C_arrays)
     # estimate the wrapped phase based on the EMI paper
@@ -222,60 +196,10 @@ def mle_stack(C_arrays: np.ndarray, beta: float = 0.0, reference_idx: float = 0)
     return np.moveaxis(phase_stack, -1, 0)
 
 
-def compress(
-    slc_stack: np.ndarray,
-    mle_estimate: np.ndarray,
-):
-    """Compress the stack of SLC data using the estimated phase.
-
-    Parameters
-    ----------
-    slc_stack : np.array
-        The stack of complex SLC data, shape (nslc, rows, cols)
-    mle_estimate : np.array
-        The estimated phase from `run_mle_gpu`, shape (nslc, rows, cols)
-
-    Returns
-    -------
-    np.array
-        The compressed SLC data, shape (rows, cols)
-    """
-    xp = get_array_module(slc_stack)
-    # For each pixel, project the SLCs onto the estimated phase
-    # by performing a pixel-wise complex dot product
-    return xp.nanmean(slc_stack * xp.conjugate(mle_estimate), axis=0)
-
-
-def estimate_temp_coh(est, C_arrays):
-    """Estimate the temporal coherence of the neighborhood.
-
-    Parameters
-    ----------
-    est : np.array
-        The estimated phase from `run_mle_gpu`, shape (nslc, rows, cols)
-    C_arrays : np.array, shape = (rows, cols, nslc, nslc)
-        The sample covariance matrix at each pixel
-        (e.g. from [`full_cov`][dolphin.phase_link.mle.full_cov]).
-
-    Returns
-    -------
-    float
-        The temporal coherence of the time series compared to cov_matrix.
-    """
-    xp = get_array_module(C_arrays)
-    # Move to match the SLC dimension at the end for the covariances
-    est_arrays = xp.moveaxis(est, 0, -1)
-    # Get only the phase of the covariance (not correlation/magnitude)
-    C_angles = np.exp(1j * xp.angle(C_arrays))
-
-    est_phase_diffs = xp.einsum("jka, jkb->jkab", est_arrays, est_arrays.conj())
-    # shape will be (rows, cols, nslc, nslc)
-    differences = C_angles * est_phase_diffs.conj()
-
-    # Get just the upper triangle of the differences (not the diagonal)
-    nslc = C_angles.shape[-1]
-    rows, cols = xp.triu_indices(nslc, k=1)
-    upper_diffs = differences[:, :, rows, cols]
-    # get number of non-nan values
-    count = xp.count_nonzero(~xp.isnan(upper_diffs), axis=-1)
-    return xp.abs(xp.nansum(upper_diffs, axis=-1)) / count
+def _check_all_nans(slc_stack):
+    """Check for all NaNs in each SLC of the stack."""
+    nans = np.isnan(slc_stack)
+    # Check that there are no SLCS which are all nans:
+    bad_slc_idxs = np.where(np.all(nans, axis=(1, 2)))[0]
+    if bad_slc_idxs.size > 0:
+        raise PhaseLinkRuntimeError(f"SLC stack[{bad_slc_idxs}] has are all NaNs.")

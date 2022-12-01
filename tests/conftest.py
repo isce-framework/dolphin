@@ -5,7 +5,7 @@ from osgeo import gdal
 from dolphin.io import load_gdal, save_arr
 from dolphin.phase_link import simulate
 
-simulate.seed(1234)
+simulate._seed(1234)
 NUM_ACQ = 30
 
 
@@ -40,7 +40,7 @@ def slc_file_list(tmp_path, slc_stack):
 # Phase linking fixtures for one neighborhood tests
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def C_truth():
     C, truth = simulate.simulate_C(
         num_acq=NUM_ACQ,

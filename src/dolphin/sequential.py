@@ -1,4 +1,11 @@
-"""Estimate wrapped phase using batches of ministacks."""
+"""Estimate wrapped phase using batches of ministacks.
+
+References
+----------
+    [1] Ansari, H., De Zan, F., & Bamler, R. (2017). Sequential estimator: Toward
+    efficient InSAR time series analysis. IEEE Transactions on Geoscience and
+    Remote Sensing, 55(10), 5637-5652.
+"""
 from collections import defaultdict
 from math import nan
 from pathlib import Path
@@ -11,8 +18,7 @@ from tqdm.contrib.logging import logging_redirect_tqdm
 
 from dolphin import io
 from dolphin.log import get_log
-from dolphin.phase_link.mle import compress
-from dolphin.phase_link.mle_gpu import MLERuntimeError, run_mle_gpu
+from dolphin.phase_link import PhaseLinkRuntimeError, run_mle
 from dolphin.utils import Pathlike, get_raster_xysize
 from dolphin.vrt import VRTStack
 
@@ -143,7 +149,7 @@ def run_evd_sequential(
 
             # Run the phase linking process on the current ministack
             try:
-                cur_mle_stack, tcorr = run_mle_gpu(
+                cur_mle_stack, tcorr = run_mle(
                     cur_data,
                     half_window=(xhalf, yhalf),
                     beta=beta,
@@ -151,7 +157,7 @@ def run_evd_sequential(
                     mask=mask[rows, cols],
                     ps_mask=ps_mask[rows, cols],
                 )
-            except MLERuntimeError:
+            except PhaseLinkRuntimeError:
                 # note: this is a warning instead of info, since it should
                 # get caught at the "skip_empty" step
                 logger.warning("No valid pixels in block. Skipping.")
@@ -202,7 +208,7 @@ def run_evd_sequential(
             logger.debug(msg)
 
         # Run the phase linking process on the current ministack
-        cur_mle_stack, tcorr = run_mle_gpu(
+        cur_mle_stack, tcorr = run_mle(
             cur_data,
             half_window=(xhalf, yhalf),
             beta=beta,
@@ -266,3 +272,27 @@ def run_evd_sequential(
     )
 
     return final_output_folder
+
+
+def compress(
+    slc_stack: np.ndarray,
+    mle_estimate: np.ndarray,
+):
+    """Compress the stack of SLC data using the estimated phase.
+
+    Parameters
+    ----------
+    slc_stack : np.array
+        The stack of complex SLC data, shape (nslc, rows, cols)
+    mle_estimate : np.array
+        The estimated phase from [`run_mle`][dolphin.phase_link.mle.run_mle],
+        shape (nslc, rows, cols)
+
+    Returns
+    -------
+    np.array
+        The compressed SLC data, shape (rows, cols)
+    """
+    # For each pixel, project the SLCs onto the estimated phase
+    # by performing a pixel-wise complex dot product
+    return np.nanmean(slc_stack * np.conjugate(mle_estimate), axis=0)

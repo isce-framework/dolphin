@@ -1,22 +1,25 @@
+"""Module for simulating stacks of SLCs to test phase linking algorithms.
+
+Contains simple versions of MLE and EVD estimator to compare against the
+full CPU/GPU stack implementations.
+"""
 import numpy as np
 import numpy.linalg as la
 from numba import njit
-
-from .mle import coh_mat, evd, mle
-
-
-@njit(cache=True)
-def seed(a):
-    """Seed the random number generator for numba.
-
-    https://numba.readthedocs.io/en/stable/reference/numpysupported.html#initialization
-    """
-    np.random.seed(a)
 
 
 @njit(cache=True)
 def _ccg_noise(N: int) -> np.array:
     return (np.random.randn(N) + 1j * np.random.randn(N)) / np.sqrt(2)
+
+
+@njit(cache=True)
+def _seed(a):
+    """Seed the random number generator for numba.
+
+    https://numba.readthedocs.io/en/stable/reference/numpysupported.html#initialization
+    """
+    np.random.seed(a)
 
 
 @njit(cache=True)
@@ -154,11 +157,13 @@ def plot_compare_mle_evd(ns=200, unwrap=False, seed=None):
     """Compare the results of the MLE and EVD methods."""
     import matplotlib.pyplot as plt
 
-    np.random.seed(seed)
+    from .covariance import coh_mat_single
+
+    _seed(seed)
     C, signal = simulate_C(num_acq=30, Tau0=12, gamma_inf=0, add_signal=True)
     # C = simulate_C(num_acq=30, Tau0=12, gamma_inf=0, add_signal=True)
     samps = simulate_neighborhood_stack(C, ns)
-    C_hat = coh_mat(samps)
+    C_hat = coh_mat_single(samps)
 
     truth = signal
     est_evd = np.angle(evd(C_hat))
@@ -188,30 +193,50 @@ def plot_compare_mle_evd(ns=200, unwrap=False, seed=None):
 
 
 @njit(cache=True)
-def estimate_temp_coh(est, cov_matrix):
-    """Estimate the temporal coherence of the neighborhood.
+def mle(cov_mat, beta=0.0):
+    """Estimate the linked phase using the MLE estimator.
 
     Parameters
     ----------
-    est : np.array
-        The estimated/solved phase timeseries.
-    cov_matrix : np.array
-        The covariance matrix of the neighborhood.
+    cov_mat : np.array
+        The sample covariance matrix
+    beta : float, optional
+        The regularization parameter, by default 0.0
 
     Returns
     -------
-    float
-        The temporal coherence of the time series compared to cov_matrix.
+    np.array
+        The estimated linked phase
     """
-    gamma = 0
-    N = len(est)
-    count = 0
-    for i in range(N):
-        for j in range(i + 1, N):
-            theta = np.angle(cov_matrix[i, j])
-            phi = np.angle(est[i] * np.conj(est[j]))
+    dtype = cov_mat.dtype
+    cov_mat = cov_mat.astype(dtype)
+    # estimate the wrapped phase based on the EMI paper
+    # *smallest* eigenvalue decomposition of the (|Gamma|^-1  *  C) matrix
+    Gamma = np.abs(cov_mat).astype(dtype)
+    if beta:
+        Gamma = (1 - beta) * Gamma + beta * np.eye(Gamma.shape[0], dtype=Gamma.dtype)
+        Gamma_inv = la.inv(Gamma).astype(dtype)
+    else:
+        Gamma_inv = la.inv(Gamma).astype(dtype)
+    _, v = la.eigh(Gamma_inv * cov_mat)
 
-            gamma += np.exp(1j * theta) * np.exp(-1j * phi)
-            count += 1
-    # assert count == (N * (N - 1)) / 2
-    return np.abs(gamma) / count
+    # smallest eigenvalue is idx 0
+    # reference to the first acquisition
+    evd_estimate = v[:, 0] * np.conjugate(v[0, 0])
+    return evd_estimate.astype(dtype)
+
+
+@njit(cache=True)
+def evd(cov_mat):
+    """Estimate the linked phase the largest eigenvector of `cov_mat`."""
+    # estimate the wrapped phase based on the eigenvalue decomp of the cov. matrix
+    # n = len(cov_mat)
+    # lambda_, v = la.eigh(cov_mat, subset_by_index=[n - 1, n - 1])  # only scipy.linalg
+    # v = v.flatten()
+    lambda_, v = la.eigh(cov_mat)
+
+    # Biggest eigenvalue is the last one
+    # reference to the first acquisition
+    evd_estimate = v[:, -1] * np.conjugate(v[0, -1])
+
+    return evd_estimate.astype(cov_mat.dtype)
