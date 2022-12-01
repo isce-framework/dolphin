@@ -58,11 +58,12 @@ def run_gpu(
 
     # Make a buffer for each pixel's coherence matrix
     # d_ means "device_", i.e. on the GPU
-    d_C_arrays = cp.zeros((rows, cols, num_slc, num_slc), dtype=np.complex64)
+    out_rows, out_cols = covariance.compute_out_shape((rows, cols), strides)
+    d_C_arrays = cp.zeros((out_rows, out_cols, num_slc, num_slc), dtype=np.complex64)
 
-    # Divide up the stack using a 2D grid
-    blocks_x = ceil(cols / threads_per_block[0])
-    blocks_y = ceil(rows / threads_per_block[1])
+    # Divide up the output shape using a 2D grid
+    blocks_x = ceil(out_cols / threads_per_block[0])
+    blocks_y = ceil(out_rows / threads_per_block[1])
     blocks = (blocks_x, blocks_y)
 
     covariance.estimate_stack_covariance_gpu[blocks, threads_per_block](

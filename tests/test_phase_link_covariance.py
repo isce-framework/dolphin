@@ -86,21 +86,53 @@ def test_estimate_stack_covariance_gpu(slcs, expected_cov, looks=(5, 5)):
 
     # Set up the full res version using numba
     d_slcs = cp.asarray(slcs)
-    d_C3 = cp.zeros((rows, cols, num_slc, num_slc), dtype=np.complex64)
+
+    strides = (1, 1)
+    out_rows, out_cols = rows, cols
+    d_C3 = cp.zeros((out_rows, out_cols, num_slc, num_slc), dtype=np.complex64)
     threads_per_block = (16, 16)
     blocks_x = ceil(slcs.shape[1] / threads_per_block[0])
-    blocks_y = ceil(slcs.hape[2] / threads_per_block[1])
+    blocks_y = ceil(slcs.shape[2] / threads_per_block[1])
     blocks = (blocks_x, blocks_y)
 
     half_window = (looks[1] // 2, looks[0] // 2)
-    covariance.estimate_covariance_gpu[blocks, threads_per_block](
-        d_slcs, half_window, d_C3
+    covariance.estimate_stack_covariance_gpu[blocks, threads_per_block](
+        d_slcs, half_window, strides, d_C3
     )
     C3 = d_C3.get()
-    assert C3.shape == (rows, cols, num_slc, num_slc)
+    # assert C3.shape == (out_rows, out_cols, num_slc, num_slc)
     C3_sub = C3[2 : -2 : looks[0], 2 : -2 : looks[0]]
     assert C3_sub.shape == expected_cov.shape
     np.testing.assert_array_almost_equal(expected_cov, C3_sub)
+
+
+@pytest.mark.skipif(not GPU_AVAILABLE, reason="GPU not available")
+def test_estimate_stack_covariance_gpu_strides(slcs, expected_cov, looks=(5, 5)):
+    import cupy as cp
+
+    num_slc, rows, cols = slcs.shape
+    # Get the CPU version for comparison
+    expected_cov = get_expected_cov(slcs, looks)
+
+    # Set up the full res version using numba
+    d_slcs = cp.asarray(slcs)
+
+    strides = looks
+    out_rows, out_cols = covariance.compute_out_shape((rows, cols), strides)
+    d_C3 = cp.zeros((out_rows, out_cols, num_slc, num_slc), dtype=np.complex64)
+    threads_per_block = (16, 16)
+    blocks_x = ceil(slcs.shape[1] / threads_per_block[0])
+    blocks_y = ceil(slcs.shape[2] / threads_per_block[1])
+    blocks = (blocks_x, blocks_y)
+
+    half_window = (looks[1] // 2, looks[0] // 2)
+    covariance.estimate_stack_covariance_gpu[blocks, threads_per_block](
+        d_slcs, half_window, strides, d_C3
+    )
+    # Now this should be the same size as the multi-looked version
+    C3 = d_C3.get()
+    assert C3.shape == expected_cov.shape
+    np.testing.assert_array_almost_equal(expected_cov, C3)
 
 
 def test_estimate_stack_covariance_nans(slcs):
@@ -144,8 +176,9 @@ def test_estimate_stack_covariance_nans_gpu(slcs, looks=(5, 5)):
     d_C = cp.zeros((rows, cols, num_slc, num_slc), dtype=np.complex64)
 
     half_window = (looks[1] // 2, looks[0] // 2)
-    covariance.estimate_covariance_gpu[blocks, threads_per_block](
-        d_slcs, half_window, d_C
+    strides = (1, 1)
+    covariance.estimate_stack_covariance_gpu[blocks, threads_per_block](
+        d_slcs, half_window, strides, d_C
     )
     C_nonan = d_C.get()
 
@@ -153,8 +186,8 @@ def test_estimate_stack_covariance_nans_gpu(slcs, looks=(5, 5)):
     slcs_nan[:, 20, 20] = np.nan
     d_slcs_nan = cp.asarray(slcs_nan)
     d_C_nan = cp.zeros((rows, cols, num_slc, num_slc), dtype=np.complex64)
-    covariance.estimate_covariance_gpu[blocks, threads_per_block](
-        d_slcs_nan, half_window, d_C_nan
+    covariance.estimate_stack_covariance_gpu[blocks, threads_per_block](
+        d_slcs_nan, half_window, strides, d_C_nan
     )
     C_nan = d_C_nan.get()
 

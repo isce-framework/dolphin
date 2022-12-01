@@ -115,23 +115,27 @@ def estimate_stack_covariance_gpu(
 ):
     """Estimate the linked phase at all pixels of `slc_stack` on the GPU."""
     # Get the global position within the 2D GPU grid
-    x, y = cuda.grid(2)
-    N, rows, cols = slc_stack.shape
+    out_x, out_y = cuda.grid(2)
+    out_rows, out_cols = C_out.shape[:2]
     # Check if we are within the bounds of the array
-    if y >= rows or x >= cols:
+    if out_y >= out_rows or out_x >= out_cols:
         return
 
-    (r_start, r_end), (c_start, c_end) = _get_slices_gpu(half_window, y, x, rows, cols)
-    # TODO: make strides work
-    if strides != (1, 1):
-        # print("Strides not implemented for GPU version")
-        pass
+    row_strides, col_strides = strides
+    r_start = row_strides // 2
+    c_start = col_strides // 2
+    in_r = r_start + out_y * row_strides
+    in_c = c_start + out_x * col_strides
 
-    # Clamp the window to the image bounds
+    N, rows, cols = slc_stack.shape
+    # Get the input slices, clamping the window to the image bounds
+    (r_start, r_end), (c_start, c_end) = _get_slices_gpu(
+        half_window, in_r, in_c, rows, cols
+    )
     samples_stack = slc_stack[:, r_start:r_end, c_start:c_end]
 
     # estimate the coherence matrix, store in current pixel's buffer
-    C = C_out[x, y, :, :]
+    C = C_out[out_y, out_x, :, :]
     _coh_mat_gpu(samples_stack, C)
 
 

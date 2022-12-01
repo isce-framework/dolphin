@@ -47,14 +47,6 @@ def test_estimation(C_truth, est_mle_cpu, est_evd_cpu):
 def test_estimation_gpu(slc_samples, est_mle_cpu):
     # Get the GPU version
     slc_stack = slc_samples.reshape(NUM_ACQ, 11, 11)
-    # est_mle_gpu_ml, temp_coh = mle_gpu.run_mle_multilooked_gpu(
-    #     slc_stack, half_window=(5, 5)
-    # )
-    # assert est_mle_gpu_ml.shape == (len(est_mle_cpu), 1, 1)
-    # assert temp_coh.shape == (1, 1)
-
-    # est_phase_gpu = np.angle(np.squeeze(est_mle_gpu_ml))
-    # np.testing.assert_array_almost_equal(est_mle_cpu, est_phase_gpu, decimal=3)
 
     est_mle_gpu_fullres, temp_coh = run_gpu(slc_stack, half_window=(5, 5))
     assert est_mle_gpu_fullres.shape == (len(est_mle_cpu), 11, 11)
@@ -92,5 +84,6 @@ def test_masked(slc_samples, C_truth, C_hat):
     if not GPU_AVAILABLE:
         pytest.skip("GPU version not available")
     # Now check GPU version
-    est_multilooked_gpu = np.squeeze(run_gpu(slc_stack_masked, half_window=(5, 5)))
-    np.testing.assert_array_almost_equal(est_mle, est_multilooked_gpu, decimal=1)
+    est_mle_gpu_fullres, temp_coh = run_gpu(slc_stack_masked, half_window=(5, 5))
+    est_phase_gpu = np.angle(est_mle_gpu_fullres[:, 5, 5])
+    np.testing.assert_array_almost_equal(est_mle, est_phase_gpu, decimal=1)
