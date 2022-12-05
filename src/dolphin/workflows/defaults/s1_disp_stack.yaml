@@ -1,0 +1,84 @@
+runconfig:
+  name: disp_s1_workflow_default
+
+  groups:
+    pge_name_group:
+      pge_name: DISP_S1_PGE
+
+    input_file_group:
+      cslc_file_list:
+      cslc_file_path:
+      cslc_file_ext: '.slc'
+
+
+    dynamic_ancillary_file_group:
+      dem_file:
+      mask_files: []
+      amp_disp_file: "amp_dispersion"
+      amp_mean_file: "mean"
+
+    product_path_group:
+      product_path:
+      scratch_path: 'scratch'
+      sas_output_file:
+
+    primary_executable:
+      product_type: DISP_S1
+
+    worker:
+      internet_access: False
+      gpu_enabled: False
+      gpu_id: 0
+      n_workers: 16
+
+    processing:
+      output_format: 'ENVI'
+      # bbox_latlon:
+
+      # temporary files during workflow processing at multiple stages
+      weight_file: 'nmap'
+      nmap_count_file: 'count'
+      ps_file: 'ps_pixels'
+
+      lines_per_block: 128
+      ram: 64
+
+      window:
+        xhalf: 11
+        yhalf: 5
+
+
+      ps:
+        directory: 'PS'
+        amp_dispersion_threshold: 0.42
+        normalizing_reference_band: 1
+
+      nmap:
+        run_nmap: False
+        directory: 'nmap'
+        pvalue: 0.05
+        stat_method: 'KS2'
+
+      phase_linking:
+        directory: 'linked_phase'
+        minimum_neighbors: 5
+        method: 'mle'
+        compressed_slc_file: 'compslc.bin'
+        temp_coh_file: 'tcorr.bin'
+        ministack_size: 15
+
+      combine_ps_ds:
+        directory: 'PS_DS'
+        temp_coh_file: 'tcorr_ps_ds.bin'
+        ps_temp_coh: 0.95
+        ifg_network_options:
+          reference_idx: 0
+          max_bandwidth:
+          max_temporal_baseline:
+
+      unwrap:
+        run_unwrap: False
+        directory: 'unwrapped'
+        unwrap_method: 'snaphu'
+        tiles: [1, 1]
+        init_method: 'mcf'
