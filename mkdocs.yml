@@ -42,6 +42,7 @@ plugins:
 markdown_extensions:
   - pymdownx.arithmatex:
       generic: true
+  - pymdownx.snippets:
 
 extra_javascript:
   - javascripts/mathjax.js

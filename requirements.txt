@@ -1,6 +1,10 @@
 gdal>=3
+git  # For pip-installing in the Docker image
 h5py
+numba
 numpy
+pip
 pymp-pypi
+python>=3.9
 ruamel.yaml
 yamale

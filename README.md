@@ -17,14 +17,17 @@ git clone https://github.com/opera-adt/dolphin.git && cd dolphin
 2. Install dependencies:
 
 ```bash
-conda install -c conda-forge --file requirements.txt
+# assuming that mamba is installed: https://mamba.readthedocs.io/en/latest/
+# if not, start with:
+# conda install mamba -n base -c conda-forge
+mamba install -c conda-forge --file requirements.txt
 ```
 
 3. Install `dolphin` via pip:
 
 ```bash
-# run "pip install -e" to install in development mode
-python -m pip install .
+# -e installs in development mode
+python -m pip install -e .
 ```
 
 For development:
