@@ -1,4 +1,4 @@
-# atlas
+# dolphin
 
 Algorithms and Tools for LAnd Surface Deformation using InSAR
 
@@ -6,12 +6,12 @@ Algorithms and Tools for LAnd Surface Deformation using InSAR
 
 ## Install
 
-The following will install `atlas` into a conda environment.
+The following will install `dolphin` into a conda environment.
 
 1. Download source code:
 
 ```bash
-git clone https://github.com/opera-adt/atlas.git && cd atlas
+git clone https://github.com/opera-adt/dolphin.git && cd dolphin
 ```
 
 2. Install dependencies:
@@ -20,12 +20,25 @@ git clone https://github.com/opera-adt/atlas.git && cd atlas
 conda install -c conda-forge --file requirements.txt
 ```
 
-3. Install `atlas` via pip:
+3. Install `dolphin` via pip:
 
 ```bash
 # run "pip install -e" to install in development mode
 python -m pip install .
 ```
+
+For development:
+
+```bash
+# run "pip install -e" to install in development mode
+python -m pip install -e .[dev]
+# Get pre-commit hooks so that linting/formatting is done automatically
+pre-commit install
+
+# After making changes, check the tests:
+pytest
+```
+
 
 ## Usage
 

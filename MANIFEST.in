@@ -1,1 +1,2 @@
-recursive-include src/atlas/* *.yaml
+# include YAML workflow files
+recursive-include src/dolphin/* *.yaml
