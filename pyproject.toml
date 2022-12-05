@@ -12,8 +12,10 @@ dependencies = [
     "ruamel.yaml",
     "yamale",
     "h5py",
-    # "pyproj",
-    # "gdal",  # TODO: worth adding here even though it should be through conda?
+    "pymp-pypi",
+    # TODO: worth adding these, even though they should be through conda?
+    # "gdal",
+    # "numba",
 ]
 classifiers = [
     "Development Status :: 2 - Pre-Alpha",
@@ -35,8 +37,13 @@ dev = [
     "pre-commit",
     "black",
     "flake8",
-    # For the cfg creation script
-    # "fire",
+    # mkdocs requirements
+    "mkdocs",
+    "mkdocstrings[python]",
+    "mkdocs-material",
+    "mkdocs-section-index",
+    "mkdocs-gen-files",
+    "mkdocs-literate-nav",
 ]
 
 

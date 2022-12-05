@@ -1,8 +1,8 @@
 """Utility methods to print system info for debugging.
 
-adapted from :func:`rasterio.show_versions`,
-which was adapted from :func:`sklearn.utils._show_versions`
-which was adapted from :func:`pandas.show_versions`
+Adapted from `rasterio.show_versions`,
+which was adapted from `sklearn.utils._show_versions`
+which was adapted from `pandas.show_versions`
 """
 import importlib
 import platform
@@ -72,7 +72,6 @@ def _get_deps_info():
     deps = [
         "numpy",
         "osgeo.gdal",
-        "pyproj",
         "h5py",
         "ruamel_yaml",
         "yamale",

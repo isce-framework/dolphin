@@ -2,9 +2,7 @@ pytest
 pre-commit
 black
 flake8
-# For the cfg creation script
-fire
-# for mkdocs
+# mkdocs requirements
 mkdocs
 mkdocstrings[python]
 mkdocs-material

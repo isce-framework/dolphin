@@ -1,5 +1,6 @@
 gdal>=3
 h5py
 numpy
+pymp-pypi
 ruamel.yaml
 yamale
