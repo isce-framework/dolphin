@@ -22,7 +22,7 @@ plugins:
     - docs/gen_ref_pages.py
 # https://github.com/oprypin/mkdocs-literate-nav
 - literate-nav:
-    nav_file: SUMMARY.md
+    nav_file: summary.md
 # https://github.com/oprypin/mkdocs-section-index
 - section-index
 # https://mkdocstrings.github.io/python/usage/
@@ -57,5 +57,7 @@ nav:
 - getting-started.md
 - tutorials.md
 - how-to-guides.md
+# https://mkdocstrings.github.io/recipes/#generate-a-literate-navigation-file
+# trailing slash: that mkdocs-literate-nav knows a summary.md file is in that folder.
 - Code Reference: reference/
 - background-theory.md
