@@ -4,13 +4,11 @@ runconfig:
   groups:
     input_file_group:
       cslc_file_list:
-        - './t48_iw3_b148_20220111_VV.slc'
-        - './t48_iw3_b148_20220201_VV.slc'
+        - './t078_165503_iw1_20220601_VV.slc'
+        - './t078_165503_iw1_20220713_VV.slc'
 
     product_path_group:
       # Directory where PGE will place results
       product_path: 'output'
-      # Directory where SAS can write temporary data
-      # Intermediate file name. SAS writes the output to this file.
       # PGE may rename the product according to file naming convention
       sas_output_file: 'unwrapped_20220201.unw'

@@ -7,14 +7,6 @@ name = "dolphin"
 description = "Workflows for generating surface displacement maps using InSAR"
 readme = { file = "README.md", content-type = "text/markdown" }
 requires-python = ">=3.9"
-dependencies = [
-    "numpy",
-    "ruamel.yaml",
-    "yamale",
-    "h5py",
-    # "pyproj",
-    # "gdal",  # TODO: worth adding here even though it should be through conda?
-]
 classifiers = [
     "Development Status :: 2 - Pre-Alpha",
     "Intended Audience :: Science/Research",
@@ -22,8 +14,13 @@ classifiers = [
     "License = file : LICENSE",
     "Operating System :: OS Independent",
 ]
+
+# Will be written into a version.py upon install, auto-generated
+# see section: setuptools_scm
+# https://setuptools.pypa.io/en/latest/userguide/pyproject_config.html#dynamic-metadata
 dynamic = [
   "version",
+  "dependencies",
 ]
 
 [project.scripts]
@@ -35,9 +32,17 @@ dev = [
     "pre-commit",
     "black",
     "flake8",
-    # For the cfg creation script
-    # "fire",
+    # mkdocs requirements
+    "mkdocs",
+    "mkdocstrings[python]",
+    "mkdocs-material",
+    "mkdocs-section-index",
+    "mkdocs-gen-files",
+    "mkdocs-literate-nav",
 ]
+
+[tool.setuptools.dynamic]
+dependencies = {file = ["requirements.txt"]}
 
 
 [project.urls]

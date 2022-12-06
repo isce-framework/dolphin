@@ -7,9 +7,9 @@ from typing import List, Tuple, Union
 import numpy as np
 from osgeo import gdal, gdal_array, gdalconst
 
-from dolphin.log import get_log
+from dolphin._log import get_log
 
-Pathlike = Union[PathLike[str], str]
+Filename = Union[str, PathLike[str]]
 gdal.UseExceptions()
 logger = get_log()
 
@@ -34,7 +34,7 @@ def gdal_to_numpy_type(gdal_type):
     return gdal_array.GDALTypeCodeToNumericTypeCode(gdal_type)
 
 
-def get_dates(filename: Pathlike) -> List[Union[None, str]]:
+def get_dates(filename: Filename) -> List[Union[None, str]]:
     """Search for dates (YYYYMMDD) in `filename`, excluding path."""
     date_list = re.findall(r"\d{4}\d{2}\d{2}", Path(filename).stem)
     if not date_list:
@@ -44,7 +44,7 @@ def get_dates(filename: Pathlike) -> List[Union[None, str]]:
     return date_list
 
 
-def parse_slc_strings(slc_str: Union[Pathlike, List[Pathlike]], fmt="%Y%m%d"):
+def parse_slc_strings(slc_str: Union[Filename, List[Filename]], fmt="%Y%m%d"):
     """Parse a string, or list of strings, matching `fmt` into datetime.date.
 
     Parameters
@@ -102,8 +102,8 @@ def _apply_gt(ds=None, filename=None, x=None, y=None, inverse=False):
 
 
 def combine_mask_files(
-    mask_files: List[Pathlike],
-    scratch_dir: Pathlike,
+    mask_files: List[Filename],
+    scratch_dir: Filename,
     output_file_name: str = "combined_mask.tif",
     dtype: str = "uint8",
     zero_is_valid: bool = False,
@@ -171,7 +171,7 @@ def combine_mask_files(
     return output_file
 
 
-def get_raster_xysize(filename: Pathlike) -> Tuple[int, int]:
+def get_raster_xysize(filename: Filename) -> Tuple[int, int]:
     """Get the xsize/ysize of a GDAL-readable raster."""
     ds = gdal.Open(fspath(filename))
     xsize, ysize = ds.RasterXSize, ds.RasterYSize
@@ -179,7 +179,7 @@ def get_raster_xysize(filename: Pathlike) -> Tuple[int, int]:
     return xsize, ysize
 
 
-def full_suffix(filename: Pathlike):
+def full_suffix(filename: Filename):
     """Get the full suffix of a filename, including multiple dots.
 
     Parameters

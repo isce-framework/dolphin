@@ -2,7 +2,7 @@
 import argparse
 from pathlib import Path
 
-from dolphin.log import log_runtime
+from dolphin._log import log_runtime
 
 from . import config
 
