@@ -1,0 +1,11 @@
+h5py
+numba
+numpy
+pymp-pypi
+ruamel.yaml
+
+# Reqs that only work/only make sense when installing with conda:
+gdal>=3
+pip
+python>=3.9
+git  # For pip-installing in the Docker image

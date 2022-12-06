@@ -22,33 +22,23 @@ classifiers = [
 dynamic = [
   "version",
   "dependencies",
+  "optional-dependencies",
 ]
-
-[project.scripts]
-dolphin = "dolphin.cli:main"
-
-[project.optional-dependencies]
-dev = [
-    "pytest",
-    "pre-commit",
-    "black",
-    "flake8",
-    # mkdocs requirements
-    "mkdocs",
-    "mkdocstrings[python]",
-    "mkdocs-material",
-    "mkdocs-section-index",
-    "mkdocs-gen-files",
-    "mkdocs-literate-nav",
-]
-
-[tool.setuptools.dynamic]
-dependencies = {file = ["requirements.txt"]}
-
 
 [project.urls]
 Homepage = "https://github.com/opera-adt/dolphin"
 "Bug Tracker" = "https://github.com/opera-adt/dolphin/issues"
+
+# Entry points for the command line interface
+[project.scripts]
+dolphin = "dolphin.cli:main"
+
+[tool.setuptools.dynamic]
+dependencies = {file = ["requirements.txt"]}
+
+# extra requirements: `pip install dolphin[docs]` or `pip install .[docs]`
+[tool.setuptools.dynamic.optional-dependencies.docs]
+file = ["docs/requirements.txt"]
 
 
 
