@@ -13,7 +13,7 @@ def load_workflow_yaml(input_path: Filename, *, workflow_name: str = "s1_disp"):
 
     Parameters
     ----------
-    input_path : Pathlike
+    input_path : Filename
         Path to the yaml file to load
     workflow_name : str
         Name of the workflow to load. Used to determine the path to the
@@ -50,7 +50,7 @@ def save_yaml(output_path: Filename, data: dict):
     ----------
     data : dict
         Dictionary containing the yaml data
-    output_path : Pathlike
+    output_path : Filename
         Path to the yaml file to save
     """
     y = YAML()

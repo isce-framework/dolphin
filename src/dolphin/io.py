@@ -7,7 +7,7 @@ import numpy as np
 from osgeo import gdal
 
 from dolphin.log import get_log
-from dolphin.utils import Pathlike, gdal_to_numpy_type, numpy_to_gdal_type
+from dolphin.utils import Filename, gdal_to_numpy_type, numpy_to_gdal_type
 
 gdal.UseExceptions()
 logger = get_log()
@@ -24,7 +24,7 @@ DEFAULT_TIFF_OPTIONS = [
 
 
 def load_gdal(
-    filename: Pathlike, band: Optional[int] = None, subsample_factor: int = 1
+    filename: Filename, band: Optional[int] = None, subsample_factor: int = 1
 ):
     """Load a gdal file into a numpy array.
 
@@ -66,7 +66,7 @@ def load_gdal(
     return out
 
 
-def copy_projection(src_file: Pathlike, dst_file: Pathlike) -> None:
+def copy_projection(src_file: Filename, dst_file: Filename) -> None:
     """Copy projection/geotransform from `src_file` to `dst_file`."""
     ds_src = gdal.Open(fspath(src_file))
     projection = ds_src.GetProjection()
@@ -90,12 +90,12 @@ def copy_projection(src_file: Pathlike, dst_file: Pathlike) -> None:
     ds_src = ds_dst = None
 
 
-def get_nodata(filename: Pathlike) -> Optional[float]:
+def get_nodata(filename: Filename) -> Optional[float]:
     """Get the nodata value from a file.
 
     Parameters
     ----------
-    filename : Pathlike
+    filename : Filename
         Path to the file to load.
 
     Returns
@@ -111,8 +111,8 @@ def get_nodata(filename: Pathlike) -> Optional[float]:
 def save_arr(
     *,
     arr: Optional[np.ndarray],
-    output_name: Pathlike,
-    like_filename: Optional[Pathlike] = None,
+    output_name: Filename,
+    like_filename: Optional[Filename] = None,
     driver: Optional[str] = "GTiff",
     options: Optional[List] = None,
     nbands: Optional[int] = None,
@@ -300,8 +300,8 @@ def save_block(
 
 
 def get_stack_nodata_mask(
-    stack_filename: Pathlike,
-    output_file: Optional[Pathlike] = None,
+    stack_filename: Filename,
+    output_file: Optional[Filename] = None,
     compute_bands: Optional[List[int]] = None,
     buffer_pixels: int = 100,
     nodata: float = np.nan,

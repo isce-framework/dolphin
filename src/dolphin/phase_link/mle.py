@@ -3,7 +3,7 @@ from typing import Optional, Tuple
 
 import numpy as np
 
-from dolphin.utils import Pathlike, check_gpu_available, get_array_module
+from dolphin.utils import Filename, check_gpu_available, get_array_module
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +22,7 @@ def run_mle(
     reference_idx: int = 0,
     mask: np.ndarray = None,
     ps_mask: np.ndarray = None,
-    output_cov_file: Optional[Pathlike] = None,
+    output_cov_file: Optional[Filename] = None,
     n_workers: int = 1,
     no_gpu: bool = False,
 ) -> Tuple[np.ndarray, np.ndarray]:

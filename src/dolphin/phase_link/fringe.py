@@ -8,7 +8,7 @@ import numpy as np
 from osgeo import gdal
 
 from dolphin.io import copy_projection
-from dolphin.utils import Pathlike, get_raster_xysize
+from dolphin.utils import Filename, get_raster_xysize
 
 # nmap.py -i stack/slcs_base.vrt -o nmap/nmap -c nmap/count -x 11 -y 5
 gdal.UseExceptions()
@@ -16,13 +16,13 @@ gdal.UseExceptions()
 
 def run_nmap(
     *,
-    slc_vrt_file: Pathlike,
-    weight_file: Pathlike,
-    count_file: Pathlike,
+    slc_vrt_file: Filename,
+    weight_file: Filename,
+    count_file: Filename,
     window: dict,
     skip_shp: bool = False,
     nmap_opts: dict = {},
-    mask_file: Optional[Pathlike] = None,
+    mask_file: Optional[Filename] = None,
     lines_per_block: int = 128,
     ram: int = 1024,
     no_gpu: bool = False,
@@ -49,12 +49,12 @@ def run_nmap(
 
 def run_nmap_fringe(
     *,
-    slc_vrt_file: Pathlike,
-    weight_file: Pathlike,
-    count_file: Pathlike,
+    slc_vrt_file: Filename,
+    weight_file: Filename,
+    count_file: Filename,
     window: dict,
     nmap_opts: dict,
-    mask_file: Optional[Pathlike] = None,
+    mask_file: Optional[Filename] = None,
     lines_per_block: int = 128,
     ram: int = 1024,
     no_gpu: bool = False,
@@ -88,11 +88,11 @@ def run_nmap_fringe(
 
 def create_full_nmap_files(
     window: dict,
-    slc_vrt_file: Pathlike = "",
+    slc_vrt_file: Filename = "",
     xsize: Optional[int] = None,
     ysize: Optional[int] = None,
-    weight_file: Pathlike = "./nmap",
-    count_file: Pathlike = "./count",
+    weight_file: Filename = "./nmap",
+    count_file: Filename = "./count",
 ):
     """Make dummy SHP nmap/count files with all neighborhoods set to 1.
 
@@ -138,10 +138,10 @@ def create_full_nmap_files(
 
 def run_evd(
     *,
-    slc_vrt_file: Pathlike,
-    weight_file: Pathlike,
-    compressed_slc_file: Pathlike,
-    output_folder: Pathlike,
+    slc_vrt_file: Filename,
+    weight_file: Filename,
+    compressed_slc_file: Filename,
+    output_folder: Filename,
     window: dict,
     pl_opts: dict,
     lines_per_block: int = 128,

@@ -9,14 +9,14 @@ from osgeo_utils import gdal_calc
 gdal.UseExceptions()
 
 from dolphin.io import copy_projection
-from dolphin.utils import Pathlike
+from dolphin.utils import Filename
 
 
 def create_amp_dispersion(
     *,
-    slc_vrt_file: Pathlike,
-    output_file: Pathlike,
-    amp_mean_file: Pathlike,
+    slc_vrt_file: Filename,
+    output_file: Filename,
+    amp_mean_file: Filename,
     reference_band: int,
     lines_per_block: int = 1000,
     ram: int = 1024,
@@ -38,10 +38,33 @@ def create_amp_dispersion(
     copy_projection(slc_vrt_file, output_file)
 
 
+def create_amp_dispersion_py(
+    *,
+    slc_vrt_file: Filename,
+    output_file: Filename,
+    amp_mean_file: Filename,
+    reference_band: int,
+):
+    """Create the amplitude dispersion file using Python.
+
+    Parameters
+    ----------
+    slc_vrt_file : Filename
+        The VRT file pointing to the stack of SLCs.
+    output_file : Filename
+        The output amplitude dispersion file.
+    amp_mean_file : Filename
+        The mean amplitude file.
+    reference_band : int
+        The band number of the reference SLC.
+    """
+    pass
+
+
 def create_ps(
     *,
-    output_file: Pathlike,
-    amp_disp_file: Pathlike,
+    output_file: Filename,
+    amp_disp_file: Filename,
     amp_dispersion_threshold: float = 0.42,
 ):
     """Create the PS file using the existing amplitude dispersion file."""
@@ -58,10 +81,10 @@ def create_ps(
 
 
 def update_amp_disp(
-    amp_mean_file: Pathlike,
-    amp_disp_file: Pathlike,
-    slc_vrt_file: Pathlike,
-    output_directory: Pathlike = "",
+    amp_mean_file: Filename,
+    amp_disp_file: Filename,
+    slc_vrt_file: Filename,
+    output_directory: Filename = "",
 ):
     r"""Update the amplitude dispersion for the new SLC.
 
@@ -82,14 +105,14 @@ def update_amp_disp(
 
     Parameters
     ----------
-    amp_mean_file : Pathlike
+    amp_mean_file : Filename
         The existing mean amplitude file.
-    amp_disp_file : Pathlike
+    amp_disp_file : Filename
         The existing amplitude dispersion file.
-    slc_vrt_file : Pathlike
+    slc_vrt_file : Filename
         The VRT file pointing to the stack of SLCs.
         Assumes that the final band is the new SLC to be added.
-    output_directory : Pathlike, optional
+    output_directory : Filename, optional
         The output directory for the updated files, current directory by default.
 
     References

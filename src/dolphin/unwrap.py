@@ -11,7 +11,7 @@ from osgeo import gdal
 from tqdm import tqdm
 
 from dolphin.log import get_log, log_runtime
-from dolphin.utils import Pathlike, get_raster_xysize, numpy_to_gdal_type
+from dolphin.utils import Filename, get_raster_xysize, numpy_to_gdal_type
 
 logger = get_log()
 
@@ -19,10 +19,10 @@ gdal.UseExceptions()
 
 
 def unwrap(
-    ifg_file: Pathlike,
-    cor_file: Pathlike,
-    out_file: Pathlike,
-    mask_file: Optional[Pathlike],
+    ifg_file: Filename,
+    cor_file: Filename,
+    out_file: Filename,
+    mask_file: Optional[Filename],
     do_tile: bool = False,
     init_method: str = "mcf",
 ):
@@ -191,10 +191,10 @@ def _save_with_metadata(meta_file, data_file, alt_line_data=True, dtype="float32
 
 @log_runtime
 def run(
-    ifg_path: Pathlike,
-    output_path: Pathlike,
-    cor_file: Pathlike = "tcorr_ps_ds.bin",
-    mask_file: Pathlike = None,
+    ifg_path: Filename,
+    output_path: Filename,
+    cor_file: Filename = "tcorr_ps_ds.bin",
+    mask_file: Optional[Filename] = None,
     max_jobs: int = 20,
     overwrite: bool = False,
     no_tile: bool = True,
@@ -205,13 +205,13 @@ def run(
 
     Parameters
     ----------
-    ifg_path : Pathlike
+    ifg_path : Filename
         Path to input interferograms
-    output_path : Pathlike
+    output_path : Filename
         Path to output directory
     cor_file : str, optional
         location of temporal correlation, by default "tcorr_ps_ds.bin"
-    mask_file : Pathlike, optional
+    mask_file : Filename, optional
         Path to mask file, by default None
     max_jobs : int, optional
         Maximum parallel processes, by default 20

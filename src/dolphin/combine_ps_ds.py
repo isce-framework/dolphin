@@ -8,7 +8,7 @@ from osgeo_utils import gdal_calc
 
 from dolphin import io, network
 from dolphin.log import get_log
-from dolphin.utils import Pathlike, get_dates
+from dolphin.utils import Filename, get_dates
 
 gdal.UseExceptions()
 
@@ -17,9 +17,9 @@ logger = get_log()
 
 def form_ifgs(
     *,
-    slc_vrt_file: Pathlike,
-    pl_directory: Pathlike,
-    output_folder: Pathlike,
+    slc_vrt_file: Filename,
+    pl_directory: Filename,
+    output_folder: Filename,
     ifg_network_options: dict,
     driver: str = "GTiff",
 ):
@@ -60,12 +60,12 @@ def form_ifgs(
 
 def run_combine(
     *,
-    slc_vrt_file: Pathlike,
-    ps_file: Pathlike,
-    pl_directory: Pathlike,
-    temp_coh_file: Pathlike,
-    temp_coh_ps_ds_file: Pathlike,
-    output_folder: Pathlike,
+    slc_vrt_file: Filename,
+    ps_file: Filename,
+    pl_directory: Filename,
+    temp_coh_file: Filename,
+    temp_coh_ps_ds_file: Filename,
+    output_folder: Filename,
     ps_temp_coh: float,
     ifg_network_options: dict,
 ):
@@ -152,20 +152,20 @@ def _form_ifg(bnd_1, bnd_2, x0, y0, xwindow, ywindow):
 
 
 def fill_temp_coh(
-    ps_file: Pathlike,
-    temp_coh_file: Pathlike,
-    temp_coh_ps_ds_file: Pathlike,
+    ps_file: Filename,
+    temp_coh_file: Filename,
+    temp_coh_ps_ds_file: Filename,
     ps_temp_coh: float,
 ):
     """Fill in high values for PS in the temporal coherence file.
 
     Parameters
     ----------
-    ps_file : Pathlike
+    ps_file : Filename
         Name of persistent scatterer binary file.
-    temp_coh_file : Pathlike
+    temp_coh_file : Filename
         Name of temporal coherence file resulting from phase linking.
-    temp_coh_ps_ds_file : Pathlike
+    temp_coh_ps_ds_file : Filename
         Name of output temporal coherence file with PS values filled in.
     ps_temp_coh : float
         Value to fill in at the PS pixels in the merged temporal coherence file.

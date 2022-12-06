@@ -3,7 +3,7 @@ from typing import Optional, Tuple
 
 import numpy as np
 
-from dolphin.utils import Pathlike
+from dolphin.utils import Filename
 
 from . import covariance, metrics
 from .mle import mle_stack
@@ -17,7 +17,7 @@ def run_cpu(
     strides: Tuple[int, int] = (1, 1),
     beta: float = 0.0,
     reference_idx: int = 0,
-    output_cov_file: Optional[Pathlike] = None,
+    output_cov_file: Optional[Filename] = None,
     n_workers: int = 1,
     **kwargs,
 ):

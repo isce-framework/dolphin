@@ -4,7 +4,7 @@ from typing import Optional, Tuple
 import numpy as np
 from numba import cuda
 
-from dolphin.utils import Pathlike
+from dolphin.utils import Filename
 
 from . import covariance, metrics
 from .mle import mle_stack
@@ -16,7 +16,7 @@ def run_gpu(
     strides: Tuple[int, int] = (1, 1),
     beta: float = 0.0,
     reference_idx: int = 0,
-    output_cov_file: Optional[Pathlike] = None,
+    output_cov_file: Optional[Filename] = None,
     threads_per_block: Tuple[int, int] = (16, 16),
     **kwargs,
 ) -> Tuple[np.ndarray, np.ndarray]:

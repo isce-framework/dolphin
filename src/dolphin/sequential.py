@@ -19,7 +19,7 @@ from tqdm.contrib.logging import logging_redirect_tqdm
 from dolphin import io
 from dolphin.log import get_log
 from dolphin.phase_link import PhaseLinkRuntimeError, run_mle
-from dolphin.utils import Pathlike, get_raster_xysize
+from dolphin.utils import Filename, get_raster_xysize
 from dolphin.vrt import VRTStack
 
 logger = get_log()
@@ -27,14 +27,14 @@ logger = get_log()
 
 def run_evd_sequential(
     *,
-    slc_vrt_file: Pathlike,
-    # weight_file: Pathlike,
-    output_folder: Pathlike,
+    slc_vrt_file: Filename,
+    # weight_file: Filename,
+    output_folder: Filename,
     window: dict,
     strides: dict = {"x": 1, "y": 1},
     ministack_size: int = 10,
-    mask_file: Optional[Pathlike] = None,
-    ps_mask_file: Optional[Pathlike] = None,
+    mask_file: Optional[Filename] = None,
+    ps_mask_file: Optional[Filename] = None,
     beta: float = 0.1,
     max_bytes: float = 32e6,
     n_workers: int = 1,

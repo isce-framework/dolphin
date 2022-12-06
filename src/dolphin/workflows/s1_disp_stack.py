@@ -121,7 +121,7 @@ def run(full_cfg: dict, debug: bool = False):
         logger.info(f"Running sequential EMI step in {pl_path}")
         pl_path = sequential.run_evd_sequential(
             slc_vrt_file=slc_vrt_file,
-            # weight_file: Pathlike,
+            # weight_file: Filename,
             output_folder=pl_path,
             window=cfg["window"],
             strides=cfg["strides"],
@@ -129,7 +129,7 @@ def run(full_cfg: dict, debug: bool = False):
             max_bytes=1e6 * cfg["ram"],
             n_workers=n_workers,
             no_gpu=not gpu_enabled,
-            # mask_file: Pathlike = None,
+            # mask_file: Filename = None,
             # ps_mask_file=ps_output,
             # beta=0.1,
             # beta=cgf["phase_linking"]["beta"],

@@ -8,7 +8,7 @@ from osgeo import gdal
 
 from dolphin import io, utils
 from dolphin.log import get_log
-from dolphin.utils import Pathlike, get_raster_xysize
+from dolphin.utils import Filename, get_raster_xysize
 
 SENTINEL_WAVELENGTH = 0.05546576
 
@@ -55,8 +55,8 @@ class VRTStack:
 
     def __init__(
         self,
-        file_list: Sequence[Pathlike],
-        outfile: Pathlike = "slc_stack.vrt",
+        file_list: Sequence[Filename],
+        outfile: Filename = "slc_stack.vrt",
         use_abs_path: bool = True,
         pixel_bbox: Optional[Tuple[int, int, int, int]] = None,
         target_extent: Optional[Tuple[float, float, float, float]] = None,
@@ -110,7 +110,7 @@ class VRTStack:
             filename=file_list[0],
         )
 
-    def write(self, outfile: Optional[Pathlike] = None):
+    def write(self, outfile: Optional[Filename] = None):
         """Write out the VRT file pointing to the stack of SLCs.
 
         Uses the `outfile` passed to the constructor, unless `outfile` is provided.
@@ -413,7 +413,7 @@ class VRTStack:
             )
 
     @staticmethod
-    def _get_non_vrt_file(filename: Pathlike):
+    def _get_non_vrt_file(filename: Filename):
         """Get one of the files within a VRT.
 
         If the file is not a VRT, return the file itself.
