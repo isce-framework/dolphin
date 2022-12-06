@@ -7,7 +7,7 @@ from typing import List, Union
 import numpy as np
 from osgeo import gdal, gdal_array, gdalconst
 
-from dolphin.log import get_log
+from dolphin._log import get_log
 
 Pathlike = Union[PathLike[str], str]
 gdal.UseExceptions()

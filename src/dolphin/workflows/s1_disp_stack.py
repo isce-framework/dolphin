@@ -4,7 +4,7 @@ from os import fspath
 from pathlib import Path
 
 # from dolphin import phase_link, ps, sequential, unwrap, utils, vrt
-from dolphin.log import get_log, log_runtime
+from dolphin._log import get_log, log_runtime
 
 
 @log_runtime
