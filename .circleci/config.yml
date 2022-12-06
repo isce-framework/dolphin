@@ -8,11 +8,30 @@ jobs:
     steps:
       - checkout
       - run:
-          name: "Build atlas docker image"
+          name: "Build dolphin docker image"
           command: |
-            docker build . -f docker/Dockerfile
+            docker build . -f Dockerfile
+  test:
+    docker:
+      - image: continuumio/miniconda3
+    steps:
+      - checkout
+      - run:
+          name: "Install dependencies"
+          command: |
+            conda install -y --file requirements.txt
+      - run:
+          name: "Install dolphin package"
+          command: |
+            python -m pip install --no-deps .
+      - run:
+          name: "Run pytest"
+          command: |
+            python -m pytest
+
 
 workflows:
   build-workflow:
     jobs:
       - build
+      - test

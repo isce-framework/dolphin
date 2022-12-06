@@ -9,7 +9,7 @@ from osgeo import gdal, gdal_array, gdalconst
 
 from dolphin._log import get_log
 
-Pathlike = Union[PathLike[str], str]
+Filename = Union[str, PathLike[str]]
 gdal.UseExceptions()
 logger = get_log()
 
@@ -34,7 +34,7 @@ def gdal_to_numpy_type(gdal_type):
     return gdal_array.GDALTypeCodeToNumericTypeCode(gdal_type)
 
 
-def get_dates(filename: Pathlike) -> List[Union[None, str]]:
+def get_dates(filename: Filename) -> List[Union[None, str]]:
     """Search for dates (YYYYMMDD) in `filename`, excluding path."""
     date_list = re.findall(r"\d{4}\d{2}\d{2}", Path(filename).stem)
     if not date_list:
@@ -44,7 +44,7 @@ def get_dates(filename: Pathlike) -> List[Union[None, str]]:
     return date_list
 
 
-def parse_slc_strings(slc_str: Union[Pathlike, List[Pathlike]], fmt="%Y%m%d"):
+def parse_slc_strings(slc_str: Union[Filename, List[Filename]], fmt="%Y%m%d"):
     """Parse a string, or list of strings, matching `fmt` into datetime.date.
 
     Parameters

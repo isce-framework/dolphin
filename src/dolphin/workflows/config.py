@@ -5,10 +5,10 @@ from pathlib import Path
 import yamale
 from ruamel.yaml import YAML
 
-from dolphin.utils import Pathlike
+from dolphin.utils import Filename
 
 
-def load_workflow_yaml(input_path: Pathlike, *, workflow_name: str = "s1_disp"):
+def load_workflow_yaml(input_path: Filename, *, workflow_name: str = "s1_disp"):
     """Load and validate a yaml file for a workflow.
 
     Parameters
@@ -41,7 +41,7 @@ def load_workflow_yaml(input_path: Pathlike, *, workflow_name: str = "s1_disp"):
     return updated
 
 
-def save_yaml(output_path: Pathlike, data: dict):
+def save_yaml(output_path: Filename, data: dict):
     """Save a yaml file for a workflow.
 
     Used to record the default-filled version of a supplied yaml.
