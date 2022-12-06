@@ -25,7 +25,7 @@ dynamic = [
 ]
 
 [project.scripts]
-dolphin = "dolphin.workflows.s1_disp:main"
+dolphin = "dolphin.cli:main"
 
 [project.optional-dependencies]
 dev = [

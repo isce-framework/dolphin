@@ -34,12 +34,18 @@ def run(config_file: str, name: str = "stack", debug: bool = False):
         s1_disp_stack.run(cfg["runconfig"]["groups"], debug=debug)
 
 
-def get_cli_args():
+def get_parser(subparser=None, subcommand_name="run"):
     """Set up the command line interface."""
-    parser = argparse.ArgumentParser(
+    metadata = dict(
         description="Run a displacement workflow",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
+    if subparser:
+        # Used by the subparser to make a nested command line interface
+        parser = subparser.add_parser(subcommand_name, **metadata)
+    else:
+        parser = argparse.ArgumentParser(**metadata)
+
     parser.add_argument(
         "config_file",
         help="Name of YAML configuration file describing workflow options.",
@@ -56,13 +62,13 @@ def get_cli_args():
         action="store_true",
         help="Print debug messages to the log.",
     )
-    args = parser.parse_args()
-    return args
+    return parser
 
 
 def main():
     """Get the command line arguments and run the workflow."""
-    args = get_cli_args()
+    parser = get_parser()
+    args = parser.parse_args()
     run(args.config_file, name=args.name, debug=args.debug)
 
 
