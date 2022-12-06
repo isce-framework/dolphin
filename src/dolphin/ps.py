@@ -5,10 +5,11 @@ from pathlib import Path
 import numpy as np
 from osgeo import gdal
 from osgeo_utils import gdal_calc
+from tqdm.auto import tqdm
 
 gdal.UseExceptions()
 
-from dolphin.io import copy_projection
+from dolphin.io import copy_projection, save_arr, save_block
 from dolphin.utils import Filename
 
 
@@ -38,12 +39,14 @@ def create_amp_dispersion(
     copy_projection(slc_vrt_file, output_file)
 
 
-def create_amp_dispersion_py(
-    *,
+def create_ps(
+    # *,
     slc_vrt_file: Filename,
     output_file: Filename,
     amp_mean_file: Filename,
-    reference_band: int,
+    amp_dispersion_file: Filename,
+    amp_dispersion_threshold: float = 0.42,
+    max_bytes: int = 1024 * 1024 * 1024,
 ):
     """Create the amplitude dispersion file using Python.
 
@@ -52,37 +55,107 @@ def create_amp_dispersion_py(
     slc_vrt_file : Filename
         The VRT file pointing to the stack of SLCs.
     output_file : Filename
+        The output PS file (dtype: Byte)
+    amp_dispersion_file : Filename
         The output amplitude dispersion file.
     amp_mean_file : Filename
-        The mean amplitude file.
-    reference_band : int
-        The band number of the reference SLC.
+        The output mean amplitude file.
+    amp_dispersion_threshold : float, optional
+        The threshold for the amplitude dispersion. Default is 0.42.
+    max_bytes : int, optional
+        The maximum number of bytes to read at a time.
+        Default is 1e9 (1 GB).
     """
-    pass
+    from .vrt import VRTStack
+
+    # Initialize the output files with zeros
+    types = [np.uint8, np.float32, np.float32]
+    file_list = [output_file, amp_dispersion_file, amp_mean_file]
+    nodatas = [0, 0, None]
+    for fn, dtype, nodata in zip(file_list, types, nodatas):
+        save_arr(
+            arr=None,
+            like_filename=slc_vrt_file,
+            output_name=fn,
+            nbands=1,
+            dtype=dtype,
+            nodata=nodata,
+        )
+
+    vrt_stack = VRTStack.from_vrt_file(slc_vrt_file)
+    num_blocks = vrt_stack._get_num_blocks(max_bytes=max_bytes)
+    block_shape = vrt_stack._get_block_shape(max_bytes=max_bytes)
+
+    # Initialize the intermediate arrays for the calculation
+    magnitude = np.zeros((len(vrt_stack), *block_shape), dtype=np.float32)
+    # n_valid = np.zeros(block_shape, dtype=int)
+    # mean = np.zeros(block_shape, dtype=np.float32)
+    # std_dev = np.zeros(block_shape, dtype=np.float32)
+    # amp_disp = np.zeros(block_shape, dtype=np.float32)
+    # ps = np.zeros(block_shape, dtype=np.uint8)
+
+    # Make the generator for the blocks
+    block_gen = vrt_stack.iter_blocks(
+        return_slices=True,
+        max_bytes=max_bytes,
+        skip_empty=False,
+    )
+    for cur_data, (rows, cols) in tqdm(block_gen, total=num_blocks):
+        if np.all(cur_data == 0) or np.all(np.isnan(cur_data)):
+            continue
+
+        magnitude = np.abs(cur_data, out=magnitude)
+        # Make the nans into 0s to ignore them
+        np.nan_to_num(magnitude, copy=False)
+
+        # Make a 2d mask of the valid values
+        # np.sum((magnitude != 0).astype(np.int16), axis=0, out=n_valid)
+        np.sum((magnitude != 0).astype(np.int16), axis=0)
+
+        # np.nanmean(magnitude, axis=0, out=mean)
+        # np.nanstd(magnitude, axis=0, out=std_dev)
+        mean = np.nanmean(magnitude, axis=0)
+        std_dev = np.nanstd(magnitude, axis=0)
+
+        # Calculate the amplitude dispersion and replace nans with 0s
+        # amp_disp = np.divide(mean, std_dev, out=amp_disp, where=n_valid > 0)
+        # amp_disp = np.nan_to_num(amp_disp, nan=0, posinf=0, neginf=0, copy=False)
+        amp_disp = mean / std_dev
+        amp_disp = np.nan_to_num(amp_disp, nan=0, posinf=0, neginf=0, copy=False)
+
+        ps = amp_disp < amp_dispersion_threshold
+        # np.greater_equal(amp_disp, amp_dispersion_threshold, out=ps)
+        # No valid pixels, set to max Byte value
+        ps[amp_disp == 0] = 255
+
+        # Write amp dispersion and the mean blocks
+        save_block(mean, amp_mean_file, rows, cols)
+        save_block(amp_disp, amp_dispersion_file, rows, cols)
+        save_block(ps, output_file, rows, cols)
 
 
-def create_ps(
+def create_ps_fringe(
     *,
     output_file: Filename,
-    amp_disp_file: Filename,
+    amp_dispersion_file: Filename,
     amp_dispersion_threshold: float = 0.42,
 ):
     """Create the PS file using the existing amplitude dispersion file."""
     gdal_calc.Calc(
         [f"a<{amp_dispersion_threshold}"],
-        a=fspath(amp_disp_file),
+        a=fspath(amp_dispersion_file),
         outfile=fspath(output_file),
         format="ENVI",
         type="Byte",
         overwrite=True,
         quiet=True,
     )
-    copy_projection(amp_disp_file, output_file)
+    copy_projection(amp_dispersion_file, output_file)
 
 
 def update_amp_disp(
     amp_mean_file: Filename,
-    amp_disp_file: Filename,
+    amp_dispersion_file: Filename,
     slc_vrt_file: Filename,
     output_directory: Filename = "",
 ):
@@ -107,7 +180,7 @@ def update_amp_disp(
     ----------
     amp_mean_file : Filename
         The existing mean amplitude file.
-    amp_disp_file : Filename
+    amp_dispersion_file : Filename
         The existing amplitude dispersion file.
     slc_vrt_file : Filename
         The VRT file pointing to the stack of SLCs.
@@ -124,12 +197,12 @@ def update_amp_disp(
     if not output_directory.exists():
         output_directory.mkdir(parents=True, exist_ok=True)
     output_mean_file = output_directory / Path(amp_mean_file).name
-    output_disp_file = output_directory / Path(amp_disp_file).name
+    output_disp_file = output_directory / Path(amp_dispersion_file).name
 
     _check_output_files(output_mean_file, output_disp_file)
 
     ds_mean = gdal.Open(fspath(amp_mean_file), gdal.GA_ReadOnly)
-    ds_ampdisp = gdal.Open(fspath(amp_disp_file), gdal.GA_ReadOnly)
+    ds_ampdisp = gdal.Open(fspath(amp_dispersion_file), gdal.GA_ReadOnly)
     # Get the number of SLCs used to create the mean amplitude
     try:
         # Use the ENVI metadata domain for ENVI files

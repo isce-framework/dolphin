@@ -117,6 +117,7 @@ def save_arr(
     options: Optional[List] = None,
     nbands: Optional[int] = None,
     dtype: Optional[Union[str, np.dtype, type]] = None,
+    nodata: Optional[Union[float, str]] = None,
 ):
     """Save an array to `output_name`.
 
@@ -141,6 +142,10 @@ def save_arr(
         Number of bands to save. Default is 1.
     dtype : str or np.dtype or type, optional
         Data type to save. Default is `arr.dtype` or the datatype of like_filename.
+    nodata : float or str, optional
+        Nodata value to save.
+        Default is the nodata of band 1 of `like_filename` (if provided), or None.
+
     """
     if like_filename is not None:
         ds_like = gdal.Open(fspath(like_filename))
@@ -160,6 +165,8 @@ def save_arr(
             gdal_dtype = numpy_to_gdal_type(dtype)
         else:
             gdal_dtype = ds_like.GetRasterBand(1).DataType
+        if nodata is None:
+            nodata = ds_like.GetRasterBand(1)
 
     nbands = nbands or (ds_like.RasterCount if ds_like else arr.shape[0])
 
@@ -191,8 +198,10 @@ def save_arr(
     if arr is not None:
         for i in range(nbands):
             print(f"Writing band {i+1}/{nbands}")
-            ds_out.GetRasterBand(i + 1).WriteArray(arr[i])
-    # TODO: copy other metadata
+            bnd = ds_out.GetRasterBand(i + 1)
+            bnd.WriteArray(arr[i])
+            bnd.SetNoDataValue(nodata)
+
     ds_out.FlushCache()
     ds_like = ds_out = None
 
@@ -256,7 +265,7 @@ def setup_output_folder(
 
 def save_block(
     cur_block: np.ndarray,
-    output_files: Union[Path, List[Path]],
+    output_files: Union[Filename, List[Filename]],
     rows: slice,
     cols: slice,
 ):
@@ -266,7 +275,7 @@ def save_block(
     ----------
     cur_block : np.ndarray
         Array of shape (n_bands, block_rows, block_cols)
-    output_files : List[Path] or Path
+    output_files : List[Filename] or Filename
         List of output files to save to, or (if cur_block is 2D) a single file.
     rows : slice
         Rows of the current block
