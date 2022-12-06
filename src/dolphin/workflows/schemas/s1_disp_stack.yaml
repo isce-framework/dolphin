@@ -70,6 +70,9 @@ processing_options:
   window:
     xhalf: int(min=1)
     yhalf: int(min=1)
+  strides:
+    x: int(min=1)
+    y: int(min=1)
 
   # Options for each step in the workflow
   ps: include('ps_options', required=False)

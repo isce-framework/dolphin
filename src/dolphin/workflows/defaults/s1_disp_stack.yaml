@@ -47,6 +47,9 @@ runconfig:
         xhalf: 11
         yhalf: 5
 
+      strides:
+        x: 1
+        y: 1
 
       ps:
         directory: 'PS'
