@@ -94,6 +94,7 @@ def run(full_cfg: dict, debug: bool = False):
     else:
         # Make the dummy nmap/count files
         logger.info(f"Creating NMAP file {weight_file}")
+        # TODO: use cfg["strides"] to make a smaller nmap file
         phase_link.run_nmap(
             slc_vrt_file=slc_vrt_file,
             weight_file=weight_file,
@@ -123,7 +124,7 @@ def run(full_cfg: dict, debug: bool = False):
             # weight_file: Pathlike,
             output_folder=pl_path,
             window=cfg["window"],
-            # ministack_size=10,
+            strides=cfg["strides"],
             ministack_size=cfg["phase_linking"]["ministack_size"],
             max_bytes=1e6 * cfg["ram"],
             n_workers=n_workers,

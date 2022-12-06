@@ -31,6 +31,7 @@ def run_evd_sequential(
     # weight_file: Pathlike,
     output_folder: Pathlike,
     window: dict,
+    strides: dict = {"x": 1, "y": 1},
     ministack_size: int = 10,
     mask_file: Optional[Pathlike] = None,
     ps_mask_file: Optional[Pathlike] = None,
@@ -64,6 +65,8 @@ def run_evd_sequential(
         ps_mask = np.zeros_like(mask)
 
     xhalf, yhalf = window["xhalf"], window["yhalf"]
+    # xstride, ystride = strides["x"], strides["y"]
+
     # Solve each ministack using the current chunk (and the previous compressed SLCs)
     ministack_starts = range(0, len(file_list_all), ministack_size)
     for mini_idx, full_stack_idx in enumerate(ministack_starts):
