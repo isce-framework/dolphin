@@ -2,7 +2,7 @@
 from math import nan
 from os import fspath
 from pathlib import Path
-from typing import Optional, Sequence, Tuple
+from typing import List, Optional, Sequence, Tuple
 
 from osgeo import gdal
 
@@ -24,7 +24,7 @@ class VRTStack:
 
     Attributes
     ----------
-    file_list : list[pathlib.Path]
+    file_list : Sequence[pathlib.Path]
         Names of files to stack
     outfile : pathlib.Path, optional (default = Path("slc_stack.vrt"))
         Name of output file to write
@@ -58,6 +58,7 @@ class VRTStack:
         file_list: Sequence[Filename],
         outfile: Filename = "slc_stack.vrt",
         use_abs_path: bool = True,
+        subdataset: Optional[str] = None,
         pixel_bbox: Optional[Tuple[int, int, int, int]] = None,
         target_extent: Optional[Tuple[float, float, float, float]] = None,
         latlon_bbox: Optional[Tuple[float, float, float, float]] = None,
@@ -76,7 +77,12 @@ class VRTStack:
         if use_abs_path:
             file_list = [Path(f).resolve() for f in file_list]
         self.file_list = file_list
+
         self.outfile = Path(outfile).resolve()
+
+        # Assumes that all files use the same subdataset (if NetCDF)
+        self._subdataset = subdataset
+
         if nodata_value is None:
             self.nodata_value = io.get_nodata(file_list[0]) or nan
         self.nodata_mask_file = (
@@ -120,6 +126,13 @@ class VRTStack:
         if not outfile:
             raise ValueError("No output file specified")
 
+        # If subdataset is None, use the file_list as is
+        # Otherwise, get the GDAL-compatible file list to write to the VRT
+        if self._subdataset is None:
+            _file_strings = self.file_list
+        else:
+            _file_strings = self._format_nc_names(self.file_list, self._subdataset)
+
         with open(self.outfile, "w") as fid:
             fid.write(
                 f'<VRTDataset rasterXSize="{self.xsize_sub}"'
@@ -127,7 +140,7 @@ class VRTStack:
             )
 
             for idx, (filename, date) in enumerate(
-                zip(self.file_list, self.dates), start=1
+                zip(_file_strings, self.dates), start=1
             ):
                 filename = str(Path(filename).resolve())
                 date_str = date.strftime("%Y%m%d")
@@ -181,6 +194,14 @@ class VRTStack:
     def __fspath__(self):
         # Allows os.fspath() to work on the object, enabling rasterio.open()
         return fspath(self.outfile)
+
+    @staticmethod
+    def _format_nc_names(file_list: Sequence[Filename], ds_name: str) -> List[str]:
+        """Format the file list for reading a subdataset from a NetCDF/HDF5 file."""
+        # Template for reading a subdataset from a NetCDF/HDF5 file
+        nc_template = "NETCDF:{file_path}://{ds_name}"
+        # TODO: do I need to check for the existence of the subdataset?
+        return [nc_template.format(file_path=f, ds_name=ds_name) for f in file_list]
 
     def add_file(self, new_file):
         """Add a new file to the stack and re-sort."""
