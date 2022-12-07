@@ -37,6 +37,20 @@ def slc_file_list(tmp_path, slc_stack):
     return file_list
 
 
+@pytest.fixture()
+def slc_file_list_nc(tmp_path, slc_stack):
+    from make_netcdf import create_test_nc
+
+    start_date = 20220101
+    name_template = tmp_path / "{date}.nc"
+    file_list = []
+    for i in range(len(slc_stack)):
+        fname = str(name_template).format(date=str(start_date + i))
+        file_list.append(fname)
+        create_test_nc(fname, epsg=32615, subdir="/", data=slc_stack[i])
+    return file_list
+
+
 # Phase linking fixtures for one neighborhood tests
 
 

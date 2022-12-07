@@ -200,7 +200,8 @@ def save_arr(
             print(f"Writing band {i+1}/{nbands}")
             bnd = ds_out.GetRasterBand(i + 1)
             bnd.WriteArray(arr[i])
-            bnd.SetNoDataValue(nodata)
+            if nodata is not None:
+                bnd.SetNoDataValue(nodata)
 
     ds_out.FlushCache()
     ds_like = ds_out = None

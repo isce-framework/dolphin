@@ -19,22 +19,40 @@ def vrt_stack(tmp_path, slc_file_list):
     return s
 
 
-def test_create(vrt_stack):
-    vrt_file = vrt_stack.outfile
-    assert vrt_file.exists()
-    assert vrt_file.stat().st_size > 0
+@pytest.fixture
+def vrt_stack_nc(tmp_path, slc_file_list_nc):
+    vrt_file = tmp_path / "test_nc.vrt"
+    s = VRTStack(slc_file_list_nc, outfile=vrt_file)
+    s.write()
 
-    # Check that the VRT is valid
-    ds = gdal.Open(str(vrt_file))
-    assert ds is not None
-    ds = None
+    assert s.shape == (30, 10, 10)
+    return s
+
+
+def test_create(vrt_stack, vrt_stack_nc):
+    for v in [vrt_stack, vrt_stack_nc]:
+        vrt_file = vrt_stack.outfile
+        assert vrt_file.exists()
+        assert vrt_file.stat().st_size > 0
+
+        # Check that the VRT is valid
+        ds = gdal.Open(str(vrt_file))
+        assert ds is not None
+        ds = None
 
 
 def test_read_stack(vrt_stack, slc_stack):
     ds = gdal.Open(str(vrt_stack.outfile))
-    read_stack = ds.ReadAsArray()
-    np.testing.assert_array_almost_equal(read_stack, slc_stack)
+    loaded = ds.ReadAsArray()
+    np.testing.assert_array_almost_equal(loaded, slc_stack)
     np.testing.assert_array_almost_equal(vrt_stack.read_stack(), slc_stack)
+
+
+def test_read_stack_nc(vrt_stack_nc, slc_stack):
+    ds = gdal.Open(str(vrt_stack_nc.outfile))
+    loaded = ds.ReadAsArray()
+    np.testing.assert_array_almost_equal(loaded, slc_stack)
+    np.testing.assert_array_almost_equal(vrt_stack_nc.read_stack(), slc_stack)
 
 
 def test_sort_order(slc_file_list):
