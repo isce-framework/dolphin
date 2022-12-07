@@ -13,22 +13,17 @@ Algorithms and Tools for LAnd Surface Deformation using InSAR
 The following will install `dolphin` into a conda environment.
 
 1. Download source code:
-
 ```bash
 git clone https://github.com/opera-adt/dolphin.git && cd dolphin
 ```
-
 2. Install dependencies:
-
 ```bash
 # assuming that mamba is installed: https://mamba.readthedocs.io/en/latest/
 # if not, start with:
 # conda install mamba -n base -c conda-forge
 mamba install -c conda-forge --file requirements.txt
 ```
-
 3. Install `dolphin` via pip:
-
 ```bash
 # -e installs in development mode
 python -m pip install -e .
