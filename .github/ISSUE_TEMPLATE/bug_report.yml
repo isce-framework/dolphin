@@ -53,7 +53,7 @@ body:
       label: Environment
       description: "What is your environment?"
       value: |
-        - Version of this software [e.g. vX.Y.Z]
-        - Operating System: [e.g. MacOSX with Docker Desktop vX.Y]
+        Please paste the output of the following:
+        `python -c "import dolphin; print(dolphin.show_versions())"`
         ...
       render: bash

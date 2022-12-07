@@ -71,10 +71,12 @@ def _get_deps_info():
     """
     deps = [
         "numpy",
+        "numba",
         "osgeo.gdal",
         "h5py",
         "ruamel_yaml",
-        "yamale",
+        "pydantic",
+        "pymp",
         "setuptools",
     ]
     return {name: _get_version(name) for name in deps}

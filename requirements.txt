@@ -1,5 +1,6 @@
 h5py
 numba
 numpy
+pydantic
 pymp-pypi
 ruamel.yaml
