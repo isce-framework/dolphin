@@ -4,6 +4,10 @@ Algorithms and Tools for LAnd Surface Deformation using InSAR
 
 🚨 This toolbox is still in **pre-alpha** stage and undergoing **rapid development**. 🚨
 
+
+<!-- This is for snippets to copy sections into other documentation pages: -->
+<!-- https://facelessuser.github.io/pymdown-extensions/extensions/snippets/#snippet-sections -->
+# --8<-- [start:install]
 ## Install
 
 The following will install `dolphin` into a conda environment.
@@ -33,14 +37,15 @@ python -m pip install -e .
 For development:
 
 ```bash
-# run "pip install -e" to install in development mode
-python -m pip install -e .[dev]
+# run "pip install -e" to install with extra development requirements
+python -m pip install -e .[docs]
 # Get pre-commit hooks so that linting/formatting is done automatically
 pre-commit install
 
 # After making changes, check the tests:
 pytest
 ```
+# --8<-- [end:install]
 
 
 ## Usage
