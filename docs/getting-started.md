@@ -8,16 +8,19 @@ README.md:install
 
 
 We use [MKDocs](https://www.mkdocs.org/) to generate the documentation.
+The reference documentation is generated from the code docstrings using [mkdocstrings](mkdocstrings.github.io/).
 
 When adding new documentation, you can build and serve the documentation locally using:
 
 ```
 mkdocs serve
 ```
+then open http://localhost:8000 in your browser.
+Creating new files or updating existing files will automatically trigger a rebuild of the documentation while `mkdocs serve` is running.
 
 
 
-The documentation is hosted using Github Pages and versioned using [Mike](https://github.com/jimporter/mike/issues).
+The online documentation is hosted using Github Pages and versioned using [Mike](https://github.com/jimporter/mike/issues).
 
 
 ### Manually deploying new versions
@@ -33,10 +36,4 @@ Set the default version to latest
 
 ```
 mike set-default --push latest
-```
-
-Now, make another change and publish a new version:
-
-```
-mike deploy --push --update-aliases 0.2 latest
 ```

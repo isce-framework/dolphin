@@ -1,6 +1,7 @@
 # mkdocs requirements
 black
 flake8
+mike # for versioning docs
 mkdocs
 mkdocs-gen-files
 mkdocs-literate-nav
