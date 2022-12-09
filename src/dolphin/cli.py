@@ -1,10 +1,10 @@
 import argparse
 
 
-def main():
+def main(args=None):
     """Top-level command line interface to the workflows."""
+    import dolphin.workflows._config_cli
     import dolphin.workflows._run_cli
-    import dolphin.workflows.config
 
     parser = argparse.ArgumentParser(
         prog=__package__,
@@ -16,4 +16,4 @@ def main():
     _ = dolphin.workflows._run_cli.get_parser(subparser, "run")
     _ = dolphin.workflows._config_cli.get_parser(subparser, "config")
     # return p.parse_args()
-    return parser.parse_args()
+    return parser.parse_args(args=args)

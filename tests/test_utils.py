@@ -26,7 +26,7 @@ def test_date_format_to_regex():
         ("%m/%d/%Y", "05/06/2025"),
     ]
     for date_format, date in matching_dates:
-        pattern = utils.date_format_to_regex(date_format)
+        pattern = utils._date_format_to_regex(date_format)
 
         # Test that the date matches the regular expression
         assert pattern.match(date) is not None
@@ -35,16 +35,10 @@ def test_date_format_to_regex():
     date_formats = ["%Y-%m-%d", "%Y/%m/%d", "%Y%m%d", "%d-%m-%Y", "%m/%d/%Y"]
     non_matching_dates = ["01-01-2021", "2022-02-03", "2022-03-04", "2022/05/06"]
     for date, date_format in zip(non_matching_dates, date_formats):
-        pattern = utils.date_format_to_regex(date_format)
+        pattern = utils._date_format_to_regex(date_format)
 
         # Test that the date does not match the regular expression
         assert pattern.match(date) is None
-
-    # Test matching a date within a larger string containing other characters
-    pattern = utils.date_format_to_regex("%Y-%m-%d")
-    match = pattern.search("This string contains a date: 2021-01-01")
-    assert match is not None
-    assert match.group() == "2021-01-01"
 
 
 def test_get_dates():

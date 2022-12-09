@@ -35,13 +35,38 @@ def gdal_to_numpy_type(gdal_type):
 
 
 def get_dates(filename: Filename, fmt="%Y%m%d") -> List[Union[None, str]]:
-    """Search for dates (YYYYMMDD) in `filename`, excluding path."""
-    pat = date_format_to_regex(fmt)
+    """Search for dates in the stem of `filename` matching `fmt`.
+
+    Excludes dates that are not in the stem of `filename` (in the directories).
+
+    Parameters
+    ----------
+    filename : str or PathLike
+        Filename to search for dates.
+    fmt : str, optional
+        Format of date to search for. Default is "%Y%m%d".
+
+    Returns
+    -------
+    list[str] or None
+        List of dates found in the stem of `filename` matching `fmt`.
+        Returns None if nothing is found.
+
+    Examples
+    --------
+    >>> get_dates("/path/to/20191231.slc.tif")
+    ['20191231']
+    >>> get_dates("S1A_IW_SLC__1SDV_20191231T000000_20191231T000000_032123_03B8F1_1C1D.nc")
+    ['20191231', '20191231']
+    >>> get_dates("/not/a/date_named_file.tif")
+    []
+    """  # noqa: E501
+    pat = _date_format_to_regex(fmt)
     date_list = re.findall(pat, Path(filename).stem)
     if not date_list:
         msg = f"{filename} does not contain date as YYYYMMDD"
         logger.warning(msg)
-        # raise ValueError(msg)
+        return []
     return date_list
 
 
@@ -65,18 +90,19 @@ def parse_slc_strings(slc_str: Union[Filename, List[Filename]], fmt="%Y%m%d"):
 
     # The re.search will find YYYYMMDD anywhere in string
     if isinstance(slc_str, str) or hasattr(slc_str, "__fspath__"):
-        d_str = get_dates(slc_str, fmt=fmt)
-        if not d_str:
+        d_list = get_dates(slc_str, fmt=fmt)
+        if not d_list:
             raise ValueError(f"Could not find date of format {fmt} in {slc_str}")
-            # return None
-        return _parse(d_str[0], fmt=fmt)
+        return _parse(d_list[0], fmt=fmt)
     else:
         # If it's an iterable of strings, run on each one
         return [parse_slc_strings(s, fmt=fmt) for s in slc_str if s]
 
 
-def date_format_to_regex(date_format):
-    r"""Convert a date format string to a regular expression.
+def _date_format_to_regex(date_format):
+    r"""Convert a python date format string to a regular expression.
+
+    Useful for Year, month, date date formats.
 
     Parameters
     ----------
@@ -90,10 +116,10 @@ def date_format_to_regex(date_format):
 
     Examples
     --------
-    >>> pat2 = date_format_to_regex("%Y%m%d").pattern
+    >>> pat2 = _date_format_to_regex("%Y%m%d").pattern
     >>> pat2 == re.compile(r'\d{4}\d{2}\d{2}').pattern
     True
-    >>> pat = date_format_to_regex("%Y-%m-%d").pattern
+    >>> pat = _date_format_to_regex("%Y-%m-%d").pattern
     >>> pat == re.compile(r'\d{4}\-\d{2}\-\d{2}').pattern
     True
     """

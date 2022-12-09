@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 import argparse
 
+from ._enums import WorkflowName
 from .config import Config
 
 
@@ -27,7 +28,7 @@ def create_config(
 def get_parser(subparser=None, subcommand_name="run"):
     """Set up the command line interface."""
     metadata = dict(
-        description="Run a displacement workflow",
+        description="Create a configuration file for a displacement workflow.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     if subparser:
@@ -41,33 +42,38 @@ def get_parser(subparser=None, subcommand_name="run"):
         "--outfile",
         help="Name of YAML configuration file to save to.",
     )
-    parser.add_argument(
-        "--debug",
-        action="store_true",
-        help="Print debug messages to the log.",
-    )
     # Get Inputs from the command line
     parser.add_argument(
         "--cslc-directory",
         help="Path to directory containing the SLCs.",
     )
     parser.add_argument(
-        "--cslc-file-list",
+        "--cslc-file",
+        nargs=argparse.ZERO_OR_MORE,
         help="Path to a file containing a list of SLCs.",
     )
     parser.add_argument(
+        "-n",
+        "--name",
+        type=str.lower,
+        choices=[i.name.lower() for i in WorkflowName],
+        default=WorkflowName.STACK.value,
+        help="Name of the displacement workflow. YAML configuration file to save to.",
+    )
+    parser.add_argument(
         "--mask-files",
+        nargs=argparse.ZERO_OR_MORE,
         help="Path to a file containing a list of mask files.",
     )
 
     return parser
 
 
-def main():
-    """Get the command line arguments and run the workflow."""
+def main(args=None):
+    """Get the command line arguments and create the config file."""
     parser = get_parser()
-    args = parser.parse_args()
-    create_config(**vars(args))
+    parsed_args = parser.parse_args(args)
+    create_config(**vars(parsed_args))
 
 
 if __name__ == "__main__":

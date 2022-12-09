@@ -63,11 +63,11 @@ def get_parser(subparser=None, subcommand_name="run"):
     return parser
 
 
-def main():
+def main(args=None):
     """Get the command line arguments and run the workflow."""
     parser = get_parser()
-    args = parser.parse_args()
-    run(args.config_file, name=args.name, debug=args.debug)
+    parsed_args = parser.parse_args(args)
+    run(parsed_args.config_file, name=parsed_args.name, debug=parsed_args.debug)
 
 
 if __name__ == "__main__":
