@@ -8,6 +8,8 @@ import importlib
 import platform
 import sys
 
+__all__ = ["show_versions"]
+
 
 def _get_sys_info():
     """System information.

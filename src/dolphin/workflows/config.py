@@ -20,6 +20,10 @@ from ._enums import InterferogramNetworkType, OutputFormat, UnwrapMethod, Workfl
 
 PathOrStr = Union[Path, str]
 
+__all__ = [
+    "Config",
+]
+
 
 def _check_and_make_dir(path: PathOrStr) -> Path:
     """Check for the existence of a directory.
