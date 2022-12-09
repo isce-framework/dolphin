@@ -154,7 +154,11 @@ def test_input_find_slcs(tmpdir):
     opts = config.Inputs(cslc_directory=tmpdir)
     assert opts.cslc_file_list == files
 
-    # dolphin config --slc-files ../../hawaii/test-loading-gtiff-complex64-gzip/t*.tif
+    opts2 = config.Inputs(cslc_file_list=files)
+    opts2.dict() == opts.dict()
+
+    opts_empty = config.Inputs(cslc_directory=tmpdir, cslc_file_ext=".tif")
+    assert opts_empty.cslc_file_list == []
 
 
 def test_input_slc_date_fmt(tmpdir):
