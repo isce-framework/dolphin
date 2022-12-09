@@ -76,7 +76,6 @@ def _get_deps_info():
         "h5py",
         "ruamel_yaml",
         "pydantic",
-        "pymp",
         "setuptools",
     ]
     return {name: _get_version(name) for name in deps}

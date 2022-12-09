@@ -10,6 +10,7 @@ from pydantic import (
     root_validator,
     validator,
 )
+from ruamel.yaml import YAML
 
 from dolphin import __version__ as _dolphin_version
 from dolphin import _show_versions
@@ -23,11 +24,10 @@ def _check_and_make_dir(path: PathOrStr) -> Path:
     """Check for the existence of a directory.
 
     Create the directory if it doesn't exist.
-    Returns `path` as an absolute Path object.
     """
     p = Path(path)
     p.mkdir(parents=True, exist_ok=True)
-    return p.absolute()
+    return p
 
 
 def _move_file_in_dir(path: PathOrStr, values: dict) -> Path:
@@ -55,15 +55,16 @@ class PsOptions(BaseModel):
     )
 
     # validators: Check directory exists, and that outputs are within directory
-    _dir_must_exist = validator("directory", allow_reuse=True, always=True, pre=True)(
+    _dir_must_exist = validator("directory", allow_reuse=True, always=True)(
         _check_and_make_dir
     )
-    validator(
+
+    _move_in_dir = validator(
         "output_file",
         "amp_dispersion_file",
         "amp_mean_file",
-        allow_reuse=True,
         always=True,
+        allow_reuse=True,
     )(_move_file_in_dir)
 
 
@@ -78,9 +79,9 @@ class HalfWindow(BaseModel):
         return 2 * self.y + 1, 2 * self.x + 1
 
     @classmethod
-    def from_looks(cls, looks: Sequence[int]):
+    def from_looks(cls, row_looks: int, col_looks: int):
         """Create a half-window from looks."""
-        return cls(x=(looks[1] - 1) // 2, y=(looks[0] - 1) // 2)
+        return cls(x=col_looks // 2, y=row_looks // 2)
 
 
 class PhaseLinkingOptions(BaseModel):
@@ -95,12 +96,12 @@ class PhaseLinkingOptions(BaseModel):
     temp_coh_file: Path = Path("temp_coh.tif")
 
     # validators
-    _dir_must_exist = validator("directory", allow_reuse=True, always=True, pre=True)(
+    _dir_must_exist = validator("directory", allow_reuse=True, always=True)(
         _check_and_make_dir
     )
-    validator("compressed_slc_file", "temp_coh_file", allow_reuse=True, always=True)(
-        _move_file_in_dir
-    )
+    _move_in_dir = validator(
+        "compressed_slc_file", "temp_coh_file", allow_reuse=True, always=True
+    )(_move_file_in_dir)
 
     @staticmethod
     def _format_date_pair(start: date, end: date, fmt="%Y%m%d") -> str:
@@ -126,7 +127,7 @@ class InterferogramNetwork(BaseModel):
         description="Maximum temporal baseline of interferograms",
         gt=0,
     )
-    network_type: InterferogramNetworkType
+    network_type = InterferogramNetworkType.SINGLE_REFERENCE
 
     # validation
     @root_validator
@@ -148,9 +149,11 @@ class InterferogramNetwork(BaseModel):
             values["network_type"] = InterferogramNetworkType.BANDWIDTH
             return values
 
-        if ref_idx is None:
-            ref_idx = 0
+        # If nothing else specified, set to a single reference network
         values["network_type"] = InterferogramNetworkType.SINGLE_REFERENCE
+        # and make sure the reference index is set
+        if ref_idx is None:
+            values["reference_idx"] = 0
         return values
 
 
@@ -162,6 +165,11 @@ class UnwrapOptions(BaseModel):
     unwrap_method: UnwrapMethod = UnwrapMethod.SNAPHU
     tiles: Sequence[int] = (1, 1)
     init_method: str = "mcf"
+
+    # validators
+    _dir_must_exist = validator("directory", allow_reuse=True, always=True)(
+        _check_and_make_dir
+    )
 
 
 class WorkerSettings(BaseSettings):
@@ -179,7 +187,7 @@ class WorkerSettings(BaseSettings):
     n_workers: int = Field(
         16, ge=1, description="Number of cpu cores to use for processing (if CPU)"
     )
-    max_ram: int = Field(
+    max_ram: float = Field(
         1.0,
         description="Maximum RAM (in GB) to use for processing",
         gt=0.1,
@@ -191,7 +199,7 @@ class WorkerSettings(BaseSettings):
         # https://docs.pydantic.dev/usage/settings/#parsing-environment-variable-values
         env_prefix = "dolphin_"  # e.g. DOLPHIN_N_WORKERS=4 for n_workers
         fields = {
-            "gpu_enabled": {"env": ["gpu_enabled", "gpu"]},
+            "gpu_enabled": {"env": ["dolphin_gpu_enabled", "gpu"]},
         }
 
 
@@ -205,6 +213,10 @@ class InputOptions(BaseModel):
     cslc_file_ext: str = Field(
         ".nc",
         description="Extension of CSLC files (if providing `cslc_directory`)",
+    )
+    cslc_date_fmt: str = Field(
+        "%Y%m%d",
+        description="Format of dates contained in CSLC filenames",
     )
 
     mask_files: List[str] = Field(
@@ -222,7 +234,7 @@ class InputOptions(BaseModel):
         if not file_list:
             if not directory:
                 raise ValueError("Must specify either cslc_file_list or cslc_directory")
-            directory = directory.absolute()
+
             ext = values.get("cslc_file_ext")
             file_list = sorted(directory.glob(f"*{ext}"))
             values["cslc_file_list"] = file_list
@@ -265,18 +277,50 @@ class Config(BaseModel):
     a file extension.
     """
 
-    input_files: InputOptions
+    input_options: InputOptions
     output_options = OutputOptions()
 
     worker_settings = WorkerSettings()
 
     # Options for each step in the workflow
+    ps_options = PsOptions()
     phase_linking = PhaseLinkingOptions()
     interferogram_network = InterferogramNetwork()
     unwrap_options = UnwrapOptions()
-    ps_options = PsOptions()
 
     # General workflow metadata
     runtime: datetime = Field(default_factory=datetime.utcnow)
     dolphin_version = _dolphin_version
     sys_info: Dict = Field(default_factory=_show_versions._get_sys_info)
+
+    # validators
+    @root_validator
+    def _move_dirs_inside_scratch(cls, values):
+        """Move outputs from workflow steps into scratch directory."""
+        scratch_dir = values["output_options"].scratch_directory
+        # For each workflow step which has an output folder, move it inside
+        # the scratch directory
+        values["ps_options"].directory = scratch_dir / values["ps_options"].directory
+        values["phase_linking"].directory = (
+            scratch_dir / values["phase_linking"].directory
+        )
+        values["unwrap_options"].directory = (
+            scratch_dir / values["unwrap_options"].directory
+        )
+        return values
+
+    # Model exporting options
+    def yaml(self, output_path: PathOrStr):
+        """Save workflow configuration as a yaml file.
+
+        Used to record the default-filled version of a supplied yaml.
+
+        Parameters
+        ----------
+        output_path : Pathlike
+            Path to the yaml file to save
+        """
+        y = YAML()
+        with open(output_path, "w") as f:
+            # TODO: will i need to exclude some fields?
+            y.dump(self.dict(), f)
