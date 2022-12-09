@@ -34,9 +34,10 @@ def gdal_to_numpy_type(gdal_type):
     return gdal_array.GDALTypeCodeToNumericTypeCode(gdal_type)
 
 
-def get_dates(filename: Filename) -> List[Union[None, str]]:
+def get_dates(filename: Filename, fmt="%Y%m%d") -> List[Union[None, str]]:
     """Search for dates (YYYYMMDD) in `filename`, excluding path."""
-    date_list = re.findall(r"\d{4}\d{2}\d{2}", Path(filename).stem)
+    pat = date_format_to_regex(fmt)
+    date_list = re.findall(pat, Path(filename).stem)
     if not date_list:
         msg = f"{filename} does not contain date as YYYYMMDD"
         logger.warning(msg)
@@ -64,7 +65,7 @@ def parse_slc_strings(slc_str: Union[Filename, List[Filename]], fmt="%Y%m%d"):
 
     # The re.search will find YYYYMMDD anywhere in string
     if isinstance(slc_str, str) or hasattr(slc_str, "__fspath__"):
-        d_str = get_dates(slc_str)
+        d_str = get_dates(slc_str, fmt=fmt)
         if not d_str:
             raise ValueError(f"Could not find date of format {fmt} in {slc_str}")
             # return None
@@ -72,3 +73,37 @@ def parse_slc_strings(slc_str: Union[Filename, List[Filename]], fmt="%Y%m%d"):
     else:
         # If it's an iterable of strings, run on each one
         return [parse_slc_strings(s, fmt=fmt) for s in slc_str if s]
+
+
+def date_format_to_regex(date_format):
+    r"""Convert a date format string to a regular expression.
+
+    Parameters
+    ----------
+    date_format : str
+        Date format string, e.g. "%Y%m%d"
+
+    Returns
+    -------
+    re.Pattern
+        Regular expression that matches the date format string.
+
+    Examples
+    --------
+    >>> pat2 = date_format_to_regex("%Y%m%d").pattern
+    >>> pat2 == re.compile(r'\d{4}\d{2}\d{2}').pattern
+    True
+    >>> pat = date_format_to_regex("%Y-%m-%d").pattern
+    >>> pat == re.compile(r'\d{4}\-\d{2}\-\d{2}').pattern
+    True
+    """
+    # Escape any special characters in the date format string
+    date_format = re.escape(date_format)
+
+    # Replace each format specifier with a regular expression that matches it
+    date_format = date_format.replace("%Y", r"\d{4}")
+    date_format = date_format.replace("%m", r"\d{2}")
+    date_format = date_format.replace("%d", r"\d{2}")
+
+    # Return the resulting regular expression
+    return re.compile(date_format)

@@ -14,6 +14,7 @@ from ruamel.yaml import YAML
 
 from dolphin import __version__ as _dolphin_version
 from dolphin import _show_versions
+from dolphin.utils import get_dates
 
 from ._enums import InterferogramNetworkType, OutputFormat, UnwrapMethod
 
@@ -237,6 +238,9 @@ class InputOptions(BaseModel):
 
             ext = values.get("cslc_file_ext")
             file_list = sorted(directory.glob(f"*{ext}"))
+            # Filter out files that don't have dates in the filename
+            date_fmt = values.get("cslc_date_fmt")
+            file_list = [str(f) for f in file_list if get_dates(f, fmt=date_fmt)]
             values["cslc_file_list"] = file_list
         return values
 
@@ -289,7 +293,7 @@ class Config(BaseModel):
     unwrap_options = UnwrapOptions()
 
     # General workflow metadata
-    runtime: datetime = Field(default_factory=datetime.utcnow)
+    runtime_utc: datetime = Field(default_factory=datetime.utcnow)
     dolphin_version = _dolphin_version
     sys_info: Dict = Field(default_factory=_show_versions._get_sys_info)
 
