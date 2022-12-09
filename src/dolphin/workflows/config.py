@@ -27,7 +27,9 @@ def _check_and_make_dir(path: PathOrStr) -> Path:
     Create the directory if it doesn't exist.
     """
     p = Path(path)
-    p.mkdir(parents=True, exist_ok=True)
+    # Make the absolute version of the directory, but keep the original
+    # name (in case we need to nest and move it.)
+    p.absolute().mkdir(parents=True, exist_ok=True)
     return p
 
 
@@ -293,16 +295,18 @@ class Config(BaseModel):
     workflow_name: str = WorkflowName.STACK
 
     inputs: Inputs
-    outputs: Outputs = Outputs()
+    outputs: Outputs = Field(default_factory=Outputs)
 
     # Options for each step in the workflow
-    ps_options: PsOptions = PsOptions()
-    phase_linking: PhaseLinkingOptions = PhaseLinkingOptions()
-    interferogram_network: InterferogramNetwork = InterferogramNetwork()
-    unwrap_options: UnwrapOptions = UnwrapOptions()
+    ps_options: PsOptions = Field(default_factory=PsOptions)
+    phase_linking: PhaseLinkingOptions = Field(default_factory=PhaseLinkingOptions)
+    interferogram_network: InterferogramNetwork = Field(
+        default_factory=InterferogramNetwork
+    )
+    unwrap_options: UnwrapOptions = Field(default_factory=UnwrapOptions)
 
-    worker_settings: WorkerSettings = WorkerSettings()
     # General workflow metadata
+    worker_settings: WorkerSettings = Field(default_factory=WorkerSettings)
     creation_time_utc: datetime = Field(default_factory=datetime.utcnow)
     dolphin_version: str = _dolphin_version
 

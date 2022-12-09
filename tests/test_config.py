@@ -6,9 +6,8 @@ import pytest
 
 from dolphin.workflows import config
 
+
 # Testing what the defaults look like for each class
-
-
 def test_half_window_defaults():
     hw = config.HalfWindow()
     assert hw.x == 11
@@ -146,10 +145,16 @@ def test_inputs_defaults():
 
 
 def test_input_find_slcs(tmpdir):
-    slc_file = tmpdir / "20220101.nc"
-    slc_file.write("")
+    files = []
+    for n in range(20220101, 20220105):
+        slc_file = tmpdir / f"{n}.nc"
+        slc_file.write("")
+        files.append(slc_file)
+
     opts = config.Inputs(cslc_directory=tmpdir)
-    assert opts.cslc_file_list == [slc_file]
+    assert opts.cslc_file_list == files
+
+    # dolphin config --slc-files ../../hawaii/test-loading-gtiff-complex64-gzip/t*.tif
 
 
 def test_input_slc_date_fmt(tmpdir):
