@@ -32,7 +32,7 @@ def _check_and_make_dir(path: PathOrStr) -> Path:
 
 
 def _move_file_in_dir(path: PathOrStr, values: dict) -> Path:
-    # Make sure the file is within `directory`
+    """Make sure the `path` is within `values[directory']` for validation."""
     p = Path(path)
     d = Path(values.get("directory", "."))
     if not p.parent == d:

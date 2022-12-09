@@ -44,14 +44,14 @@ def test_ps_options_defaults(tmpdir):
 
 def test_phase_linking_options_defaults(tmpdir):
     with tmpdir.as_cwd():
-        plo = config.PhaseLinkingOptions()
-        assert plo.ministack_size == 15
-        assert plo.directory == Path("linked_phase")
-        assert plo.directory.exists()
-        assert plo.directory.is_dir()
-        assert plo.half_window == config.HalfWindow()
-        assert plo.compressed_slc_file == Path("linked_phase/compressed_slc.tif")
-        assert plo.temp_coh_file == Path("linked_phase/temp_coh.tif")
+        opts = config.PhaseLinkingOptions()
+        assert opts.ministack_size == 15
+        assert opts.directory == Path("linked_phase")
+        assert opts.directory.exists()
+        assert opts.directory.is_dir()
+        assert opts.half_window == config.HalfWindow()
+        assert opts.compressed_slc_file == Path("linked_phase/compressed_slc.tif")
+        assert opts.temp_coh_file == Path("linked_phase/temp_coh.tif")
 
 
 def test_phase_linking_options_bad_size(tmpdir):
@@ -62,29 +62,29 @@ def test_phase_linking_options_bad_size(tmpdir):
 
 def test_interferogram_network_defaults(tmpdir):
     with tmpdir.as_cwd():
-        ifgo = config.InterferogramNetwork()
-        assert ifgo.reference_idx == 0
-        assert ifgo.max_bandwidth is None
-        assert ifgo.max_temporal_baseline is None
-        assert ifgo.network_type == config.InterferogramNetworkType.SINGLE_REFERENCE
+        opts = config.InterferogramNetwork()
+        assert opts.reference_idx == 0
+        assert opts.max_bandwidth is None
+        assert opts.max_temporal_baseline is None
+        assert opts.network_type == config.InterferogramNetworkType.SINGLE_REFERENCE
 
 
 def test_unwrap_options_defaults(tmpdir):
     with tmpdir.as_cwd():
-        unwo = config.UnwrapOptions()
-        assert unwo.unwrap_method == config.UnwrapMethod.SNAPHU
-        assert unwo.tiles == [1, 1]
-        assert unwo.init_method == "mcf"
-        assert unwo.directory == Path("unwrap")
+        opts = config.UnwrapOptions()
+        assert opts.unwrap_method == config.UnwrapMethod.SNAPHU
+        assert opts.tiles == [1, 1]
+        assert opts.init_method == "mcf"
+        assert opts.directory == Path("unwrap")
 
 
 def test_outputs_defaults(tmpdir):
     with tmpdir.as_cwd():
-        unwo = config.Outputs()
-        assert unwo.output_directory == Path("output")
-        assert unwo.output_format == config.OutputFormat.NETCDF
-        assert unwo.scratch_directory == Path("scratch")
-        assert unwo.hdf5_creation_options == dict(
+        opts = config.Outputs()
+        assert opts.output_directory == Path("output")
+        assert opts.output_format == config.OutputFormat.NETCDF
+        assert opts.scratch_directory == Path("scratch")
+        assert opts.hdf5_creation_options == dict(
             chunks=True,
             compression="gzip",
             compression_opts=4,
@@ -103,12 +103,6 @@ def test_worker_settings_defaults():
 def test_worker_env_defaults(monkeypatch):
     # Change environment with monkeypatch
     # https://docs.pytest.org/en/latest/how-to/monkeypatch.html
-    ws = config.WorkerSettings()
-    assert ws.gpu_enabled is True
-    assert ws.gpu_id == 0
-    assert ws.n_workers == 16
-    assert ws.max_ram_gb == 1.0
-
     monkeypatch.setenv("dolphin_gpu_enabled", "False")
     ws = config.WorkerSettings()
     assert ws.gpu_enabled is False
