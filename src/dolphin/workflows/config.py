@@ -164,7 +164,7 @@ class UnwrapOptions(BaseModel):
     run_unwrap: bool = False
     directory: Path = Path("unwrap")
     unwrap_method: UnwrapMethod = UnwrapMethod.SNAPHU
-    tiles: Sequence[int] = (1, 1)
+    tiles: Sequence[int] = [1, 1]
     init_method: str = "mcf"
 
     # validators
@@ -303,14 +303,36 @@ class Config(BaseModel):
         """Move outputs from workflow steps into scratch directory."""
         scratch_dir = values["output_options"].scratch_directory
         # For each workflow step which has an output folder, move it inside
-        # the scratch directory
-        values["ps_options"].directory = scratch_dir / values["ps_options"].directory
-        values["phase_linking"].directory = (
-            scratch_dir / values["phase_linking"].directory
-        )
-        values["unwrap_options"].directory = (
-            scratch_dir / values["unwrap_options"].directory
-        )
+        # the scratch directory if it's not already inside
+        # They may already be inside if we're loading from a json/yaml file
+        pso = values["ps_options"]
+        if not pso.directory.parent == scratch_dir:
+            values["ps_options"].directory = scratch_dir / pso.directory
+        if not pso.amp_dispersion_file.parent.parent == scratch_dir:
+            values["ps_options"].amp_dispersion_file = (
+                scratch_dir / pso.amp_dispersion_file
+            )
+        if not pso.amp_mean_file.parent.parent == scratch_dir:
+            values["ps_options"].amp_mean_file = scratch_dir / pso.amp_mean_file
+        if not pso.output_file.parent.parent == scratch_dir:
+            values["ps_options"].output_file = scratch_dir / pso.output_file
+
+        pld = values["phase_linking"]
+        if not pld.directory.parent == scratch_dir:
+            values["phase_linking"].directory = scratch_dir / pld.directory
+        if not pld.compressed_slc_file.parent.parent == scratch_dir:
+            values["phase_linking"].compressed_slc_file = (
+                scratch_dir / pld.compressed_slc_file
+            )
+        if not pld.temp_coh_file.parent.parent == scratch_dir:
+            values["phase_linking"].temp_coh_file = scratch_dir / pld.temp_coh_file
+
+        unwo = values["unwrap_options"]
+        if not unwo.directory.parent == scratch_dir:
+            values["unwrap_options"].directory = scratch_dir / unwo.directory
+
+        # check that the outputs of each step are inside their respective directories
+
         return values
 
     # Model exporting options
