@@ -1,3 +1,4 @@
+import json
 from datetime import date, datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Union
@@ -13,10 +14,9 @@ from pydantic import (
 from ruamel.yaml import YAML
 
 from dolphin import __version__ as _dolphin_version
-from dolphin import _show_versions
 from dolphin.utils import get_dates
 
-from ._enums import InterferogramNetworkType, OutputFormat, UnwrapMethod
+from ._enums import InterferogramNetworkType, OutputFormat, UnwrapMethod, WorkflowName
 
 PathOrStr = Union[Path, str]
 
@@ -188,7 +188,7 @@ class WorkerSettings(BaseSettings):
     n_workers: int = Field(
         16, ge=1, description="Number of cpu cores to use for processing (if CPU)"
     )
-    max_ram: float = Field(
+    max_ram_gb: float = Field(
         1.0,
         description="Maximum RAM (in GB) to use for processing",
         gt=0.1,
@@ -204,7 +204,7 @@ class WorkerSettings(BaseSettings):
         }
 
 
-class InputOptions(BaseModel):
+class Inputs(BaseModel):
     """Options specifying input datasets for workflow."""
 
     cslc_file_list: List[PathOrStr] = Field(
@@ -245,7 +245,7 @@ class InputOptions(BaseModel):
         return values
 
 
-class OutputOptions(BaseModel):
+class Outputs(BaseModel):
     """Options for the output format/compressions."""
 
     output_format: OutputFormat = OutputFormat.NETCDF
@@ -276,15 +276,15 @@ class OutputOptions(BaseModel):
 class Config(BaseModel):
     """Configuration for the workflow.
 
-    Required fields are in InputOptions:
-    Must specify either `cslc_file_list` or `cslc_directory` and
-    a file extension.
+    Required fields are in `Inputs`.
+    Must specify either `cslc_file_list`, or `cslc_directory` and
+    a `cslc_file_ext`.
     """
 
-    input_options: InputOptions
-    output_options = OutputOptions()
+    workflow_name = WorkflowName.STACK
 
-    worker_settings = WorkerSettings()
+    inputs: Inputs
+    outputs = Outputs()
 
     # Options for each step in the workflow
     ps_options = PsOptions()
@@ -292,51 +292,50 @@ class Config(BaseModel):
     interferogram_network = InterferogramNetwork()
     unwrap_options = UnwrapOptions()
 
+    worker_settings = WorkerSettings()
     # General workflow metadata
     runtime_utc: datetime = Field(default_factory=datetime.utcnow)
     dolphin_version = _dolphin_version
-    sys_info: Dict = Field(default_factory=_show_versions._get_sys_info)
 
     # validators
     @root_validator
     def _move_dirs_inside_scratch(cls, values):
-        """Move outputs from workflow steps into scratch directory."""
-        scratch_dir = values["output_options"].scratch_directory
-        # For each workflow step which has an output folder, move it inside
-        # the scratch directory if it's not already inside
-        # They may already be inside if we're loading from a json/yaml file
-        pso = values["ps_options"]
-        if not pso.directory.parent == scratch_dir:
-            values["ps_options"].directory = scratch_dir / pso.directory
-        if not pso.amp_dispersion_file.parent.parent == scratch_dir:
+        """Ensure outputs from workflow steps are within scratch directory."""
+        scratch_dir = values["outputs"].scratch_directory
+
+        # For each workflow step that has an output folder, move it inside
+        # the scratch directory (if it's not already inside).
+        # They may already be inside if we're loading from a json/yaml file.
+        ps_opts = values["ps_options"]
+        if not ps_opts.directory.parent == scratch_dir:
+            values["ps_options"].directory = scratch_dir / ps_opts.directory
+        if not ps_opts.amp_dispersion_file.parent.parent == scratch_dir:
             values["ps_options"].amp_dispersion_file = (
-                scratch_dir / pso.amp_dispersion_file
+                scratch_dir / ps_opts.amp_dispersion_file
             )
-        if not pso.amp_mean_file.parent.parent == scratch_dir:
-            values["ps_options"].amp_mean_file = scratch_dir / pso.amp_mean_file
-        if not pso.output_file.parent.parent == scratch_dir:
-            values["ps_options"].output_file = scratch_dir / pso.output_file
+        if not ps_opts.amp_mean_file.parent.parent == scratch_dir:
+            values["ps_options"].amp_mean_file = scratch_dir / ps_opts.amp_mean_file
+        if not ps_opts.output_file.parent.parent == scratch_dir:
+            values["ps_options"].output_file = scratch_dir / ps_opts.output_file
 
-        pld = values["phase_linking"]
-        if not pld.directory.parent == scratch_dir:
-            values["phase_linking"].directory = scratch_dir / pld.directory
-        if not pld.compressed_slc_file.parent.parent == scratch_dir:
+        pl_opts = values["phase_linking"]
+        if not pl_opts.directory.parent == scratch_dir:
+            values["phase_linking"].directory = scratch_dir / pl_opts.directory
+        if not pl_opts.compressed_slc_file.parent.parent == scratch_dir:
             values["phase_linking"].compressed_slc_file = (
-                scratch_dir / pld.compressed_slc_file
+                scratch_dir / pl_opts.compressed_slc_file
             )
-        if not pld.temp_coh_file.parent.parent == scratch_dir:
-            values["phase_linking"].temp_coh_file = scratch_dir / pld.temp_coh_file
+        if not pl_opts.temp_coh_file.parent.parent == scratch_dir:
+            values["phase_linking"].temp_coh_file = scratch_dir / pl_opts.temp_coh_file
 
-        unwo = values["unwrap_options"]
-        if not unwo.directory.parent == scratch_dir:
-            values["unwrap_options"].directory = scratch_dir / unwo.directory
-
-        # check that the outputs of each step are inside their respective directories
+        unw_opts = values["unwrap_options"]
+        if not unw_opts.directory.parent == scratch_dir:
+            values["unwrap_options"].directory = scratch_dir / unw_opts.directory
 
         return values
 
-    # Model exporting options
-    def yaml(self, output_path: PathOrStr):
+    # Extra model exporting options beyond .dict() or .json()
+    def to_yaml(self, output_path: PathOrStr):
         """Save workflow configuration as a yaml file.
 
         Used to record the default-filled version of a supplied yaml.
@@ -344,9 +343,28 @@ class Config(BaseModel):
         Parameters
         ----------
         output_path : Pathlike
-            Path to the yaml file to save
+            Path to the yaml file to save.
         """
+        data = json.loads(self.json())
         y = YAML()
         with open(output_path, "w") as f:
-            # TODO: will i need to exclude some fields?
-            y.dump(self.dict(), f)
+            y.dump(data, f)
+
+    @classmethod
+    def from_yaml(cls, yaml_path: PathOrStr):
+        """Load a workflow configuration from a yaml file.
+
+        Parameters
+        ----------
+        yaml_path : Pathlike
+            Path to the yaml file to load.
+
+        Returns
+        -------
+        Config
+            Workflow configuration
+        """
+        y = YAML(typ="safe")
+        with open(yaml_path, "r") as f:
+            data = y.load(f)
+        return cls(**data)

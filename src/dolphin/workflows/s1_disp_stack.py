@@ -6,9 +6,11 @@ from pathlib import Path
 # from dolphin import phase_link, ps, sequential, unwrap, utils, vrt
 from dolphin._log import get_log, log_runtime
 
+from .config import Config
+
 
 @log_runtime
-def run(full_cfg: dict, debug: bool = False):
+def run(full_cfg: Config, debug: bool = False):
     """Run the displacement workflow on a stack of SLCs.
 
     Parameters

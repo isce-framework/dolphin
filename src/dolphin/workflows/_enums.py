@@ -1,6 +1,13 @@
 from enum import Enum
 
 
+class WorkflowName(str, Enum):
+    """Names of workflows."""
+
+    STACK = "stack"
+    SINGLE = "single"
+
+
 class OutputFormat(str, Enum):
     """Possible output formats for the workflow."""
 

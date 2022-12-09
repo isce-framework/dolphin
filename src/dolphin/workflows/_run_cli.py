@@ -1,37 +1,35 @@
 #!/usr/bin/env python
 import argparse
-from pathlib import Path
 
 from dolphin._log import log_runtime
 
-from . import config
+from ._enums import WorkflowName
+from .config import Config
 
 
 @log_runtime
-def run(config_file: str, name: str = "stack", debug: bool = False):
+def run(config_file: str, debug: bool = False):
     """Run the displacement workflow.
 
     Parameters
     ----------
     config_file : str
         YAML file containing the workflow options.
-    name : str, choices = ["single", "stack"]
-        Name of the workflow to run.
     debug : bool, optional
         Enable debug logging, by default False.
     """
-    cfg = config.load_workflow_yaml(config_file, workflow_name=f"s1_disp_{name}")
-    cfg_path = Path(config_file)
-    filled_cfg_path = cfg_path.with_name(cfg_path.stem + "_filled" + cfg_path.suffix)
-    config.save_yaml(filled_cfg_path, config.add_dolphin_section(cfg))
-    if name == "single":
-        # from dolphin.workflows import s1_disp_single
-        # TODO
-        raise NotImplementedError("Single interferogram workflow not yet implemented")
-    elif name == "stack":
+    cfg = Config.from_yaml(config_file)
+    if cfg.workflow_name == "stack":
         from dolphin.workflows import s1_disp_stack
 
-        s1_disp_stack.run(cfg["runconfig"]["groups"], debug=debug)
+        s1_disp_stack.run(cfg, debug=debug)
+    elif cfg.workflow_name == "single":
+        raise NotImplementedError("Single interferogram workflow not yet implemented")
+    else:
+        choices = WorkflowName.__members__.values()
+        raise ValueError(
+            f"Unknown workflow name: {cfg.workflow_name}. Must be one of {choices}"
+        )
 
 
 def get_parser(subparser=None, subcommand_name="run"):
