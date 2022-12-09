@@ -27,8 +27,12 @@ def create_config(
         },
         name=name,
     )
-    print(f"Saving configuration to {str(outfile)}", file=sys.stderr)
-    cfg.to_yaml(outfile)
+
+    if outfile == "-":  # Write to stdout
+        cfg.to_yaml(sys.stdout)
+    else:
+        print(f"Saving configuration to {str(outfile)}", file=sys.stderr)
+        cfg.to_yaml(outfile)
 
 
 def get_parser(subparser=None, subcommand_name="run"):
@@ -46,8 +50,8 @@ def get_parser(subparser=None, subcommand_name="run"):
     parser.add_argument(
         "-o",
         "--outfile",
-        default=sys.stdout,
-        help="Name of YAML configuration file to save to.",
+        default="dolphin_config.yaml",
+        help="Name of YAML configuration file to save to. Use '-' to write to stdout.",
     )
     # Get Inputs from the command line
     parser.add_argument(

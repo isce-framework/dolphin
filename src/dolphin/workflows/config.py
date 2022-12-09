@@ -1,7 +1,7 @@
 import json
 from datetime import date, datetime
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence, Union
+from typing import Dict, List, Optional, Sequence, TextIO, Union
 
 from pydantic import (
     BaseModel,
@@ -352,7 +352,7 @@ class Config(BaseModel):
         return values
 
     # Extra model exporting options beyond .dict() or .json()
-    def to_yaml(self, output_path: PathOrStr):
+    def to_yaml(self, output_path: Union[PathOrStr, TextIO]):
         """Save workflow configuration as a yaml file.
 
         Used to record the default-filled version of a supplied yaml.

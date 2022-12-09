@@ -1,5 +1,9 @@
 
 --8<--
+README.md:usage
+--8<--
+
+--8<--
 README.md:install
 --8<--
 
@@ -17,7 +21,6 @@ mkdocs serve
 ```
 then open http://localhost:8000 in your browser.
 Creating new files or updating existing files will automatically trigger a rebuild of the documentation while `mkdocs serve` is running.
-
 
 
 The online documentation is hosted using Github Pages and versioned using [Mike](https://github.com/jimporter/mike/issues).
