@@ -4,7 +4,7 @@ import subprocess
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from os import fspath
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Tuple
 
 import numpy as np
 from osgeo import gdal
@@ -25,20 +25,24 @@ def unwrap(
     mask_file: Optional[Filename],
     do_tile: bool = False,
     init_method: str = "mcf",
+    looks: Tuple[int, int] = (5, 1),
 ):
     """Unwrap a single interferogram."""
+    if init_method.lower() not in ("mcf", "mst"):
+        raise ValueError(f"Invalid init_method {init_method}")
     conncomp_file = Path(out_file).with_suffix(".unw.conncomp")
     alt_line_data = True
     tmp_intfile = _nan_to_zero(ifg_file)
     cmd = _snaphu_cmd(
         fspath(tmp_intfile),
         cor_file,
-        out_file,
+        Path(out_file),
         conncomp_file,
         mask_file,
         do_tile=do_tile,
         alt_line_data=alt_line_data,
         init_method=init_method,
+        looks=looks,
     )
     logger.info(cmd)
     subprocess.check_call(cmd, shell=True)
@@ -84,6 +88,7 @@ def _snaphu_cmd(
     do_tile=False,
     alt_line_data=True,
     init_method="mcf",
+    looks=(5, 1),
 ):
     conf_name = out_file.with_suffix(out_file.suffix + ".snaphu_conf")
     width, _ = get_raster_xysize(ifg_file)
@@ -132,6 +137,12 @@ CONNCOMPFILE {conncomp_file}   # TODO: snaphu has a bug for tiling conncomps
         conf_string += f"NPROC {nprocs}\n"
 
     conf_string += f"INITMETHOD {init_method.upper()}\n"
+
+    row_looks, col_looks = looks
+    conf_string += "\n"
+    conf_string += f"NLOOKSRANGE {col_looks}\n"
+    conf_string += f"NLOOKSAZ {row_looks}\n"
+    conf_string += f"NCORRLOOKS {row_looks * col_looks}\n"
 
     with open(conf_name, "w") as f:
         f.write(conf_string)
