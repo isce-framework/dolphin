@@ -15,5 +15,8 @@ def main(args=None):
     # Adds the subcommand to the top-level parser
     _ = dolphin.workflows._run_cli.get_parser(subparser, "run")
     _ = dolphin.workflows._config_cli.get_parser(subparser, "config")
-    # return p.parse_args()
-    return parser.parse_args(args=args)
+    parsed_args = parser.parse_args(args=args)
+
+    arg_dict = vars(parsed_args)
+    run_func = arg_dict.pop("run_func")
+    run_func(**arg_dict)

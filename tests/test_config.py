@@ -181,6 +181,16 @@ def test_input_no_cslc_directory():
         config.Inputs(cslc_directory=None)
 
 
+def test_input_nones(tmpdir):
+    config.Inputs(
+        cslc_directory=None, cslc_file_list=["20220101.nc"], cslc_file_ext=None
+    )
+    with pytest.raises(pydantic.ValidationError):
+        config.Inputs(cslc_file_ext=".nc")
+        config.Inputs(cslc_directory=None, cslc_file_ext=".nc")
+        config.Inputs(cslc_directory=".", cslc_file_ext=None)
+
+
 def test_config_defaults():
     c = config.Config(inputs={"cslc_directory": "."})
     # These should be the defaults
@@ -205,7 +215,7 @@ def test_config_defaults():
     assert c.unwrap_options.directory == Path("scratch/unwrap")
 
     now = datetime.datetime.utcnow()
-    assert (now - c.runtime_utc).seconds == 0
+    assert (now - c.creation_time_utc).seconds == 0
 
 
 def test_config_roundtrip_dict():

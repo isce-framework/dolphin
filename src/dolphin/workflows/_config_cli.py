@@ -1,27 +1,33 @@
 #!/usr/bin/env python
 import argparse
+import sys
+from pathlib import Path
+from typing import List, Optional, Union
 
 from ._enums import WorkflowName
 from .config import Config
 
 
 def create_config(
-    outfile,
     *,
-    cslc_directory=None,
-    cslc_file_ext=".nc",
-    cslc_file_list=None,
-    mask_files=None,
+    outfile: Union[str, Path],
+    slc_directory=None,
+    ext: str = ".nc",
+    slc_files: Optional[List[str]] = None,
+    mask_files: Optional[List[str]] = None,
+    name: WorkflowName = WorkflowName.STACK,
 ):
     """Create a config for a displacement workflow."""
     cfg = Config(
         inputs={
-            "cslc_directory": cslc_directory,
-            "cslc_file_ext": cslc_file_ext,
-            "cslc_file_list": cslc_file_list,
+            "cslc_directory": slc_directory,
+            "cslc_file_ext": ext,
+            "cslc_file_list": slc_files,
             "mask_files": mask_files,
-        }
+        },
+        name=name,
     )
+    print(f"Saving configuration to {str(outfile)}", file=sys.stderr)
     cfg.to_yaml(outfile)
 
 
@@ -40,17 +46,24 @@ def get_parser(subparser=None, subcommand_name="run"):
     parser.add_argument(
         "-o",
         "--outfile",
+        default=sys.stdout,
         help="Name of YAML configuration file to save to.",
     )
     # Get Inputs from the command line
     parser.add_argument(
-        "--cslc-directory",
+        "-d",
+        "--slc-directory",
         help="Path to directory containing the SLCs.",
     )
     parser.add_argument(
-        "--cslc-file",
+        "--ext",
+        default=".nc",
+        help="Extension of SLCs to search for (if --slc-directory is given).",
+    )
+    parser.add_argument(
+        "--slc-files",
         nargs=argparse.ZERO_OR_MORE,
-        help="Path to a file containing a list of SLCs.",
+        help="Alternative: list the paths of all SLC files to include.",
     )
     parser.add_argument(
         "-n",
@@ -65,6 +78,7 @@ def get_parser(subparser=None, subcommand_name="run"):
         nargs=argparse.ZERO_OR_MORE,
         help="Path to a file containing a list of mask files.",
     )
+    parser.set_defaults(run_func=create_config)
 
     return parser
 

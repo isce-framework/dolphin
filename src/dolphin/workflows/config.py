@@ -211,7 +211,7 @@ class Inputs(BaseModel):
         default_factory=list, description="List of CSLC files"
     )
     cslc_directory: DirectoryPath = Field(None, description="Path to CSLC files")
-    cslc_file_ext: str = Field(
+    cslc_file_ext: Optional[str] = Field(
         ".nc",
         description="Extension of CSLC files (if providing `cslc_directory`)",
     )
@@ -227,6 +227,15 @@ class Inputs(BaseModel):
             " 0 for no data/invalid, and 1 for data."
         ),
     )
+
+    # validators
+    @validator("mask_files", "cslc_file_list", pre=True)
+    def _check_mask_files(cls, v):
+        if isinstance(v, str):
+            return [v]
+        elif v is None:
+            return []
+        return v
 
     @root_validator
     def _check_slc_files_exist(cls, values):
@@ -281,21 +290,21 @@ class Config(BaseModel):
     a `cslc_file_ext`.
     """
 
-    workflow_name = WorkflowName.STACK
+    workflow_name: str = WorkflowName.STACK
 
     inputs: Inputs
-    outputs = Outputs()
+    outputs: Outputs = Outputs()
 
     # Options for each step in the workflow
-    ps_options = PsOptions()
-    phase_linking = PhaseLinkingOptions()
-    interferogram_network = InterferogramNetwork()
-    unwrap_options = UnwrapOptions()
+    ps_options: PsOptions = PsOptions()
+    phase_linking: PhaseLinkingOptions = PhaseLinkingOptions()
+    interferogram_network: InterferogramNetwork = InterferogramNetwork()
+    unwrap_options: UnwrapOptions = UnwrapOptions()
 
-    worker_settings = WorkerSettings()
+    worker_settings: WorkerSettings = WorkerSettings()
     # General workflow metadata
-    runtime_utc: datetime = Field(default_factory=datetime.utcnow)
-    dolphin_version = _dolphin_version
+    creation_time_utc: datetime = Field(default_factory=datetime.utcnow)
+    dolphin_version: str = _dolphin_version
 
     # validators
     @root_validator
@@ -347,8 +356,11 @@ class Config(BaseModel):
         """
         data = json.loads(self.json())
         y = YAML()
-        with open(output_path, "w") as f:
-            y.dump(data, f)
+        if hasattr(output_path, "write"):
+            y.dump(data, output_path)
+        else:
+            with open(output_path, "w") as f:
+                y.dump(data, f)
 
     @classmethod
     def from_yaml(cls, yaml_path: PathOrStr):
