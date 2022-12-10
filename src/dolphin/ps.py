@@ -8,8 +8,8 @@ from tqdm.auto import tqdm
 
 gdal.UseExceptions()
 
+from dolphin._types import Filename
 from dolphin.io import save_arr, save_block
-from dolphin.utils import Filename
 
 
 def create_ps(

@@ -7,8 +7,9 @@ from osgeo import gdal
 from osgeo_utils import gdal_calc
 
 from dolphin import io, network
+from dolphin._types import Filename
 from dolphin.log import get_log
-from dolphin.utils import Filename, get_dates
+from dolphin.utils import get_dates
 
 gdal.UseExceptions()
 

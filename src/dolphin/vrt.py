@@ -7,8 +7,8 @@ from typing import List, Optional, Sequence, Tuple
 from osgeo import gdal
 
 from dolphin import io, utils
+from dolphin._types import Filename
 from dolphin.log import get_log
-from dolphin.utils import Filename, get_raster_xysize
 
 SENTINEL_WAVELENGTH = 0.05546576
 
@@ -450,7 +450,7 @@ class VRTStack:
     @property
     def shape(self):
         """Get the 3D shape of the stack."""
-        return (len(self),) + get_raster_xysize(self.file_list[0])
+        return (len(self),) + io.get_raster_xysize(self.file_list[0])
 
     def __len__(self):
         return len(self.file_list)

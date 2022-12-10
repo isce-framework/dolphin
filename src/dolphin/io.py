@@ -6,8 +6,9 @@ from typing import List, Optional, Tuple, Union
 import numpy as np
 from osgeo import gdal
 
+from dolphin._types import Filename
 from dolphin.log import get_log
-from dolphin.utils import Filename, gdal_to_numpy_type, numpy_to_gdal_type
+from dolphin.utils import gdal_to_numpy_type, numpy_to_gdal_type
 
 gdal.UseExceptions()
 logger = get_log()
@@ -21,6 +22,14 @@ DEFAULT_TIFF_OPTIONS = [
     f"BLOCKXSIZE={DEFAULT_TILE_SIZE[1]}",
     f"BLOCKYSIZE={DEFAULT_TILE_SIZE[0]}",
 ]
+
+
+def get_raster_xysize(filename: Filename) -> Tuple[int, int]:
+    """Get the xsize/ysize of a GDAL-readable raster."""
+    ds = gdal.Open(fspath(filename))
+    xsize, ysize = ds.RasterXSize, ds.RasterYSize
+    ds = None
+    return xsize, ysize
 
 
 def load_gdal(
@@ -572,9 +581,10 @@ def get_max_block_shape(
         (num_rows, num_cols) shape of blocks to load from `vrt_file`
     """
     blockX, blockY = get_raster_block_size(filename)
+    xsize, ysize = get_raster_xysize(filename)
     # If it's written by line, load at least 16 lines at a time
-    blockX = max(16, blockX)
-    blockY = max(16, blockY)
+    blockX = min(max(16, blockX), xsize)
+    blockY = min(max(16, blockY), ysize)
 
     ds = gdal.Open(fspath(filename))
     shape = (ds.RasterYSize, ds.RasterXSize)

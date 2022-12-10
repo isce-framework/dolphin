@@ -17,9 +17,9 @@ from tqdm.auto import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
 from dolphin import io
+from dolphin._types import Filename
 from dolphin.log import get_log
 from dolphin.phase_link import PhaseLinkRuntimeError, run_mle
-from dolphin.utils import Filename, get_raster_xysize
 from dolphin.vrt import VRTStack
 
 logger = get_log()
@@ -56,7 +56,7 @@ def run_evd_sequential(
     if mask_file is not None:
         mask = io.load_gdal(mask_file).astype(bool)
     else:
-        xsize, ysize = get_raster_xysize(v_all.file_list[0])
+        xsize, ysize = io.get_raster_xysize(v_all.file_list[0])
         mask = np.zeros((ysize, xsize), dtype=bool)
 
     if ps_mask_file is not None:

@@ -3,7 +3,8 @@ from typing import Optional, Tuple
 
 import numpy as np
 
-from dolphin.utils import Filename, check_gpu_available, get_array_module
+from dolphin._types import Filename
+from dolphin.utils import check_gpu_available, get_array_module
 
 logger = logging.getLogger(__name__)
 

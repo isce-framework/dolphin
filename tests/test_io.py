@@ -10,6 +10,12 @@ def test_load(raster_100_by_200):
     assert arr.shape == (100, 200)
 
 
+def test_get_raster_xysize(raster_100_by_200):
+    arr = io.load_gdal(raster_100_by_200)
+    assert arr.shape == (100, 200)
+    assert (200, 100) == io.get_raster_xysize(raster_100_by_200)
+
+
 def test_save_like(raster_100_by_200, tmpdir):
     arr = io.load_gdal(raster_100_by_200)
 

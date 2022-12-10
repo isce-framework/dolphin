@@ -5,7 +5,6 @@ import numpy as np
 import pytest
 
 from dolphin import utils
-from dolphin.io import load_gdal
 
 
 def test_get_types():
@@ -82,12 +81,6 @@ def test_parse_slc_strings():
         dt,
         dt,
     ]
-
-
-def test_get_raster_xysize(raster_100_by_200):
-    arr = load_gdal(raster_100_by_200)
-    assert arr.shape == (100, 200)
-    assert (200, 100) == utils.get_raster_xysize(raster_100_by_200)
 
 
 def test_take_looks():

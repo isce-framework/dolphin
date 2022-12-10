@@ -29,6 +29,17 @@ def vrt_stack_nc(tmp_path, slc_file_list_nc):
     return s
 
 
+@pytest.fixture
+def vrt_stack_nc_wgs84(tmp_path, slc_file_list_nc_wgs84):
+    # Check an alternative projection system
+    vrt_file = tmp_path / "test_nc_wgs84.vrt"
+    s = VRTStack(slc_file_list_nc_wgs84, outfile=vrt_file)
+    s.write()
+
+    assert s.shape == (30, 10, 10)
+    return s
+
+
 def test_create(vrt_stack, vrt_stack_nc):
     for v in [vrt_stack, vrt_stack_nc]:
         vrt_file = vrt_stack.outfile

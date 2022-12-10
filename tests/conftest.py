@@ -1,5 +1,6 @@
 import numpy as np
 import pytest
+from make_netcdf import create_test_nc
 from osgeo import gdal
 
 from dolphin.io import load_gdal, save_arr
@@ -39,8 +40,7 @@ def slc_file_list(tmp_path, slc_stack):
 
 @pytest.fixture()
 def slc_file_list_nc(tmp_path, slc_stack):
-    from make_netcdf import create_test_nc
-
+    """Save the slc stack as a series of NetCDF files."""
     start_date = 20220101
     name_template = tmp_path / "{date}.nc"
     file_list = []
@@ -48,6 +48,20 @@ def slc_file_list_nc(tmp_path, slc_stack):
         fname = str(name_template).format(date=str(start_date + i))
         file_list.append(fname)
         create_test_nc(fname, epsg=32615, subdir="/", data=slc_stack[i])
+    return file_list
+
+
+@pytest.fixture()
+def slc_file_list_nc_wgs84(tmp_path, slc_stack):
+    """Make one with lat/lon as the projection system."""
+
+    start_date = 20220101
+    name_template = tmp_path / "{date}.nc"
+    file_list = []
+    for i in range(len(slc_stack)):
+        fname = str(name_template).format(date=str(start_date + i))
+        file_list.append(fname)
+        create_test_nc(fname, epsg=4326, subdir="/", data=slc_stack[i])
     return file_list
 
 

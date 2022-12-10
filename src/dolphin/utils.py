@@ -1,6 +1,6 @@
 import datetime
 import re
-from os import PathLike, fspath
+from os import fspath
 from pathlib import Path
 from typing import List, Sequence, Tuple, Union
 
@@ -8,8 +8,8 @@ import numpy as np
 from osgeo import gdal, gdal_array, gdalconst
 
 from dolphin._log import get_log
+from dolphin._types import Filename
 
-Filename = Union[str, Path, PathLike[str]]
 gdal.UseExceptions()
 logger = get_log()
 
@@ -249,14 +249,6 @@ def combine_mask_files(
     ds_out = None
 
     return output_file
-
-
-def get_raster_xysize(filename: Filename) -> Tuple[int, int]:
-    """Get the xsize/ysize of a GDAL-readable raster."""
-    ds = gdal.Open(fspath(filename))
-    xsize, ysize = ds.RasterXSize, ds.RasterYSize
-    ds = None
-    return xsize, ysize
 
 
 def full_suffix(filename: Filename):

@@ -4,7 +4,7 @@ from typing import Optional, Tuple
 import numpy as np
 from numba import cuda
 
-from dolphin.utils import Filename
+from dolphin._types import Filename
 
 from . import covariance, metrics
 from .mle import mle_stack
