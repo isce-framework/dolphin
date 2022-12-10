@@ -169,6 +169,7 @@ def save_arr(
     driver: Optional[str] = "GTiff",
     options: Optional[List] = None,
     nbands: Optional[int] = None,
+    shape: Optional[Tuple[int, int]] = None,
     dtype: Optional[Union[str, np.dtype, type]] = None,
     nodata: Optional[Union[float, str]] = None,
 ):
@@ -193,6 +194,9 @@ def save_arr(
         List of options to pass to the driver. Default is DEFAULT_TIFF_OPTIONS.
     nbands : int, optional
         Number of bands to save. Default is 1.
+    shape : tuple, optional
+        (rows, cols) of desired output file.
+        Overrides the shape of the output file, if using `like_filename`.
     dtype : str or np.dtype or type, optional
         Data type to save. Default is `arr.dtype` or the datatype of like_filename.
     nodata : float or str, optional
@@ -213,7 +217,10 @@ def save_arr(
     else:
         if not ds_like:
             raise ValueError("Must specify either `arr` or `like_filename`")
-        xsize, ysize = ds_like.RasterXSize, ds_like.RasterYSize
+        if shape is not None:
+            ysize, xsize = shape
+        else:
+            xsize, ysize = ds_like.RasterXSize, ds_like.RasterYSize
         if dtype is not None:
             gdal_dtype = numpy_to_gdal_type(dtype)
         else:
@@ -265,6 +272,7 @@ def setup_output_folder(
     driver: str = "GTiff",
     dtype="complex64",
     start_idx: int = 0,
+    strides: Dict[str, int] = {"y": 1, "x": 1},
     creation_options: Optional[List] = None,
 ) -> List[Path]:
     """Create empty output files for each band after `start_idx` in `vrt_stack`.
@@ -284,6 +292,10 @@ def setup_output_folder(
         Index of vrt_stack to begin making output files.
         This should match the ministack index to avoid re-creating the
         past compressed SLCs.
+    strides : Dict[str, int], optional
+        Strides to use when creating the empty files, by default {"y": 1, "x": 1}
+        Larger strides will create smaller output files, computed using
+        [dolphin.io.compute_out_shape][]
     creation_options : list, optional
         List of options to pass to the GDAL driver, by default None
 
@@ -297,6 +309,7 @@ def setup_output_folder(
     output_files = []
     date_strs = [d.strftime("%Y%m%d") for d in vrt_stack.dates]
 
+    rows, cols = vrt_stack.shape[-2:]
     for filename in date_strs[start_idx:]:
         slc_name = Path(filename).stem
         # TODO: get extension from cfg
@@ -310,6 +323,7 @@ def setup_output_folder(
             driver=driver,
             nbands=1,
             dtype=dtype,
+            shape=compute_out_shape((rows, cols), strides),
             options=creation_options,
         )
 

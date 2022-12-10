@@ -51,6 +51,35 @@ def test_save_empty_like(raster_100_by_200, tmpdir):
     # TODO: test other metadata
 
 
+def test_save_strided(raster_100_by_200, tmpdir):
+    save_name = tmpdir / "same_size.tif"
+    strides = {"x": 1, "y": 1}
+    out_shape = io.compute_out_shape((100, 200), strides)
+    assert out_shape == (100, 200)
+    io.save_arr(
+        arr=None,
+        like_filename=raster_100_by_200,
+        shape=out_shape,
+        output_name=save_name,
+    )
+
+    xsize, ysize = io.get_raster_xysize(save_name)
+    assert (ysize, xsize) == (100, 200)
+
+    save_name2 = tmpdir / "smaller_size.tif"
+    strides = {"x": 2, "y": 4}
+    out_shape = io.compute_out_shape((100, 200), strides)
+    assert out_shape == (25, 100)
+    io.save_arr(
+        arr=None,
+        like_filename=raster_100_by_200,
+        shape=out_shape,
+        output_name=save_name2,
+    )
+    xsize, ysize = io.get_raster_xysize(save_name2)
+    assert (ysize, xsize) == (25, 100)
+
+
 def test_save_block(raster_100_by_200, tmpdir):
     save_name = tmpdir / "empty.tif"
     io.save_arr(arr=None, like_filename=raster_100_by_200, output_name=save_name)
@@ -153,6 +182,27 @@ def test_setup_output_folder(tmpdir, tiled_file_list):
         assert out_file.exists()
         ds = gdal.Open(str(out_file))
         assert ds.GetRasterBand(1).DataType == gdal.GDT_Float32
+
+
+def test_setup_output_folder_strided(tmpdir, tiled_file_list):
+    vrt_stack = vrt.VRTStack(tiled_file_list, outfile=tmpdir / "stack.vrt")
+    vrt_stack.write()
+
+    strides = {"x": 4, "y": 2}
+    out_file_list = io.setup_output_folder(
+        vrt_stack, driver="GTiff", dtype=np.complex64, strides=strides
+    )
+    rows, cols = vrt_stack.shape[-2:]
+    for out_file in out_file_list:
+        assert out_file.exists()
+        assert out_file.suffix == ".tif"
+        assert out_file.parent == tmpdir
+
+        ds = gdal.Open(str(out_file))
+        assert ds.GetRasterBand(1).DataType == gdal.GDT_CFloat32
+        assert ds.RasterXSize == cols // strides["x"]
+        assert ds.RasterYSize == rows // strides["y"]
+        ds = None
 
 
 def test_get_nodata_mask(tmpdir):

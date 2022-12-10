@@ -14,7 +14,7 @@ def run(cfg: Workflow, debug: bool = False):
     Parameters
     ----------
     cfg : Config
-        [dolphin.Config][] object with workflow parameters
+        [dolphin.workflows.config.Config][] object with workflow parameters
     debug : bool, optional
         Enable debug logging, by default False.
     """

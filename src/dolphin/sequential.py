@@ -31,7 +31,7 @@ def run_evd_sequential(
     # weight_file: Filename,
     output_folder: Filename,
     half_window: dict,
-    # strides: dict = {"x": 1, "y": 1},
+    strides: dict = {"x": 1, "y": 1},
     ministack_size: int = 10,
     mask_file: Optional[Filename] = None,
     ps_mask_file: Optional[Filename] = None,
@@ -65,7 +65,6 @@ def run_evd_sequential(
         ps_mask = np.zeros_like(mask)
 
     xhalf, yhalf = half_window["xhalf"], half_window["yhalf"]
-    # xstride, ystride = strides["x"], strides["y"]
 
     # Solve each ministack using the current chunk (and the previous compressed SLCs)
     ministack_starts = range(0, len(file_list_all), ministack_size)
@@ -95,7 +94,7 @@ def run_evd_sequential(
         )
         # Set up the output folder with empty files to write into
         cur_output_files = io.setup_output_folder(
-            cur_vrt, driver="GTiff", start_idx=mini_idx
+            cur_vrt, driver="GTiff", start_idx=mini_idx, strides=strides
         )
         # Save these for the final adjustment later
         # Keep the list of compressed SLCs to prepend to next VRTStack.file_list
@@ -156,7 +155,7 @@ def run_evd_sequential(
             try:
                 cur_mle_stack, tcorr = run_mle(
                     cur_data,
-                    half_window=(xhalf, yhalf),
+                    half_window=half_window,
                     beta=beta,
                     reference_idx=mini_idx,
                     mask=mask[rows, cols],
@@ -219,7 +218,7 @@ def run_evd_sequential(
         # Run the phase linking process on the current ministack
         cur_mle_stack, tcorr = run_mle(
             cur_data,
-            half_window=(xhalf, yhalf),
+            half_window=half_window,
             beta=beta,
             reference_idx=0,
             mask=mask[rows, cols],
