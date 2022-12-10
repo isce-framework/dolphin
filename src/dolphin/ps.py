@@ -122,6 +122,7 @@ def calc_ps_block(stack_mag: np.ndarray, amp_dispersion_threshold: float = 0.42)
     amp_disp = np.nan_to_num(amp_disp, nan=0, posinf=0, neginf=0, copy=False)
 
     ps = amp_disp < amp_dispersion_threshold
+    ps[amp_disp == 0] = False
     return mean, amp_disp, ps
 
 

@@ -323,10 +323,9 @@ class Outputs(BaseModel):
             return {"x": v, "y": v}
         return v
 
-    @root_validator
-    def _check_res_strides(cls, values):
+    @validator("strides", always=True)
+    def _check_strides_against_res(cls, strides, values):
         """Compute the output resolution from the strides."""
-        strides = values.get("strides")
         resolution = values.get("output_resolution")
         if strides is not None and resolution is not None:
             raise ValueError("Cannot specify both strides and output_resolution.")
@@ -346,7 +345,7 @@ class Outputs(BaseModel):
             # and that the resolution is valid, > 0. Can be int or float
             if any([v <= 0 for v in resolution.values()]):
                 raise ValueError("Resolutions must be > 0")
-        return values
+        return strides
 
 
 class Workflow(BaseModel):

@@ -247,7 +247,7 @@ def setup_output_folder(
     for filename in date_strs[start_idx:]:
         slc_name = Path(filename).stem
         # TODO: get extension from cfg
-        # output_path = output_folder / f"{slc_name}.slc.tif"
+        # TODO: account for HDF5
         output_path = output_folder / f"{slc_name}.slc.tif"
 
         save_arr(

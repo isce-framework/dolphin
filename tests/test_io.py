@@ -90,7 +90,7 @@ def test_save_block_cpx(raster_100_by_200, cpx_arr, tmpdir):
 
     io.save_block(
         cur_block=np.ones((20, 30), dtype=np.complex64),
-        output_files=save_name,
+        filename=save_name,
         rows=slice(0, 20),
         cols=slice(0, 30),
     )
@@ -101,7 +101,7 @@ def test_save_block_cpx(raster_100_by_200, cpx_arr, tmpdir):
     block_cpx = cpx_arr[:10, :10].copy()
     io.save_block(
         cur_block=block_cpx,
-        output_files=save_name,
+        filename=save_name,
         rows=slice(20, 30),
         cols=slice(20, 30),
     )

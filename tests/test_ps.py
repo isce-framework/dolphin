@@ -1,14 +1,49 @@
 import numpy as np
-import pytest
 from osgeo import gdal
 
 import dolphin.ps
 
 
-@pytest.fixture
-def amp_mean_file(tmp_path):
-    out = tmp_path / "amp_mean.tif"
-    return out
+def test_ps_block(slc_stack):
+    # Run the PS selector on entire stack
+    amp_mean, amp_disp, ps_pixels = dolphin.ps.calc_ps_block(
+        np.abs(slc_stack),
+        amp_dispersion_threshold=0.42,
+    )
+    assert amp_mean.shape == amp_disp.shape == ps_pixels.shape
+    assert amp_mean.dtype == amp_disp.dtype == np.float32
+    assert ps_pixels.dtype == bool
+
+    assert ps_pixels.sum() == 0
+
+    assert amp_mean.min() > 0
+    assert amp_disp.min() >= 0
+
+
+def test_ps_nodata(slc_stack):
+    s_nan = slc_stack.copy()
+    s_nan[:, 0, 0] = np.nan
+    # Run the PS selector on entire stack
+    amp_mean, amp_disp, ps_pixels = dolphin.ps.calc_ps_block(
+        np.abs(s_nan),
+        amp_dispersion_threshold=0.42,
+    )
+    assert amp_mean[0, 0] == 0
+    assert amp_disp[0, 0] == 0
+    assert not ps_pixels[0, 0]
+
+
+def test_ps_threshold(slc_stack):
+    _, _, ps_pixels = dolphin.ps.calc_ps_block(
+        np.abs(slc_stack),
+        amp_dispersion_threshold=100000,
+    )
+    assert ps_pixels.sum() == ps_pixels.size
+    _, _, ps_pixels = dolphin.ps.calc_ps_block(
+        np.abs(slc_stack),
+        amp_dispersion_threshold=0,
+    )
+    assert ps_pixels.sum() == 0
 
 
 def _write_zeros(file, shape):
@@ -62,7 +97,7 @@ def test_update_amp_disp(tmp_path, slc_stack):
         slc_vrt_file = _make_slc_vrt_file(tmp_path, slc_stack[: i + 1])
         dolphin.ps.update_amp_disp(
             amp_mean_file=amp_mean_file,
-            amp_disp_file=amp_disp_file,
+            amp_dispersion_file=amp_disp_file,
             slc_vrt_file=slc_vrt_file,
             output_directory=out_path,
         )
@@ -80,11 +115,3 @@ def test_update_amp_disp(tmp_path, slc_stack):
         # Move the new files to the old files
         new_amp_file.rename(amp_mean_file)
         new_disp_file.rename(amp_disp_file)
-
-    # # Run on the entire stack
-    # dolphin.ps.create_amp_dispersion(
-    #     slc_vrt_file=slc_vrt_file,
-    #     output_file=amp_disp_file,
-    #     amp_mean_file=amp_mean_file,
-    #     reference_band=1,
-    # )
