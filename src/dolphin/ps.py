@@ -4,39 +4,12 @@ from pathlib import Path
 
 import numpy as np
 from osgeo import gdal
-from osgeo_utils import gdal_calc
 from tqdm.auto import tqdm
 
 gdal.UseExceptions()
 
-from dolphin.io import copy_projection, save_arr, save_block
+from dolphin.io import save_arr, save_block
 from dolphin.utils import Filename
-
-
-def create_amp_dispersion(
-    *,
-    slc_vrt_file: Filename,
-    output_file: Filename,
-    amp_mean_file: Filename,
-    reference_band: int,
-    lines_per_block: int = 1000,
-    ram: int = 1024,
-):
-    """Create the amplitude dispersion file using FRInGE."""
-    import ampdispersionlib
-
-    aa = ampdispersionlib.Ampdispersion()
-
-    aa.inputDS = fspath(slc_vrt_file)
-    aa.outputDS = fspath(output_file)
-    aa.meanampDS = fspath(amp_mean_file)
-
-    aa.blocksize = lines_per_block
-    aa.memsize = ram
-    aa.refband = reference_band
-
-    aa.run()
-    copy_projection(slc_vrt_file, output_file)
 
 
 def create_ps(
@@ -46,9 +19,9 @@ def create_ps(
     amp_mean_file: Filename,
     amp_dispersion_file: Filename,
     amp_dispersion_threshold: float = 0.42,
-    max_bytes: int = 1024 * 1024 * 1024,
+    max_ram_gb: float = 1.0,
 ):
-    """Create the amplitude dispersion file using Python.
+    """Create the amplitude dispersion, mean, and PS files.
 
     Parameters
     ----------
@@ -62,16 +35,16 @@ def create_ps(
         The output mean amplitude file.
     amp_dispersion_threshold : float, optional
         The threshold for the amplitude dispersion. Default is 0.42.
-    max_bytes : int, optional
-        The maximum number of bytes to read at a time.
-        Default is 1e9 (1 GB).
+    max_ram_gb : int, optional
+        The maximum amount of data to read at a time (in GB).
+        Default is 1.0 GB.
     """
     from .vrt import VRTStack
 
     # Initialize the output files with zeros
     types = [np.uint8, np.float32, np.float32]
     file_list = [output_file, amp_dispersion_file, amp_mean_file]
-    nodatas = [0, 0, None]
+    nodatas = [255, 0, 0]
     for fn, dtype, nodata in zip(file_list, types, nodatas):
         save_arr(
             arr=None,
@@ -83,16 +56,12 @@ def create_ps(
         )
 
     vrt_stack = VRTStack.from_vrt_file(slc_vrt_file)
+    max_bytes = 1e9 * max_ram_gb
     num_blocks = vrt_stack._get_num_blocks(max_bytes=max_bytes)
     block_shape = vrt_stack._get_block_shape(max_bytes=max_bytes)
 
     # Initialize the intermediate arrays for the calculation
     magnitude = np.zeros((len(vrt_stack), *block_shape), dtype=np.float32)
-    # n_valid = np.zeros(block_shape, dtype=int)
-    # mean = np.zeros(block_shape, dtype=np.float32)
-    # std_dev = np.zeros(block_shape, dtype=np.float32)
-    # amp_disp = np.zeros(block_shape, dtype=np.float32)
-    # ps = np.zeros(block_shape, dtype=np.uint8)
 
     # Make the generator for the blocks
     block_gen = vrt_stack.iter_blocks(
@@ -105,27 +74,11 @@ def create_ps(
             continue
 
         magnitude = np.abs(cur_data, out=magnitude)
-        # Make the nans into 0s to ignore them
-        np.nan_to_num(magnitude, copy=False)
+        mean, amp_disp, ps = calc_ps_block(magnitude, amp_dispersion_threshold)
 
-        # Make a 2d mask of the valid values
-        # np.sum((magnitude != 0).astype(np.int16), axis=0, out=n_valid)
-        np.sum((magnitude != 0).astype(np.int16), axis=0)
-
-        # np.nanmean(magnitude, axis=0, out=mean)
-        # np.nanstd(magnitude, axis=0, out=std_dev)
-        mean = np.nanmean(magnitude, axis=0)
-        std_dev = np.nanstd(magnitude, axis=0)
-
-        # Calculate the amplitude dispersion and replace nans with 0s
-        # amp_disp = np.divide(mean, std_dev, out=amp_disp, where=n_valid > 0)
-        # amp_disp = np.nan_to_num(amp_disp, nan=0, posinf=0, neginf=0, copy=False)
-        amp_disp = mean / std_dev
-        amp_disp = np.nan_to_num(amp_disp, nan=0, posinf=0, neginf=0, copy=False)
-
-        ps = amp_disp < amp_dispersion_threshold
-        # np.greater_equal(amp_disp, amp_dispersion_threshold, out=ps)
-        # No valid pixels, set to max Byte value
+        # Use the UInt8 type for the PS to save.
+        # For invalid pixels, set to max Byte value
+        ps = ps.astype(np.uint8)
         ps[amp_disp == 0] = 255
 
         # Write amp dispersion and the mean blocks
@@ -134,23 +87,42 @@ def create_ps(
         save_block(ps, output_file, rows, cols)
 
 
-def create_ps_fringe(
-    *,
-    output_file: Filename,
-    amp_dispersion_file: Filename,
-    amp_dispersion_threshold: float = 0.42,
-):
-    """Create the PS file using the existing amplitude dispersion file."""
-    gdal_calc.Calc(
-        [f"a<{amp_dispersion_threshold}"],
-        a=fspath(amp_dispersion_file),
-        outfile=fspath(output_file),
-        format="ENVI",
-        type="Byte",
-        overwrite=True,
-        quiet=True,
-    )
-    copy_projection(amp_dispersion_file, output_file)
+def calc_ps_block(stack_mag: np.ndarray, amp_dispersion_threshold: float = 0.42):
+    """Calculate the amplitude dispersion for a block of data.
+
+    Parameters
+    ----------
+    stack_mag : np.ndarray
+        The magnitude of the stack of SLCs.
+    amp_dispersion_threshold : float, optional
+        The threshold for the amplitude dispersion to label a pixel as a PS:
+            ps = amp_disp < amp_dispersion_threshold
+        Default is 0.42.
+
+    Returns
+    -------
+    mean : np.ndarray
+        The mean amplitude for the block.
+        dtype: float32
+    amp_disp : np.ndarray
+        The amplitude dispersion for the block.
+    ps : np.ndarray
+        The persistent scatterers for the block.
+        dtype: bool
+    """
+    # Make the nans into 0s to ignore them
+    np.nan_to_num(stack_mag, copy=False)
+
+    # TODO: is it worth creating each ndarray in advance and use `out=`?
+    mean = np.nanmean(stack_mag, axis=0)
+    std_dev = np.nanstd(stack_mag, axis=0)
+
+    # Calculate the amplitude dispersion and replace nans with 0s
+    amp_disp = mean / std_dev
+    amp_disp = np.nan_to_num(amp_disp, nan=0, posinf=0, neginf=0, copy=False)
+
+    ps = amp_disp < amp_dispersion_threshold
+    return mean, amp_disp, ps
 
 
 def update_amp_disp(
@@ -159,9 +131,9 @@ def update_amp_disp(
     slc_vrt_file: Filename,
     output_directory: Filename = "",
 ):
-    r"""Update the amplitude dispersion for the new SLC.
+    r"""Update the amplitude dispersion for a new SLC.
 
-    Uses Welford's method to update the mean and variance.
+    Uses Welford's method for online updating of mean and variance.
 
     \[
     \begin{align}
