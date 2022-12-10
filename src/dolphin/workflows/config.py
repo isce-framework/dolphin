@@ -282,12 +282,12 @@ class Outputs(BaseModel):
     output_format: OutputFormat = OutputFormat.NETCDF
     scratch_directory: Path = Path("scratch")
     output_directory: Path = Path("output")
-    output_resolution: Optional[dict] = Field(
+    output_resolution: Optional[Dict[str, int]] = Field(
         # {"x": 20, "y": 20},
         None,
         description="Output (x, y) resolution (in units of input data)",
     )
-    strides: Optional[dict] = Field(
+    strides: Optional[Dict[str, int]] = Field(
         {"x": 1, "y": 1},
         description=(
             "Alternative to specifying output resolution: Specify the (x, y) strides"

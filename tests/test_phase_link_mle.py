@@ -48,7 +48,7 @@ def test_estimation_gpu(slc_samples, est_mle_cpu):
     # Get the GPU version
     slc_stack = slc_samples.reshape(NUM_ACQ, 11, 11)
 
-    est_mle_gpu_fullres, temp_coh = run_gpu(slc_stack, half_window=(5, 5))
+    est_mle_gpu_fullres, temp_coh = run_gpu(slc_stack, half_window={"x": 5, "y": 5})
     assert est_mle_gpu_fullres.shape == (len(est_mle_cpu), 11, 11)
     assert temp_coh.shape == (11, 11)
     # The middle pixel should be the same, since it had the full window
@@ -75,7 +75,7 @@ def test_masked(slc_samples, C_truth, C_hat):
     slc_stack_masked[:, mask] = np.nan
 
     C_hat2 = covariance.estimate_stack_covariance_cpu(
-        slc_stack_masked, half_window=(5, 5)
+        slc_stack_masked, half_window={"x": 5, "y": 5}
     )
     est_full = np.squeeze(mle.mle_stack(C_hat2))
     # Middle pixel should be the same
@@ -84,6 +84,8 @@ def test_masked(slc_samples, C_truth, C_hat):
     if not GPU_AVAILABLE:
         pytest.skip("GPU version not available")
     # Now check GPU version
-    est_mle_gpu_fullres, temp_coh = run_gpu(slc_stack_masked, half_window=(5, 5))
+    est_mle_gpu_fullres, temp_coh = run_gpu(
+        slc_stack_masked, half_window={"x": 5, "y": 5}
+    )
     est_phase_gpu = np.angle(est_mle_gpu_fullres[:, 5, 5])
     np.testing.assert_array_almost_equal(est_mle, est_phase_gpu, decimal=1)

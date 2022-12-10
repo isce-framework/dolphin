@@ -1,5 +1,5 @@
 import logging
-from typing import Optional, Tuple
+from typing import Dict, Optional
 
 import numpy as np
 
@@ -13,8 +13,8 @@ logger = logging.getLogger(__name__)
 
 def run_cpu(
     slc_stack: np.ndarray,
-    half_window: Tuple[int, int],
-    strides: Tuple[int, int] = (1, 1),
+    half_window: Dict[str, int],
+    strides: Dict[str, int] = {"x": 1, "y": 1},
     beta: float = 0.0,
     reference_idx: int = 0,
     output_cov_file: Optional[Filename] = None,
@@ -27,12 +27,12 @@ def run_cpu(
     ----------
     slc_stack : np.ndarray
         The SLC stack, with shape (n_slc, n_rows, n_cols)
-    half_window : Tuple[int, int]
-        The half window size as [half_x, half_y] in pixels.
+    half_window : Dict[str, int]
+        The half window size as {"x": half_win_x, "y": half_win_y}
         The full window size is 2 * half_window + 1 for x, y.
-    strides : Tuple[int, int], optional
-        The (row, col) strides (in pixels) to use for the sliding window.
-        By default (1, 1)
+    strides : Dict[str, int], optional
+        The (x, y) strides (in pixels) to use for the sliding window.
+        By default {"x": 1, "y": 1}
     beta : float, optional
         The regularization parameter, by default 0.0.
     reference_idx : int, optional

@@ -4,7 +4,7 @@ Contains for CPU and GPU versions (which will not be available if no GPU).
 """
 from cmath import isnan
 from cmath import sqrt as csqrt
-from typing import Tuple
+from typing import Dict, Tuple
 
 import numpy as np
 import pymp
@@ -15,8 +15,8 @@ from numba import cuda, njit
 
 def estimate_stack_covariance_cpu(
     slc_stack: np.ndarray,
-    half_window: Tuple[int, int],
-    strides: Tuple[int, int] = (1, 1),
+    half_window: Dict[str, int],
+    strides: Dict[str, int] = {"x": 1, "y": 1},
     n_workers=1,
 ):
     """Estimate the linked phase at all pixels of `slc_stack` on the CPU.
@@ -25,12 +25,12 @@ def estimate_stack_covariance_cpu(
     ----------
     slc_stack : np.ndarray
         The SLC stack, with shape (n_slc, n_rows, n_cols).
-    half_window : Tuple[int, int]
-        The half window size as [half_x, half_y] in pixels.
+    half_window : Dict[str, int]
+        The half window size as {"x": half_win_x, "y": half_win_y}
         The full window size is 2 * half_window + 1 for x, y.
-    strides : Tuple[int, int], optional
-        The (row, col) strides (in pixels) to use for the sliding window.
-        By default (1, 1)
+    strides : Dict[str, int], optional
+        The (x, y) strides (in pixels) to use for the sliding window.
+        By default {"x": 1, "y": 1}
     n_workers : int, optional
         The number of workers to use for (CPU version) multiprocessing.
         If 1 (default), no multiprocessing is used.
@@ -50,7 +50,8 @@ def estimate_stack_covariance_cpu(
     out_rows, out_cols = compute_out_shape((rows, cols), strides)
     C_arrays = pymp.shared.array((out_rows, out_cols, nslc, nslc), dtype=dtype)
 
-    row_strides, col_strides = strides
+    row_strides, col_strides = strides["y"], strides["x"]
+    half_col, half_row = half_window["x"], half_window["y"]
     with pymp.Parallel(n_workers) as p:
         # Looping over linear index for pixels (less nesting of pymp context managers)
         for idx in p.range(out_rows * out_cols):
@@ -66,7 +67,7 @@ def estimate_stack_covariance_cpu(
             in_c = c_start + out_c * col_strides
 
             (r_start, r_end), (c_start, c_end) = _get_slices_cpu(
-                half_window, in_r, in_c, rows, cols
+                half_row, half_col, in_r, in_c, rows, cols
             )
             # Read the 3D current chunk
             samples_stack = slcs_shared[:, r_start:r_end, c_start:c_end]
@@ -110,7 +111,7 @@ def coh_mat_single(neighbor_stack, cov_mat=None):
 # GPU version of the covariance matrix computation
 @cuda.jit
 def estimate_stack_covariance_gpu(
-    slc_stack, half_window: Tuple[int, int], strides: Tuple[int, int], C_out
+    slc_stack, half_window: Dict[str, int], strides: Dict[str, int], C_out
 ):
     """Estimate the linked phase at all pixels of `slc_stack` on the GPU."""
     # Get the global position within the 2D GPU grid
@@ -120,7 +121,7 @@ def estimate_stack_covariance_gpu(
     if out_y >= out_rows or out_x >= out_cols:
         return
 
-    row_strides, col_strides = strides
+    row_strides, col_strides = strides["y"], strides["x"]
     r_start = row_strides // 2
     c_start = col_strides // 2
     in_r = r_start + out_y * row_strides
@@ -173,20 +174,14 @@ def _coh_mat_gpu(samples_stack, cov_mat):
         cov_mat[i_slc, i_slc] = 1.0
 
 
-# (r_start, r_end), (c_start, c_end) = _get_slices_cpu(
-#                 half_window, in_r, in_c, rows, cols
-#             )
-def _get_slices(half_window, r, c, rows, cols):
+def _get_slices(half_r: int, half_c: int, r: int, c: int, rows: int, cols: int):
     """Get the slices for the given pixel and half window size."""
-    # Get the half window size
-    half_x, half_y = half_window
-
     # Clamp min indexes to 0
-    r_start = max(r - half_y, 0)
-    c_start = max(c - half_x, 0)
+    r_start = max(r - half_r, 0)
+    c_start = max(c - half_c, 0)
     # Clamp max indexes to the array size
-    r_end = min(r + half_y + 1, rows)
-    c_end = min(c + half_x + 1, cols)
+    r_end = min(r + half_r + 1, rows)
+    c_end = min(c + half_c + 1, cols)
     return (r_start, r_end), (c_start, c_end)
 
 
@@ -196,7 +191,7 @@ _get_slices_gpu = cuda.jit(device=True)(_get_slices)
 
 
 def compute_out_shape(
-    shape: Tuple[int, int], strides: Tuple[int, int]
+    shape: Tuple[int, int], strides: Dict[str, int]
 ) -> Tuple[int, int]:
     """Calculate the output size for an input `shape` and row/col `strides`.
 
@@ -219,8 +214,8 @@ def compute_out_shape(
     ----------
     shape : Tuple[int, int]
         Input size: (rows, cols)
-    strides : Tuple[int, int]
-        (row strides, col_strides)
+    strides : Dict[str, int]
+        {"x": x strides, "y": y strides}
 
     Returns
     -------
@@ -228,7 +223,7 @@ def compute_out_shape(
         Size of output after striding
     """
     rows, cols = shape
-    rs, cs = strides
+    rs, cs = strides["y"], strides["x"]
     # initial starting pixel
     r_off, c_off = (rs // 2, cs // 2)
     remaining_rows = rows - r_off - 1

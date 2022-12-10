@@ -63,15 +63,16 @@ def test_coh_mat_single(slcs, expected_cov, looks=(5, 5)):
 def test_estimate_stack_covariance_cpu(slcs, expected_cov, looks=(5, 5)):
     # Check the full stack function
     r_looks, c_looks = looks
-    half_window = (c_looks // 2, r_looks // 2)
+    half_window = {"x": c_looks // 2, "y": r_looks // 2}
+    strides = {"x": c_looks, "y": r_looks}
     C1_cpu = covariance.estimate_stack_covariance_cpu(
-        slcs, half_window=half_window, strides=looks
+        slcs, half_window=half_window, strides=strides
     )
     np.testing.assert_array_almost_equal(expected_cov, C1_cpu)
 
     # Check multi-processing
     C1_cpu_mp = covariance.estimate_stack_covariance_cpu(
-        slcs, half_window=half_window, strides=looks, n_workers=2
+        slcs, half_window=half_window, strides=strides, n_workers=2
     )
     np.testing.assert_array_almost_equal(expected_cov, C1_cpu_mp)
 
@@ -87,7 +88,7 @@ def test_estimate_stack_covariance_gpu(slcs, expected_cov, looks=(5, 5)):
     # Set up the full res version using numba
     d_slcs = cp.asarray(slcs)
 
-    strides = (1, 1)
+    strides = {"x": 1, "y": 1}
     out_rows, out_cols = rows, cols
     d_C3 = cp.zeros((out_rows, out_cols, num_slc, num_slc), dtype=np.complex64)
     threads_per_block = (16, 16)
@@ -117,7 +118,8 @@ def test_estimate_stack_covariance_gpu_strides(slcs, expected_cov, looks=(5, 5))
     # Set up the full res version using numba
     d_slcs = cp.asarray(slcs)
 
-    strides = looks
+    r_looks, c_looks = looks
+    strides = {"x": c_looks, "y": r_looks}
     out_rows, out_cols = covariance.compute_out_shape((rows, cols), strides)
     d_C3 = cp.zeros((out_rows, out_cols, num_slc, num_slc), dtype=np.complex64)
     threads_per_block = (16, 16)
@@ -175,8 +177,9 @@ def test_estimate_stack_covariance_nans_gpu(slcs, looks=(5, 5)):
     d_slcs = cp.asarray(slcs)
     d_C = cp.zeros((rows, cols, num_slc, num_slc), dtype=np.complex64)
 
-    half_window = (looks[1] // 2, looks[0] // 2)
-    strides = (1, 1)
+    r_looks, c_looks = looks
+    half_window = {"x": c_looks // 2, "y": r_looks // 2}
+    strides = {"x": 1, "y": 1}
     covariance.estimate_stack_covariance_gpu[blocks, threads_per_block](
         d_slcs, half_window, strides, d_C
     )
@@ -198,7 +201,7 @@ def test_estimate_stack_covariance_nans_gpu(slcs, looks=(5, 5)):
 
 
 def test_compute_out_size():
-    strides = (3, 3)
+    strides = {"x": 3, "y": 3}
     assert (2, 2) == covariance.compute_out_shape((6, 6), strides)
 
     # 1 more/fewer in each direction shouldn't change it
