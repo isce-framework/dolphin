@@ -2,11 +2,11 @@
 # from dolphin import phase_link, ps, sequential, unwrap, utils, vrt
 from dolphin._log import get_log, log_runtime
 
-from .config import Config
+from .config import Workflow
 
 
 @log_runtime
-def run(cfg: Config, debug: bool = False):
+def run(cfg: Workflow, debug: bool = False):
     """Run the displacement workflow on a stack of SLCs.
 
     Parameters

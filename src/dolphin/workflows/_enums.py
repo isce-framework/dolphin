@@ -20,7 +20,6 @@ class OutputFormat(str, Enum):
 
     ENVI = "ENVI"
     GTiff = "GTiff"
-    HDF5 = "HDF5"
     NETCDF = "NetCDF"
 
 

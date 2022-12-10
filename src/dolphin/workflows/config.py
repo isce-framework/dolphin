@@ -23,7 +23,7 @@ from ._enums import InterferogramNetworkType, OutputFormat, UnwrapMethod, Workfl
 PathOrStr = Union[Path, str]
 
 __all__ = [
-    "Config",
+    "Workflow",
 ]
 
 
@@ -289,7 +289,7 @@ class Outputs(BaseModel):
         return v.absolute()
 
 
-class Config(BaseModel):
+class Workflow(BaseModel):
     """Configuration for the workflow.
 
     Required fields are in `Inputs`.

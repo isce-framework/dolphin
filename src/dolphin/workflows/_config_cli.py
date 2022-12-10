@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import List, Optional, Union
 
 from ._enums import WorkflowName
-from .config import Config
+from .config import Workflow
 
 
 def create_config(
@@ -18,7 +18,7 @@ def create_config(
     name: WorkflowName = WorkflowName.STACK,
 ):
     """Create a config for a displacement workflow."""
-    cfg = Config(
+    cfg = Workflow(
         inputs={
             "cslc_directory": slc_directory,
             "cslc_file_ext": ext,

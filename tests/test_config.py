@@ -195,7 +195,7 @@ def test_input_nones(tmpdir):
 
 
 def test_config_defaults():
-    c = config.Config(inputs={"cslc_directory": "."})
+    c = config.Workflow(inputs={"cslc_directory": "."})
     # These should be the defaults
     assert c.interferogram_network == config.InterferogramNetwork()
     assert c.outputs == config.Outputs()
@@ -224,7 +224,7 @@ def test_config_defaults():
 
 def test_config_create_dir_tree(tmpdir):
     with tmpdir.as_cwd():
-        c = config.Config(inputs={"cslc_directory": "."})
+        c = config.Workflow(inputs={"cslc_directory": "."})
         c.create_dir_tree()
         assert c.ps_options.directory.exists()
         assert c.phase_linking.directory.exists()
@@ -239,22 +239,22 @@ def test_config_create_dir_tree(tmpdir):
 
 
 def test_config_roundtrip_dict():
-    c = config.Config(inputs={"cslc_directory": "."})
+    c = config.Workflow(inputs={"cslc_directory": "."})
     c_dict = c.dict()
-    c2 = config.Config.parse_obj(c_dict)
+    c2 = config.Workflow.parse_obj(c_dict)
     assert c == c2
 
 
 def test_config_roundtrip_json():
-    c = config.Config(inputs={"cslc_directory": "."})
+    c = config.Workflow(inputs={"cslc_directory": "."})
     c_json = c.json()
-    c2 = config.Config.parse_raw(c_json)
+    c2 = config.Workflow.parse_raw(c_json)
     assert c == c2
 
 
 def test_config_roundtrip_yaml(tmp_path):
     outfile = tmp_path / "config.yaml"
-    c = config.Config(inputs={"cslc_directory": "."})
+    c = config.Workflow(inputs={"cslc_directory": "."})
     c.to_yaml(outfile)
-    c2 = config.Config.from_yaml(outfile)
+    c2 = config.Workflow.from_yaml(outfile)
     assert c == c2

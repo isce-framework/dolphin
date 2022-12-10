@@ -70,15 +70,16 @@ def get_dates(filename: Filename, fmt="%Y%m%d") -> List[Union[None, str]]:
     return date_list
 
 
-def parse_slc_strings(slc_str: Union[Filename, List[Filename]], fmt="%Y%m%d"):
+def parse_slc_strings(slc_str: Union[Filename, List[Filename]], fmt=None):
     """Parse a string, or list of strings, matching `fmt` into datetime.date.
 
     Parameters
     ----------
     slc_str : str or list of str
         String or list of strings to parse.
-    fmt : str, optional
-        Format of string to parse. Default is "%Y%m%d".
+    fmt : str, or List[str]. Optional
+        Format of string to parse.
+        If None (default), searches for "%Y%m%d" or "%Y-%m-%d".
 
     Returns
     -------
@@ -88,12 +89,30 @@ def parse_slc_strings(slc_str: Union[Filename, List[Filename]], fmt="%Y%m%d"):
     def _parse(datestr, fmt="%Y%m%d") -> datetime.date:
         return datetime.datetime.strptime(datestr, fmt).date()
 
-    # The re.search will find YYYYMMDD anywhere in string
+    if fmt is None:
+        fmt = ["%Y%m%d", "%Y-%m-%d"]
+    elif isinstance(fmt, str):
+        fmt = [fmt]
+
     if isinstance(slc_str, str) or hasattr(slc_str, "__fspath__"):
-        d_list = get_dates(slc_str, fmt=fmt)
-        if not d_list:
+        # Unpack all returned dates from each format
+        d_list = []
+        fmt_found = None
+        for f in fmt:
+            d_list.extend(get_dates(slc_str, fmt=f))
+            if len(d_list) > 0:
+                fmt_found = f
+                break
+        else:  # if we iterate through all formats and don't find any dates
             raise ValueError(f"Could not find date of format {fmt} in {slc_str}")
-        return _parse(d_list[0], fmt=fmt)
+
+        unique_dates = np.unique(d_list)
+        if len(unique_dates) > 1:
+            raise ValueError(
+                f"Found multiple dates in {slc_str}: {unique_dates}. "
+                "Please specify a date format."
+            )
+        return _parse(unique_dates[0], fmt=fmt_found)
     else:
         # If it's an iterable of strings, run on each one
         return [parse_slc_strings(s, fmt=fmt) for s in slc_str if s]
