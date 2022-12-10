@@ -16,7 +16,7 @@ from ruamel.yaml import YAML
 
 from dolphin import __version__ as _dolphin_version
 from dolphin._log import get_log
-from dolphin.utils import get_dates
+from dolphin.utils import get_dates, parse_slc_strings
 
 from ._enums import InterferogramNetworkType, OutputFormat, UnwrapMethod, WorkflowName
 
@@ -196,13 +196,21 @@ class WorkerSettings(BaseSettings):
 class Inputs(BaseModel):
     """Options specifying input datasets for workflow."""
 
-    cslc_directory: DirectoryPath = Field(None, description="Path to CSLC files")
+    cslc_file_list: List[Path] = Field(
+        default_factory=list, description="List of CSLC files"
+    )
+    cslc_directory: Optional[DirectoryPath] = Field(
+        None,
+        description="Path to CSLC files",
+        exclude=True
+        # Note that we're not keeping the "directory" once we've
+        # found the files, so we exclude it from the schema
+    )
     cslc_file_ext: Optional[str] = Field(
         ".nc",
         description="Extension of CSLC files (if providing `cslc_directory`)",
-    )
-    cslc_file_list: List[PathOrStr] = Field(
-        default_factory=list, description="List of CSLC files"
+        # Same here: Only care about the file_list once it's found
+        exclude=True,
     )
     cslc_date_fmt: str = Field(
         "%Y%m%d",
@@ -221,15 +229,18 @@ class Inputs(BaseModel):
     @validator("mask_files", "cslc_file_list", pre=True)
     def _check_mask_files(cls, v):
         if isinstance(v, str):
-            return [v]
+            return [Path(v)]
         elif v is None:
             return []
+        elif not isinstance(v, list):
+            v = [Path(f) for f in v]
         return v
 
     @root_validator
     def _check_slc_files_exist(cls, values):
         file_list = values.get("cslc_file_list")
         directory = values.get("cslc_directory")
+        date_fmt = values.get("cslc_date_fmt")
         if not file_list:
             if not directory:
                 raise ValueError("Must specify either cslc_file_list or cslc_directory")
@@ -237,16 +248,32 @@ class Inputs(BaseModel):
             ext = values.get("cslc_file_ext")
             file_list = sorted(directory.glob(f"*{ext}"))
             # Filter out files that don't have dates in the filename
-            date_fmt = values.get("cslc_date_fmt")
-            file_list = [str(f) for f in file_list if get_dates(f, fmt=date_fmt)]
-            values["cslc_file_list"] = file_list
+            file_list = [Path(f) for f in file_list if get_dates(f, fmt=date_fmt)]
+            if len(file_list) == 0:
+                raise ValueError(
+                    f"No files found in {directory} with extension {ext} and"
+                    f" date format {date_fmt}"
+                )
+
             # Save the directory, if used, as an absolute path
             values["cslc_directory"] = directory.absolute()
-        else:
-            # If the file_list is directly provided, null out the directory/extension
-            values["cslc_directory"] = None
-            values["cslc_file_ext"] = None
+
+        # Sort the files by date
+        date_list = parse_slc_strings(file_list, fmt=date_fmt)
+        # Sort the files by date
+        file_list, date_list = zip(
+            *sorted(zip(file_list, date_list), key=lambda x: x[1])
+        )
+        # Coerce the file_list to a list of Path objects, sorted
+        values["cslc_file_list"] = [Path(f) for f in file_list]
+        # Once we have the file list, we don't need the directory or extension
+        del values["cslc_directory"]
+        del values["cslc_file_ext"]
         return values
+
+    def get_dates(self) -> List[date]:
+        """Get the dates parsed from the input files."""
+        return parse_slc_strings(self.cslc_file_list, fmt=self.cslc_date_fmt)
 
 
 class Outputs(BaseModel):
@@ -255,12 +282,13 @@ class Outputs(BaseModel):
     output_format: OutputFormat = OutputFormat.NETCDF
     scratch_directory: Path = Path("scratch")
     output_directory: Path = Path("output")
-    output_resolution: List[float] = Field(
-        [20, 20],
+    output_resolution: Optional[dict] = Field(
+        # {"x": 20, "y": 20},
+        None,
         description="Output (x, y) resolution (in units of input data)",
     )
-    strides: List[int] = Field(
-        [1, 1],
+    strides: Optional[dict] = Field(
+        {"x": 1, "y": 1},
         description=(
             "Alternative to specifying output resolution: Specify the (x, y) strides"
             " (decimation factor) to perform while processing input. For example,"
@@ -287,6 +315,38 @@ class Outputs(BaseModel):
     @validator("output_directory", "scratch_directory", always=True)
     def _dir_is_absolute(cls, v):
         return v.absolute()
+
+    @validator("output_resolution", "strides", pre=True, always=True)
+    def _check_resolution(cls, v):
+        """Allow the user to specify just one float, applying to both dimensions."""
+        if isinstance(v, (int, float)):
+            return {"x": v, "y": v}
+        return v
+
+    @root_validator
+    def _check_res_strides(cls, values):
+        """Compute the output resolution from the strides."""
+        strides = values.get("strides")
+        resolution = values.get("output_resolution")
+        if strides is not None and resolution is not None:
+            raise ValueError("Cannot specify both strides and output_resolution.")
+        elif strides is None and resolution is None:
+            raise ValueError("Must specify either strides or output_resolution.")
+
+        # Check that the dict has the correct keys
+        if strides is not None:
+            if not set(strides.keys()) == {"x", "y"}:
+                raise ValueError("Strides must be a dict with keys 'x' and 'y'")
+            # and that the strides are integers
+            if not all([isinstance(v, int) for v in strides.values()]):
+                raise ValueError("Strides must be integers")
+        if resolution is not None:
+            if not set(resolution.keys()) == {"x", "y"}:
+                raise ValueError("Resolution must be a dict with keys 'x' and 'y'")
+            # and that the resolution is valid, > 0. Can be int or float
+            if any([v <= 0 for v in resolution.values()]):
+                raise ValueError("Resolutions must be > 0")
+        return values
 
 
 class Workflow(BaseModel):
@@ -318,6 +378,7 @@ class Workflow(BaseModel):
     # internal helpers
     # Stores the list of directories to be created by the workflow
     _directory_list: List[Path] = PrivateAttr(default_factory=list)
+    _date_list: List[date] = PrivateAttr(default_factory=list)
 
     # validators
     @root_validator
@@ -398,8 +459,9 @@ class Workflow(BaseModel):
         return cls(**data)
 
     def __init__(self, **data):
-        """After validation, initialize and store the directory list."""
+        """After validation, set up properties for use during workflow run."""
         super().__init__(**data)
+
         # Track the directories that need to be created at start of workflow
         self._directory_list = [
             self.outputs.scratch_directory,
@@ -408,6 +470,9 @@ class Workflow(BaseModel):
             self.phase_linking.directory,
             self.unwrap_options.directory,
         ]
+
+        # Store the dates parsed from the input files
+        self._date_list = self.inputs.get_dates()
 
     def create_dir_tree(self, debug=False):
         """Create the directory tree for the workflow."""

@@ -266,17 +266,17 @@ def setup_output_folder(
 
 def save_block(
     cur_block: np.ndarray,
-    output_files: Union[Filename, List[Filename]],
+    filename: Filename,
     rows: slice,
     cols: slice,
 ):
-    """Save each of the MLE estimates (ignoring the compressed SLCs).
+    """Save an ndarray to a subset of the pre-made `filename`.
 
     Parameters
     ----------
     cur_block : np.ndarray
         Array of shape (n_bands, block_rows, block_cols)
-    output_files : List[Filename] or Filename
+    filename : Filename
         List of output files to save to, or (if cur_block is 2D) a single file.
     rows : slice
         Rows of the current block
@@ -288,25 +288,19 @@ def save_block(
     ValueError
         If length of `output_files` does not match length of `cur_block`.
     """
-    if not isinstance(output_files, list):
-        output_files = [output_files]
     if cur_block.ndim == 2:
         # Make into 3D array shaped (1, rows, cols)
         cur_block = cur_block[np.newaxis, ...]
 
-    if len(cur_block) != len(output_files):
-        raise ValueError(
-            f"cur_block has {len(cur_block)} layers, but passed"
-            f" {len(output_files)} files"
-        )
-    for cur_image, filename in zip(cur_block, output_files):
-        ds = gdal.Open(fspath(filename), gdal.GA_Update)
-        bnd = ds.GetRasterBand(1)
+    ds = gdal.Open(fspath(filename), gdal.GA_Update)
+    for b_idx, cur_image in enumerate(cur_block, start=1):
+        bnd = ds.GetRasterBand(b_idx)
         # only need offset for write:
         # https://gdal.org/api/python/osgeo.gdal.html#osgeo.gdal.Band.WriteArray
         bnd.WriteArray(cur_image, cols.start, rows.start)
         bnd.FlushCache()
-        bnd = ds = None
+        bnd = None
+    ds = None
 
 
 def get_stack_nodata_mask(

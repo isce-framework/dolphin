@@ -42,7 +42,7 @@ def test_save_block(raster_100_by_200, tmpdir):
 
     io.save_block(
         cur_block=np.ones((20, 30)),
-        output_files=save_name,
+        filename=save_name,
         rows=slice(0, 20),
         cols=slice(0, 30),
     )
@@ -52,7 +52,7 @@ def test_save_block(raster_100_by_200, tmpdir):
 
     io.save_block(
         cur_block=np.ones((20, 30)),
-        output_files=save_name,
+        filename=save_name,
         rows=slice(0, 20),
         cols=slice(0, 30),
     )

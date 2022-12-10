@@ -30,8 +30,8 @@ def run_evd_sequential(
     slc_vrt_file: Filename,
     # weight_file: Filename,
     output_folder: Filename,
-    window: dict,
-    strides: dict = {"x": 1, "y": 1},
+    half_window: dict,
+    # strides: dict = {"x": 1, "y": 1},
     ministack_size: int = 10,
     mask_file: Optional[Filename] = None,
     ps_mask_file: Optional[Filename] = None,
@@ -64,7 +64,7 @@ def run_evd_sequential(
     else:
         ps_mask = np.zeros_like(mask)
 
-    xhalf, yhalf = window["xhalf"], window["yhalf"]
+    xhalf, yhalf = half_window["xhalf"], half_window["yhalf"]
     # xstride, ystride = strides["x"], strides["y"]
 
     # Solve each ministack using the current chunk (and the previous compressed SLCs)
@@ -172,7 +172,9 @@ def run_evd_sequential(
 
             # Save each of the MLE estimates (ignoring the compressed SLCs)
             assert len(cur_mle_stack[mini_idx:]) == len(cur_output_files)
-            io.save_block(cur_mle_stack[mini_idx:], cur_output_files, rows, cols)
+            for img, f in zip(cur_mle_stack[mini_idx:], cur_output_files):
+                io.save_block(img, f, rows, cols)
+
             # Save the temporal coherence blocks
             io.save_block(tcorr, tcorr_file, rows, cols)
 
@@ -227,7 +229,8 @@ def run_evd_sequential(
         )
 
         # Save each of the MLE estimates (ignoring the compressed SLCs)
-        io.save_block(cur_mle_stack, adjusted_comp_slc_files, rows, cols)
+        for img, f in zip(cur_mle_stack, adjusted_comp_slc_files):
+            io.save_block(img, f, rows, cols)
         # TODO: Do I care about the temporal coherence here?
         # What would it even mean for the all-compressed SLCs?
 

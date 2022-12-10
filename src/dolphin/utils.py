@@ -2,14 +2,14 @@ import datetime
 import re
 from os import PathLike, fspath
 from pathlib import Path
-from typing import List, Tuple, Union
+from typing import List, Sequence, Tuple, Union
 
 import numpy as np
 from osgeo import gdal, gdal_array, gdalconst
 
 from dolphin._log import get_log
 
-Filename = Union[str, PathLike[str]]
+Filename = Union[str, Path, PathLike[str]]
 gdal.UseExceptions()
 logger = get_log()
 
@@ -70,7 +70,7 @@ def get_dates(filename: Filename, fmt="%Y%m%d") -> List[Union[None, str]]:
     return date_list
 
 
-def parse_slc_strings(slc_str: Union[Filename, List[Filename]], fmt=None):
+def parse_slc_strings(slc_str: Union[Filename, Sequence[Filename]], fmt=None):
     """Parse a string, or list of strings, matching `fmt` into datetime.date.
 
     Parameters
