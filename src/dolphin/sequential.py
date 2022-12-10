@@ -171,16 +171,20 @@ def run_evd_sequential(
 
             # Save each of the MLE estimates (ignoring the compressed SLCs)
             assert len(cur_mle_stack[mini_idx:]) == len(cur_output_files)
+            # Get the location within the output file, shrinking down the slices
+            out_rows = slice(rows.start // strides["y"], rows.stop // strides["y"])
+            out_cols = slice(cols.start // strides["x"], cols.stop // strides["x"])
+
             for img, f in zip(cur_mle_stack[mini_idx:], cur_output_files):
-                io.save_block(img, f, rows, cols)
+                io.save_block(img, f, out_rows, out_cols)
 
             # Save the temporal coherence blocks
-            io.save_block(tcorr, tcorr_file, rows, cols)
+            io.save_block(tcorr, tcorr_file, out_rows, out_cols)
 
             # Compress the ministack using only the non-compressed SLCs
             cur_comp_slc = compress(cur_data[mini_idx:], cur_mle_stack[mini_idx:])
             # Save the compressed SLC block
-            io.save_block(cur_comp_slc, cur_comp_slc_file, rows, cols)
+            io.save_block(cur_comp_slc, cur_comp_slc_file, out_rows, out_cols)
             # logger.debug(f"Saved compressed block SLC to {cur_comp_slc_file}")
             tqdm.write(" Finished block, loading next block.")
 
@@ -198,7 +202,7 @@ def run_evd_sequential(
     ##############################################
     # Set up the output folder with empty files to write into
     adjusted_comp_slc_files = io.setup_output_folder(
-        adjustment_vrt_stack, driver="GTiff"
+        adjustment_vrt_stack, driver="GTiff", strides=strides
     )
 
     # Iterate over the ministack in blocks
@@ -227,9 +231,12 @@ def run_evd_sequential(
             no_gpu=no_gpu,
         )
 
+        # Get the location within the output file, shrinking down the slices
+        out_rows = slice(rows.start // strides["y"], rows.stop // strides["y"])
+        out_cols = slice(cols.start // strides["x"], cols.stop // strides["x"])
         # Save each of the MLE estimates (ignoring the compressed SLCs)
         for img, f in zip(cur_mle_stack, adjusted_comp_slc_files):
-            io.save_block(img, f, rows, cols)
+            io.save_block(img, f, out_rows, out_cols)
         # TODO: Do I care about the temporal coherence here?
         # What would it even mean for the all-compressed SLCs?
 
