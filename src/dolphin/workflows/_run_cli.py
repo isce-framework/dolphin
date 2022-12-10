@@ -19,6 +19,7 @@ def run(config_file: str, debug: bool = False):
         Enable debug logging, by default False.
     """
     cfg = Config.from_yaml(config_file)
+    cfg.create_dir_tree()
     if cfg.workflow_name == "stack":
         from dolphin.workflows import s1_disp_stack
 
@@ -49,17 +50,11 @@ def get_parser(subparser=None, subcommand_name="run"):
         help="Name of YAML configuration file describing workflow options.",
     )
     parser.add_argument(
-        "-n",
-        "--name",
-        default="stack",
-        choices=["single", "stack"],
-        help="Name workflow to run.",
-    )
-    parser.add_argument(
         "--debug",
         action="store_true",
         help="Print debug messages to the log.",
     )
+    parser.set_defaults(run_func=run)
     return parser
 
 
@@ -67,7 +62,7 @@ def main(args=None):
     """Get the command line arguments and run the workflow."""
     parser = get_parser()
     parsed_args = parser.parse_args(args)
-    run(parsed_args.config_file, name=parsed_args.name, debug=parsed_args.debug)
+    run(parsed_args.config_file, debug=parsed_args.debug)
 
 
 if __name__ == "__main__":

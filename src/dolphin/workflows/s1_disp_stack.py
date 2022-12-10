@@ -34,7 +34,7 @@ def run(cfg: Config, debug: bool = False):
     # ###############
     # 1. PS selection
     # ###############
-    ps_output = cfg.ps_options.ps_file
+    ps_output = cfg.ps_options.output_file
     if ps_output.exists():
         logger.info(f"Skipping making existing PS file {ps_output}")
     else:

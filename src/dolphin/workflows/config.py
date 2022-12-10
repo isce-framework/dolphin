@@ -8,12 +8,14 @@ from pydantic import (
     BaseSettings,
     DirectoryPath,
     Field,
+    PrivateAttr,
     root_validator,
     validator,
 )
 from ruamel.yaml import YAML
 
 from dolphin import __version__ as _dolphin_version
+from dolphin._log import get_log
 from dolphin.utils import get_dates
 
 from ._enums import InterferogramNetworkType, OutputFormat, UnwrapMethod, WorkflowName
@@ -25,20 +27,11 @@ __all__ = [
 ]
 
 
-def _check_and_make_dir(path: PathOrStr) -> Path:
-    """Check for the existence of a directory.
-
-    Create the directory if it doesn't exist.
-    """
-    p = Path(path)
-    # Make the absolute version of the directory, but keep the original
-    # name (in case we need to nest and move it.)
-    p.absolute().mkdir(parents=True, exist_ok=True)
-    return p
-
-
 def _move_file_in_dir(path: PathOrStr, values: dict) -> Path:
-    """Make sure the `path` is within `values[directory']` for validation."""
+    """Make sure the `path` is within `values['directory']`.
+
+    Used for validation in different workflow steps' outputs.
+    """
     p = Path(path)
     d = Path(values.get("directory", "."))
     if not p.parent == d:
@@ -51,9 +44,9 @@ class PsOptions(BaseModel):
     """Options for the PS pixel selection portion of the workflow."""
 
     directory: Path = Path("PS")
-    output_file: Optional[Path] = Path("ps_pixels.tif")
-    amp_dispersion_file: Optional[Path] = Path("amp_dispersion.tif")
-    amp_mean_file: Optional[Path] = Path("amp_mean.tif")
+    output_file: Path = Path("ps_pixels.tif")
+    amp_dispersion_file: Path = Path("amp_dispersion.tif")
+    amp_mean_file: Path = Path("amp_mean.tif")
 
     amp_dispersion_threshold: float = Field(
         0.42,
@@ -62,10 +55,6 @@ class PsOptions(BaseModel):
     )
 
     # validators: Check directory exists, and that outputs are within directory
-    _dir_must_exist = validator("directory", allow_reuse=True, always=True)(
-        _check_and_make_dir
-    )
-
     _move_in_dir = validator(
         "output_file",
         "amp_dispersion_file",
@@ -103,9 +92,6 @@ class PhaseLinkingOptions(BaseModel):
     temp_coh_file: Path = Path("temp_coh.tif")
 
     # validators
-    _dir_must_exist = validator("directory", allow_reuse=True, always=True)(
-        _check_and_make_dir
-    )
     _move_in_dir = validator(
         "compressed_slc_file", "temp_coh_file", allow_reuse=True, always=True
     )(_move_file_in_dir)
@@ -174,9 +160,6 @@ class UnwrapOptions(BaseModel):
     init_method: str = "mcf"
 
     # validators
-    _dir_must_exist = validator("directory", allow_reuse=True, always=True)(
-        _check_and_make_dir
-    )
 
 
 class WorkerSettings(BaseSettings):
@@ -213,13 +196,13 @@ class WorkerSettings(BaseSettings):
 class Inputs(BaseModel):
     """Options specifying input datasets for workflow."""
 
-    cslc_file_list: List[PathOrStr] = Field(
-        default_factory=list, description="List of CSLC files"
-    )
     cslc_directory: DirectoryPath = Field(None, description="Path to CSLC files")
     cslc_file_ext: Optional[str] = Field(
         ".nc",
         description="Extension of CSLC files (if providing `cslc_directory`)",
+    )
+    cslc_file_list: List[PathOrStr] = Field(
+        default_factory=list, description="List of CSLC files"
     )
     cslc_date_fmt: str = Field(
         "%Y%m%d",
@@ -257,6 +240,12 @@ class Inputs(BaseModel):
             date_fmt = values.get("cslc_date_fmt")
             file_list = [str(f) for f in file_list if get_dates(f, fmt=date_fmt)]
             values["cslc_file_list"] = file_list
+            # Save the directory, if used, as an absolute path
+            values["cslc_directory"] = directory.absolute()
+        else:
+            # If the file_list is directly provided, null out the directory/extension
+            values["cslc_directory"] = None
+            values["cslc_file_ext"] = None
         return values
 
 
@@ -265,8 +254,20 @@ class Outputs(BaseModel):
 
     output_format: OutputFormat = OutputFormat.NETCDF
     scratch_directory: Path = Path("scratch")
-    # TODO: spacing, strides, etc.
     output_directory: Path = Path("output")
+    output_resolution: List[float] = Field(
+        [20, 20],
+        description="Output (x, y) resolution (in units of input data)",
+    )
+    strides: List[int] = Field(
+        [1, 1],
+        description=(
+            "Alternative to specifying output resolution: Specify the (x, y) strides"
+            " (decimation factor) to perform while processing input. For example,"
+            " strides of [4, 2] would turn an input resolution of [5, 10] into an"
+            " output resolution of [20, 20]."
+        ),
+    )
 
     hdf5_creation_options: Dict = Field(
         dict(
@@ -283,9 +284,6 @@ class Outputs(BaseModel):
     )
 
     # validators
-    _dir_must_exist = validator(
-        "output_directory", "scratch_directory", allow_reuse=True, always=True
-    )(_check_and_make_dir)
 
 
 class Config(BaseModel):
@@ -314,40 +312,47 @@ class Config(BaseModel):
     creation_time_utc: datetime = Field(default_factory=datetime.utcnow)
     dolphin_version: str = _dolphin_version
 
+    # internal helpers
+    # Stores the list of directories to be created by the workflow
+    _directory_list: List[Path] = PrivateAttr(default_factory=list)
+
     # validators
     @root_validator
     def _move_dirs_inside_scratch(cls, values):
         """Ensure outputs from workflow steps are within scratch directory."""
         scratch_dir = values["outputs"].scratch_directory
+        # Save all directories as absolute paths
+        scratch_dir = scratch_dir.absolute()
 
         # For each workflow step that has an output folder, move it inside
         # the scratch directory (if it's not already inside).
         # They may already be inside if we're loading from a json/yaml file.
         ps_opts = values["ps_options"]
         if not ps_opts.directory.parent == scratch_dir:
-            values["ps_options"].directory = scratch_dir / ps_opts.directory
+            ps_opts.directory = scratch_dir / ps_opts.directory
+        ps_opts.directory = ps_opts.directory.absolute()
+
         if not ps_opts.amp_dispersion_file.parent.parent == scratch_dir:
-            values["ps_options"].amp_dispersion_file = (
-                scratch_dir / ps_opts.amp_dispersion_file
-            )
+            ps_opts.amp_dispersion_file = scratch_dir / ps_opts.amp_dispersion_file
         if not ps_opts.amp_mean_file.parent.parent == scratch_dir:
-            values["ps_options"].amp_mean_file = scratch_dir / ps_opts.amp_mean_file
+            ps_opts.amp_mean_file = scratch_dir / ps_opts.amp_mean_file
         if not ps_opts.output_file.parent.parent == scratch_dir:
-            values["ps_options"].output_file = scratch_dir / ps_opts.output_file
+            ps_opts.output_file = scratch_dir / ps_opts.output_file
 
         pl_opts = values["phase_linking"]
         if not pl_opts.directory.parent == scratch_dir:
-            values["phase_linking"].directory = scratch_dir / pl_opts.directory
+            pl_opts.directory = scratch_dir / pl_opts.directory
+        pl_opts.directory = pl_opts.directory.absolute()
+
         if not pl_opts.compressed_slc_file.parent.parent == scratch_dir:
-            values["phase_linking"].compressed_slc_file = (
-                scratch_dir / pl_opts.compressed_slc_file
-            )
+            pl_opts.compressed_slc_file = scratch_dir / pl_opts.compressed_slc_file
         if not pl_opts.temp_coh_file.parent.parent == scratch_dir:
-            values["phase_linking"].temp_coh_file = scratch_dir / pl_opts.temp_coh_file
+            pl_opts.temp_coh_file = scratch_dir / pl_opts.temp_coh_file
 
         unw_opts = values["unwrap_options"]
         if not unw_opts.directory.parent == scratch_dir:
-            values["unwrap_options"].directory = scratch_dir / unw_opts.directory
+            unw_opts.directory = scratch_dir / unw_opts.directory
+        unw_opts.directory = unw_opts.directory.absolute()
 
         return values
 
@@ -388,3 +393,22 @@ class Config(BaseModel):
         with open(yaml_path, "r") as f:
             data = y.load(f)
         return cls(**data)
+
+    def __init__(self, **data):
+        """After validation, initialize and store the directory list."""
+        super().__init__(**data)
+        # Track the directories that need to be created at start of workflow
+        self._directory_list = [
+            self.outputs.scratch_directory,
+            self.outputs.output_directory,
+            self.ps_options.directory,
+            self.phase_linking.directory,
+            self.unwrap_options.directory,
+        ]
+
+    def create_dir_tree(self):
+        """Create the directory tree for the workflow."""
+        log = get_log()
+        for d in self._directory_list:
+            log.debug(f"Creating directory: {d}")
+            d.mkdir(parents=True, exist_ok=True)

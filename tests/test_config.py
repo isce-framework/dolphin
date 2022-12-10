@@ -34,8 +34,6 @@ def test_ps_options_defaults(tmpdir):
         pso = config.PsOptions()
         assert pso.amp_dispersion_threshold == 0.42
         assert pso.directory == Path("PS")
-        assert pso.directory.exists()
-        assert pso.directory.is_dir()
         assert pso.output_file == Path("PS/ps_pixels.tif")
         assert pso.amp_dispersion_file == Path("PS/amp_dispersion.tif")
         assert pso.amp_mean_file == Path("PS/amp_mean.tif")
@@ -46,8 +44,6 @@ def test_phase_linking_options_defaults(tmpdir):
         opts = config.PhaseLinkingOptions()
         assert opts.ministack_size == 15
         assert opts.directory == Path("linked_phase")
-        assert opts.directory.exists()
-        assert opts.directory.is_dir()
         assert opts.half_window == config.HalfWindow()
         assert opts.compressed_slc_file == Path("linked_phase/compressed_slc.tif")
         assert opts.temp_coh_file == Path("linked_phase/temp_coh.tif")
@@ -133,9 +129,7 @@ def test_worker_env_defaults(monkeypatch):
 
 def test_inputs_defaults():
     opts = config.Inputs(cslc_directory=".")
-    assert opts.cslc_directory == Path(".")
-    assert opts.cslc_directory.exists()
-    assert opts.cslc_directory.is_dir()
+    assert opts.cslc_directory == Path(".").absolute()
 
     assert opts.cslc_file_ext == ".nc"
     assert opts.cslc_date_fmt == "%Y%m%d"
@@ -210,21 +204,38 @@ def test_config_defaults():
 
     # Check the defaults for the sub-configs, where the folders
     # should have been moved to the scratch directory
-    assert c.ps_options.directory == Path("scratch/PS")
-    # Path('scratch/PS/amp_mean.tif')
-    assert c.ps_options.amp_mean_file == Path("scratch/PS/amp_mean.tif")
-    assert c.ps_options.amp_dispersion_file == Path("scratch/PS/amp_dispersion.tif")
+    assert c.ps_options.directory == Path("scratch/PS").absolute()
+    assert c.ps_options.amp_mean_file == Path("scratch/PS/amp_mean.tif").absolute()
 
-    assert c.phase_linking.directory == Path("scratch/linked_phase")
-    assert c.phase_linking.compressed_slc_file == Path(
-        "scratch/linked_phase/compressed_slc.tif"
-    )
-    assert c.phase_linking.temp_coh_file == Path("scratch/linked_phase/temp_coh.tif")
+    p = Path("scratch/PS/amp_dispersion.tif")
+    assert c.ps_options.amp_dispersion_file == p.absolute()
 
-    assert c.unwrap_options.directory == Path("scratch/unwrap")
+    assert c.phase_linking.directory == Path("scratch/linked_phase").absolute()
+    p = Path("scratch/linked_phase/compressed_slc.tif")
+    assert c.phase_linking.compressed_slc_file == p.absolute()
+    p = Path("scratch/linked_phase/temp_coh.tif")
+    assert c.phase_linking.temp_coh_file == p.absolute()
+
+    assert c.unwrap_options.directory == Path("scratch/unwrap").absolute()
 
     now = datetime.datetime.utcnow()
     assert (now - c.creation_time_utc).seconds == 0
+
+
+def test_config_create_dir_tree(tmpdir):
+    with tmpdir.as_cwd():
+        c = config.Config(inputs={"cslc_directory": "."})
+        c.create_dir_tree()
+        assert c.ps_options.directory.exists()
+        assert c.phase_linking.directory.exists()
+        assert c.unwrap_options.directory.exists()
+
+        # Check that the scratch directory is created
+        assert Path("scratch").exists()
+
+        for d in c._directory_list:
+            assert d.exists()
+            assert d.is_dir()
 
 
 def test_config_roundtrip_dict():
