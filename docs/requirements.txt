@@ -10,3 +10,4 @@ mkdocs-section-index
 mkdocstrings[python]
 pre-commit
 pytest
+pytest-cov
