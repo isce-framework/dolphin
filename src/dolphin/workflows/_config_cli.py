@@ -2,7 +2,7 @@
 import argparse
 import sys
 from pathlib import Path
-from typing import List, Optional, Union
+from typing import List, Optional, Tuple, Union
 
 from ._enums import WorkflowName
 from .config import Workflow
@@ -15,16 +15,20 @@ def create_config(
     ext: str = ".nc",
     slc_files: Optional[List[str]] = None,
     mask_files: Optional[List[str]] = None,
+    strides: Tuple[int, int],
     name: WorkflowName = WorkflowName.STACK,
 ):
     """Create a config for a displacement workflow."""
     cfg = Workflow(
-        inputs={
-            "cslc_directory": slc_directory,
-            "cslc_file_ext": ext,
-            "cslc_file_list": slc_files,
-            "mask_files": mask_files,
-        },
+        inputs=dict(
+            cslc_directory=slc_directory,
+            cslc_file_ext=ext,
+            cslc_file_list=slc_files,
+            mask_files=mask_files,
+        ),
+        outputs=dict(
+            strides={"x": strides[0], "y": strides[1]},
+        ),
         name=name,
     )
 
@@ -68,6 +72,18 @@ def get_parser(subparser=None, subcommand_name="run"):
         "--slc-files",
         nargs=argparse.ZERO_OR_MORE,
         help="Alternative: list the paths of all SLC files to include.",
+    )
+    # Get Outputs from the command line
+    parser.add_argument(
+        "-s",
+        "--strides",
+        nargs=2,
+        type=int,
+        default=(1, 1),
+        help=(
+            "Strides/decimation factor (x, y) (in pixels) to use when determining"
+            " output shape."
+        ),
     )
     parser.add_argument(
         "-n",

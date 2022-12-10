@@ -287,7 +287,7 @@ class Outputs(BaseModel):
         None,
         description="Output (x, y) resolution (in units of input data)",
     )
-    strides: Optional[Dict[str, int]] = Field(
+    strides: Dict[str, int] = Field(
         {"x": 1, "y": 1},
         description=(
             "Alternative to specifying output resolution: Specify the (x, y) strides"

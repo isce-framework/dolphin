@@ -26,7 +26,7 @@ def run_mle(
     avg_mag: Optional[np.ndarray] = None,
     output_cov_file: Optional[Filename] = None,
     n_workers: int = 1,
-    no_gpu: bool = False,
+    gpu_enabled: bool = False,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """Estimate the linked phase for a stack using the MLE estimator.
 
@@ -65,8 +65,8 @@ def run_mle(
     n_workers : int, optional
         The number of workers to use for (CPU version) multiprocessing.
         If 1 (default), no multiprocessing is used.
-    no_gpu : bool, optional
-        If True, do not use the GPU even if it is available.
+    gpu_enabled : bool, optional
+        If False, do not use the GPU, even if it is available.
 
     Returns
     -------
@@ -107,7 +107,7 @@ def run_mle(
 
     #######################################
     gpu_is_available = check_gpu_available()
-    if no_gpu or not gpu_is_available:
+    if not gpu_enabled or not gpu_is_available:
         mle_est, temp_coh = _run_cpu(
             slc_stack,
             half_window,

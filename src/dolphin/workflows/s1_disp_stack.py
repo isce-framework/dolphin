@@ -1,7 +1,5 @@
 #!/usr/bin/env python
-from dolphin import ps, vrt
-
-# from dolphin import phase_link, ps, sequential, unwrap, utils, vrt
+from dolphin import ps, sequential, vrt
 from dolphin._log import get_log, log_runtime
 
 from .config import Workflow
@@ -59,24 +57,18 @@ def run(cfg: Workflow, debug: bool = False):
         logger.info(f"Skipping EVD step, {len(existing_files)} files already exist")
     else:
         logger.info(f"Running sequential EMI step in {pl_path}")
-        # pl_path = sequential.run_evd_sequential(
-        #     slc_vrt_file=slc_vrt_file,
-        #     half_window=cfg.unwrap_options.half_window.dict(),
-        #     # strides=cfg.outputs.strides,
-        #     beta=0.0,
-        # )
-    # slc_vrt_file: Filename,
-    # # weight_file: Filename,
-    # output_folder: Filename,
-    # window: dict,
-    # strides: dict = {"x": 1, "y": 1},
-    # ministack_size: int = 10,
-    # mask_file: Optional[Filename] = None,
-    # ps_mask_file: Optional[Filename] = None,
-    # beta: float = 0.1,
-    # max_bytes: float = 32e6,
-    # n_workers: int = 1,
-    # no_gpu: bool = False,
+        pl_path = sequential.run_evd_sequential(
+            slc_vrt_file=slc_vrt_file,
+            output_folder=cfg.phase_linking.directory,
+            half_window=cfg.unwrap_options.half_window.dict(),
+            strides=cfg.outputs.strides,
+            ministack_size=cfg.phase_linking.ministack_size,
+            mask_file=cfg.phase_linking.mask_file,
+            ps_mask_file=cfg.ps_options.output_file,
+            max_bytes=cfg.worker_settings.max_ram_gb / 1e9,
+            n_workers=cfg.worker_settings.n_workers,
+            beta=0.0,
+        )
 
     # ###################################################
     # 3. Form interferograms from estimated wrapped phase

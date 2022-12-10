@@ -38,7 +38,7 @@ def run_evd_sequential(
     beta: float = 0.1,
     max_bytes: float = 32e6,
     n_workers: int = 1,
-    no_gpu: bool = False,
+    gpu_enabled: bool = True,
 ):
     """Estimate wrapped phase using batches of ministacks."""
     output_folder = Path(output_folder)
@@ -66,6 +66,7 @@ def run_evd_sequential(
 
     xhalf, yhalf = half_window["xhalf"], half_window["yhalf"]
     xs, ys = strides["x"], strides["y"]
+    out_shape = io.compute_out_shape((ysize, ysize), strides)
 
     # Solve each ministack using the current chunk (and the previous compressed SLCs)
     ministack_starts = range(0, len(file_list_all), ministack_size)
@@ -108,6 +109,7 @@ def run_evd_sequential(
             like_filename=cur_vrt.outfile,
             output_name=cur_comp_slc_file,
             nbands=1,
+            shape=out_shape,
         )
         comp_slc_files.append(cur_comp_slc_file)
 
@@ -119,6 +121,7 @@ def run_evd_sequential(
             output_name=tcorr_file,
             nbands=1,
             dtype=np.float32,
+            shape=out_shape,
         )
         tcorr_files.append(tcorr_file)
 
@@ -162,7 +165,7 @@ def run_evd_sequential(
                     mask=mask[rows, cols],
                     ps_mask=ps_mask[rows, cols],
                     n_workers=n_workers,
-                    no_gpu=no_gpu,
+                    gpu_enabled=gpu_enabled,
                 )
             except PhaseLinkRuntimeError:
                 # note: this is a warning instead of info, since it should
@@ -224,12 +227,13 @@ def run_evd_sequential(
         cur_mle_stack, tcorr = run_mle(
             cur_data,
             half_window=half_window,
+            strides=strides,
             beta=beta,
             reference_idx=0,
             mask=mask[rows, cols],
             ps_mask=ps_mask[rows, cols],
             n_workers=n_workers,
-            no_gpu=no_gpu,
+            gpu_enabled=gpu_enabled,
         )
 
         # Get the location within the output file, shrinking down the slices
