@@ -22,6 +22,8 @@ from logging import Formatter
 
 COLORS = False
 
+__all__ = ["get_log", "log_runtime"]
+
 
 def get_log(debug=False, name="dolphin.log"):
     """Create a nice log format for use across multiple files.

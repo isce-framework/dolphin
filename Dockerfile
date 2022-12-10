@@ -2,7 +2,7 @@ FROM mambaorg/micromamba:1.1.0
 
 # Install conda packages
 # https://github.com/mamba-org/micromamba-docker#quick-start
-COPY --chown=$MAMBA_USER:$MAMBA_USER requirements.txt /tmp/requirements.txt
+COPY --chown=$MAMBA_USER:$MAMBA_USER requirements-conda.txt /tmp/requirements.txt
 RUN micromamba install --yes --channel conda-forge -n base -f /tmp/requirements.txt && \
     micromamba clean --all --yes
 

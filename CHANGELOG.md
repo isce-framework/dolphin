@@ -26,7 +26,6 @@ Added requirements:
 - numpy
 - h5py
 - ruamel.yaml
-- yamale
+- pydantic
 - numba
-- pip:
-  - pymp-pypi
+- pymp-pypi

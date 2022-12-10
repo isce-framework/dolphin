@@ -4,27 +4,52 @@ Algorithms and Tools for LAnd Surface Deformation using InSAR
 
 🚨 This toolbox is still in **pre-alpha** stage and undergoing **rapid development**. 🚨
 
+
+
+## Usage
+
+<!-- This is for snippets to copy sections into other documentation pages: -->
+<!-- https://facelessuser.github.io/pymdown-extensions/extensions/snippets/#snippet-sections -->
+# --8<-- [start:usage]
+Dolphin has a main command line entry point to run the algorithms and tools in workflows.
+The main entry point is named `dolphin`, which has two subcommands:
+
+1. `dolphin config`: create a workflow configuration file.
+2. `dolphin run` : run the workflow using this file.
+
+Example usage:
+
+```bash
+$ dolphin config --slc-directory /path/to/slc --ext ".tif"
+```
+This will create a YAML file (by default `dolphin_config.yaml` in the current directory).
+You can also directly use a list of SLC files as input, e.g.:
+```bash
+$ dolphin config --slc-files /path/to/slc1.tif /path/to/slc2.tif
+```
+
+# --8<-- [end:usage]
+
+
+
+
+# --8<-- [start:install]
 ## Install
 
 The following will install `dolphin` into a conda environment.
 
 1. Download source code:
-
 ```bash
 git clone https://github.com/opera-adt/dolphin.git && cd dolphin
 ```
-
 2. Install dependencies:
-
 ```bash
 # assuming that mamba is installed: https://mamba.readthedocs.io/en/latest/
 # if not, start with:
 # conda install mamba -n base -c conda-forge
 mamba install -c conda-forge --file requirements.txt
 ```
-
 3. Install `dolphin` via pip:
-
 ```bash
 # -e installs in development mode
 python -m pip install -e .
@@ -33,29 +58,15 @@ python -m pip install -e .
 For development:
 
 ```bash
-# run "pip install -e" to install in development mode
-python -m pip install -e .[dev]
+# run "pip install -e" to install with extra development requirements
+python -m pip install -e .[docs]
 # Get pre-commit hooks so that linting/formatting is done automatically
 pre-commit install
 
 # After making changes, check the tests:
 pytest
 ```
-
-For development:
-
-```bash
-# run "pip install -e" to install in development mode
-python -m pip install -e .[dev]
-# Get pre-commit hooks so that linting/formatting is done automatically
-pre-commit install
-
-# After making changes, check the tests:
-pytest
-```
-
-
-## Usage
+# --8<-- [end:install]
 
 ## License
 **Copyright (c) 2022** California Institute of Technology (“Caltech”). U.S. Government

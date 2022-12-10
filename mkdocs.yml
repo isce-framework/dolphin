@@ -6,7 +6,7 @@ theme:
   # https://squidfunk.github.io/mkdocs-material
   name: "material"
   favicon: img/favicon.ico
-  logo: img/android-chrome-512x512.png
+  logo: img/apple-touch-icon.png
   palette:
     primary: cyan
     # https://squidfunk.github.io/mkdocs-material/setup/changing-the-colors/#color-scheme
@@ -36,6 +36,11 @@ plugins:
           heading_level: 2
 
 
+extra:
+  # https://github.com/squidfunk/mkdocs-material-example-versioning
+  # https://github.com/jimporter/mike (for versioning)
+  version:
+    provider: mike
 
 # extra_css:
 #   - css/custom.css

@@ -8,6 +8,8 @@ import importlib
 import platform
 import sys
 
+__all__ = ["show_versions"]
+
 
 def _get_sys_info():
     """System information.
@@ -71,10 +73,11 @@ def _get_deps_info():
     """
     deps = [
         "numpy",
+        "numba",
         "osgeo.gdal",
         "h5py",
         "ruamel_yaml",
-        "yamale",
+        "pydantic",
         "setuptools",
     ]
     return {name: _get_version(name) for name in deps}

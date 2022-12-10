@@ -6,7 +6,8 @@ build-backend = "setuptools.build_meta"
 name = "dolphin"
 description = "Workflows for generating surface displacement maps using InSAR"
 readme = { file = "README.md", content-type = "text/markdown" }
-requires-python = ">=3.9"
+requires-python = ">=3.8"
+
 classifiers = [
     "Development Status :: 2 - Pre-Alpha",
     "Intended Audience :: Science/Research",
@@ -15,45 +16,36 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 
-# Will be written into a version.py upon install, auto-generated
+# The version will be written into a version.py upon install, auto-generated
 # see section: setuptools_scm
 # https://setuptools.pypa.io/en/latest/userguide/pyproject_config.html#dynamic-metadata
+# dependencies will be read from text files
 dynamic = [
   "version",
   "dependencies",
+  "optional-dependencies",
 ]
-
-[project.scripts]
-dolphin = "dolphin.workflows.s1_disp:main"
-
-[project.optional-dependencies]
-dev = [
-    "pytest",
-    "pre-commit",
-    "black",
-    "flake8",
-    # mkdocs requirements
-    "mkdocs",
-    "mkdocstrings[python]",
-    "mkdocs-material",
-    "mkdocs-section-index",
-    "mkdocs-gen-files",
-    "mkdocs-literate-nav",
-]
-
-[tool.setuptools.dynamic]
-dependencies = {file = ["requirements.txt"]}
-
 
 [project.urls]
 Homepage = "https://github.com/opera-adt/dolphin"
 "Bug Tracker" = "https://github.com/opera-adt/dolphin/issues"
 
+# Entry points for the command line interface
+[project.scripts]
+dolphin = "dolphin.cli:main"
+
+[tool.setuptools.dynamic]
+dependencies = {file = ["requirements.txt"]}
+
+# extra requirements: `pip install dolphin[docs]` or `pip install .[docs]`
+[tool.setuptools.dynamic.optional-dependencies.docs]
+file = ["docs/requirements.txt"]
+
 
 
 [tool.setuptools_scm]
 # https://github.com/pypa/setuptools_scm#configuration-parameters
-write_to = "src/dolphin/version.py"
+write_to = "src/dolphin/_version.py"
 # https://github.com/pypa/setuptools_scm#version-number-construction
 version_scheme = "no-guess-dev"  # Will not guess the next version
 
@@ -74,4 +66,4 @@ ignore_missing_imports = true
 ignore = "D100,D102,D104,D105,D203,D204,D213,D413"
 
 [tool.pytest.ini_options]
-addopts = "--doctest-modules --ignore=scripts --ignore=docs"
+addopts = "--doctest-modules --cov=dolphin --ignore=scripts --ignore=docs"
