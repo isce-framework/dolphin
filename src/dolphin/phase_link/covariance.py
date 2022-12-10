@@ -4,11 +4,13 @@ Contains for CPU and GPU versions (which will not be available if no GPU).
 """
 from cmath import isnan
 from cmath import sqrt as csqrt
-from typing import Dict, Tuple
+from typing import Dict
 
 import numpy as np
 import pymp
 from numba import cuda, njit
+
+from dolphin.io import compute_out_shape
 
 # CPU version of the covariance matrix computation
 
@@ -188,50 +190,6 @@ def _get_slices(half_r: int, half_c: int, r: int, c: int, rows: int, cols: int):
 # Make cpu and gpu compiled versions of the helper function
 _get_slices_cpu = njit(_get_slices)
 _get_slices_gpu = cuda.jit(device=True)(_get_slices)
-
-
-def compute_out_shape(
-    shape: Tuple[int, int], strides: Dict[str, int]
-) -> Tuple[int, int]:
-    """Calculate the output size for an input `shape` and row/col `strides`.
-
-    For instance, in a 6 x 6 array with `strides=(3, 3)`,
-    we could expect the pixels to be centered on indexes
-    `[7, 10, 25, 28]`.
-
-        [[ 0  1  2   3  4  5]
-        [ 6  7  8    9 10 11]
-        [12 13 14   15 16 17]
-
-        [18 19 20   21 22 23]
-        [24 25 26   27 28 29]
-        [30 31 32   33 34 35]]
-
-
-    So the output size would be `(2, 2)`.
-
-    Parameters
-    ----------
-    shape : Tuple[int, int]
-        Input size: (rows, cols)
-    strides : Dict[str, int]
-        {"x": x strides, "y": y strides}
-
-    Returns
-    -------
-    out_shape : Tuple[int, int]
-        Size of output after striding
-    """
-    rows, cols = shape
-    rs, cs = strides["y"], strides["x"]
-    # initial starting pixel
-    r_off, c_off = (rs // 2, cs // 2)
-    remaining_rows = rows - r_off - 1
-    remaining_cols = cols - c_off - 1
-    out_rows = remaining_rows // rs + 1
-    out_cols = remaining_cols // cs + 1
-
-    return out_rows, out_cols
 
 
 def _save_covariance(output_cov_file, C_arrays):

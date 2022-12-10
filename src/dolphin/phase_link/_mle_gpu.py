@@ -5,6 +5,7 @@ import numpy as np
 from numba import cuda
 
 from dolphin._types import Filename
+from dolphin.io import compute_out_shape
 
 from . import covariance, metrics
 from .mle import mle_stack
@@ -58,7 +59,7 @@ def run_gpu(
 
     # Make a buffer for each pixel's coherence matrix
     # d_ means "device_", i.e. on the GPU
-    out_rows, out_cols = covariance.compute_out_shape((rows, cols), strides)
+    out_rows, out_cols = compute_out_shape((rows, cols), strides)
     d_C_arrays = cp.zeros((out_rows, out_cols, num_slc, num_slc), dtype=np.complex64)
 
     # Divide up the output shape using a 2D grid

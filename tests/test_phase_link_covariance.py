@@ -3,6 +3,7 @@ from math import ceil, floor
 import numpy as np
 import pytest
 
+from dolphin.io import compute_out_shape
 from dolphin.phase_link import covariance, simulate
 from dolphin.utils import check_gpu_available, take_looks
 
@@ -120,7 +121,7 @@ def test_estimate_stack_covariance_gpu_strides(slcs, expected_cov, looks=(5, 5))
 
     r_looks, c_looks = looks
     strides = {"x": c_looks, "y": r_looks}
-    out_rows, out_cols = covariance.compute_out_shape((rows, cols), strides)
+    out_rows, out_cols = compute_out_shape((rows, cols), strides)
     d_C3 = cp.zeros((out_rows, out_cols, num_slc, num_slc), dtype=np.complex64)
     threads_per_block = (16, 16)
     blocks_x = ceil(slcs.shape[1] / threads_per_block[0])
@@ -198,16 +199,3 @@ def test_estimate_stack_covariance_nans_gpu(slcs, looks=(5, 5)):
     assert np.abs(C_nonan[5, 5] - C_nan[5, 5]).max() < 1e-6
     # Should still be close to the non-nan version
     assert np.max(np.abs(C_nonan - C_nan)) < 0.10
-
-
-def test_compute_out_size():
-    strides = {"x": 3, "y": 3}
-    assert (2, 2) == covariance.compute_out_shape((6, 6), strides)
-
-    # 1 more/fewer in each direction shouldn't change it
-    assert (2, 2) == covariance.compute_out_shape((5, 5), strides)
-    assert (2, 2) == covariance.compute_out_shape((7, 7), strides)
-
-    # but 2 more in each direction should
-    assert (1, 1) == covariance.compute_out_shape((4, 4), strides)
-    assert (3, 3) == covariance.compute_out_shape((8, 8), strides)

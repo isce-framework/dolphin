@@ -16,6 +16,19 @@ def test_get_raster_xysize(raster_100_by_200):
     assert (200, 100) == io.get_raster_xysize(raster_100_by_200)
 
 
+def test_compute_out_size():
+    strides = {"x": 3, "y": 3}
+    assert (2, 2) == io.compute_out_shape((6, 6), strides)
+
+    # 1 more/fewer in each direction shouldn't change it
+    assert (2, 2) == io.compute_out_shape((5, 5), strides)
+    assert (2, 2) == io.compute_out_shape((7, 7), strides)
+
+    # but 2 more in each direction should
+    assert (1, 1) == io.compute_out_shape((4, 4), strides)
+    assert (3, 3) == io.compute_out_shape((8, 8), strides)
+
+
 def test_save_like(raster_100_by_200, tmpdir):
     arr = io.load_gdal(raster_100_by_200)
 
@@ -297,7 +310,7 @@ def test_iter_blocks_nodata_mask(tiled_raster_100_by_200):
     expected_num_blocks = row_blocks * col_blocks
     assert len(blocks) == expected_num_blocks
 
-    nodata_mask = np.zeros((100, 200), dtype=np.bool)
+    nodata_mask = np.zeros((100, 200), dtype=bool)
     nodata_mask[:5, :5] = True
     # non-full-block should still all be loaded nan should be fine, will get loaded
     blocks = list(
