@@ -53,10 +53,10 @@ def run_evd_sequential(
     comp_slc_files: List[Path] = []
     tcorr_files: List[Path] = []
 
+    ysize, xsize = v_all.shape[-2:]
     if mask_file is not None:
         mask = io.load_gdal(mask_file).astype(bool)
     else:
-        xsize, ysize = io.get_raster_xysize(v_all.file_list[0])
         mask = np.zeros((ysize, xsize), dtype=bool)
 
     if ps_mask_file is not None:
@@ -65,6 +65,7 @@ def run_evd_sequential(
         ps_mask = np.zeros_like(mask)
 
     xhalf, yhalf = half_window["xhalf"], half_window["yhalf"]
+    xs, ys = strides["x"], strides["y"]
 
     # Solve each ministack using the current chunk (and the previous compressed SLCs)
     ministack_starts = range(0, len(file_list_all), ministack_size)
@@ -172,8 +173,8 @@ def run_evd_sequential(
             # Save each of the MLE estimates (ignoring the compressed SLCs)
             assert len(cur_mle_stack[mini_idx:]) == len(cur_output_files)
             # Get the location within the output file, shrinking down the slices
-            out_rows = slice(rows.start // strides["y"], rows.stop // strides["y"])
-            out_cols = slice(cols.start // strides["x"], cols.stop // strides["x"])
+            out_rows = slice(rows.start // ys, rows.stop // ys)
+            out_cols = slice(cols.start // xs, cols.stop // xs)
 
             for img, f in zip(cur_mle_stack[mini_idx:], cur_output_files):
                 io.save_block(img, f, out_rows, out_cols)
@@ -232,8 +233,8 @@ def run_evd_sequential(
         )
 
         # Get the location within the output file, shrinking down the slices
-        out_rows = slice(rows.start // strides["y"], rows.stop // strides["y"])
-        out_cols = slice(cols.start // strides["x"], cols.stop // strides["x"])
+        out_rows = slice(rows.start // ys, rows.stop // ys)
+        out_cols = slice(cols.start // xs, cols.stop // xs)
         # Save each of the MLE estimates (ignoring the compressed SLCs)
         for img, f in zip(cur_mle_stack, adjusted_comp_slc_files):
             io.save_block(img, f, out_rows, out_cols)

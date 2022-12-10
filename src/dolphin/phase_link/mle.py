@@ -4,7 +4,7 @@ from typing import Dict, Optional, Tuple
 import numpy as np
 
 from dolphin._types import Filename
-from dolphin.utils import check_gpu_available, get_array_module
+from dolphin.utils import check_gpu_available, get_array_module, take_looks
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +22,8 @@ def run_mle(
     beta: float = 0.0,
     reference_idx: int = 0,
     mask: np.ndarray = None,
-    ps_mask: np.ndarray = None,
+    ps_mask: Optional[np.ndarray] = None,
+    avg_mag: Optional[np.ndarray] = None,
     output_cov_file: Optional[Filename] = None,
     n_workers: int = 1,
     no_gpu: bool = False,
@@ -54,6 +55,11 @@ def run_mle(
         with `mask`).
         The phase from these pixels will be inserted back
         into the final estimate directly from `slc_stack`.
+    avg_mag : np.ndarray, optional
+        The average magnitude of the SLC stack, used to estimate the
+        to find the brights PS pixels to fill within each look window.
+        If None, the average magnitude is estimated from the SLC stack.
+        By default None.
     output_cov_file : str, optional
         HDF5 filename to save the estimated covariance at each pixel.
     n_workers : int, optional
@@ -122,18 +128,37 @@ def run_mle(
             # is it worth passing the blocks-per-grid?
         )
 
+    # Get the smaller, looked versions of the masks
+    # We zero out nodata if all pixels within the window had nodata
+    mask_looked = take_looks(mask, strides["y"], strides["x"], func_type="all")
     # Set no data pixels to np.nan
-    temp_coh[mask] = np.nan
+    temp_coh[mask_looked] = np.nan
+
+    # For ps_mask, we set to True if any pixels within the window were PS
+    ps_mask_looked = take_looks(ps_mask, strides["y"], strides["x"], func_type="any")
+
+    # Get the indices of the maxes within each look window
+    slc_r_idxs, slc_c_idxs = _get_maxes(avg_mag, strides["y"], strides["x"])
 
     # Fill in the PS pixels from the original SLC stack, if it was given
-    if np.any(ps_mask):
-        ps_ref = slc_stack[0][ps_mask]
+    if np.any(ps_mask_looked):
+        # ref = np.conj(slc_stack[0][ps_mask])
+        ref = np.conj(slc_stack[0][slc_r_idxs, slc_c_idxs])
         for i in range(num_slc):
-            mle_est[i][ps_mask] = slc_stack[i][ps_mask] * np.conj(ps_ref)
+            mle_est[i][ps_mask_looked] = slc_stack[i][slc_r_idxs, slc_c_idxs] * ref
         # Force PS pixels to have high temporal coherence
-        temp_coh[ps_mask] = 1
+        temp_coh[ps_mask_looked] = 1
 
     return mle_est, temp_coh
+
+
+def _get_maxes(arr, row_looks, col_looks):
+    # Get the max value in each look window
+    max_nums = take_looks(arr, row_looks, col_looks, func_type="nanmax")
+    # Repeat the max values to back to the original size
+    maxes_filled = np.repeat(np.repeat(max_nums, col_looks, axis=1), row_looks, axis=0)
+    # Find the indices of the max values in the original image
+    return np.where(maxes_filled == arr)
 
 
 def mle_stack(C_arrays, beta: float = 0.0, reference_idx: float = 0):
