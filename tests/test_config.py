@@ -76,9 +76,9 @@ def test_unwrap_options_defaults(tmpdir):
 def test_outputs_defaults(tmpdir):
     with tmpdir.as_cwd():
         opts = config.Outputs()
-        assert opts.output_directory == Path("output")
+        assert opts.output_directory == Path("output").absolute()
         assert opts.output_format == config.OutputFormat.NETCDF
-        assert opts.scratch_directory == Path("scratch")
+        assert opts.scratch_directory == Path("scratch").absolute()
         assert opts.hdf5_creation_options == dict(
             chunks=True,
             compression="gzip",

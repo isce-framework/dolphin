@@ -19,7 +19,7 @@ def run(config_file: str, debug: bool = False):
         Enable debug logging, by default False.
     """
     cfg = Config.from_yaml(config_file)
-    cfg.create_dir_tree()
+    cfg.create_dir_tree(debug=debug)
     if cfg.workflow_name == "stack":
         from dolphin.workflows import s1_disp_stack
 

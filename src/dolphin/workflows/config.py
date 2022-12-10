@@ -284,6 +284,9 @@ class Outputs(BaseModel):
     )
 
     # validators
+    @validator("output_directory", "scratch_directory", always=True)
+    def _dir_is_absolute(cls, v):
+        return v.absolute()
 
 
 class Config(BaseModel):
@@ -406,9 +409,9 @@ class Config(BaseModel):
             self.unwrap_options.directory,
         ]
 
-    def create_dir_tree(self):
+    def create_dir_tree(self, debug=False):
         """Create the directory tree for the workflow."""
-        log = get_log()
+        log = get_log(debug=debug)
         for d in self._directory_list:
             log.debug(f"Creating directory: {d}")
             d.mkdir(parents=True, exist_ok=True)
