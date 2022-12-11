@@ -85,6 +85,8 @@ def run_gpu(
     # But if we need to free GPU memory:
     # cp.get_default_memory_pool().free_all_blocks()
 
-    # use the amplitude from the original SLCs
-    mle_est = np.abs(slc_stack) * d_cpx_phase.get()
+    # use the amplitude from the original SLCs, accounting for strides
+    xs, ys = strides["x"], strides["y"]
+    slcs_decimated = slc_stack[:, ys // 2 :: ys, xs // 2 :: xs]
+    mle_est = np.abs(slcs_decimated) * d_cpx_phase.get()
     return mle_est, temp_coh

@@ -187,8 +187,9 @@ def run_evd_sequential(
             io.save_block(tcorr, tcorr_file, out_rows, out_cols)
 
             # Compress the ministack using only the non-compressed SLCs
+            cur_data_decimated = cur_data[mini_idx:, ys // 2 :: ys, xs // 2 :: xs]
             cur_comp_slc = compress(
-                cur_data[mini_idx:, ys // 2 :: ys, xs // 2 :: xs],
+                cur_data_decimated,
                 cur_mle_stack[mini_idx:],
             )
             # Save the compressed SLC block
