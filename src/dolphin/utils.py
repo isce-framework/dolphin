@@ -1,5 +1,6 @@
 import datetime
 import re
+import warnings
 from os import fspath
 from pathlib import Path
 from typing import List, Sequence, Tuple, Union
@@ -365,9 +366,12 @@ def take_looks(arr, row_looks, col_looks, func_type="nansum", edge_strategy="cut
     new_cols = cols // col_looks
 
     func = getattr(xp, func_type)
-    return func(
-        xp.reshape(arr, (new_rows, row_looks, new_cols, col_looks)), axis=(3, 1)
-    )
+    with warnings.catch_warnings():
+        # ignore the warning about nansum of empty slice
+        warnings.simplefilter("ignore", category=RuntimeWarning)
+        return func(
+            xp.reshape(arr, (new_rows, row_looks, new_cols, col_looks)), axis=(3, 1)
+        )
 
 
 def _make_dims_multiples(arr, row_looks, col_looks, how="cutoff"):
@@ -383,7 +387,6 @@ def _make_dims_multiples(arr, row_looks, col_looks, how="cutoff"):
     elif how == "pad":
         pad_rows = (row_looks - row_cutoff) % row_looks
         pad_cols = (col_looks - col_cutoff) % col_looks
-        print(f"Padding {pad_rows} rows and {pad_cols} cols")
         if pad_rows > 0 or pad_cols > 0:
             arr = np.pad(
                 arr,

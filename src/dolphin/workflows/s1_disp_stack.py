@@ -67,6 +67,7 @@ def run(cfg: Workflow, debug: bool = False):
             ps_mask_file=cfg.ps_options.output_file,
             max_bytes=cfg.worker_settings.max_ram_gb / 1e9,
             n_workers=cfg.worker_settings.n_workers,
+            gpu_enabled=cfg.worker_settings.gpu_enabled,
             beta=0.0,
         )
 

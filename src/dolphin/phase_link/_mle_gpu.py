@@ -67,8 +67,11 @@ def run_gpu(
     blocks_y = ceil(out_rows / threads_per_block[1])
     blocks = (blocks_x, blocks_y)
 
+    # Can't use dict in numba kernels, so pass the values as a tuple
+    halfwin_rowcol = (half_window["y"], half_window["x"])
+    strides_rowcol = (strides["y"], strides["x"])
     covariance.estimate_stack_covariance_gpu[blocks, threads_per_block](
-        d_slc_stack, half_window, strides, d_C_arrays
+        d_slc_stack, halfwin_rowcol, strides_rowcol, d_C_arrays
     )
 
     if output_cov_file:

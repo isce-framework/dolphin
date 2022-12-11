@@ -134,14 +134,17 @@ def run_mle(
     # Set no data pixels to np.nan
     temp_coh[mask_looked] = np.nan
 
-    # For ps_mask, we set to True if any pixels within the window were PS
-    ps_mask_looked = take_looks(ps_mask, strides["y"], strides["x"], func_type="any")
-
     if avg_mag is None:
         # Get the average magnitude of the SLC stack
         avg_mag = np.abs(slc_stack).mean(axis=0)
+    # null out all the non-PS pixels
+    avg_mag[~ps_mask] = np.nan
+
     # Get the indices of the maxes within each look window
     slc_r_idxs, slc_c_idxs = _get_maxes(avg_mag, strides["y"], strides["x"])
+
+    # For ps_mask, we set to True if any pixels within the window were PS
+    ps_mask_looked = take_looks(ps_mask, strides["y"], strides["x"], func_type="any")
 
     # Fill in the PS pixels from the original SLC stack, if it was given
     if np.any(ps_mask_looked):

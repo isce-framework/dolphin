@@ -148,12 +148,12 @@ def run_evd_sequential(
         for cur_data, (rows, cols) in tqdm(block_gen, total=num_blocks):
             if np.all(cur_data == 0):
                 continue
-            with logging_redirect_tqdm():
-                tqdm.write(
-                    f"Processing block ({rows.start}:{rows.stop})/{ysize},"
-                    f" ({cols.start}:{cols.stop})/{xsize}",
-                    end="... ",
-                )
+            # with logging_redirect_tqdm():
+            #     tqdm.write(
+            #         f"Processing block ({rows.start}:{rows.stop})/{ysize},"
+            #         f" ({cols.start}:{cols.stop})/{xsize}",
+            #         end="... ",
+            #     )
 
             # Run the phase linking process on the current ministack
             try:

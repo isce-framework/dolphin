@@ -4,7 +4,7 @@ Contains for CPU and GPU versions (which will not be available if no GPU).
 """
 from cmath import isnan
 from cmath import sqrt as csqrt
-from typing import Dict
+from typing import Dict, Tuple
 
 import numpy as np
 import pymp
@@ -113,7 +113,7 @@ def coh_mat_single(neighbor_stack, cov_mat=None):
 # GPU version of the covariance matrix computation
 @cuda.jit
 def estimate_stack_covariance_gpu(
-    slc_stack, half_window: Dict[str, int], strides: Dict[str, int], C_out
+    slc_stack, half_rowcol: Tuple[int, int], strides_rowcol: Tuple[int, int], C_out
 ):
     """Estimate the linked phase at all pixels of `slc_stack` on the GPU."""
     # Get the global position within the 2D GPU grid
@@ -123,16 +123,18 @@ def estimate_stack_covariance_gpu(
     if out_y >= out_rows or out_x >= out_cols:
         return
 
-    row_strides, col_strides = strides["y"], strides["x"]
+    row_strides, col_strides = strides_rowcol
     r_start = row_strides // 2
     c_start = col_strides // 2
     in_r = r_start + out_y * row_strides
     in_c = c_start + out_x * col_strides
 
+    half_row, half_col = half_rowcol
+
     N, rows, cols = slc_stack.shape
     # Get the input slices, clamping the window to the image bounds
     (r_start, r_end), (c_start, c_end) = _get_slices_gpu(
-        half_window, in_r, in_c, rows, cols
+        half_row, half_col, in_r, in_c, rows, cols
     )
     samples_stack = slc_stack[:, r_start:r_end, c_start:c_end]
 
