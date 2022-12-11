@@ -50,7 +50,7 @@ class VRTStack:
         in every images. Used for skipping the loading of these pixels.
     file_date_fmt : str, optional (default = "%Y%m%d")
         Format string for parsing the dates from the filenames.
-        Passed to [dolphin.utils.parse_slc_strings][].
+        Passed to [dolphin.utils.get_dates][].
     """
 
     def __init__(

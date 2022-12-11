@@ -137,6 +137,9 @@ def run_mle(
     # For ps_mask, we set to True if any pixels within the window were PS
     ps_mask_looked = take_looks(ps_mask, strides["y"], strides["x"], func_type="any")
 
+    if avg_mag is None:
+        # Get the average magnitude of the SLC stack
+        avg_mag = np.abs(slc_stack).mean(axis=0)
     # Get the indices of the maxes within each look window
     slc_r_idxs, slc_c_idxs = _get_maxes(avg_mag, strides["y"], strides["x"])
 
@@ -154,9 +157,14 @@ def run_mle(
 
 def _get_maxes(arr, row_looks, col_looks):
     # Get the max value in each look window
-    max_nums = take_looks(arr, row_looks, col_looks, func_type="nanmax")
+    # We have to pad so that the shapes are a multiple of the look sizes
+    # Otherwise, the maxes sizes will be off
+    max_nums = take_looks(
+        arr, row_looks, col_looks, func_type="nanmax", edge_strategy="pad"
+    )
     # Repeat the max values to back to the original size
     maxes_filled = np.repeat(np.repeat(max_nums, col_looks, axis=1), row_looks, axis=0)
+    maxes_filled = maxes_filled[: arr.shape[0], : arr.shape[1]]
     # Find the indices of the max values in the original image
     return np.where(maxes_filled == arr)
 

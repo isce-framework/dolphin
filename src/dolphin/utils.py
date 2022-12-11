@@ -106,13 +106,12 @@ def parse_slc_strings(slc_str: Union[Filename, Sequence[Filename]], fmt=None):
         else:  # if we iterate through all formats and don't find any dates
             raise ValueError(f"Could not find date of format {fmt} in {slc_str}")
 
-        unique_dates = np.unique(d_list)
-        if len(unique_dates) > 1:
-            raise ValueError(
-                f"Found multiple dates in {slc_str}: {unique_dates}. "
-                "Please specify a date format."
-            )
-        return _parse(unique_dates[0], fmt=fmt_found)
+        # if len(unique_dates) > 1:
+        #     raise ValueError(
+        #         f"Found multiple dates in {slc_str}: {unique_dates}. "
+        #         "Please specify a date format."
+        #     )
+        return _parse(d_list[0], fmt=fmt_found)
     else:
         # If it's an iterable of strings, run on each one
         return [parse_slc_strings(s, fmt=fmt) for s in slc_str if s]
@@ -324,7 +323,7 @@ def get_array_module(arr):
     return xp
 
 
-def take_looks(arr, row_looks, col_looks, func_type="nansum"):
+def take_looks(arr, row_looks, col_looks, func_type="nansum", edge_strategy="cutoff"):
     """Downsample a numpy matrix by summing blocks of (row_looks, col_looks).
 
     Parameters
@@ -335,9 +334,11 @@ def take_looks(arr, row_looks, col_looks, func_type="nansum"):
         the reduction rate in row direction
     col_looks : int
         the reduction rate in col direction
-
     func_type : str, optional
         the numpy function to use for downsampling, by default "nansum"
+    edge_strategy : str, optional
+        how to handle edges, by default "cutoff"
+        Choices are "cutoff", "pad"
 
     Returns
     -------
@@ -356,19 +357,40 @@ def take_looks(arr, row_looks, col_looks, func_type="nansum"):
 
     if arr.ndim >= 3:
         return xp.stack([take_looks(a, row_looks, col_looks, func_type) for a in arr])
+
+    arr = _make_dims_multiples(arr, row_looks, col_looks, how=edge_strategy)
+
     rows, cols = arr.shape
     new_rows = rows // row_looks
     new_cols = cols // col_looks
-
-    row_cutoff = rows % row_looks
-    col_cutoff = cols % col_looks
-
-    if row_cutoff != 0:
-        arr = arr[:-row_cutoff, :]
-    if col_cutoff != 0:
-        arr = arr[:, :-col_cutoff]
 
     func = getattr(xp, func_type)
     return func(
         xp.reshape(arr, (new_rows, row_looks, new_cols, col_looks)), axis=(3, 1)
     )
+
+
+def _make_dims_multiples(arr, row_looks, col_looks, how="cutoff"):
+    rows, cols = arr.shape
+    row_cutoff = rows % row_looks
+    col_cutoff = cols % col_looks
+    if how == "cutoff":
+        if row_cutoff != 0:
+            arr = arr[:-row_cutoff, :]
+        if col_cutoff != 0:
+            arr = arr[:, :-col_cutoff]
+        return arr
+    elif how == "pad":
+        pad_rows = (row_looks - row_cutoff) % row_looks
+        pad_cols = (col_looks - col_cutoff) % col_looks
+        print(f"Padding {pad_rows} rows and {pad_cols} cols")
+        if pad_rows > 0 or pad_cols > 0:
+            arr = np.pad(
+                arr,
+                ((0, pad_rows), (0, pad_cols)),
+                mode="constant",
+                constant_values=np.nan,
+            )
+        return arr
+    else:
+        raise ValueError(f"Invalid edge strategy: {how}")

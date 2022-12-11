@@ -64,7 +64,7 @@ def run_evd_sequential(
     else:
         ps_mask = np.zeros_like(mask)
 
-    xhalf, yhalf = half_window["xhalf"], half_window["yhalf"]
+    xhalf, yhalf = half_window["x"], half_window["y"]
     xs, ys = strides["x"], strides["y"]
     out_shape = io.compute_out_shape((ysize, ysize), strides)
 
@@ -160,6 +160,7 @@ def run_evd_sequential(
                 cur_mle_stack, tcorr = run_mle(
                     cur_data,
                     half_window=half_window,
+                    strides=strides,
                     beta=beta,
                     reference_idx=mini_idx,
                     mask=mask[rows, cols],
@@ -186,15 +187,34 @@ def run_evd_sequential(
             io.save_block(tcorr, tcorr_file, out_rows, out_cols)
 
             # Compress the ministack using only the non-compressed SLCs
-            cur_comp_slc = compress(cur_data[mini_idx:], cur_mle_stack[mini_idx:])
+            cur_comp_slc = compress(
+                cur_data[mini_idx:, ys // 2 :: ys, xs // 2 :: xs],
+                cur_mle_stack[mini_idx:],
+            )
             # Save the compressed SLC block
             io.save_block(cur_comp_slc, cur_comp_slc_file, out_rows, out_cols)
             # logger.debug(f"Saved compressed block SLC to {cur_comp_slc_file}")
-            tqdm.write(" Finished block, loading next block.")
+            # tqdm.write(" Finished block, loading next block.")
 
         logger.info(f"Finished ministack {mini_idx} of size {cur_vrt.shape}.")
 
+    ##############################################
+    # Set up the output folder with empty files to write into
+    final_output_folder = output_folder / "final"
+    final_output_folder.mkdir(parents=True, exist_ok=True)
     # Find the offsets between stacks by doing a phase linking only compressed SLCs
+    # But only if we have multiple ministacks
+    if len(comp_slc_files) == 1:
+        # There was only one ministack, so we can skip this step
+        logger.info("Only one ministack, skipping offset calculation.")
+        assert len(output_slc_files) == 1
+        assert len(tcorr_files) == 1
+        for slc_fname in output_slc_files[0]:
+            slc_fname.rename(final_output_folder / slc_fname.name)
+        tcorr_files[0].rename(final_output_folder / tcorr_files[0].name)
+        return
+
+    # Compute the adjustments by running EVD on the compressed SLCs
     comp_output_folder = output_folder / "adjustments"
     comp_output_folder.mkdir(parents=True, exist_ok=True)
     adjustment_vrt_stack = VRTStack(
@@ -203,8 +223,6 @@ def run_evd_sequential(
     adjustment_vrt_stack.write()
     logger.info(f"Running EVD on compressed files: {adjustment_vrt_stack}")
 
-    ##############################################
-    # Set up the output folder with empty files to write into
     adjusted_comp_slc_files = io.setup_output_folder(
         adjustment_vrt_stack, driver="GTiff", strides=strides
     )
@@ -246,10 +264,6 @@ def run_evd_sequential(
         # What would it even mean for the all-compressed SLCs?
 
     # Compensate for the offsets between ministacks (aka "datum adjustments")
-    final_output_folder = output_folder / "final"
-    # TODO: do i need to separate out these?
-    # final_output_folder = output_folder
-    final_output_folder.mkdir(parents=True, exist_ok=True)
     for mini_idx, slc_files in output_slc_files.items():
         adjustment_fname = adjusted_comp_slc_files[mini_idx]
         # driver = "ENVI"

@@ -65,5 +65,9 @@ def run_cpu(
     # Get the temporal coherence
     temp_coh = metrics.estimate_temp_coh(cpx_phase, C_arrays)
     # use the amplitude from the original SLCs
-    mle_est = np.abs(slc_stack) * np.exp(1j * output_phase)
+    # account for the strides when grabbing original data
+    xs, ys = strides["x"], strides["y"]
+    mle_est = np.abs(slc_stack[:, ys // 2 :: ys, xs // 2 :: xs]) * np.exp(
+        1j * output_phase
+    )
     return mle_est, temp_coh
