@@ -255,8 +255,12 @@ class VRTStack:
             self.xsize_sub, self.ysize_sub = self.xsize, self.ysize
 
     @classmethod
-    def from_vrt_file(cls, vrt_file, new_outfile="slc_stack.vrt", **kwargs):
+    def from_vrt_file(cls, vrt_file, new_outfile=None, **kwargs):
         """Create a new VRTStack using an existing VRT file."""
+        if new_outfile is None:
+            # Point to the same, if none provided
+            new_outfile = vrt_file
+
         ds = gdal.Open(fspath(vrt_file))
         # First item is the `vrt_file` itself
         file_list = [Path(f) for f in ds.GetFileList()[1:]]
