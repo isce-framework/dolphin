@@ -4,7 +4,6 @@ import sys
 from pathlib import Path
 from typing import List, Optional, Tuple, Union
 
-from ._enums import WorkflowName
 from .config import Workflow
 
 
@@ -16,7 +15,9 @@ def create_config(
     slc_files: Optional[List[str]] = None,
     mask_files: Optional[List[str]] = None,
     strides: Tuple[int, int],
-    name: WorkflowName = WorkflowName.STACK,
+    max_ram_gb: float = 1,
+    n_workers: int = 16,
+    no_gpu: bool = False,
 ):
     """Create a config for a displacement workflow."""
     cfg = Workflow(
@@ -29,7 +30,11 @@ def create_config(
         outputs=dict(
             strides={"x": strides[0], "y": strides[1]},
         ),
-        name=name,
+        worker_settings=dict(
+            max_ram_gb=max_ram_gb,
+            n_workers=n_workers,
+            gpu_enabled=(not no_gpu),
+        ),
     )
 
     if outfile == "-":  # Write to stdout
@@ -86,18 +91,27 @@ def get_parser(subparser=None, subcommand_name="run"):
         ),
     )
     parser.add_argument(
-        "-n",
-        "--name",
-        type=str.lower,
-        choices=[i.name.lower() for i in WorkflowName],
-        default=WorkflowName.STACK.value,
-        help="Name of the displacement workflow. YAML configuration file to save to.",
+        "--no-gpu",
+        action="store_true",
+        help="Disable the GPU (if using a machine that has one available).",
     )
     parser.add_argument(
-        "--mask-files",
-        nargs=argparse.ZERO_OR_MORE,
-        help="Path to a file containing a list of mask files.",
+        "--max-ram-gb",
+        type=float,
+        default=1,
+        help="Maximum amount of RAM to use per worker.",
     )
+    parser.add_argument(
+        "--n-workers",
+        type=int,
+        default=16,
+        help="Number of workers to use.",
+    )
+    # parser.add_argument(
+    #     "--mask-files",
+    #     nargs=argparse.ZERO_OR_MORE,
+    #     help="Path to a file containing a list of mask files.",
+    # )
     parser.set_defaults(run_func=create_config)
 
     return parser
