@@ -13,6 +13,7 @@ def create_config(
     slc_directory=None,
     ext: str = ".nc",
     slc_files: Optional[List[str]] = None,
+    subdataset: Optional[str] = None,
     mask_files: Optional[List[str]] = None,
     strides: Tuple[int, int],
     max_ram_gb: float = 1,
@@ -26,6 +27,7 @@ def create_config(
             cslc_file_ext=ext,
             cslc_file_list=slc_files,
             mask_files=mask_files,
+            subdataset=subdataset,
         ),
         outputs=dict(
             strides={"x": strides[0], "y": strides[1]},
@@ -77,6 +79,13 @@ def get_parser(subparser=None, subcommand_name="run"):
         "--slc-files",
         nargs=argparse.ZERO_OR_MORE,
         help="Alternative: list the paths of all SLC files to include.",
+    )
+    # Get the subdataset of the SLCs to use, if passing HDF5/NetCDF files
+    parser.add_argument(
+        "-sds",
+        "--subdataset",
+        default="SLC/VV",
+        help="Subdataset to use from HDF5/NetCDF files.",
     )
     # Get Outputs from the command line
     parser.add_argument(

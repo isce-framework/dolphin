@@ -3,6 +3,7 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, TextIO, Union
 
+from osgeo import gdal
 from pydantic import (
     BaseModel,
     BaseSettings,
@@ -16,10 +17,12 @@ from ruamel.yaml import YAML
 
 from dolphin import __version__ as _dolphin_version
 from dolphin._log import get_log
+from dolphin.io import format_nc_filename
 from dolphin.utils import get_dates, parse_slc_strings
 
 from ._enums import InterferogramNetworkType, OutputFormat, UnwrapMethod, WorkflowName
 
+gdal.UseExceptions()
 PathOrStr = Union[Path, str]
 
 __all__ = [
@@ -212,6 +215,10 @@ class Inputs(BaseModel):
         # Same here: Only care about the file_list once it's found
         exclude=True,
     )
+    subdataset: Optional[str] = Field(
+        None,
+        description="Subdataset to use from CSLC files, if passing HDF5/NetCDF files.",
+    )
     cslc_date_fmt: str = Field(
         "%Y%m%d",
         description="Format of dates contained in CSLC filenames",
@@ -241,11 +248,11 @@ class Inputs(BaseModel):
         file_list = values.get("cslc_file_list")
         directory = values.get("cslc_directory")
         date_fmt = values.get("cslc_date_fmt")
+        ext = values.get("cslc_file_ext")
         if not file_list:
             if not directory:
                 raise ValueError("Must specify either cslc_file_list or cslc_directory")
 
-            ext = values.get("cslc_file_ext")
             file_list = sorted(directory.glob(f"*{ext}"))
             # Filter out files that don't have dates in the filename
             file_list = [Path(f) for f in file_list if get_dates(f, fmt=date_fmt)]
@@ -255,8 +262,13 @@ class Inputs(BaseModel):
                     f" date format {date_fmt}"
                 )
 
-            # Save the directory, if used, as an absolute path
-            values["cslc_directory"] = directory.absolute()
+        if ext is None:
+            ext = file_list[0].suffix
+        # If they're HDF5/NetCDF files, we need to check that the subdataset exists
+        if ext in [".h5", ".nc"]:
+            subdataset = values.get("subdataset")
+            # gdal formatting function will raise an error if subdataset doesn't exist
+            _ = [format_nc_filename(f, subdataset) for f in file_list]
 
         # Sort the files by date
         date_list = parse_slc_strings(file_list, fmt=date_fmt)
