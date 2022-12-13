@@ -204,16 +204,14 @@ class Inputs(BaseModel):
     )
     cslc_directory: Optional[DirectoryPath] = Field(
         None,
-        description="Path to CSLC files",
-        exclude=True
-        # Note that we're not keeping the "directory" once we've
-        # found the files, so we exclude it from the schema
+        description=(
+            "Path to CSLC files (if not directly specifying). "
+            "Must also provide `cslc_file_ext`."
+        ),
     )
     cslc_file_ext: Optional[str] = Field(
         ".nc",
         description="Extension of CSLC files (if providing `cslc_directory`)",
-        # Same here: Only care about the file_list once it's found
-        exclude=True,
     )
     subdataset: Optional[str] = Field(
         None,
@@ -252,7 +250,6 @@ class Inputs(BaseModel):
         if not file_list:
             if not directory:
                 raise ValueError("Must specify either cslc_file_list or cslc_directory")
-
             file_list = sorted(directory.glob(f"*{ext}"))
             # Filter out files that don't have dates in the filename
             file_list = [Path(f) for f in file_list if get_dates(f, fmt=date_fmt)]

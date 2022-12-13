@@ -84,7 +84,6 @@ def get_parser(subparser=None, subcommand_name="run"):
     parser.add_argument(
         "-sds",
         "--subdataset",
-        default="SLC/VV",
         help="Subdataset to use from HDF5/NetCDF files.",
     )
     # Get Outputs from the command line

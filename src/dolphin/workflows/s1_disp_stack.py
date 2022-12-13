@@ -27,7 +27,10 @@ def run(cfg: Workflow, debug: bool = False):
     # 0. Make a VRT pointing to the input SLC files
     # #############################################
     slc_vrt_file = scratch_dir / "slc_stack.vrt"
-    vrt_stack = vrt.VRTStack(input_file_list, outfile=slc_vrt_file)
+    subdataset = cfg.inputs.subdataset
+    vrt_stack = vrt.VRTStack(
+        input_file_list, subdataset=subdataset, outfile=slc_vrt_file
+    )
     vrt_stack.write()
 
     # ###############

@@ -81,9 +81,6 @@ def format_nc_filename(filename: Filename, ds_name: Optional[str] = None) -> str
         return fspath(filename)
 
     if ds_name is None:
-        logger.warning(
-            "No dataset name specified for %s, guessing from file contents", filename
-        )
         return _guess_gdal_dataset(filename)
     else:
         return f'NETCDF:"{filename}":"//{ds_name.lstrip("/")}"'
@@ -102,8 +99,11 @@ def _guess_gdal_dataset(filename: Filename) -> str:
     ds : str
         GDAL dataset.
     """
+    logger.debug(
+        "No dataset name specified for %s, guessing from file contents", filename
+    )
     info = gdal.Info(fspath(filename), format="json")
-    if len(info["bands"]) > 1:
+    if len(info["bands"]) > 0:
         # This means that gdal already found bands to read with just `filename`
         # so try that
         return fspath(filename)

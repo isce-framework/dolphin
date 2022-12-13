@@ -24,7 +24,7 @@ class VRTStack:
 
     Attributes
     ----------
-    file_list : Sequence[pathlib.Path]
+    file_list : List[pathlib.Path]
         Names of files to stack
     outfile : pathlib.Path, optional (default = Path("slc_stack.vrt"))
         Name of output file to write
@@ -81,8 +81,8 @@ class VRTStack:
         # Unpack the sorted pairs
         file_list, dates = zip(*file_dates)
         # Save the attributes
-        self.file_list = file_list
-        self.dates = dates
+        self.file_list = list(file_list)
+        self.dates = list(dates)
         # save for future parsing of dates with `add_file`
         self.file_date_fmt = file_date_fmt
 
@@ -276,7 +276,7 @@ class VRTStack:
                 fn = line.split(">")[1].strip().split("<")[0]
                 file_strings.append(fn)
         # double check we got the same count
-        ds = gdal.Open(vrt_file)
+        ds = gdal.Open(fspath(vrt_file))
         count = ds.RasterCount
         ds = None
         if count != len(file_strings):
@@ -288,6 +288,8 @@ class VRTStack:
         if testname.startswith("HDF5:") or testname.startswith("NETCDF:"):
             name_triplets = [name.split(":") for name in file_strings]
             prefixes, filepaths, subdatasets = zip(*name_triplets)
+            # Remove quoting if it was present
+            filepaths = [f.strip('"').strip("'") for f in filepaths]
             if len(set(subdatasets)) > 1:
                 raise NotImplementedError("Only 1 subdataset name is supported")
             sds = subdatasets[0].lstrip("/")  # Only returning one subdataset name
