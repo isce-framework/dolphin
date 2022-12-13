@@ -67,24 +67,31 @@ class VRTStack:
         file_date_fmt: str = "%Y%m%d",
     ):
         """Initialize a VRTStack object for a list of files, optionally subsetting."""
-        if sort_files:
-            # Sort by the filename, not the whole path
-            file_list = sorted(
-                [Path(f) for f in file_list],
-                # Make sure compressed slcs are at the beginning of the stack
-                key=lambda f: Path(f).stem.replace("compressed_", ""),
-            )
+        files = [Path(f) for f in file_list]
         if use_abs_path:
-            file_list = [Path(f).resolve() for f in file_list]
+            files = [p.resolve() for p in files]
+        # Extract the date/datetimes from the filenames
+        dates = [utils.parse_slc_strings(f, fmt=file_date_fmt) for f in files]
+
+        # Sort by the date within the filename
+        file_dates = sorted(
+            [(f, d) for f, d in zip(file_list, dates)],
+            key=lambda f_d_tuple: f_d_tuple[1],  # use date as key
+        )
+        # Unpack the sorted pairs
+        file_list, dates = zip(*file_dates)
+        # Save the attributes
         self.file_list = file_list
+        self.dates = dates
+        # save for future parsing of dates with `add_file`
+        self.file_date_fmt = file_date_fmt
 
         self.outfile = Path(outfile).resolve()
-
         # Assumes that all files use the same subdataset (if NetCDF)
         self._subdataset = subdataset
 
-        # If we're not using .h5 or .nc, use the file_list as is
-        # Otherwise, get the GDAL-compatible file list to write to the VRT
+        # If we're using .h5 or .nc, get the GDAL-compatible paths to write to the VRT
+        # Otherwise this will just be the file_list as is
         self._gdal_file_strings = [
             io.format_nc_filename(f, subdataset) for f in file_list
         ]
@@ -94,13 +101,6 @@ class VRTStack:
         self.nodata_mask_file = (
             self.outfile.parent / f"{self.outfile.stem}_nodata_mask.tif"
         )
-
-        # Extract the date/datetimes from the filenames
-        self.dates = [
-            utils.parse_slc_strings(f, fmt=file_date_fmt) for f in self.file_list
-        ]
-        # for future parsing of dates with `add_file`
-        self.file_date_fmt = file_date_fmt
 
         # Use the first file in the stack to get size, transform info
         ds = gdal.Open(fspath(self._gdal_file_strings[0]))
@@ -240,15 +240,61 @@ class VRTStack:
     @classmethod
     def from_vrt_file(cls, vrt_file, new_outfile=None, **kwargs):
         """Create a new VRTStack using an existing VRT file."""
+        file_list, subdataset = cls._parse_vrt_file(vrt_file)
         if new_outfile is None:
             # Point to the same, if none provided
             new_outfile = vrt_file
 
-        ds = gdal.Open(fspath(vrt_file))
-        # First item is the `vrt_file` itself
-        file_list = [Path(f) for f in ds.GetFileList()[1:]]
+        return cls(file_list, outfile=new_outfile, subdataset=subdataset, **kwargs)
+
+    @staticmethod
+    def _parse_vrt_file(vrt_file):
+        """Extract the filenames, and possible subdatasets, from a .vrt file.
+
+        Note that we are parsing the XML, not using `GetFileList`, because the
+        function does not seem to work when using HDF5 files. E.g.
+
+            <SourceFilename ="1">NETCDF:20220111.nc:SLC/VV</SourceFilename>
+
+        This would not get added to the result of `GetFileList`
+
+        Parameters
+        ----------
+        vrt_file : Filename
+            Path to the VRT file to read.
+
+        Returns
+        -------
+        filepaths
+        """
+        file_strings = []
+        with open(vrt_file) as f:
+            for line in f:
+                if "<SourceFilename" not in line:
+                    continue
+                # Get the middle part of < >filename</ >
+                fn = line.split(">")[1].strip().split("<")[0]
+                file_strings.append(fn)
+        # double check we got the same count
+        ds = gdal.Open(vrt_file)
+        count = ds.RasterCount
         ds = None
-        return cls(file_list, outfile=new_outfile, **kwargs)
+        if count != len(file_strings):
+            raise ValueError(
+                f"Found {len(file_strings)} parsing {vrt_file}, but file has"
+                f" {count} bands."
+            )
+        testname = file_strings[0].upper()
+        if testname.startswith("HDF5:") or testname.startswith("NETCDF:"):
+            name_triplets = [name.split(":") for name in file_strings]
+            prefixes, filepaths, subdatasets = zip(*name_triplets)
+            if len(set(subdatasets)) > 1:
+                raise NotImplementedError("Only 1 subdataset name is supported")
+            sds = subdatasets[0].lstrip("/")  # Only returning one subdataset name
+        else:
+            # If no prefix, the file_strings are actually paths
+            filepaths, sds = file_strings, None
+        return list(filepaths), sds
 
     @staticmethod
     def _latlon_bbox_to_te(
