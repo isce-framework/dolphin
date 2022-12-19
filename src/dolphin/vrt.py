@@ -72,16 +72,17 @@ class VRTStack:
             files = [p.resolve() for p in files]
         # Extract the date/datetimes from the filenames
         dates = [utils.parse_slc_strings(f, fmt=file_date_fmt) for f in files]
+        if sort_files:
+            # Sort by the date within the filename
+            file_dates = sorted(
+                [(f, d) for f, d in zip(file_list, dates)],
+                key=lambda f_d_tuple: f_d_tuple[1],  # use date as key
+            )
+            # Unpack the sorted pairs with new sorted values
+            file_list, dates = zip(*file_dates)
 
-        # Sort by the date within the filename
-        file_dates = sorted(
-            [(f, d) for f, d in zip(file_list, dates)],
-            key=lambda f_d_tuple: f_d_tuple[1],  # use date as key
-        )
-        # Unpack the sorted pairs
-        file_list, dates = zip(*file_dates)
         # Save the attributes
-        self.file_list = list(file_list)
+        self.file_list = list(files)
         self.dates = list(dates)
         # save for future parsing of dates with `add_file`
         self.file_date_fmt = file_date_fmt
@@ -95,6 +96,7 @@ class VRTStack:
         self._gdal_file_strings = [
             io.format_nc_filename(f, subdataset) for f in file_list
         ]
+        self._check_same_size()
 
         if nodata_value is None:
             self.nodata_value = io.get_nodata(self._gdal_file_strings[0]) or nan
@@ -176,6 +178,18 @@ class VRTStack:
             raise ValueError("No output file specified")
         if not self.outfile.exists():
             self.write()
+
+    def _check_same_size(self):
+        """Make sure all files in the stack are the same size."""
+        from collections import defaultdict
+
+        size_to_file = defaultdict(list)
+        for f in self._gdal_file_strings:
+            s = io.get_raster_xysize(f)
+            size_to_file[s].append(f)
+        if len(size_to_file) > 1:
+            size_str = "\n".join(size_to_file.items())
+            raise ValueError(f"Not files have same raster size: {size_str}")
 
     def read_stack(self, band: Optional[int] = None, subsample_factor: int = 1):
         """Read in the SLC stack."""

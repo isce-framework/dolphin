@@ -15,6 +15,7 @@ def create_config(
     slc_files: Optional[List[str]] = None,
     subdataset: Optional[str] = None,
     mask_files: Optional[List[str]] = None,
+    ministack_size: Optional[int] = 15,
     strides: Tuple[int, int],
     max_ram_gb: float = 1,
     n_workers: int = 16,
@@ -31,6 +32,9 @@ def create_config(
         ),
         outputs=dict(
             strides={"x": strides[0], "y": strides[1]},
+        ),
+        phase_linking=dict(
+            ministack_size=ministack_size,
         ),
         worker_settings=dict(
             max_ram_gb=max_ram_gb,
@@ -58,6 +62,7 @@ def get_parser(subparser=None, subcommand_name="run"):
     else:
         parser = argparse.ArgumentParser(**metadata)
 
+    # parser._action_groups.pop()
     parser.add_argument(
         "-o",
         "--outfile",
@@ -65,29 +70,41 @@ def get_parser(subparser=None, subcommand_name="run"):
         help="Name of YAML configuration file to save to. Use '-' to write to stdout.",
     )
     # Get Inputs from the command line
-    parser.add_argument(
+    inputs = parser.add_argument_group("Input options")
+    inputs.add_argument(
         "-d",
         "--slc-directory",
         help="Path to directory containing the SLCs.",
     )
-    parser.add_argument(
+    inputs.add_argument(
         "--ext",
         default=".nc",
         help="Extension of SLCs to search for (if --slc-directory is given).",
     )
-    parser.add_argument(
+    inputs.add_argument(
         "--slc-files",
         nargs=argparse.ZERO_OR_MORE,
         help="Alternative: list the paths of all SLC files to include.",
     )
     # Get the subdataset of the SLCs to use, if passing HDF5/NetCDF files
-    parser.add_argument(
+    inputs.add_argument(
         "-sds",
         "--subdataset",
         help="Subdataset to use from HDF5/NetCDF files.",
     )
+
+    # Phase linking options
+    pl_group = parser.add_argument_group("Phase Linking options")
+    pl_group.add_argument(
+        "-ms",
+        "--ministack-size",
+        default=15,
+        help="Strides/decimation factor (x, y) (in pixels) to use when determining",
+    )
+
     # Get Outputs from the command line
-    parser.add_argument(
+    out_group = parser.add_argument_group("Output options")
+    out_group.add_argument(
         "-s",
         "--strides",
         nargs=2,
@@ -98,18 +115,20 @@ def get_parser(subparser=None, subcommand_name="run"):
             " output shape."
         ),
     )
-    parser.add_argument(
+
+    worker_group = parser.add_argument_group("Worker options")
+    worker_group.add_argument(
         "--no-gpu",
         action="store_true",
         help="Disable the GPU (if using a machine that has one available).",
     )
-    parser.add_argument(
+    worker_group.add_argument(
         "--max-ram-gb",
         type=float,
         default=1,
         help="Maximum amount of RAM to use per worker.",
     )
-    parser.add_argument(
+    worker_group.add_argument(
         "--n-workers",
         type=int,
         default=16,
