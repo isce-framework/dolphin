@@ -1,4 +1,5 @@
 import numpy as np
+import numpy.testing as npt
 from osgeo import gdal
 
 import dolphin.ps
@@ -109,8 +110,8 @@ def test_update_amp_disp(tmp_path, slc_stack):
         mean = amp_stack[: i + 1].mean(axis=0)
         sigma = amp_stack[: i + 1].std(axis=0)
 
-        np.testing.assert_array_almost_equal(mean, computed_mean)
-        np.testing.assert_array_almost_equal(sigma / mean, computed_disp)
+        npt.assert_array_almost_equal(mean, computed_mean)
+        npt.assert_array_almost_equal(sigma / mean, computed_disp)
 
         # Move the new files to the old files
         new_amp_file.rename(amp_mean_file)

@@ -1,4 +1,5 @@
 import numpy as np
+import numpy.testing as npt
 
 from dolphin.phase_link import metrics, simulate
 
@@ -53,4 +54,4 @@ def test_temp_coh():
     tc_image = metrics.estimate_temp_coh(est_arrays, C_arrays)
 
     expected_tc_image = np.array(out_tc).reshape((2, 2))
-    np.testing.assert_array_almost_equal(tc_image, expected_tc_image)
+    npt.assert_array_almost_equal(tc_image, expected_tc_image)

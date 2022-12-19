@@ -1,6 +1,7 @@
 from math import ceil, floor
 
 import numpy as np
+import numpy.testing as npt
 import pytest
 
 from dolphin.io import compute_out_shape
@@ -58,7 +59,7 @@ def test_coh_mat_single(slcs, expected_cov, looks=(5, 5)):
             c_slice = slice(c * c_looks, (c + 1) * c_looks)
             cur_samples = slcs[:, r_slice, c_slice].reshape(num_slc, -1)
             cur_C = covariance.coh_mat_single(cur_samples)
-            np.testing.assert_array_almost_equal(expected_cov[r, c, :, :], cur_C)
+            npt.assert_array_almost_equal(expected_cov[r, c, :, :], cur_C)
 
 
 def test_estimate_stack_covariance_cpu(slcs, expected_cov, looks=(5, 5)):
@@ -69,13 +70,13 @@ def test_estimate_stack_covariance_cpu(slcs, expected_cov, looks=(5, 5)):
     C1_cpu = covariance.estimate_stack_covariance_cpu(
         slcs, half_window=half_window, strides=strides
     )
-    np.testing.assert_array_almost_equal(expected_cov, C1_cpu)
+    npt.assert_array_almost_equal(expected_cov, C1_cpu)
 
     # Check multi-processing
     C1_cpu_mp = covariance.estimate_stack_covariance_cpu(
         slcs, half_window=half_window, strides=strides, n_workers=2
     )
-    np.testing.assert_array_almost_equal(expected_cov, C1_cpu_mp)
+    npt.assert_array_almost_equal(expected_cov, C1_cpu_mp)
 
 
 @pytest.mark.skipif(not GPU_AVAILABLE, reason="GPU not available")
@@ -105,7 +106,7 @@ def test_estimate_stack_covariance_gpu(slcs, expected_cov, looks=(5, 5)):
     # assert C3.shape == (out_rows, out_cols, num_slc, num_slc)
     C3_sub = C3[2 : -2 : looks[0], 2 : -2 : looks[0]]
     assert C3_sub.shape == expected_cov.shape
-    np.testing.assert_array_almost_equal(expected_cov, C3_sub)
+    npt.assert_array_almost_equal(expected_cov, C3_sub)
 
 
 @pytest.mark.skipif(not GPU_AVAILABLE, reason="GPU not available")
@@ -135,7 +136,7 @@ def test_estimate_stack_covariance_gpu_strides(slcs, expected_cov, looks=(5, 5))
     # Now this should be the same size as the multi-looked version
     C3 = d_C3.get()
     assert C3.shape == expected_cov.shape
-    np.testing.assert_array_almost_equal(expected_cov, C3)
+    npt.assert_array_almost_equal(expected_cov, C3)
 
 
 def test_estimate_stack_covariance_nans(slcs):

@@ -2,6 +2,7 @@ import datetime
 from pathlib import Path
 
 import numpy as np
+import numpy.testing as npt
 import pytest
 
 from dolphin import utils
@@ -87,11 +88,11 @@ def test_take_looks():
     arr = np.array([[0.1, 0.01, 2], [3, 4, 1 + 1j]])
 
     downsampled = utils.take_looks(arr, 2, 1, func_type="nansum")
-    np.testing.assert_array_equal(downsampled, np.array([[3.1, 4.01, 3.0 + 1.0j]]))
+    npt.assert_array_equal(downsampled, np.array([[3.1, 4.01, 3.0 + 1.0j]]))
     downsampled = utils.take_looks(arr, 2, 1, func_type="mean")
-    np.testing.assert_array_equal(downsampled, np.array([[1.55, 2.005, 1.5 + 0.5j]]))
+    npt.assert_array_equal(downsampled, np.array([[1.55, 2.005, 1.5 + 0.5j]]))
     downsampled = utils.take_looks(arr, 1, 2, func_type="mean")
-    np.testing.assert_array_equal(downsampled, np.array([[0.055], [3.5]]))
+    npt.assert_array_equal(downsampled, np.array([[0.055], [3.5]]))
 
 
 def test_take_looks_3d():
@@ -100,7 +101,7 @@ def test_take_looks_3d():
     downsampled = utils.take_looks(arr3d, 2, 1)
     expected = np.array([[3.1, 4.01, 3.0 + 1.0j]])
     for i in range(3):
-        np.testing.assert_array_equal(downsampled[i], expected)
+        npt.assert_array_equal(downsampled[i], expected)
 
 
 def test_masked_looks(slc_samples):
@@ -115,4 +116,11 @@ def test_masked_looks(slc_samples):
     slc_stack_masked[:, mask] = np.nan
     s2 = np.squeeze(utils.take_looks(slc_stack_masked, 11, 11))
 
-    np.testing.assert_array_almost_equal(s1, s2, decimal=5)
+    npt.assert_array_almost_equal(s1, s2, decimal=5)
+
+
+def test_upsample_nearest():
+    arr = np.arange(16).reshape(4, 4)
+    looked = utils.take_looks(arr, 2, 2, func_type="max")
+    assert looked.shape == (2, 2)
+    assert looked == np.array([[7, 11], [15, 19]])

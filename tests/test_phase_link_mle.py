@@ -1,4 +1,5 @@
 import numpy as np
+import numpy.testing as npt
 import pytest
 
 from dolphin.phase_link import covariance, mle, simulate
@@ -53,7 +54,7 @@ def test_estimation_gpu(slc_samples, est_mle_cpu):
     assert temp_coh.shape == (11, 11)
     # The middle pixel should be the same, since it had the full window
     est_phase_gpu2 = np.angle(est_mle_gpu_fullres[:, 5, 5])
-    np.testing.assert_array_almost_equal(est_mle_cpu, est_phase_gpu2, decimal=3)
+    npt.assert_array_almost_equal(est_mle_cpu, est_phase_gpu2, decimal=3)
 
 
 def test_masked(slc_samples, C_truth, C_hat):
@@ -79,7 +80,7 @@ def test_masked(slc_samples, C_truth, C_hat):
     )
     est_full = np.squeeze(mle.mle_stack(C_hat2))
     # Middle pixel should be the same
-    np.testing.assert_array_almost_equal(est_mle, est_full[:, 5, 5], decimal=1)
+    npt.assert_array_almost_equal(est_mle, est_full[:, 5, 5], decimal=1)
 
     if not GPU_AVAILABLE:
         pytest.skip("GPU version not available")
@@ -88,4 +89,4 @@ def test_masked(slc_samples, C_truth, C_hat):
         slc_stack_masked, half_window={"x": 5, "y": 5}
     )
     est_phase_gpu = np.angle(est_mle_gpu_fullres[:, 5, 5])
-    np.testing.assert_array_almost_equal(est_mle, est_phase_gpu, decimal=1)
+    npt.assert_array_almost_equal(est_mle, est_phase_gpu, decimal=1)

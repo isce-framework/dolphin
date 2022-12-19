@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import numpy as np
+import numpy.testing as npt
 import pytest
 from osgeo import gdal
 
@@ -55,15 +56,15 @@ def test_create(vrt_stack, vrt_stack_nc):
 def test_read_stack(vrt_stack, slc_stack):
     ds = gdal.Open(str(vrt_stack.outfile))
     loaded = ds.ReadAsArray()
-    np.testing.assert_array_almost_equal(loaded, slc_stack)
-    np.testing.assert_array_almost_equal(vrt_stack.read_stack(), slc_stack)
+    npt.assert_array_almost_equal(loaded, slc_stack)
+    npt.assert_array_almost_equal(vrt_stack.read_stack(), slc_stack)
 
 
 def test_read_stack_nc(vrt_stack_nc, slc_stack):
     ds = gdal.Open(str(vrt_stack_nc.outfile))
     loaded = ds.ReadAsArray()
-    np.testing.assert_array_almost_equal(loaded, slc_stack)
-    np.testing.assert_array_almost_equal(vrt_stack_nc.read_stack(), slc_stack)
+    npt.assert_array_almost_equal(loaded, slc_stack)
+    npt.assert_array_almost_equal(vrt_stack_nc.read_stack(), slc_stack)
 
 
 def test_sort_order(slc_file_list):

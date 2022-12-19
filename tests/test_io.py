@@ -1,4 +1,5 @@
 import numpy as np
+import numpy.testing as npt
 import pytest
 from osgeo import gdal
 
@@ -37,7 +38,7 @@ def test_save_like(raster_100_by_200, tmpdir):
     io.save_arr(arr=ones, like_filename=raster_100_by_200, output_name=save_name)
 
     ones_loaded = io.load_gdal(save_name)
-    np.testing.assert_array_almost_equal(ones, ones_loaded)
+    npt.assert_array_almost_equal(ones, ones_loaded)
 
 
 def test_save_empty_like(raster_100_by_200, tmpdir):
@@ -46,7 +47,7 @@ def test_save_empty_like(raster_100_by_200, tmpdir):
 
     empty_loaded = io.load_gdal(save_name)
     zeros = np.zeros_like(empty_loaded)
-    np.testing.assert_array_almost_equal(empty_loaded, zeros)
+    npt.assert_array_almost_equal(empty_loaded, zeros)
 
     # TODO: test other metadata
 
@@ -86,7 +87,7 @@ def test_save_block(raster_100_by_200, tmpdir):
 
     block_loaded = io.load_gdal(save_name)
     arr = np.zeros_like(block_loaded)
-    np.testing.assert_array_almost_equal(block_loaded, arr)
+    npt.assert_array_almost_equal(block_loaded, arr)
 
     io.save_block(
         cur_block=np.ones((20, 30)),
@@ -96,7 +97,7 @@ def test_save_block(raster_100_by_200, tmpdir):
     )
     block_loaded2 = io.load_gdal(save_name)
     arr[:20, :30] = 1
-    np.testing.assert_array_almost_equal(block_loaded2, arr)
+    npt.assert_array_almost_equal(block_loaded2, arr)
 
     io.save_block(
         cur_block=np.ones((20, 30)),
@@ -106,7 +107,7 @@ def test_save_block(raster_100_by_200, tmpdir):
     )
     block_loaded2 = io.load_gdal(save_name)
     arr[:20, :30] = 1
-    np.testing.assert_array_almost_equal(block_loaded2, arr)
+    npt.assert_array_almost_equal(block_loaded2, arr)
 
 
 @pytest.fixture
@@ -121,7 +122,7 @@ def test_save_cpx(raster_100_by_200, cpx_arr, tmpdir):
     io.save_arr(arr=cpx_arr, like_filename=raster_100_by_200, output_name=save_name)
     arr_loaded = io.load_gdal(save_name)
     assert arr_loaded.dtype == np.complex64
-    np.testing.assert_array_almost_equal(arr_loaded, cpx_arr)
+    npt.assert_array_almost_equal(arr_loaded, cpx_arr)
 
 
 def test_save_block_cpx(raster_100_by_200, cpx_arr, tmpdir):
