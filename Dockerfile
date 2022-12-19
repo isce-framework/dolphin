@@ -1,4 +1,4 @@
-FROM mambaorg/micromamba:1.1.0
+FROM mambaorg/micromamba:1.1.0@sha256:53697a4bae2d9a4407463b8f314d370e201c58f6b5e5ff7c1f24699ed7e37a41
 
 # Install conda packages
 # https://github.com/mamba-org/micromamba-docker#quick-start
@@ -9,7 +9,7 @@ RUN micromamba install --yes --channel conda-forge -n base -f /tmp/requirements.
 
 SHELL ["/usr/local/bin/_dockerfile_shell.sh"]
 
-# https://github.com/mamba-org/micromamba-docker#use-the-shell-form-of-run-with-micromamba
+# https://github.com/mamba-org/micromamba-docker#running-commands-in-dockerfile-within-the-conda-environment
 ARG MAMBA_DOCKERFILE_ACTIVATE=1
 
 # TODO: workdir?

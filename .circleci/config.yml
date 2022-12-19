@@ -10,7 +10,7 @@ jobs:
       - run:
           name: "Build dolphin docker image"
           command: |
-            docker build . -f Dockerfile
+            docker build . -t opera-adt/dolphin -f Dockerfile
   test:
     docker:
       - image: continuumio/miniconda3

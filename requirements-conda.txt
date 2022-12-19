@@ -4,7 +4,6 @@ numpy
 pydantic
 pymp-pypi
 ruamel.yaml
-
 # Reqs that only work/only make sense when installing with conda:
 gdal>=3
 pip
