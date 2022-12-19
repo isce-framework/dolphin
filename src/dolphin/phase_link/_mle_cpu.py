@@ -66,7 +66,10 @@ def run_cpu(
     temp_coh = metrics.estimate_temp_coh(cpx_phase, C_arrays)
     # use the amplitude from the original SLCs
     # account for the strides when grabbing original data
+    out_rows, out_cols = output_phase.shape[-2:]
     xs, ys = strides["x"], strides["y"]
-    slcs_decimated = slc_stack[:, ys // 2 :: ys, xs // 2 :: xs]
+    slcs_decimated = slc_stack[
+        :, ys // 2 : -ys // 2 + 1 : ys, xs // 2 : -xs // 2 + 1 : xs
+    ]
     mle_est = np.abs(slcs_decimated) * np.exp(1j * output_phase)
     return mle_est, temp_coh

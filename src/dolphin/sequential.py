@@ -20,6 +20,7 @@ from dolphin import io
 from dolphin._types import Filename
 from dolphin.log import get_log
 from dolphin.phase_link import PhaseLinkRuntimeError, run_mle
+from dolphin.utils import upsample_nearest
 from dolphin.vrt import VRTStack
 
 logger = get_log()
@@ -195,9 +196,8 @@ def run_evd_sequential(
             io.save_block(tcorr, tcorr_file, out_rows, out_cols)
 
             # Compress the ministack using only the non-compressed SLCs
-            cur_data_decimated = cur_data[mini_idx:, ys // 2 :: ys, xs // 2 :: xs]
             cur_comp_slc = compress(
-                cur_data_decimated,
+                cur_data[mini_idx:],
                 cur_mle_stack[mini_idx:],
             )
             # Save the compressed SLC block
@@ -332,13 +332,16 @@ def compress(
         The stack of complex SLC data, shape (nslc, rows, cols)
     mle_estimate : np.array
         The estimated phase from [`run_mle`][dolphin.phase_link.mle.run_mle],
-        shape (nslc, rows, cols)
+        shape (nslc, rows // strides['y'], cols // strides['x'])
 
     Returns
     -------
     np.array
         The compressed SLC data, shape (rows, cols)
     """
+    # If the output is downsampled, we need to make `mle_estimate` the same shape
+    # as the output
+    mle_estimate_upsampled = upsample_nearest(mle_estimate, slc_stack.shape[1:])
     # For each pixel, project the SLCs onto the estimated phase
     # by performing a pixel-wise complex dot product
-    return np.nanmean(slc_stack * np.conjugate(mle_estimate), axis=0)
+    return np.nanmean(slc_stack * np.conjugate(mle_estimate_upsampled), axis=0)

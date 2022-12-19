@@ -3,7 +3,7 @@ import re
 import warnings
 from os import fspath
 from pathlib import Path
-from typing import List, Sequence, Tuple, Union
+from typing import List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 from osgeo import gdal, gdal_array, gdalconst
@@ -399,3 +399,53 @@ def _make_dims_multiples(arr, row_looks, col_looks, how="cutoff"):
         return arr
     else:
         raise ValueError(f"Invalid edge strategy: {how}")
+
+
+def upsample_nearest(
+    arr: np.ndarray,
+    output_shape: Tuple[int, int],
+    looks: Optional[Tuple[int, int]] = None,
+) -> np.ndarray:
+    """Upsample a numpy matrix by repeating blocks of (row_looks, col_looks).
+
+    Parameters
+    ----------
+    arr : np.array
+        2D or 3D downsampled array.
+    output_shape : Tuple[int, int]
+        The desired output shape.
+    looks : Tuple[int, int]
+        The number of looks in the row and column directions.
+        If not provided, will be calculated from `output_shape`.
+
+    Returns
+    -------
+    ndarray
+        The upsampled array, shape = `output_shape`.
+
+    Notes
+    -----
+    Will use cupy if available and if `arr` is a cupy array on the GPU.
+    """
+    xp = get_array_module(arr)
+    in_rows, in_cols = arr.shape[-2:]
+    out_rows, out_cols = output_shape[-2:]
+    if (in_rows, in_cols) == (out_rows, out_cols):
+        return arr
+
+    if looks is None:
+        row_looks = out_rows // in_rows
+        col_looks = out_cols // in_cols
+    else:
+        row_looks, col_looks = looks
+
+    arr_up = xp.repeat(xp.repeat(arr, row_looks, axis=-2), col_looks, axis=-1)
+    # This may be larger than the original array, or it may be smaller, depending
+    # on whether it was padded or cutoff
+    out_r = min(out_rows, arr_up.shape[-2])
+    out_c = min(out_cols, arr_up.shape[-1])
+
+    shape = (len(arr), out_rows, out_cols) if arr.ndim == 3 else (out_rows, out_cols)
+    arr_out = xp.zeros(shape=shape, dtype=arr.dtype)
+    arr_out[..., :out_r, :out_c] = arr_up[..., :out_r, :out_c]
+    return arr_out

@@ -123,4 +123,26 @@ def test_upsample_nearest():
     arr = np.arange(16).reshape(4, 4)
     looked = utils.take_looks(arr, 2, 2, func_type="max")
     assert looked.shape == (2, 2)
-    assert looked == np.array([[7, 11], [15, 19]])
+    npt.assert_array_equal(looked, np.array([[5, 7], [13, 15]]))
+
+    upsampled = utils.upsample_nearest(looked, output_shape=arr.shape)
+    assert upsampled.shape == (4, 4)
+    npt.assert_array_equal(
+        upsampled,
+        np.array(
+            [
+                [5, 5, 7, 7],
+                [5, 5, 7, 7],
+                [13, 13, 15, 15],
+                [13, 13, 15, 15],
+            ]
+        ),
+    )
+
+    arr3d = np.stack([arr, arr, arr], axis=0)
+    looked3d = utils.take_looks(arr3d, 2, 2, func_type="max")
+    assert looked3d.shape == (3, 2, 2)
+    upsampled3d = utils.upsample_nearest(looked3d, output_shape=arr.shape)
+    assert upsampled3d.shape == (3, 4, 4)
+    for img in upsampled3d:
+        npt.assert_array_equal(img, upsampled)

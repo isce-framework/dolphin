@@ -4,7 +4,12 @@ from typing import Dict, Optional, Tuple
 import numpy as np
 
 from dolphin._types import Filename
-from dolphin.utils import check_gpu_available, get_array_module, take_looks
+from dolphin.utils import (
+    check_gpu_available,
+    get_array_module,
+    take_looks,
+    upsample_nearest,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -166,8 +171,9 @@ def _get_maxes(arr, row_looks, col_looks):
         arr, row_looks, col_looks, func_type="nanmax", edge_strategy="pad"
     )
     # Repeat the max values to back to the original size
-    maxes_filled = np.repeat(np.repeat(max_nums, col_looks, axis=1), row_looks, axis=0)
-    maxes_filled = maxes_filled[: arr.shape[0], : arr.shape[1]]
+    maxes_filled = upsample_nearest(
+        max_nums, arr.shape[-2:], looks=(row_looks, col_looks)
+    )
     # Find the indices of the max values in the original image
     return np.where(maxes_filled == arr)
 
