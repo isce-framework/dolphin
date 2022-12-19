@@ -375,6 +375,7 @@ def take_looks(arr, row_looks, col_looks, func_type="nansum", edge_strategy="cut
 
 
 def _make_dims_multiples(arr, row_looks, col_looks, how="cutoff"):
+    """Pad or cutoff an array to make the dimensions multiples of the looks."""
     rows, cols = arr.shape
     row_cutoff = rows % row_looks
     col_cutoff = cols % col_looks
@@ -387,12 +388,13 @@ def _make_dims_multiples(arr, row_looks, col_looks, how="cutoff"):
     elif how == "pad":
         pad_rows = (row_looks - row_cutoff) % row_looks
         pad_cols = (col_looks - col_cutoff) % col_looks
+        pad_val = False if arr.dtype == bool else np.nan
         if pad_rows > 0 or pad_cols > 0:
             arr = np.pad(
                 arr,
                 ((0, pad_rows), (0, pad_cols)),
                 mode="constant",
-                constant_values=np.nan,
+                constant_values=pad_val,
             )
         return arr
     else:

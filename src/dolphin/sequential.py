@@ -86,7 +86,9 @@ def run_evd_sequential(
         logger.info(msg)
         # Add the existing compressed SLC files to the start
         cur_files = comp_slc_files + cur_files
-        cur_vrt = VRTStack(cur_files, outfile=cur_output_folder / f"{start_end}.vrt")
+        cur_vrt = VRTStack(
+            cur_files, outfile=cur_output_folder / f"{start_end}.vrt", sort_files=False
+        )
         cur_vrt.write()
 
         # mini_idx is first non-compressed SLC
@@ -109,7 +111,9 @@ def run_evd_sequential(
             like_filename=cur_vrt.outfile,
             output_name=cur_comp_slc_file,
             nbands=1,
-            shape=out_shape,
+            # shape=out_shape,
+            # The compressed SLC is the same size as the original SLC
+            shape=(ysize, ysize),
         )
         comp_slc_files.append(cur_comp_slc_file)
 
@@ -148,6 +152,7 @@ def run_evd_sequential(
         for cur_data, (rows, cols) in tqdm(block_gen, total=num_blocks):
             if np.all(cur_data == 0):
                 continue
+            cur_data = cur_data.astype(np.complex64)
             # with logging_redirect_tqdm():
             #     tqdm.write(
             #         f"Processing block ({rows.start}:{rows.stop})/{ysize},"
@@ -177,8 +182,11 @@ def run_evd_sequential(
             # Save each of the MLE estimates (ignoring the compressed SLCs)
             assert len(cur_mle_stack[mini_idx:]) == len(cur_output_files)
             # Get the location within the output file, shrinking down the slices
-            out_rows = slice(rows.start // ys, rows.stop // ys)
-            out_cols = slice(cols.start // xs, cols.stop // xs)
+            out_r, out_c = io.compute_out_shape(
+                (rows.stop - rows.start, cols.stop - cols.start), strides
+            )
+            out_rows = slice(rows.start // ys, rows.start // ys + out_r)
+            out_cols = slice(cols.start // xs, cols.start // xs + out_c)
 
             for img, f in zip(cur_mle_stack[mini_idx:], cur_output_files):
                 io.save_block(img, f, out_rows, out_cols)

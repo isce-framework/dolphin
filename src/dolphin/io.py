@@ -168,21 +168,6 @@ def compute_out_shape(
 ) -> Tuple[int, int]:
     """Calculate the output size for an input `shape` and row/col `strides`.
 
-    For instance, in a 6 x 6 array with `strides=(3, 3)`,
-    we could expect the pixels to be centered on indexes
-    `[7, 10, 25, 28]`.
-
-        [[ 0  1  2   3  4  5]
-        [ 6  7  8    9 10 11]
-        [12 13 14   15 16 17]
-
-        [18 19 20   21 22 23]
-        [24 25 26   27 28 29]
-        [30 31 32   33 34 35]]
-
-
-    So the output size would be `(2, 2)`.
-
     Parameters
     ----------
     shape : Tuple[int, int]
@@ -194,17 +179,26 @@ def compute_out_shape(
     -------
     out_shape : Tuple[int, int]
         Size of output after striding
+
+    Notes
+    -----
+    If there is not a full window (of size `strides`), the end
+    will get cut off rather than padded with a partial one.
+    This should match the output size of `[dolphin.utils.take_looks][]`.
+
+    As a 1D example, in array of size 6 with `strides`=3 along this dim,
+    we could expect the pixels to be centered on indexes
+    `[1, 4]`.
+
+        [ 0  1  2   3  4  5]
+
+    So the output size would be 2, since we have 2 full windows.
+    If the array size was 7 or 8, we would have 2 full windows and 1 partial,
+    so the output size would still be 2.
     """
     rows, cols = shape
     rs, cs = strides["y"], strides["x"]
-    # initial starting pixel
-    r_off, c_off = (rs // 2, cs // 2)
-    remaining_rows = rows - r_off - 1
-    remaining_cols = cols - c_off - 1
-    out_rows = remaining_rows // rs + 1
-    out_cols = remaining_cols // cs + 1
-
-    return out_rows, out_cols
+    return (rows // rs, cols // cs)
 
 
 def save_arr(
