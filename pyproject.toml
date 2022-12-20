@@ -40,6 +40,8 @@ dependencies = {file = ["requirements.txt"]}
 # extra requirements: `pip install dolphin[docs]` or `pip install .[docs]`
 [tool.setuptools.dynamic.optional-dependencies.docs]
 file = ["docs/requirements.txt"]
+[tool.setuptools.dynamic.optional-dependencies.test]
+file = ["tests/requirements.txt"]
 
 
 

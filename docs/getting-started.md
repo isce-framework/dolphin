@@ -31,31 +31,38 @@ git clone https://github.com/opera-adt/dolphin.git && cd dolphin
 ```
 2. Install dependencies:
 ```bash
-# assuming that mamba is installed: https://mamba.readthedocs.io/en/latest/
-# if not, start with:
-# conda install mamba -n base -c conda-forge
-mamba install -c conda-forge --file requirements.txt
+conda install -c conda-forge --file requirements.txt
 ```
+
 3. Install `dolphin` via pip:
 ```bash
 # -e installs in development mode
-python -m pip install -e .
+python -m pip install .
 ```
 
-For development:
+## Setup for Developers
+
+To setup a development environment, you can use the following additional steps:
+
 
 ```bash
 # run "pip install -e" to install with extra development requirements
-python -m pip install -e .[docs]
+python -m pip install -e ".[docs,test]"
+```
+This will install the `dolphin` package in development mode, and install the additional dependencies for documentation and testing.
+
+After changing code, we use [`pre-commit`](https://pre-commit.com/) to automatically run linting and formatting:
+```bash
 # Get pre-commit hooks so that linting/formatting is done automatically
 pre-commit install
 
-# After making changes, check the tests:
+After making changes, you can rerun the existing tests and any new ones you have added using:
+```bash
 pytest
 ```
 
 
-## Creating Documentation
+### Creating Documentation
 
 
 We use [MKDocs](https://www.mkdocs.org/) to generate the documentation.
