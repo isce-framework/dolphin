@@ -7,5 +7,5 @@ ruamel.yaml
 # Reqs that only work/only make sense when installing with conda:
 gdal>=3
 pip
-python>=3.8,<3.11
+python>=3.7,<3.11
 git  # For pip-installing in the Docker image

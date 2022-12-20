@@ -21,7 +21,7 @@ jobs:
             spec: ""
           - label: Minimum
             spec: |
-              python=3.8
+              python=3.7
               numpy=1.20
               numba=0.54
               h5py=3.6
