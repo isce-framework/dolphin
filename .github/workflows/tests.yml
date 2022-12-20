@@ -1,4 +1,4 @@
-name: pytest
+name: Pytest and build docker image
 
 on: [pull_request, push]
 
@@ -42,7 +42,7 @@ jobs:
       - name: Setup environment
         uses: mamba-org/provision-with-micromamba@main
         with:
-          environment-file: requirements.txt
+          environment-file: requirements-conda.txt
           environment-name: dolphin
           extra-specs: ${{ matrix.deps.spec }}
           channels: conda-forge
