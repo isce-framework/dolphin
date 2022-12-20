@@ -1,13 +1,8 @@
 # mkdocs requirements
 black
 flake8
-mike # for versioning docs
 mkdocs
 mkdocs-gen-files
 mkdocs-literate-nav
-mkdocs-material
 mkdocs-section-index
 mkdocstrings[python]
-pre-commit
-pytest
-pytest-cov
