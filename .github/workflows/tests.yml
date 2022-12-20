@@ -42,15 +42,17 @@ jobs:
       - name: Setup environment
         uses: mamba-org/provision-with-micromamba@main
         with:
-          environment-file: requirements-conda.txt
+          # environment-file: requirements-conda.txt
           environment-name: dolphin
           extra-specs: ${{ matrix.deps.spec }}
           channels: conda-forge
       - name: Install
         run: |
+          micromamba install --yes -f requirements-conda.txt -c conda-forge
           pip install --no-deps .
       - name: Test
         run: |
+          micromamba install -f tests/requirements.txt -c conda-forge
           pytest --cov-report=xml
       - name: Coverage report
         uses: codecov/codecov-action@v2
@@ -62,7 +64,6 @@ jobs:
         uses: actions/checkout@v3
       - name: Build docker image
         run: |
-          micromamba install -f tests/requirements.txt -c conda-forge
           docker build . -t opera-adt/dolphin -f docker/Dockerfile
       - name: Test entrypoint
         run: |
