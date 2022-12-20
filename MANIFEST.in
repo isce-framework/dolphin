@@ -1,2 +1,0 @@
-# include YAML workflow files
-recursive-include src/dolphin/* *.yaml
