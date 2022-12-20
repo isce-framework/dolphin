@@ -1,3 +1,4 @@
+# These are the packages easily-installable through pip
 h5py
 numba
 numpy

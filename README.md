@@ -37,7 +37,7 @@ git clone https://github.com/opera-adt/dolphin.git && cd dolphin
 ```
 2. Install dependencies:
 ```bash
-conda install -c conda-forge --file requirements.txt
+conda install -c conda-forge --file conda-env.yml
 ```
 
 3. Install `dolphin` via pip:
