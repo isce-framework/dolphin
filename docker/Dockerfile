@@ -17,6 +17,5 @@ ARG MAMBA_DOCKERFILE_ACTIVATE=1
 # --no-deps because they are installed with conda
 RUN python -m pip install --no-deps .
 
-# SHELL ["/usr/local/bin/_dockerfile_shell.sh"]
-# ENTRYPOINT ["/usr/local/bin/_entrypoint.sh", "python", "-m", "dolphin"]
-# CMD ["--help"]
+ENTRYPOINT ["/usr/local/bin/_entrypoint.sh", "python", "-m", "dolphin"]
+CMD ["--help"]
