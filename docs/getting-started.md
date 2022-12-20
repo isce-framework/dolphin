@@ -36,7 +36,6 @@ conda install -c conda-forge --file requirements.txt
 
 3. Install `dolphin` via pip:
 ```bash
-# -e installs in development mode
 python -m pip install .
 ```
 

@@ -24,10 +24,10 @@ jobs:
               python=3.8
               numpy=1.20
               numba=0.54
-              h5py=3.5
+              h5py=3.6
               ruamel_yaml=0.15
               pydantic=1.10
-              pymp-pypi=0.5
+              pymp-pypi=0.4.5
               gdal=3.4
 
       fail-fast: false
@@ -38,7 +38,7 @@ jobs:
         shell: bash -l {0}
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
       - name: Setup environment
         uses: mamba-org/provision-with-micromamba@main
         with:
@@ -48,10 +48,22 @@ jobs:
           channels: conda-forge
       - name: Install
         run: |
+          micromamba install -f test/requirements.txt -c conda-forge
           pip install --no-deps .
       - name: Test
         run: |
-          micromamba install -f test/requirements.txt -c conda-forge
           pytest --cov-report=xml
       - name: Coverage report
         uses: codecov/codecov-action@v2
+
+  build-docker:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Build docker image
+        run: |
+          docker build . -t opera-adt/dolphin -f docker/Dockerfile
+      - name: Test entrypoint
+        run: |
+          docker run --rm opera-adt/dolphin
