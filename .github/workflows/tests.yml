@@ -42,13 +42,12 @@ jobs:
       - name: Setup environment
         uses: mamba-org/provision-with-micromamba@main
         with:
-          # environment-file: requirements-conda.txt
+          environment-file: requirements-conda.lock
           environment-name: dolphin
           extra-specs: ${{ matrix.deps.spec }}
           channels: conda-forge
       - name: Install
         run: |
-          micromamba install --yes -f requirements-conda.txt -c conda-forge
           pip install --no-deps .
       - name: Test
         run: |
