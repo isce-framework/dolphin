@@ -48,7 +48,7 @@ jobs:
           channels: conda-forge
       - name: Install
         run: |
-          micromamba install -f test/requirements.txt -c conda-forge
+          micromamba install -f tests/requirements.txt -c conda-forge
           pip install --no-deps .
       - name: Test
         run: |
