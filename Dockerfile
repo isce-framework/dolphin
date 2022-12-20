@@ -19,5 +19,5 @@ COPY --chown=$MAMBA_USER:$MAMBA_USER . .
 # --no-deps because they are installed with conda
 RUN python -m pip install --no-deps .
 
-ENTRYPOINT ["/usr/local/bin/_entrypoint.sh", "dolphin"]
+ENTRYPOINT ["/usr/local/bin/_entrypoint.sh", "python", "-m", "dolphin"]
 CMD ["--help"]
