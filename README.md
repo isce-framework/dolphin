@@ -8,9 +8,6 @@ Algorithms and Tools for LAnd Surface Deformation using InSAR
 
 ## Usage
 
-<!-- This is for snippets to copy sections into other documentation pages: -->
-<!-- https://facelessuser.github.io/pymdown-extensions/extensions/snippets/#snippet-sections -->
---8<-- [start:usage]
 Dolphin has a main command line entry point to run the algorithms and tools in workflows.
 The main entry point is named `dolphin`, which has two subcommands:
 
@@ -28,12 +25,8 @@ You can also directly use a list of SLC files as input, e.g.:
 $ dolphin config --slc-files /path/to/slc1.tif /path/to/slc2.tif
 ```
 
---8<-- [end:usage]
 
 
-
-
---8<-- [start:install]
 ## Install
 
 The following will install `dolphin` into a conda environment.
@@ -66,7 +59,6 @@ pre-commit install
 # After making changes, check the tests:
 pytest
 ```
---8<-- [end:install]
 
 ## License
 
