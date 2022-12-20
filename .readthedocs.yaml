@@ -1,27 +1,29 @@
 # .readthedocs.yaml
 # Read the Docs configuration file
 # See https://docs.readthedocs.io/en/stable/config-file/v2.html for details
-
-# Required
 version: 2
 
-# Set the version of Python and other tools you might need
-# build:
-#   os: ubuntu-22.04
-#   tools:
-#     python: "3.10"
+mkdocs:
+  configuration: mkdocs.yml
+
+conda:
+  environment: environment.yml
+
+python:
+  install:
+    - method: pip
+      path: .
+      extra_requirements:
+        - docs
+
+
+# To manually specify the build:
 # build:
 #   os: "ubuntu-22.04"
 #   tools:
 #     python: "mambaforge-4.10"
 #   commands:
-#     - mamba install --file requirements.txt --channel conda-forge
+#     - mamba install --file conda-env.yml
 #     - mamba install --file docs/requirements.txt --channel conda-forge
-
-mkdocs:
-  configuration: mkdocs.yml
-
-# Optionally declare the Python requirements required to build your docs
-python:
-   install:
-   - requirements: docs/requirements.txt
+#     - pip install --no-deps .
+#     - mkdocs build f mkdocs.yml -d _readthedocs/ -W
