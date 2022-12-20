@@ -1,6 +1,5 @@
 import datetime
 import re
-from os import PathLike
 from pathlib import Path
 from typing import List, Union
 
@@ -8,8 +7,8 @@ import numpy as np
 from osgeo import gdal, gdal_array, gdalconst
 
 from dolphin._log import get_log
+from dolphin._types import Filename
 
-Filename = Union[str, PathLike[str]]
 gdal.UseExceptions()
 logger = get_log()
 
