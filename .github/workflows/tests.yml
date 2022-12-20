@@ -48,7 +48,6 @@ jobs:
           channels: conda-forge
       - name: Install
         run: |
-          micromamba install -f tests/requirements.txt -c conda-forge
           pip install --no-deps .
       - name: Test
         run: |
@@ -63,6 +62,7 @@ jobs:
         uses: actions/checkout@v3
       - name: Build docker image
         run: |
+          micromamba install -f tests/requirements.txt -c conda-forge
           docker build . -t opera-adt/dolphin -f docker/Dockerfile
       - name: Test entrypoint
         run: |
