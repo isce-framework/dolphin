@@ -12,5 +12,5 @@ dependencies:
   - pydantic
   - pymp-pypi
   - ruamel.yaml
-  - scipy>=0.16 # "scipy 0.16+ is required for linear algebra", numba
+  - scipy>=1.5 # "scipy 0.16+ is required for linear algebra", numba. 1.5 is the oldest version that supports Python 3.7
   - tqdm
