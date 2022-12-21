@@ -1,14 +1,10 @@
-# Unreleased, 0.0
+# Unreleased, 0.0.1
 
 **Added**
 
-- Support for upsampling N-D arrays (FFT-based & nearest neighbor)
-- Basic support for multilooking
-- Band pass FIR filter implementation using the optimal equiripple method
-- Tile manager class
-- Abstract interface to "plug-in" unwrapping algorithms
-- Unwrapping via SNAPHU, PHASS, and ICU
-- Baseline multi-scale unwrapping implementation
+- Created the `config` module to handle the configuration of the workflows
+- Command line interface for running the workflows
+- Outline of project structure and utilities
 
 **Changed**
 

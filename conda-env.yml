@@ -1,0 +1,14 @@
+name: dolphin-env
+channels:
+  - conda-forge
+dependencies:
+  - python>=3.7,<3.11
+  - pip
+  - gdal>=3.3
+  - git  # For pip-installing in the Docker image
+  - h5py
+  - numba
+  - numpy
+  - pydantic
+  - pymp-pypi
+  - ruamel.yaml

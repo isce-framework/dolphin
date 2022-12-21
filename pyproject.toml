@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "dolphin"
 description = "Workflows for generating surface displacement maps using InSAR"
 readme = { file = "README.md", content-type = "text/markdown" }
-requires-python = ">=3.8"
+requires-python = ">=3.7"
 
 classifiers = [
     "Development Status :: 2 - Pre-Alpha",
@@ -40,6 +40,8 @@ dependencies = {file = ["requirements.txt"]}
 # extra requirements: `pip install dolphin[docs]` or `pip install .[docs]`
 [tool.setuptools.dynamic.optional-dependencies.docs]
 file = ["docs/requirements.txt"]
+[tool.setuptools.dynamic.optional-dependencies.test]
+file = ["tests/requirements.txt"]
 
 
 

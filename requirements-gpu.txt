@@ -1,4 +1,0 @@
-cupy
-# https://numba.pydata.org/numba-doc/latest/user/installing.html#installing-using-conda-on-x86-x86-64-power-platforms
-numba
-cudatoolkit

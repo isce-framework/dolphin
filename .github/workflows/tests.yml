@@ -1,0 +1,69 @@
+name: Pytest and build docker image
+
+on: [pull_request, push]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref }}
+  cancel-in-progress: true
+
+jobs:
+  pytest:
+    strategy:
+      matrix:
+        os:
+          - label: Linux
+            runner: ubuntu-latest
+          - label: macOS
+            runner: macos-latest
+
+        deps:
+          - label: Latest
+            spec: ""
+          - label: Minimum
+            spec: |
+              python=3.7
+              numpy=1.20
+              numba=0.54
+              h5py=3.6
+              ruamel_yaml=0.15
+              pydantic=1.10
+              pymp-pypi=0.4.5
+              gdal=3.4
+
+      fail-fast: false
+    name: ${{ matrix.os.label }} • ${{matrix.deps.label }}
+    runs-on: ${{ matrix.os.runner }}
+    defaults:
+      run:
+        shell: bash -l {0}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Setup environment
+        uses: mamba-org/provision-with-micromamba@main
+        with:
+          environment-file: conda-env.yml
+          environment-name: dolphin-env
+          extra-specs: ${{ matrix.deps.spec }}
+          channels: conda-forge
+      - name: Install
+        run: |
+          pip install --no-deps .
+      - name: Test
+        run: |
+          micromamba install -f tests/requirements.txt -c conda-forge
+          pytest --cov-report=xml
+      - name: Coverage report
+        uses: codecov/codecov-action@v2
+
+  build-docker:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Build docker image
+        run: |
+          docker build . -t opera-adt/dolphin -f docker/Dockerfile
+      - name: Test entrypoint
+        run: |
+          docker run --rm opera-adt/dolphin
