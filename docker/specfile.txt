@@ -46,6 +46,7 @@ https://conda.anaconda.org/conda-forge/linux-64/libffi-3.4.2-h7f98852_5.tar.bz2#
 https://conda.anaconda.org/conda-forge/linux-64/libev-4.33-h516909a_1.tar.bz2#6f8720dff19e17ce5d48cfe7f3d2f0a3
 https://conda.anaconda.org/conda-forge/linux-64/libedit-3.1.20191231-he28a2e2_2.tar.bz2#4d331e44109e3f0e19b4cb8f9b82f3e1
 https://conda.anaconda.org/conda-forge/linux-64/libdeflate-1.14-h166bdaf_0.tar.bz2#fc84a0446e4e4fb882e78d786cfb9734
+https://conda.anaconda.org/conda-forge/linux-64/libaec-1.0.6-h9c3ff4c_0.tar.bz2#c77f5e4e418fa47d699d6afa54c5d444
 https://conda.anaconda.org/conda-forge/linux-64/lerc-4.0.0-h27087fc_0.tar.bz2#76bbff344f0134279f225174e9064c8f
 https://conda.anaconda.org/conda-forge/linux-64/keyutils-1.6.1-h166bdaf_0.tar.bz2#30186d27e2c9fa62b45fb1476b7200e3
 https://conda.anaconda.org/conda-forge/linux-64/json-c-0.16-hc379101_0.tar.bz2#0e2bca6857cb73acec30387fef7c3142
@@ -89,7 +90,7 @@ https://conda.anaconda.org/conda-forge/linux-64/freetype-2.12.1-hca18f0e_1.conda
 https://conda.anaconda.org/conda-forge/linux-64/liblapack-3.9.0-16_linux64_openblas.tar.bz2#955d993f41f9354bf753d29864ea20ad
 https://conda.anaconda.org/conda-forge/linux-64/libcblas-3.9.0-16_linux64_openblas.tar.bz2#20bae26d0a1db73f758fc3754cab4719
 https://conda.anaconda.org/conda-forge/linux-64/libpq-15.1-hb675445_2.conda#509f08b3789d9e7e9a72871491ae08e2
-https://conda.anaconda.org/conda-forge/linux-64/libcurl-7.86.0-hdc1c0ab_2.conda#c4c21da8fc657a6c5e426b8cbad36cc2
+https://conda.anaconda.org/conda-forge/linux-64/libcurl-7.87.0-hdc1c0ab_0.conda#bc302fa1cf8eda15c60f669b7524a320
 https://conda.anaconda.org/conda-forge/linux-64/libglib-2.74.1-h606061b_1.tar.bz2#ed5349aa96776e00b34eccecf4a948fe
 https://conda.anaconda.org/conda-forge/linux-64/xorg-libxrender-0.9.10-h7f98852_1003.tar.bz2#f59c1242cc1dd93e72c2ee2b360979eb
 https://conda.anaconda.org/conda-forge/linux-64/xorg-libxext-1.3.4-h7f98852_1.tar.bz2#536cc5db4d0a3ba0630541aec064b5e4
@@ -101,15 +102,15 @@ https://conda.anaconda.org/conda-forge/linux-64/fontconfig-2.14.1-hc2a2eb6_0.tar
 https://conda.anaconda.org/conda-forge/linux-64/postgresql-15.1-h3248436_2.conda#4d2f2c04f8bdb6a9cb0d6e8d90b1f907
 https://conda.anaconda.org/conda-forge/linux-64/xerces-c-3.2.4-h55805fa_1.tar.bz2#d127dc8efe24033b306180939e51e6af
 https://conda.anaconda.org/conda-forge/linux-64/proj-9.1.0-h93bde94_0.tar.bz2#255c7204dda39747c3ba380d28b026d7
-https://conda.anaconda.org/conda-forge/linux-64/hdf5-1.12.2-nompi_h4df4325_100.tar.bz2#91f6a330e4aeba166e5d7f0ee0af3d37
-https://conda.anaconda.org/conda-forge/linux-64/curl-7.86.0-hdc1c0ab_2.conda#3c96ba0c180e389621c4fd62d06c151b
+https://conda.anaconda.org/conda-forge/linux-64/hdf5-1.12.2-nompi_h4df4325_101.conda#162a25904af6586b234b2dd52ee99c61
+https://conda.anaconda.org/conda-forge/linux-64/curl-7.87.0-hdc1c0ab_0.conda#b14123ca479b9473d7f7395b0fd25c97
 https://conda.anaconda.org/conda-forge/linux-64/cfitsio-4.2.0-hd9d235c_0.conda#8c57a9adbafd87f5eff842abde599cb4
 https://conda.anaconda.org/conda-forge/noarch/pip-22.3.1-pyhd8ed1ab_0.tar.bz2#da66f2851b9836d3a7c5190082a45f7d
 https://conda.anaconda.org/conda-forge/linux-64/cairo-1.16.0-ha61ee94_1014.tar.bz2#d1a88f3ed5b52e1024b80d4bcd26a7a0
 https://conda.anaconda.org/conda-forge/linux-64/libspatialite-5.0.1-h7c8129e_22.tar.bz2#23abed7562ad969493b89ad0e5f5c521
 https://conda.anaconda.org/conda-forge/linux-64/geotiff-1.7.1-ha76d385_4.tar.bz2#6a613710a0f19aba3a5dfe83bf1c1c0f
 https://conda.anaconda.org/conda-forge/linux-64/kealib-1.5.0-ha7026e8_0.conda#c948b920f45fd81a2dde8b1ab514cc84
-https://conda.anaconda.org/conda-forge/linux-64/tiledb-2.13.0-h3f4058f_0.conda#b7009881353045d2bdae62ec0dd04bc0
+https://conda.anaconda.org/conda-forge/linux-64/tiledb-2.13.0-hd532e3d_1.conda#d7655c5bdd7a9b47a49d0029f72773da
 https://conda.anaconda.org/conda-forge/linux-64/libnetcdf-4.8.1-nompi_h261ec11_106.tar.bz2#9b25de670ce5753a33c18b1090d1d3bf
 https://conda.anaconda.org/conda-forge/linux-64/git-2.39.0-pl5321h693f4a3_0.conda#d52d166cf45275bdc6c108f951371d37
 https://conda.anaconda.org/conda-forge/noarch/typing_extensions-4.4.0-pyha770c72_0.tar.bz2#2d93b130d148d7fc77e583677792fc6a
@@ -121,6 +122,7 @@ https://conda.anaconda.org/conda-forge/noarch/cached_property-1.5.2-pyha770c72_1
 https://conda.anaconda.org/conda-forge/linux-64/poppler-22.12.0-h92391eb_0.conda#7ad6d858f5615f9b0e9e4bd60395ea75
 https://conda.anaconda.org/conda-forge/noarch/typing-extensions-4.4.0-hd8ed1ab_0.tar.bz2#be969210b61b897775a0de63cd9e9026
 https://conda.anaconda.org/conda-forge/linux-64/ruamel.yaml-0.17.21-py310h5764c6d_2.tar.bz2#93643151fba5c31c676effdd7661f075
+https://conda.anaconda.org/conda-forge/linux-64/scipy-1.9.3-py310hdfbd76f_2.tar.bz2#0582a434d03f6b06d5defbb142c96f4f
 https://conda.anaconda.org/conda-forge/linux-64/numba-0.56.4-py310ha5257ce_0.conda#5a4904c5c57a3d1f9a5ae6533401f652
 https://conda.anaconda.org/conda-forge/noarch/cached-property-1.5.2-hd8ed1ab_1.tar.bz2#9b347a7ec10940d3f7941ff6c460b551
 https://conda.anaconda.org/conda-forge/linux-64/libgdal-3.6.1-hf2b5f72_1.conda#fc4c5716fac9e7f242223dca042e1045
