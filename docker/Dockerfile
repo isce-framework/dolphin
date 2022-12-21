@@ -1,5 +1,5 @@
 # bring in the micromamba image so we can copy files from it
-FROM mambaorg/micromamba:1.1.0@sha256:53697a4bae2d9a4407463b8f314d370e201c58f6b5e5ff7c1f24699ed7e37a41 as micromamba
+FROM mambaorg/micromamba:1.1.0 as micromamba
 
 # This is the image we are going add micromaba to:
 # See https://github.com/oracle/container-images or https://hub.docker.com/_/oraclelinux
