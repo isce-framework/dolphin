@@ -14,7 +14,7 @@ NUM_ACQ = 30
 
 @pytest.fixture(scope="session")
 def slc_stack():
-    shape = (NUM_ACQ, 10, 10)
+    shape = (NUM_ACQ, 5, 10)
     sigma = 0.5
     data = np.random.normal(0, sigma, size=shape).astype(np.complex64)
     # Phase doesn't matter here

@@ -314,6 +314,24 @@ def test_iter_blocks(tiled_raster_100_by_200):
     assert blocks[-1].shape == (4, 8)
 
 
+def test_iter_blocks_rowcols(tiled_raster_100_by_200):
+    # Block size that is a multiple of the raster size
+    bgen = io.iter_blocks(tiled_raster_100_by_200, (10, 20), band=1, return_slices=True)
+    blocks, slices = zip(*list(bgen))
+
+    assert blocks[0].shape == (10, 20)
+    for rs, cs in slices:
+        assert rs.stop - rs.start == 10
+        assert cs.stop - cs.start == 20
+
+    # Non-multiple block size
+    bgen = io.iter_blocks(tiled_raster_100_by_200, (32, 32), band=1, return_slices=True)
+    blocks, slices = zip(*list(bgen))
+    assert blocks[0].shape == (32, 32)
+    for b, (rs, cs) in zip(blocks, slices):
+        assert b.shape == (rs.stop - rs.start, cs.stop - cs.start)
+
+
 def test_iter_nodata(
     raster_with_nan,
     raster_with_nan_block,

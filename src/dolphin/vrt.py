@@ -92,7 +92,7 @@ class VRTStack:
         self._gdal_file_strings = [
             io.format_nc_filename(f, subdataset) for f in self.file_list
         ]
-        self._check_same_size()
+        self._assert_images_same_size()
 
         if nodata_value is None:
             self.nodata_value = io.get_nodata(self._gdal_file_strings[0]) or nan
@@ -183,7 +183,7 @@ class VRTStack:
         if not self.outfile.exists():
             self.write()
 
-    def _check_same_size(self):
+    def _assert_images_same_size(self):
         """Make sure all files in the stack are the same size."""
         from collections import defaultdict
 
@@ -514,7 +514,8 @@ class VRTStack:
     @property
     def shape(self):
         """Get the 3D shape of the stack."""
-        return (len(self),) + io.get_raster_xysize(self.file_list[0])
+        xsize, ysize = io.get_raster_xysize(self.file_list[0])
+        return (len(self.file_list), ysize, xsize)
 
     def __len__(self):
         return len(self.file_list)

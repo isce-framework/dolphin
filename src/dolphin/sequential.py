@@ -54,11 +54,11 @@ def run_evd_sequential(
     comp_slc_files: List[Path] = []
     tcorr_files: List[Path] = []
 
-    ysize, xsize = v_all.shape[-2:]
+    nrows, ncols = v_all.shape[-2:]
     if mask_file is not None:
         mask = io.load_gdal(mask_file).astype(bool)
     else:
-        mask = np.zeros((ysize, xsize), dtype=bool)
+        mask = np.zeros((nrows, ncols), dtype=bool)
 
     if ps_mask_file is not None:
         ps_mask = io.load_gdal(ps_mask_file).astype(bool)
@@ -67,7 +67,7 @@ def run_evd_sequential(
 
     xhalf, yhalf = half_window["x"], half_window["y"]
     xs, ys = strides["x"], strides["y"]
-    out_shape = io.compute_out_shape((ysize, ysize), strides)
+    out_shape = io.compute_out_shape((nrows, ncols), strides)
 
     # Solve each ministack using the current chunk (and the previous compressed SLCs)
     ministack_starts = range(0, len(file_list_all), ministack_size)
@@ -114,7 +114,7 @@ def run_evd_sequential(
             nbands=1,
             # shape=out_shape,
             # The compressed SLC is the same size as the original SLC
-            shape=(ysize, ysize),
+            shape=(nrows, ncols),
         )
         comp_slc_files.append(cur_comp_slc_file)
 
@@ -156,8 +156,8 @@ def run_evd_sequential(
             cur_data = cur_data.astype(np.complex64)
             # with logging_redirect_tqdm():
             #     tqdm.write(
-            #         f"Processing block ({rows.start}:{rows.stop})/{ysize},"
-            #         f" ({cols.start}:{cols.stop})/{xsize}",
+            #         f"Processing block ({rows.start}:{rows.stop})/{nrows},"
+            #         f" ({cols.start}:{cols.stop})/{ncols}",
             #         end="... ",
             #     )
 

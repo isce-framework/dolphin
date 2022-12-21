@@ -422,7 +422,7 @@ def get_stack_nodata_mask(
     Parameters
     ----------
     stack_filename : Path or str
-        VRTStack object containing the SLC stack.
+        File containing the SLC stack as separate bands.
     output_file : Path or str, optional
         Name of file to save to., by default None
     compute_bands : List[int], optional

@@ -89,7 +89,16 @@ def create_ps(
 
 
 def calc_ps_block(stack_mag: np.ndarray, amp_dispersion_threshold: float = 0.42):
-    """Calculate the amplitude dispersion for a block of data.
+    r"""Calculate the amplitude dispersion for a block of data.
+
+    The amplitude dispersion is defined as the standard deviation of a pixel's
+    magnitude divided by the mean of the magnitude:
+
+        \[
+        d_a = \frac{\sigma(|Z|)}{\mu(|Z|)}
+        \]
+
+    where $Z \in \mathbb{R}^{N}$ is one pixel's complex data for $N$ SLCs.
 
     Parameters
     ----------
@@ -119,7 +128,7 @@ def calc_ps_block(stack_mag: np.ndarray, amp_dispersion_threshold: float = 0.42)
     std_dev = np.nanstd(stack_mag, axis=0)
 
     # Calculate the amplitude dispersion and replace nans with 0s
-    amp_disp = mean / std_dev
+    amp_disp = std_dev / mean
     amp_disp = np.nan_to_num(amp_disp, nan=0, posinf=0, neginf=0, copy=False)
 
     ps = amp_disp < amp_dispersion_threshold

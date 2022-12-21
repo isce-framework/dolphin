@@ -11,33 +11,34 @@ from dolphin.vrt import VRTStack
 
 
 @pytest.fixture
-def vrt_stack(tmp_path, slc_file_list):
+def vrt_stack(tmp_path, slc_stack, slc_file_list):
     vrt_file = tmp_path / "test.vrt"
     s = VRTStack(slc_file_list, outfile=vrt_file)
     s.write()
 
-    assert s.shape == (30, 10, 10)
+    assert s.shape == slc_stack.shape
+    assert len(s) == len(slc_stack) == len(slc_file_list)
     return s
 
 
 @pytest.fixture
-def vrt_stack_nc(tmp_path, slc_file_list_nc):
+def vrt_stack_nc(tmp_path, slc_stack, slc_file_list_nc):
     vrt_file = tmp_path / "test_nc.vrt"
     s = VRTStack(slc_file_list_nc, outfile=vrt_file)
     s.write()
 
-    assert s.shape == (30, 10, 10)
+    assert s.shape == slc_stack.shape
     return s
 
 
 @pytest.fixture
-def vrt_stack_nc_wgs84(tmp_path, slc_file_list_nc_wgs84):
+def vrt_stack_nc_wgs84(tmp_path, slc_stack, slc_file_list_nc_wgs84):
     # Check an alternative projection system
     vrt_file = tmp_path / "test_nc_wgs84.vrt"
     s = VRTStack(slc_file_list_nc_wgs84, outfile=vrt_file)
     s.write()
 
-    assert s.shape == (30, 10, 10)
+    assert s.shape == slc_stack.shape
     return s
 
 
@@ -135,13 +136,17 @@ def test_add_file(vrt_stack, slc_stack):
     assert read_stack.shape[0] == slc_stack.shape[0] + 2
 
 
-def test_iter_blocks(vrt_stack, slc_stack):
+def test_iter_blocks(vrt_stack):
     blocks = list(vrt_stack.iter_blocks(block_shape=(5, 5)))
-    # (10, 10) total shape, breaks into 5x5 blocks
-    assert len(blocks) == 4
+    # (5, 10) total shape, breaks into 5x5 blocks
+    assert len(blocks) == 2
     for b in blocks:
         assert b.shape == (len(vrt_stack), 5, 5)
-        assert b.shape[0] == slc_stack.shape[0]
+
+    blocks = list(vrt_stack.iter_blocks(block_shape=(1, 2)))
+    assert len(blocks) == 25
+    for b in blocks:
+        assert b.shape == (len(vrt_stack), 1, 2)
 
 
 def test_tiled_iter_blocks(tmp_path, tiled_file_list):
@@ -153,6 +158,7 @@ def test_tiled_iter_blocks(tmp_path, tiled_file_list):
     # (100, 200) total shape, breaks into 32x32 blocks
     assert len(blocks) == 28
     for i, b in enumerate(blocks, start=1):
+        # Account for the smaller block sizes at the ends
         if i % 7 == 0:
             # last col
             if i > 21:  # Last row

@@ -91,8 +91,6 @@ def run_mle(
         mask = np.zeros((rows, cols), dtype=bool)
     else:
         mask = mask.astype(bool)
-    # Make sure we also are ignoring pixels which are nans for all SLCs
-    mask |= np.all(np.isnan(slc_stack), axis=0)
 
     # Track the PS pixels, if given, and remove them from the stack
     # This will prevent the large amplitude PS pixels from dominating
@@ -103,6 +101,13 @@ def run_mle(
         ps_mask = ps_mask.astype(bool)
     _check_all_nans(slc_stack)
 
+    # Make sure we also are ignoring pixels which are nans for all SLCs
+    if mask.shape != (rows, cols) or ps_mask.shape != (rows, cols):
+        raise ValueError(
+            f"mask.shape={mask.shape}, ps_mask.shape={ps_mask.shape},"
+            f" but != SLC (rows, cols) {rows, cols}"
+        )
+    mask |= np.all(np.isnan(slc_stack), axis=0)
     # TODO: Any other masks we need?
     ignore_mask = np.logical_or.reduce((mask, ps_mask))
 
