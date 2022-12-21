@@ -6,5 +6,5 @@ set -e
 # https://stackoverflow.com/questions/24537340/docker-adding-a-file-from-a-parent-directory
 cd "$(dirname "$0")/.."
 docker run -u $(id -u):$(id -g) -v "$PWD:/mnt" -w /mnt --rm -it mambaorg/micromamba:1.1.0 bash -c '\
-    micromamba create --yes --file conda-env.yml && micromamba env export --explicit > /mnt/specfile.txt'
+    micromamba create --yes --name dolphin-env --file conda-env.yml && micromamba env export --name dolphin-env --explicit > /mnt/specfile.txt'
 mv specfile.txt docker/specfile.txt
