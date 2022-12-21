@@ -12,3 +12,4 @@ dependencies:
   - pydantic
   - pymp-pypi
   - ruamel.yaml
+  - tqdm

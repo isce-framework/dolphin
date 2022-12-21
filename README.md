@@ -19,16 +19,16 @@ Example usage:
 $ dolphin config --slc-files /path/to/slcs/*tif
 ```
 This will create a YAML file (by default `dolphin_config.yaml` in the current directory).
-You can also directly use a list of SLC files as input, e.g.:
-```bash
-$ dolphin config --slc-files /path/to/slc1.tif /path/to/slc2.tif
-```
 
-The only required input for the workflow is a list of coregistered SLC files (in either geographic or radar coordinates).
+The only required inputs for the workflow is a list of coregistered SLC files (in either geographic or radar coordinates).
 If the SLC files are spread over multiple files, you can either
 1. use the `--slc-files` option with a bash glob pattern, (e.g. `dolphin config --slc-files merged/SLC/*/*.slc` would match the [ISCE2 stack processor output](https://github.com/isce-framework/isce2/tree/main/contrib/stack) )
 1. Store all input SLC files in a text file delimited by newlines (e.g. `my_slc_list.txt`), and give the name of this text file prefixed by the `@` character (e.g. `dolphin config --slc-files @my_slc_list.txt`)
 
+The full set of options is written to the configuration file; you can edit this file, or you can see which commonly tuned options by are changeable running `dolphin config --help`.
+
+
+For more details, see the [documentation](https://dolphin-insar.readthedocs.io/).
 
 ## Install
 
