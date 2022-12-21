@@ -12,4 +12,5 @@ dependencies:
   - pydantic
   - pymp-pypi
   - ruamel.yaml
+  - scipy>=0.16 # "scipy 0.16+ is required for linear algebra", numba
   - tqdm
