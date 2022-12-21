@@ -1,3 +1,4 @@
 pre-commit
+pyproj # Used for the `make_netcdf.py` test script
 pytest
 pytest-cov
