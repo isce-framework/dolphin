@@ -10,8 +10,6 @@ from .config import Workflow
 def create_config(
     *,
     outfile: Union[str, Path],
-    slc_directory=None,
-    ext: str = ".nc",
     slc_files: Optional[List[str]] = None,
     subdataset: Optional[str] = None,
     mask_files: Optional[List[str]] = None,
@@ -24,8 +22,6 @@ def create_config(
     """Create a config for a displacement workflow."""
     cfg = Workflow(
         inputs=dict(
-            cslc_directory=slc_directory,
-            cslc_file_ext=ext,
             cslc_file_list=slc_files,
             mask_files=mask_files,
             subdataset=subdataset,
@@ -55,6 +51,8 @@ def get_parser(subparser=None, subcommand_name="run"):
     metadata = dict(
         description="Create a configuration file for a displacement workflow.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        # https://docs.python.org/3/library/argparse.html#fromfile-prefix-chars
+        fromfile_prefix_chars="@",
     )
     if subparser:
         # Used by the subparser to make a nested command line interface
@@ -72,20 +70,11 @@ def get_parser(subparser=None, subcommand_name="run"):
     # Get Inputs from the command line
     inputs = parser.add_argument_group("Input options")
     inputs.add_argument(
-        "-d",
-        "--slc-directory",
-        help="Path to directory containing the SLCs.",
-    )
-    inputs.add_argument(
-        "--ext",
-        default=".nc",
-        help="Extension of SLCs to search for (if --slc-directory is given).",
-    )
-    inputs.add_argument(
         "--slc-files",
         nargs=argparse.ZERO_OR_MORE,
         help="Alternative: list the paths of all SLC files to include.",
     )
+
     # Get the subdataset of the SLCs to use, if passing HDF5/NetCDF files
     inputs.add_argument(
         "-sds",
