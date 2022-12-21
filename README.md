@@ -1,9 +1,11 @@
 # dolphin
 
-Algorithms and Tools for LAnd Surface Deformation using InSAR
+High resolution wrapped phase estimation for InSAR
+
+<!-- DeformatiOn Land surface Products in High resolution using INsar -->
+
 
 🚨 This toolbox is still in **pre-alpha** stage and undergoing **rapid development**. 🚨
-
 
 
 ## Usage
