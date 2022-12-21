@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import numpy as np
 import pytest
 from make_netcdf import create_test_nc
@@ -31,8 +33,8 @@ def slc_file_list(tmp_path, slc_stack):
     file_list = []
     for i in range(shape[0]):
         fname = str(name_template).format(date=str(start_date + i))
-        file_list.append(fname)
-        ds = driver.Create(fname, shape[2], shape[1], 1, gdal.GDT_CFloat32)
+        file_list.append(Path(fname))
+        ds = driver.Create(fname, shape[-1], shape[-2], 1, gdal.GDT_CFloat32)
         ds.GetRasterBand(1).WriteArray(slc_stack[i])
         ds = None
     return file_list
@@ -46,8 +48,8 @@ def slc_file_list_nc(tmp_path, slc_stack):
     file_list = []
     for i in range(len(slc_stack)):
         fname = str(name_template).format(date=str(start_date + i))
-        file_list.append(fname)
         create_test_nc(fname, epsg=32615, subdir="/", data=slc_stack[i])
+        file_list.append(Path(fname))
     return file_list
 
 
@@ -60,8 +62,8 @@ def slc_file_list_nc_wgs84(tmp_path, slc_stack):
     file_list = []
     for i in range(len(slc_stack)):
         fname = str(name_template).format(date=str(start_date + i))
-        file_list.append(fname)
         create_test_nc(fname, epsg=4326, subdir="/", data=slc_stack[i])
+        file_list.append(Path(fname))
     return file_list
 
 
@@ -133,6 +135,14 @@ def tiled_file_list(tiled_raster_100_by_200):
     outname3 = tmp_path / "20220103test.tif"
     gdal.Translate(str(outname3), str(tiled_raster_100_by_200))
     return [tiled_raster_100_by_200, outname2, outname3]
+
+
+@pytest.fixture()
+def raster_10_by_20(tmp_path, tiled_raster_100_by_200):
+    # Write a small image to a file
+    outname2 = tmp_path / "20220102small.tif"
+    gdal.Translate(str(outname2), str(tiled_raster_100_by_200), height=10, width=20)
+    return outname2
 
 
 @pytest.fixture

@@ -1,3 +1,4 @@
+import shutil
 from datetime import date, datetime
 from pathlib import Path
 
@@ -130,25 +131,20 @@ def test_worker_env_defaults(monkeypatch):
 
 
 @pytest.fixture()
-def dir_with_1_slc(tmp_path):
+def dir_with_1_slc(tmp_path, slc_file_list_nc):
     p = tmp_path / "slc"
     p.mkdir()
-    slc_file0 = p / "slc_20220101.nc"
-    with open(slc_file0, "w") as f:
-        f.write("")
+
+    shutil.copy(slc_file_list_nc[0], p / "slc_20220101.nc")
     return p
 
 
 @pytest.fixture()
-def dir_with_2_slcs(tmp_path):
+def dir_with_2_slcs(tmp_path, slc_file_list_nc):
     p = tmp_path / "slc"
     p.mkdir()
-    slc_file0 = p / "slc_20220101.nc"
-    with open(slc_file0, "w") as f:
-        f.write("")
-    slc_file1 = p / "slc_20220202.nc"
-    with open(slc_file1, "w") as f:
-        f.write("")
+    shutil.copy(slc_file_list_nc[0], p / "slc_20220101.nc")
+    shutil.copy(slc_file_list_nc[1], p / "slc_20220102.nc")
     return p
 
 
@@ -168,21 +164,17 @@ def test_inputs_defaults(dir_with_1_slc):
     assert isinstance(opts2.cslc_file_list[0], Path)
 
 
-def test_input_find_slcs(tmpdir):
-    files = []
-    for n in range(20220101, 20220105):
-        slc_file = tmpdir / f"{n}.nc"
-        slc_file.write("")
-        files.append(Path(str(slc_file)))
+def test_input_find_slcs(slc_file_list_nc):
+    cslc_dir = Path(slc_file_list_nc[0]).parent
 
-    opts = config.Inputs(cslc_directory=tmpdir)
-    assert opts.cslc_file_list == files
+    opts = config.Inputs(cslc_directory=cslc_dir)
+    assert opts.cslc_file_list == slc_file_list_nc
 
-    opts2 = config.Inputs(cslc_file_list=files)
+    opts2 = config.Inputs(cslc_file_list=slc_file_list_nc)
     opts2.dict() == opts.dict()
 
     with pytest.raises(pydantic.ValidationError):
-        config.Inputs(cslc_directory=tmpdir, cslc_file_ext=".tif")
+        config.Inputs(cslc_directory=cslc_dir, cslc_file_ext=".tif")
 
 
 def test_input_slc_date_fmt(dir_with_2_slcs):
@@ -192,14 +184,15 @@ def test_input_slc_date_fmt(dir_with_2_slcs):
     assert opts.cslc_file_list == expected_slcs
 
     bad_date_slc = dir_with_2_slcs / "notadate.nc"
-    open(bad_date_slc, "w").close()
+    shutil.copy(expected_slcs[0], bad_date_slc)
+
     opts = config.Inputs(cslc_directory=dir_with_2_slcs)
     assert opts.cslc_file_list == expected_slcs
 
     slc_file1 = dir_with_2_slcs / "2022-01-01.nc"
     slc_file2 = dir_with_2_slcs / "2022-01-02.nc"
-    open(slc_file1, "w").close()
-    open(slc_file2, "w").close()
+    shutil.copy(expected_slcs[0], slc_file1)
+    shutil.copy(expected_slcs[1], slc_file2)
 
     opts = config.Inputs(cslc_directory=dir_with_2_slcs, cslc_date_fmt="%Y-%m-%d")
     assert opts.cslc_file_list == [slc_file1, slc_file2]
@@ -214,7 +207,7 @@ def test_input_slc_date_fmt(dir_with_2_slcs):
 
 def test_input_get_dates(dir_with_2_slcs):
     opts = config.Inputs(cslc_directory=dir_with_2_slcs)
-    expected = [date(2022, 1, 1), date(2022, 2, 2)]
+    expected = [date(2022, 1, 1), date(2022, 1, 2)]
     assert opts.get_dates() == expected
 
 
@@ -277,9 +270,10 @@ def test_config_defaults(dir_with_1_slc):
     assert (now - c.creation_time_utc).seconds == 0
 
 
-def test_config_create_dir_tree(tmpdir):
+def test_config_create_dir_tree(tmpdir, slc_file_list_nc):
     slc_file0 = tmpdir / "slc_20220101.nc"
-    slc_file0.write("")
+    shutil.copy(slc_file_list_nc[0], slc_file0)
+
     with tmpdir.as_cwd():
         c = config.Workflow(inputs={"cslc_directory": "."})
         c.create_dir_tree()

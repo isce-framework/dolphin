@@ -21,13 +21,13 @@ def test_compute_out_size():
     strides = {"x": 3, "y": 3}
     assert (2, 2) == io.compute_out_shape((6, 6), strides)
 
-    # 1 more/fewer in each direction shouldn't change it
-    assert (2, 2) == io.compute_out_shape((5, 5), strides)
+    # 1,2 more in each direction shouldn't change it
     assert (2, 2) == io.compute_out_shape((7, 7), strides)
+    assert (2, 2) == io.compute_out_shape((8, 8), strides)
 
-    # but 2 more in each direction should
+    # 1,2 fewer should bump down to 1
+    assert (1, 1) == io.compute_out_shape((5, 5), strides)
     assert (1, 1) == io.compute_out_shape((4, 4), strides)
-    assert (3, 3) == io.compute_out_shape((8, 8), strides)
 
 
 def test_save_like(raster_100_by_200, tmpdir):

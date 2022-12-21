@@ -73,6 +73,9 @@ def test_sort_order(slc_file_list):
     vrt_stack = VRTStack(random_order)
     assert vrt_stack.file_list == [Path(f) for f in slc_file_list]
 
+    vrt_stack2 = VRTStack(random_order, sort_files=False)
+    assert vrt_stack2.file_list == random_order
+
 
 def test_dates(vrt_stack):
     dates = vrt_stack.dates
@@ -81,6 +84,16 @@ def test_dates(vrt_stack):
     for d in dates:
         assert d.strftime("%Y%m%d") == str(d0)
         d0 += 1
+
+
+def test_bad_sizes(slc_file_list, raster_10_by_20):
+    from dolphin.io import get_raster_xysize
+
+    # Make sure the files are the same size
+    assert get_raster_xysize(slc_file_list[0]) == get_raster_xysize(slc_file_list[1])
+    assert get_raster_xysize(slc_file_list[0]) != get_raster_xysize(raster_10_by_20)
+    with pytest.raises(ValueError):
+        VRTStack(slc_file_list + [raster_10_by_20])
 
 
 # TODO: target extent

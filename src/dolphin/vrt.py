@@ -68,22 +68,17 @@ class VRTStack:
     ):
         """Initialize a VRTStack object for a list of files, optionally subsetting."""
         files = [Path(f) for f in file_list]
+        self._use_abs_path = use_abs_path
         if use_abs_path:
             files = [p.resolve() for p in files]
         # Extract the date/datetimes from the filenames
         dates = [utils.parse_slc_strings(f, fmt=file_date_fmt) for f in files]
         if sort_files:
-            # Sort by the date within the filename
-            file_dates = sorted(
-                [(f, d) for f, d in zip(file_list, dates)],
-                key=lambda f_d_tuple: f_d_tuple[1],  # use date as key
-            )
-            # Unpack the sorted pairs with new sorted values
-            file_list, dates = zip(*file_dates)
+            files, dates = self._sort_by_date(files, dates)
 
         # Save the attributes
-        self.file_list = list(files)
-        self.dates = list(dates)
+        self.file_list = list(file_list)
+        self.dates = dates
         # save for future parsing of dates with `add_file`
         self.file_date_fmt = file_date_fmt
 
@@ -94,7 +89,7 @@ class VRTStack:
         # If we're using .h5 or .nc, get the GDAL-compatible paths to write to the VRT
         # Otherwise this will just be the file_list as is
         self._gdal_file_strings = [
-            io.format_nc_filename(f, subdataset) for f in file_list
+            io.format_nc_filename(f, subdataset) for f in self.file_list
         ]
         self._check_same_size()
 
@@ -121,7 +116,7 @@ class VRTStack:
             pixel_bbox=pixel_bbox,
             target_extent=target_extent,
             latlon_bbox=latlon_bbox,
-            filename=file_list[0],
+            filename=self.file_list[0],
         )
 
     def write(self, outfile: Optional[Filename] = None):
@@ -140,9 +135,7 @@ class VRTStack:
                 f' rasterYSize="{self.ysize_sub}">\n'
             )
 
-            for idx, (filename, date) in enumerate(
-                zip(self._gdal_file_strings, self.dates), start=1
-            ):
+            for idx, filename in enumerate(self._gdal_file_strings, start=1):
                 block_size = io.get_raster_block_size(filename)
                 # blocks in a vrt have a min of 16, max of 2**14=16384
                 # https://github.com/OSGeo/gdal/blob/2530defa1e0052827bc98696e7806037a6fec86e/frmts/vrt/vrtrasterband.cpp#L339
@@ -173,6 +166,16 @@ class VRTStack:
         ds.SetSpatialRef(self.srs)
         ds = None
 
+    @staticmethod
+    def _sort_by_date(file_list, dates):
+        file_dates = sorted(
+            [(f, d) for f, d in zip(file_list, dates)],
+            key=lambda f_d_tuple: f_d_tuple[1],  # use date as key
+        )
+        # Unpack the sorted pairs with new sorted values
+        file_list, dates = zip(*file_dates)
+        return list(file_list), list(dates)
+
     def _check_exists(self):
         if not self.outfile:
             raise ValueError("No output file specified")
@@ -188,7 +191,7 @@ class VRTStack:
             s = io.get_raster_xysize(f)
             size_to_file[s].append(f)
         if len(size_to_file) > 1:
-            size_str = "\n".join(size_to_file.items())
+            size_str = "\n".join(str(size_to_file.items()))
             raise ValueError(f"Not files have same raster size: {size_str}")
 
     def read_stack(self, band: Optional[int] = None, subsample_factor: int = 1):
@@ -200,11 +203,22 @@ class VRTStack:
         # Allows os.fspath() to work on the object, enabling rasterio.open()
         return fspath(self.outfile)
 
-    def add_file(self, new_file):
-        """Add a new file to the stack and re-sort."""
-        self.file_list = sorted(self.file_list + [new_file])
-        self.dates = [
-            utils.parse_slc_strings(f, fmt=self.file_date_fmt) for f in self.file_list
+    def add_file(self, new_file: Filename, sort_files: bool = True):
+        """Append a new file to the stack, and (optionally) re-sort."""
+        new_file = Path(new_file)
+        if self._use_abs_path:
+            new_file = new_file.resolve()
+        self.file_list.append(new_file)
+
+        # Parse the new date, and add it to the list
+        new_date = utils.parse_slc_strings(new_file, fmt=self.file_date_fmt)
+        self.dates.append(new_date)
+        if sort_files:
+            self.file_list, self.dates = self._sort_by_date(self.file_list, self.dates)
+
+        # reset the gdal file strings
+        self._gdal_file_strings = [
+            io.format_nc_filename(f, self._subdataset) for f in self.file_list
         ]
 
     def set_subset(
