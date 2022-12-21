@@ -6,6 +6,10 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref }}
   cancel-in-progress: true
 
+env:
+  # https://github.com/pytest-dev/pytest/issues/2042#issuecomment-429289164
+  PY_IGNORE_IMPORTMISMATCH: 1
+
 jobs:
   pytest:
     strategy:
