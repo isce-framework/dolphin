@@ -37,6 +37,10 @@ def slc_file_list(tmp_path, slc_stack):
         ds = driver.Create(fname, shape[-1], shape[-2], 1, gdal.GDT_CFloat32)
         ds.GetRasterBand(1).WriteArray(slc_stack[i])
         ds = None
+
+    # Write the list of SLC files to a text file
+    with open(tmp_path / "slclist.txt", "w") as f:
+        f.write("\n".join([str(f) for f in file_list]))
     return file_list
 
 
@@ -50,6 +54,10 @@ def slc_file_list_nc(tmp_path, slc_stack):
         fname = str(name_template).format(date=str(start_date + i))
         create_test_nc(fname, epsg=32615, subdir="/", data=slc_stack[i])
         file_list.append(Path(fname))
+
+    # Write the list of SLC files to a text file
+    with open(tmp_path / "slclist.txt", "w") as f:
+        f.write("\n".join([str(f) for f in file_list]))
     return file_list
 
 
@@ -64,6 +72,9 @@ def slc_file_list_nc_wgs84(tmp_path, slc_stack):
         fname = str(name_template).format(date=str(start_date + i))
         create_test_nc(fname, epsg=4326, subdir="/", data=slc_stack[i])
         file_list.append(Path(fname))
+
+    with open(tmp_path / "slclist.txt", "w") as f:
+        f.write("\n".join([str(f) for f in file_list]))
     return file_list
 
 

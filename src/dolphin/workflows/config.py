@@ -7,7 +7,6 @@ from osgeo import gdal
 from pydantic import (
     BaseModel,
     BaseSettings,
-    DirectoryPath,
     Field,
     PrivateAttr,
     root_validator,
@@ -202,17 +201,6 @@ class Inputs(BaseModel):
     cslc_file_list: List[Path] = Field(
         default_factory=list, description="List of CSLC files"
     )
-    cslc_directory: Optional[DirectoryPath] = Field(
-        None,
-        description=(
-            "Path to CSLC files (if not directly specifying). "
-            "Must also provide `cslc_file_ext`."
-        ),
-    )
-    cslc_file_ext: Optional[str] = Field(
-        ".nc",
-        description="Extension of CSLC files (if providing `cslc_directory`)",
-    )
     subdataset: Optional[str] = Field(
         None,
         description="Subdataset to use from CSLC files, if passing HDF5/NetCDF files.",
@@ -231,36 +219,46 @@ class Inputs(BaseModel):
     )
 
     # validators
-    @validator("mask_files", "cslc_file_list", pre=True)
+    @validator("cslc_file_list", pre=True)
+    def _check_input_file_list(cls, v):
+        if v is None:
+            return []
+        if isinstance(v, (str, Path)):
+            v_path = Path(v)
+            # Check if it's a newline-delimited list of input files
+            if v_path.exists() and v_path.is_file():
+                filenames = [Path(f) for f in v_path.read_text().splitlines()]
+                # If given as relative paths, make them relative to the file
+                parent = v_path.parent
+                return [parent / f if not f.is_absolute() else f for f in filenames]
+
+        return [Path(f) for f in v]
+
+    @validator("mask_files", pre=True)
     def _check_mask_files(cls, v):
-        if isinstance(v, str):
+        if isinstance(v, (str, Path)):
+            # If they have passed a single mask file, return it as a list
             return [Path(v)]
         elif v is None:
             return []
-        elif not isinstance(v, list):
-            v = [Path(f) for f in v]
-        return v
+        return [Path(f) for f in v]
 
     @root_validator
     def _check_slc_files_exist(cls, values):
         file_list = values.get("cslc_file_list")
-        directory = values.get("cslc_directory")
         date_fmt = values.get("cslc_date_fmt")
-        ext = values.get("cslc_file_ext")
         if not file_list:
-            if not directory:
-                raise ValueError("Must specify either cslc_file_list or cslc_directory")
-            file_list = sorted(directory.glob(f"*{ext}"))
-            # Filter out files that don't have dates in the filename
-            file_list = [Path(f) for f in file_list if get_dates(f, fmt=date_fmt)]
-            if len(file_list) == 0:
-                raise ValueError(
-                    f"No files found in {directory} with extension {ext} and"
-                    f" date format {date_fmt}"
-                )
+            raise ValueError("Must specify list of input SLC files.")
 
-        if ext is None:
-            ext = file_list[0].suffix
+        # Filter out files that don't have dates in the filename
+        file_matching_date = [Path(f) for f in file_list if get_dates(f, fmt=date_fmt)]
+        if len(file_matching_date) < len(file_list):
+            raise ValueError(
+                f"Found {len(file_matching_date)} files with dates in the filename"
+                f" out of {len(file_list)} files."
+            )
+
+        ext = file_list[0].suffix
         # If they're HDF5/NetCDF files, we need to check that the subdataset exists
         if ext in [".h5", ".nc"]:
             subdataset = values.get("subdataset")
@@ -275,9 +273,6 @@ class Inputs(BaseModel):
         )
         # Coerce the file_list to a list of Path objects, sorted
         values["cslc_file_list"] = [Path(f) for f in file_list]
-        # Once we have the file list, we don't need the directory or extension
-        del values["cslc_directory"]
-        del values["cslc_file_ext"]
         return values
 
     def get_dates(self) -> List[date]:
@@ -360,9 +355,7 @@ class Outputs(BaseModel):
 class Workflow(BaseModel):
     """Configuration for the workflow.
 
-    Required fields are in `Inputs`.
-    Must specify either `cslc_file_list`, or `cslc_directory` and
-    a `cslc_file_ext`.
+    Required fields are in `Inputs`, where you must specify `cslc_file_list`.
     """
 
     workflow_name: str = WorkflowName.STACK

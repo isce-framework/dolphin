@@ -135,7 +135,10 @@ def dir_with_1_slc(tmp_path, slc_file_list_nc):
     p = tmp_path / "slc"
     p.mkdir()
 
-    shutil.copy(slc_file_list_nc[0], p / "slc_20220101.nc")
+    fname = "slc_20220101.nc"
+    shutil.copy(slc_file_list_nc[0], p / fname)
+    with open(p / "slclist.txt", "w") as f:
+        f.write(fname + "\n")
     return p
 
 
@@ -145,12 +148,15 @@ def dir_with_2_slcs(tmp_path, slc_file_list_nc):
     p.mkdir()
     shutil.copy(slc_file_list_nc[0], p / "slc_20220101.nc")
     shutil.copy(slc_file_list_nc[1], p / "slc_20220102.nc")
+    with open(p / "slclist.txt", "w") as f:
+        f.write("slc_20220101.nc\n")
+        f.write("slc_20220102.nc\n")
     return p
 
 
 def test_inputs_defaults(dir_with_1_slc):
     # make a dummy file
-    opts = config.Inputs(cslc_directory=dir_with_1_slc)
+    opts = config.Inputs(cslc_file_list=dir_with_1_slc / "slclist.txt")
 
     assert opts.cslc_file_list[0].parent == dir_with_1_slc.absolute()
     assert opts.cslc_date_fmt == "%Y%m%d"
@@ -167,55 +173,50 @@ def test_inputs_defaults(dir_with_1_slc):
 def test_input_find_slcs(slc_file_list_nc):
     cslc_dir = Path(slc_file_list_nc[0]).parent
 
-    opts = config.Inputs(cslc_directory=cslc_dir)
+    opts = config.Inputs(cslc_file_list=slc_file_list_nc)
     assert opts.cslc_file_list == slc_file_list_nc
 
-    opts2 = config.Inputs(cslc_file_list=slc_file_list_nc)
+    opts2 = config.Inputs(cslc_file_list=cslc_dir / "slclist.txt")
     opts2.dict() == opts.dict()
-
-    with pytest.raises(pydantic.ValidationError):
-        config.Inputs(cslc_directory=cslc_dir, cslc_file_ext=".tif")
 
 
 def test_input_slc_date_fmt(dir_with_2_slcs):
     expected_slcs = [Path(str(p)) for p in sorted(dir_with_2_slcs.glob("*.nc"))]
 
-    opts = config.Inputs(cslc_directory=dir_with_2_slcs)
+    opts = config.Inputs(cslc_file_list=expected_slcs)
     assert opts.cslc_file_list == expected_slcs
 
+    # If files don't all match the date format, it should error
     bad_date_slc = dir_with_2_slcs / "notadate.nc"
     shutil.copy(expected_slcs[0], bad_date_slc)
-
-    opts = config.Inputs(cslc_directory=dir_with_2_slcs)
-    assert opts.cslc_file_list == expected_slcs
+    new_file_list = dir_with_2_slcs.glob("*.nc")
+    with pytest.raises(pydantic.ValidationError):
+        opts = config.Inputs(cslc_file_list=new_file_list)
 
     slc_file1 = dir_with_2_slcs / "2022-01-01.nc"
     slc_file2 = dir_with_2_slcs / "2022-01-02.nc"
     shutil.copy(expected_slcs[0], slc_file1)
     shutil.copy(expected_slcs[1], slc_file2)
+    new_file_list = dir_with_2_slcs.glob("2022-*.nc")
 
-    opts = config.Inputs(cslc_directory=dir_with_2_slcs, cslc_date_fmt="%Y-%m-%d")
+    opts = config.Inputs(cslc_file_list=new_file_list, cslc_date_fmt="%Y-%m-%d")
     assert opts.cslc_file_list == [slc_file1, slc_file2]
 
     # Check that we can get slcs by passing empty string
     # Should match all created files
-    opts = config.Inputs(cslc_directory=dir_with_2_slcs, cslc_date_fmt="")
-    assert opts.cslc_file_list == sorted(
-        [slc_file1, slc_file2, *expected_slcs, bad_date_slc]
-    )
+    all_file_list = list(dir_with_2_slcs.glob("*.nc"))
+    opts = config.Inputs(cslc_file_list=all_file_list, cslc_date_fmt="")
+    assert set(opts.cslc_file_list) == set(all_file_list)
 
 
 def test_input_get_dates(dir_with_2_slcs):
-    opts = config.Inputs(cslc_directory=dir_with_2_slcs)
+    opts = config.Inputs(cslc_file_list=dir_with_2_slcs / "slclist.txt")
     expected = [date(2022, 1, 1), date(2022, 1, 2)]
     assert opts.get_dates() == expected
 
 
 def test_input_date_sort(dir_with_2_slcs):
     file_list = [Path(str(p)) for p in sorted(dir_with_2_slcs.glob("*.nc"))]
-    opts = config.Inputs(cslc_directory=dir_with_2_slcs)
-    assert opts.cslc_file_list == file_list
-
     opts = config.Inputs(cslc_file_list=file_list)
     assert opts.cslc_file_list == file_list
 
@@ -223,32 +224,20 @@ def test_input_date_sort(dir_with_2_slcs):
     assert opts.cslc_file_list == file_list
 
 
-def test_input_no_cslc_directory():
+def test_input_cslc_empty():
     with pytest.raises(pydantic.ValidationError):
-        config.Inputs(cslc_directory=None)
-
-
-def test_input_cslc_dir_empty(tmpdir):
-    with tmpdir.as_cwd():
-        with pytest.raises(pydantic.ValidationError):
-            config.Inputs(cslc_directory=".")
-
-
-def test_input_nones(tmpdir):
-    with tmpdir.as_cwd():
-        with pytest.raises(pydantic.ValidationError):
-            config.Inputs(cslc_file_ext=".nc")
-            config.Inputs(cslc_directory=None, cslc_file_ext=".nc")
-            config.Inputs(cslc_directory=".", cslc_file_ext=None)
+        config.Inputs(cslc_file_list=None)
+        config.Inputs(cslc_file_list="")
+        config.Inputs(cslc_file_list=[])
 
 
 def test_config_defaults(dir_with_1_slc):
-    c = config.Workflow(inputs={"cslc_directory": dir_with_1_slc})
+    c = config.Workflow(inputs={"cslc_file_list": dir_with_1_slc / "slclist.txt"})
     # These should be the defaults
     assert c.interferogram_network == config.InterferogramNetwork()
     assert c.outputs == config.Outputs()
     assert c.worker_settings == config.WorkerSettings()
-    assert c.inputs == config.Inputs(cslc_directory=dir_with_1_slc)
+    assert c.inputs == config.Inputs(cslc_file_list=dir_with_1_slc / "slclist.txt")
 
     # Check the defaults for the sub-configs, where the folders
     # should have been moved to the scratch directory
@@ -271,11 +260,11 @@ def test_config_defaults(dir_with_1_slc):
 
 
 def test_config_create_dir_tree(tmpdir, slc_file_list_nc):
-    slc_file0 = tmpdir / "slc_20220101.nc"
-    shutil.copy(slc_file_list_nc[0], slc_file0)
+    fname0 = "slc_20220101.nc"
+    shutil.copy(slc_file_list_nc[0], tmpdir / fname0)
 
     with tmpdir.as_cwd():
-        c = config.Workflow(inputs={"cslc_directory": "."})
+        c = config.Workflow(inputs={"cslc_file_list": [fname0]})
         c.create_dir_tree()
         assert c.ps_options.directory.exists()
         assert c.phase_linking.directory.exists()
@@ -290,23 +279,23 @@ def test_config_create_dir_tree(tmpdir, slc_file_list_nc):
 
 
 def test_config_roundtrip_dict(dir_with_1_slc):
-    c = config.Workflow(inputs={"cslc_directory": dir_with_1_slc})
+    c = config.Workflow(inputs={"cslc_file_list": dir_with_1_slc / "slclist.txt"})
     c_dict = c.dict()
     c2 = config.Workflow.parse_obj(c_dict)
     assert c == c2
 
 
 def test_config_roundtrip_json(dir_with_1_slc):
-    c = config.Workflow(inputs={"cslc_directory": dir_with_1_slc})
+    c = config.Workflow(inputs={"cslc_file_list": dir_with_1_slc / "slclist.txt"})
     c_json = c.json()
     c2 = config.Workflow.parse_raw(c_json)
     assert c == c2
 
 
 def test_config_roundtrip_yaml(tmp_path, dir_with_1_slc):
-    c = config.Workflow(inputs={"cslc_directory": dir_with_1_slc})
+    c = config.Workflow(inputs={"cslc_file_list": dir_with_1_slc / "slclist.txt"})
     outfile = tmp_path / "config.yaml"
-    c = config.Workflow(inputs={"cslc_directory": dir_with_1_slc})
+    c = config.Workflow(inputs={"cslc_file_list": dir_with_1_slc / "slclist.txt"})
     c.to_yaml(outfile)
     c2 = config.Workflow.from_yaml(outfile)
     assert c == c2
