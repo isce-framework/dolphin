@@ -73,8 +73,9 @@ def create_ps(
         if np.all(cur_data == 0) or np.all(np.isnan(cur_data)):
             continue
 
-        magnitude = np.abs(cur_data, out=magnitude)
-        mean, amp_disp, ps = calc_ps_block(magnitude, amp_dispersion_threshold)
+        cur_rows, cur_cols = cur_data.shape[-2:]
+        magnitude_cur = np.abs(cur_data, out=magnitude[:cur_rows, cur_cols])
+        mean, amp_disp, ps = calc_ps_block(magnitude_cur, amp_dispersion_threshold)
 
         # Use the UInt8 type for the PS to save.
         # For invalid pixels, set to max Byte value

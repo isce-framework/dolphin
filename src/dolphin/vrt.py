@@ -2,6 +2,7 @@
 from math import nan
 from os import fspath
 from pathlib import Path
+from pprint import pformat
 from typing import Optional, Sequence, Tuple
 
 from osgeo import gdal
@@ -191,8 +192,8 @@ class VRTStack:
             s = io.get_raster_xysize(f)
             size_to_file[s].append(f)
         if len(size_to_file) > 1:
-            size_str = "\n".join(str(size_to_file.items()))
-            raise ValueError(f"Not files have same raster size: {size_str}")
+            size_str = pformat(dict(sorted(size_to_file.items())))
+            raise ValueError(f"Not files have same raster (x, y) size:\n{size_str}")
 
     def read_stack(self, band: Optional[int] = None, subsample_factor: int = 1):
         """Read in the SLC stack."""
