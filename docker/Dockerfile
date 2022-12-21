@@ -1,5 +1,5 @@
 # bring in the micromamba image so we can copy files from it
-FROM mambaorg/micromamba:1.1.0 as micromamba
+FROM mambaorg/micromamba:1.1.0@sha256:53697a4bae2d9a4407463b8f314d370e201c58f6b5e5ff7c1f24699ed7e37a41 as micromamba
 
 # This is the image we are going add micromaba to:
 # See https://github.com/oracle/container-images or https://hub.docker.com/_/oraclelinux
@@ -16,6 +16,8 @@ COPY --from=micromamba "$MAMBA_EXE" "$MAMBA_EXE"
 COPY --from=micromamba /usr/local/bin/_activate_current_env.sh /usr/local/bin/_activate_current_env.sh
 COPY --from=micromamba /usr/local/bin/_dockerfile_shell.sh /usr/local/bin/_dockerfile_shell.sh
 COPY --from=micromamba /usr/local/bin/_entrypoint.sh /usr/local/bin/_entrypoint.sh
+# The `RUN true` is a weird hack to prevent "layer does not exist" errors
+# apparently arising from multi-stage builds? https://stackoverflow.com/a/62409523/4174466
 RUN true
 COPY --from=micromamba /usr/local/bin/_activate_current_env.sh /usr/local/bin/_activate_current_env.sh
 RUN true
