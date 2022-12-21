@@ -77,8 +77,8 @@ class VRTStack:
             files, dates = self._sort_by_date(files, dates)
 
         # Save the attributes
-        self.file_list = list(file_list)
-        self.dates = dates
+        self.file_list = list(files)
+        self.dates = list(dates)
         # save for future parsing of dates with `add_file`
         self.file_date_fmt = file_date_fmt
 

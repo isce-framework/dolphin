@@ -98,9 +98,10 @@ def test_estimate_stack_covariance_gpu(slcs, expected_cov, looks=(5, 5)):
     blocks_y = ceil(slcs.shape[2] / threads_per_block[1])
     blocks = (blocks_x, blocks_y)
 
-    half_window = (looks[1] // 2, looks[0] // 2)
+    half_rowcol = (looks[0] // 2, looks[1] // 2)
+    strides_rowcol = (strides["y"], strides["x"])
     covariance.estimate_stack_covariance_gpu[blocks, threads_per_block](
-        d_slcs, half_window, strides, d_C3
+        d_slcs, half_rowcol, strides_rowcol, d_C3
     )
     C3 = d_C3.get()
     # assert C3.shape == (out_rows, out_cols, num_slc, num_slc)
@@ -129,9 +130,10 @@ def test_estimate_stack_covariance_gpu_strides(slcs, expected_cov, looks=(5, 5))
     blocks_y = ceil(slcs.shape[2] / threads_per_block[1])
     blocks = (blocks_x, blocks_y)
 
-    half_window = (looks[1] // 2, looks[0] // 2)
+    half_rowcol = (looks[0] // 2, looks[1] // 2)
+    strides_rowcol = (strides["y"], strides["x"])
     covariance.estimate_stack_covariance_gpu[blocks, threads_per_block](
-        d_slcs, half_window, strides, d_C3
+        d_slcs, half_rowcol, strides_rowcol, d_C3
     )
     # Now this should be the same size as the multi-looked version
     C3 = d_C3.get()
@@ -179,11 +181,10 @@ def test_estimate_stack_covariance_nans_gpu(slcs, looks=(5, 5)):
     d_slcs = cp.asarray(slcs)
     d_C = cp.zeros((rows, cols, num_slc, num_slc), dtype=np.complex64)
 
-    r_looks, c_looks = looks
-    half_window = {"x": c_looks // 2, "y": r_looks // 2}
-    strides = {"x": 1, "y": 1}
+    half_rowcol = (looks[0] // 2, looks[1] // 2)
+    strides_rowcol = (1, 1)
     covariance.estimate_stack_covariance_gpu[blocks, threads_per_block](
-        d_slcs, half_window, strides, d_C
+        d_slcs, half_rowcol, strides_rowcol, d_C
     )
     C_nonan = d_C.get()
 
@@ -192,7 +193,7 @@ def test_estimate_stack_covariance_nans_gpu(slcs, looks=(5, 5)):
     d_slcs_nan = cp.asarray(slcs_nan)
     d_C_nan = cp.zeros((rows, cols, num_slc, num_slc), dtype=np.complex64)
     covariance.estimate_stack_covariance_gpu[blocks, threads_per_block](
-        d_slcs_nan, half_window, strides, d_C_nan
+        d_slcs_nan, half_rowcol, strides_rowcol, d_C_nan
     )
     C_nan = d_C_nan.get()
 
