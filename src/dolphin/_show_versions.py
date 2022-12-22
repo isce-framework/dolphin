@@ -11,7 +11,7 @@ import sys
 __all__ = ["show_versions"]
 
 
-def _get_sys_info():
+def _get_sys_info() -> typing.Dict[str, str]:
     """System information.
 
     Returns
@@ -33,34 +33,32 @@ def _get_opera_info():
 
     Returns
     -------
-    dict:
+    dict
         dolphin / opera module information
     """
     # pylint: disable=import-outside-toplevel
     import dolphin
 
-    blob = [
-        ("dolphin", dolphin.__version__),
+    blob = {
+        "dolphin": dolphin.__version__,
         # optionals
-        ("isce3", _get_version("isce3")),
-        ("compass", _get_version("compass")),
-    ]
-
-    return dict(blob)
+        "isce3": _get_version("isce3"),
+        "compass": _get_version("compass"),
+    }
 
 
 def _get_version(modname):
-    try:
-        if modname in sys.modules:
-            mod = sys.modules[modname]
-        else:
-            mod = importlib.import_module(modname)
+    if modname in sys.modules:
+        mod = sys.modules[modname]
+    else:
         try:
-            return mod.__version__
-        except AttributeError:
-            return mod.version
-    except ImportError:
-        return None
+            mod = importlib.import_module(modname)
+        except ImportError:
+            return None
+    try:
+        return mod.__version__
+    except AttributeError:
+        return mod.version
 
 
 def _get_deps_info():
