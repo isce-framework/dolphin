@@ -45,7 +45,7 @@ To setup a development environment, you can use the following additional steps:
 
 
 ```bash
-# run "pip install -e" to install with extra development requirements
+# Run "pip install -e" to install with extra development requirements
 python -m pip install -e ".[docs,test]"
 ```
 This will install the `dolphin` package in development mode, and install the additional dependencies for documentation and testing.
@@ -54,10 +54,11 @@ After changing code, we use [`pre-commit`](https://pre-commit.com/) to automatic
 ```bash
 # Get pre-commit hooks so that linting/formatting is done automatically
 pre-commit install
+```
 
 After making changes, you can rerun the existing tests and any new ones you have added using:
 ```bash
-pytest
+python -m pytest
 ```
 
 

@@ -18,7 +18,7 @@
 
 Added requirements:
 
-- gdal>=3.0
+- gdal>=3.4
 - numpy
 - h5py
 - ruamel.yaml
