@@ -19,6 +19,7 @@ https://conda.anaconda.org/conda-forge/linux-64/geos-3.11.1-h27087fc_0.tar.bz2#9
 https://conda.anaconda.org/conda-forge/linux-64/geotiff-1.7.1-ha76d385_4.tar.bz2#6a613710a0f19aba3a5dfe83bf1c1c0f
 https://conda.anaconda.org/conda-forge/linux-64/gettext-0.21.1-h27087fc_0.tar.bz2#14947d8770185e5153fdd04d4673ed37
 https://conda.anaconda.org/conda-forge/linux-64/giflib-5.2.1-h36c2ea0_2.tar.bz2#626e68ae9cc5912d6adb79d318cf962d
+https://conda.anaconda.org/conda-forge/linux-64/git-2.39.0-pl5321h693f4a3_0.conda#d52d166cf45275bdc6c108f951371d37
 https://conda.anaconda.org/conda-forge/linux-64/h5py-3.7.0-nompi_py310h416281c_102.tar.bz2#0531c9996dd47c57f14264c3177ccb03
 https://conda.anaconda.org/conda-forge/linux-64/hdf4-4.2.15-h9772cbc_5.tar.bz2#ee08782aff2ff9b3291c967fa6bc7336
 https://conda.anaconda.org/conda-forge/linux-64/hdf5-1.12.2-nompi_h4df4325_101.conda#162a25904af6586b234b2dd52ee99c61
@@ -79,6 +80,7 @@ https://conda.anaconda.org/conda-forge/linux-64/openjpeg-2.5.0-h7d73246_1.tar.bz
 https://conda.anaconda.org/conda-forge/linux-64/_openmp_mutex-4.5-2_gnu.tar.bz2#73aaf86a425cc6e73fcf236a5a46396d
 https://conda.anaconda.org/conda-forge/linux-64/openssl-3.0.7-h0b41bf4_1.conda#7adaac6ff98219bcb99b45e408b80f4e
 https://conda.anaconda.org/conda-forge/linux-64/pcre2-10.40-hc3806b6_0.tar.bz2#69e2c796349cd9b273890bee0febfe1b
+https://conda.anaconda.org/conda-forge/linux-64/perl-5.32.1-2_h7f98852_perl5.tar.bz2#09ba115862623f00962e9809ea248f1a
 https://conda.anaconda.org/conda-forge/linux-64/pixman-0.40.0-h36c2ea0_0.tar.bz2#660e72c82f2e75a6b3fe6a6e75c79f19
 https://conda.anaconda.org/conda-forge/linux-64/poppler-22.12.0-h92391eb_0.conda#7ad6d858f5615f9b0e9e4bd60395ea75
 https://conda.anaconda.org/conda-forge/linux-64/postgresql-15.1-h3248436_2.conda#4d2f2c04f8bdb6a9cb0d6e8d90b1f907
