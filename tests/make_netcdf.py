@@ -10,13 +10,27 @@ from osgeo import gdal
 
 
 def _add_complex_type(h5_root_group):
+    if "complex64" in h5_root_group:
+        return
     ctype = h5py.h5t.py_create(np.complex64)
     ctype.commit(h5_root_group.id, np.string_("complex64"))
 
 
 def create_test_nc(
-    outfile, epsg=32615, subdir="/", data=None, shape=(21, 15), dtype=np.complex64
+    outfile,
+    epsg=32615,
+    subdir="/",
+    data=None,
+    shape=(21, 15),
+    dtype=np.complex64,
+    write_mode="w",
 ):
+    if isinstance(subdir, list):
+        # Create groups in the same file to make multiple SubDatasets
+        return [
+            create_test_nc(outfile, epsg, s, data, shape, dtype, "a") for s in subdir
+        ]
+
     if data is None:
         data = np.ones(shape, dtype=dtype)
     else:
@@ -27,7 +41,7 @@ def create_test_nc(
 
     rows, cols = shape
     # Create basic HDF5 file
-    hf = h5py.File(outfile, "w")
+    hf = h5py.File(outfile, write_mode)
     hf.attrs["Conventions"] = "CF-1.8"
 
     xds = hf.create_dataset(
@@ -89,13 +103,21 @@ def get_cli_args():
         "-e", dest="epsg", type=int, default=4326, help="EPSG code to test"
     )
     parser.add_argument(
-        "-r", dest="subdir", type=str, default="/", help="Group name. Root by default"
+        "-r",
+        dest="subdir",
+        type=str,
+        nargs="*",
+        default="/",
+        help=(
+            "Group name(s). Root ('/') by default. If passing multiple "
+            "groups, they will be created in the same file as subdatasets."
+        ),
     )
     return parser.parse_args()
 
 
 if __name__ == "__main__":
-    """Driver for testing CF."""
+    """Create dummy NetCDF files containing CF-convention metadata."""
 
     # Command line parsing
     args = get_cli_args()
@@ -109,4 +131,14 @@ if __name__ == "__main__":
 
     create_test_nc(args.outfile, epsg=args.epsg, subdir=args.subdir)
     gdalinfo = gdal.Info(args.outfile, format="json")
-    print(gdalinfo["coordinateSystem"]["wkt"])
+
+    if len(args.subdir) == 1:
+        assert f'ID["EPSG",{args.epsg}]]' in gdalinfo["coordinateSystem"]["wkt"]
+    else:
+        for i in range(1, len(args.subdir) + 1):
+            gdalinfo_sub = gdal.Info(
+                gdalinfo["metadata"]["SUBDATASETS"][f"SUBDATASET_{i}_NAME"],
+                format="json",
+            )
+
+            assert f'ID["EPSG",{args.epsg}]]' in gdalinfo_sub["coordinateSystem"]["wkt"]
