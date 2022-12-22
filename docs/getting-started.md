@@ -25,6 +25,12 @@ conda activate dolphin-env
 python -m pip install .
 ```
 
+
+If you have access to a GPU, you can install the extra requirements from running the GPU accelerated algorithms:
+```bash
+conda env update --name dolphin-env --file conda-env-gpu-extras.yml
+```
+
 ## Usage
 
 Dolphin has a main command line entry point to run the algorithms and tools in workflows.

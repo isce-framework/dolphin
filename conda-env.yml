@@ -2,14 +2,15 @@ name: dolphin-env
 channels:
   - conda-forge
 dependencies:
+
   - python>=3.7,<3.11
-  - pip
+  - pip>=21.3  # https://pip.pypa.io/en/stable/reference/build-system/pyproject-toml/#editable-installation
   - gdal>=3.3
   - git  # For pip-installing in the Docker image
-  - h5py
-  - numba
-  - numpy
-  - pydantic
-  - pymp-pypi
-  - ruamel.yaml
+  - h5py>=3.6
+  - numba>=0.54
+  - numpy>=1.20
+  - pydantic>=1.10
+  - pymp-pypi>=0.4.5
+  - ruamel.yaml>=0.15
   - scipy>=1.5 # "scipy 0.16+ is required for linear algebra", numba. 1.5 is the oldest version that supports Python 3.7

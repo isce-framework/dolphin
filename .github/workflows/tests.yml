@@ -28,7 +28,7 @@ jobs:
               ruamel_yaml=0.15
               pydantic=1.10
               pymp-pypi=0.4.5
-              gdal=3.4
+              gdal=3.3
               scipy=1.5
 
       fail-fast: false
