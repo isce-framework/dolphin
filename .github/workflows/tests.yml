@@ -34,6 +34,7 @@ jobs:
               pymp-pypi=0.4.5
               gdal=3.3
               scipy=1.5
+              tqdm=4.0
 
       fail-fast: false
     name: ${{ matrix.os.label }} • ${{ matrix.deps.label }}
