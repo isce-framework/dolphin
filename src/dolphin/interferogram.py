@@ -64,10 +64,7 @@ def run_combine(
     slc_vrt_file: Filename,
     ps_file: Filename,
     pl_directory: Filename,
-    temp_coh_file: Filename,
-    temp_coh_ps_ds_file: Filename,
     output_folder: Filename,
-    ps_temp_coh: float,
     ifg_network_options: dict,
 ):
     """Run workflow step to combine PS and DS phases."""
@@ -139,8 +136,6 @@ def run_combine(
         bnd_orig_1 = bnd_orig_2 = None
     ds_orig_stack = None
 
-    # Create the temporal coherence file, filling in high values for PS
-    fill_temp_coh(ps_file, temp_coh_file, temp_coh_ps_ds_file, ps_temp_coh)
     return
 
 
@@ -150,53 +145,6 @@ def _form_ifg(bnd_1, bnd_2, x0, y0, xwindow, ywindow):
     slc_1 = bnd_1.ReadAsArray(x0, y0, xwindow, ywindow)
     slc_2 = bnd_2.ReadAsArray(x0, y0, xwindow, ywindow)
     return slc_1 * slc_2.conj()
-
-
-def fill_temp_coh(
-    ps_file: Filename,
-    temp_coh_file: Filename,
-    temp_coh_ps_ds_file: Filename,
-    ps_temp_coh: float,
-):
-    """Fill in high values for PS in the temporal coherence file.
-
-    Parameters
-    ----------
-    ps_file : Filename
-        Name of persistent scatterer binary file.
-    temp_coh_file : Filename
-        Name of temporal coherence file resulting from phase linking.
-    temp_coh_ps_ds_file : Filename
-        Name of output temporal coherence file with PS values filled in.
-    ps_temp_coh : float
-        Value to fill in at the PS pixels in the merged temporal coherence file.
-    """
-    # Start with a copy of the PS temporal coherence file
-    ds_in = gdal.Open(fspath(temp_coh_file))
-    driver = gdal.GetDriverByName("ENVI")
-    ds_out = driver.CreateCopy(fspath(temp_coh_ps_ds_file), ds_in)
-    ds_in = None
-
-    ds_psfile = gdal.Open(fspath(ps_file))
-    bnd_ps = ds_psfile.GetRasterBand(1)
-    bnd_out = ds_out.GetRasterBand(1)
-
-    # Overwrite the temporal coherence at PS points with a high value, in blocks
-    # Use the full width each time, iterate over the height dimension
-    xsize, ysize = ds_out.RasterXSize, ds_out.RasterYSize
-    x0, y0, xwindow, ywindow = _get_block_window(xsize, ysize, max_lines=1000)
-    while y0 < ysize:
-        cur_ywin = ywindow if (y0 + ywindow) < ysize else ysize - y0
-        ps_arr = bnd_ps.ReadAsArray(x0, y0, xwindow, cur_ywin)
-        tc_merged = bnd_out.ReadAsArray(x0, y0, xwindow, cur_ywin)
-
-        ps_mask = ps_arr == 1
-        tc_merged[ps_mask] = ps_temp_coh
-        bnd_out.WriteArray(tc_merged, x0, y0)
-
-        y0 += ywindow
-
-    ds_out = bnd_out = ds_psfile = bnd_ps = None
 
 
 def _get_block_window(xsize, ysize, max_lines=1000):
