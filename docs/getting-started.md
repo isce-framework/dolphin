@@ -1,5 +1,30 @@
 
 
+
+## Install
+
+The following will install `dolphin` into a conda environment.
+
+1. Download source code:
+```bash
+git clone https://github.com/opera-adt/dolphin.git && cd dolphin
+```
+2. Install dependencies:
+```bash
+conda env create --file conda-env.yml
+```
+
+or if you have an existing environment:
+```bash
+conda env update --name my-existing-env --file conda-env.yml
+```
+
+3. Install `dolphin` via pip:
+```bash
+conda activate dolphin-env
+python -m pip install .
+```
+
 ## Usage
 
 Dolphin has a main command line entry point to run the algorithms and tools in workflows.
@@ -19,25 +44,6 @@ You can also directly use a list of SLC files as input, e.g.:
 $ dolphin config --slc-files /path/to/slc1.tif /path/to/slc2.tif
 ```
 
-
-
-## Install
-
-The following will install `dolphin` into a conda environment.
-
-1. Download source code:
-```bash
-git clone https://github.com/opera-adt/dolphin.git && cd dolphin
-```
-2. Install dependencies:
-```bash
-conda install -c conda-forge --file requirements.txt
-```
-
-3. Install `dolphin` via pip:
-```bash
-python -m pip install .
-```
 
 ## Setup for Developers
 
