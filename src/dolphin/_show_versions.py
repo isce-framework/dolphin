@@ -7,6 +7,9 @@ which was adapted from `pandas.show_versions`
 import importlib
 import platform
 import sys
+import typing
+
+import dolphin
 
 __all__ = ["show_versions"]
 
@@ -16,16 +19,14 @@ def _get_sys_info() -> typing.Dict[str, str]:
 
     Returns
     -------
-    dict:
+    dict
         system and Python version information
     """
-    blob = [
-        ("python", sys.version.replace("\n", " ")),
-        ("executable", sys.executable),
-        ("machine", platform.platform()),
-    ]
-
-    return dict(blob)
+    return {
+        "python": sys.version.replace("\n", " "),
+        "executable": sys.executable,
+        "machine": platform.platform(),
+    }
 
 
 def _get_opera_info():
@@ -36,15 +37,13 @@ def _get_opera_info():
     dict
         dolphin / opera module information
     """
-    # pylint: disable=import-outside-toplevel
-    import dolphin
-
     blob = {
         "dolphin": dolphin.__version__,
         # optionals
         "isce3": _get_version("isce3"),
         "compass": _get_version("compass"),
     }
+    return blob
 
 
 def _get_version(modname):
