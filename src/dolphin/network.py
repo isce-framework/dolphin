@@ -1,5 +1,5 @@
 import itertools
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 from dolphin.log import get_log
 from dolphin.utils import parse_slc_strings
@@ -9,9 +9,9 @@ logger = get_log()
 
 def make_ifg_list(
     slc_list: List[str],
-    max_bandwidth: int = None,
-    max_temporal_baseline: float = None,
-    reference_idx: int = None,
+    max_bandwidth: Optional[int] = None,
+    max_temporal_baseline: Optional[float] = None,
+    reference_idx: Optional[int] = None,
     final_only: bool = False,
 ) -> List[Tuple]:
     """Form a list of interferogram names from a list of dates."""
@@ -62,7 +62,9 @@ def limit_by_bandwidth(slc_date_list: List[str], max_bandwidth: int):
     ]
 
 
-def limit_by_temporal_baseline(slc_date_list: List[str], max_baseline: float = None):
+def limit_by_temporal_baseline(
+    slc_date_list: List[str], max_baseline: Optional[float] = None
+):
     """Form a list of the ifgs limited to a maximum temporal baseline.
 
     Parameters
