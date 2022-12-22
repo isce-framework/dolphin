@@ -32,7 +32,7 @@ jobs:
               scipy=1.5
 
       fail-fast: false
-    name: ${{ matrix.os.label }} • ${{matrix.deps.label }}
+    name: ${{ matrix.os.label }} • ${{ matrix.deps.label }}
     runs-on: ${{ matrix.os.runner }}
     defaults:
       run:
