@@ -1,4 +1,6 @@
 """Module for computing quality metrics of estimated solutions."""
+import functools
+
 from dolphin.utils import get_array_module
 
 
@@ -38,10 +40,21 @@ def estimate_temp_coh(est, C_arrays):
     # shape will be (rows, cols, nslc, nslc)
     differences = C_angles * est_phase_diffs.conj()
 
-    # Get just the upper triangle of the differences (not the diagonal)
+    # # Get just the upper triangle of the differences (not the diagonal)
     nslc = C_angles.shape[-1]
-    rows, cols = xp.triu_indices(nslc, k=1)
+    rows, cols = _get_upper_tri_idxs(nslc, xp)
     upper_diffs = differences[:, :, rows, cols]
     # get number of non-nan values
     count = xp.count_nonzero(~xp.isnan(upper_diffs), axis=-1)
     return xp.abs(xp.nansum(upper_diffs, axis=-1)) / count
+
+
+@functools.lru_cache(maxsize=32)
+def _get_upper_tri_idxs(nslc, xp):
+    """Get the upper triangle (not including the diagonal) of a matrix.
+
+    Caching is used to avoid re-computing the indices for the same nslc,
+    which is useful when running on the GPU.
+    """
+    rows, cols = xp.triu_indices(nslc, k=1)
+    return rows, cols
