@@ -1,6 +1,3 @@
-
-
-
 ## Install
 
 The following will install `dolphin` into a conda environment.
@@ -50,10 +47,12 @@ You can also directly use a list of SLC files as input, e.g.:
 $ dolphin config --slc-files /path/to/slc1.tif /path/to/slc2.tif
 ```
 
-
 ## Setup for Developers
 
-To setup a development environment, you can use the following additional steps:
+To contribute to the development of `dolphin`, you can fork the repository and install the package in development mode.
+We encourage new features to be developed on a new branch of your fork, and then submitted as a pull request to the main repository.
+
+Once you're ready to write new code, you can use the following additional steps to add to your development environment:
 
 
 ```bash
@@ -67,8 +66,9 @@ After changing code, we use [`pre-commit`](https://pre-commit.com/) to automatic
 # Get pre-commit hooks so that linting/formatting is done automatically
 pre-commit install
 ```
+This will set up the linters and formatters to run on any staged files before you commit them.
 
-After making changes, you can rerun the existing tests and any new ones you have added using:
+After making functional changes, you can rerun the existing tests and any new ones you have added using:
 ```bash
 python -m pytest
 ```

@@ -43,8 +43,6 @@ file = ["docs/requirements.txt"]
 [tool.setuptools.dynamic.optional-dependencies.test]
 file = ["tests/requirements.txt"]
 
-
-
 [tool.setuptools_scm]
 # https://github.com/pypa/setuptools_scm#configuration-parameters
 write_to = "src/dolphin/_version.py"
