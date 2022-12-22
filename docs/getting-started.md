@@ -1,4 +1,32 @@
+## Install
 
+The following will install `dolphin` into a conda environment.
+
+1. Download source code:
+```bash
+git clone https://github.com/opera-adt/dolphin.git && cd dolphin
+```
+2. Install dependencies:
+```bash
+conda env create --file conda-env.yml
+```
+
+or if you have an existing environment:
+```bash
+conda env update --name my-existing-env --file conda-env.yml
+```
+
+3. Install `dolphin` via pip:
+```bash
+conda activate dolphin-env
+python -m pip install .
+```
+
+
+If you have access to a GPU, you can install the extra requirements from running the GPU accelerated algorithms:
+```bash
+conda env update --name dolphin-env --file conda-env-gpu-extras.yml
+```
 
 ## Usage
 
@@ -19,33 +47,16 @@ You can also directly use a list of SLC files as input, e.g.:
 $ dolphin config --slc-files /path/to/slc1.tif /path/to/slc2.tif
 ```
 
-
-
-## Install
-
-The following will install `dolphin` into a conda environment.
-
-1. Download source code:
-```bash
-git clone https://github.com/opera-adt/dolphin.git && cd dolphin
-```
-2. Install dependencies:
-```bash
-conda install -c conda-forge --file requirements.txt
-```
-
-3. Install `dolphin` via pip:
-```bash
-python -m pip install .
-```
-
 ## Setup for Developers
 
-To setup a development environment, you can use the following additional steps:
+To contribute to the development of `dolphin`, you can fork the repository and install the package in development mode.
+We encourage new features to be developed on a new branch of your fork, and then submitted as a pull request to the main repository.
+
+Once you're ready to write new code, you can use the following additional steps to add to your development environment:
 
 
 ```bash
-# run "pip install -e" to install with extra development requirements
+# Run "pip install -e" to install with extra development requirements
 python -m pip install -e ".[docs,test]"
 ```
 This will install the `dolphin` package in development mode, and install the additional dependencies for documentation and testing.
@@ -54,10 +65,12 @@ After changing code, we use [`pre-commit`](https://pre-commit.com/) to automatic
 ```bash
 # Get pre-commit hooks so that linting/formatting is done automatically
 pre-commit install
+```
+This will set up the linters and formatters to run on any staged files before you commit them.
 
-After making changes, you can rerun the existing tests and any new ones you have added using:
+After making functional changes, you can rerun the existing tests and any new ones you have added using:
 ```bash
-pytest
+python -m pytest
 ```
 
 

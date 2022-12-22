@@ -1,6 +1,4 @@
 # mkdocs requirements
-black
-flake8
 mkdocs
 mkdocs-gen-files
 mkdocs-literate-nav

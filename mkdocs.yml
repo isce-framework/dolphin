@@ -2,16 +2,9 @@ site_name: Documentation for dolphin
 
 theme:
   name: "readthedocs"
-  # name: "rtd-dropdown"
-  # name: "mkdocs"
   favicon: img/favicon.ico
   logo: img/apple-touch-icon.png
   highlightjs: true
-  # palette:
-  #   primary: cyan
-  #   # https://squidfunk.github.io/mkdocs-material/setup/changing-the-colors/#color-scheme
-  #   # red pink purple blue grey black teal cyan
-
 
 
 plugins:
@@ -29,11 +22,8 @@ plugins:
       python:
         paths: [src]
         options:
-          # docstring_section_style: table  # default
           docstring_style: numpy
-          # heading_level: 2
           members_order: alphabetical # source
-          # show_signature_annotations: true
 
 
 markdown_extensions:

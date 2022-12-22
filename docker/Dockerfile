@@ -47,7 +47,7 @@ RUN micromamba install --yes --channel conda-forge -n base -f /tmp/specfile.txt 
 
 COPY --chown=$MAMBA_USER:$MAMBA_USER . .
 
-# activte, otherwise python will not be found
+# Activate, otherwise python will not be found
 # https://github.com/mamba-org/micromamba-docker#running-commands-in-dockerfile-within-the-conda-environment
 ARG MAMBA_DOCKERFILE_ACTIVATE=1
 # --no-deps because they are installed with conda

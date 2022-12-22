@@ -18,10 +18,13 @@
 
 Added requirements:
 
-- gdal>=3.0
-- numpy
-- h5py
-- ruamel.yaml
-- pydantic
-- numba
-- pymp-pypi
+- gdal>=3.3
+- h5py>=3.6
+- numba>=0.54
+- numpy>=1.20
+- pydantic>=1.10
+- pymp-pypi>=0.4.5
+- ruamel_yaml>=0.15
+- scipy>=1.5
+
+Currently, Python 3.7 is supported, but 3.11 is not due numba not yet supporting Python 3.11.

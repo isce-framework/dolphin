@@ -20,23 +20,21 @@ import logging
 import time
 from logging import Formatter
 
-COLORS = False
-
 __all__ = ["get_log", "log_runtime"]
 
 
-def get_log(debug=False, name="dolphin.log"):
+def get_log(debug: bool = False, name: str = "dolphin.log") -> logging.Logger:
     """Create a nice log format for use across multiple files.
 
     Default logging level is INFO
 
     Parameters
     ----------
-    name : Optional[str]
+    debug : bool, optional
+        If true, sets logging level to DEBUG (Default value = False)
+    name : str, optional
         The name the logger will use when printing statements
         (Default value = "dolphin.log")
-    debug : Optional[bool]
-        If true, sets logging level to DEBUG (Default value = False)
 
     Returns
     -------

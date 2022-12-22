@@ -8,6 +8,33 @@ High resolution wrapped phase estimation for InSAR
 🚨 This toolbox is still in **pre-alpha** stage and undergoing **rapid development**. 🚨
 
 
+
+
+## Install
+
+The following will install `dolphin` into a conda environment.
+
+1. Download source code:
+```bash
+git clone https://github.com/opera-adt/dolphin.git && cd dolphin
+```
+2. Install dependencies:
+```bash
+conda env create --file conda-env.yml
+```
+
+or if you have an existing environment:
+```bash
+conda env update --name my-existing-env --file conda-env.yml
+```
+
+3. Install `dolphin` via pip:
+```bash
+conda activate dolphin-env
+python -m pip install .
+```
+
+
 ## Usage
 
 The main entry point for running the phase estimation workflow is named `dolphin`, which has two subcommands:
@@ -28,27 +55,6 @@ If the SLC files are spread over multiple files, you can either
 1. Store all input SLC files in a text file delimited by newlines (e.g. `my_slc_list.txt`), and give the name of this text file prefixed by the `@` character (e.g. `dolphin config --slc-files @my_slc_list.txt`)
 
 The full set of options is written to the configuration file; you can edit this file, or you can see which commonly tuned options by are changeable running `dolphin config --help`.
-
-
-For more details, see the [documentation](https://dolphin-insar.readthedocs.io/).
-
-## Install
-
-The following will install `dolphin` into a conda environment.
-
-1. Download source code:
-```bash
-git clone https://github.com/opera-adt/dolphin.git && cd dolphin
-```
-2. Install dependencies:
-```bash
-conda install -c conda-forge --file conda-env.yml
-```
-
-3. Install `dolphin` via pip:
-```bash
-python -m pip install .
-```
 
 See the [documentation](https://dolphin-insar.readthedocs.io/) for more details.
 

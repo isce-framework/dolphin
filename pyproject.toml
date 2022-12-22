@@ -43,8 +43,6 @@ file = ["docs/requirements.txt"]
 [tool.setuptools.dynamic.optional-dependencies.test]
 file = ["tests/requirements.txt"]
 
-
-
 [tool.setuptools_scm]
 # https://github.com/pypa/setuptools_scm#configuration-parameters
 write_to = "src/dolphin/_version.py"
@@ -53,7 +51,7 @@ version_scheme = "no-guess-dev"  # Will not guess the next version
 
 
 [tool.black]
-target-version = ["py38", "py39", "py310"]
+target-version = ["py37", "py38", "py39", "py310"]
 preview = true
 
 [tool.isort]
@@ -61,7 +59,7 @@ profile = "black"
 known_first_party = ["dolphin"]
 
 [tool.mypy]
-python_version = "3.8"
+python_version = "3.7"
 ignore_missing_imports = true
 
 [tool.pydocstyle]
@@ -69,3 +67,4 @@ ignore = "D100,D102,D104,D105,D203,D204,D213,D413"
 
 [tool.pytest.ini_options]
 addopts = "--doctest-modules --cov=dolphin --ignore=scripts --ignore=docs"
+filterwarnings = ["error"]
