@@ -153,45 +153,6 @@ def rmse(x, y):
     return np.sqrt(np.mean((x - y) ** 2))
 
 
-def plot_compare_mle_evd(ns=200, unwrap=False, seed=None):
-    """Compare the results of the MLE and EVD methods."""
-    import matplotlib.pyplot as plt
-
-    from .covariance import coh_mat_single
-
-    _seed(seed)
-    C, signal = simulate_C(num_acq=30, Tau0=12, gamma_inf=0, add_signal=True)
-    # C = simulate_C(num_acq=30, Tau0=12, gamma_inf=0, add_signal=True)
-    samps = simulate_neighborhood_stack(C, ns)
-    C_hat = coh_mat_single(samps)
-
-    truth = signal
-    est_evd = np.angle(evd(C_hat))
-    est_mle = np.angle(mle(C_hat))
-
-    idxs = np.arange(0, len(est_evd))
-
-    fig, ax = plt.subplots()
-    if unwrap:
-
-        def u(x):
-            return np.unwrap(x)
-
-    else:
-
-        def u(x):
-            return x
-
-    ax.plot(idxs, u(truth), lw=4, label="truth")
-    ax.plot(
-        idxs, u(est_evd), lw=3, label="EVD: RMSE={:.2f}".format(rmse(truth, est_evd))
-    )
-    ax.plot(
-        idxs, u(est_mle), lw=2, label="MLE: RMSE={:.2f}".format(rmse(truth, est_mle))
-    )
-    ax.legend()
-
-
 @njit(cache=True)
 def mle(cov_mat, beta=0.0):
     """Estimate the linked phase using the MLE estimator.
