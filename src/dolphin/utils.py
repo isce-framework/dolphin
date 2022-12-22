@@ -280,7 +280,7 @@ def half_window_to_full(half_window: Union[List, Tuple]) -> Tuple[int, int]:
     return (2 * half_window[0] + 1, 2 * half_window[1] + 1)
 
 
-def check_gpu_available() -> bool:
+def gpu_is_available() -> bool:
     """Check if a GPU is available."""
     try:
         # cupy not available on Mac m1

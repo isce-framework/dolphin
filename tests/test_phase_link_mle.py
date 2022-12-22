@@ -4,9 +4,9 @@ import pytest
 
 from dolphin.phase_link import covariance, mle, simulate
 from dolphin.phase_link._mle_gpu import run_gpu
-from dolphin.utils import check_gpu_available
+from dolphin.utils import gpu_is_available
 
-GPU_AVAILABLE = check_gpu_available()
+GPU_AVAILABLE = gpu_is_available()
 NUM_ACQ = 30
 simulate._seed(1234)
 

@@ -5,8 +5,8 @@ import numpy as np
 
 from dolphin._types import Filename
 from dolphin.utils import (
-    check_gpu_available,
     get_array_module,
+    gpu_is_available,
     take_looks,
     upsample_nearest,
 )
@@ -116,8 +116,7 @@ def run_mle(
     slc_stack_copy[:, ignore_mask] = np.nan
 
     #######################################
-    gpu_is_available = check_gpu_available()
-    if not gpu_enabled or not gpu_is_available:
+    if not gpu_enabled or not gpu_is_available():
         mle_est, temp_coh = _run_cpu(
             slc_stack,
             half_window,
@@ -230,7 +229,7 @@ def mle_stack(C_arrays, beta: float = 0.0, reference_idx: float = 0):
         Gamma = (1 - beta) * Gamma + beta * Id
 
     Gamma_inv = xp.linalg.inv(Gamma)
-    _, V = xp.linalg.eigh(Gamma_inv * C_arrays)
+    V = _get_eigvecs(Gamma_inv * C_arrays)
 
     # The shape of V is (rows, cols, nslc, nslc)
     # at pixel (r, c), the columns of V[r, c] are the eigenvectors.
@@ -246,6 +245,31 @@ def mle_stack(C_arrays, beta: float = 0.0, reference_idx: float = 0):
     phase_stack = xp.angle(evd_estimate)
     # Move the SLC dimension to the front (to match the SLC stack shape)
     return np.moveaxis(phase_stack, -1, 0)
+
+
+def _get_eigvecs(C):
+    xp = get_array_module(C)
+    # Make sure we don't overflow: cupy https://github.com/cupy/cupy/issues/7261
+    # The work_size must be less than 2**30, so
+    # Keep (rows*cols)*nslc approximately less than 2**22?
+    rows, cols, nslc, _ = C.shape
+    max_size = 2**22
+    num_blocks = 1 + (rows * cols * nslc) // max_size
+    if num_blocks > 1:
+        # V_out wil lbe the eigenvectors, shape (rows, cols, nslc, nslc)
+        V_out = xp.empty_like(C)
+        # Split the computation into blocks
+        # This is to avoid overflow errors in cupy.linalg.eigh
+        for i in range(num_blocks):
+            # get chunks of rows at a time
+            start = i * (rows // num_blocks)
+            end = (i + 1) * (rows // num_blocks)
+            if i == num_blocks - 1:
+                end = rows
+            V_out[start:end] = xp.linalg.eigh(C[start:end])[1]
+    else:
+        _, V_out = xp.linalg.eigh(C)
+    return V_out
 
 
 def _check_all_nans(slc_stack):
