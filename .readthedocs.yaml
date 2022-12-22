@@ -15,15 +15,3 @@ python:
       path: .
       extra_requirements:
         - docs
-
-
-# To manually specify the build:
-# build:
-#   os: "ubuntu-22.04"
-#   tools:
-#     python: "mambaforge-4.10"
-#   commands:
-#     - mamba install --file conda-env.yml
-#     - mamba install --file docs/requirements.txt --channel conda-forge
-#     - pip install --no-deps .
-#     - mkdocs build f mkdocs.yml -d _readthedocs/ -W
