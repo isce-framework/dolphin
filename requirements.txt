@@ -6,4 +6,4 @@ pydantic>=1.10
 pymp-pypi>=0.4.5
 ruamel_yaml>=0.15
 scipy>=1.5
-tqdm>=4.0
+tqdm>=4.40
