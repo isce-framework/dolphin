@@ -61,8 +61,8 @@ def run_mle(
         The phase from these pixels will be inserted back
         into the final estimate directly from `slc_stack`.
     avg_mag : np.ndarray, optional
-        The average magnitude of the SLC stack, used to estimate the
-        to find the brights PS pixels to fill within each look window.
+        The average magnitude of the SLC stack, used to to find the brightest
+        PS pixels to fill within each look window.
         If None, the average magnitude is estimated from the SLC stack.
         By default None.
     output_cov_file : str, optional
@@ -83,7 +83,7 @@ def run_mle(
     from ._mle_cpu import run_cpu as _run_cpu
     from ._mle_gpu import run_gpu as _run_gpu
 
-    num_slc, rows, cols = slc_stack.shape
+    _, rows, cols = slc_stack.shape
     # Common pre-processing for both CPU and GPU versions:
 
     # Mask nodata pixels if given
@@ -112,13 +112,13 @@ def run_mle(
     ignore_mask = np.logical_or.reduce((mask, ps_mask))
 
     # Make a copy, and set the masked pixels to np.nan
-    slc_stack_copy = slc_stack.copy()
-    slc_stack_copy[:, ignore_mask] = np.nan
+    slc_stack_masked = slc_stack.copy()
+    slc_stack_masked[:, ignore_mask] = np.nan
 
     #######################################
     if not gpu_enabled or not gpu_is_available():
         mle_est, temp_coh = _run_cpu(
-            slc_stack,
+            slc_stack_masked,
             half_window,
             strides,
             beta,
@@ -128,7 +128,7 @@ def run_mle(
         )
     else:
         mle_est, temp_coh = _run_gpu(
-            slc_stack,
+            slc_stack_masked,
             half_window,
             strides,
             beta,
@@ -143,26 +143,9 @@ def run_mle(
     # Set no data pixels to np.nan
     temp_coh[mask_looked] = np.nan
 
-    if avg_mag is None:
-        # Get the average magnitude of the SLC stack
-        avg_mag = np.abs(slc_stack).mean(axis=0)
-    # null out all the non-PS pixels
-    avg_mag[~ps_mask] = np.nan
-
-    # Get the indices of the maxes within each look window
-    slc_r_idxs, slc_c_idxs = _get_maxes(avg_mag, strides["y"], strides["x"])
-
-    # For ps_mask, we set to True if any pixels within the window were PS
-    ps_mask_looked = take_looks(ps_mask, strides["y"], strides["x"], func_type="any")
-
     # Fill in the PS pixels from the original SLC stack, if it was given
-    if np.any(ps_mask_looked):
-        # ref = np.conj(slc_stack[0][ps_mask])
-        ref = np.conj(slc_stack[0][slc_r_idxs, slc_c_idxs])
-        for i in range(num_slc):
-            mle_est[i][ps_mask_looked] = slc_stack[i][slc_r_idxs, slc_c_idxs] * ref
-        # Force PS pixels to have high temporal coherence
-        temp_coh[ps_mask_looked] = 1
+    if np.any(ps_mask):
+        _fill_ps_pixels(mle_est, temp_coh, slc_stack, ps_mask, strides, avg_mag)
 
     return mle_est, temp_coh
 
@@ -279,3 +262,43 @@ def _check_all_nans(slc_stack):
     bad_slc_idxs = np.where(np.all(nans, axis=(1, 2)))[0]
     if bad_slc_idxs.size > 0:
         raise PhaseLinkRuntimeError(f"SLC stack[{bad_slc_idxs}] has are all NaNs.")
+
+
+def _fill_ps_pixels(mle_est, temp_coh, slc_stack, ps_mask, strides, avg_mag):
+    """Fill in the PS locations in the MLE estimate with the original SLC data.
+
+    Overwrites `mle_est` and `temp_coh` in place.
+
+    Parameters
+    ----------
+    mle_est : ndarray, shape = (nslc, rows, cols)
+        The complex valued-MLE estimate of the phase.
+    temp_coh : ndarray, shape = (rows, cols)
+        The temporal coherence of the estimate.
+    slc_stack : np.ndarray
+        The original SLC stack, with shape (n_images, n_rows, n_cols)
+    ps_mask : ndarray, shape = (rows, cols)
+        Boolean mask of pixels marking persistent scatterers (PS).
+    strides : dict
+        The look window strides
+    avg_mag : np.ndarray, optional
+        The average magnitude of the SLC stack, used to to find the brightest
+        PS pixels to fill within each look window.
+    """
+    if avg_mag is None:
+        # Get the average magnitude of the SLC stack
+        avg_mag = np.abs(slc_stack).mean(axis=0)
+    # null out all the non-PS pixels
+    avg_mag[~ps_mask] = np.nan
+
+    # Get the indices of the maxes within each look window
+    slc_r_idxs, slc_c_idxs = _get_maxes(avg_mag, strides["y"], strides["x"])
+    # For ps_mask, we set to True if any pixels within the window were PS
+    ps_mask_looked = take_looks(ps_mask, strides["y"], strides["x"], func_type="any")
+
+    # ref = np.conj(slc_stack[0][ps_mask])
+    ref = np.conj(slc_stack[0][slc_r_idxs, slc_c_idxs])
+    for i in range(len(slc_stack)):
+        mle_est[i][ps_mask_looked] = slc_stack[i][slc_r_idxs, slc_c_idxs] * ref
+    # Force PS pixels to have high temporal coherence
+    temp_coh[ps_mask_looked] = 1

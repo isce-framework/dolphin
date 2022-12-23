@@ -18,6 +18,8 @@ from tqdm.contrib.logging import logging_redirect_tqdm
 
 from dolphin import io
 from dolphin._types import Filename
+
+# from dolphin.interferogram import VRTInterferogram
 from dolphin.log import get_log
 from dolphin.phase_link import PhaseLinkRuntimeError, run_mle
 from dolphin.utils import upsample_nearest
@@ -247,7 +249,7 @@ def run_evd_sequential(
         with logging_redirect_tqdm():
             logger.debug(msg)
 
-        # Run the phase linking process on the current ministack
+        # Run the phase linking process on the current adjustment stack
         cur_mle_stack, tcorr = run_mle(
             cur_data,
             half_window=half_window,
@@ -255,7 +257,7 @@ def run_evd_sequential(
             beta=beta,
             reference_idx=0,
             mask=mask[rows, cols],
-            ps_mask=ps_mask[rows, cols],
+            ps_mask=None,  # PS mask doesn't matter for the adjustments
             n_workers=n_workers,
             gpu_enabled=gpu_enabled,
         )
@@ -288,6 +290,7 @@ def run_evd_sequential(
                 outfile=outfile,
                 A=slc_fname,
                 B=adjustment_fname,
+                # TODO: does B have unit norm?
                 calc="abs(A) * exp(1j * (angle(A) + angle(B)))",
                 quiet=True,
                 overwrite=True,
@@ -339,6 +342,9 @@ def compress(
     # If the output is downsampled, we need to make `mle_estimate` the same shape
     # as the output
     mle_estimate_upsampled = upsample_nearest(mle_estimate, slc_stack.shape[1:])
-    # For each pixel, project the SLCs onto the estimated phase
+    # For each pixel, project the SLCs onto the (normalized) estimated phase
     # by performing a pixel-wise complex dot product
-    return np.nanmean(slc_stack * np.conjugate(mle_estimate_upsampled), axis=0)
+    mle_norm = np.linalg.norm(mle_estimate_upsampled, axis=0)
+    return (
+        np.nansum(slc_stack * np.conjugate(mle_estimate_upsampled), axis=0) / mle_norm
+    )
