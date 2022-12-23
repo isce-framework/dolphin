@@ -94,3 +94,56 @@ def test_masked(slc_samples, C_truth):
     )
     est_phase_gpu = np.angle(est_mle_gpu_fullres[:, 5, 5])
     npt.assert_array_almost_equal(est_mle, est_phase_gpu, decimal=1)
+
+
+def test_run_mle(slc_samples):
+    slc_stack = slc_samples.reshape(NUM_ACQ, 11, 11)
+    mle_est, _ = mle.run_mle(
+        slc_stack,
+        half_window={"x": 5, "y": 5},
+        gpu_enabled=False,
+    )
+
+    C_hat = covariance.coh_mat_single(slc_samples)
+    expected_phase = np.angle(simulate.mle(C_hat))
+
+    # Middle pixel should be the same
+    npt.assert_array_almost_equal(expected_phase, np.angle(mle_est[:, 5, 5]), decimal=1)
+
+
+def test_run_mle_norm_output(slc_samples):
+    slc_stack = slc_samples.reshape(NUM_ACQ, 11, 11)
+    ps_mask = np.zeros((11, 11), dtype=bool)
+    ps_mask[1, 1] = True
+    mle_est, _ = mle.run_mle(
+        slc_stack,
+        half_window={"x": 5, "y": 5},
+        ps_mask=ps_mask,
+        use_slc_amp=False,
+        gpu_enabled=False,
+    )
+    assert np.allclose(np.abs(mle_est), 1)
+
+
+@pytest.mark.parametrize("gpu_enabled", [True, False])
+@pytest.mark.parametrize("strides", [1, 2, 3])
+def test_run_mle_ps_fill(slc_samples, gpu_enabled, strides):
+    slc_stack = slc_samples.reshape(NUM_ACQ, 11, 11)
+    ps_mask = np.zeros((11, 11), dtype=bool)
+    ps_mask[1, 1] = True
+    mle_est, temp_coh = mle.run_mle(
+        slc_stack,
+        half_window={"x": 5, "y": 5},
+        strides={"x": strides, "y": strides},
+        ps_mask=ps_mask,
+        gpu_enabled=gpu_enabled,
+    )
+    ps_phase = slc_stack[:, 1, 1]
+    ps_phase *= ps_phase[0].conj()  # Reference to first acquisition
+
+    out_idx = 1 // strides
+    npt.assert_array_almost_equal(
+        np.angle(ps_phase), np.angle(mle_est[:, out_idx, out_idx])
+    )
+
+    assert temp_coh[out_idx, out_idx] == 1

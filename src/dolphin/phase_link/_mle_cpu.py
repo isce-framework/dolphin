@@ -72,8 +72,9 @@ def run_cpu(
         # use the amplitude from the original SLCs
         # account for the strides when grabbing original data
         xs, ys = strides["x"], strides["y"]
+        _, rows, cols = slc_stack.shape
         slcs_decimated = slc_stack[
-            :, ys // 2 : -ys // 2 + 1 : ys, xs // 2 : -xs // 2 + 1 : xs
+            :, ys // 2 : rows - ys // 2 + 1 : ys, xs // 2 : cols - xs // 2 + 1 : xs
         ]
         mle_est *= np.abs(slcs_decimated)
 

@@ -87,15 +87,17 @@ def run_gpu(
     # Get the temporal coherence
     temp_coh = metrics.estimate_temp_coh(d_cpx_phase, d_C_arrays).get()
 
+    mle_est = d_cpx_phase.get()
     # # https://docs.cupy.dev/en/stable/user_guide/memory.html
     # may just be cached a lot of the huge memory available on aurora
     # But if we need to free GPU memory:
     # cp.get_default_memory_pool().free_all_blocks()
 
-    mle_est = d_cpx_phase.get()
     if use_slc_amp:
         # use the amplitude from the original SLCs, accounting for strides
         xs, ys = strides["x"], strides["y"]
-        slcs_decimated = slc_stack[:, ys // 2 :: ys, xs // 2 :: xs]
+        slcs_decimated = slc_stack[
+            :, ys // 2 : rows - ys // 2 + 1 : ys, xs // 2 : cols - xs // 2 + 1 : xs
+        ]
         mle_est *= np.abs(slcs_decimated)
     return mle_est, temp_coh
