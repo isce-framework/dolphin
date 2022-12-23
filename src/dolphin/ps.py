@@ -1,4 +1,5 @@
 """Find the persistent scatterers in a stack of SLCS."""
+import warnings
 from os import fspath
 from pathlib import Path
 
@@ -128,7 +129,10 @@ def calc_ps_block(stack_mag: np.ndarray, amp_dispersion_threshold: float = 0.42)
     std_dev = np.nanstd(stack_mag, axis=0)
 
     # Calculate the amplitude dispersion and replace nans with 0s
-    amp_disp = std_dev / mean
+    with warnings.catch_warnings():
+        # ignore the warning about nansum of empty slice
+        warnings.simplefilter("ignore", category=RuntimeWarning)
+        amp_disp = std_dev / mean
     amp_disp = np.nan_to_num(amp_disp, nan=0, posinf=0, neginf=0, copy=False)
 
     ps = amp_disp < amp_dispersion_threshold

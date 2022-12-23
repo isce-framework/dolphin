@@ -12,6 +12,10 @@ GPU_AVAILABLE = gpu_is_available()
 NUM_ACQ = 30
 simulate._seed(1234)
 
+import warnings
+
+from numba.core.errors import NumbaPerformanceWarning
+
 # Make sure the GPU versions are correct by making simpler versions:
 
 
@@ -100,6 +104,9 @@ def test_estimate_stack_covariance_gpu(slcs, expected_cov, looks=(5, 5)):
 
     half_rowcol = (looks[0] // 2, looks[1] // 2)
     strides_rowcol = (strides["y"], strides["x"])
+
+    # 'Grid size 49 will likely result in GPU under-utilization due to low occupancy.'
+    warnings.filterwarnings("ignore", category=NumbaPerformanceWarning)
     covariance.estimate_stack_covariance_gpu[blocks, threads_per_block](
         d_slcs, half_rowcol, strides_rowcol, d_C3
     )
