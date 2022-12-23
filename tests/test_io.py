@@ -160,7 +160,6 @@ def test_save_block_cpx(raster_100_by_200, cpx_arr, tmpdir):
 
 def test_setup_output_folder(tmpdir, tiled_file_list):
     vrt_stack = vrt.VRTStack(tiled_file_list, outfile=tmpdir / "stack.vrt")
-    vrt_stack.write()
     out_file_list = io.setup_output_folder(
         vrt_stack, driver="GTiff", dtype=np.complex64
     )
@@ -187,7 +186,6 @@ def test_setup_output_folder(tmpdir, tiled_file_list):
 
 def test_setup_output_folder_strided(tmpdir, tiled_file_list):
     vrt_stack = vrt.VRTStack(tiled_file_list, outfile=tmpdir / "stack.vrt")
-    vrt_stack.write()
 
     strides = {"x": 4, "y": 2}
     out_file_list = io.setup_output_folder(
@@ -217,7 +215,6 @@ def test_get_nodata_mask(tmpdir):
     file_list = [path1, path2]
 
     vrt_stack = vrt.VRTStack(file_list, outfile=tmpdir / "stack2.vrt")
-    vrt_stack.write()
 
     m = io.get_stack_nodata_mask(
         vrt_stack.outfile, output_file=tmpdir / "mask.tif", buffer_pixels=0

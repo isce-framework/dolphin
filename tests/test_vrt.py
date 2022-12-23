@@ -14,7 +14,6 @@ from dolphin.vrt import VRTStack
 def vrt_stack(tmp_path, slc_stack, slc_file_list):
     vrt_file = tmp_path / "test.vrt"
     s = VRTStack(slc_file_list, outfile=vrt_file)
-    s.write()
 
     assert s.shape == slc_stack.shape
     assert len(s) == len(slc_stack) == len(slc_file_list)
@@ -25,7 +24,6 @@ def vrt_stack(tmp_path, slc_stack, slc_file_list):
 def vrt_stack_nc(tmp_path, slc_stack, slc_file_list_nc):
     vrt_file = tmp_path / "test_nc.vrt"
     s = VRTStack(slc_file_list_nc, outfile=vrt_file)
-    s.write()
 
     assert s.shape == slc_stack.shape
     return s
@@ -36,7 +34,6 @@ def vrt_stack_nc_wgs84(tmp_path, slc_stack, slc_file_list_nc_wgs84):
     # Check an alternative projection system
     vrt_file = tmp_path / "test_nc_wgs84.vrt"
     s = VRTStack(slc_file_list_nc_wgs84, outfile=vrt_file)
-    s.write()
 
     assert s.shape == slc_stack.shape
     return s
@@ -54,6 +51,20 @@ def test_create(vrt_stack, vrt_stack_nc):
         ds = None
 
 
+def test_create_over_existing(tmp_path, slc_file_list):
+    vrt_file = tmp_path / "test.vrt"
+    VRTStack(slc_file_list, outfile=vrt_file)
+    with pytest.raises(FileExistsError):
+        VRTStack(slc_file_list, outfile=vrt_file)
+
+
+def test_from_vrt_file(tmp_path, slc_file_list):
+    vrt_file = tmp_path / "test.vrt"
+    s = VRTStack(slc_file_list, outfile=vrt_file)
+    s2 = VRTStack.from_vrt_file(vrt_file)
+    assert s == s2
+
+
 def test_read_stack(vrt_stack, slc_stack):
     ds = gdal.Open(str(vrt_stack.outfile))
     loaded = ds.ReadAsArray()
@@ -68,13 +79,15 @@ def test_read_stack_nc(vrt_stack_nc, slc_stack):
     npt.assert_array_almost_equal(vrt_stack_nc.read_stack(), slc_stack)
 
 
-def test_sort_order(slc_file_list):
+def test_sort_order(tmp_path, slc_file_list):
     random_order = [Path(f) for f in np.random.permutation(slc_file_list)]
     # Make sure the files are sorted by date
-    vrt_stack = VRTStack(random_order)
+    vrt_stack = VRTStack(random_order, outfile=tmp_path / "test.vrt")
     assert vrt_stack.file_list == [Path(f) for f in slc_file_list]
 
-    vrt_stack2 = VRTStack(random_order, sort_files=False)
+    vrt_stack2 = VRTStack(
+        random_order, sort_files=False, outfile=tmp_path / "test2.vrt"
+    )
     assert vrt_stack2.file_list == random_order
 
 
@@ -94,7 +107,7 @@ def test_bad_sizes(slc_file_list, raster_10_by_20):
     assert get_raster_xysize(slc_file_list[0]) == get_raster_xysize(slc_file_list[1])
     assert get_raster_xysize(slc_file_list[0]) != get_raster_xysize(raster_10_by_20)
     with pytest.raises(ValueError):
-        VRTStack(slc_file_list + [raster_10_by_20])
+        VRTStack(slc_file_list + [raster_10_by_20], outfile="other.vrt")
 
 
 # TODO: target extent
@@ -130,7 +143,6 @@ def test_add_file(vrt_stack, slc_stack):
     vrt_stack.add_file(new_path_future)
     assert len(vrt_stack.file_list) == slc_stack.shape[0] + 2
 
-    vrt_stack.write()
     ds = gdal.Open(str(vrt_stack.outfile))
     read_stack = ds.ReadAsArray()
     assert read_stack.shape[0] == slc_stack.shape[0] + 2
@@ -152,7 +164,6 @@ def test_iter_blocks(vrt_stack):
 def test_tiled_iter_blocks(tmp_path, tiled_file_list):
     outfile = tmp_path / "stack.vrt"
     vrt_stack = VRTStack(tiled_file_list, outfile=outfile)
-    vrt_stack.write()
     max_bytes = len(vrt_stack) * 32 * 32 * 8
     blocks = list(vrt_stack.iter_blocks(max_bytes=max_bytes))
     # (100, 200) total shape, breaks into 32x32 blocks

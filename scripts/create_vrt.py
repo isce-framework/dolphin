@@ -93,14 +93,13 @@ def main():
     out_dir.mkdir(parents=True, exist_ok=True)
 
     outfile = str(out_dir / args.out_vrt_name)
-    stack = VRTStack(
+    VRTStack(
         file_list,
         outfile=outfile,
         pixel_bbox=args.pixel_bbox,
         target_extent=args.target_extent,
         latlon_bbox=args.latlon_bbox,
     )
-    stack.write()
 
 
 if __name__ == "__main__":

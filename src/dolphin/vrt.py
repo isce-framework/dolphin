@@ -66,8 +66,16 @@ class VRTStack:
         sort_files: bool = True,
         nodata_value: Optional[float] = None,
         file_date_fmt: str = "%Y%m%d",
+        write_file: bool = True,
     ):
         """Initialize a VRTStack object for a list of files, optionally subsetting."""
+        if Path(outfile).exists() and write_file:
+            raise FileExistsError(
+                f"Output file {outfile} already exists. "
+                "Please delete or specify a different output file. "
+                "To create from an existing VRT, use the `from_vrt_file` method."
+            )
+
         files = [Path(f) for f in file_list]
         self._use_abs_path = use_abs_path
         if use_abs_path:
@@ -113,23 +121,17 @@ class VRTStack:
         ds = None
         # Save the subset info
 
-        self.set_subset(
+        self._set_subset(
             pixel_bbox=pixel_bbox,
             target_extent=target_extent,
             latlon_bbox=latlon_bbox,
             filename=self.file_list[0],
         )
+        if write_file:
+            self._write()
 
-    def write(self, outfile: Optional[Filename] = None):
-        """Write out the VRT file pointing to the stack of SLCs.
-
-        Uses the `outfile` passed to the constructor, unless `outfile` is provided.
-        """
-        if outfile is None:
-            outfile = self.outfile
-        if not outfile:
-            raise ValueError("No output file specified")
-
+    def _write(self):
+        """Write out the VRT file pointing to the stack of SLCs, erroring if exists."""
         with open(self.outfile, "w") as fid:
             fid.write(
                 f'<VRTDataset rasterXSize="{self.xsize_sub}"'
@@ -177,12 +179,6 @@ class VRTStack:
         file_list, dates = zip(*file_dates)
         return list(file_list), list(dates)
 
-    def _check_exists(self):
-        if not self.outfile:
-            raise ValueError("No output file specified")
-        if not self.outfile.exists():
-            self.write()
-
     def _assert_images_same_size(self):
         """Make sure all files in the stack are the same size."""
         from collections import defaultdict
@@ -197,7 +193,6 @@ class VRTStack:
 
     def read_stack(self, band: Optional[int] = None, subsample_factor: int = 1):
         """Read in the SLC stack."""
-        self._check_exists()
         return io.load_gdal(self.outfile, band=band, subsample_factor=subsample_factor)
 
     def __fspath__(self):
@@ -221,8 +216,9 @@ class VRTStack:
         self._gdal_file_strings = [
             io.format_nc_filename(f, self._subdataset) for f in self.file_list
         ]
+        self._write()
 
-    def set_subset(
+    def _set_subset(
         self, pixel_bbox=None, target_extent=None, latlon_bbox=None, filename=None
     ):
         """Save the subset bounding box for a given target extent.
@@ -274,7 +270,13 @@ class VRTStack:
             # Point to the same, if none provided
             new_outfile = vrt_file
 
-        return cls(file_list, outfile=new_outfile, subdataset=subdataset, **kwargs)
+        return cls(
+            file_list,
+            outfile=new_outfile,
+            subdataset=subdataset,
+            write_file=False,
+            **kwargs,
+        )
 
     @staticmethod
     def _parse_vrt_file(vrt_file):
@@ -397,7 +399,6 @@ class VRTStack:
         max_bytes: Optional[float] = DEFAULT_BLOCK_BYTES,
         return_slices: bool = False,
         skip_empty: bool = True,
-        nodata: float = nan,
         use_nodata_mask: bool = True,
     ):
         """Iterate over blocks of the stack.
@@ -423,9 +424,6 @@ class VRTStack:
             return (row_slice, col_slice) indicating the position of the current block.
         skip_empty : bool, optional (default True)
             Skip blocks that are entirely empty (all NaNs)
-        nodata : float, optional (default np.nan)
-            Value to use for nodata to determine if a block is empty.
-            Not used if `skip_empty` is False.
         use_nodata_mask : bool, optional (default True)
             Use the nodata mask to determine if a block is empty.
             Not used if `skip_empty` is False.
@@ -435,7 +433,6 @@ class VRTStack:
         Tuple[Tuple[int, int], Tuple[int, int]]
             Iterator of ((row_start, row_stop), (col_start, col_stop))
         """
-        self._check_exists()
         if block_shape is None:
             block_shape = self._get_block_shape(max_bytes=max_bytes)
         ndm = None
@@ -489,6 +486,8 @@ class VRTStack:
     def _get_nodata_mask(self, nodata=nan, buffer_pixels=100):
         if self.nodata_mask_file.exists():
             return io.load_gdal(self.nodata_mask_file).astype(bool)
+        # TODO: Write the code to grab the pre-computed polygon, rather
+        # than the loading data.
         else:
             return io.get_stack_nodata_mask(
                 self.outfile,
@@ -523,3 +522,11 @@ class VRTStack:
     def __repr__(self):
         outname = fspath(self.outfile) if self.outfile else "(not written)"
         return f"VRTStack({len(self.file_list)} bands, outfile={outname})"
+
+    def __eq__(self, other):
+        if not isinstance(other, VRTStack):
+            return False
+        return (
+            self._gdal_file_strings == other._gdal_file_strings
+            and self.outfile == other.outfile
+        )

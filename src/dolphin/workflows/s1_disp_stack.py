@@ -26,12 +26,10 @@ def run(cfg: Workflow, debug: bool = False):
     # #############################################
     # 0. Make a VRT pointing to the input SLC files
     # #############################################
-    slc_vrt_file = scratch_dir / "slc_stack.vrt"
     subdataset = cfg.inputs.subdataset
     vrt_stack = vrt.VRTStack(
-        input_file_list, subdataset=subdataset, outfile=slc_vrt_file
+        input_file_list, subdataset=subdataset, outfile=scratch_dir / "slc_stack.vrt"
     )
-    vrt_stack.write()
 
     # ###############
     # 1. PS selection
@@ -42,7 +40,7 @@ def run(cfg: Workflow, debug: bool = False):
     else:
         logger.info(f"Creating persistent scatterer file {ps_output}")
         ps.create_ps(
-            slc_vrt_file=slc_vrt_file,
+            slc_vrt_file=vrt_stack.outfile,
             output_file=cfg.ps_options.output_file,
             amp_mean_file=cfg.ps_options.amp_mean_file,
             amp_dispersion_file=cfg.ps_options.amp_dispersion_file,
@@ -61,7 +59,7 @@ def run(cfg: Workflow, debug: bool = False):
     else:
         logger.info(f"Running sequential EMI step in {pl_path}")
         pl_path = sequential.run_evd_sequential(
-            slc_vrt_file=slc_vrt_file,
+            slc_vrt_file=vrt_stack.outfile,
             output_folder=cfg.phase_linking.directory,
             half_window=cfg.phase_linking.half_window.dict(),
             strides=cfg.outputs.strides,

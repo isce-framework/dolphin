@@ -90,7 +90,6 @@ def run_evd_sequential(
         cur_vrt = VRTStack(
             cur_files, outfile=cur_output_folder / f"{start_end}.vrt", sort_files=False
         )
-        cur_vrt.write()
 
         # mini_idx is first non-compressed SLC
         logger.info(
@@ -146,7 +145,6 @@ def run_evd_sequential(
             return_slices=True,
             max_bytes=stack_max_bytes,
             skip_empty=True,
-            nodata=0,
             # TODO: get the nodata value from the vrt stack
             # this involves verifying that COMPASS correctly sets the nodata value
         )
@@ -229,9 +227,8 @@ def run_evd_sequential(
     adjustment_vrt_stack = VRTStack(
         comp_slc_files, outfile=comp_output_folder / "compressed_stack.vrt"
     )
-    adjustment_vrt_stack.write()
-    logger.info(f"Running EVD on compressed files: {adjustment_vrt_stack}")
 
+    logger.info(f"Running EVD on compressed files: {adjustment_vrt_stack}")
     adjusted_comp_slc_files = io.setup_output_folder(
         adjustment_vrt_stack, driver="GTiff", strides=strides
     )
