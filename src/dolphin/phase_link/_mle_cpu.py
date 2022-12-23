@@ -17,6 +17,7 @@ def run_cpu(
     strides: Dict[str, int] = {"x": 1, "y": 1},
     beta: float = 0.0,
     reference_idx: int = 0,
+    use_slc_amp: bool = True,
     output_cov_file: Optional[Filename] = None,
     n_workers: int = 1,
     **kwargs,
@@ -37,12 +38,14 @@ def run_cpu(
         The regularization parameter, by default 0.0.
     reference_idx : int, optional
         The index of the (non compressed) reference SLC, by default 0
+    use_slc_amp : bool, optional
+        Whether to use the SLC amplitude when outputting the MLE estimate,
+        or to set the SLC amplitude to 1.0. By default True.
     output_cov_file : str, optional
         HDF5 filename to save the estimated covariance at each pixel.
     n_workers : int, optional
         The number of workers to use for (CPU version) multiprocessing.
         If 1 (default), no multiprocessing is used.
-
 
     Returns
     -------
@@ -64,12 +67,14 @@ def run_cpu(
     cpx_phase = np.exp(1j * output_phase)
     # Get the temporal coherence
     temp_coh = metrics.estimate_temp_coh(cpx_phase, C_arrays)
-    # use the amplitude from the original SLCs
-    # account for the strides when grabbing original data
-    out_rows, out_cols = output_phase.shape[-2:]
-    xs, ys = strides["x"], strides["y"]
-    slcs_decimated = slc_stack[
-        :, ys // 2 : -ys // 2 + 1 : ys, xs // 2 : -xs // 2 + 1 : xs
-    ]
-    mle_est = np.abs(slcs_decimated) * np.exp(1j * output_phase)
+    mle_est = np.exp(1j * output_phase)
+    if use_slc_amp:
+        # use the amplitude from the original SLCs
+        # account for the strides when grabbing original data
+        xs, ys = strides["x"], strides["y"]
+        slcs_decimated = slc_stack[
+            :, ys // 2 : -ys // 2 + 1 : ys, xs // 2 : -xs // 2 + 1 : xs
+        ]
+        mle_est *= np.abs(slcs_decimated)
+
     return mle_est, temp_coh

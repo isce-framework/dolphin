@@ -29,6 +29,7 @@ def run_mle(
     mask: np.ndarray = None,
     ps_mask: Optional[np.ndarray] = None,
     avg_mag: Optional[np.ndarray] = None,
+    use_slc_amp: bool = True,
     output_cov_file: Optional[Filename] = None,
     n_workers: int = 1,
     gpu_enabled: bool = False,
@@ -65,6 +66,9 @@ def run_mle(
         PS pixels to fill within each look window.
         If None, the average magnitude is estimated from the SLC stack.
         By default None.
+    use_slc_amp : bool, optional
+        Whether to use the SLC amplitude when outputting the MLE estimate,
+        or to set the SLC amplitude to 1.0. By default True.
     output_cov_file : str, optional
         HDF5 filename to save the estimated covariance at each pixel.
     n_workers : int, optional
@@ -123,6 +127,7 @@ def run_mle(
             strides,
             beta,
             reference_idx,
+            use_slc_amp,
             output_cov_file,
             n_workers=n_workers,
         )
@@ -133,6 +138,7 @@ def run_mle(
             strides,
             beta,
             reference_idx,
+            use_slc_amp,
             output_cov_file,
             # is it worth passing the blocks-per-grid?
         )

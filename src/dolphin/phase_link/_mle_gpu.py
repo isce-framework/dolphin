@@ -17,6 +17,7 @@ def run_gpu(
     strides: Dict[str, int] = {"x": 1, "y": 1},
     beta: float = 0.0,
     reference_idx: int = 0,
+    use_slc_amp: bool = True,
     output_cov_file: Optional[Filename] = None,
     threads_per_block: Tuple[int, int] = (16, 16),
     **kwargs,
@@ -37,6 +38,9 @@ def run_gpu(
         The regularization parameter, by default 0.0.
     reference_idx : int, optional
         The index of the (non compressed) reference SLC, by default 0
+    use_slc_amp : bool, optional
+        Whether to use the SLC amplitude when outputting the MLE estimate,
+        or to set the SLC amplitude to 1.0. By default True.
     output_cov_file : str, optional
         HDF5 filename to save the estimated covariance at each pixel.
     threads_per_block : Tuple[int, int], optional
@@ -88,8 +92,10 @@ def run_gpu(
     # But if we need to free GPU memory:
     # cp.get_default_memory_pool().free_all_blocks()
 
-    # use the amplitude from the original SLCs, accounting for strides
-    xs, ys = strides["x"], strides["y"]
-    slcs_decimated = slc_stack[:, ys // 2 :: ys, xs // 2 :: xs]
-    mle_est = np.abs(slcs_decimated) * d_cpx_phase.get()
+    mle_est = d_cpx_phase.get()
+    if use_slc_amp:
+        # use the amplitude from the original SLCs, accounting for strides
+        xs, ys = strides["x"], strides["y"]
+        slcs_decimated = slc_stack[:, ys // 2 :: ys, xs // 2 :: xs]
+        mle_est *= np.abs(slcs_decimated)
     return mle_est, temp_coh

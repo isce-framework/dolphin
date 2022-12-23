@@ -258,6 +258,7 @@ def run_evd_sequential(
             reference_idx=0,
             mask=mask[rows, cols],
             ps_mask=None,  # PS mask doesn't matter for the adjustments
+            use_slc_amp=False,  # Make adjustments unit-amplitude
             n_workers=n_workers,
             gpu_enabled=gpu_enabled,
         )
