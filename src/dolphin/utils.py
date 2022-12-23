@@ -96,26 +96,50 @@ def parse_slc_strings(slc_str: Union[Filename, Sequence[Filename]], fmt=None):
         fmt = [fmt]
 
     if isinstance(slc_str, str) or hasattr(slc_str, "__fspath__"):
+        path = _get_path_from_gdal_str(slc_str)
         # Unpack all returned dates from each format
         d_list = []
         fmt_found = None
         for f in fmt:
-            d_list.extend(get_dates(slc_str, fmt=f))
+            d_list.extend(get_dates(path, fmt=f))
             if len(d_list) > 0:
                 fmt_found = f
                 break
         else:  # if we iterate through all formats and don't find any dates
             raise ValueError(f"Could not find date of format {fmt} in {slc_str}")
 
-        # if len(unique_dates) > 1:
-        #     raise ValueError(
-        #         f"Found multiple dates in {slc_str}: {unique_dates}. "
-        #         "Please specify a date format."
-        #     )
+        # Take the first date found
         return _parse(d_list[0], fmt=fmt_found)
     else:
         # If it's an iterable of strings, run on each one
         return [parse_slc_strings(s, fmt=fmt) for s in slc_str if s]
+
+
+def _get_path_from_gdal_str(name: Filename) -> Path:
+    s = str(name)
+    if s.startswith("DERIVED_SUBDATASET"):
+        p = s.split(":")[-1].strip('"').strip("'")
+    elif ":" in s and (s.startswith("NETCDF") or s.startswith("HDF")):
+        p = s.split(":")[1].strip('"').strip("'")
+    else:
+        return Path(name)
+    return Path(p)
+
+
+def _resolve_gdal_path(gdal_str):
+    """Resolve the file portion of a gdal-openable string to an absolute path."""
+    s = str(gdal_str)
+    if s.startswith("DERIVED_SUBDATASET"):
+        # like DERIVED_SUBDATASET:AMPLITUDE:slc_filepath.tif
+        file_part = s.split(":")[-1]
+    elif ":" in s and (s.startswith("NETCDF") or s.startswith("HDF")):
+        # like NETCDF:"slc_filepath.nc":slc_var
+        file_part = s.split(":")[1]
+
+    # strip quotes to add back in after
+    file_part = file_part.strip('"').strip("'")
+    file_part_resolved = Path(file_part).resolve()
+    return gdal_str.replace(file_part, str(file_part_resolved))
 
 
 def _date_format_to_regex(date_format):

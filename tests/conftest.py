@@ -78,6 +78,25 @@ def slc_file_list_nc_wgs84(tmp_path, slc_stack):
     return file_list
 
 
+@pytest.fixture()
+def slc_file_list_nc_with_sds(tmp_path, slc_stack):
+    """Save NetCDF files with multiple valid datsets."""
+    start_date = 20220101
+    name_template = tmp_path / "{date}.nc"
+    file_list = []
+    subdirs = ["/slc", "/slc2"]
+    for i in range(len(slc_stack)):
+        fname = str(name_template).format(date=str(start_date + i))
+        create_test_nc(fname, epsg=32615, subdir=subdirs, data=slc_stack[i])
+        # just point to one of them
+        file_list.append(f"NETCDF:{fname}:/slc/data")
+
+    # Write the list of SLC files to a text file
+    with open(tmp_path / "slclist.txt", "w") as f:
+        f.write("\n".join([str(f) for f in file_list]))
+    return file_list
+
+
 # Phase linking fixtures for one neighborhood tests
 
 

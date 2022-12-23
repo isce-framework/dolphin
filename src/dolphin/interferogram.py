@@ -1,154 +1,131 @@
 """Combine estimated DS phases with PS phases to form interferograms."""
 from os import fspath
 from pathlib import Path
+from typing import Optional, Union
 
-import numpy as np
 from osgeo import gdal
-from osgeo_utils import gdal_calc
+from pydantic import BaseModel, Field, root_validator, validator
 
-from dolphin import io, network
-from dolphin._types import Filename
+from dolphin import io
 from dolphin.log import get_log
-from dolphin.utils import get_dates
+from dolphin.utils import _get_path_from_gdal_str, _resolve_gdal_path, parse_slc_strings
 
 gdal.UseExceptions()
 
 logger = get_log()
 
 
-def form_ifgs(
-    *,
-    slc_vrt_file: Filename,
-    pl_directory: Filename,
-    output_folder: Filename,
-    ifg_network_options: dict,
-    driver: str = "GTiff",
-):
-    """Run workflow step to combine PS and DS phases."""
-    # Create the interferogram list
-    pl_slc_files = Path(pl_directory).glob("*.slc.tif")
-    pl_date_dict = {get_dates(p)[0]: p for p in pl_slc_files}
+class DerivedVRTInterferogram(BaseModel):
+    """Form an interferogram using VRT Pixel Functions."""
 
-    ds_orig_stack = gdal.Open(fspath(slc_vrt_file))
-    assert len(pl_date_dict) == ds_orig_stack.RasterCount
+    ref_slc: Union[str, Path] = Field(..., description="Path to reference SLC file")
+    sec_slc: Union[str, Path] = Field(..., description="Path to secondary SLC file")
+    outfile: Optional[Path] = Field(
+        None,
+        description=(
+            "Path to output interferogram. Defaults to '<date1>_<date2>.vrt', where the"
+            " dates are parsed from the input files, placed in the same directory as"
+            " `ref_slc`."
+        ),
+    )
+    pixel_func: str = "mul"
 
-    date_list = [k for k in pl_date_dict.keys() if k]
-    date12_list = network.make_ifg_list(date_list, **ifg_network_options)
+    date_format: str = "%Y%m%d"
+    _template = """\
+<VRTDataset rasterXSize="{xsize}" rasterYSize="{ysize}">
+    <VRTRasterBand dataType="CFloat32" band="1" subClass="VRTDerivedRasterBand">
+        <PixelFunctionType>{pixel_func}</PixelFunctionType>
+        <SimpleSource>
+            <SourceFilename relativeToVRT="0">{ref_slc}</SourceFilename>
+        </SimpleSource>
+        <SimpleSource>
+            <SourceFilename relativeToVRT="0">{sec_slc}</SourceFilename>
+        </SimpleSource>
+    </VRTRasterBand>
+</VRTDataset>
+    """
 
-    for date_1, date_2 in date12_list:
-        # output file with both PS and DS pixels
-        output_file = Path(output_folder) / f"{date_1}_{date_2}.int"
-        slc1_path = pl_date_dict[date_1]
-        slc2_path = pl_date_dict[date_2]
-        logger.info(
-            f"Forming interferogram {output_file.stem} in {output_folder} between"
-            f" {slc1_path} and {slc2_path}"
-        )
+    @validator("ref_slc", "sec_slc")
+    def _check_gdal_string(cls, v):
+        # First make sure it's openable
+        try:
+            gdal.Info(fspath(v))
+        except RuntimeError:
+            raise ValueError(f"File {v} is not a valid GDAL dataset")
+        # Then, if we passed a string like 'NETCDF:"file.nc":band', make sure
+        # the file is absolute
+        if ":" in str(v):
+            try:
+                v = _resolve_gdal_path(v)
+            except Exception:
+                # if the file had colons for some reason but
+                # it didn't match, just ignore
+                pass
+        return v
 
-        gdal_calc.Calc(
-            NoDataValue=np.nan,
-            hideNoData=True,  # ?? i don't quite get this option
-            format=driver,
-            outfile=output_file,
-            A=fspath(slc1_path),
-            B=fspath(slc2_path),
-            calc="A * numpy.conjugate(B)",
-            quiet=True,
-            overwrite=True,
-            creation_options=io.DEFAULT_TIFF_OPTIONS,
-        )
+    @validator("pixel_func")
+    def _validate_pixel_func(cls, v):
+        if v not in ["mul", "cmul"]:
+            raise ValueError("pixel function must be 'mul' or 'cmul'")
+        return v.lower()
 
+    @validator("outfile", always=True)
+    def _output_cant_exist(cls, v, values):
+        if not v:
+            # from the output file name from the dates within input files
+            ref_slc, sec_slc = values.get("ref_slc"), values.get("sec_slc")
+            fmt = values.get("date_format", "%Y%m%d")
+            date1 = parse_slc_strings(ref_slc, fmt=fmt)
+            date2 = parse_slc_strings(sec_slc, fmt=fmt)
+            path = _get_path_from_gdal_str(ref_slc).parent
+            v = path / f"{date1.strftime(fmt)}_{date2.strftime(fmt)}.vrt"
+        elif Path(v).exists():
+            raise ValueError(f"Output file {v} already exists")
+        return v
 
-def run_combine(
-    *,
-    slc_vrt_file: Filename,
-    ps_file: Filename,
-    pl_directory: Filename,
-    output_folder: Filename,
-    ifg_network_options: dict,
-):
-    """Run workflow step to combine PS and DS phases."""
-    # Create the interferogram list
-    pl_slc_files = Path(pl_directory).glob("*.slc.tif")
-    pl_date_dict = {get_dates(p)[0]: p for p in pl_slc_files}
+    @root_validator
+    def _validate_files(cls, values):
+        """Check that the inputs are the same size and geotransform."""
+        ref_slc = values.get("ref_slc")
+        sec_slc = values.get("sec_slc")
+        if not ref_slc or not sec_slc:
+            # Skip validation if files are not set
+            return values
+        ds1 = gdal.Open(fspath(ref_slc))
+        ds2 = gdal.Open(fspath(sec_slc))
+        xsize, ysize = ds1.RasterXSize, ds1.RasterYSize
+        xsize2, ysize2 = ds2.RasterXSize, ds2.RasterYSize
+        if xsize != xsize2 or ysize != ysize2:
+            raise ValueError(
+                f"Input files {ref_slc} and {sec_slc} are not the same size"
+            )
+        gt1 = ds1.GetGeoTransform()
+        gt2 = ds2.GetGeoTransform()
+        if gt1 != gt2:
+            raise ValueError(
+                f"Input files {ref_slc} and {sec_slc} have different GeoTransforms"
+            )
 
-    ds_orig_stack = gdal.Open(fspath(slc_vrt_file))
-    assert len(pl_date_dict) == ds_orig_stack.RasterCount
+        return values
 
-    date_list = [k for k in pl_date_dict.keys() if k]
-    date12_list = network.make_ifg_list(date_list, **ifg_network_options)
+    # def __init__(self, **data):
+    #     super().__init__(**data)
+    def write(self):
+        xsize, ysize = io.get_raster_xysize(self.ref_slc)
+        with open(self.outfile, "w") as f:
+            f.write(
+                self._template.format(
+                    xsize=xsize,
+                    ysize=ysize,
+                    ref_slc=self.ref_slc,
+                    sec_slc=self.sec_slc,
+                    pixel_func=self.pixel_func,
+                )
+            )
+        io.copy_projection(self.ref_slc, self.outfile)
 
-    ds_psfile = gdal.Open(fspath(ps_file))
-    bnd_ps = ds_psfile.GetRasterBand(1)
-
-    xsize, ysize = ds_orig_stack.RasterXSize, ds_orig_stack.RasterYSize
-    driver = gdal.GetDriverByName("ENVI")
-    for date_1, date_2 in date12_list:
-        # output file with both PS and DS pixels
-        output_file = Path(output_folder) / f"{date_1}_{date_2}.int"
-        # dataset for the output PS-DS integrated wrapped phase
-        ds_out = driver.Create(fspath(output_file), xsize, ysize, 1, gdal.GDT_CFloat32)
-        bnd_out = ds_out.GetRasterBand(1)
-
-        logger.info(f"Forming interferogram {output_file.stem} in {output_folder}")
-        # get the current two SLCs, both original and phase-linked
-        pl_file_1 = pl_date_dict[date_1]
-        pl_file_2 = pl_date_dict[date_2]
-        ds_pl_1 = gdal.Open(fspath(pl_file_1))
-        ds_pl_2 = gdal.Open(fspath(pl_file_2))
-        bnd_pl_1 = ds_pl_1.GetRasterBand(1)
-        bnd_pl_2 = ds_pl_2.GetRasterBand(1)
-
-        idx1 = date_list.index(date_1)
-        idx2 = date_list.index(date_2)
-        bnd_orig_1 = ds_orig_stack.GetRasterBand(idx1 + 1)
-        bnd_orig_2 = ds_orig_stack.GetRasterBand(idx2 + 1)
-
-        # integrate PS to DS for this pair and write to file block by block
-        xsize, ysize = ds_out.RasterXSize, ds_out.RasterYSize
-        x0, y0, xwindow, ywindow = _get_block_window(xsize, ysize, max_lines=1000)
-        while y0 < ysize:
-            # Limit the y window to remaining lines
-            cur_ywin = ywindow if (y0 + ywindow) < ysize else ysize - y0
-            ps_arr = bnd_ps.ReadAsArray(x0, y0, xwindow, cur_ywin)
-
-            # Form the original full-res ifg
-            ifg_orig = _form_ifg(bnd_orig_1, bnd_orig_2, x0, y0, xwindow, cur_ywin)
-            # TODO do I want to keep the amplitude=1 ?
-            ifg_out = _form_ifg(bnd_pl_1, bnd_pl_2, x0, y0, xwindow, cur_ywin)
-            # Use the original ifg's amplitude values:
-            ifg_out = np.abs(ifg_orig) * np.exp(1j * np.angle(ifg_out))
-
-            # breakpoint()
-            # But only take the values at the PS pixels
-            ps_mask = ps_arr == 1
-            # ps_mask = np.zeros_like(ifg_orig, dtype=bool)
-            ifg_out[ps_mask] = ifg_orig[ps_mask]
-            bnd_out.WriteArray(ifg_out, x0, y0)
-            bnd_out.FlushCache()
-
-            y0 += ywindow
-
-        # close the datasets
-        ds_out = bnd_out = None
-        ds_pl_1 = ds_pl_2 = bnd_pl_1 = bnd_pl_2 = None
-        # ds_orig_1 = ds_orig_2 = bnd_orig_1 = bnd_orig_2 = None
-        bnd_orig_1 = bnd_orig_2 = None
-    ds_orig_stack = None
-
-    return
-
-
-def _form_ifg(bnd_1, bnd_2, x0, y0, xwindow, ywindow):
-    # cross multiply two SLCs
-    # TODO: need to use actual crossmul module to avoid aliasing
-    slc_1 = bnd_1.ReadAsArray(x0, y0, xwindow, ywindow)
-    slc_2 = bnd_2.ReadAsArray(x0, y0, xwindow, ywindow)
-    return slc_1 * slc_2.conj()
-
-
-def _get_block_window(xsize, ysize, max_lines=1000):
-    x0, y0 = 0, 0
-    xwindow = xsize
-    ywindow = min(max_lines, ysize)
-    return x0, y0, xwindow, ywindow
+    def load(self):
+        """Load the interferogram as a numpy array."""
+        if not self.outfile.exists():
+            self.write()
+        return io.load_gdal(self.outfile)
