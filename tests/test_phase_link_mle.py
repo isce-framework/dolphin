@@ -61,7 +61,7 @@ def test_estimation_gpu(slc_samples, est_mle_cpu):
     npt.assert_array_almost_equal(est_mle_cpu, est_phase_gpu2, decimal=3)
 
 
-def test_masked(slc_samples, C_truth, C_hat):
+def test_masked(slc_samples, C_truth):
     slc_stack = slc_samples.reshape(NUM_ACQ, 11, 11)
     mask = np.zeros((11, 11), dtype=bool)
     # Mask the top row

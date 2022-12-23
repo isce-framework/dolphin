@@ -15,11 +15,20 @@ gdal.UseExceptions()
 logger = get_log()
 
 
-class DerivedVRTInterferogram(BaseModel):
-    """Form an interferogram using VRT Pixel Functions."""
+class VRTInterferogram(BaseModel):
+    """Create an interferogram using a VRTDerivedRasterBand."""
 
     ref_slc: Union[str, Path] = Field(..., description="Path to reference SLC file")
     sec_slc: Union[str, Path] = Field(..., description="Path to secondary SLC file")
+    outdir: Optional[Path] = Field(
+        None,
+        description=(
+            "Directory to place output interferogram. Defaults to the same directory as"
+            " `ref_slc`. If only `outdir` is specified, the output interferogram will"
+            " be named '<date1>_<date2>.vrt', where the dates are parsed from the"
+            " inputs. If `outfile` is specified, this is ignored."
+        ),
+    )
     outfile: Optional[Path] = Field(
         None,
         description=(
@@ -28,13 +37,13 @@ class DerivedVRTInterferogram(BaseModel):
             " `ref_slc`."
         ),
     )
-    pixel_func: str = "mul"
-
     date_format: str = "%Y%m%d"
+
+    pixel_function: str = "cmul"
     _template = """\
 <VRTDataset rasterXSize="{xsize}" rasterYSize="{ysize}">
     <VRTRasterBand dataType="CFloat32" band="1" subClass="VRTDerivedRasterBand">
-        <PixelFunctionType>{pixel_func}</PixelFunctionType>
+        <PixelFunctionType>{pixel_function}</PixelFunctionType>
         <SimpleSource>
             <SourceFilename relativeToVRT="0">{ref_slc}</SourceFilename>
         </SimpleSource>
@@ -63,11 +72,19 @@ class DerivedVRTInterferogram(BaseModel):
                 pass
         return v
 
-    @validator("pixel_func")
+    @validator("pixel_function")
     def _validate_pixel_func(cls, v):
         if v not in ["mul", "cmul"]:
             raise ValueError("pixel function must be 'mul' or 'cmul'")
         return v.lower()
+
+    @validator("outdir", always=True)
+    def _check_output_dir(cls, v, values):
+        if v is not None:
+            return Path(v)
+        # If outdir is not set, use the directory of the reference SLC
+        ref_slc = values.get("ref_slc")
+        return _get_path_from_gdal_str(ref_slc).parent
 
     @validator("outfile", always=True)
     def _output_cant_exist(cls, v, values):
@@ -77,8 +94,9 @@ class DerivedVRTInterferogram(BaseModel):
             fmt = values.get("date_format", "%Y%m%d")
             date1 = parse_slc_strings(ref_slc, fmt=fmt)
             date2 = parse_slc_strings(sec_slc, fmt=fmt)
-            path = _get_path_from_gdal_str(ref_slc).parent
-            v = path / f"{date1.strftime(fmt)}_{date2.strftime(fmt)}.vrt"
+
+            outdir = values.get("outdir")
+            v = outdir / f"{date1.strftime(fmt)}_{date2.strftime(fmt)}.vrt"
         elif Path(v).exists():
             raise ValueError(f"Output file {v} already exists")
         return v
@@ -108,9 +126,12 @@ class DerivedVRTInterferogram(BaseModel):
 
         return values
 
-    # def __init__(self, **data):
-    #     super().__init__(**data)
-    def write(self):
+    def __init__(self, **data):
+        """Create a VRTInterferogram object and write the VRT file."""
+        super().__init__(**data)
+        self._write()
+
+    def _write(self):
         xsize, ysize = io.get_raster_xysize(self.ref_slc)
         with open(self.outfile, "w") as f:
             f.write(
@@ -119,13 +140,16 @@ class DerivedVRTInterferogram(BaseModel):
                     ysize=ysize,
                     ref_slc=self.ref_slc,
                     sec_slc=self.sec_slc,
-                    pixel_func=self.pixel_func,
+                    pixel_function=self.pixel_function,
                 )
             )
         io.copy_projection(self.ref_slc, self.outfile)
 
     def load(self):
         """Load the interferogram as a numpy array."""
-        if not self.outfile.exists():
-            self.write()
         return io.load_gdal(self.outfile)
+
+    @property
+    def shape(self):
+        xsize, ysize = io.get_raster_xysize(self.outfile)
+        return (ysize, xsize)
