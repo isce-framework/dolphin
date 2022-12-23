@@ -1,8 +1,10 @@
+import warnings
 from math import ceil, floor
 
 import numpy as np
 import numpy.testing as npt
 import pytest
+from numba.core.errors import NumbaPerformanceWarning
 
 from dolphin.io import compute_out_shape
 from dolphin.phase_link import covariance, simulate
@@ -12,9 +14,6 @@ GPU_AVAILABLE = gpu_is_available()
 NUM_ACQ = 30
 simulate._seed(1234)
 
-import warnings
-
-from numba.core.errors import NumbaPerformanceWarning
 
 # Make sure the GPU versions are correct by making simpler versions:
 

@@ -1,6 +1,9 @@
+import warnings
+
 import numpy as np
 import numpy.testing as npt
 import pytest
+from numba.core.errors import NumbaPerformanceWarning
 
 from dolphin.phase_link import covariance, mle, simulate
 from dolphin.phase_link._mle_gpu import run_gpu
@@ -49,6 +52,7 @@ def test_estimation_gpu(slc_samples, est_mle_cpu):
     # Get the GPU version
     slc_stack = slc_samples.reshape(NUM_ACQ, 11, 11)
 
+    warnings.filterwarnings("ignore", category=NumbaPerformanceWarning)
     est_mle_gpu_fullres, temp_coh = run_gpu(slc_stack, half_window={"x": 5, "y": 5})
     assert est_mle_gpu_fullres.shape == (len(est_mle_cpu), 11, 11)
     assert temp_coh.shape == (11, 11)
