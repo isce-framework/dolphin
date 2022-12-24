@@ -16,7 +16,31 @@ logger = get_log()
 
 
 class VRTInterferogram(BaseModel):
-    """Create an interferogram using a VRTDerivedRasterBand."""
+    """Create an interferogram using a VRTDerivedRasterBand.
+
+    Attributes
+    ----------
+    ref_slc : Union[str, Path]
+        Path to reference SLC file
+    sec_slc : Union[str, Path]
+        Path to secondary SLC file
+    outdir : Optional[Path], optional
+        Directory to place output interferogram. Defaults to the same directory as
+        `ref_slc`. If only `outdir` is specified, the output interferogram will
+        be named '<date1>_<date2>.vrt', where the dates are parsed from the
+        inputs. If `outfile` is specified, this is ignored.
+    outfile : Optional[Path], optional
+        Path to output interferogram. Defaults to '<date1>_<date2>.vrt',
+        placed in the same directory as `ref_slc`.
+    date_format : str, optional
+        Date format to use when parsing dates from the input files.
+        Defaults to '%Y%m%d'.
+    pixel_function : str, optional
+        GDAL Pixel function to use, choices={'cmul', 'mul'}.
+        Defaults to 'cmul', which performs `ref_slc * sec_slc.conj()`.
+        See https://gdal.org/drivers/raster/vrt.html#default-pixel-functions
+
+    """
 
     ref_slc: Union[str, Path] = Field(..., description="Path to reference SLC file")
     sec_slc: Union[str, Path] = Field(..., description="Path to secondary SLC file")

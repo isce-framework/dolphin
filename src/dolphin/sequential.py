@@ -18,8 +18,7 @@ from tqdm.contrib.logging import logging_redirect_tqdm
 
 from dolphin import io
 from dolphin._types import Filename
-
-# from dolphin.interferogram import VRTInterferogram
+from dolphin.interferogram import VRTInterferogram
 from dolphin.log import get_log
 from dolphin.phase_link import PhaseLinkRuntimeError, run_mle
 from dolphin.utils import upsample_nearest
@@ -275,36 +274,22 @@ def run_evd_sequential(
     # Compensate for the offsets between ministacks (aka "datum adjustments")
     for mini_idx, slc_files in output_slc_files.items():
         adjustment_fname = adjusted_comp_slc_files[mini_idx]
-        # driver = "ENVI"
-        driver = "GTiff"
-        for slc_fname in tqdm(slc_files):
-            with logging_redirect_tqdm():
-                logger.info(f"Compensating {slc_fname} with {adjustment_fname}")
+
+        for slc_fname in slc_files:
+            logger.info(f"Compensating {slc_fname} with {adjustment_fname}")
             outfile = final_output_folder / f"{slc_fname.name}"
 
-            # TODO: Use a derived VRT band like fringe
-            # gdal.SetConfigOption("GDAL_VRT_ENABLE_PYTHON", "YES")
-            # make sure that the abs value is the same to just to phase
-            gdal_calc.Calc(
-                NoDataValue=nan,
-                format=driver,
+            VRTInterferogram(
+                ref_slc=slc_fname,
+                sec_slc=adjustment_fname,
                 outfile=outfile,
-                A=slc_fname,
-                B=adjustment_fname,
-                # TODO: does B have unit norm?
-                calc="abs(A) * exp(1j * (angle(A) + angle(B)))",
-                quiet=True,
-                overwrite=True,
-                creation_options=io.DEFAULT_TIFF_OPTIONS,
+                pixel_func="mul",
             )
-            # TODO: need to copy projection?
-            # TODO: delete old?
 
     # Average the temporal coherence files in each ministack
+    output_tcorr_file = final_output_folder / "tcorr_average.tif"
     # Can pass the list of files to gdal_calc, which interprets it
     # as a multi-band file
-
-    output_tcorr_file = final_output_folder / "tcorr_average.tif"
     logger.info(f"Averaging temporal coherence files into: {output_tcorr_file}")
     gdal_calc.Calc(
         NoDataValue=nan,
