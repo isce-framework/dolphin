@@ -74,7 +74,7 @@ def run_cpu(
         xs, ys = strides["x"], strides["y"]
         _, rows, cols = slc_stack.shape
         slcs_decimated = slc_stack[
-            :, ys // 2 : rows - ys // 2 + 1 : ys, xs // 2 : cols - xs // 2 + 1 : xs
+            :, ys // 2 : rows - ys // 2 : ys, xs // 2 : cols - xs // 2 : xs
         ]
         mle_est *= np.abs(slcs_decimated)
 
