@@ -138,7 +138,8 @@ def _sim_signal(
         truth += seasonal
 
     # adding random temporal signal (which simulates atmosphere + DEM error + ...)
-    signal_phase = truth + std_random * np.random.randn(len(t))
+    signal_phase = truth + std_random / 2 * np.random.randn(len(t))
+    # we divided std by 2 since we're subtracting the first value
     signal_phase = signal_phase - signal_phase[0]
 
     # wrap the phase to -pi to p
