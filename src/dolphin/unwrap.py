@@ -34,10 +34,11 @@ def unwrap(
         raise ValueError(f"Invalid init_method {init_method}")
     conncomp_file = Path(out_file).with_suffix(".unw.conncomp")
     alt_line_data = True
-    tmp_intfile = _nan_to_zero(ifg_file)
+    tmp_ifg_file = _nan_to_zero(ifg_file, ext=".int")
+    tmp_cor_file = _nan_to_zero(cor_file, ext=".cor")
     cmd = _snaphu_cmd(
-        fspath(tmp_intfile),
-        cor_file,
+        fspath(tmp_ifg_file),
+        fspath(tmp_cor_file),
         Path(out_file),
         conncomp_file,
         mask_file,
@@ -49,35 +50,30 @@ def unwrap(
     logger.info(cmd)
     subprocess.check_call(cmd, shell=True)
     _save_with_metadata(
-        tmp_intfile, out_file, alt_line_data=alt_line_data, dtype="float32"
+        tmp_ifg_file, out_file, alt_line_data=alt_line_data, dtype="float32"
     )
-    _save_with_metadata(tmp_intfile, conncomp_file, alt_line_data=False, dtype="byte")
-    _set_unw_zeros(out_file, tmp_intfile)
-    os.remove(tmp_intfile)
+    _save_with_metadata(tmp_ifg_file, conncomp_file, alt_line_data=False, dtype="byte")
+    _set_unw_zeros(out_file, tmp_ifg_file)
+    os.remove(tmp_ifg_file)
 
 
-def _nan_to_zero(infile):
+def _nan_to_zero(infile, ext):
     """Make a copy of infile and replace NaNs with 0."""
     in_p = Path(infile)
-    tmp_file = (in_p.parent) / (in_p.stem + "_tmp" + in_p.suffix)
+    tmp_file = (in_p.parent) / (in_p.stem + "_tmp" + ext)
 
     ds_in = gdal.Open(fspath(infile))
-    drv = ds_in.GetDriver()
+    drv = gdal.GetDriverByName("ENVI")
     ds_out = drv.CreateCopy(fspath(tmp_file), ds_in, options=["SUFFIX=ADD"])
 
-    bnd = ds_in.GetRasterBand(1)
+    bnd = ds_in.GetRasterBand(1)  # this assumes there's just one band (for cor)
     nodata = bnd.GetNoDataValue()
     arr = bnd.ReadAsArray()
     mask = np.logical_or(np.isnan(arr), arr == nodata)
     arr[mask] = 0
     ds_out.GetRasterBand(1).WriteArray(arr)
     ds_out = None
-    # cmd = (
-    #     f"gdal_calc.py -A {infile} --out_file={tmp_file} --overwrite "
-    #     "--NoDataValue 0 --format ROI_PAC --calc='np.isnan(A)*0 + (~np.isnan(A))*A' "
-    # )
-    # logger.info(cmd)
-    # subprocess.check_call(cmd, shell=True)
+
     return tmp_file
 
 

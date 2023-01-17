@@ -278,7 +278,6 @@ def run_evd_sequential(
         for slc_fname in slc_files:
             logger.info(f"Compensating {slc_fname} with {adjustment_fname}")
             outfile = final_output_folder / f"{slc_fname.name}"
-
             VRTInterferogram(
                 ref_slc=slc_fname,
                 sec_slc=adjustment_fname,
