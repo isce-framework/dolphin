@@ -122,12 +122,14 @@ def calc_ps_block(stack_mag: np.ndarray, amp_dispersion_threshold: float = 0.42)
         The persistent scatterers for the block.
         dtype: bool
     """
+    if np.iscomplexobj(stack_mag):
+        raise ValueError("The input `stack_mag` must be real-valued.")
     # Make the nans into 0s to ignore them
-    np.nan_to_num(np.abs(stack_mag), copy=False)
+    np.nan_to_num(stack_mag, copy=False)
 
     # TODO: is it worth creating each ndarray in advance and use `out=`?
-    mean = np.nanmean(np.abs(stack_mag), axis=0)
-    std_dev = np.nanstd(np.abs(stack_mag), axis=0)
+    mean = np.nanmean(stack_mag, axis=0)
+    std_dev = np.nanstd(stack_mag, axis=0)
 
     # Calculate the amplitude dispersion and replace nans with 0s
     with warnings.catch_warnings():

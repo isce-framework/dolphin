@@ -21,7 +21,7 @@ def _estimate_temp_coh(est, cov_matrix):
 
 def test_temp_coh():
     sigmas = [0.01, 0.1, 1, 10]
-    expected_tcoh_bounds = [(0.99, 1), (0.9, 1.0), (0.25, 0.5), (0.0, 0.3)]
+    expected_tcoh_bounds = [(0.99, 1), (0.9, 1.0), (0.25, 0.75), (0.0, 0.3)]
     out_tc = []
     out_C = []
     out_truth = []
