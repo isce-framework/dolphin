@@ -6,11 +6,14 @@ from cmath import isnan
 from cmath import sqrt as csqrt
 from typing import Dict, Tuple
 
+import numba
 import numpy as np
 import pymp
 from numba import cuda, njit
 
 from dolphin.io import compute_out_shape
+
+from ._utils import _get_slices_cpu, _get_slices_gpu
 
 # CPU version of the covariance matrix computation
 
@@ -113,7 +116,12 @@ def coh_mat_single(neighbor_stack, cov_mat=None):
 # GPU version of the covariance matrix computation
 @cuda.jit
 def estimate_stack_covariance_gpu(
-    slc_stack, half_rowcol: Tuple[int, int], strides_rowcol: Tuple[int, int], C_out
+    slc_stack,
+    half_rowcol: Tuple[int, int],
+    strides_rowcol: Tuple[int, int],
+    neighbor_arrays,
+    C_out,
+    do_shp,  # =True,
 ):
     """Estimate the linked phase at all pixels of `slc_stack` on the GPU."""
     # Get the global position within the 2D GPU grid
@@ -137,14 +145,18 @@ def estimate_stack_covariance_gpu(
         half_row, half_col, in_r, in_c, rows, cols
     )
     samples_stack = slc_stack[:, r_start:r_end, c_start:c_end]
+    if do_shp:
+        neighbors_stack = neighbor_arrays[in_r, in_c, :, :]
+    else:
+        neighbors_stack = cuda.local.array((2, 2), dtype=numba.bool_)
 
     # estimate the coherence matrix, store in current pixel's buffer
     C = C_out[out_y, out_x, :, :]
-    _coh_mat_gpu(samples_stack, C)
+    _coh_mat_gpu(samples_stack, neighbors_stack, do_shp, C)
 
 
 @cuda.jit(device=True)
-def _coh_mat_gpu(samples_stack, cov_mat):
+def _coh_mat_gpu(samples_stack, neighbors_stack, do_shp, cov_mat):
     """Given a (n_slc, n_samps) samples, estimate the coherence matrix."""
     nslc = cov_mat.shape[0]
     # Iterate over the upper triangle of the output matrix
@@ -156,6 +168,10 @@ def _coh_mat_gpu(samples_stack, cov_mat):
             # At each C_ij, iterate over the samples in the window
             for rs in range(samples_stack.shape[1]):
                 for cs in range(samples_stack.shape[2]):
+                    # Skip if it's not a valid neighbor
+                    if do_shp and not neighbors_stack[rs, cs]:
+                        continue
+
                     s1 = samples_stack[i_slc, rs, cs]
                     s2 = samples_stack[j_slc, rs, cs]
                     if isnan(s1) or isnan(s2):
@@ -176,22 +192,6 @@ def _coh_mat_gpu(samples_stack, cov_mat):
                 cov_mat[i_slc, j_slc] = c
                 cov_mat[j_slc, i_slc] = c.conjugate()
         cov_mat[i_slc, i_slc] = 1.0
-
-
-def _get_slices(half_r: int, half_c: int, r: int, c: int, rows: int, cols: int):
-    """Get the slices for the given pixel and half window size."""
-    # Clamp min indexes to 0
-    r_start = max(r - half_r, 0)
-    c_start = max(c - half_c, 0)
-    # Clamp max indexes to the array size
-    r_end = min(r + half_r + 1, rows)
-    c_end = min(c + half_c + 1, cols)
-    return (r_start, r_end), (c_start, c_end)
-
-
-# Make cpu and gpu compiled versions of the helper function
-_get_slices_cpu = njit(_get_slices)
-_get_slices_gpu = cuda.jit(device=True)(_get_slices)
 
 
 def _save_covariance(output_cov_file, C_arrays):

@@ -7,7 +7,7 @@ from numba import cuda
 from dolphin._types import Filename
 from dolphin.io import compute_out_shape
 
-from . import covariance, metrics
+from . import covariance, metrics, shp
 from .mle import mle_stack
 
 
@@ -20,6 +20,7 @@ def run_gpu(
     use_slc_amp: bool = True,
     output_cov_file: Optional[Filename] = None,
     threads_per_block: Tuple[int, int] = (16, 16),
+    do_shp: bool = False,
     **kwargs,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """Run the GPU version of the stack covariance estimator and MLE solver.
@@ -46,6 +47,9 @@ def run_gpu(
     threads_per_block : Tuple[int, int], optional
         The number of threads per block to use for the GPU kernel.
         By default (16, 16)
+    do_shp : bool, optional
+        Whether to use the SHP estimator to multilook.
+        By default False (use a rectangular window).
 
     Returns
     -------
@@ -58,24 +62,47 @@ def run_gpu(
 
     num_slc, rows, cols = slc_stack.shape
 
+    # Can't use dict in numba kernels, so pass the values as a tuple
+    halfwin_rowcol = (half_window["y"], half_window["x"])
+    row_win, col_win = 2 * halfwin_rowcol[0] + 1, 2 * halfwin_rowcol[1] + 1
+    strides_rowcol = (strides["y"], strides["x"])
+
+    out_rows, out_cols = compute_out_shape((rows, cols), strides)
+
     # Copy the read-only data to the device
     d_slc_stack = cuda.to_device(slc_stack)
-
-    # Make a buffer for each pixel's coherence matrix
-    # d_ means "device_", i.e. on the GPU
-    out_rows, out_cols = compute_out_shape((rows, cols), strides)
-    d_C_arrays = cp.zeros((out_rows, out_cols, num_slc, num_slc), dtype=np.complex64)
 
     # Divide up the output shape using a 2D grid
     blocks_x = ceil(out_cols / threads_per_block[0])
     blocks_y = ceil(out_rows / threads_per_block[1])
     blocks = (blocks_x, blocks_y)
 
-    # Can't use dict in numba kernels, so pass the values as a tuple
-    halfwin_rowcol = (half_window["y"], half_window["x"])
-    strides_rowcol = (strides["y"], strides["x"])
+    # Make a buffer for each pixel's coherence matrix
+    # d_ means "device_", i.e. on the GPU
+    d_C_arrays = cp.zeros((out_rows, out_cols, num_slc, num_slc), dtype=np.complex64)
+
+    # TODO: use the strides as well to compute a smaller neighbor array
+    d_neighbor_arrays = cp.zeros((rows, cols, row_win, col_win), dtype=np.bool_)
+    d_amp_stack = cp.abs(d_slc_stack)
+    if do_shp:
+        d_amp_stack.sort(
+            axis=0
+        )  # Sort each pixel by amplitude to easily compute the ECDFs
+        shp.estimate_neighbors[blocks, threads_per_block](
+            d_amp_stack,
+            halfwin_rowcol,
+            # strides_rowcol,  # TODO: use the strides as well
+            0.05,  # alpha
+            d_neighbor_arrays,
+        )
+
     covariance.estimate_stack_covariance_gpu[blocks, threads_per_block](
-        d_slc_stack, halfwin_rowcol, strides_rowcol, d_C_arrays
+        d_slc_stack,
+        halfwin_rowcol,
+        strides_rowcol,
+        d_neighbor_arrays,
+        d_C_arrays,
+        do_shp,
     )
 
     if output_cov_file:

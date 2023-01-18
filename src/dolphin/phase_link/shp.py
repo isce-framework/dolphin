@@ -1,7 +1,12 @@
-from math import gcd
+from math import exp, gcd, sqrt
+from typing import Tuple
 
+# import cupy as cp
 import numba
 import numpy as np
+from numba import cuda
+
+from ._utils import _get_slices_gpu
 
 
 @numba.njit
@@ -29,25 +34,27 @@ def ks_2samp(data1, data2):
     This is a simplified version of the scipy.stats.ks_2samp function.
     https://github.com/scipy/scipy/blob/v1.10.0/scipy/stats/_stats_py.py#L7948-L8179
     """
-    data1 = np.sort(data1)
-    data2 = np.sort(data2)
     n1 = data1.shape[0]
     n2 = data2.shape[0]
     if n1 != n2:
         raise ValueError("Data passed to ks_2samp must be of the same size")
     if min(n1, n2) == 0:
         raise ValueError("Data passed to ks_2samp must not be empty")
+    if np.iscomplexobj(data1) or np.iscomplexobj(data2):
+        raise ValueError("ks_2samp only accepts real input data")
 
+    data1 = np.sort(data1)
+    data2 = np.sort(data2)
     data_all = np.concatenate((data1, data2))
     # using searchsorted solves equal data problem
     cdf1 = np.searchsorted(data1, data_all, side="right") / n1
     cdf2 = np.searchsorted(data2, data_all, side="right") / n2
-    cddiffs = cdf1 - cdf2
+    cdf_diffs = cdf1 - cdf2
     # Ensure sign of minS is not negative.
     # np.clip not yet implemented in earlier numba, at least up to 0.53
-    minS = np.maximum(0.0, np.minimum(1.0, -np.min(cddiffs)))
+    minS = np.maximum(0.0, np.minimum(1.0, -np.min(cdf_diffs)))
 
-    maxS = np.max(cddiffs)
+    maxS = np.max(cdf_diffs)
     d = max(minS, maxS)
     g = gcd(n1, n2)
     prob = -np.inf
@@ -59,10 +66,24 @@ def ks_2samp(data1, data2):
     d = h * 1.0 / lcm
     if h == 0:
         prob = 1.0
-    prob = _compute_prob_outside_square(n1, h)
+    else:
+        prob = _compute_prob_outside_square(n1, h)
 
     prob = np.maximum(0, np.minimum(1, prob))
-    return (d, prob)
+    # return (d, prob)
+    return prob
+
+
+def _ks_2samp_block(data1, data_block):
+    """Compute the Kolmogorov-Smirnov statistic on a block."""
+    if data_block.ndim == 1:
+        return ks_2samp(data1, data_block)
+    elif data_block.ndim == 3:
+        # For 3D data, reshape to 2D where each col is a pixel
+        data_cols = data_block.reshape(data_block.shape[0], -1)
+    else:
+        data_cols = data_block
+    return np.apply_along_axis(lambda d: ks_2samp(d, data1), axis=0, arr=data_cols)
 
 
 @numba.njit
@@ -102,67 +123,137 @@ def _compute_prob_outside_square(n, h):
     return 2 * P
 
 
-@numba.njit
-def ks_test_2(x1, x2, alpha=0.05):
-    """Kolmogorov-Smirnov test for two samples.
+# GPU version of the SHP finding algorithm
+@cuda.jit
+def estimate_neighbors(
+    sorted_amp_stack,
+    half_rowcol: Tuple[int, int],
+    alpha: float,
+    neighbor_arrays,
+):
+    """Estimate the linked phase at all pixels of `slc_stack` on the GPU."""
+    # Get the global position within the 2D GPU grid
+    c, r = cuda.grid(2)
+    num_slc, rows, cols = sorted_amp_stack.shape
+    # Check if we are within the bounds of the array
+    if r >= rows or c >= cols:
+        return
 
-    Adapted from https://github.com/isce-framework/fringe/blob/main/tests/KS2/ks2test.py
+    _get_ecdf_critical_distance_gpu
+    ecdf_dist_cutoff = _get_ecdf_critical_distance_gpu(num_slc, alpha)
+    half_row, half_col = half_rowcol
+
+    # Get the input slices, clamping the window to the image bounds
+    (r_start, r_end), (c_start, c_end) = _get_slices_gpu(
+        half_row, half_col, r, c, rows, cols
+    )
+    amp_block = sorted_amp_stack[:, r_start:r_end, c_start:c_end]
+    # TODO: if this is a bottleneck, we can do something smarter
+    # by computing only the bottom right corner, then mirroring
+    # also, we can use strides to only compute the output
+    # pixels that are actually needed
+    neighbors_pixel = neighbor_arrays[r, c, :, :]
+    _get_neighbors(amp_block, half_rowcol, ecdf_dist_cutoff, neighbors_pixel)
+
+
+@cuda.jit(device=True)
+def _get_neighbors(amp_block, half_rowcol, ecdf_dist_cutoff, neighbors):
+    _, rows, cols = amp_block.shape
+
+    r_c, c_c = rows // 2, cols // 2
+    if rows < 2 * half_rowcol[0] + 1 or cols < 2 * half_rowcol[1] + 1:
+        neighbors[:] = True
+        return
+
+    x1 = amp_block[:, r_c, c_c]
+    for i in range(rows):
+        for j in range(cols):
+            if i == r_c and j == c_c:
+                neighbors[i, j] = True
+                continue
+            x2 = amp_block[:, i, j]
+
+            ecdf_max_dist = _get_max_cdf_dist_gpu(x1, x2)
+
+            neighbors[i, j] = ecdf_max_dist < ecdf_dist_cutoff
+
+
+def _get_max_cdf_dist(x1, x2):
+    """Get the maximum CDF distance between two arrays.
 
     Parameters
     ----------
-    x1 : array_like
-        First sample.
-    x2 : array_like
-        Second sample.
-    alpha : float, optional
-        Significance level. The default is 0.05.
+    x1 : np.ndarray
+        First array, size n, sorted
+    x2 : np.ndarray
+        Second array, size n, sorted
 
     Returns
     -------
-    H : int
-        H = 1 if the null hypothesis is rejected,
-        H = 0 if the null hypothesis is not rejected.
-    pValue : float
-        p-value of the test.
-    ks_statistic : float
-        KS statistic.
+    float
+        Maximum empirical CDF distance between the two arrays
 
-    References
-    ----------
-    .. [1] https://en.wikipedia.org/wiki/Kolmogorov%E2%80%93Smirnov_test
-    .. [2] https://www.mathworks.com/help/stats/kstest2.html
-
+    Examples
+    --------
+    >>> x1 = np.array([1, 2, 3, 4, 5])
+    >>> x2 = np.array([1, 2, 3, 4, 5])
+    >>> _get_max_cdf_dist(x1, x2)
+    0.0
+    >>> x2 = np.array([2, 3, 4, 5, 6])
+    >>> _get_max_cdf_dist(x1, x2)
+    0.2
+    >>> _get_max_cdf_dist(x2, x1)
+    0.2
+    >>> x2 = np.array([6, 7, 8, 9, 10])
+    >>> _get_max_cdf_dist(x1, x2)
+    1.0
     """
-    binEdges = np.hstack(
-        (np.array([0.0]), np.sort(np.concatenate((x1, x2))), np.array([100000000.0]))
-    )
+    n = x1.shape[0]
+    i1 = i2 = i_out = 0
+    cdf1 = cdf2 = 0
+    max_dist = 0
+    while i_out < 2 * n:
+        if i1 == n:
+            cdf2 += 1 / n
+            i2 += 1
+        elif i2 == n:
+            cdf1 += 1 / n
+            i1 += 1
 
-    binCounts1 = np.histogram(x1, binEdges)[0]
-    binCounts2 = np.histogram(x2, binEdges)[0]
+        elif x1[i1] < x2[i2]:
+            cdf1 += 1 / n
+            i1 += 1
+        else:
+            cdf2 += 1 / n
+            i2 += 1
+        i_out += 1
+        max_dist = max(max_dist, abs(cdf1 - cdf2))
+    return max_dist
 
-    sampleCDF1 = np.cumsum(binCounts1) / np.sum(binCounts1)
-    sampleCDF2 = np.cumsum(binCounts2) / np.sum(binCounts2)
 
-    deltaCDF = np.abs(sampleCDF1 - sampleCDF2)
+_get_max_cdf_dist_gpu = cuda.jit(device=True)(_get_max_cdf_dist)
+_get_max_cdf_dist_cpu = numba.njit(_get_max_cdf_dist)
 
-    ks_statistic = deltaCDF.max()
 
-    n1 = len(x1)
-    n2 = len(x2)
+def _get_ecdf_critical_distance(nslc, alpha):
+    N = nslc / 2.0
+    cur_dist = 0.01
+    critical_distance = 0.1
+    sqrt_N = sqrt(N)
+    while cur_dist <= 1.0:
+        value = cur_dist * (sqrt_N + 0.12 + 0.11 / sqrt_N)
+        pvalue = 0
+        for t in range(1, 101):
+            pvalue += ((-1) ** (t - 1)) * exp(-2 * (value**2) * (t**2))
+        pvalue = max(0.0, min(1.0, 2 * pvalue))
 
-    n = float(n1 * n2) / (n1 + n2)
-    lambd = max((np.sqrt(n) + 0.12 + 0.11 / np.sqrt(n)) * ks_statistic, 0.0)
+        if pvalue <= alpha:
+            critical_distance = cur_dist
+            break
 
-    j = np.linspace(1, 101, 101)
-    pValue = 2 * sum(
-        (np.power(-1, j - 1) * np.exp(-2 * lambd * lambd * np.power(j, 2)))
-    )  # multiple by 2 in MATLAB
-    pValue = max(0.0, min(1.0, pValue))
+        cur_dist += 0.001
+    return critical_distance
 
-    # assign the H values after calculation is done
-    if alpha >= pValue:
-        H = 1
-    else:
-        H = 0
 
-    return H, pValue, ks_statistic
+_get_ecdf_critical_distance_gpu = cuda.jit(device=True)(_get_ecdf_critical_distance)
+_get_ecdf_critical_distance_cpu = numba.njit(_get_ecdf_critical_distance)
