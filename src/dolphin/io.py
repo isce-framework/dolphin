@@ -30,6 +30,8 @@ DEFAULT_HDF5_OPTIONS = dict(
     shuffle=True,
 )
 DEFAULT_DATETIME_FORMAT = "%Y%m%d"
+# Specific to opera CSLC products:
+OPERA_DATASET_NAME = "science/SENTINEL1/CSLC/grids/VV"
 
 
 def get_raster_xysize(filename: Filename) -> Tuple[int, int]:

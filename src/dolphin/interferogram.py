@@ -209,6 +209,7 @@ class Network:
         max_temporal_baseline: Optional[float] = None,
         reference_idx: Optional[int] = None,
         final_only: bool = False,
+        subdataset: Optional[str] = None,
     ):
         """Create a network of interferograms from a list of SLCs.
 
@@ -219,15 +220,19 @@ class Network:
         max_bandwidth : Optional[int], optional
             Maximum number of SLCs to include in an interferogram, by index distance.
             Defaults to None.
-        max_temporal_baseline : Optional[float], optional
+        max_temporal_baseline : Optional[float]
             Maximum temporal baseline to include in an interferogram, in days.
             Defaults to None.
-        reference_idx : Optional[int], optional
+        reference_idx : Optional[int]
             Index of the SLC to use as the reference for all interferograms.
             Defaults to None.
         final_only : bool, optional
             If True, only form the final nearest-neighbor interferogram.
             Defaults to False.
+        subdataset : Optional[str]
+            If passing NetCDF files in `slc_list, the subdataset of the image data
+            within the file.
+            Defaults to None.
         """
         self.slc_list, self.slc_dates = utils.sort_files_by_date(slc_list)
         self.ifg_list = self._make_ifg_list(
@@ -241,6 +246,29 @@ class Network:
         self.max_bandwidth = max_bandwidth
         self.max_temporal_baseline = max_temporal_baseline
         self.reference_idx = reference_idx
+        self._subdataset = subdataset
+        self._vrt_list: List[VRTInterferogram] = []
+
+    def write(self, outdir: Path = Path.cwd()) -> None:
+        """Write out a VRTInterferogram for each ifg.
+
+        Parameters
+        ----------
+        outdir : Path, optional
+            Directory to write the VRT files to, by default Path.cwd()
+        """
+        self._vrt_list = []
+        for ref, sec in self._gdal_file_strings:
+            v = VRTInterferogram(ref_slc=ref, sec_slc=sec, outdir=outdir)
+            self._vrt_list.append(v)
+
+    @property
+    def _gdal_file_strings(self):
+        # format each file in each pair
+        return [
+            [io.format_nc_filename(f, self._subdataset) for f in ifg]
+            for ifg in self.ifg_list
+        ]
 
     def __repr__(self):
         return (
