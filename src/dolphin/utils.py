@@ -3,7 +3,7 @@ import re
 import warnings
 from os import fspath
 from pathlib import Path
-from typing import List, Optional, Sequence, Tuple, Union
+from typing import Iterable, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 from osgeo import gdal, gdal_array, gdalconst
@@ -176,6 +176,36 @@ def _date_format_to_regex(date_format):
 
     # Return the resulting regular expression
     return re.compile(date_format)
+
+
+def sort_files_by_date(
+    files: Iterable[Filename], file_date_fmt: str = "%Y%m%d"
+) -> Tuple[List, List[datetime.date]]:
+    """Sort a list of files by date.
+
+    Parameters
+    ----------
+    files : Iterable[Filename]
+        List of files to sort.
+    file_date_fmt : str, optional
+        Datetime format passed to `strptime`, by default "%Y%m%d"
+
+    Returns
+    -------
+    file_list: List[Filename]
+        Sorted list of files.
+    dates: List[datetime.date]
+        Sorted list of dates corresponding to the files.
+    """
+    dates = [parse_slc_strings(f, fmt=file_date_fmt) for f in files]
+    # files, dates = _sort_by_date(files, dates)
+    file_dates = sorted(
+        [(f, d) for f, d in zip(files, dates)],
+        key=lambda f_d_tuple: f_d_tuple[1],  # use date as key
+    )
+    # Unpack the sorted pairs with new sorted values
+    file_list, dates = zip(*file_dates)
+    return list(file_list), list(dates)
 
 
 def combine_mask_files(

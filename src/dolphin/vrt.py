@@ -83,7 +83,7 @@ class VRTStack:
         # Extract the date/datetimes from the filenames
         dates = [utils.parse_slc_strings(f, fmt=file_date_fmt) for f in files]
         if sort_files:
-            files, dates = self._sort_by_date(files, dates)
+            files, dates = utils.sort_files_by_date(files, file_date_fmt=file_date_fmt)
 
         # Save the attributes
         self.file_list = list(files)
@@ -169,16 +169,6 @@ class VRTStack:
         ds.SetSpatialRef(self.srs)
         ds = None
 
-    @staticmethod
-    def _sort_by_date(file_list, dates):
-        file_dates = sorted(
-            [(f, d) for f, d in zip(file_list, dates)],
-            key=lambda f_d_tuple: f_d_tuple[1],  # use date as key
-        )
-        # Unpack the sorted pairs with new sorted values
-        file_list, dates = zip(*file_dates)
-        return list(file_list), list(dates)
-
     def _assert_images_same_size(self):
         """Make sure all files in the stack are the same size."""
         from collections import defaultdict
@@ -210,7 +200,9 @@ class VRTStack:
         new_date = utils.parse_slc_strings(new_file, fmt=self.file_date_fmt)
         self.dates.append(new_date)
         if sort_files:
-            self.file_list, self.dates = self._sort_by_date(self.file_list, self.dates)
+            self.file_list, self.dates = utils.sort_files_by_date(
+                self.file_list, file_date_fmt=self.file_date_fmt
+            )
 
         # reset the gdal file strings
         self._gdal_file_strings = [
