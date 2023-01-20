@@ -7,10 +7,9 @@ from typing import List, Optional, Tuple, Union
 from osgeo import gdal
 from pydantic import BaseModel, Field, root_validator, validator
 
-from dolphin import io
+from dolphin import io, utils
 from dolphin._types import Filename
 from dolphin.log import get_log
-from dolphin.utils import _get_path_from_gdal_str, _resolve_gdal_path, parse_slc_strings
 
 gdal.UseExceptions()
 
@@ -91,7 +90,7 @@ class VRTInterferogram(BaseModel):
         # the file is absolute
         if ":" in str(v):
             try:
-                v = _resolve_gdal_path(v)
+                v = utils._resolve_gdal_path(v)
             except Exception:
                 # if the file had colons for some reason but
                 # it didn't match, just ignore
@@ -110,7 +109,7 @@ class VRTInterferogram(BaseModel):
             return Path(v)
         # If outdir is not set, use the directory of the reference SLC
         ref_slc = values.get("ref_slc")
-        return _get_path_from_gdal_str(ref_slc).parent
+        return utils._get_path_from_gdal_str(ref_slc).parent
 
     @validator("outfile", always=True)
     def _output_cant_exist(cls, v, values):
@@ -118,8 +117,8 @@ class VRTInterferogram(BaseModel):
             # from the output file name from the dates within input files
             ref_slc, sec_slc = values.get("ref_slc"), values.get("sec_slc")
             fmt = values.get("date_format", "%Y%m%d")
-            date1 = parse_slc_strings(ref_slc, fmt=fmt)
-            date2 = parse_slc_strings(sec_slc, fmt=fmt)
+            date1 = utils.parse_slc_strings(ref_slc, fmt=fmt)
+            date2 = utils.parse_slc_strings(sec_slc, fmt=fmt)
 
             outdir = values.get("outdir")
             v = outdir / f"{date1.strftime(fmt)}_{date2.strftime(fmt)}.vrt"
@@ -187,7 +186,9 @@ class Network:
     Attributes
     ----------
     slc_list : list
-        List of SLCs to use to form interferograms
+        List of SLCs to use to form interferograms.
+    slc_dates : list[datetime.date]
+        List of dates corresponding to the SLCs.
     ifg_list : list
         List of interferograms created from the SLCs.
     max_bandwidth : Optional[int], optional
@@ -228,7 +229,7 @@ class Network:
             If True, only form the final nearest-neighbor interferogram.
             Defaults to False.
         """
-        self.slc_list = list(sorted(slc_list, key=lambda f: str(f)))  # key for mypy
+        self.slc_list, self.slc_dates = utils.sort_files_by_date(slc_list)
         self.ifg_list = self._make_ifg_list(
             self.slc_list,
             max_bandwidth=max_bandwidth,
@@ -265,7 +266,7 @@ class Network:
         reference_idx: Optional[int] = None,
         final_only: bool = False,
     ) -> List[Tuple]:
-        """Form a list of interferogram names from a list of sorted dates."""
+        """Form interferogram names from a list of SLC files sorted by date."""
         if final_only:
             # Just form the final nearest-neighbor ifg
             return [tuple(slc_list[-2:])]
@@ -332,7 +333,7 @@ class Network:
             Pairs of (date1, date2) ifgs
         """
         ifg_strs = self._all_pairs(slc_date_list)
-        ifg_dates = self._all_pairs(parse_slc_strings(slc_date_list))
+        ifg_dates = self._all_pairs(utils.parse_slc_strings(slc_date_list))
         baselines = [self._temp_baseline(ifg) for ifg in ifg_dates]
         return [
             ifg for ifg, b in zip(ifg_strs, baselines) if b <= max_temporal_baseline
