@@ -22,6 +22,14 @@ DEFAULT_TIFF_OPTIONS = [
     f"BLOCKXSIZE={DEFAULT_TILE_SIZE[1]}",
     f"BLOCKYSIZE={DEFAULT_TILE_SIZE[0]}",
 ]
+DEFAULT_HDF5_OPTIONS = dict(
+    # https://docs.h5py.org/en/stable/high/dataset.html#filter-pipeline
+    chunks=DEFAULT_TILE_SIZE,
+    compression="gzip",
+    compression_opts=4,
+    shuffle=True,
+)
+DEFAULT_DATETIME_FORMAT = "%Y%m%d"
 
 
 def get_raster_xysize(filename: Filename) -> Tuple[int, int]:
@@ -399,7 +407,7 @@ def setup_output_folder(
     output_folder = vrt_stack.outfile.parent
 
     output_files = []
-    date_strs = [d.strftime("%Y%m%d") for d in vrt_stack.dates]
+    date_strs = [d.strftime(DEFAULT_DATETIME_FORMAT) for d in vrt_stack.dates]
 
     rows, cols = vrt_stack.shape[-2:]
     for filename in date_strs[start_idx:]:
@@ -530,6 +538,25 @@ def get_stack_nodata_mask(
 
 
 def _erode_nodata(nd_mask, buffer_pixels=25):
+    """Erode the nodata mask by `buffer_pixels`.
+
+    This makes the nodata mask more conservative:
+    there will be fewer pixels marked as nodata after.
+
+    Parameters
+    ----------
+    nd_mask : np.ndarray[bool]
+        Array where True indicates nodata.
+    buffer_pixels : int, optional
+        Size (in pixels) of erosion structural element to use.
+        By default 25.
+
+    Returns
+    -------
+    np.ndarray[bool]
+        Same size as `nd_mask`, with no data pixels shrunk
+        after erosion.
+    """
     # invert so that good pixels are 1
     # we want to expand the area that is considered "good"
     # since we're being conservative with what we completely ignore

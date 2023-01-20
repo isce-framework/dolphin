@@ -27,9 +27,15 @@ def run(cfg: Workflow, debug: bool = False):
     # 0. Make a VRT pointing to the input SLC files
     # #############################################
     subdataset = cfg.inputs.subdataset
-    vrt_stack = vrt.VRTStack(
-        input_file_list, subdataset=subdataset, outfile=scratch_dir / "slc_stack.vrt"
-    )
+    vrt_path = scratch_dir / "slc_stack.vrt"
+    if vrt_path.exists():
+        vrt_stack = vrt.VRTStack.from_vrt_file(vrt_path)
+    else:
+        vrt_stack = vrt.VRTStack(
+            input_file_list,
+            subdataset=subdataset,
+            outfile=scratch_dir / "slc_stack.vrt",
+        )
 
     # ###############
     # 1. PS selection

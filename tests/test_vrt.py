@@ -5,6 +5,7 @@ import numpy.testing as npt
 import pytest
 from osgeo import gdal
 
+from dolphin.utils import _get_path_from_gdal_str
 from dolphin.vrt import VRTStack
 
 # Note: uses the fixtures from conftest.py
@@ -24,6 +25,16 @@ def vrt_stack(tmp_path, slc_stack, slc_file_list):
 def vrt_stack_nc(tmp_path, slc_stack, slc_file_list_nc):
     vrt_file = tmp_path / "test_nc.vrt"
     s = VRTStack(slc_file_list_nc, outfile=vrt_file)
+
+    assert s.shape == slc_stack.shape
+    return s
+
+
+@pytest.fixture
+def vrt_stack_nc_subdataset(tmp_path, slc_stack, slc_file_list_nc_with_sds):
+    vrt_file = tmp_path / "test_nc.vrt"
+    files_only = [_get_path_from_gdal_str(f) for f in slc_file_list_nc_with_sds]
+    s = VRTStack(files_only, outfile=vrt_file, subdataset="slc/data")
 
     assert s.shape == slc_stack.shape
     return s
@@ -91,11 +102,16 @@ def test_sort_order(tmp_path, slc_file_list):
     assert vrt_stack2.file_list == random_order
 
 
-def test_dates(vrt_stack):
+def test_dates(vrt_stack, vrt_stack_nc_subdataset):
     dates = vrt_stack.dates
     assert len(dates) == len(vrt_stack)
     d0 = 20220101
     for d in dates:
+        assert d.strftime("%Y%m%d") == str(d0)
+        d0 += 1
+
+    d0 = 20220101
+    for d in vrt_stack_nc_subdataset.dates:
         assert d.strftime("%Y%m%d") == str(d0)
         d0 += 1
 

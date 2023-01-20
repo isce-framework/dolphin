@@ -64,6 +64,17 @@ def test_get_dates():
     )
 
 
+def test_get_dates_with_gdal_string():
+    # Checks that is can parse 'NETCDF:"/path/to/file.nc":variable'
+    assert ["20200303", "20210101"] == utils.get_dates(
+        'NETCDF:"/usr/19990101/20200303_20210101.int":variable'
+    )
+    # Check the derived dataset name too
+    assert ["20200303", "20210101"] == utils.get_dates(
+        'DERIVED_SUBDATASET:AMPLITUDE:"/usr/19990101/20200303_20210101.int":variable'
+    )
+
+
 def test_parse_slc_strings():
     dt = datetime.date(2020, 3, 3)
     assert utils.parse_slc_strings(Path("/usr/19990101/asdf20200303.tif")) == dt
@@ -82,6 +93,16 @@ def test_parse_slc_strings():
         dt,
         dt,
     ]
+
+
+def test_parse_slc_strings_with_gdal_string():
+    # Checks that is can parse 'NETCDF:"/path/to/file.nc":variable'
+    dt = datetime.date(2020, 3, 3)
+    s = 'NETCDF:"/usr/19990101/asdf20200303.tif":variable'
+    assert utils.parse_slc_strings(s) == dt
+    # Check the derived dataset name too
+    s = 'DERIVED_SUBDATASET:AMPLITUDE:"/usr/19990101/asdf20200303.tif":variable'
+    assert utils.parse_slc_strings(s) == dt
 
 
 def test_take_looks():

@@ -97,9 +97,7 @@ class VRTStack:
 
         # If we're using .h5 or .nc, get the GDAL-compatible paths to write to the VRT
         # Otherwise this will just be the file_list as is
-        self._gdal_file_strings = [
-            io.format_nc_filename(f, subdataset) for f in self.file_list
-        ]
+
         self._assert_images_same_size()
 
         if nodata_value is None:
@@ -181,6 +179,10 @@ class VRTStack:
             size_str = pformat(dict(sorted(size_to_file.items())))
             raise ValueError(f"Not files have same raster (x, y) size:\n{size_str}")
 
+    @property
+    def _gdal_file_strings(self):
+        return [io.format_nc_filename(f, self._subdataset) for f in self.file_list]
+
     def read_stack(self, band: Optional[int] = None, subsample_factor: int = 1):
         """Read in the SLC stack."""
         return io.load_gdal(self.outfile, band=band, subsample_factor=subsample_factor)
@@ -204,10 +206,6 @@ class VRTStack:
                 self.file_list, file_date_fmt=self.file_date_fmt
             )
 
-        # reset the gdal file strings
-        self._gdal_file_strings = [
-            io.format_nc_filename(f, self._subdataset) for f in self.file_list
-        ]
         self._write()
 
     def _set_subset(
@@ -424,7 +422,7 @@ class VRTStack:
         )
 
     def _get_block_shape(self, max_bytes=DEFAULT_BLOCK_BYTES):
-        test_file = self._get_non_vrt_file(self.file_list[0])
+        test_file = self._get_non_vrt_file(self._gdal_file_strings[0])
 
         return io.get_max_block_shape(
             # Note that we're using the actual first file, not the VRT
@@ -486,7 +484,7 @@ class VRTStack:
     @property
     def shape(self):
         """Get the 3D shape of the stack."""
-        xsize, ysize = io.get_raster_xysize(self.file_list[0])
+        xsize, ysize = io.get_raster_xysize(self._gdal_file_strings[0])
         return (len(self.file_list), ysize, xsize)
 
     def __len__(self):
