@@ -35,7 +35,7 @@ def gdal_to_numpy_type(gdal_type):
     return gdal_array.GDALTypeCodeToNumericTypeCode(gdal_type)
 
 
-def get_dates(filename: Filename, fmt="%Y%m%d") -> List[Union[None, str]]:
+def get_dates(filename: Filename, fmt="%Y%m%d") -> List[Union[None, datetime.date]]:
     """Search for dates in the stem of `filename` matching `fmt`.
 
     Excludes dates that are not in the stem of `filename` (in the directories).
@@ -49,16 +49,16 @@ def get_dates(filename: Filename, fmt="%Y%m%d") -> List[Union[None, str]]:
 
     Returns
     -------
-    list[str] or None
+    list[datetime.date or None]
         List of dates found in the stem of `filename` matching `fmt`.
         Returns None if nothing is found.
 
     Examples
     --------
     >>> get_dates("/path/to/20191231.slc.tif")
-    ['20191231']
+    [datetime.date(2019, 12, 31)]
     >>> get_dates("S1A_IW_SLC__1SDV_20191231T000000_20191231T000000_032123_03B8F1_1C1D.nc")
-    ['20191231', '20191231']
+    [datetime.date(2019, 12, 31), datetime.date(2019, 12, 31)]
     >>> get_dates("/not/a/date_named_file.tif")
     []
     """  # noqa: E501
@@ -68,7 +68,11 @@ def get_dates(filename: Filename, fmt="%Y%m%d") -> List[Union[None, str]]:
         msg = f"{filename} does not contain date as YYYYMMDD"
         logger.warning(msg)
         return []
-    return date_list
+    return [_parse_date(d, fmt) for d in date_list]
+
+
+def _parse_date(datestr, fmt="%Y%m%d") -> datetime.date:
+    return datetime.datetime.strptime(datestr, fmt).date()
 
 
 def parse_slc_strings(slc_str: Union[Filename, Sequence[Filename]], fmt=None):
@@ -86,10 +90,6 @@ def parse_slc_strings(slc_str: Union[Filename, Sequence[Filename]], fmt=None):
     -------
     datetime.date, or list of datetime.date
     """
-
-    def _parse(datestr, fmt="%Y%m%d") -> datetime.date:
-        return datetime.datetime.strptime(datestr, fmt).date()
-
     if fmt is None:
         fmt = ["%Y%m%d", "%Y-%m-%d"]
     elif isinstance(fmt, str):
@@ -99,17 +99,15 @@ def parse_slc_strings(slc_str: Union[Filename, Sequence[Filename]], fmt=None):
         path = _get_path_from_gdal_str(slc_str)
         # Unpack all returned dates from each format
         d_list = []
-        fmt_found = None
         for f in fmt:
             d_list.extend(get_dates(path, fmt=f))
             if len(d_list) > 0:
-                fmt_found = f
                 break
         else:  # if we iterate through all formats and don't find any dates
             raise ValueError(f"Could not find date of format {fmt} in {slc_str}")
 
         # Take the first date found
-        return _parse(d_list[0], fmt=fmt_found)
+        return d_list[0]
     else:
         # If it's an iterable of strings, run on each one
         return [parse_slc_strings(s, fmt=fmt) for s in slc_str if s]
@@ -180,7 +178,7 @@ def _date_format_to_regex(date_format):
 
 def sort_files_by_date(
     files: Iterable[Filename], file_date_fmt: str = "%Y%m%d"
-) -> Tuple[List, List[datetime.date]]:
+) -> Tuple[List, List]:
     """Sort a list of files by date.
 
     Parameters
@@ -194,17 +192,24 @@ def sort_files_by_date(
     -------
     file_list: List[Filename]
         Sorted list of files.
-    dates: List[datetime.date]
+    dates: List[datetime.date] or List[Tuple[datetime.date,...]]
         Sorted list of dates corresponding to the files.
     """
-    dates = [parse_slc_strings(f, fmt=file_date_fmt) for f in files]
-    # files, dates = _sort_by_date(files, dates)
+    date_lists = [get_dates(f, fmt=file_date_fmt) for f in files]
+    # For SLCs or single-date files, just return the first date
+    if all(len(d) == 1 for d in date_lists):
+        dates = [d[0] for d in date_lists]
+    else:
+        # For multi-date files, return a tuple of dates
+        dates = [tuple(d) for d in date_lists]  # type: ignore
+
     file_dates = sorted(
         [(f, d) for f, d in zip(files, dates)],
-        key=lambda f_d_tuple: f_d_tuple[1],  # use date as key
+        # use the date or dates as the key
+        key=lambda f_d_tuple: f_d_tuple[1],  # type: ignore
     )
     # Unpack the sorted pairs with new sorted values
-    file_list, dates = zip(*file_dates)
+    file_list, dates = zip(*file_dates)  # type: ignore
     return list(file_list), list(dates)
 
 

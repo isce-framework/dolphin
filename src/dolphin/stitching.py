@@ -1,9 +1,10 @@
 """stitching.py: utilities for combining interferograms into larger images."""
+import datetime
 import itertools
 import os
 from typing import List
 
-from dolphin._parsers import BurstSlc, parse_opera_cslc
+from dolphin import utils
 from dolphin._types import Filename
 from dolphin.io import get_raster_bounds
 
@@ -12,7 +13,6 @@ def merge_by_date(
     image_file_list: List[Filename],
     output_path: Filename = ".",
     dry_run: bool = False,
-    verbose: bool = True,
 ):
     """Group images from the same date and merge into one image per date.
 
@@ -24,8 +24,6 @@ def merge_by_date(
         path to output directory
     dry_run: bool
         if True, do not actually stitch the images, just print.
-    verbose: bool
-        if True, print out the names of the images being stitched.
 
     Returns
     -------
@@ -39,9 +37,9 @@ def merge_by_date(
         print(f"Stitching {len(cur_images)} images from {date} into one image")
         stitched_name = _stitch_same_date(
             cur_images,
+            date,
             output_path=output_path,
             dry_run=dry_run,
-            verbose=verbose,
         )
 
         # Keep track of the acquisition datetimes for each stitched file
@@ -52,80 +50,77 @@ def merge_by_date(
     return stitched_acq_times
 
 
-def group_images_by_date(image_file_list: List[Filename]):
+def group_images_by_date(
+    image_file_list: List[Filename], file_date_fmt: str = "%Y%m%d"
+):
     """Combine Sentinel objects by date.
 
     Parameters
     ----------
     image_file_list: List[Filename]
         path to folder containing CSLC files
+    file_date_fmt: str
+        format of the date in the filename. Default is %Y%m%d
 
     Returns
     -------
     dict:
         key is the date of the SLC acquisition
-        Value is a list of BurstSlc objects on that date:
+        Value is a list of Paths on that date:
         [(datetime.datetime(2017, 10, 13),
-          [BurstSlc(...)
-            BurstSlc(...),
+          [Path(...)
+            Path(...),
             ...]),
          (datetime.datetime(2017, 10, 25),
-          [BurstSlc(...)
-            BurstSlc(...),
+          [Path(...)
+            Path(...),
             ...]),
     """
-    burst_images = [parse_opera_cslc(f) for f in image_file_list]
-    date_sorted_images = sorted(
-        burst_images, key=lambda b: (b.datetime, b.burst_id, b.subswath)
+    sorted_file_list, _ = utils.sort_files_by_date(
+        image_file_list, file_date_fmt=file_date_fmt
     )
 
     # Now collapse into groups, sorted by the date
     grouped_images = {
-        date: list(g)
-        for date, g in itertools.groupby(
-            date_sorted_images, key=lambda x: x.datetime.date()
+        dates: list(g)
+        for dates, g in itertools.groupby(
+            sorted_file_list, key=lambda x: tuple(utils.get_dates(x))
         )
     }
     return grouped_images
 
 
 def _stitch_same_date(
-    slc_file_list: List[BurstSlc],
+    file_list: List[Filename],
+    date: datetime.date,
     output_path: Filename,
     dry_run: bool = False,
-    verbose: bool = True,
 ):
     """Combine multiple SLC images on the same date into one image.
 
     Parameters
     ----------
-    slc_file_list: List[Filename]
-        list of BurstSlc objects
+    file_list: List[Filename]
+        list of raster filenames
+    date: datetime.date
+        date of the images
     output_path: Filename
         path to output directory
     dry_run: bool
         if True, do not actually stitch the images, just print.
-    verbose: bool
-        if True, print out the names of the images being stitched.
 
     Returns
     -------
     str:
         path to the stitched SLC file
     """
-    if verbose:
-        print("Stitching slcs for %s" % slc_file_list[0].datetime.date())
-        for g in slc_file_list:
-            print("image:", g.filename, g.datetime)
-
-    g = slc_file_list[0]
     # TODO: what format? How to initialize the file?
-    new_name = "{}.h5".format(g.datetime.strftime("%Y%m%d"))
+    new_name = "{}.h5".format(date.strftime("%Y%m%d"))
     new_name = os.path.join(output_path, new_name)
     if dry_run:
         return new_name
 
-    if len(slc_file_list) == 1:
+    if len(file_list) == 1:
         print("Only one image, no stitching needed")
         return new_name
 
