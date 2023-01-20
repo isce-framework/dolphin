@@ -7,6 +7,7 @@ from rich import print
 
 from dolphin._parsers import BurstSlc, parse_opera_cslc
 from dolphin._types import Filename
+from dolphin.io import get_raster_bounds
 
 
 def merge_by_date(
@@ -132,3 +133,27 @@ def _stitch_same_date(
 
     # TODO
     return new_name
+
+
+def get_combined_bounds(*filenames: Filename):
+    """Get the bounds of the combined image.
+
+    Parameters
+    ----------
+    filenames: List[Filename]
+        list of filenames to combine
+
+    Returns
+    -------
+    tuple:
+        (min_x, min_y, max_x, max_y)
+
+    """
+    # scan input files
+    xs = []
+    ys = []
+    for fn in filenames:
+        left, bottom, right, top = get_raster_bounds(fn)
+        xs.extend([left, right])
+        ys.extend([bottom, top])
+    return min(xs), min(ys), max(xs), max(ys)

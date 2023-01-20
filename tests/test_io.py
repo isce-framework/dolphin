@@ -30,6 +30,13 @@ def test_compute_out_size():
     assert (1, 1) == io.compute_out_shape((4, 4), strides)
 
 
+def test_get_raster_bounds(slc_file_list_nc_wgs84):
+    # Use the created WGS84 SLC
+    bnds = io.get_raster_bounds(slc_file_list_nc_wgs84[0])
+    expected = (-5.5, -2.0, 4.5, 3.0)
+    assert bnds == expected
+
+
 def test_save_like(raster_100_by_200, tmpdir):
     arr = io.load_gdal(raster_100_by_200)
 

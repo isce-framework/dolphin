@@ -163,6 +163,58 @@ def get_nodata(filename: Filename) -> Optional[float]:
     return nodata
 
 
+def rowcol_to_xy(
+    row: int,
+    col: int,
+    ds: Optional[gdal.Dataset] = None,
+    filename: Optional[Filename] = None,
+) -> Tuple[float, float]:
+    """Convert indexes in the image space to georeferenced coordinates."""
+    return _apply_gt(ds, filename, col, row)
+
+
+def xy_to_rowcol(
+    x: float,
+    y: float,
+    ds: Optional[gdal.Dataset] = None,
+    filename: Optional[Filename] = None,
+) -> Tuple[float, float]:
+    """Convert coordinates in the georeferenced space to a row and column index."""
+    return _apply_gt(ds, filename, x, y, inverse=True)
+
+
+def _apply_gt(
+    ds=None, filename=None, x=None, y=None, inverse=False, gt=None
+) -> Tuple[float, float]:
+    """Read the (possibly inverse) geotransform, apply to the x/y coordinates."""
+    if gt is None:
+        if ds is None:
+            ds = gdal.Open(fspath(filename))
+            gt = ds.GetGeoTransform()
+            ds = None
+        else:
+            gt = ds.GetGeoTransform()
+
+    if inverse:
+        gt = gdal.InvGeoTransform(gt)
+    # Reference: https://gdal.org/tutorials/geotransforms_tut.html
+    x = gt[0] + x * gt[1] + y * gt[2]
+    y = gt[3] + x * gt[4] + y * gt[5]
+    return x, y
+
+
+def get_raster_bounds(filename: Filename) -> Tuple[float, float, float, float]:
+    """Get the (left, bottom, right, top) bounds of the image."""
+    ds = gdal.Open(fspath(filename))
+    gt = ds.GetGeoTransform()
+    xsize, ysize = ds.RasterXSize, ds.RasterYSize
+
+    left, top = _apply_gt(gt=gt, x=0, y=0)
+    right, bottom = _apply_gt(gt=gt, x=xsize, y=ysize)
+
+    return (left, bottom, right, top)
+
+
 def compute_out_shape(
     shape: Tuple[int, int], strides: Dict[str, int]
 ) -> Tuple[int, int]:

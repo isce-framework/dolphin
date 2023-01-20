@@ -178,33 +178,6 @@ def _date_format_to_regex(date_format):
     return re.compile(date_format)
 
 
-def rowcol_to_xy(row, col, ds=None, filename=None):
-    """Convert indexes in the image space to georeferenced coordinates."""
-    return _apply_gt(ds, filename, col, row)
-
-
-def xy_to_rowcol(x, y, ds=None, filename=None):
-    """Convert coordinates in the georeferenced space to a row and column index."""
-    return _apply_gt(ds, filename, x, y, inverse=True)
-
-
-def _apply_gt(ds=None, filename=None, x=None, y=None, inverse=False):
-    """Read the (possibly inverse) geotransform, apply to the x/y coordinates."""
-    if ds is None:
-        ds = gdal.Open(fspath(filename))
-        gt = ds.GetGeoTransform()
-        ds = None
-    else:
-        gt = ds.GetGeoTransform()
-
-    if inverse:
-        gt = gdal.InvGeoTransform(gt)
-    # Reference: https://gdal.org/tutorials/geotransforms_tut.html
-    x = gt[0] + x * gt[1] + y * gt[2]
-    y = gt[3] + x * gt[4] + y * gt[5]
-    return x, y
-
-
 def combine_mask_files(
     mask_files: List[Filename],
     scratch_dir: Filename,

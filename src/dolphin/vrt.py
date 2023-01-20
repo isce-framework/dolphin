@@ -368,28 +368,9 @@ class VRTStack:
     def _te_to_bbox(target_extent, ds=None, filename=None):
         """Convert target extent to pixel bounding box, in georeferenced coordinates."""
         xmin, ymin, xmax, ymax = target_extent  # in georeferenced coordinates
-        left, bottom = VRTStack._xy_to_rowcol(xmin, ymin, ds=ds, filename=filename)
-        right, top = VRTStack._xy_to_rowcol(xmax, ymax, ds=ds, filename=filename)
+        left, bottom = io.xy_to_rowcol(xmin, ymin, ds=ds, filename=filename)
+        right, top = io.xy_to_rowcol(xmax, ymax, ds=ds, filename=filename)
         return left, bottom, right, top
-
-    @staticmethod
-    def _apply_gt(gt, xpixel, ypixel):
-        # Reference: https://gdal.org/tutorials/geotransforms_tut.html
-        x = gt[0] + xpixel * gt[1] + ypixel * gt[2]
-        y = gt[3] + xpixel * gt[4] + ypixel * gt[5]
-        return x, y
-
-    @staticmethod
-    def _xy_to_rowcol(x, y, ds=None, filename=None):
-        """Convert coordinates in the georeferenced space to a row and column index."""
-        if ds is None:
-            ds = gdal.Open(fspath(filename))
-            gt = ds.GetGeoTransform()
-            ds = None
-        else:
-            gt = ds.GetGeoTransform()
-        gt = gdal.InvGeoTransform(ds.GetGeoTransform())
-        return VRTStack._apply_gt(gt, x, y)
 
     def iter_blocks(
         self,

@@ -41,7 +41,7 @@ def parse_opera_cslc(filename: Filename) -> BurstSlc:
 
     Examples
     --------
-    >>> _parse_opera_cslc('t087_185678_iw2_20180210_VV.h5')
+    >>> parse_opera_cslc('t087_185678_iw2_20180210_VV.h5')
     BurstSlc(track=87, burst_id=185678, subswath='iw2',\
  datetime=datetime.datetime(2018, 2, 10, 0, 0), pol='VV',\
  filename=PosixPath('t087_185678_iw2_20180210_VV.h5'))
