@@ -3,8 +3,6 @@ import itertools
 import os
 from typing import List
 
-from rich import print
-
 from dolphin._parsers import BurstSlc, parse_opera_cslc
 from dolphin._types import Filename
 from dolphin.io import get_raster_bounds

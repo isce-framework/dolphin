@@ -185,11 +185,11 @@ class Network:
 
     Attributes
     ----------
-    slc_list : list
+    slc_list : list[Filename]
         List of SLCs to use to form interferograms.
     slc_dates : list[datetime.date]
         List of dates corresponding to the SLCs.
-    ifg_list : list
+    ifg_list : list[Tuple[Filename, Filename]]
         List of interferograms created from the SLCs.
     max_bandwidth : Optional[int], optional
         Maximum number of SLCs to include in an interferogram, by index distance.
