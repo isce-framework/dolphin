@@ -2,7 +2,10 @@
 import datetime
 import itertools
 import os
-from typing import List
+from os import fspath
+from typing import List, Tuple
+
+from osgeo import gdal
 
 from dolphin import utils
 from dolphin._types import Filename
@@ -125,11 +128,14 @@ def _stitch_same_date(
         return new_name
 
     # TODO
+    # bounds, gt = get_combined_bounds_gt(*file_list)
     return new_name
 
 
-def get_combined_bounds(*filenames: Filename):
-    """Get the bounds of the combined image.
+def get_combined_bounds_gt(
+    *filenames: Filename,
+) -> Tuple[Tuple[float, float, float, float], List]:
+    """Get the bounds and geotransform of the combined image.
 
     Parameters
     ----------
@@ -138,15 +144,30 @@ def get_combined_bounds(*filenames: Filename):
 
     Returns
     -------
-    tuple:
+    bounds: Tuple[float]
         (min_x, min_y, max_x, max_y)
-
+    gt: List[float]
+        geotransform of the combined image.
     """
     # scan input files
     xs = []
     ys = []
+    projs = set()
+    resolutions = set()
     for fn in filenames:
+        ds = gdal.Open(fspath(fn))
         left, bottom, right, top = get_raster_bounds(fn)
+        gt = ds.GetGeoTransform()
+        dx, dy = gt[1], gt[5]
+        resolutions.add((dx, dy))
+        projs.add(ds.GetProjection())
+
         xs.extend([left, right])
         ys.extend([bottom, top])
-    return min(xs), min(ys), max(xs), max(ys)
+    if len(projs) > 1:
+        raise ValueError(f"Input files have different projections {projs}")
+    if len(resolutions) > 1:
+        raise ValueError(f"Input files have different resolutions: {resolutions}")
+    bounds = min(xs), min(ys), max(xs), max(ys)
+    gt_total = [bounds[0], dx, 0, bounds[3], 0, dy]
+    return bounds, gt_total

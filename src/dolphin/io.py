@@ -213,9 +213,12 @@ def _apply_gt(
     return x, y
 
 
-def get_raster_bounds(filename: Filename) -> Tuple[float, float, float, float]:
+def get_raster_bounds(
+    filename: Filename, ds: Optional[gdal.Dataset] = None
+) -> Tuple[float, float, float, float]:
     """Get the (left, bottom, right, top) bounds of the image."""
-    ds = gdal.Open(fspath(filename))
+    if ds is None:
+        ds = gdal.Open(fspath(filename))
     gt = ds.GetGeoTransform()
     xsize, ysize = ds.RasterXSize, ds.RasterYSize
 
