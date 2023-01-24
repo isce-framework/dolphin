@@ -198,8 +198,12 @@ class WorkerSettings(BaseSettings):
 class Inputs(BaseModel):
     """Options specifying input datasets for workflow."""
 
-    cslc_file_list: List[Path] = Field(
-        default_factory=list, description="List of CSLC files"
+    cslc_file_list: Union[Path, List[Path]] = Field(
+        default_factory=list,
+        description=(
+            "List of CSLC files, or newline-delimited file "
+            "containing list of CSLC files."
+        ),
     )
     subdataset: Optional[str] = Field(
         None,
@@ -231,6 +235,10 @@ class Inputs(BaseModel):
                 # If given as relative paths, make them relative to the file
                 parent = v_path.parent
                 return [parent / f if not f.is_absolute() else f for f in filenames]
+            else:
+                raise ValueError(
+                    f"Input file list {v_path} does not exist or is not a file."
+                )
 
         return [Path(f) for f in v]
 

@@ -41,7 +41,7 @@ def slc_file_list(tmp_path, slc_stack):
         ds = None
 
     # Write the list of SLC files to a text file
-    with open(tmp_path / "slclist.txt", "w") as f:
+    with open(d / "slclist.txt", "w") as f:
         f.write("\n".join([str(f) for f in file_list]))
     return file_list
 
@@ -61,7 +61,7 @@ def slc_file_list_nc(tmp_path, slc_stack):
         file_list.append(Path(fname))
 
     # Write the list of SLC files to a text file
-    with open(tmp_path / "slclist.txt", "w") as f:
+    with open(d / "slclist.txt", "w") as f:
         f.write("\n".join([str(f) for f in file_list]))
     return file_list
 
@@ -81,7 +81,7 @@ def slc_file_list_nc_wgs84(tmp_path, slc_stack):
         assert 'AUTHORITY["EPSG","4326"]]' in gdal.Open(fname).GetProjection()
         file_list.append(Path(fname))
 
-    with open(tmp_path / "slclist.txt", "w") as f:
+    with open(d / "slclist.txt", "w") as f:
         f.write("\n".join([str(f) for f in file_list]))
     return file_list
 
@@ -102,7 +102,7 @@ def slc_file_list_nc_with_sds(tmp_path, slc_stack):
         file_list.append(f"NETCDF:{fname}:/slc/data")
 
     # Write the list of SLC files to a text file
-    with open(tmp_path / "slclist.txt", "w") as f:
+    with open(d / "slclist.txt", "w") as f:
         f.write("\n".join([str(f) for f in file_list]))
     return file_list
 
@@ -138,7 +138,9 @@ def raster_100_by_200(tmp_path):
     ysize, xsize = 100, 200
     # Create a test raster
     driver = gdal.GetDriverByName("ENVI")
-    filename = str(tmp_path / "raster_100_by_200" / "test.bin")
+    d = tmp_path / "raster_100_by_200"
+    d.mkdir()
+    filename = str(d / "test.bin")
     ds = driver.Create(filename, xsize, ysize, 1, gdal.GDT_CFloat32)
     ds.FlushCache()
     ds = None
@@ -158,7 +160,9 @@ def tiled_raster_100_by_200(tmp_path):
     ]
     # Create a test raster
     driver = gdal.GetDriverByName("GTiff")
-    filename = tmp_path / "tiled" / "20220101test.tif"
+    d = tmp_path / "tiled"
+    d.mkdir()
+    filename = d / "20220101test.tif"
     ds = driver.Create(
         str(filename), xsize, ysize, 1, gdal.GDT_CFloat32, options=creation_options
     )
@@ -180,7 +184,9 @@ def tiled_file_list(tiled_raster_100_by_200):
 @pytest.fixture()
 def raster_10_by_20(tmp_path, tiled_raster_100_by_200):
     # Write a small image to a file
-    outname2 = tmp_path / "raster_10_by_20" / "20220102small.tif"
+    d = tmp_path / "raster_10_by_20"
+    d.mkdir()
+    outname2 = d / "20220102small.tif"
     gdal.Translate(str(outname2), str(tiled_raster_100_by_200), height=10, width=20)
     return outname2
 
