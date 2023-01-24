@@ -29,7 +29,9 @@ def slc_file_list(tmp_path, slc_stack):
     # driver = gdal.GetDriverByName("ENVI")
     driver = gdal.GetDriverByName("GTiff")
     start_date = 20220101
-    name_template = tmp_path / "{date}.slc.tif"
+    d = tmp_path / "gtiff"
+    d.mkdir()
+    name_template = d / "{date}.slc.tif"
     file_list = []
     for i in range(shape[0]):
         fname = str(name_template).format(date=str(start_date + i))
@@ -48,11 +50,14 @@ def slc_file_list(tmp_path, slc_stack):
 def slc_file_list_nc(tmp_path, slc_stack):
     """Save the slc stack as a series of NetCDF files."""
     start_date = 20220101
-    name_template = tmp_path / "{date}.nc"
+    d = tmp_path / "32615"
+    d.mkdir()
+    name_template = d / "{date}.nc"
     file_list = []
     for i in range(len(slc_stack)):
         fname = str(name_template).format(date=str(start_date + i))
         create_test_nc(fname, epsg=32615, subdir="/", data=slc_stack[i])
+        assert 'AUTHORITY["EPSG","32615"]]' in gdal.Open(fname).GetProjection()
         file_list.append(Path(fname))
 
     # Write the list of SLC files to a text file
@@ -66,11 +71,14 @@ def slc_file_list_nc_wgs84(tmp_path, slc_stack):
     """Make one with lat/lon as the projection system."""
 
     start_date = 20220101
-    name_template = tmp_path / "{date}.nc"
+    d = tmp_path / "wgs84"
+    d.mkdir()
+    name_template = d / "{date}.nc"
     file_list = []
     for i in range(len(slc_stack)):
         fname = str(name_template).format(date=str(start_date + i))
         create_test_nc(fname, epsg=4326, subdir="/", data=slc_stack[i])
+        assert 'AUTHORITY["EPSG","4326"]]' in gdal.Open(fname).GetProjection()
         file_list.append(Path(fname))
 
     with open(tmp_path / "slclist.txt", "w") as f:
@@ -82,7 +90,9 @@ def slc_file_list_nc_wgs84(tmp_path, slc_stack):
 def slc_file_list_nc_with_sds(tmp_path, slc_stack):
     """Save NetCDF files with multiple valid datsets."""
     start_date = 20220101
-    name_template = tmp_path / "{date}.nc"
+    d = tmp_path / "nc_with_sds"
+    name_template = d / "{date}.nc"
+    d.mkdir()
     file_list = []
     subdirs = ["/slc", "/slc2"]
     for i in range(len(slc_stack)):
@@ -128,7 +138,7 @@ def raster_100_by_200(tmp_path):
     ysize, xsize = 100, 200
     # Create a test raster
     driver = gdal.GetDriverByName("ENVI")
-    filename = str(tmp_path / "test.bin")
+    filename = str(tmp_path / "raster_100_by_200" / "test.bin")
     ds = driver.Create(filename, xsize, ysize, 1, gdal.GDT_CFloat32)
     ds.FlushCache()
     ds = None
@@ -148,7 +158,7 @@ def tiled_raster_100_by_200(tmp_path):
     ]
     # Create a test raster
     driver = gdal.GetDriverByName("GTiff")
-    filename = tmp_path / "20220101test.tif"
+    filename = tmp_path / "tiled" / "20220101test.tif"
     ds = driver.Create(
         str(filename), xsize, ysize, 1, gdal.GDT_CFloat32, options=creation_options
     )
@@ -170,7 +180,7 @@ def tiled_file_list(tiled_raster_100_by_200):
 @pytest.fixture()
 def raster_10_by_20(tmp_path, tiled_raster_100_by_200):
     # Write a small image to a file
-    outname2 = tmp_path / "20220102small.tif"
+    outname2 = tmp_path / "raster_10_by_20" / "20220102small.tif"
     gdal.Translate(str(outname2), str(tiled_raster_100_by_200), height=10, width=20)
     return outname2
 

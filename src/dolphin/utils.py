@@ -190,9 +190,9 @@ def sort_files_by_date(
 
     Returns
     -------
-    file_list: List[Filename]
+    file_list : List[Filename]
         Sorted list of files.
-    dates: List[datetime.date] or List[Tuple[datetime.date,...]]
+    dates : List[datetime.date] or List[Tuple[datetime.date,...]]
         Sorted list of dates corresponding to the files.
     """
     date_lists = [get_dates(f, fmt=file_date_fmt) for f in files]
@@ -200,8 +200,8 @@ def sort_files_by_date(
     if all(len(d) == 1 for d in date_lists):
         dates = [d[0] for d in date_lists]
     else:
-        # For multi-date files, return a tuple of dates
-        dates = [tuple(d) for d in date_lists]  # type: ignore
+        # For multi-date files, return a List of dates
+        dates = [list(d) for d in date_lists]  # type: ignore
 
     file_dates = sorted(
         [(f, d) for f, d in zip(files, dates)],

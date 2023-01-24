@@ -269,8 +269,7 @@ def run_evd_sequential(
         # Save each of the MLE estimates (ignoring the compressed SLCs)
         for img, f in zip(cur_mle_stack, adjusted_comp_slc_files):
             io.write_block(img, f, out_rows, out_cols)
-        # TODO: Do I care about the temporal coherence here?
-        # What would it even mean for the all-compressed SLCs?
+        # Don't think I care about the temporal coherence here
 
     # Compensate for the offsets between ministacks (aka "datum adjustments")
     for mini_idx, slc_files in output_slc_files.items():

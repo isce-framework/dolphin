@@ -32,7 +32,7 @@ def merge_by_date(
 
     Returns
     -------
-    str:
+    str
         path to the stitched image file
     """
     grouped_images = group_images_by_date(image_file_list)
@@ -116,7 +116,7 @@ def _stitch_same_date(
 
     Returns
     -------
-    str:
+    Path
         path to the stitched SLC file
     """
     # TODO: what format? How to initialize the file?
@@ -131,7 +131,7 @@ def _stitch_same_date(
 
     # TODO
     # bounds, gt = get_combined_bounds_gt(*file_list)
-    return new_name
+    return Path(new_name)
 
 
 def get_combined_bounds_gt(

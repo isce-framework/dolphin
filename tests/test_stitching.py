@@ -22,25 +22,45 @@ def shifted_slc_files(tmp_path):
     return file_list
 
 
-def test_get_combined_bounds(shifted_slc_files):
+def test_get_combined_bounds_gt(shifted_slc_files):
     # Use the created WGS84 SLC
     bnds = io.get_raster_bounds(shifted_slc_files[0])
-    expected = (-5.5, -4.5, 4.5, 5.5)
-    assert bnds == expected
+    expected_bnds = (-5.5, -4.5, 4.5, 5.5)
+    assert bnds == expected_bnds
+
     bnds = io.get_raster_bounds(shifted_slc_files[1])
-    expected = (-4.5, -3.5, 5.5, 6.5)
-    assert bnds == expected
+    expected_bnds = (-4.5, -3.5, 5.5, 6.5)
+    assert bnds == expected_bnds
+
     bnds = io.get_raster_bounds(shifted_slc_files[-1])
-    expected = (-1.5, -0.5, 8.5, 9.5)
-    assert bnds == expected
+    expected_bnds = (-1.5, -0.5, 8.5, 9.5)
+    assert bnds == expected_bnds
 
     # check same file twice
-    bnds = stitching.get_combined_bounds(shifted_slc_files[0], shifted_slc_files[0])
-    expected = (-5.5, -4.5, 4.5, 5.5)
-    assert bnds == expected
+    bnds, gt = stitching.get_combined_bounds_gt(
+        shifted_slc_files[0], shifted_slc_files[0]
+    )
+    expected_bnds = (-5.5, -4.5, 4.5, 5.5)
+    expected_gt = [-5.5, 1.0, 0.0, 5.5, 0.0, -1.0]
+    assert bnds == expected_bnds
+    assert gt == expected_gt
 
     # Now combined one: should have the mins as the first two values,
     # and the last two values should be the -1 file
-    bnds = stitching.get_combined_bounds(*shifted_slc_files)
-    expected = (-5.5, -4.5, 8.5, 9.5)
-    assert bnds == expected
+    bnds, gt = stitching.get_combined_bounds_gt(*shifted_slc_files)
+    expected_bnds = (-5.5, -4.5, 8.5, 9.5)
+    # only the top left corner should change
+    expected_gt[0], expected_gt[3] = -5.5, 9.5
+    assert bnds == expected_bnds
+    assert gt == expected_gt
+
+
+def test_get_combined_bounds_gt_different_proj(
+    slc_file_list_nc, slc_file_list_nc_wgs84
+):
+    bnds, gt = stitching.get_combined_bounds_gt(*slc_file_list_nc)
+    assert bnds == (-5.5, -2.0, 4.5, 3.0)
+    assert gt == [-5.5, 1.0, 0, 3.0, 0, -1.0]
+
+    with pytest.raises(ValueError):
+        stitching.get_combined_bounds_gt(slc_file_list_nc_wgs84[0], slc_file_list_nc[0])
