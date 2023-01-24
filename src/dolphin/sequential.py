@@ -108,7 +108,7 @@ def run_evd_sequential(
 
         # Create the empty compressed SLC file
         cur_comp_slc_file = cur_output_folder / f"compressed_{start_end}.tif"
-        io.save_arr(
+        io.write_arr(
             arr=None,
             like_filename=cur_vrt.outfile,
             output_name=cur_comp_slc_file,
@@ -121,7 +121,7 @@ def run_evd_sequential(
 
         # Create the empty compressed temporal coherence file
         tcorr_file = cur_output_folder / f"tcorr_{start_end}.tif"
-        io.save_arr(
+        io.write_arr(
             arr=None,
             like_filename=cur_vrt.outfile,
             output_name=tcorr_file,
@@ -190,10 +190,10 @@ def run_evd_sequential(
             out_cols = slice(cols.start // xs, cols.start // xs + out_c)
 
             for img, f in zip(cur_mle_stack[mini_idx:], cur_output_files):
-                io.save_block(img, f, out_rows, out_cols)
+                io.write_block(img, f, out_rows, out_cols)
 
             # Save the temporal coherence blocks
-            io.save_block(tcorr, tcorr_file, out_rows, out_cols)
+            io.write_block(tcorr, tcorr_file, out_rows, out_cols)
 
             # Compress the ministack using only the non-compressed SLCs
             cur_comp_slc = compress(
@@ -201,7 +201,7 @@ def run_evd_sequential(
                 cur_mle_stack[mini_idx:],
             )
             # Save the compressed SLC block
-            io.save_block(cur_comp_slc, cur_comp_slc_file, out_rows, out_cols)
+            io.write_block(cur_comp_slc, cur_comp_slc_file, out_rows, out_cols)
             # logger.debug(f"Saved compressed block SLC to {cur_comp_slc_file}")
             # tqdm.write(" Finished block, loading next block.")
 
@@ -268,7 +268,7 @@ def run_evd_sequential(
         out_cols = slice(cols.start // xs, cols.stop // xs)
         # Save each of the MLE estimates (ignoring the compressed SLCs)
         for img, f in zip(cur_mle_stack, adjusted_comp_slc_files):
-            io.save_block(img, f, out_rows, out_cols)
+            io.write_block(img, f, out_rows, out_cols)
         # TODO: Do I care about the temporal coherence here?
         # What would it even mean for the all-compressed SLCs?
 

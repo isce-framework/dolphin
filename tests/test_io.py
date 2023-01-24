@@ -42,7 +42,7 @@ def test_save_like(raster_100_by_200, tmpdir):
 
     ones = np.ones_like(arr)
     save_name = tmpdir / "ones.tif"
-    io.save_arr(arr=ones, like_filename=raster_100_by_200, output_name=save_name)
+    io.write_arr(arr=ones, like_filename=raster_100_by_200, output_name=save_name)
 
     ones_loaded = io.load_gdal(save_name)
     npt.assert_array_almost_equal(ones, ones_loaded)
@@ -50,7 +50,7 @@ def test_save_like(raster_100_by_200, tmpdir):
 
 def test_save_empty_like(raster_100_by_200, tmpdir):
     save_name = tmpdir / "empty.tif"
-    io.save_arr(arr=None, like_filename=raster_100_by_200, output_name=save_name)
+    io.write_arr(arr=None, like_filename=raster_100_by_200, output_name=save_name)
 
     empty_loaded = io.load_gdal(save_name)
     zeros = np.zeros_like(empty_loaded)
@@ -64,7 +64,7 @@ def test_save_strided(raster_100_by_200, tmpdir):
     strides = {"x": 1, "y": 1}
     out_shape = io.compute_out_shape((100, 200), strides)
     assert out_shape == (100, 200)
-    io.save_arr(
+    io.write_arr(
         arr=None,
         like_filename=raster_100_by_200,
         shape=out_shape,
@@ -78,7 +78,7 @@ def test_save_strided(raster_100_by_200, tmpdir):
     strides = {"x": 2, "y": 4}
     out_shape = io.compute_out_shape((100, 200), strides)
     assert out_shape == (25, 100)
-    io.save_arr(
+    io.write_arr(
         arr=None,
         like_filename=raster_100_by_200,
         shape=out_shape,
@@ -90,13 +90,13 @@ def test_save_strided(raster_100_by_200, tmpdir):
 
 def test_save_block(raster_100_by_200, tmpdir):
     save_name = tmpdir / "empty.tif"
-    io.save_arr(arr=None, like_filename=raster_100_by_200, output_name=save_name)
+    io.write_arr(arr=None, like_filename=raster_100_by_200, output_name=save_name)
 
     block_loaded = io.load_gdal(save_name)
     arr = np.zeros_like(block_loaded)
     npt.assert_array_almost_equal(block_loaded, arr)
 
-    io.save_block(
+    io.write_block(
         cur_block=np.ones((20, 30)),
         filename=save_name,
         rows=slice(0, 20),
@@ -106,7 +106,7 @@ def test_save_block(raster_100_by_200, tmpdir):
     arr[:20, :30] = 1
     npt.assert_array_almost_equal(block_loaded2, arr)
 
-    io.save_block(
+    io.write_block(
         cur_block=np.ones((20, 30)),
         filename=save_name,
         rows=slice(0, 20),
@@ -126,7 +126,7 @@ def cpx_arr(shape=(100, 200)):
 
 def test_save_cpx(raster_100_by_200, cpx_arr, tmpdir):
     save_name = tmpdir / "complex.tif"
-    io.save_arr(arr=cpx_arr, like_filename=raster_100_by_200, output_name=save_name)
+    io.write_arr(arr=cpx_arr, like_filename=raster_100_by_200, output_name=save_name)
     arr_loaded = io.load_gdal(save_name)
     assert arr_loaded.dtype == np.complex64
     npt.assert_array_almost_equal(arr_loaded, cpx_arr)
@@ -135,7 +135,7 @@ def test_save_cpx(raster_100_by_200, cpx_arr, tmpdir):
 def test_save_block_cpx(raster_100_by_200, cpx_arr, tmpdir):
     save_name = tmpdir / "complex_block.tif"
     # Start with empty file
-    io.save_arr(
+    io.write_arr(
         arr=None,
         like_filename=raster_100_by_200,
         output_name=save_name,
@@ -144,7 +144,7 @@ def test_save_block_cpx(raster_100_by_200, cpx_arr, tmpdir):
     arr_loaded = io.load_gdal(save_name)
     assert (arr_loaded == 0).all()
 
-    io.save_block(
+    io.write_block(
         cur_block=np.ones((20, 30), dtype=np.complex64),
         filename=save_name,
         rows=slice(0, 20),
@@ -155,7 +155,7 @@ def test_save_block_cpx(raster_100_by_200, cpx_arr, tmpdir):
     assert (arr_loaded[20:, 30:] == 0).all()
 
     block_cpx = cpx_arr[:10, :10].copy()
-    io.save_block(
+    io.write_block(
         cur_block=block_cpx,
         filename=save_name,
         rows=slice(20, 30),
@@ -215,7 +215,7 @@ def test_get_nodata_mask(tmpdir):
     # Setup stack of ones
     arr = np.ones((50, 50), dtype="float32")
     path1 = tmpdir / "20200102.tif"
-    io.save_arr(arr=arr, output_name=path1)
+    io.write_arr(arr=arr, output_name=path1)
 
     path2 = tmpdir / "20220103.tif"
     gdal.Translate(str(path2), str(path1))
@@ -233,19 +233,19 @@ def test_get_nodata_mask(tmpdir):
 
     # save some nodata
     arr[:, :10] = np.nan
-    io.save_arr(arr=arr, output_name=path1)
+    io.write_arr(arr=arr, output_name=path1)
     m = io.get_stack_nodata_mask(vrt_stack.outfile, buffer_pixels=0)
     # Should still be 0
     assert m.sum() == 0
 
     # Now the whole stack has nodata
-    io.save_arr(arr=arr, output_name=path2)
+    io.write_arr(arr=arr, output_name=path2)
     m = io.get_stack_nodata_mask(vrt_stack.outfile, buffer_pixels=0)
     # Should still be 0
     assert m.sum() == 10 * 50
 
     # but with a buffer, it should be 0
-    io.save_arr(arr=arr, output_name=path2)
+    io.write_arr(arr=arr, output_name=path2)
     m = io.get_stack_nodata_mask(vrt_stack.outfile, buffer_pixels=50)
     # Should still be 0
     assert m.sum() == 0
@@ -253,7 +253,7 @@ def test_get_nodata_mask(tmpdir):
     # TODO: the buffer isn't making it as big as i'd expect...
     # but with a buffer, it should be 0
 
-    io.save_arr(arr=arr, output_name=path2)
+    io.write_arr(arr=arr, output_name=path2)
     m = io.get_stack_nodata_mask(vrt_stack.outfile, buffer_pixels=10)
     # Should still be 0
     with pytest.raises(AssertionError):

@@ -10,7 +10,7 @@ from tqdm.auto import tqdm
 gdal.UseExceptions()
 
 from dolphin._types import Filename
-from dolphin.io import save_arr, save_block
+from dolphin.io import write_arr, write_block
 
 
 def create_ps(
@@ -47,7 +47,7 @@ def create_ps(
     file_list = [output_file, amp_dispersion_file, amp_mean_file]
     nodatas = [255, 0, 0]
     for fn, dtype, nodata in zip(file_list, types, nodatas):
-        save_arr(
+        write_arr(
             arr=None,
             like_filename=slc_vrt_file,
             output_name=fn,
@@ -84,9 +84,9 @@ def create_ps(
         ps[amp_disp == 0] = 255
 
         # Write amp dispersion and the mean blocks
-        save_block(mean, amp_mean_file, rows, cols)
-        save_block(amp_disp, amp_dispersion_file, rows, cols)
-        save_block(ps, output_file, rows, cols)
+        write_block(mean, amp_mean_file, rows, cols)
+        write_block(amp_disp, amp_dispersion_file, rows, cols)
+        write_block(ps, output_file, rows, cols)
 
 
 def calc_ps_block(stack_mag: np.ndarray, amp_dispersion_threshold: float = 0.42):

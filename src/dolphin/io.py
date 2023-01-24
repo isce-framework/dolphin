@@ -266,7 +266,7 @@ def compute_out_shape(
     return (rows // rs, cols // cs)
 
 
-def save_arr(
+def write_arr(
     *,
     arr: Optional[np.ndarray],
     output_name: Filename,
@@ -421,7 +421,7 @@ def setup_output_folder(
         # TODO: account for HDF5
         output_path = output_folder / f"{slc_name}.slc.tif"
 
-        save_arr(
+        write_arr(
             arr=None,
             like_filename=vrt_stack.outfile,
             output_name=output_path,
@@ -436,13 +436,13 @@ def setup_output_folder(
     return output_files
 
 
-def save_block(
+def write_block(
     cur_block: np.ndarray,
     filename: Filename,
     rows: slice,
     cols: slice,
 ):
-    """Save an ndarray to a subset of the pre-made `filename`.
+    """Write out an ndarray to a subset of the pre-made `filename`.
 
     Parameters
     ----------
@@ -463,6 +463,9 @@ def save_block(
     if cur_block.ndim == 2:
         # Make into 3D array shaped (1, rows, cols)
         cur_block = cur_block[np.newaxis, ...]
+    # filename must be pre-made
+    if not Path(filename).exists():
+        raise ValueError(f"File {filename} does not exist")
 
     ds = gdal.Open(fspath(filename), gdal.GA_Update)
     for b_idx, cur_image in enumerate(cur_block, start=1):
@@ -532,7 +535,7 @@ def get_stack_nodata_mask(
             out_mask &= nodata_mask
 
     if output_file:
-        save_arr(
+        write_arr(
             arr=out_mask,
             output_name=output_file,
             like_filename=stack_filename,
