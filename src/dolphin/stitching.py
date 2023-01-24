@@ -178,6 +178,7 @@ def get_combined_bounds_gt(
 def _nan_to_zero(
     infile,
     ext: Optional[str] = None,
+    out_dir: Optional[Filename] = None,
     in_band: int = 1,
     driver="ENVI",
     creation_options=["SUFFIX=ADD"],
@@ -186,7 +187,11 @@ def _nan_to_zero(
     in_p = Path(infile)
     if ext is None:
         ext = in_p.suffix
-    tmp_file = (in_p.parent) / (in_p.stem + "_tmp" + ext)
+    if out_dir is None:
+        out_dir = in_p.parent
+    else:
+        out_dir = Path(out_dir)
+    tmp_file = out_dir / (in_p.stem + "_tmp" + ext)
 
     ds_in = gdal.Open(fspath(infile))
     drv = gdal.GetDriverByName(driver)

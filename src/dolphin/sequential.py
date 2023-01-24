@@ -220,7 +220,7 @@ def run_evd_sequential(
         assert len(tcorr_files) == 1
         for slc_fname in output_slc_files[0]:
             slc_fname.rename(final_output_folder / slc_fname.name)
-        tcorr_files[0].rename(final_output_folder / tcorr_files[0].name)
+        tcorr_files[0].rename(final_output_folder / "tcorr_average.tif")
         return final_output_folder
 
     # Compute the adjustments by running EVD on the compressed SLCs

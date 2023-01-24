@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-from dolphin import interferogram, ps, sequential, vrt
+from dolphin import interferogram, ps, sequential, stitching, unwrap, vrt
 from dolphin._log import get_log, log_runtime
 
 from .config import Workflow
@@ -110,8 +110,22 @@ def run(cfg: Workflow, debug: bool = False):
         logger.info("Skipping unwrap step")
         return
 
-    # output_dir = cfg.outputs.output_directory.absolute()
-    # unwrap.run( ... )
+    stitched_ifg_dir = scratch_dir / "stitched_ifgs"
+    stitched_ifg_dir.mkdir(exist_ok=True)
+    # snaphu needs the binary format
+    stitching._nan_to_zero(
+        infile=network.ifg_list[-1], ext=".int", out_dir=stitched_ifg_dir, driver="ENVI"
+    )
+    tcorr_file = pl_path / "tcorr_average.tif"
+    unwrap.run(
+        ifg_path=stitched_ifg_dir,
+        output_path=cfg.unwrap_options.directory,
+        cor_file=tcorr_file,
+        # mask_file: Optional[Filename] = None,
+        max_jobs=20,
+        # overwrite: bool = False,
+        no_tile=True,
+    )
 
     # ####################
     # 5. Phase Corrections
