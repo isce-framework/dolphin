@@ -106,6 +106,8 @@ class PhaseLinkingOptions(BaseModel):
 class InterferogramNetwork(BaseModel):
     """Options to determine the type of network for interferogram formation."""
 
+    directory: Path = Path("interferograms")
+
     reference_idx: Optional[int] = Field(
         None,
         description=(
@@ -477,6 +479,7 @@ class Workflow(BaseModel):
             self.outputs.output_directory,
             self.ps_options.directory,
             self.phase_linking.directory,
+            self.interferogram_network.directory,
             self.unwrap_options.directory,
         ]
 

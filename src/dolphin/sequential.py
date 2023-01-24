@@ -209,19 +209,23 @@ def run_evd_sequential(
 
     ##############################################
     # Set up the output folder with empty files to write into
-    final_output_folder = output_folder / "final"
-    final_output_folder.mkdir(parents=True, exist_ok=True)
+    # final_output_folder = output_folder / "final"
+    # final_output_folder.mkdir(parents=True, exist_ok=True)
+
+    # Average the temporal coherence files in each ministack
+    output_tcorr_file = output_folder / "tcorr_average.tif"
     # Find the offsets between stacks by doing a phase linking only compressed SLCs
-    # But only if we have multiple ministacks
+
+    # ...But only if we have multiple ministacks
     if len(comp_slc_files) == 1:
         # There was only one ministack, so we can skip this step
         logger.info("Only one ministack, skipping offset calculation.")
         assert len(output_slc_files) == 1
         assert len(tcorr_files) == 1
         for slc_fname in output_slc_files[0]:
-            slc_fname.rename(final_output_folder / slc_fname.name)
-        tcorr_files[0].rename(final_output_folder / "tcorr_average.tif")
-        return final_output_folder
+            slc_fname.rename(output_folder / slc_fname.name)
+        tcorr_files[0].rename(output_tcorr_file)
+        return
 
     # Compute the adjustments by running EVD on the compressed SLCs
     comp_output_folder = output_folder / "adjustments"
@@ -277,7 +281,7 @@ def run_evd_sequential(
 
         for slc_fname in slc_files:
             logger.info(f"Compensating {slc_fname} with {adjustment_fname}")
-            outfile = final_output_folder / f"{slc_fname.name}"
+            outfile = output_folder / f"{slc_fname.name}"
             VRTInterferogram(
                 ref_slc=slc_fname,
                 sec_slc=adjustment_fname,
@@ -285,8 +289,6 @@ def run_evd_sequential(
                 pixel_func="mul",
             )
 
-    # Average the temporal coherence files in each ministack
-    output_tcorr_file = final_output_folder / "tcorr_average.tif"
     # Can pass the list of files to gdal_calc, which interprets it
     # as a multi-band file
     logger.info(f"Averaging temporal coherence files into: {output_tcorr_file}")
@@ -301,8 +303,6 @@ def run_evd_sequential(
         A=tcorr_files,
         calc="numpy.nanmean(A, axis=0)",
     )
-
-    return final_output_folder
 
 
 def compress(

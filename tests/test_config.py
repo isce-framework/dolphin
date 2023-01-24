@@ -274,6 +274,7 @@ def test_config_create_dir_tree(tmpdir, slc_file_list_nc):
         c = config.Workflow(inputs={"cslc_file_list": [fname0]})
         c.create_dir_tree()
         assert c.ps_options.directory.exists()
+        assert c.interferogram_network.directory.exists()
         assert c.phase_linking.directory.exists()
         assert c.unwrap_options.directory.exists()
 

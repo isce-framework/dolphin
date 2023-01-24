@@ -65,9 +65,9 @@ def run(cfg: Workflow, debug: bool = False):
         logger.info(f"Skipping EVD step, {len(existing_files)} files already exist")
     else:
         logger.info(f"Running sequential EMI step in {pl_path}")
-        pl_path = sequential.run_evd_sequential(
+        sequential.run_evd_sequential(
             slc_vrt_file=vrt_stack.outfile,
-            output_folder=cfg.phase_linking.directory,
+            output_folder=pl_path,
             half_window=cfg.phase_linking.half_window.dict(),
             strides=cfg.outputs.strides,
             ministack_size=cfg.phase_linking.ministack_size,
@@ -82,7 +82,8 @@ def run(cfg: Workflow, debug: bool = False):
     # ###################################################
     # 3. Form interferograms from estimated wrapped phase
     # ###################################################
-    existing_ifgs = list(cfg.interferograms.directory.glob("*.int.vrt"))
+    ifg_dir = cfg.interferogram_network.directory
+    existing_ifgs = list(ifg_dir.glob("*.int.vrt"))
     if len(existing_ifgs) > 0:
         logger.info(f"Skipping interferogram step, {len(existing_ifgs)} exists")
     else:
@@ -93,12 +94,16 @@ def run(cfg: Workflow, debug: bool = False):
             f"Creating virtual interferograms from {len(phase_linked_slcs)} files and"
             f" {len(compressed_slcs)} compressed files"
         )
+        if compressed_slcs:
+            slc_list = [compressed_slcs[0]] + phase_linked_slcs
+        else:
+            slc_list = phase_linked_slcs
         network = interferogram.Network(
-            slc_list=[compressed_slcs[0]] + phase_linked_slcs,
+            slc_list=slc_list,
             # TODO: get this from config
             reference_idx=0,
         )
-        network.write(outdir=cfg.interferograms.directory)
+        network.write(outdir=ifg_dir)
 
     # ###################################
     # 4. Stitch and Unwrap interferograms

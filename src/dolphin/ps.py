@@ -75,7 +75,7 @@ def create_ps(
             continue
 
         cur_rows, cur_cols = cur_data.shape[-2:]
-        magnitude_cur = np.abs(cur_data, out=magnitude[:, :cur_rows, cur_cols])
+        magnitude_cur = np.abs(cur_data, out=magnitude[:, :cur_rows, :cur_cols])
         mean, amp_disp, ps = calc_ps_block(magnitude_cur, amp_dispersion_threshold)
 
         # Use the UInt8 type for the PS to save.
