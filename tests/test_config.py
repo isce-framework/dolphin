@@ -170,6 +170,13 @@ def test_inputs_defaults(dir_with_1_slc):
     assert isinstance(opts2.cslc_file_list[0], Path)
 
 
+def test_inputs_bad_filename(tmp_path):
+    # make a dummy file
+    bad_cslc_file = tmp_path / "nonexistent_slclist.txt"
+    with pytest.raises(pydantic.ValidationError, match="does not exist"):
+        config.Inputs(cslc_file_list=bad_cslc_file)
+
+
 def test_input_find_slcs(slc_file_list_nc):
     cslc_dir = Path(slc_file_list_nc[0]).parent
 

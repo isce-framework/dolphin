@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-from dolphin import ps, sequential, vrt
+from dolphin import interferogram, ps, sequential, vrt
 from dolphin._log import get_log, log_runtime
 
 from .config import Workflow
@@ -59,7 +59,8 @@ def run(cfg: Workflow, debug: bool = False):
     # #########################
     pl_path = cfg.phase_linking.directory
 
-    existing_files = list(pl_path.glob("*.h5"))  # TODO: get ext from config
+    # TODO: get intermediate ext from config
+    existing_files = list(pl_path.glob("*.tif"))
     if len(existing_files) > 0:
         logger.info(f"Skipping EVD step, {len(existing_files)} files already exist")
     else:
@@ -81,13 +82,23 @@ def run(cfg: Workflow, debug: bool = False):
     # ###################################################
     # 3. Form interferograms from estimated wrapped phase
     # ###################################################
-    # existing_ifgs = list(cfg.interferograms.directory.glob("*.int*"))
-    # if len(existing_ifgs) > 0:
-    #     logger.info(f"Skipping interferogram step, {len(existing_ifgs)} exists")
-    # else:
-    #     logger.info(f"Running interferogram formation ")
-    #    # The python MLE function handles the temp coh, and the PS phase insertion
-    #    # interferograms.form_ifgs( ... )
+    existing_ifgs = list(cfg.interferograms.directory.glob("*.int.vrt"))
+    if len(existing_ifgs) > 0:
+        logger.info(f"Skipping interferogram step, {len(existing_ifgs)} exists")
+    else:
+        # TODO: intermediate extension should be in config
+        phase_linked_slcs = sorted(pl_path.glob("20*.tif"))
+        compressed_slcs = sorted(pl_path.glob("compressed_*.tif"))
+        logger.info(
+            f"Creating virtual interferograms from {len(phase_linked_slcs)} files and"
+            f" {len(compressed_slcs)} compressed files"
+        )
+        network = interferogram.Network(
+            slc_list=[compressed_slcs[0]] + phase_linked_slcs,
+            # TODO: get this from config
+            reference_idx=0,
+        )
+        network.write(outdir=cfg.interferograms.directory)
 
     # ###################################
     # 4. Stitch and Unwrap interferograms

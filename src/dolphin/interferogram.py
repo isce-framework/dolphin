@@ -2,7 +2,7 @@
 import itertools
 from os import fspath
 from pathlib import Path
-from typing import List, Optional, Tuple, Union
+from typing import List, Optional, Sequence, Tuple, Union
 
 from osgeo import gdal
 from pydantic import BaseModel, Field, root_validator, validator
@@ -204,7 +204,7 @@ class Network:
 
     def __init__(
         self,
-        slc_list: List[Filename],
+        slc_list: Sequence[Filename],
         max_bandwidth: Optional[int] = None,
         max_temporal_baseline: Optional[float] = None,
         reference_idx: Optional[int] = None,

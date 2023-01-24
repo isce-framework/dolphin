@@ -198,7 +198,7 @@ class WorkerSettings(BaseSettings):
 class Inputs(BaseModel):
     """Options specifying input datasets for workflow."""
 
-    cslc_file_list: Union[Path, List[Path]] = Field(
+    cslc_file_list: List[Path] = Field(
         default_factory=list,
         description=(
             "List of CSLC files, or newline-delimited file "

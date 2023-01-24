@@ -221,7 +221,7 @@ def run_evd_sequential(
         for slc_fname in output_slc_files[0]:
             slc_fname.rename(final_output_folder / slc_fname.name)
         tcorr_files[0].rename(final_output_folder / tcorr_files[0].name)
-        return
+        return final_output_folder
 
     # Compute the adjustments by running EVD on the compressed SLCs
     comp_output_folder = output_folder / "adjustments"
