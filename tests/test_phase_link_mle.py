@@ -1,9 +1,6 @@
-import warnings
-
 import numpy as np
 import numpy.testing as npt
 import pytest
-from numba.core.errors import NumbaPerformanceWarning
 
 from dolphin.phase_link import covariance, mle, simulate
 from dolphin.phase_link._mle_gpu import run_gpu
@@ -12,6 +9,11 @@ from dolphin.utils import gpu_is_available
 GPU_AVAILABLE = gpu_is_available()
 NUM_ACQ = 30
 simulate._seed(1234)
+
+# 'Grid size 49 will likely result in GPU under-utilization due to low occupancy.'
+pytestmark = pytest.mark.filterwarnings(
+    "ignore::numba.core.errors.NumbaPerformanceWarning"
+)
 
 
 @pytest.fixture(scope="module")
@@ -52,7 +54,6 @@ def test_estimation_gpu(slc_samples, est_mle_cpu):
     # Get the GPU version
     slc_stack = slc_samples.reshape(NUM_ACQ, 11, 11)
 
-    warnings.filterwarnings("ignore", category=NumbaPerformanceWarning)
     est_mle_gpu_fullres, temp_coh = run_gpu(slc_stack, half_window={"x": 5, "y": 5})
     assert est_mle_gpu_fullres.shape == (len(est_mle_cpu), 11, 11)
     assert temp_coh.shape == (11, 11)
@@ -126,11 +127,27 @@ def test_run_mle_norm_output(slc_samples):
 
 
 @pytest.mark.parametrize("gpu_enabled", [True, False])
+@pytest.mark.parametrize("strides", [1, 2, 3, 4, 5])
+@pytest.mark.parametrize("half_window", [5, 11])
+@pytest.mark.parametrize("shape", [(10, 11), (15, 20), (50, 75)])
+def test_strides_window_sizes(gpu_enabled, strides, half_window, shape):
+    """Test that window and stride sizes don't cause errors for many input shapes."""
+    data = np.random.normal(0, 1, size=(4, *shape)).astype(np.complex64)
+    mle.run_mle(
+        data,
+        half_window={"x": half_window, "y": half_window},
+        strides={"x": strides, "y": strides},
+        gpu_enabled=gpu_enabled,
+    )
+
+
+@pytest.mark.parametrize("gpu_enabled", [True, False])
 @pytest.mark.parametrize("strides", [1, 2, 3])
 def test_run_mle_ps_fill(slc_samples, gpu_enabled, strides):
     slc_stack = slc_samples.reshape(NUM_ACQ, 11, 11)
+    ps_idx = 2
     ps_mask = np.zeros((11, 11), dtype=bool)
-    ps_mask[1, 1] = True
+    ps_mask[ps_idx, ps_idx] = True
     mle_est, temp_coh = mle.run_mle(
         slc_stack,
         half_window={"x": 5, "y": 5},
@@ -138,10 +155,10 @@ def test_run_mle_ps_fill(slc_samples, gpu_enabled, strides):
         ps_mask=ps_mask,
         gpu_enabled=gpu_enabled,
     )
-    ps_phase = slc_stack[:, 1, 1]
+    ps_phase = slc_stack[:, ps_idx, ps_idx]
     ps_phase *= ps_phase[0].conj()  # Reference to first acquisition
 
-    out_idx = 1 // strides
+    out_idx = ps_idx // strides
     npt.assert_array_almost_equal(
         np.angle(ps_phase), np.angle(mle_est[:, out_idx, out_idx])
     )
