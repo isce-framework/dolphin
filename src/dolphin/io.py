@@ -89,6 +89,10 @@ def load_gdal(
 
 def format_nc_filename(filename: Filename, ds_name: Optional[str] = None) -> str:
     """Format an HDF5/NetCDF filename, with dataset for reading using GDAL."""
+    # If we've already formatted the filename, return it
+    if str(filename).startswith("NETCDF:") or str(filename).startswith("HDF5:"):
+        return str(filename)
+
     if not (fspath(filename).endswith(".nc") or fspath(filename).endswith(".h5")):
         return fspath(filename)
 

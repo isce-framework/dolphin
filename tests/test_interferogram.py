@@ -4,7 +4,7 @@ from pathlib import Path
 import numpy.testing as npt
 import pytest
 
-from dolphin import io
+from dolphin import io, utils
 from dolphin.interferogram import Network, VRTInterferogram
 
 
@@ -12,8 +12,8 @@ def test_derived_vrt_interferogram(slc_file_list):
     """Basic test that the VRT loads the same as S1 * S2.conj()."""
     ifg = VRTInterferogram(ref_slc=slc_file_list[0], sec_slc=slc_file_list[1])
 
-    assert "20220101_20220102.vrt" == ifg.filepath.name
-    assert io.get_raster_xysize(ifg.filepath) == io.get_raster_xysize(slc_file_list[0])
+    assert "20220101_20220102.vrt" == ifg.path.name
+    assert io.get_raster_xysize(ifg.path) == io.get_raster_xysize(slc_file_list[0])
     assert ifg.dates == (date(2022, 1, 1), date(2022, 1, 2))
 
     arr0 = io.load_gdal(slc_file_list[0])
@@ -26,10 +26,8 @@ def test_derived_vrt_interferogram(slc_file_list):
 def test_derived_vrt_interferogram_nc(slc_file_list_nc):
     ifg = VRTInterferogram(ref_slc=slc_file_list_nc[0], sec_slc=slc_file_list_nc[1])
 
-    assert "20220101_20220102.vrt" == ifg.filepath.name
-    assert io.get_raster_xysize(ifg.filepath) == io.get_raster_xysize(
-        slc_file_list_nc[0]
-    )
+    assert "20220101_20220102.vrt" == ifg.path.name
+    assert io.get_raster_xysize(ifg.path) == io.get_raster_xysize(slc_file_list_nc[0])
 
     arr0 = io.load_gdal(slc_file_list_nc[0])
     arr1 = io.load_gdal(slc_file_list_nc[1])
@@ -44,8 +42,8 @@ def test_derived_vrt_interferogram_with_subdataset(slc_file_list_nc_with_sds):
         ref_slc=slc_file_list_nc_with_sds[0], sec_slc=slc_file_list_nc_with_sds[1]
     )
 
-    assert "20220101_20220102.vrt" == ifg.filepath.name
-    assert io.get_raster_xysize(ifg.filepath) == io.get_raster_xysize(
+    assert "20220101_20220102.vrt" == ifg.path.name
+    assert io.get_raster_xysize(ifg.path) == io.get_raster_xysize(
         slc_file_list_nc_with_sds[0]
     )
 
@@ -56,24 +54,40 @@ def test_derived_vrt_interferogram_with_subdataset(slc_file_list_nc_with_sds):
     assert ifg_arr.shape == arr0.shape
     npt.assert_allclose(ifg_arr, arr0 * arr1.conj())
 
+    # Now try with just the path
+    path1 = utils._get_path_from_gdal_str(slc_file_list_nc_with_sds[0])
+    path2 = utils._get_path_from_gdal_str(slc_file_list_nc_with_sds[1])
+    # it should fail if we don't pass the subdataset
+    with pytest.raises(ValueError):
+        ifg2 = VRTInterferogram(ref_slc=path1, sec_slc=path2)
+
+    ifg2 = VRTInterferogram(
+        ref_slc=path1,
+        sec_slc=path2,
+        outfile=ifg.path.parent / "test2.vrt",
+        subdataset="slc/data",
+    )
+    ifg_arr2 = ifg2.load()
+    npt.assert_allclose(ifg_arr2, ifg_arr)
+
 
 def test_derived_vrt_interferogram_outdir(tmp_path, slc_file_list):
     ifg = VRTInterferogram(ref_slc=slc_file_list[0], sec_slc=slc_file_list[1])
-    assert slc_file_list[0].parent / "20220101_20220102.vrt" == ifg.filepath
+    assert slc_file_list[0].parent / "20220101_20220102.vrt" == ifg.path
 
     ifg = VRTInterferogram(
         ref_slc=slc_file_list[0], sec_slc=slc_file_list[1], outdir=tmp_path
     )
-    assert tmp_path / "20220101_20220102.vrt" == ifg.filepath
+    assert tmp_path / "20220101_20220102.vrt" == ifg.path
 
 
 def test_derived_vrt_interferogram_outfile(tmpdir, slc_file_list):
     # Change directory so we dont create a file in the source directory
     with tmpdir.as_cwd():
         ifg = VRTInterferogram(
-            ref_slc=slc_file_list[0], sec_slc=slc_file_list[1], filepath="test_ifg.vrt"
+            ref_slc=slc_file_list[0], sec_slc=slc_file_list[1], path="test_ifg.vrt"
         )
-    assert Path("test_ifg.vrt") == ifg.filepath
+    assert Path("test_ifg.vrt") == ifg.path
 
 
 # Use use four files for the tests below

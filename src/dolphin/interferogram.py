@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import List, Optional, Sequence, Tuple, Union
 
 from osgeo import gdal
-from pydantic import BaseModel, Field, root_validator, validator
+from pydantic import BaseModel, Extra, Field, root_validator, validator
 
 from dolphin import io, utils
 from dolphin._types import Filename
@@ -26,14 +26,18 @@ class VRTInterferogram(BaseModel):
         Path to reference SLC file
     sec_slc : Union[str, Path]
         Path to secondary SLC file
-    filepath : Optional[Path], optional
+    path : Optional[Path], optional
         Path to output interferogram. Defaults to Path('<date1>_<date2>.vrt'),
         placed in the same directory as `ref_slc`.
     outdir : Optional[Path], optional
         Directory to place output interferogram. Defaults to the same directory as
         `ref_slc`. If only `outdir` is specified, the output interferogram will
         be named '<date1>_<date2>.vrt', where the dates are parsed from the
-        inputs. If `filepath` is specified, this is ignored.
+        inputs. If `path` is specified, this is ignored.
+    subdataset : Optional[str], optional
+        Subdataset to use for the input files (if passing file paths
+        to NETCDF/HDF5 files).
+        Defaults to None.
     date_format : str, optional
         Date format to use when parsing dates from the input files.
         Defaults to '%Y%m%d'.
@@ -46,18 +50,22 @@ class VRTInterferogram(BaseModel):
 
     """
 
-    ref_slc: Union[str, Path] = Field(..., description="Path to reference SLC file")
-    sec_slc: Union[str, Path] = Field(..., description="Path to secondary SLC file")
-    outdir: Optional[Path] = Field(
+    subdataset: Optional[str] = Field(
+        None,
+        description="Subdataset to use for the input files. Defaults to None.",
+    )
+    ref_slc: Union[Path, str] = Field(..., description="Path to reference SLC file")
+    sec_slc: Union[Path, str] = Field(..., description="Path to secondary SLC file")
+    outdir: Optional[Union[str, Path]] = Field(
         None,
         description=(
             "Directory to place output interferogram. Defaults to the same directory as"
             " `ref_slc`. If only `outdir` is specified, the output interferogram will"
             " be named '<date1>_<date2>.vrt', where the dates are parsed from the"
-            " inputs. If `filepath` is specified, this is ignored."
+            " inputs. If `path` is specified, this is ignored."
         ),
     )
-    filepath: Optional[Path] = Field(
+    path: Optional[Path] = Field(
         None,
         description=(
             "Path to output interferogram. Defaults to '<date1>_<date2>.vrt', where the"
@@ -83,23 +91,29 @@ class VRTInterferogram(BaseModel):
     """
     dates: Optional[Tuple[datetime.date, datetime.date]] = None
 
+    class Config:
+        extra = Extra.forbid  # raise error if extra fields passed in
+
     @validator("ref_slc", "sec_slc")
-    def _check_gdal_string(cls, v):
-        # First make sure it's openable
+    def _check_gdal_string(cls, v, values):
+        subdataset = values.get("subdataset")
+        # If we're using a subdataset, create a the GDAL-readable string
+        gdal_str = io.format_nc_filename(v, subdataset)
         try:
-            gdal.Info(fspath(v))
+            # First make sure it's openable
+            gdal.Info(fspath(gdal_str))
         except RuntimeError:
-            raise ValueError(f"File {v} is not a valid GDAL dataset")
+            raise ValueError(f"File {gdal_str} is not a valid GDAL dataset")
         # Then, if we passed a string like 'NETCDF:"file.nc":band', make sure
         # the file is absolute
-        if ":" in str(v):
+        if ":" in str(gdal_str):
             try:
-                v = utils._resolve_gdal_path(v)
+                gdal_str = utils._resolve_gdal_path(gdal_str)
             except Exception:
                 # if the file had colons for some reason but
                 # it didn't match, just ignore
                 pass
-        return v
+        return gdal_str
 
     @validator("pixel_function")
     def _validate_pixel_func(cls, v):
@@ -115,7 +129,7 @@ class VRTInterferogram(BaseModel):
         ref_slc = values.get("ref_slc")
         return utils._get_path_from_gdal_str(ref_slc).parent
 
-    @validator("filepath", always=True)
+    @validator("path", always=True)
     def _check_output_cant_exist(cls, v, values):
         if not v:
             # from the output file name from the dates within input files
@@ -179,7 +193,7 @@ class VRTInterferogram(BaseModel):
 
     def _write(self):
         xsize, ysize = io.get_raster_xysize(self.ref_slc)
-        with open(self.filepath, "w") as f:
+        with open(self.path, "w") as f:
             f.write(
                 self._template.format(
                     xsize=xsize,
@@ -189,15 +203,15 @@ class VRTInterferogram(BaseModel):
                     pixel_function=self.pixel_function,
                 )
             )
-        io.copy_projection(self.ref_slc, self.filepath)
+        io.copy_projection(self.ref_slc, self.path)
 
     def load(self):
         """Load the interferogram as a numpy array."""
-        return io.load_gdal(self.filepath)
+        return io.load_gdal(self.path)
 
     @property
     def shape(self):
-        xsize, ysize = io.get_raster_xysize(self.filepath)
+        xsize, ysize = io.get_raster_xysize(self.path)
         return (ysize, xsize)
 
 

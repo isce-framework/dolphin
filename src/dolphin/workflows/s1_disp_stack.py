@@ -122,7 +122,7 @@ def run(cfg: Workflow, debug: bool = False):
     stitched_ifg_dir.mkdir(exist_ok=True)
     # snaphu needs the binary format
     logger.info("Stitching interferograms by date.")
-    ifg_filenames = [ifg.filepath for ifg in network.ifg_list]
+    ifg_filenames = [ifg.path for ifg in network.ifg_list]
     stitching.merge_by_date(
         image_file_list=ifg_filenames,  # type: ignore
         file_date_fmt=cfg.inputs.cslc_date_fmt,
