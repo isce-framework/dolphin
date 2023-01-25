@@ -367,15 +367,23 @@ def _get_combined_bounds_gt(
     xs = []
     ys = []
     resolutions = set()
+    projs = set()
     for fn in filenames:
         ds = gdal.Open(fspath(fn))
         left, bottom, right, top = io.get_raster_bounds(fn)
         gt = ds.GetGeoTransform()
         dx, dy = gt[1], gt[5]
+
         resolutions.add((abs(dx), abs(dy)))  # dy is negative for north-up
+        projs.add(ds.GetProjection())
 
         xs.extend([left, right])
         ys.extend([bottom, top])
+
+    if len(resolutions) > 1:
+        raise ValueError(f"The input files have different resolutions: {resolutions}. ")
+    if len(projs) > 1:
+        raise ValueError(f"The input files have different projections: {projs}. ")
 
     res = (abs(dx), abs(dy))
     bounds = min(xs), min(ys), max(xs), max(ys)

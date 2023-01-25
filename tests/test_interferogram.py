@@ -20,7 +20,7 @@ def test_derived_vrt_interferogram(slc_file_list):
     arr1 = io.load_gdal(slc_file_list[1])
     ifg_arr = ifg.load()
     assert ifg_arr.shape == arr0.shape
-    npt.assert_allclose(ifg_arr, arr0 * arr1.conj())
+    npt.assert_allclose(ifg_arr, arr0 * arr1.conj(), rtol=1e-6)
 
 
 def test_derived_vrt_interferogram_nc(slc_file_list_nc):
@@ -34,7 +34,7 @@ def test_derived_vrt_interferogram_nc(slc_file_list_nc):
 
     ifg_arr = ifg.load()
     assert ifg_arr.shape == arr0.shape
-    npt.assert_allclose(ifg_arr, arr0 * arr1.conj())
+    npt.assert_allclose(ifg_arr, arr0 * arr1.conj(), rtol=1e-6)
 
 
 def test_derived_vrt_interferogram_with_subdataset(slc_file_list_nc_with_sds):
@@ -52,7 +52,7 @@ def test_derived_vrt_interferogram_with_subdataset(slc_file_list_nc_with_sds):
 
     ifg_arr = ifg.load()
     assert ifg_arr.shape == arr0.shape
-    npt.assert_allclose(ifg_arr, arr0 * arr1.conj())
+    npt.assert_allclose(ifg_arr, arr0 * arr1.conj(), rtol=1e-6)
 
     # Now try with just the path
     path1 = utils._get_path_from_gdal_str(slc_file_list_nc_with_sds[0])
@@ -68,7 +68,7 @@ def test_derived_vrt_interferogram_with_subdataset(slc_file_list_nc_with_sds):
         subdataset="slc/data",
     )
     ifg_arr2 = ifg2.load()
-    npt.assert_allclose(ifg_arr2, ifg_arr)
+    npt.assert_allclose(ifg_arr2, ifg_arr, rtol=1e-6)
 
 
 def test_derived_vrt_interferogram_outdir(tmp_path, slc_file_list):

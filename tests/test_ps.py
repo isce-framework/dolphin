@@ -9,7 +9,7 @@ def test_ps_block(slc_stack):
     # Run the PS selector on entire stack
     amp_mean, amp_disp, ps_pixels = dolphin.ps.calc_ps_block(
         np.abs(slc_stack),
-        amp_dispersion_threshold=0.42,
+        amp_dispersion_threshold=0.35,  # should be too low for random data
     )
     assert amp_mean.shape == amp_disp.shape == ps_pixels.shape
     assert amp_mean.dtype == amp_disp.dtype == np.float32
@@ -27,7 +27,7 @@ def test_ps_nodata(slc_stack):
     # Run the PS selector on entire stack
     amp_mean, amp_disp, ps_pixels = dolphin.ps.calc_ps_block(
         np.abs(s_nan),
-        amp_dispersion_threshold=0.42,
+        amp_dispersion_threshold=0.35,
     )
     assert amp_mean[0, 0] == 0
     assert amp_disp[0, 0] == 0
