@@ -130,12 +130,15 @@ def run(cfg: Workflow, debug: bool = False):
         dry_run=False,
     )
 
-    tcorr_file = pl_path / "tcorr_average.tif"
+    # Stitch the correlation files
+    # TODO: right now it's a tiff, needs to also be ENVI
+    # tcorr_file = pl_path / "tcorr_average.tif"
+
     logger.info(f"Unwrapping interferograms in {stitched_ifg_dir}")
-    unwrap.run(
+    unwrapped_paths = unwrap.run(
         ifg_path=stitched_ifg_dir,
         output_path=cfg.unwrap_options.directory,
-        cor_file=tcorr_file,
+        cor_file=None,  # TODO: tcorr_file,
         # mask_file: Optional[Filename] = None,
         max_jobs=20,
         # overwrite: bool = False,
@@ -146,3 +149,18 @@ def run(cfg: Workflow, debug: bool = False):
     # 5. Phase Corrections
     # ####################
     # TODO: Determine format for the tropospheric/ionospheric phase correction
+
+    # #############################
+    # Finalize the output
+
+    # TODO: make the HDF5 product
+    logger.info(f"Creating outputs in {cfg.outputs.output_directory}")
+    for p in unwrapped_paths:
+        # for now, just move the unwrapped results
+        #
+        # get all the associated header/conncomp files too
+        for ext in ["", ".rsc", ".conncomp", ".conncomp.hdr"]:
+            name = p.name + ext
+            new_name = cfg.outputs.output_directory / name
+            logger.info(f"Moving {p} to {new_name}")
+            (p.parent / name).rename(new_name)

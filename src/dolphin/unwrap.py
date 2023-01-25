@@ -21,7 +21,7 @@ gdal.UseExceptions()
 
 def unwrap(
     ifg_file: Filename,
-    cor_file: Filename,
+    cor_file: Optional[Filename],
     out_file: Filename,
     mask_file: Optional[Filename],
     do_tile: bool = False,
@@ -35,10 +35,10 @@ def unwrap(
     alt_line_data = True
     cmd = _snaphu_cmd(
         fspath(ifg_file),
-        fspath(cor_file),
+        fspath(cor_file or ""),
         Path(out_file),
         conncomp_file,
-        mask_file,
+        fspath(mask_file or ""),
         do_tile=do_tile,
         alt_line_data=alt_line_data,
         init_method=init_method,
@@ -81,9 +81,9 @@ CONNCOMPFILE {conncomp_file}   # TODO: snaphu has a bug for tiling conncomps
     # Need to specify the input file format in a config file
     # the rest of the options are overwritten by command line options
     # conf_string += "INFILEFORMAT     COMPLEX_DATA\n"
-    # conf_string += "CORRFILEFORMAT   ALT_LINE_DATA"
-    conf_string += "CORRFILEFORMAT   FLOAT_DATA\n"
-    conf_string += f"CORRFILE	{cor_file}\n"
+    if cor_file:
+        conf_string += "CORRFILEFORMAT   FLOAT_DATA\n"
+        conf_string += f"CORRFILE	{cor_file}\n"
 
     if mask_file:
         conf_string += f"BYTEMASKFILE {mask_file}\n"
@@ -178,7 +178,7 @@ def _save_with_metadata(meta_file, data_file, alt_line_data=True, dtype="float32
 def run(
     ifg_path: Filename,
     output_path: Filename,
-    cor_file: Filename = "tcorr_ps_ds.bin",
+    cor_file: Optional[Filename] = "tcorr_ps_ds.bin",
     mask_file: Optional[Filename] = None,
     max_jobs: int = 20,
     overwrite: bool = False,
@@ -205,6 +205,11 @@ def run(
         don't perform tiling on big interferograms, by default True
     init_method : str, choices = {"mcf", "mst"}
         SNAPHU initialization method, by default "mcf"
+
+    Returns
+    -------
+    list[Path]
+        list of unwrapped files names
     """
     filenames = list(Path(ifg_path).glob("*.int"))
     if len(filenames) == 0:
@@ -215,8 +220,6 @@ def run(
         raise ValueError(f"Invalid init_method {init_method}")
 
     output_path = Path(output_path)
-
-    cols, rows = get_raster_xysize(filenames[0])
 
     ext_unw = ".unw"
     all_out_files = [(output_path / f.name).with_suffix(ext_unw) for f in filenames]
@@ -249,3 +252,5 @@ def run(
         for idx, fut in enumerate(tqdm(as_completed(futures)), start=1):
             fut.result()
             tqdm.write("Done with {} / {}".format(idx, len(futures)))
+
+    return all_out_files
