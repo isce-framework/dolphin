@@ -100,8 +100,9 @@ def run(cfg: Workflow, debug: bool = False):
             slc_list = phase_linked_slcs
         network = interferogram.Network(
             slc_list=slc_list,
-            # TODO: get this from config
-            reference_idx=0,
+            reference_idx=cfg.interferogram_network.reference_idx,
+            max_bandwidth=cfg.interferogram_network.max_bandwidth,
+            max_temporal_baseline=cfg.interferogram_network.max_temporal_baseline,
             outdir=ifg_dir,
         )
         if len(network) == 0:
