@@ -8,8 +8,8 @@ import numpy as np
 from osgeo import gdal
 from pyproj import CRS
 
+from dolphin._log import get_log
 from dolphin._types import Filename
-from dolphin.log import get_log
 from dolphin.utils import gdal_to_numpy_type, numpy_to_gdal_type
 
 gdal.UseExceptions()

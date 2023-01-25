@@ -23,7 +23,7 @@ from logging import Formatter
 __all__ = ["get_log", "log_runtime"]
 
 
-def get_log(debug: bool = False, name: str = "dolphin.log") -> logging.Logger:
+def get_log(debug: bool = False, name: str = "dolphin._log") -> logging.Logger:
     """Create a nice log format for use across multiple files.
 
     Default logging level is INFO
@@ -34,7 +34,7 @@ def get_log(debug: bool = False, name: str = "dolphin.log") -> logging.Logger:
         If true, sets logging level to DEBUG (Default value = False)
     name : str, optional
         The name the logger will use when printing statements
-        (Default value = "dolphin.log")
+        (Default value = "dolphin._log")
 
     Returns
     -------

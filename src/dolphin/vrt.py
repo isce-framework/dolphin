@@ -8,8 +8,8 @@ from typing import Optional, Sequence, Tuple
 from osgeo import gdal
 
 from dolphin import io, utils
+from dolphin._log import get_log
 from dolphin._types import Filename
-from dolphin.log import get_log
 
 SENTINEL_WAVELENGTH = 0.05546576
 

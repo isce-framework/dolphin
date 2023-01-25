@@ -9,8 +9,8 @@ from osgeo import gdal
 from pydantic import BaseModel, Extra, Field, root_validator, validator
 
 from dolphin import io, utils
+from dolphin._log import get_log
 from dolphin._types import Filename
-from dolphin.log import get_log
 
 gdal.UseExceptions()
 

@@ -18,9 +18,9 @@ from tqdm.auto import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
 from dolphin import io
+from dolphin._log import get_log
 from dolphin._types import Filename
 from dolphin.interferogram import VRTInterferogram
-from dolphin.log import get_log
 from dolphin.phase_link import PhaseLinkRuntimeError, run_mle
 from dolphin.utils import upsample_nearest
 from dolphin.vrt import VRTStack

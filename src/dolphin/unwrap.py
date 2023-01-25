@@ -9,9 +9,9 @@ import numpy as np
 from osgeo import gdal
 from tqdm import tqdm
 
+from dolphin._log import get_log, log_runtime
 from dolphin._types import Filename
 from dolphin.io import get_raster_xysize
-from dolphin.log import get_log, log_runtime
 from dolphin.utils import numpy_to_gdal_type
 
 logger = get_log()
