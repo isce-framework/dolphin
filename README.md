@@ -1,12 +1,8 @@
 # dolphin
 
-High resolution wrapped phase estimation for InSAR
+High resolution wrapped phase estimation for InSAR using combine PS/DS processing.
 
 <!-- DeformatiOn Land surface Products in High resolution using INsar -->
-
-
-🚨 This toolbox is still in **pre-alpha** stage and undergoing **rapid development**. 🚨
-
 
 
 
@@ -33,6 +29,8 @@ conda env update --name my-existing-env --file conda-env.yml
 conda activate dolphin-env
 python -m pip install .
 ```
+
+See the [documentation](https://dolphin-insar.readthedocs.io/) for more details, including GPU support.
 
 
 ## Usage
