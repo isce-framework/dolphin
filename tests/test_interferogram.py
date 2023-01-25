@@ -1,3 +1,4 @@
+from datetime import date
 from pathlib import Path
 
 import numpy.testing as npt
@@ -11,8 +12,9 @@ def test_derived_vrt_interferogram(slc_file_list):
     """Basic test that the VRT loads the same as S1 * S2.conj()."""
     ifg = VRTInterferogram(ref_slc=slc_file_list[0], sec_slc=slc_file_list[1])
 
-    assert "20220101_20220102.vrt" == ifg.outfile.name
-    assert io.get_raster_xysize(ifg.outfile) == io.get_raster_xysize(slc_file_list[0])
+    assert "20220101_20220102.vrt" == ifg.filepath.name
+    assert io.get_raster_xysize(ifg.filepath) == io.get_raster_xysize(slc_file_list[0])
+    assert ifg.dates == (date(2022, 1, 1), date(2022, 1, 2))
 
     arr0 = io.load_gdal(slc_file_list[0])
     arr1 = io.load_gdal(slc_file_list[1])
@@ -24,8 +26,8 @@ def test_derived_vrt_interferogram(slc_file_list):
 def test_derived_vrt_interferogram_nc(slc_file_list_nc):
     ifg = VRTInterferogram(ref_slc=slc_file_list_nc[0], sec_slc=slc_file_list_nc[1])
 
-    assert "20220101_20220102.vrt" == ifg.outfile.name
-    assert io.get_raster_xysize(ifg.outfile) == io.get_raster_xysize(
+    assert "20220101_20220102.vrt" == ifg.filepath.name
+    assert io.get_raster_xysize(ifg.filepath) == io.get_raster_xysize(
         slc_file_list_nc[0]
     )
 
@@ -42,8 +44,8 @@ def test_derived_vrt_interferogram_with_subdataset(slc_file_list_nc_with_sds):
         ref_slc=slc_file_list_nc_with_sds[0], sec_slc=slc_file_list_nc_with_sds[1]
     )
 
-    assert "20220101_20220102.vrt" == ifg.outfile.name
-    assert io.get_raster_xysize(ifg.outfile) == io.get_raster_xysize(
+    assert "20220101_20220102.vrt" == ifg.filepath.name
+    assert io.get_raster_xysize(ifg.filepath) == io.get_raster_xysize(
         slc_file_list_nc_with_sds[0]
     )
 
@@ -57,107 +59,113 @@ def test_derived_vrt_interferogram_with_subdataset(slc_file_list_nc_with_sds):
 
 def test_derived_vrt_interferogram_outdir(tmp_path, slc_file_list):
     ifg = VRTInterferogram(ref_slc=slc_file_list[0], sec_slc=slc_file_list[1])
-    assert slc_file_list[0].parent / "20220101_20220102.vrt" == ifg.outfile
+    assert slc_file_list[0].parent / "20220101_20220102.vrt" == ifg.filepath
 
     ifg = VRTInterferogram(
         ref_slc=slc_file_list[0], sec_slc=slc_file_list[1], outdir=tmp_path
     )
-    assert tmp_path / "20220101_20220102.vrt" == ifg.outfile
+    assert tmp_path / "20220101_20220102.vrt" == ifg.filepath
 
 
 def test_derived_vrt_interferogram_outfile(tmpdir, slc_file_list):
     # Change directory so we dont create a file in the source directory
     with tmpdir.as_cwd():
         ifg = VRTInterferogram(
-            ref_slc=slc_file_list[0], sec_slc=slc_file_list[1], outfile="test_ifg.vrt"
+            ref_slc=slc_file_list[0], sec_slc=slc_file_list[1], filepath="test_ifg.vrt"
         )
-    assert Path("test_ifg.vrt") == ifg.outfile
+    assert Path("test_ifg.vrt") == ifg.filepath
 
 
+# Use use four files for the tests below
 @pytest.fixture
-def slc_list():
-    return ["20220101", "20220201", "20220301", "20220401"]
+def four_slc_files(slc_file_list):
+    # starts on 20220101
+    return slc_file_list[:4]
 
 
-def test_single_reference_network(slc_list):
-    n = Network(slc_list, reference_idx=0)
-    assert n.ifg_list == [
-        ("20220101", "20220201"),
-        ("20220101", "20220301"),
-        ("20220101", "20220401"),
-    ]
-    n = Network(slc_list, reference_idx=1)
-    assert n.ifg_list == [
-        ("20220101", "20220201"),
-        ("20220201", "20220301"),
-        ("20220201", "20220401"),
+def _get_pair_stems(slc_file_pairs):
+    return [
+        (a.stem.strip(".slc.tif"), b.stem.strip(".slc.tif")) for a, b in slc_file_pairs
     ]
 
 
-def test_limit_by_bandwidth(slc_list):
-    n = Network(slc_list, max_bandwidth=1)
-    assert n.ifg_list == [
-        ("20220101", "20220201"),
-        ("20220201", "20220301"),
-        ("20220301", "20220401"),
+def test_single_reference_network(tmp_path, four_slc_files):
+    n = Network(four_slc_files, reference_idx=0, outdir=tmp_path)
+
+    assert n.slc_file_pairs[0][0] == four_slc_files[0]
+    assert n.slc_file_pairs[0][1] == four_slc_files[1]
+
+    assert _get_pair_stems(n.slc_file_pairs) == [
+        ("20220101", "20220102"),
+        ("20220101", "20220103"),
+        ("20220101", "20220104"),
     ]
-    n = Network(slc_list, max_bandwidth=2)
-    assert n.ifg_list == [
-        ("20220101", "20220201"),
-        ("20220101", "20220301"),
-        ("20220201", "20220301"),
-        ("20220201", "20220401"),
-        ("20220301", "20220401"),
+    # check the written out files:
+    assert Path(tmp_path / "20220101_20220102.vrt").exists()
+    assert Path(tmp_path / "20220101_20220103.vrt").exists()
+    assert Path(tmp_path / "20220101_20220104.vrt").exists()
+
+    n = Network(four_slc_files, reference_idx=1, outdir=tmp_path)
+    assert _get_pair_stems(n.slc_file_pairs) == [
+        ("20220101", "20220102"),  # still has the same order (early, late)
+        ("20220102", "20220103"),
+        ("20220102", "20220104"),
     ]
-    n = Network(slc_list, max_bandwidth=3)
-    assert n.ifg_list == [
-        ("20220101", "20220201"),
-        ("20220101", "20220301"),
-        ("20220101", "20220401"),
-        ("20220201", "20220301"),
-        ("20220201", "20220401"),
-        ("20220301", "20220401"),
-    ]
+    assert Path(tmp_path / "20220101_20220102.vrt").exists()
+    assert Path(tmp_path / "20220102_20220103.vrt").exists()
+    assert Path(tmp_path / "20220102_20220104.vrt").exists()
 
 
-def test_limit_by_temporal_baseline(slc_list):
-    n = Network(slc_list, max_temporal_baseline=1)
-    assert n.ifg_list == []
-
-    n = Network(slc_list, max_temporal_baseline=31)
-    assert n.ifg_list == [
-        ("20220101", "20220201"),
-        ("20220201", "20220301"),
-        ("20220301", "20220401"),
+def test_limit_by_bandwidth(tmp_path, four_slc_files):
+    n = Network(four_slc_files, max_bandwidth=1, outdir=tmp_path)
+    assert _get_pair_stems(n.slc_file_pairs) == [
+        ("20220101", "20220102"),
+        ("20220102", "20220103"),
+        ("20220103", "20220104"),
     ]
-    n = Network(slc_list, max_temporal_baseline=61)
-    assert n.ifg_list == [
-        ("20220101", "20220201"),
-        ("20220101", "20220301"),
-        ("20220201", "20220301"),
-        ("20220201", "20220401"),
-        ("20220301", "20220401"),
+    n = Network(four_slc_files, max_bandwidth=2, outdir=tmp_path)
+    assert _get_pair_stems(n.slc_file_pairs) == [
+        ("20220101", "20220102"),
+        ("20220101", "20220103"),
+        ("20220102", "20220103"),
+        ("20220102", "20220104"),
+        ("20220103", "20220104"),
     ]
-    n = Network(slc_list, max_temporal_baseline=500)
-    assert n.ifg_list == [
-        ("20220101", "20220201"),
-        ("20220101", "20220301"),
-        ("20220101", "20220401"),
-        ("20220201", "20220301"),
-        ("20220201", "20220401"),
-        ("20220301", "20220401"),
+    n = Network(four_slc_files, max_bandwidth=3, outdir=tmp_path)
+    assert _get_pair_stems(n.slc_file_pairs) == [
+        ("20220101", "20220102"),
+        ("20220101", "20220103"),
+        ("20220101", "20220104"),
+        ("20220102", "20220103"),
+        ("20220102", "20220104"),
+        ("20220103", "20220104"),
     ]
 
 
-@pytest.fixture
-def slc_list_paths(slc_list):
-    return [Path(f) for f in slc_list]
+def test_limit_by_temporal_baseline(tmp_path, four_slc_files):
+    n = Network(four_slc_files, max_temporal_baseline=0, outdir=tmp_path)
+    assert _get_pair_stems(n.slc_file_pairs) == []
 
-
-def test_path_inputs(slc_list_paths):
-    n = Network(slc_list_paths, max_temporal_baseline=31)
-    assert n.ifg_list == [
-        (Path("20220101"), Path("20220201")),
-        (Path("20220201"), Path("20220301")),
-        (Path("20220301"), Path("20220401")),
+    n = Network(four_slc_files, max_temporal_baseline=1, outdir=tmp_path)
+    assert _get_pair_stems(n.slc_file_pairs) == [
+        ("20220101", "20220102"),
+        ("20220102", "20220103"),
+        ("20220103", "20220104"),
+    ]
+    n = Network(four_slc_files, max_temporal_baseline=2, outdir=tmp_path)
+    assert _get_pair_stems(n.slc_file_pairs) == [
+        ("20220101", "20220102"),
+        ("20220101", "20220103"),
+        ("20220102", "20220103"),
+        ("20220102", "20220104"),
+        ("20220103", "20220104"),
+    ]
+    n = Network(four_slc_files, max_temporal_baseline=500, outdir=tmp_path)
+    assert _get_pair_stems(n.slc_file_pairs) == [
+        ("20220101", "20220102"),
+        ("20220101", "20220103"),
+        ("20220101", "20220104"),
+        ("20220102", "20220103"),
+        ("20220102", "20220104"),
+        ("20220103", "20220104"),
     ]

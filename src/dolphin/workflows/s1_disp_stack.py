@@ -102,8 +102,10 @@ def run(cfg: Workflow, debug: bool = False):
             slc_list=slc_list,
             # TODO: get this from config
             reference_idx=0,
+            outdir=ifg_dir,
         )
-        network.write(outdir=ifg_dir)
+        if len(network) == 0:
+            raise ValueError("No interferograms were created")
 
     # ###################################
     # 4. Stitch and Unwrap interferograms
@@ -118,10 +120,20 @@ def run(cfg: Workflow, debug: bool = False):
     stitched_ifg_dir = scratch_dir / "stitched_ifgs"
     stitched_ifg_dir.mkdir(exist_ok=True)
     # snaphu needs the binary format
-    stitching._nan_to_zero(
-        infile=network.ifg_list[-1], ext=".int", out_dir=stitched_ifg_dir, driver="ENVI"
+    # stitching._nan_to_zero(
+    #     infile=network.ifg_list[-1], ext=".int", out_dir=stitched_ifg_dir, driver="ENVI"
+    # )
+    logger.info("Stitching interferograms by date.")
+    ifg_filenames = [ifg.filepath for ifg in network.ifg_list]
+    stitching.merge_by_date(
+        image_file_list=ifg_filenames,  # type: ignore
+        file_date_fmt=cfg.inputs.cslc_date_fmt,
+        output_dir=stitched_ifg_dir,
+        dry_run=False,
     )
+
     tcorr_file = pl_path / "tcorr_average.tif"
+    logger.info(f"Unwrapping interferograms in {stitched_ifg_dir}")
     unwrap.run(
         ifg_path=stitched_ifg_dir,
         output_path=cfg.unwrap_options.directory,

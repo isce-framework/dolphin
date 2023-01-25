@@ -16,7 +16,9 @@ from dolphin._types import Filename
 
 def merge_by_date(
     image_file_list: List[Filename],
-    output_path: Filename = ".",
+    file_date_fmt: str = io.DEFAULT_DATETIME_FORMAT,
+    output_dir: Filename = ".",
+    driver: str = "ENVI",
     dry_run: bool = False,
 ):
     """Group images from the same date and merge into one image per date.
@@ -25,17 +27,27 @@ def merge_by_date(
     ----------
     image_file_list : List[Filename]
         list of paths to images.
-    output_path : Filename
+    file_date_fmt : Optional[str]
+        format of the date in the filename. Default is %Y%m%d
+    output_dir : Filename
         path to output directory
+    driver : str
+        GDAL driver to use for output. Default is ENVI.
     dry_run : bool
         if True, do not actually stitch the images, just print.
 
     Returns
     -------
-    str
-        path to the stitched image file
+    dict
+        key is the date of the SLC acquisition
+        Value is the path to the stitched image
+
+    Notes
+    -----
+    This function is intended to be used with filenames that contain date pairs
+    (from interferograms).
     """
-    grouped_images = group_images_by_date(image_file_list)
+    grouped_images = group_images_by_date(image_file_list, file_date_fmt=file_date_fmt)
     stitched_acq_times = {}
 
     for date, cur_images in grouped_images.items():
@@ -43,20 +55,18 @@ def merge_by_date(
         stitched_name = _stitch_same_date(
             cur_images,
             date,
-            output_path=output_path,
+            output_dir=output_dir,
+            driver=driver,
             dry_run=dry_run,
         )
 
-        # Keep track of the acquisition datetimes for each stitched file
-        burst_id_start = cur_images[0].burst_id
-        burst_id_end = cur_images[-1].burst_id
-        stitched_acq_times[stitched_name] = (date, burst_id_start, burst_id_end)
+        stitched_acq_times[date] = stitched_name
 
     return stitched_acq_times
 
 
 def group_images_by_date(
-    image_file_list: List[Filename], file_date_fmt: str = "%Y%m%d"
+    image_file_list: List[Filename], file_date_fmt: str = io.DEFAULT_DATETIME_FORMAT
 ):
     """Combine Sentinel objects by date.
 
@@ -65,18 +75,19 @@ def group_images_by_date(
     image_file_list: List[Filename]
         path to folder containing CSLC files
     file_date_fmt: str
-        format of the date in the filename. Default is %Y%m%d
+        format of the date in the filename.
+        Default is [dolphin.io.DEFAULT_DATETIME_FORMAT][]
 
     Returns
     -------
     dict
         key is the date of the SLC acquisition
         Value is a list of Paths on that date:
-        [(datetime.datetime(2017, 10, 13),
+        [(datetime.date(2017, 10, 13),
           [Path(...)
             Path(...),
             ...]),
-         (datetime.datetime(2017, 10, 25),
+         (datetime.date(2017, 10, 25),
           [Path(...)
             Path(...),
             ...]),
@@ -97,23 +108,23 @@ def group_images_by_date(
 
 def _stitch_same_date(
     file_list: List[Filename],
-    date: datetime.date,
-    output_path: Filename,
+    dates: Tuple[datetime.date, datetime.date],
+    output_dir: Filename,
     target_aligned_pixels: bool = False,
     driver: str = "ENVI",
     nodata: Optional[float] = 0,
     out_dtype: Optional[DTypeLike] = None,
     dry_run: bool = False,
-):
+) -> Path:
     """Combine multiple SLC images on the same date into one image.
 
     Parameters
     ----------
     file_list : List[Filename]
         list of raster filenames
-    date : datetime.date
-        date of the images
-    output_path : Filename
+    dates : Tuple[datetime.date]
+        date(s) of the images
+    output_dir : Filename
         path to output directory
     target_aligned_pixels: bool
         if True, adjust output image bounds so that pixel coordinates
@@ -135,8 +146,8 @@ def _stitch_same_date(
     Path
         path to the stitched SLC file
     """
-    Path(output_path).mkdir(parents=True, exist_ok=True)
-    new_name = Path(output_path) / f"{date.strftime('%Y%m%d')}.int"
+    Path(output_dir).mkdir(parents=True, exist_ok=True)
+    new_name = Path(output_dir) / (io._format_date_pair(*dates) + ".int")
 
     if dry_run:
         return new_name
@@ -275,8 +286,10 @@ def _nodata_to_zero(
     bnd = ds_in.GetRasterBand(in_band)
     nodata = bnd.GetNoDataValue()
     arr = bnd.ReadAsArray()
+    # also make sure to replace NaNs, even if nodata is not set
     mask = np.logical_or(np.isnan(arr), arr == nodata)
     arr[mask] = 0
+
     ds_out.GetRasterBand(1).WriteArray(arr)
     ds_out = None
 

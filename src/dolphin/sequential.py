@@ -69,7 +69,6 @@ def run_evd_sequential(
     xhalf, yhalf = half_window["x"], half_window["y"]
     xs, ys = strides["x"], strides["y"]
     out_shape = io.compute_out_shape((nrows, ncols), strides)
-    fmt = io.DEFAULT_DATETIME_FORMAT  # Used for output folder names
 
     # Solve each ministack using the current chunk (and the previous compressed SLCs)
     ministack_starts = range(0, len(file_list_all), ministack_size)
@@ -80,7 +79,7 @@ def run_evd_sequential(
 
         # Make the current ministack output folder using the start/end dates
         d0, d1 = cur_dates[0], cur_dates[-1]
-        start_end = f"{d0.strftime(fmt)}_{d1.strftime(fmt)}"
+        start_end = io._format_date_pair(d0, d1)
         cur_output_folder = output_folder / start_end
         cur_output_folder.mkdir(parents=True, exist_ok=True)
 

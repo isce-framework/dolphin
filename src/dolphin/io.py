@@ -1,4 +1,5 @@
 import copy
+from datetime import date
 from os import fspath
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
@@ -495,6 +496,10 @@ def write_block(
         bnd.FlushCache()
         bnd = None
     ds = None
+
+
+def _format_date_pair(start: date, end: date, fmt=DEFAULT_DATETIME_FORMAT) -> str:
+    return f"{start.strftime(fmt)}_{end.strftime(fmt)}"
 
 
 def get_stack_nodata_mask(

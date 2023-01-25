@@ -98,10 +98,6 @@ class PhaseLinkingOptions(BaseModel):
         "compressed_slc_file", "temp_coh_file", allow_reuse=True, always=True
     )(_move_file_in_dir)
 
-    @staticmethod
-    def _format_date_pair(start: date, end: date, fmt="%Y%m%d") -> str:
-        return f"{start.strftime(fmt)}_{end.strftime(fmt)}"
-
 
 class InterferogramNetwork(BaseModel):
     """Options to determine the type of network for interferogram formation."""
