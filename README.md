@@ -30,8 +30,6 @@ conda activate dolphin-env
 python -m pip install .
 ```
 
-See the [documentation](https://dolphin-insar.readthedocs.io/) for more details, including GPU support.
-
 
 ## Usage
 
