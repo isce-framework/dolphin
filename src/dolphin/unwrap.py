@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 import os
 import subprocess
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -34,11 +33,9 @@ def unwrap(
         raise ValueError(f"Invalid init_method {init_method}")
     conncomp_file = Path(out_file).with_suffix(".unw.conncomp")
     alt_line_data = True
-    tmp_ifg_file = _nan_to_zero(ifg_file, ext=".int")
-    tmp_cor_file = _nan_to_zero(cor_file, ext=".cor")
     cmd = _snaphu_cmd(
-        fspath(tmp_ifg_file),
-        fspath(tmp_cor_file),
+        fspath(ifg_file),
+        fspath(cor_file),
         Path(out_file),
         conncomp_file,
         mask_file,
@@ -50,31 +47,10 @@ def unwrap(
     logger.info(cmd)
     subprocess.check_call(cmd, shell=True)
     _save_with_metadata(
-        tmp_ifg_file, out_file, alt_line_data=alt_line_data, dtype="float32"
+        ifg_file, out_file, alt_line_data=alt_line_data, dtype="float32"
     )
-    _save_with_metadata(tmp_ifg_file, conncomp_file, alt_line_data=False, dtype="byte")
-    _set_unw_zeros(out_file, tmp_ifg_file)
-    os.remove(tmp_ifg_file)
-
-
-def _nan_to_zero(infile, ext):
-    """Make a copy of infile and replace NaNs with 0."""
-    in_p = Path(infile)
-    tmp_file = (in_p.parent) / (in_p.stem + "_tmp" + ext)
-
-    ds_in = gdal.Open(fspath(infile))
-    drv = gdal.GetDriverByName("ENVI")
-    ds_out = drv.CreateCopy(fspath(tmp_file), ds_in, options=["SUFFIX=ADD"])
-
-    bnd = ds_in.GetRasterBand(1)  # this assumes there's just one band (for cor)
-    nodata = bnd.GetNoDataValue()
-    arr = bnd.ReadAsArray()
-    mask = np.logical_or(np.isnan(arr), arr == nodata)
-    arr[mask] = 0
-    ds_out.GetRasterBand(1).WriteArray(arr)
-    ds_out = None
-
-    return tmp_file
+    _save_with_metadata(ifg_file, conncomp_file, alt_line_data=False, dtype="byte")
+    _set_unw_zeros(out_file, ifg_file)
 
 
 def _snaphu_cmd(
@@ -207,7 +183,6 @@ def run(
     max_jobs: int = 20,
     overwrite: bool = False,
     no_tile: bool = True,
-    create_isce_headers: bool = False,
     init_method: str = "mcf",
 ):
     """Run snaphu on all interferograms in a directory.
@@ -228,8 +203,6 @@ def run(
         overwrite results, by default False
     no_tile : bool, optional
         don't perform tiling on big interferograms, by default True
-    create_isce_headers : bool, optional
-        Create .xml files for isce, by default False
     init_method : str, choices = {"mcf", "mst"}
         SNAPHU initialization method, by default "mcf"
     """
@@ -244,7 +217,6 @@ def run(
     output_path = Path(output_path)
 
     cols, rows = get_raster_xysize(filenames[0])
-    shape = (rows, cols)
 
     ext_unw = ".unw"
     all_out_files = [(output_path / f.name).with_suffix(ext_unw) for f in filenames]
@@ -277,16 +249,3 @@ def run(
         for idx, fut in enumerate(tqdm(as_completed(futures)), start=1):
             fut.result()
             tqdm.write("Done with {} / {}".format(idx, len(futures)))
-
-    if not create_isce_headers:
-        return
-
-    from apertools import isce_helpers, utils
-
-    for f in tqdm(filenames):
-        f = f.with_suffix(ext_unw)
-
-        dirname, fname = os.path.split(f)
-        with utils.chdir_then_revert(dirname):
-            isce_helpers.create_unw_image(fname, shape=shape)
-            # isce_helpers.create_int_image(fname)

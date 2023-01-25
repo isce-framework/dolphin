@@ -121,9 +121,6 @@ def run(cfg: Workflow, debug: bool = False):
     stitched_ifg_dir = scratch_dir / "stitched_ifgs"
     stitched_ifg_dir.mkdir(exist_ok=True)
     # snaphu needs the binary format
-    # stitching._nan_to_zero(
-    #     infile=network.ifg_list[-1], ext=".int", out_dir=stitched_ifg_dir, driver="ENVI"
-    # )
     logger.info("Stitching interferograms by date.")
     ifg_filenames = [ifg.filepath for ifg in network.ifg_list]
     stitching.merge_by_date(
