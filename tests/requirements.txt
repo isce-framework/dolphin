@@ -1,7 +1,6 @@
 black
 flake8
 pre-commit
-pyproj # Used for the `make_netcdf.py` test script
 pytest
 pytest-cov
 pytest-xdist # parallel tests: https://pytest-xdist.readthedocs.io/en/latest/

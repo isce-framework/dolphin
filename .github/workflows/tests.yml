@@ -32,6 +32,7 @@ jobs:
               ruamel_yaml=0.15
               pydantic=1.10
               pymp-pypi=0.4.5
+              pyproj=3.0
               gdal=3.3
               scipy=1.5
               tqdm=4.60
