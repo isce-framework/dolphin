@@ -8,6 +8,7 @@ from dolphin.interferogram import Network, VRTInterferogram
 
 
 def test_derived_vrt_interferogram(slc_file_list):
+    """Basic test that the VRT loads the same as S1 * S2.conj()."""
     ifg = VRTInterferogram(ref_slc=slc_file_list[0], sec_slc=slc_file_list[1])
 
     assert "20220101_20220102.vrt" == ifg.outfile.name

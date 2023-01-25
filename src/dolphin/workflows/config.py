@@ -424,6 +424,11 @@ class Workflow(BaseModel):
         if not pl_opts.temp_coh_file.parent.parent == scratch_dir:
             pl_opts.temp_coh_file = scratch_dir / pl_opts.temp_coh_file
 
+        ifg_opts = values["interferogram_network"]
+        if not ifg_opts.directory.parent == scratch_dir:
+            ifg_opts.directory = scratch_dir / ifg_opts.directory
+        ifg_opts.directory = ifg_opts.directory.absolute()
+
         unw_opts = values["unwrap_options"]
         if not unw_opts.directory.parent == scratch_dir:
             unw_opts.directory = scratch_dir / unw_opts.directory

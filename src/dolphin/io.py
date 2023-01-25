@@ -1,10 +1,11 @@
 import copy
 from os import fspath
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 from osgeo import gdal
+from pyproj import CRS
 
 from dolphin._types import Filename
 from dolphin.log import get_log
@@ -276,6 +277,8 @@ def write_arr(
     nbands: Optional[int] = None,
     shape: Optional[Tuple[int, int]] = None,
     dtype: Optional[Union[str, np.dtype, type]] = None,
+    geotransform: Optional[Sequence[float]] = None,
+    projection: Optional[Any] = None,
     nodata: Optional[Union[float, str]] = None,
 ):
     """Save an array to `output_name`.
@@ -304,6 +307,13 @@ def write_arr(
         Overrides the shape of the output file, if using `like_filename`.
     dtype : str or np.dtype or type, optional
         Data type to save. Default is `arr.dtype` or the datatype of like_filename.
+    geotransform : List, optional
+        Geotransform to save. Default is the geotransform of like_filename.
+        See https://gdal.org/tutorials/geotransforms_tut.html .
+    projection : str or int, optional
+        Projection to save. Default is the projection of like_filename.
+        Possible values are anything parse-able by ``pyproj.CRS.from_user_input``
+        (including EPSG ints, WKT strings, PROJ strings, etc.)
     nodata : float or str, optional
         Nodata value to save.
         Default is the nodata of band 1 of `like_filename` (if provided), or None.
@@ -356,8 +366,17 @@ def write_arr(
     )
 
     if ds_like:
+        geotransform = ds_like.GetGeoTransform()
+        projection = ds_like.GetProjection()
+    else:
+        if projection is not None:
+            # this still works if we're passed a WKT string
+            projection = CRS.from_user_input(projection).to_wkt()
+
+    if projection is not None:
+        ds_out.SetProjection(projection)
+    if geotransform is not None:
         ds_out.SetGeoTransform(ds_like.GetGeoTransform())
-        ds_out.SetProjection(ds_like.GetProjection())
 
     # Write the actual data
     if arr is not None:

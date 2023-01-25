@@ -5,7 +5,7 @@ from pathlib import Path
 import pydantic
 import pytest
 
-from dolphin.workflows import config
+from dolphin.workflows import InterferogramNetworkType, config
 
 
 # Testing what the defaults look like for each class
@@ -62,7 +62,7 @@ def test_interferogram_network_defaults(tmpdir):
         assert opts.reference_idx == 0
         assert opts.max_bandwidth is None
         assert opts.max_temporal_baseline is None
-        assert opts.network_type == config.InterferogramNetworkType.SINGLE_REFERENCE
+        assert opts.network_type == InterferogramNetworkType.SINGLE_REFERENCE
 
 
 def test_unwrap_options_defaults(tmpdir):
@@ -241,7 +241,6 @@ def test_input_cslc_empty():
 def test_config_defaults(dir_with_1_slc):
     c = config.Workflow(inputs={"cslc_file_list": dir_with_1_slc / "slclist.txt"})
     # These should be the defaults
-    assert c.interferogram_network == config.InterferogramNetwork()
     assert c.outputs == config.Outputs()
     assert c.worker_settings == config.WorkerSettings()
     assert c.inputs == config.Inputs(cslc_file_list=dir_with_1_slc / "slclist.txt")
@@ -259,6 +258,18 @@ def test_config_defaults(dir_with_1_slc):
     assert c.phase_linking.compressed_slc_file == p.absolute()
     p = Path("scratch/linked_phase/temp_coh.tif")
     assert c.phase_linking.temp_coh_file == p.absolute()
+
+    assert (
+        c.interferogram_network.directory == Path("scratch/interferograms").absolute()
+    )
+    assert c.interferogram_network.reference_idx == 0
+    assert (
+        c.interferogram_network.network_type
+        == InterferogramNetworkType.SINGLE_REFERENCE
+    )
+
+    assert c.interferogram_network.max_bandwidth is None
+    assert c.interferogram_network.max_temporal_baseline is None
 
     assert c.unwrap_options.directory == Path("scratch/unwrap").absolute()
 
