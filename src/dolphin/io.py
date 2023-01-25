@@ -45,7 +45,12 @@ def get_raster_xysize(filename: Filename) -> Tuple[int, int]:
 
 
 def load_gdal(
-    filename: Filename, band: Optional[int] = None, subsample_factor: int = 1
+    filename: Filename,
+    *,
+    band: Optional[int] = None,
+    subsample_factor: int = 1,
+    rows: Optional[slice] = None,
+    cols: Optional[slice] = None,
 ):
     """Load a gdal file into a numpy array.
 
@@ -58,6 +63,10 @@ def load_gdal(
     subsample_factor : int, optional
         Subsample the data by this factor. Default is 1 (no subsampling).
         Uses nearest neighbor resampling.
+    rows : slice, optional
+        Rows to load. Default is None (load all rows).
+    cols : slice, optional
+        Columns to load. Default is None (load all columns).
 
     Returns
     -------
@@ -66,24 +75,37 @@ def load_gdal(
         where y = height // subsample_factor and x = width // subsample_factor.
     """
     ds = gdal.Open(fspath(filename))
-    rows, cols = ds.RasterYSize, ds.RasterXSize
+    nrows, ncols = ds.RasterYSize, ds.RasterXSize
     # Make an output object of the right size
     dt = gdal_to_numpy_type(ds.GetRasterBand(1).DataType)
 
+    if rows is not None and cols is not None:
+        xoff, yoff = cols.start, rows.start
+        row_stop = min(rows.stop, nrows)
+        col_stop = min(cols.stop, ncols)
+        xsize, ysize = col_stop - cols.start, row_stop - rows.start
+        if xsize <= 0 or ysize <= 0:
+            raise IndexError(
+                f"Invalid row/col slices: {rows}, {cols} for file {filename} of size"
+                f" {nrows}x{ncols}"
+            )
+        nrows_out, ncols_out = ysize // subsample_factor, xsize // subsample_factor
+    else:
+        xoff, yoff = 0, 0
+        xsize, ysize = ncols, nrows
+        nrows_out, ncols_out = nrows // subsample_factor, ncols // subsample_factor
     # Read the data, and decimate if specified
     resamp = gdal.GRA_NearestNeighbour
     if band is None:
         count = ds.RasterCount
-        out = np.empty(
-            (count, rows // subsample_factor, cols // subsample_factor), dtype=dt
-        )
-        ds.ReadAsArray(buf_obj=out, resample_alg=resamp)
+        out = np.empty((count, nrows_out, ncols_out), dtype=dt)
+        ds.ReadAsArray(xoff, yoff, xsize, ysize, buf_obj=out, resample_alg=resamp)
         if count == 1:
             out = out[0]
     else:
-        out = np.empty((rows // subsample_factor, cols // subsample_factor), dtype=dt)
+        out = np.empty((nrows_out, ncols_out), dtype=dt)
         bnd = ds.GetRasterBand(band)
-        bnd.ReadAsArray(buf_obj=out, resample_alg=resamp)
+        bnd.ReadAsArray(xoff, yoff, xsize, ysize, buf_obj=out, resample_alg=resamp)
     return out
 
 

@@ -17,6 +17,27 @@ def test_get_raster_xysize(raster_100_by_200):
     assert (200, 100) == io.get_raster_xysize(raster_100_by_200)
 
 
+def test_load_slice(raster_100_by_200):
+    arr = io.load_gdal(raster_100_by_200)
+    block = io.load_gdal(raster_100_by_200, rows=slice(0, 10), cols=slice(0, 10))
+    assert block.shape == (10, 10)
+    npt.assert_allclose(block, arr[:10, :10])
+
+    block = io.load_gdal(raster_100_by_200, rows=slice(10, 20), cols=slice(10, 20))
+    assert block.shape == (10, 10)
+    npt.assert_allclose(block, arr[10:20, 10:20])
+
+
+def test_load_slice_oob(raster_100_by_200):
+    arr = io.load_gdal(raster_100_by_200)
+    block = io.load_gdal(raster_100_by_200, rows=slice(0, 300), cols=slice(0, 300))
+    assert block.shape == (100, 200)
+    npt.assert_allclose(block, arr)
+
+    with pytest.raises(IndexError):
+        block = io.load_gdal(raster_100_by_200, rows=slice(300, 400), cols=slice(0, 10))
+
+
 def test_compute_out_size():
     strides = {"x": 3, "y": 3}
     assert (2, 2) == io.compute_out_shape((6, 6), strides)
