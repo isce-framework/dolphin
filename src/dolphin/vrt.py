@@ -358,9 +358,9 @@ class VRTStack:
     def _te_to_bbox(target_extent, ds=None, filename=None):
         """Convert target extent to pixel bounding box, in georeferenced coordinates."""
         xmin, ymin, xmax, ymax = target_extent  # in georeferenced coordinates
-        left, bottom = io.xy_to_rowcol(xmin, ymin, ds=ds, filename=filename)
-        right, top = io.xy_to_rowcol(xmax, ymax, ds=ds, filename=filename)
-        return left, bottom, right, top
+        row_bottom, col_left = io.xy_to_rowcol(xmin, ymin, ds=ds, filename=filename)
+        row_top, col_right = io.xy_to_rowcol(xmax, ymax, ds=ds, filename=filename)
+        return col_left, row_bottom, col_right, row_top
 
     def iter_blocks(
         self,

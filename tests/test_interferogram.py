@@ -64,7 +64,7 @@ def test_derived_vrt_interferogram_with_subdataset(slc_file_list_nc_with_sds):
     ifg2 = VRTInterferogram(
         ref_slc=path1,
         sec_slc=path2,
-        outfile=ifg.path.parent / "test2.vrt",
+        path=ifg.path.parent / "test2.vrt",
         subdataset="slc/data",
     )
     ifg_arr2 = ifg2.load()

@@ -185,17 +185,13 @@ def run_evd_sequential(
             # Save each of the MLE estimates (ignoring the compressed SLCs)
             assert len(cur_mle_stack[mini_idx:]) == len(cur_output_files)
             # Get the location within the output file, shrinking down the slices
-            out_r, out_c = io.compute_out_shape(
-                (rows.stop - rows.start, cols.stop - cols.start), strides
-            )
-            out_rows = slice(rows.start // ys, rows.start // ys + out_r)
-            out_cols = slice(cols.start // xs, cols.start // xs + out_c)
-
+            out_row_start = rows.start // ys
+            out_col_start = cols.start // xs
             for img, f in zip(cur_mle_stack[mini_idx:], cur_output_files):
-                io.write_block(img, f, out_rows, out_cols)
+                io.write_block(img, f, out_row_start, out_col_start)
 
             # Save the temporal coherence blocks
-            io.write_block(tcorr, tcorr_file, out_rows, out_cols)
+            io.write_block(tcorr, tcorr_file, out_row_start, out_col_start)
 
             # Compress the ministack using only the non-compressed SLCs
             cur_comp_slc = compress(
@@ -203,7 +199,9 @@ def run_evd_sequential(
                 cur_mle_stack[mini_idx:],
             )
             # Save the compressed SLC block
-            io.write_block(cur_comp_slc, cur_comp_slc_file, out_rows, out_cols)
+            io.write_block(
+                cur_comp_slc, cur_comp_slc_file, out_row_start, out_col_start
+            )
             # logger.debug(f"Saved compressed block SLC to {cur_comp_slc_file}")
             # tqdm.write(" Finished block, loading next block.")
 
@@ -270,11 +268,11 @@ def run_evd_sequential(
         )
 
         # Get the location within the output file, shrinking down the slices
-        out_rows = slice(rows.start // ys, rows.stop // ys)
-        out_cols = slice(cols.start // xs, cols.stop // xs)
+        out_row_start = rows.start // ys
+        out_col_start = cols.start // xs
         # Save each of the MLE estimates (ignoring the compressed SLCs)
         for img, f in zip(cur_mle_stack, adjusted_comp_slc_files):
-            io.write_block(img, f, out_rows, out_cols)
+            io.write_block(img, f, out_row_start, out_col_start)
         # Don't think I care about the temporal coherence here
 
     # Compensate for the offsets between ministacks (aka "datum adjustments")
@@ -287,8 +285,8 @@ def run_evd_sequential(
             VRTInterferogram(
                 ref_slc=slc_fname,
                 sec_slc=adjustment_fname,
-                outfile=outfile,
-                pixel_func="mul",
+                path=outfile,
+                pixel_function="mul",
             )
 
     # Can pass the list of files to gdal_calc, which interprets it

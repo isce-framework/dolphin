@@ -11,7 +11,10 @@ from numpy.typing import DTypeLike
 from osgeo import gdal
 
 from dolphin import io, utils
+from dolphin._log import get_log
 from dolphin._types import Filename
+
+logger = get_log()
 
 
 def merge_by_date(
@@ -19,7 +22,6 @@ def merge_by_date(
     file_date_fmt: str = io.DEFAULT_DATETIME_FORMAT,
     output_dir: Filename = ".",
     driver: str = "ENVI",
-    dry_run: bool = False,
 ):
     """Group images from the same date and merge into one image per date.
 
@@ -33,8 +35,6 @@ def merge_by_date(
         path to output directory
     driver : str
         GDAL driver to use for output. Default is ENVI.
-    dry_run : bool
-        if True, do not actually stitch the images, just print.
 
     Returns
     -------
@@ -51,13 +51,12 @@ def merge_by_date(
     stitched_acq_times = {}
 
     for date, cur_images in grouped_images.items():
-        print(f"Stitching {len(cur_images)} images from {date} into one image")
+        logger.info(f"Stitching {len(cur_images)} images from {date} into one image")
         stitched_name = _stitch_same_date(
             cur_images,
             date,
             output_dir=output_dir,
             driver=driver,
-            dry_run=dry_run,
         )
 
         stitched_acq_times[date] = stitched_name
@@ -114,7 +113,6 @@ def _stitch_same_date(
     driver: str = "ENVI",
     nodata: Optional[float] = 0,
     out_dtype: Optional[DTypeLike] = None,
-    dry_run: bool = False,
 ) -> Path:
     """Combine multiple SLC images on the same date into one image.
 
@@ -138,8 +136,6 @@ def _stitch_same_date(
     out_dtype : Optional[DTypeLike]
         output data type. Default is None, which will use the data type
         of the first image in the list.
-    dry_run : bool
-        if True, do not actually stitch the images, just print.
 
     Returns
     -------
@@ -149,12 +145,9 @@ def _stitch_same_date(
     Path(output_dir).mkdir(parents=True, exist_ok=True)
     new_name = Path(output_dir) / (io._format_date_pair(*dates) + ".int")
 
-    if dry_run:
-        return new_name
-
     if len(file_list) == 1:
-        print("Only one image, no stitching needed")
-        print(f"Copying {file_list[0]} to {new_name} and zeroing nodata values.")
+        logger.info("Only one image, no stitching needed")
+        logger.info(f"Copying {file_list[0]} to {new_name} and zeroing nodata values.")
         _nodata_to_zero(
             file_list[0],
             outfile=new_name,
@@ -162,17 +155,17 @@ def _stitch_same_date(
         )
         return new_name
 
-    # TODO
     # Compute output array shape. We guarantee it will cover the output
     # bounds completely
     bounds, gt = _get_combined_bounds_gt(
         *file_list, target_aligned_pixels=target_aligned_pixels
     )
-    # Get the resolution from the geotransform
-    res = [gt[1], gt[5]]
+    # Get the (dx, dy) resolution from the geotransform
+    res = (abs(gt[1]), abs(gt[5]))  # dy is be negative for north-up images
 
     out_shape = _get_output_shape(bounds, res)
     projection = _get_mode_projection(file_list)
+    out_dtype = out_dtype or io.get_dtype(file_list[0])
 
     io.write_arr(
         arr=None,
@@ -186,9 +179,88 @@ def _stitch_same_date(
         projection=projection,
     )
 
-    # in_nodata = io.get_nodata(file_list[0])
+    out_left, out_bottom, out_right, out_top = bounds
+    # Now loop through the files and write them to the output
+    for f in file_list:
+        logger.info(f"Stitching {f} into {new_name}")
+        ds_in = gdal.Open(f)
+        proj_in = ds_in.GetProjection()
+        if proj_in != projection:
+            logger.info(
+                f"Reprojecting {f} from {proj_in} to match mode projection {projection}"
+            )
+            ds_in = _get_warped_ds(f, projection, res)
+        else:
+            ds_in = gdal.Open(f)
+        in_left, in_bottom, in_right, in_top = io.get_raster_bounds(ds=ds_in)
+
+        # Get the spatial intersection of input and output
+        int_right = min(in_right, out_right)
+        int_top = min(in_top, out_top)
+        int_left = max(in_left, out_left)
+        int_bottom = max(in_bottom, out_bottom)
+
+        # Get the pixel coordinates of the intersection in the input
+        row_top, col_right = io.xy_to_rowcol(int_right, int_top, ds=ds_in)
+        row_bottom, col_left = io.xy_to_rowcol(int_left, int_bottom, ds=ds_in)
+        in_rows, in_cols = ds_in.RasterYSize, ds_in.RasterXSize
+        # Read the input data in this window
+        arr_in = ds_in.ReadAsArray(
+            col_left,
+            row_top,
+            # Clip the width/height to the raster size
+            min(col_right - col_left, in_cols),
+            min(row_bottom - row_top, in_rows),
+        )
+        # TODO: handle nodata and nans
+
+        # Get pixel coordinates of the intersection in the output
+        row_top, col_right = io.xy_to_rowcol(int_right, int_top, filename=new_name)
+        row_bottom, col_left = io.xy_to_rowcol(int_left, int_bottom, filename=new_name)
+        # Write the input data to the output in this window
+        io.write_block(
+            arr_in,
+            filename=new_name,
+            row_start=row_top,
+            col_start=col_left,
+        )
 
     return Path(new_name)
+
+
+def _get_warped_ds(input: Filename, projection: str, res: Tuple[float, float]):
+    """Get an in-memory warped VRT of the input file.
+
+    Parameters
+    ----------
+    input : Filename
+        Name of the input file.
+    projection : str
+        The desired projection, as a WKT string or 'EPSG:XXXX' string.
+    res : Tuple[float, float]
+        The desired [x, y] resolution.
+
+    Returns
+    -------
+    gdal.Dataset
+        The result of gdal.Warp with VRT output format.
+    """
+    return gdal.Warp(
+        "",
+        input,
+        format="VRT",
+        dstSRS=projection,
+        targetAlignedPixels=True,
+        xRes=res[0],
+        yRes=res[1],
+    )
+
+
+def _gdal_merge(*inputs: Filename, output: Filename):
+    import subprocess
+
+    cmd = ["gdal_merge.py", "-init", 0, "-n", 0, "-o", output, *inputs]
+    subprocess.run(cmd, check=True)  # type: ignore
 
 
 def _get_combined_bounds_gt(
@@ -222,7 +294,7 @@ def _get_combined_bounds_gt(
         left, bottom, right, top = io.get_raster_bounds(fn)
         gt = ds.GetGeoTransform()
         dx, dy = gt[1], gt[5]
-        resolutions.add((dx, dy))
+        resolutions.add((abs(dx), abs(dy)))  # dy is negative for north-up
         projs.add(ds.GetProjection())
 
         xs.extend([left, right])
@@ -243,8 +315,8 @@ def _get_combined_bounds_gt(
 def _get_output_shape(bounds, res):
     """Get the output shape of the combined image."""
     left, bottom, right, top = bounds
-    out_width = int(round((right - left) / res[0]))
-    out_height = int(round((top - bottom) / res[1]))
+    out_width = int(round((right - left) / abs(res[0])))
+    out_height = int(round((top - bottom) / abs(res[1])))
     return (out_height, out_width)
 
 

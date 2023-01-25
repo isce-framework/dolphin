@@ -84,9 +84,9 @@ def create_ps(
         ps[amp_disp == 0] = 255
 
         # Write amp dispersion and the mean blocks
-        write_block(mean, amp_mean_file, rows, cols)
-        write_block(amp_disp, amp_dispersion_file, rows, cols)
-        write_block(ps, output_file, rows, cols)
+        write_block(mean, amp_mean_file, rows.start, cols.start)
+        write_block(amp_disp, amp_dispersion_file, rows.start, cols.start)
+        write_block(ps, output_file, rows.start, cols.start)
 
 
 def calc_ps_block(stack_mag: np.ndarray, amp_dispersion_threshold: float = 0.42):

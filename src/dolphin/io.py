@@ -16,14 +16,14 @@ gdal.UseExceptions()
 logger = get_log()
 
 
-DEFAULT_TILE_SIZE = [128, 128]
-DEFAULT_TIFF_OPTIONS = [
+DEFAULT_TILE_SIZE = (128, 128)
+DEFAULT_TIFF_OPTIONS = (
     "COMPRESS=DEFLATE",
-    "ZLEVEL=5",
+    "ZLEVEL=4",
     "TILED=YES",
     f"BLOCKXSIZE={DEFAULT_TILE_SIZE[1]}",
     f"BLOCKYSIZE={DEFAULT_TILE_SIZE[0]}",
-]
+)
 DEFAULT_HDF5_OPTIONS = dict(
     # https://docs.h5py.org/en/stable/high/dataset.html#filter-pipeline
     chunks=DEFAULT_TILE_SIZE,
@@ -179,6 +179,24 @@ def get_nodata(filename: Filename) -> Optional[float]:
     return nodata
 
 
+def get_dtype(filename: Filename) -> np.dtype:
+    """Get the data type from a file.
+
+    Parameters
+    ----------
+    filename : Filename
+        Path to the file to load.
+
+    Returns
+    -------
+    np.dtype
+        Data type.
+    """
+    ds = gdal.Open(fspath(filename))
+    dt = gdal_to_numpy_type(ds.GetRasterBand(1).DataType)
+    return dt
+
+
 def rowcol_to_xy(
     row: int,
     col: int,
@@ -194,9 +212,15 @@ def xy_to_rowcol(
     y: float,
     ds: Optional[gdal.Dataset] = None,
     filename: Optional[Filename] = None,
-) -> Tuple[float, float]:
+    do_round=True,
+) -> Tuple[int, int]:
     """Convert coordinates in the georeferenced space to a row and column index."""
-    return _apply_gt(ds, filename, x, y, inverse=True)
+    col, row = _apply_gt(ds, filename, x, y, inverse=True)
+    # Need to convert to int, otherwise we get a float
+    if do_round:
+        row = round(row)
+        col = round(col)
+    return int(row), int(col)
 
 
 def _apply_gt(
@@ -220,11 +244,14 @@ def _apply_gt(
 
 
 def get_raster_bounds(
-    filename: Filename, ds: Optional[gdal.Dataset] = None
+    filename: Optional[Filename] = None, ds: Optional[gdal.Dataset] = None
 ) -> Tuple[float, float, float, float]:
     """Get the (left, bottom, right, top) bounds of the image."""
     if ds is None:
+        if filename is None:
+            raise ValueError("Must provide either `filename` or `ds`")
         ds = gdal.Open(fspath(filename))
+
     gt = ds.GetGeoTransform()
     xsize, ysize = ds.RasterXSize, ds.RasterYSize
 
@@ -329,14 +356,13 @@ def write_arr(
     else:
         ds_like = None
 
+    xsize = ysize = gdal_dtype = None
     if arr is not None:
         if arr.ndim == 2:
             arr = arr[np.newaxis, ...]
         ysize, xsize = arr.shape[-2:]
         gdal_dtype = numpy_to_gdal_type(arr.dtype)
     else:
-        if not ds_like:
-            raise ValueError("Must specify either `arr` or `like_filename`")
         if shape is not None:
             ysize, xsize = shape
         else:
@@ -345,8 +371,13 @@ def write_arr(
             gdal_dtype = numpy_to_gdal_type(dtype)
         else:
             gdal_dtype = ds_like.GetRasterBand(1).DataType
-        if nodata is None:
-            nodata = ds_like.GetRasterBand(1)
+
+    if any(v is None for v in (xsize, ysize, gdal_dtype)):
+        raise ValueError("Must specify either `arr` or `like_filename`")
+
+    if nodata is None and ds_like is not None:
+        b = ds_like.GetRasterBand(1)
+        nodata = b.GetNoDataValue()
 
     nbands = nbands or (ds_like.RasterCount if ds_like else arr.shape[0])
 
@@ -358,7 +389,7 @@ def write_arr(
                 raise ValueError("Must specify `driver` if `like_filename` is None")
             driver = ds_like.GetDriver().ShortName
     if options is None and driver == "GTiff":
-        options = DEFAULT_TIFF_OPTIONS
+        options = list(DEFAULT_TIFF_OPTIONS)
 
     drv = gdal.GetDriverByName(driver)
     ds_out = drv.Create(
@@ -370,18 +401,20 @@ def write_arr(
         options=options or [],
     )
 
-    if ds_like:
-        geotransform = ds_like.GetGeoTransform()
+    # If not provided, attempt to get projection/geotransform from like_filename
+    if projection is None and ds_like is not None:
         projection = ds_like.GetProjection()
-    else:
-        if projection is not None:
-            # this still works if we're passed a WKT string
-            projection = CRS.from_user_input(projection).to_wkt()
+    if geotransform is None and ds_like is not None:
+        geotransform = ds_like.GetGeoTransform()
 
-    if projection is not None:
+    # Set the geo/proj information
+    if projection:
+        # Make sure we're got a correct format for the projection
+        # this still works if we're passed a WKT string
+        projection = CRS.from_user_input(projection).to_wkt()
         ds_out.SetProjection(projection)
     if geotransform is not None:
-        ds_out.SetGeoTransform(ds_like.GetGeoTransform())
+        ds_out.SetGeoTransform(geotransform)
 
     # Write the actual data
     if arr is not None:
@@ -399,8 +432,8 @@ def write_arr(
 def write_block(
     cur_block: np.ndarray,
     filename: Filename,
-    rows: slice,
-    cols: slice,
+    row_start: int,
+    col_start: int,
 ):
     """Write out an ndarray to a subset of the pre-made `filename`.
 
@@ -410,10 +443,10 @@ def write_block(
         Array of shape (n_bands, block_rows, block_cols)
     filename : Filename
         List of output files to save to, or (if cur_block is 2D) a single file.
-    rows : slice
-        Rows of the current block
-    cols : slice
-        Columns of the current block
+    row_start : int
+        Row index to start writing at.
+    col_start : int
+        Column index to start writing at.
 
     Raises
     ------
@@ -432,7 +465,7 @@ def write_block(
         bnd = ds.GetRasterBand(b_idx)
         # only need offset for write:
         # https://gdal.org/api/python/osgeo.gdal.html#osgeo.gdal.Band.WriteArray
-        bnd.WriteArray(cur_image, cols.start, rows.start)
+        bnd.WriteArray(cur_image, col_start, row_start)
         bnd.FlushCache()
         bnd = None
     ds = None

@@ -16,10 +16,11 @@ NUM_ACQ = 30
 def slc_stack():
     shape = (NUM_ACQ, 5, 10)
     sigma = 0.5
-    data = np.random.normal(0, sigma, size=shape).astype(np.complex64)
-    # Phase doesn't matter here
-    complex_data = data * np.exp(1j * np.zeros_like(data))
-    return complex_data
+    data = np.random.normal(0, sigma, size=shape) + 1j * np.random.normal(
+        0, sigma, size=shape
+    )
+    data = data.astype(np.complex64)
+    return data
 
 
 @pytest.fixture()

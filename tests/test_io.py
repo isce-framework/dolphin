@@ -99,8 +99,8 @@ def test_save_block(raster_100_by_200, tmpdir):
     io.write_block(
         cur_block=np.ones((20, 30)),
         filename=save_name,
-        rows=slice(0, 20),
-        cols=slice(0, 30),
+        row_start=0,
+        col_start=0,
     )
     block_loaded2 = io.load_gdal(save_name)
     arr[:20, :30] = 1
@@ -109,8 +109,8 @@ def test_save_block(raster_100_by_200, tmpdir):
     io.write_block(
         cur_block=np.ones((20, 30)),
         filename=save_name,
-        rows=slice(0, 20),
-        cols=slice(0, 30),
+        row_start=0,
+        col_start=0,
     )
     block_loaded2 = io.load_gdal(save_name)
     arr[:20, :30] = 1
@@ -147,8 +147,8 @@ def test_save_block_cpx(raster_100_by_200, cpx_arr, tmpdir):
     io.write_block(
         cur_block=np.ones((20, 30), dtype=np.complex64),
         filename=save_name,
-        rows=slice(0, 20),
-        cols=slice(0, 30),
+        row_start=0,
+        col_start=0,
     )
     arr_loaded = io.load_gdal(save_name)
     assert (arr_loaded[:20, :30] == 1 + 0j).all()
@@ -158,8 +158,8 @@ def test_save_block_cpx(raster_100_by_200, cpx_arr, tmpdir):
     io.write_block(
         cur_block=block_cpx,
         filename=save_name,
-        rows=slice(20, 30),
-        cols=slice(20, 30),
+        row_start=20,
+        col_start=20,
     )
     arr_loaded = io.load_gdal(save_name)
     assert (arr_loaded[20:30, 20:30] == block_cpx).all()
