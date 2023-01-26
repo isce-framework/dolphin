@@ -17,7 +17,7 @@ from ruamel.yaml import YAML
 from dolphin import __version__ as _dolphin_version
 from dolphin._log import get_log
 from dolphin.io import format_nc_filename
-from dolphin.utils import get_dates, parse_slc_strings
+from dolphin.utils import get_dates, parse_slc_strings, sort_files_by_date
 
 from ._enums import InterferogramNetworkType, OutputFormat, UnwrapMethod, WorkflowName
 
@@ -271,12 +271,7 @@ class Inputs(BaseModel):
             # gdal formatting function will raise an error if subdataset doesn't exist
             _ = [format_nc_filename(f, subdataset) for f in file_list]
 
-        # Sort the files by date
-        date_list = parse_slc_strings(file_list, fmt=date_fmt)
-        # Sort the files by date
-        file_list, date_list = zip(
-            *sorted(zip(file_list, date_list), key=lambda x: x[1])
-        )
+        file_list, _ = sort_files_by_date(file_list, file_date_fmt=date_fmt)
         # Coerce the file_list to a list of Path objects, sorted
         values["cslc_file_list"] = [Path(f) for f in file_list]
         return values
