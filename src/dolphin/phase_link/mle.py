@@ -286,24 +286,25 @@ def _fill_ps_pixels(
     if avg_mag is None:
         # Get the average magnitude of the SLC stack
         avg_mag = np.abs(slc_stack).mean(axis=0)
-    # null out all the non-PS pixels
-    avg_mag[~ps_mask] = np.nan
+    mag = avg_mag.copy()
     # Ensure that where avg_mag is NaN and `nodata_mask` are in sync
-    avg_mag[nodata_mask] = np.nan
-    nodata_mask[np.isnan(avg_mag)] = True
+    mag[nodata_mask] = np.nan
+    nodata_mask[np.isnan(mag)] = True
+
+    # null out all the non-PS pixels
+    mag[~ps_mask] = np.nan
 
     # Get the indices of the brightest pixels within each look window
-    slc_r_idxs, slc_c_idxs = _get_maxes(avg_mag, strides["y"], strides["x"])
+    slc_r_idxs, slc_c_idxs = _get_maxes(mag, strides["y"], strides["x"])
     # For ps_mask, we set to True if any pixels within the window were PS
     ps_mask_looked = take_looks(ps_mask, strides["y"], strides["x"], func_type="any")
     nodata_mask_looked = take_looks(
-        nodata_mask, strides["y"], strides["x"], func_type="any"
+        nodata_mask, strides["y"], strides["x"], func_type="all"
     )
 
     # we're only filling where there's both a PS pixel and valid data
     # Now that the sum of this mask should be equal to the shape of `slc_r_idxs`
     fill_mask = ps_mask_looked & ~nodata_mask_looked
-
     # ref = np.conj(slc_stack[0][ps_mask])
     ref = np.conj(slc_stack[0][slc_r_idxs, slc_c_idxs])
     for i in range(len(slc_stack)):
