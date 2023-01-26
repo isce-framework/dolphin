@@ -1,0 +1,50 @@
+site_name: Documentation for dolphin
+
+theme:
+  name: "readthedocs"
+  favicon: img/favicon.ico
+  logo: img/apple-touch-icon.png
+  highlightjs: true
+
+
+plugins:
+- search
+# plugin suggestions from here: https://mkdocstrings.github.io/recipes/
+- gen-files:
+    scripts:
+    - docs/gen_ref_pages.py
+# https://github.com/oprypin/mkdocs-literate-nav
+- literate-nav:
+    nav_file: summary.md
+# https://mkdocstrings.github.io/python/usage/
+- mkdocstrings:
+    handlers:
+      python:
+        paths: [src]
+        options:
+          docstring_style: numpy
+          members_order: alphabetical # source
+
+
+markdown_extensions:
+  - pymdownx.arithmatex:
+      generic: true
+
+extra_javascript:
+  - javascripts/mathjax.js
+  - https://polyfill.io/v3/polyfill.min.js?features=es6
+  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
+
+
+watch:
+- src/
+
+nav:
+- index.md
+- getting-started.md
+- tutorials.md
+- how-to-guides.md
+# https://mkdocstrings.github.io/recipes/#generate-a-literate-navigation-file
+# trailing slash: that mkdocs-literate-nav knows a summary.md file is in that folder.
+- Code Reference: reference/
+- background-theory.md

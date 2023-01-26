@@ -1,0 +1,20 @@
+<VRTDataset rasterXSize="{xsize}" rasterYSize="{ysize}">
+    <VRTRasterBand dataType="CFloat32" band="1" subClass="VRTDerivedRasterBand">
+        <PixelFunctionType>adjust</PixelFunctionType>
+        <PixelFunctionLanguage>Python</PixelFunctionLanguage>
+        <PixelFunctionCode><![CDATA[
+            import numpy as np
+            def adjust(in_ar, out_ar, xoff, yoff, xsize, ysize, raster_xsize,
+                       raster_ysize, buf_radius, gt, **kwargs):
+
+                out_ar[:] = np.abs(in_ar[0]) * np.exp(1j * (np.angle(in_ar[0]) + np.angle(in_ar[1])))
+            ]]>
+        </PixelFunctionCode>
+        <SimpleSource>
+            <SourceFilename relativeToVRT="1">{file1}</SourceFilename>
+        </SimpleSource>
+        <SimpleSource>
+            <SourceFilename relativeToVRT="1">{file2}</SourceFilename>
+        </SimpleSource>
+    </VRTRasterBand>
+</VRTDataset>

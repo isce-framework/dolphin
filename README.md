@@ -1,59 +1,61 @@
-# atlas
+# dolphin
 
-Algorithms and Tools for LAnd Surface Deformation using InSAR
+High resolution wrapped phase estimation for InSAR using combine PS/DS processing.
 
-🚨 This toolbox is still in **pre-alpha** stage and undergoing **rapid development**. 🚨
+<!-- DeformatiOn Land surface Products in High resolution using INsar -->
+
+
 
 ## Install
 
-The following will install `atlas` into a conda environment.
+The following will install `dolphin` into a conda environment.
 
 1. Download source code:
-
 ```bash
-git clone https://github.com/opera-adt/atlas.git && cd atlas
+git clone https://github.com/opera-adt/dolphin.git && cd dolphin
 ```
-
 2. Install dependencies:
-
 ```bash
-conda install -c conda-forge --file requirements.txt
+conda env create --file conda-env.yml
 ```
 
-3. Install `atlas` via pip:
-
+or if you have an existing environment:
 ```bash
-# run "pip install -e" to install in development mode
+conda env update --name my-existing-env --file conda-env.yml
+```
+
+3. Install `dolphin` via pip:
+```bash
+conda activate dolphin-env
 python -m pip install .
 ```
 
+
 ## Usage
 
+The main entry point for running the phase estimation workflow is named `dolphin`, which has two subcommands:
+
+1. `dolphin config`: create a workflow configuration file.
+2. `dolphin run` : run the workflow using this file.
+
+Example usage:
+
+```bash
+$ dolphin config --slc-files /path/to/slcs/*tif
+```
+This will create a YAML file (by default `dolphin_config.yaml` in the current directory).
+
+The only required inputs for the workflow is a list of coregistered SLC files (in either geographic or radar coordinates).
+If the SLC files are spread over multiple files, you can either
+1. use the `--slc-files` option with a bash glob pattern, (e.g. `dolphin config --slc-files merged/SLC/*/*.slc` would match the [ISCE2 stack processor output](https://github.com/isce-framework/isce2/tree/main/contrib/stack) )
+1. Store all input SLC files in a text file delimited by newlines (e.g. `my_slc_list.txt`), and give the name of this text file prefixed by the `@` character (e.g. `dolphin config --slc-files @my_slc_list.txt`)
+
+The full set of options is written to the configuration file; you can edit this file, or you can see which commonly tuned options by are changeable running `dolphin config --help`.
+
+See the [documentation](https://dolphin-insar.readthedocs.io/) for more details.
+
 ## License
-**Copyright (c) 2022** California Institute of Technology (“Caltech”). U.S. Government
-sponsorship acknowledged.
 
-All rights reserved.
+This software is licensed under your choice of BSD-3-Clause or Apache-2.0 licenses. See the accompanying LICENSE file for further details.
 
-Redistribution and use in source and binary forms, with or without modification, are permitted provided
-that the following conditions are met:
-* Redistributions of source code must retain the above copyright notice, this list of conditions and
-the following disclaimer.
-* Redistributions in binary form must reproduce the above copyright notice, this list of conditions
-and the following disclaimer in the documentation and/or other materials provided with the
-distribution.
-* Neither the name of Caltech nor its operating division, the Jet Propulsion Laboratory, nor the
-names of its contributors may be used to endorse or promote products derived from this software
-without specific prior written permission.
-
-THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS
-IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
-THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
-CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
-OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
-WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
-OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
-ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+SPDX-License-Identifier: BSD-3-Clause OR Apache-2.0

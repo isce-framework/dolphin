@@ -1,7 +1,10 @@
-python>=3.9     # sentinel1-reader requirement
-numpy           # sentinel1-reader requirement
-gdal>=3
-#isce3        # since the conda-installed isce3 is not the most updated version, installing isce3 from stratch is recommended, to stay in sync with isce3 development.
-#journal      # as of Mar 2022, journal from conda does not support python3.9; since it is included during isce3 installation above, comment this out temporarily.
-ruamel.yaml
-yamale
+# These are the packages easily-installable through pip
+h5py>=3.6
+numba>=0.54
+numpy>=1.20
+pydantic>=1.10
+pymp-pypi>=0.4.5
+pyproj>=3.2
+ruamel_yaml>=0.15
+scipy>=1.5
+tqdm>=4.60
