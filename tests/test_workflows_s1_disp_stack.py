@@ -2,6 +2,8 @@ import random
 from itertools import chain
 from pathlib import Path
 
+import pytest
+
 from dolphin.workflows import s1_disp_stack
 
 
@@ -31,3 +33,15 @@ def test_group_by_burst():
     # but the order of the lists of each key may be different
     for burst, file_list in s1_disp_stack._group_by_burst(in_files).items():
         assert sorted(file_list) == sorted(expected[burst])
+
+
+def test_group_by_burst_non_opera():
+    with pytest.raises(ValueError, match="Could not parse burst id"):
+        s1_disp_stack._group_by_burst(["20200101.slc", "20200202.slc"])
+        # A combination should still error
+        s1_disp_stack._group_by_burst(
+            [
+                "20200101.slc",
+                Path("t087_185679_iw1/20180210/t087_185679_iw1_20180210_VV.h5"),
+            ]
+        )

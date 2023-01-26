@@ -1,4 +1,5 @@
 import json
+import re
 from datetime import date, datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, TextIO, Union
@@ -27,6 +28,15 @@ PathOrStr = Union[Path, str]
 __all__ = [
     "Workflow",
 ]
+
+logger = get_log()
+
+# Specific to OPERA CSLC products:
+OPERA_DATASET_NAME = "science/SENTINEL1/CSLC/grids/VV"
+# for example, t087_185684_iw2
+OPERA_BURST_RE = re.compile(
+    r"t(?P<track>\d{3})_(?P<burst_id>\d{6})_(?P<subswath>iw[1-3])"
+)
 
 
 def _move_file_in_dir(path: PathOrStr, values: dict) -> Path:
@@ -198,7 +208,11 @@ class Inputs(BaseModel):
     )
     subdataset: Optional[str] = Field(
         None,
-        description="Subdataset to use from CSLC files, if passing HDF5/NetCDF files.",
+        description=(
+            "If passing HDF5/NetCDF files, subdataset to use from CSLC files. "
+            f"If not specified, but all `cslc_file_list` looks like {OPERA_BURST_RE}, "
+            f" will use {OPERA_DATASET_NAME} as the subdataset."
+        ),
     )
     cslc_date_fmt: str = Field(
         "%Y%m%d",
@@ -232,6 +246,22 @@ class Inputs(BaseModel):
                 )
 
         return [Path(f) for f in v]
+
+    @validator("subdataset", pre=True)
+    def _check_for_opera(cls, v, values):
+        cslc_file_list = values.get("cslc_file_list")
+        # if we're not dealing with all OPERA files, just return whatever they gave
+        if any(re.search(OPERA_BURST_RE, str(f)) is None for f in cslc_file_list):
+            return v
+        # Here we're dealing with all OPERA files, so we need to set the subdataset
+        if v is None:
+            # Assume that the user forgot to set the subdataset, and set it to the
+            # default OPERA dataset name
+            logger.info(
+                "CSLC files look like OPERA files, setting subdataset to"
+                f" {OPERA_DATASET_NAME}."
+            )
+            return OPERA_DATASET_NAME
 
     @validator("mask_files", pre=True)
     def _check_mask_files(cls, v):

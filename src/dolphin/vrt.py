@@ -370,7 +370,7 @@ class VRTStack:
         max_bytes: Optional[float] = DEFAULT_BLOCK_BYTES,
         return_slices: bool = False,
         skip_empty: bool = True,
-        use_nodata_mask: bool = True,
+        use_nodata_mask: bool = False,
     ):
         """Iterate over blocks of the stack.
 

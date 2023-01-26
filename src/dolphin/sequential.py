@@ -60,14 +60,14 @@ def run_evd_sequential(
 
     nrows, ncols = v_all.shape[-2:]
     if mask_file is not None:
-        mask = io.load_gdal(mask_file).astype(bool)
+        nodata_mask = io.load_gdal(mask_file).astype(bool)
     else:
-        mask = np.zeros((nrows, ncols), dtype=bool)
+        nodata_mask = np.zeros((nrows, ncols), dtype=bool)
 
     if ps_mask_file is not None:
         ps_mask = io.load_gdal(ps_mask_file).astype(bool)
     else:
-        ps_mask = np.zeros_like(mask)
+        ps_mask = np.zeros_like(nodata_mask)
 
     xhalf, yhalf = half_window["x"], half_window["y"]
     xs, ys = strides["x"], strides["y"]
@@ -171,7 +171,7 @@ def run_evd_sequential(
                     strides=strides,
                     beta=beta,
                     reference_idx=mini_idx,
-                    mask=mask[rows, cols],
+                    nodata_mask=nodata_mask[rows, cols],
                     ps_mask=ps_mask[rows, cols],
                     n_workers=n_workers,
                     gpu_enabled=gpu_enabled,
@@ -260,7 +260,7 @@ def run_evd_sequential(
             strides=strides,
             beta=beta,
             reference_idx=0,
-            mask=mask[rows, cols],
+            nodata_mask=nodata_mask[rows, cols],
             ps_mask=None,  # PS mask doesn't matter for the adjustments
             use_slc_amp=False,  # Make adjustments unit-amplitude
             n_workers=n_workers,

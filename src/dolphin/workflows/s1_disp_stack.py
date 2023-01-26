@@ -2,6 +2,7 @@
 import itertools
 import re
 from pathlib import Path
+from pprint import pformat
 from typing import Dict, List, Pattern, Sequence, Union
 
 from dolphin._log import get_log, log_runtime
@@ -9,12 +10,7 @@ from dolphin._types import Filename
 from dolphin.interferogram import VRTInterferogram
 
 from . import stitch_and_unwrap, wrapped_phase
-from .config import Workflow
-
-# for example, t087_185678_iw2
-OPERA_BURST_RE = re.compile(
-    r"t(?P<track>\d{3})_(?P<burst_id>\d{6})_(?P<subswath>iw[1-3])"
-)
+from .config import OPERA_BURST_RE, Workflow
 
 
 @log_runtime
@@ -33,6 +29,7 @@ def run(cfg: Workflow, debug: bool = False):
     try:
         grouped_slc_files = _group_by_burst(cfg.inputs.cslc_file_list)
     except ValueError as e:
+        # Make sure it's not some other ValueError
         if "Could not parse burst id" not in str(e):
             raise e
         # Otherwise, we have SLC files which are not OPERA burst files
@@ -45,6 +42,8 @@ def run(cfg: Workflow, debug: bool = False):
             (burst, _create_burst_cfg(cfg, burst, grouped_slc_files))
             for burst in grouped_slc_files
         ]
+        for _, burst_cfg in wrapped_phase_cfgs:
+            burst_cfg.create_dir_tree()
     else:
         wrapped_phase_cfgs = [("", cfg)]
     # ###########################
@@ -55,8 +54,9 @@ def run(cfg: Workflow, debug: bool = False):
     for burst, burst_cfg in wrapped_phase_cfgs:
         msg = "Running wrapped phase estimation"
         if burst:
-            msg += f" for burst {burst_cfg.burst_id}"
+            msg += f" for burst {burst}"
         logger.info(msg)
+        logger.info(pformat(burst_cfg.dict()))
         cur_ifg_list = wrapped_phase.run(burst_cfg, debug=debug)
         ifg_list.extend(cur_ifg_list)
 

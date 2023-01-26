@@ -36,17 +36,6 @@ The main entry point is named `dolphin`, which has two subcommands:
 1. `dolphin config`: create a workflow configuration file.
 2. `dolphin run` : run the workflow using this file.
 
-Example usage:
-
-```bash
-$ dolphin config --slc-directory /path/to/slc --ext ".tif"
-```
-This will create a YAML file (by default `dolphin_config.yaml` in the current directory).
-You can also directly use a list of SLC files as input, e.g.:
-```bash
-$ dolphin config --slc-files /path/to/slc1.tif /path/to/slc2.tif
-```
-
 ## Setup for Developers
 
 To contribute to the development of `dolphin`, you can fork the repository and install the package in development mode.

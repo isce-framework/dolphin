@@ -26,7 +26,7 @@ def run_mle(
     strides: Dict[str, int] = {"x": 1, "y": 1},
     beta: float = 0.0,
     reference_idx: int = 0,
-    mask: np.ndarray = None,
+    nodata_mask: np.ndarray = None,
     ps_mask: Optional[np.ndarray] = None,
     avg_mag: Optional[np.ndarray] = None,
     use_slc_amp: bool = True,
@@ -50,15 +50,15 @@ def run_mle(
         The regularization parameter, by default 0.0.
     reference_idx : int, optional
         The index of the (non compressed) reference SLC, by default 0
-    mask : np.ndarray, optional
-        A mask of bad pixels to ignore when estimating the covariance.
+    nodata_mask : np.ndarray, optional
+        A mask of bad/nodata pixels to ignore when estimating the covariance.
         Pixels with `True` (or 1) are ignored, by default None
         If None, all pixels are used, by default None.
     ps_mask : np.ndarray, optional
         A mask of pixels marking persistent scatterers (PS) to
-        also ignore when multilooking.
-        Pixels with `True` (or 1) are PS and will be ignored (combined
-        with `mask`).
+        skip when multilooking.
+        Pixels with `True` (or 1) are PS and will be ignored
+        (combined with `nodata_mask`).
         The phase from these pixels will be inserted back
         into the final estimate directly from `slc_stack`.
     avg_mag : np.ndarray, optional
@@ -91,10 +91,10 @@ def run_mle(
     # Common pre-processing for both CPU and GPU versions:
 
     # Mask nodata pixels if given
-    if mask is None:
-        mask = np.zeros((rows, cols), dtype=bool)
+    if nodata_mask is None:
+        nodata_mask = np.zeros((rows, cols), dtype=bool)
     else:
-        mask = mask.astype(bool)
+        nodata_mask = nodata_mask.astype(bool)
 
     # Track the PS pixels, if given, and remove them from the stack
     # This will prevent the large amplitude PS pixels from dominating
@@ -106,14 +106,14 @@ def run_mle(
     _check_all_nans(slc_stack)
 
     # Make sure we also are ignoring pixels which are nans for all SLCs
-    if mask.shape != (rows, cols) or ps_mask.shape != (rows, cols):
+    if nodata_mask.shape != (rows, cols) or ps_mask.shape != (rows, cols):
         raise ValueError(
-            f"mask.shape={mask.shape}, ps_mask.shape={ps_mask.shape},"
+            f"nodata_mask.shape={nodata_mask.shape}, ps_mask.shape={ps_mask.shape},"
             f" but != SLC (rows, cols) {rows, cols}"
         )
-    mask |= np.all(np.isnan(slc_stack), axis=0)
+    nodata_mask |= np.all(np.isnan(slc_stack), axis=0)
     # TODO: Any other masks we need?
-    ignore_mask = np.logical_or.reduce((mask, ps_mask))
+    ignore_mask = np.logical_or.reduce((nodata_mask, ps_mask))
 
     # Make a copy, and set the masked pixels to np.nan
     slc_stack_masked = slc_stack.copy()
@@ -145,30 +145,17 @@ def run_mle(
 
     # Get the smaller, looked versions of the masks
     # We zero out nodata if all pixels within the window had nodata
-    mask_looked = take_looks(mask, strides["y"], strides["x"], func_type="all")
+    mask_looked = take_looks(nodata_mask, strides["y"], strides["x"], func_type="all")
     # Set no data pixels to np.nan
     temp_coh[mask_looked] = np.nan
 
     # Fill in the PS pixels from the original SLC stack, if it was given
     if np.any(ps_mask):
-        _fill_ps_pixels(mle_est, temp_coh, slc_stack, ps_mask, strides, avg_mag)
+        _fill_ps_pixels(
+            mle_est, temp_coh, slc_stack, ps_mask, nodata_mask, strides, avg_mag
+        )
 
     return mle_est, temp_coh
-
-
-def _get_maxes(arr, row_looks, col_looks):
-    # Get the max value in each look window
-    # We have to pad so that the shapes are a multiple of the look sizes
-    # Otherwise, the maxes sizes will be off
-    max_nums = take_looks(
-        arr, row_looks, col_looks, func_type="nanmax", edge_strategy="pad"
-    )
-    # Repeat the max values to back to the original size
-    maxes_filled = upsample_nearest(
-        max_nums, arr.shape[-2:], looks=(row_looks, col_looks)
-    )
-    # Find the indices of the max values in the original image
-    return np.where(maxes_filled == arr)
 
 
 def mle_stack(C_arrays, beta: float = 0.0, reference_idx: float = 0):
@@ -270,7 +257,9 @@ def _check_all_nans(slc_stack):
         raise PhaseLinkRuntimeError(f"SLC stack[{bad_slc_idxs}] has are all NaNs.")
 
 
-def _fill_ps_pixels(mle_est, temp_coh, slc_stack, ps_mask, strides, avg_mag):
+def _fill_ps_pixels(
+    mle_est, temp_coh, slc_stack, ps_mask, nodata_mask, strides, avg_mag
+):
     """Fill in the PS locations in the MLE estimate with the original SLC data.
 
     Overwrites `mle_est` and `temp_coh` in place.
@@ -285,6 +274,8 @@ def _fill_ps_pixels(mle_est, temp_coh, slc_stack, ps_mask, strides, avg_mag):
         The original SLC stack, with shape (n_images, n_rows, n_cols)
     ps_mask : ndarray, shape = (rows, cols)
         Boolean mask of pixels marking persistent scatterers (PS).
+    nodata_mask : ndarray, shape = (rows, cols)
+        Boolean mask of pixels marking no data pixels.
     strides : dict
         The look window strides
     avg_mag : np.ndarray, optional
@@ -296,15 +287,42 @@ def _fill_ps_pixels(mle_est, temp_coh, slc_stack, ps_mask, strides, avg_mag):
         avg_mag = np.abs(slc_stack).mean(axis=0)
     # null out all the non-PS pixels
     avg_mag[~ps_mask] = np.nan
+    # Ensure that the avg_mag is NaN where there is no data
+    avg_mag[nodata_mask] = np.nan
 
-    # Get the indices of the maxes within each look window
+    # Get the indices of the brightest pixels within each look window
     slc_r_idxs, slc_c_idxs = _get_maxes(avg_mag, strides["y"], strides["x"])
     # For ps_mask, we set to True if any pixels within the window were PS
     ps_mask_looked = take_looks(ps_mask, strides["y"], strides["x"], func_type="any")
+    nodata_mask_looked = take_looks(
+        nodata_mask, strides["y"], strides["x"], func_type="any"
+    )
+
+    # we're only filling where there's both a PS pixel and valid data
+    # Now that the sum of this mask should be equal to the shape of `slc_r_idxs`
+    fill_mask = (ps_mask_looked & ~nodata_mask_looked) & (~np.isnan(avg_mag))
 
     # ref = np.conj(slc_stack[0][ps_mask])
     ref = np.conj(slc_stack[0][slc_r_idxs, slc_c_idxs])
     for i in range(len(slc_stack)):
-        mle_est[i][ps_mask_looked] = slc_stack[i][slc_r_idxs, slc_c_idxs] * ref
+        mle_est[i][fill_mask] = slc_stack[i][slc_r_idxs, slc_c_idxs] * ref
     # Force PS pixels to have high temporal coherence
     temp_coh[ps_mask_looked] = 1
+
+
+def _get_maxes(arr, row_looks, col_looks):
+    if row_looks == 1 and col_looks == 1:
+        # No need to pad if we're not looking
+        return np.where(arr == arr)
+    # Get the max value in each look window
+    # We have to pad so that the shapes are a multiple of the look sizes
+    # Otherwise, the maxes sizes will be off
+    max_nums = take_looks(
+        arr, row_looks, col_looks, func_type="nanmax", edge_strategy="pad"
+    )
+    # Repeat the max values to back to the original size
+    maxes_filled = upsample_nearest(
+        max_nums, arr.shape[-2:], looks=(row_looks, col_looks)
+    )
+    # Find the indices of the max values in the original image
+    return np.where(maxes_filled == arr)

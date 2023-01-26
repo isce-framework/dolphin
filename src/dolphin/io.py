@@ -18,7 +18,6 @@ __all__ = [
     "load_gdal",
     "write_arr",
     "write_block",
-    "OPERA_DATASET_NAME",
 ]
 
 
@@ -38,8 +37,6 @@ DEFAULT_HDF5_OPTIONS = dict(
     shuffle=True,
 )
 DEFAULT_DATETIME_FORMAT = "%Y%m%d"
-# Specific to opera CSLC products:
-OPERA_DATASET_NAME = "science/SENTINEL1/CSLC/grids/VV"
 
 logger = get_log()
 
