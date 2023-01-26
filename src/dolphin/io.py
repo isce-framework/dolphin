@@ -1,4 +1,5 @@
 import copy
+import re
 from datetime import date
 from os import fspath
 from pathlib import Path
@@ -34,6 +35,10 @@ DEFAULT_HDF5_OPTIONS = dict(
 DEFAULT_DATETIME_FORMAT = "%Y%m%d"
 # Specific to opera CSLC products:
 OPERA_DATASET_NAME = "science/SENTINEL1/CSLC/grids/VV"
+# for example, t087_185678_iw2. <track>_<burst_id>_<subswath>.
+OPERA_BURST_RE = re.compile(
+    r"t(?P<track>\d{3})_(?P<burst_id>\d{6})_(?P<subswath>iw[1-3])"
+)
 
 
 def get_raster_xysize(filename: Filename) -> Tuple[int, int]:
