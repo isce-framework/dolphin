@@ -22,25 +22,28 @@ def merge_by_date(
     file_date_fmt: str = io.DEFAULT_DATETIME_FORMAT,
     output_dir: Filename = ".",
     driver: str = "ENVI",
+    overwrite: bool = False,
 ):
     """Group images from the same date and merge into one image per date.
 
     Parameters
     ----------
     image_file_list : List[Filename]
-        list of paths to images.
+        List of paths to images.
     file_date_fmt : Optional[str]
-        format of the date in the filename. Default is %Y%m%d
+        Format of the date in the filename. Default is %Y%m%d
     output_dir : Filename
-        path to output directory
+        Path to output directory
     driver : str
         GDAL driver to use for output. Default is ENVI.
+    overwrite : bool
+        Overwrite existing files. Default is False.
 
     Returns
     -------
     dict
-        key is the dates of the SLC acquisitions
-        Value is the path to the stitched image
+        key: the date of the SLC acquisitions/date pair of the interferogram.
+        value: the path to the stitched image
 
     Notes
     -----
@@ -51,7 +54,7 @@ def merge_by_date(
     stitched_acq_times = {}
 
     for dates, cur_images in grouped_images.items():
-        logger.info(f"Stitching {len(cur_images)} images from {dates} into one image")
+        logger.info(f"{dates}: Stitching {len(cur_images)} images.")
         Path(output_dir).mkdir(parents=True, exist_ok=True)
         outfile = Path(output_dir) / (io._format_date_pair(*dates) + ".int")
 
@@ -59,6 +62,7 @@ def merge_by_date(
             cur_images,
             outfile=outfile,
             driver=driver,
+            overwrite=overwrite,
         )
 
         stitched_acq_times[dates] = outfile
@@ -73,30 +77,41 @@ def merge_images(
     driver: str = "ENVI",
     out_nodata: Optional[float] = 0,
     out_dtype: Optional[DTypeLike] = None,
+    overwrite=False,
 ):
     """Combine multiple SLC images on the same date into one image.
 
     Parameters
     ----------
     file_list : List[Filename]
-        list of raster filenames
+        List of raster filenames
     outfile : Filename
-        path to output file
+        Path to output file
     output_dir : Filename
-        path to output directory
+        Path to output directory
     target_aligned_pixels: bool
-        if True, adjust output image bounds so that pixel coordinates
+        If True, adjust output image bounds so that pixel coordinates
         are integer multiples of pixel size, matching the ``-tap``
         options of GDAL utilities.
         Default is True.
     driver : str
         GDAL driver to use for output file. Default is ENVI.
     out_nodata : Optional[float]
-        nodata value to use for output file. Default is 0.
+        Nodata value to use for output file. Default is 0.
     out_dtype : Optional[DTypeLike]
-        output data type. Default is None, which will use the data type
+        Output data type. Default is None, which will use the data type
         of the first image in the list.
+    overwrite : bool
+        Overwrite existing files. Default is False.
     """
+    if Path(outfile).exists():
+        if not overwrite:
+            logger.info(f"{outfile} already exists, skipping")
+            return
+        else:
+            logger.info(f"Overwrite=True: removing {outfile}")
+            Path(outfile).unlink()
+
     if len(file_list) == 1:
         logger.info("Only one image, no stitching needed")
         logger.info(f"Copying {file_list[0]} to {outfile} and zeroing nodata values.")

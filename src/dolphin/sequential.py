@@ -176,10 +176,10 @@ def run_evd_sequential(
                     n_workers=n_workers,
                     gpu_enabled=gpu_enabled,
                 )
-            except PhaseLinkRuntimeError:
+            except PhaseLinkRuntimeError as e:
                 # note: this is a warning instead of info, since it should
                 # get caught at the "skip_empty" step
-                logger.warning("No valid pixels in block. Skipping.")
+                logger.warning(f"Skipping block: {e}")
                 continue
 
             # Save each of the MLE estimates (ignoring the compressed SLCs)

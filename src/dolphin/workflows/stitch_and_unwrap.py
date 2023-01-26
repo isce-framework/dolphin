@@ -28,10 +28,6 @@ def run(ifg_list: List[VRTInterferogram], cfg: Workflow, debug: bool = False):
     # 1. Stitch separate wrapped interferograms
     # #########################################
 
-    if not cfg.unwrap_options.run_unwrap:
-        logger.info("Skipping unwrap step")
-        return
-
     # TODO: this should be made in the config
     stitched_ifg_dir = cfg.interferogram_network.directory / "stitched"
     stitched_ifg_dir.mkdir(exist_ok=True)
@@ -50,6 +46,9 @@ def run(ifg_list: List[VRTInterferogram], cfg: Workflow, debug: bool = False):
     # #####################################
     # 2. Unwrap the stitched interferograms
     # #####################################
+    if not cfg.unwrap_options.run_unwrap:
+        logger.info("Skipping unwrap step")
+        return []
 
     logger.info(f"Unwrapping interferograms in {stitched_ifg_dir}")
     unwrapped_paths = unwrap.run(
