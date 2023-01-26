@@ -227,10 +227,11 @@ def _get_eigvecs(C):
     xp = get_array_module(C)
     # Make sure we don't overflow: cupy https://github.com/cupy/cupy/issues/7261
     # The work_size must be less than 2**30, so
-    # Keep (rows*cols)*nslc approximately less than 2**22?
-    rows, cols, nslc, _ = C.shape
-    max_size = 2**22
-    num_blocks = 1 + (rows * cols * nslc) // max_size
+    # Keep (rows*cols) approximately less than 2**21? make it 2**20 to be safer
+    # see https://github.com/cupy/cupy/issues/7261#issuecomment-1362991323 for that math
+    rows, cols, _, _ = C.shape
+    max_batch_size = 2**20
+    num_blocks = 1 + (rows * cols) // max_batch_size
     if num_blocks > 1:
         # V_out wil lbe the eigenvectors, shape (rows, cols, nslc, nslc)
         V_out = xp.empty_like(C)
@@ -287,8 +288,9 @@ def _fill_ps_pixels(
         avg_mag = np.abs(slc_stack).mean(axis=0)
     # null out all the non-PS pixels
     avg_mag[~ps_mask] = np.nan
-    # Ensure that the avg_mag is NaN where there is no data
+    # Ensure that where avg_mag is NaN and `nodata_mask` are in sync
     avg_mag[nodata_mask] = np.nan
+    nodata_mask[np.isnan(avg_mag)] = True
 
     # Get the indices of the brightest pixels within each look window
     slc_r_idxs, slc_c_idxs = _get_maxes(avg_mag, strides["y"], strides["x"])
@@ -300,7 +302,7 @@ def _fill_ps_pixels(
 
     # we're only filling where there's both a PS pixel and valid data
     # Now that the sum of this mask should be equal to the shape of `slc_r_idxs`
-    fill_mask = (ps_mask_looked & ~nodata_mask_looked) & (~np.isnan(avg_mag))
+    fill_mask = ps_mask_looked & ~nodata_mask_looked
 
     # ref = np.conj(slc_stack[0][ps_mask])
     ref = np.conj(slc_stack[0][slc_r_idxs, slc_c_idxs])
