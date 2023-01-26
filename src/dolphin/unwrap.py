@@ -180,7 +180,7 @@ def run(
     output_path: Filename,
     cor_file: Optional[Filename] = "tcorr_ps_ds.bin",
     mask_file: Optional[Filename] = None,
-    max_jobs: int = 20,
+    max_jobs: int = 10,
     overwrite: bool = False,
     no_tile: bool = True,
     init_method: str = "mcf",

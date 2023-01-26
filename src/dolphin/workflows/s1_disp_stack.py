@@ -25,6 +25,7 @@ def run(cfg: Workflow, debug: bool = False):
         Enable debug logging, by default False.
     """
     logger = get_log(debug=debug)
+    logger.debug(pformat(cfg.dict()))
 
     try:
         grouped_slc_files = _group_by_burst(cfg.inputs.cslc_file_list)
@@ -56,7 +57,7 @@ def run(cfg: Workflow, debug: bool = False):
         if burst:
             msg += f" for burst {burst}"
         logger.info(msg)
-        logger.info(pformat(burst_cfg.dict()))
+        logger.debug(pformat(burst_cfg.dict()))
         cur_ifg_list = wrapped_phase.run(burst_cfg, debug=debug)
         ifg_list.extend(cur_ifg_list)
 
@@ -156,5 +157,7 @@ def _create_burst_cfg(
         inputs={"cslc_file_list": grouped_slc_files[burst_id]},
         outputs={"scratch_directory": top_level_scratch / burst_id},
     )
-    cfg_temp_dict.update(new_input_dict)
+    # Just update the inputs and the scratch directory
+    cfg_temp_dict["inputs"].update(new_input_dict["inputs"])
+    cfg_temp_dict["outputs"].update(new_input_dict["outputs"])
     return Workflow(**cfg_temp_dict)

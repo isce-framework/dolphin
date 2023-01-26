@@ -247,7 +247,7 @@ class Inputs(BaseModel):
 
         return [Path(f) for f in v]
 
-    @validator("subdataset", pre=True)
+    @validator("subdataset", pre=True, always=True)
     def _check_for_opera(cls, v, values):
         cslc_file_list = values.get("cslc_file_list")
         # if we're not dealing with all OPERA files, just return whatever they gave
@@ -262,6 +262,7 @@ class Inputs(BaseModel):
                 f" {OPERA_DATASET_NAME}."
             )
             return OPERA_DATASET_NAME
+        return v
 
     @validator("mask_files", pre=True)
     def _check_mask_files(cls, v):
