@@ -90,13 +90,6 @@ class PhaseLinkingOptions(BaseModel):
         15, description="Size of the ministack for sequential estimator.", gt=1
     )
     half_window = HalfWindow()
-    compressed_slc_file: Path = Path("compressed_slc.tif")
-    temp_coh_file: Path = Path("temp_coh.tif")
-
-    # validators
-    _move_in_dir = validator(
-        "compressed_slc_file", "temp_coh_file", allow_reuse=True, always=True
-    )(_move_file_in_dir)
 
 
 class InterferogramNetwork(BaseModel):
@@ -350,6 +343,10 @@ class Outputs(BaseModel):
             # and that the resolution is valid, > 0. Can be int or float
             if any([v <= 0 for v in resolution.values()]):
                 raise ValueError("Resolutions must be > 0")
+            # TODO: compute strides from resolution
+            raise NotImplementedError(
+                "output_resolution not yet implemented. Use `strides`."
+            )
         return strides
 
 
@@ -409,11 +406,6 @@ class Workflow(BaseModel):
         if not pl_opts.directory.parent == scratch_dir:
             pl_opts.directory = scratch_dir / pl_opts.directory
         pl_opts.directory = pl_opts.directory.absolute()
-
-        if not pl_opts.compressed_slc_file.parent.parent == scratch_dir:
-            pl_opts.compressed_slc_file = scratch_dir / pl_opts.compressed_slc_file
-        if not pl_opts.temp_coh_file.parent.parent == scratch_dir:
-            pl_opts.temp_coh_file = scratch_dir / pl_opts.temp_coh_file
 
         ifg_opts = values["interferogram_network"]
         if not ifg_opts.directory.parent == scratch_dir:

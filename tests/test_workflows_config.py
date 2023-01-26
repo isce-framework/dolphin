@@ -46,8 +46,6 @@ def test_phase_linking_options_defaults(tmpdir):
         assert opts.ministack_size == 15
         assert opts.directory == Path("linked_phase")
         assert opts.half_window == config.HalfWindow()
-        assert opts.compressed_slc_file == Path("linked_phase/compressed_slc.tif")
-        assert opts.temp_coh_file == Path("linked_phase/temp_coh.tif")
 
 
 def test_phase_linking_options_bad_size(tmpdir):
@@ -254,10 +252,6 @@ def test_config_defaults(dir_with_1_slc):
     assert c.ps_options.amp_dispersion_file == p.absolute()
 
     assert c.phase_linking.directory == Path("scratch/linked_phase").absolute()
-    p = Path("scratch/linked_phase/compressed_slc.tif")
-    assert c.phase_linking.compressed_slc_file == p.absolute()
-    p = Path("scratch/linked_phase/temp_coh.tif")
-    assert c.phase_linking.temp_coh_file == p.absolute()
 
     assert (
         c.interferogram_network.directory == Path("scratch/interferograms").absolute()

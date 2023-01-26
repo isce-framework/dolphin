@@ -23,7 +23,6 @@ def run(ifg_list: List[VRTInterferogram], cfg: Workflow, debug: bool = False):
         Enable debug logging, by default False.
     """
     logger = get_log(debug=debug)
-    scratch_dir = cfg.outputs.scratch_directory
 
     # #########################################
     # 1. Stitch separate wrapped interferograms
@@ -34,7 +33,7 @@ def run(ifg_list: List[VRTInterferogram], cfg: Workflow, debug: bool = False):
         return
 
     # TODO: this should be made in the config
-    stitched_ifg_dir = scratch_dir / "stitched_ifgs"
+    stitched_ifg_dir = cfg.interferogram_network.directory / "stitched"
     stitched_ifg_dir.mkdir(exist_ok=True)
 
     # Also preps for snaphu, which needs binary format with no nans
@@ -44,7 +43,6 @@ def run(ifg_list: List[VRTInterferogram], cfg: Workflow, debug: bool = False):
         image_file_list=ifg_filenames,  # type: ignore
         file_date_fmt=cfg.inputs.cslc_date_fmt,
         output_dir=stitched_ifg_dir,
-        dry_run=False,
     )
     # TODO: Stitch the correlation files
     # tcorr_file = pl_path / "tcorr_average.tif"

@@ -1,10 +1,12 @@
 #!/usr/bin/env python
 import itertools
 import re
-from typing import List, Pattern, Union
+from pathlib import Path
+from typing import Dict, List, Pattern, Sequence, Union
 
 from dolphin._log import get_log, log_runtime
 from dolphin._types import Filename
+from dolphin.interferogram import VRTInterferogram
 
 from . import stitch_and_unwrap, wrapped_phase
 from .config import Workflow
@@ -28,10 +30,35 @@ def run(cfg: Workflow, debug: bool = False):
     """
     logger = get_log(debug=debug)
 
+    try:
+        grouped_slc_files = _group_by_burst(cfg.inputs.cslc_file_list)
+    except ValueError as e:
+        if "Could not parse burst id" not in str(e):
+            raise e
+        # Otherwise, we have SLC files which are not OPERA burst files
+        grouped_slc_files = {"": cfg.inputs.cslc_file_list}
+
+    if len(grouped_slc_files) > 1:
+        logger.info(f"Found SLC files from {len(grouped_slc_files)} bursts")
+        wrapped_phase_cfgs = [
+            # Include the burst for logging purposes
+            (burst, _create_burst_cfg(cfg, burst, grouped_slc_files))
+            for burst in grouped_slc_files
+        ]
+    else:
+        wrapped_phase_cfgs = [("", cfg)]
     # ###########################
     # 1. Wrapped phase estimation
     # ###########################
-    ifg_list = wrapped_phase.run(cfg, debug=debug)
+    ifg_list: List[VRTInterferogram] = []
+    # Now for each burst, run the wrapped phase estimation
+    for burst, burst_cfg in wrapped_phase_cfgs:
+        msg = "Running wrapped phase estimation"
+        if burst:
+            msg += f" for burst {burst_cfg.burst_id}"
+        logger.info(msg)
+        cur_ifg_list = wrapped_phase.run(burst_cfg, debug=debug)
+        ifg_list.extend(cur_ifg_list)
 
     # ###################################
     # 2. Stitch and unwrap interferograms
@@ -55,9 +82,9 @@ def run(cfg: Workflow, debug: bool = False):
 
 
 def _group_by_burst(
-    file_list: List[Filename],
+    file_list: Sequence[Filename],
     burst_id_fmt: Union[str, Pattern[str]] = OPERA_BURST_RE,
-):
+) -> Dict[str, List[Path]]:
     """Group Sentinel CSLC files by burst.
 
     Parameters
@@ -89,7 +116,7 @@ def _group_by_burst(
         """Sort files by burst id."""
         burst_ids = [get_burst_id(f) for f in file_list]
         file_burst_tups = sorted(
-            [(f, d) for f, d in zip(file_list, burst_ids)],
+            [(Path(f), d) for f, d in zip(file_list, burst_ids)],
             # use the date or dates as the key
             key=lambda f_d_tuple: f_d_tuple[1],  # type: ignore
         )
@@ -106,3 +133,28 @@ def _group_by_burst(
         )
     }
     return grouped_images
+
+
+def _create_burst_cfg(
+    cfg: Workflow, burst_id: str, grouped_slc_files: Dict[str, List[Path]]
+) -> Workflow:
+    excludes = {
+        "inputs": {"cslc_file_list"},
+        "ps_options": {
+            "directory",
+            "output_file",
+            "amp_dispersion_file",
+            "amp_mean_file",
+        },
+        "phase_linking": {"directory"},
+        "interferogram_network": {"directory"},
+    }
+    cfg_temp_dict = cfg.copy(deep=True, exclude=excludes).dict()
+
+    top_level_scratch = cfg_temp_dict["outputs"]["scratch_directory"]
+    new_input_dict = dict(
+        inputs={"cslc_file_list": grouped_slc_files[burst_id]},
+        outputs={"scratch_directory": top_level_scratch / burst_id},
+    )
+    cfg_temp_dict.update(new_input_dict)
+    return Workflow(**cfg_temp_dict)
