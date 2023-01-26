@@ -1,6 +1,6 @@
 # dolphin
 
-High resolution wrapped phase estimation for InSAR using combine PS/DS processing.
+High resolution wrapped phase estimation for InSAR using combined PS/DS processing.
 
 <!-- DeformatiOn Land surface Products in High resolution using INsar -->
 
