@@ -1,5 +1,4 @@
 import copy
-import re
 from datetime import date
 from os import fspath
 from pathlib import Path
@@ -14,7 +13,13 @@ from dolphin._types import Filename
 from dolphin.utils import gdal_to_numpy_type, numpy_to_gdal_type
 
 gdal.UseExceptions()
-logger = get_log()
+
+__all__ = [
+    "load_gdal",
+    "write_arr",
+    "write_block",
+    "OPERA_DATASET_NAME",
+]
 
 
 DEFAULT_TILE_SIZE = (128, 128)
@@ -35,10 +40,8 @@ DEFAULT_HDF5_OPTIONS = dict(
 DEFAULT_DATETIME_FORMAT = "%Y%m%d"
 # Specific to opera CSLC products:
 OPERA_DATASET_NAME = "science/SENTINEL1/CSLC/grids/VV"
-# for example, t087_185678_iw2. <track>_<burst_id>_<subswath>.
-OPERA_BURST_RE = re.compile(
-    r"t(?P<track>\d{3})_(?P<burst_id>\d{6})_(?P<subswath>iw[1-3])"
-)
+
+logger = get_log()
 
 
 def get_raster_xysize(filename: Filename) -> Tuple[int, int]:

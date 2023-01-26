@@ -1,8 +1,18 @@
 #!/usr/bin/env python
-from dolphin import interferogram, ps, sequential, stitching, unwrap, vrt
-from dolphin._log import get_log, log_runtime
+import itertools
+import re
+from typing import List, Pattern, Union
 
+from dolphin._log import get_log, log_runtime
+from dolphin._types import Filename
+
+from . import stitch_and_unwrap, wrapped_phase
 from .config import Workflow
+
+# for example, t087_185678_iw2
+OPERA_BURST_RE = re.compile(
+    r"t(?P<track>\d{3})_(?P<burst_id>\d{6})_(?P<subswath>iw[1-3])"
+)
 
 
 @log_runtime
@@ -17,142 +27,20 @@ def run(cfg: Workflow, debug: bool = False):
         Enable debug logging, by default False.
     """
     logger = get_log(debug=debug)
-    scratch_dir = cfg.outputs.scratch_directory
 
-    input_file_list = cfg.inputs.cslc_file_list
-    if not input_file_list:
-        raise ValueError("No input files found")
-
-    # #############################################
-    # 0. Make a VRT pointing to the input SLC files
-    # #############################################
-    subdataset = cfg.inputs.subdataset
-    vrt_path = scratch_dir / "slc_stack.vrt"
-    if vrt_path.exists():
-        vrt_stack = vrt.VRTStack.from_vrt_file(vrt_path)
-    else:
-        vrt_stack = vrt.VRTStack(
-            input_file_list,
-            subdataset=subdataset,
-            outfile=scratch_dir / "slc_stack.vrt",
-        )
-
-    # ###############
-    # 1. PS selection
-    # ###############
-    ps_output = cfg.ps_options.output_file
-    if ps_output.exists():
-        logger.info(f"Skipping making existing PS file {ps_output}")
-    else:
-        logger.info(f"Creating persistent scatterer file {ps_output}")
-        ps.create_ps(
-            slc_vrt_file=vrt_stack.outfile,
-            output_file=cfg.ps_options.output_file,
-            amp_mean_file=cfg.ps_options.amp_mean_file,
-            amp_dispersion_file=cfg.ps_options.amp_dispersion_file,
-            amp_dispersion_threshold=cfg.ps_options.amp_dispersion_threshold,
-            max_ram_gb=cfg.worker_settings.max_ram_gb,
-        )
-
-    # #########################
-    # 2. phase linking/EVD step
-    # #########################
-    pl_path = cfg.phase_linking.directory
-
-    # TODO: get intermediate ext from config
-    existing_files = list(pl_path.glob("*.tif"))
-    if len(existing_files) > 0:
-        logger.info(f"Skipping EVD step, {len(existing_files)} files already exist")
-    else:
-        logger.info(f"Running sequential EMI step in {pl_path}")
-        sequential.run_evd_sequential(
-            slc_vrt_file=vrt_stack.outfile,
-            output_folder=pl_path,
-            half_window=cfg.phase_linking.half_window.dict(),
-            strides=cfg.outputs.strides,
-            ministack_size=cfg.phase_linking.ministack_size,
-            # mask_file=cfg.inputs.mask_file,
-            ps_mask_file=cfg.ps_options.output_file,
-            max_bytes=cfg.worker_settings.max_ram_gb * 1e9,
-            n_workers=cfg.worker_settings.n_workers,
-            gpu_enabled=cfg.worker_settings.gpu_enabled,
-            beta=0.0,
-        )
-
-    # ###################################################
-    # 3. Form interferograms from estimated wrapped phase
-    # ###################################################
-    ifg_dir = cfg.interferogram_network.directory
-    existing_ifgs = list(ifg_dir.glob("*.int.vrt"))
-    if len(existing_ifgs) > 0:
-        logger.info(f"Skipping interferogram step, {len(existing_ifgs)} exists")
-    else:
-        # TODO: intermediate extension should be in config
-        phase_linked_slcs = sorted(pl_path.glob("20*.tif"))
-        compressed_slcs = sorted(pl_path.glob("compressed_*.tif"))
-        logger.info(
-            f"Creating virtual interferograms from {len(phase_linked_slcs)} files and"
-            f" {len(compressed_slcs)} compressed files"
-        )
-        if compressed_slcs:
-            slc_list = [compressed_slcs[0]] + phase_linked_slcs
-        else:
-            slc_list = phase_linked_slcs
-        network = interferogram.Network(
-            slc_list=slc_list,
-            reference_idx=cfg.interferogram_network.reference_idx,
-            max_bandwidth=cfg.interferogram_network.max_bandwidth,
-            max_temporal_baseline=cfg.interferogram_network.max_temporal_baseline,
-            outdir=ifg_dir,
-        )
-        if len(network) == 0:
-            raise ValueError("No interferograms were created")
+    # ###########################
+    # 1. Wrapped phase estimation
+    # ###########################
+    ifg_list = wrapped_phase.run(cfg, debug=debug)
 
     # ###################################
-    # 4. Stitch and Unwrap interferograms
+    # 2. Stitch and unwrap interferograms
     # ###################################
-    # TODO: will this be a separate workflow?
-    # Or will we loop through all bursts, then stitch, then unwrap all here?
+    unwrapped_paths = stitch_and_unwrap.run(ifg_list, cfg, debug=debug)
 
-    if not cfg.unwrap_options.run_unwrap:
-        logger.info("Skipping unwrap step")
-        return
-
-    stitched_ifg_dir = scratch_dir / "stitched_ifgs"
-    stitched_ifg_dir.mkdir(exist_ok=True)
-    # snaphu needs the binary format
-    logger.info("Stitching interferograms by date.")
-    ifg_filenames = [ifg.path for ifg in network.ifg_list]
-    stitching.merge_by_date(
-        image_file_list=ifg_filenames,  # type: ignore
-        file_date_fmt=cfg.inputs.cslc_date_fmt,
-        output_dir=stitched_ifg_dir,
-        dry_run=False,
-    )
-
-    # Stitch the correlation files
-    # TODO: right now it's a tiff, needs to also be ENVI
-    # tcorr_file = pl_path / "tcorr_average.tif"
-
-    logger.info(f"Unwrapping interferograms in {stitched_ifg_dir}")
-    unwrapped_paths = unwrap.run(
-        ifg_path=stitched_ifg_dir,
-        output_path=cfg.unwrap_options.directory,
-        cor_file=None,  # TODO: tcorr_file,
-        # mask_file: Optional[Filename] = None,
-        max_jobs=20,
-        # overwrite: bool = False,
-        no_tile=True,
-    )
-
-    # ####################
-    # 5. Phase Corrections
-    # ####################
-    # TODO: Determine format for the tropospheric/ionospheric phase correction
-
-    # #############################
-    # Finalize the output
-
+    # ######################################
+    # 3. Finalize the output as an HDF5 product
+    # ######################################
     # TODO: make the HDF5 product
     logger.info(f"Creating outputs in {cfg.outputs.output_directory}")
     for p in unwrapped_paths:
@@ -164,3 +52,57 @@ def run(cfg: Workflow, debug: bool = False):
             new_name = cfg.outputs.output_directory / name
             logger.info(f"Moving {p} to {new_name}")
             (p.parent / name).rename(new_name)
+
+
+def _group_by_burst(
+    file_list: List[Filename],
+    burst_id_fmt: Union[str, Pattern[str]] = OPERA_BURST_RE,
+):
+    """Group Sentinel CSLC files by burst.
+
+    Parameters
+    ----------
+    file_list: List[Filename]
+        path to folder containing CSLC files
+    burst_id_fmt: str
+        format of the burst id in the filename.
+        Default is [OPERA_BURST_RE][]
+
+    Returns
+    -------
+    dict
+        key is the burst id of the SLC acquisition
+        Value is a list of Paths on that burst:
+        {
+            't087_185678_iw2': [Path(...), Path(...),],
+            't087_185678_iw3': [Path(...),... ],
+        }
+    """
+
+    def get_burst_id(filename):
+        m = re.search(burst_id_fmt, str(filename))
+        if not m:
+            raise ValueError(f"Could not parse burst id from {filename}")
+        return m.group()
+
+    def sort_by_burst_id(file_list):
+        """Sort files by burst id."""
+        burst_ids = [get_burst_id(f) for f in file_list]
+        file_burst_tups = sorted(
+            [(f, d) for f, d in zip(file_list, burst_ids)],
+            # use the date or dates as the key
+            key=lambda f_d_tuple: f_d_tuple[1],  # type: ignore
+        )
+        # Unpack the sorted pairs with new sorted values
+        file_list, burst_ids = zip(*file_burst_tups)  # type: ignore
+        return file_list
+
+    sorted_file_list = sort_by_burst_id(file_list)
+    # Now collapse into groups, sorted by the burst_id
+    grouped_images = {
+        burst_id: list(g)
+        for burst_id, g in itertools.groupby(
+            sorted_file_list, key=lambda x: get_burst_id(x)
+        )
+    }
+    return grouped_images

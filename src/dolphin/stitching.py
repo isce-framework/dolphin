@@ -1,11 +1,10 @@
 """stitching.py: utilities for combining interferograms into larger images."""
 import itertools
 import math
-import re
 import tempfile
 from os import fspath
 from pathlib import Path
-from typing import List, Optional, Pattern, Tuple, Union
+from typing import List, Optional, Tuple
 
 import numpy as np
 from numpy.typing import DTypeLike
@@ -48,7 +47,7 @@ def merge_by_date(
     This function is intended to be used with filenames that contain date pairs
     (from interferograms).
     """
-    grouped_images = group_by_date(image_file_list, file_date_fmt=file_date_fmt)
+    grouped_images = _group_by_date(image_file_list, file_date_fmt=file_date_fmt)
     stitched_acq_times = {}
 
     for dates, cur_images in grouped_images.items():
@@ -65,101 +64,6 @@ def merge_by_date(
         stitched_acq_times[dates] = outfile
 
     return stitched_acq_times
-
-
-def group_by_date(
-    file_list: List[Filename], file_date_fmt: str = io.DEFAULT_DATETIME_FORMAT
-):
-    """Combine Sentinel objects by date.
-
-    Parameters
-    ----------
-    file_list: List[Filename]
-        path to folder containing CSLC files
-    file_date_fmt: str
-        format of the date in the filename.
-        Default is [dolphin.io.DEFAULT_DATETIME_FORMAT][]
-
-    Returns
-    -------
-    dict
-        key is the date of the SLC acquisition
-        Value is a list of Paths on that date:
-        [(datetime.date(2017, 10, 13),
-          [Path(...)
-            Path(...),
-            ...]),
-         (datetime.date(2017, 10, 25),
-          [Path(...)
-            Path(...),
-            ...]),
-    """
-    sorted_file_list, _ = utils.sort_files_by_date(
-        file_list, file_date_fmt=file_date_fmt
-    )
-
-    # Now collapse into groups, sorted by the date
-    grouped_images = {
-        dates: list(g)
-        for dates, g in itertools.groupby(
-            sorted_file_list, key=lambda x: tuple(utils.get_dates(x))
-        )
-    }
-    return grouped_images
-
-
-def group_by_burst(
-    file_list: List[Filename],
-    burst_id_fmt: Union[str, Pattern[str]] = io.OPERA_BURST_RE,
-):
-    """Combine Sentinel objects by burst.
-
-    Parameters
-    ----------
-    file_list: List[Filename]
-        path to folder containing CSLC files
-    burst_id_fmt: str
-        format of the burst id in the filename.
-        Default is [dolphin.io.OPERA_BURST_RE][]
-
-    Returns
-    -------
-    dict
-        key is the burst id of the SLC acquisition
-        Value is a list of Paths on that burst:
-        {
-            't087_185678_iw2': [Path(...), Path(...),],
-            't087_185678_iw3': [Path(...),... ],
-        }
-    """
-
-    def get_burst_id(filename):
-        m = re.search(burst_id_fmt, str(filename))
-        if not m:
-            raise ValueError(f"Could not parse burst id from {filename}")
-        return m.group()
-
-    def sort_by_burst_id(file_list):
-        """Sort files by burst id."""
-        burst_ids = [get_burst_id(f) for f in file_list]
-        file_burst_tups = sorted(
-            [(f, d) for f, d in zip(file_list, burst_ids)],
-            # use the date or dates as the key
-            key=lambda f_d_tuple: f_d_tuple[1],  # type: ignore
-        )
-        # Unpack the sorted pairs with new sorted values
-        file_list, burst_ids = zip(*file_burst_tups)  # type: ignore
-        return file_list
-
-    sorted_file_list = sort_by_burst_id(file_list)
-    # Now collapse into groups, sorted by the burst_id
-    grouped_images = {
-        burst_id: list(g)
-        for burst_id, g in itertools.groupby(
-            sorted_file_list, key=lambda x: get_burst_id(x)
-        )
-    }
-    return grouped_images
 
 
 def merge_images(
@@ -289,6 +193,47 @@ def merge_images(
 
     # Remove the tempdir
     temp_dir.cleanup()
+
+
+def _group_by_date(
+    file_list: List[Filename], file_date_fmt: str = io.DEFAULT_DATETIME_FORMAT
+):
+    """Combine Sentinel objects by date.
+
+    Parameters
+    ----------
+    file_list: List[Filename]
+        path to folder containing CSLC files
+    file_date_fmt: str
+        format of the date in the filename.
+        Default is [dolphin.io.DEFAULT_DATETIME_FORMAT][]
+
+    Returns
+    -------
+    dict
+        key is the date of the SLC acquisition
+        Value is a list of Paths on that date:
+        [(datetime.date(2017, 10, 13),
+          [Path(...)
+            Path(...),
+            ...]),
+         (datetime.date(2017, 10, 25),
+          [Path(...)
+            Path(...),
+            ...]),
+    """
+    sorted_file_list, _ = utils.sort_files_by_date(
+        file_list, file_date_fmt=file_date_fmt
+    )
+
+    # Now collapse into groups, sorted by the date
+    grouped_images = {
+        dates: list(g)
+        for dates, g in itertools.groupby(
+            sorted_file_list, key=lambda x: tuple(utils.get_dates(x))
+        )
+    }
+    return grouped_images
 
 
 def _blend_new_arr(
