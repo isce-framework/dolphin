@@ -9,6 +9,7 @@ References
 import warnings
 from collections import defaultdict
 from math import nan
+from os import fspath
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -295,7 +296,7 @@ def run_evd_sequential(
     gdal_calc.Calc(
         NoDataValue=nan,
         format="GTiff",
-        outfile=output_tcorr_file,
+        outfile=fspath(output_tcorr_file),
         type="Float32",
         quiet=True,
         overwrite=True,
@@ -333,7 +334,7 @@ def compress(
     # Avoid divide by zero (there may be 0s at the upsampled boundary)
     mle_norm[mle_norm == 0] = np.nan
     with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", message="invalid value encountered in divide")
+        warnings.filterwarnings("ignore", message="invalid value encountered")
         return (
             np.nansum(slc_stack * np.conjugate(mle_estimate_upsampled), axis=0)
             / mle_norm

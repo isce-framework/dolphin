@@ -1,4 +1,5 @@
 # dolphin
+[![Pytest and build docker image](https://github.com/opera-adt/dolphin/actions/workflows/tests.yml/badge.svg?branch=main)](https://github.com/opera-adt/dolphin/actions/workflows/tests.yml)
 
 High resolution wrapped phase estimation for InSAR using combined PS/DS processing.
 
