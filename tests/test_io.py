@@ -58,7 +58,7 @@ def test_get_raster_bounds(slc_file_list_nc_wgs84):
     assert bnds == expected
 
 
-def test_save_like(raster_100_by_200, tmpdir):
+def test_write_arr_like(raster_100_by_200, tmpdir):
     arr = io.load_gdal(raster_100_by_200)
 
     ones = np.ones_like(arr)
@@ -69,7 +69,7 @@ def test_save_like(raster_100_by_200, tmpdir):
     npt.assert_array_almost_equal(ones, ones_loaded)
 
 
-def test_save_empty_like(raster_100_by_200, tmpdir):
+def test_write_empty_like(raster_100_by_200, tmpdir):
     save_name = tmpdir / "empty.tif"
     io.write_arr(arr=None, like_filename=raster_100_by_200, output_name=save_name)
 
@@ -77,7 +77,28 @@ def test_save_empty_like(raster_100_by_200, tmpdir):
     zeros = np.zeros_like(empty_loaded)
     npt.assert_array_almost_equal(empty_loaded, zeros)
 
-    # TODO: test other metadata
+
+def test_write_metadata(raster_100_by_200, tmpdir):
+    save_name = tmpdir / "empty_nometa.tif"
+    io.write_arr(arr=None, like_filename=raster_100_by_200, output_name=save_name)
+    assert io.get_dtype(save_name) == np.complex64
+    assert io.get_nodata(save_name) is None
+
+    save_name = tmpdir / "empty_bool_255_nodata.tif"
+    io.write_arr(
+        arr=None,
+        like_filename=raster_100_by_200,
+        output_name=save_name,
+        dtype=bool,
+        nodata=255,
+    )
+    assert io.get_nodata(save_name) == 255
+
+    save_name = tmpdir / "empty_nan_nodata.tif"
+    io.write_arr(
+        arr=None, like_filename=raster_100_by_200, output_name=save_name, nodata=np.nan
+    )
+    assert np.isnan(io.get_nodata(save_name))
 
 
 def test_save_strided(raster_100_by_200, tmpdir):

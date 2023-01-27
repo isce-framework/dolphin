@@ -66,7 +66,10 @@ def run_evd_sequential(
         nodata_mask = np.zeros((nrows, ncols), dtype=bool)
 
     if ps_mask_file is not None:
-        ps_mask = io.load_gdal(ps_mask_file).astype(bool)
+        ps_mask = io.load_gdal(ps_mask_file)
+        # Set the nodata values to 0 so they are false
+        ps_mask[ps_mask == 255] = 0
+        ps_mask = ps_mask.astype(bool)
     else:
         ps_mask = np.zeros_like(nodata_mask)
 

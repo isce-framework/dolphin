@@ -446,11 +446,16 @@ def write_arr(
     # Write the actual data
     if arr is not None:
         for i in range(nbands):
-            print(f"Writing band {i+1}/{nbands}")
+            logger.debug(f"Writing band {i+1}/{nbands}")
             bnd = ds_out.GetRasterBand(i + 1)
             bnd.WriteArray(arr[i])
-            if nodata is not None:
-                bnd.SetNoDataValue(nodata)
+
+    # Set the nodata value for each band
+    if nodata is not None:
+        for i in range(nbands):
+            logger.debug(f"Setting nodata for band {i+1}/{nbands}")
+            bnd = ds_out.GetRasterBand(i + 1)
+            bnd.SetNoDataValue(nodata)
 
     ds_out.FlushCache()
     ds_like = ds_out = None
@@ -543,7 +548,7 @@ def get_stack_nodata_mask(
     # cap buffer pixel length to be no more the image size
     buffer_pixels = min(buffer_pixels, min(ds.RasterXSize, ds.RasterYSize))
     for b in compute_bands:
-        print(f"Computing mask for band {b}")
+        logger.debug(f"Computing mask for band {b}")
         bnd = ds.GetRasterBand(b)
         arr = bnd.ReadAsArray()
         if np.isnan(nodata):
@@ -553,7 +558,7 @@ def get_stack_nodata_mask(
 
         # Expand the region with a convolution
         if buffer_pixels > 0:
-            print(f"Padding mask with {buffer_pixels} pixels")
+            logger.debug(f"Padding mask with {buffer_pixels} pixels")
             out_mask &= _erode_nodata(nodata_mask, buffer_pixels)
         else:
             out_mask &= nodata_mask
@@ -831,6 +836,6 @@ def get_raster_block_size(filename):
     block_size = ds.GetRasterBand(1).GetBlockSize()
     for i in range(2, ds.RasterCount + 1):
         if block_size != ds.GetRasterBand(i).GetBlockSize():
-            print(f"Warning: {filename} bands have different block shapes.")
+            logger.warning(f"Warning: {filename} bands have different block shapes.")
             break
     return block_size
