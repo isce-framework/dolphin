@@ -14,7 +14,7 @@ gdal.UseExceptions()
 logger = get_log()
 
 
-def numpy_to_gdal_type(np_dtype: DTypeLike):
+def numpy_to_gdal_type(np_dtype: DTypeLike) -> int:
     """Convert numpy dtype to gdal type.
 
     Parameters
