@@ -7,14 +7,14 @@ which was adapted from `pandas.show_versions`
 import importlib
 import platform
 import sys
-import typing
+from typing import Dict, Optional
 
 import dolphin
 
 __all__ = ["show_versions"]
 
 
-def _get_sys_info() -> typing.Dict[str, str]:
+def _get_sys_info() -> Dict[str, str]:
     """System information.
 
     Returns
