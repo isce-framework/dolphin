@@ -89,8 +89,10 @@ def _parse_date(datestr: str, fmt: str = "%Y%m%d") -> datetime.date:
     return datetime.datetime.strptime(datestr, fmt).date()
 
 
-def parse_slc_strings(slc_str: Union[Filename, Iterable[Filename]], fmt=None):
-    """Parse a string, or list of strings, matching `fmt` into datetime.date.
+def parse_slc_strings(
+    slc_str: Union[Filename, Iterable[Filename]], fmt=None
+) -> Union[datetime.date, List[datetime.date]]:
+    """Parse a string/Path, or list of strings/Paths, matching `fmt` into dates.
 
     It is expected that the date is in the filename portion of the string,
     and that the date is unique in the filename (although it may appear
@@ -115,10 +117,6 @@ def parse_slc_strings(slc_str: Union[Filename, Iterable[Filename]], fmt=None):
         or if multiple dates are found in the filename portion
         of `slc_str` (we expect only one date per SLC file).
     """
-
-    def _parse(datestr, fmt="%Y%m%d") -> datetime.date:
-        return datetime.datetime.strptime(datestr, fmt).date()
-
     if fmt is None:
         fmt = ["%Y%m%d", "%Y-%m-%d"]
     elif isinstance(fmt, str):
@@ -127,11 +125,9 @@ def parse_slc_strings(slc_str: Union[Filename, Iterable[Filename]], fmt=None):
     if isinstance(slc_str, str) or hasattr(slc_str, "__fspath__"):
         # Unpack all returned dates from each format
         d_list = []
-        fmt_found = None
         for f in fmt:
             d_list.extend(get_dates(slc_str, fmt=f))  # type: ignore
             if len(d_list) > 0:
-                fmt_found = f
                 break
         else:  # if we iterate through all formats and don't find any dates
             raise ValueError(f"Could not find date of format {fmt} in {slc_str}")
@@ -142,10 +138,10 @@ def parse_slc_strings(slc_str: Union[Filename, Iterable[Filename]], fmt=None):
                 f"Found multiple dates in {slc_str}: {unique_dates}. "
                 "Please specify a date format."
             )
-        return _parse(unique_dates[0], fmt=fmt_found)
+        return unique_dates[0]
     else:
         # If it's an iterable of strings, run on each one
-        return [parse_slc_strings(s, fmt=fmt) for s in slc_str if s]
+        return [parse_slc_strings(s, fmt=fmt) for s in slc_str if s]  # type: ignore
 
 
 def _date_format_to_regex(date_format):
