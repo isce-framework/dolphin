@@ -1,7 +1,7 @@
 import datetime
 import re
 from pathlib import Path
-from typing import List, Union
+from typing import Iterable, List, Union
 
 import numpy as np
 from numpy.typing import DTypeLike
@@ -50,7 +50,7 @@ def gdal_to_numpy_type(gdal_type: Union[str, int]) -> np.dtype:
     return gdal_array.GDALTypeCodeToNumericTypeCode(gdal_type)
 
 
-def get_dates(filename: Filename, fmt="%Y%m%d") -> List[Union[None, str]]:
+def get_dates(filename: Filename, fmt: str = "%Y%m%d") -> List[datetime.date]:
     """Search for dates in the stem of `filename` matching `fmt`.
 
     Excludes dates that are not in the stem of `filename` (in the directories).
@@ -64,42 +64,56 @@ def get_dates(filename: Filename, fmt="%Y%m%d") -> List[Union[None, str]]:
 
     Returns
     -------
-    list[str] or None
+    list[datetime.date]
         List of dates found in the stem of `filename` matching `fmt`.
-        Returns None if nothing is found.
 
     Examples
     --------
     >>> get_dates("/path/to/20191231.slc.tif")
-    ['20191231']
+    [datetime.date(2019, 12, 31)]
     >>> get_dates("S1A_IW_SLC__1SDV_20191231T000000_20191231T000000_032123_03B8F1_1C1D.nc")
-    ['20191231', '20191231']
+    [datetime.date(2019, 12, 31), datetime.date(2019, 12, 31)]
     >>> get_dates("/not/a/date_named_file.tif")
     []
     """  # noqa: E501
     pat = _date_format_to_regex(fmt)
     date_list = re.findall(pat, Path(filename).stem)
     if not date_list:
-        msg = f"{filename} does not contain date as YYYYMMDD"
+        msg = f"{filename} does not contain date like {fmt}"
         logger.warning(msg)
         return []
-    return date_list
+    return [_parse_date(d, fmt) for d in date_list]
 
 
-def parse_slc_strings(slc_str: Union[Filename, List[Filename]], fmt=None):
+def _parse_date(datestr: str, fmt: str = "%Y%m%d") -> datetime.date:
+    return datetime.datetime.strptime(datestr, fmt).date()
+
+
+def parse_slc_strings(slc_str: Union[Filename, Iterable[Filename]], fmt=None):
     """Parse a string, or list of strings, matching `fmt` into datetime.date.
+
+    It is expected that the date is in the filename portion of the string,
+    and that the date is unique in the filename (although it may appear
+    more than once, as is the case with Sentinel-1 SLC product names).
 
     Parameters
     ----------
-    slc_str : str or list of str
-        String or list of strings to parse.
+    slc_str : str or Iterable[str]
+        String or list of strings to parse for dates.
     fmt : str, or List[str]. Optional
         Format of string to parse.
         If None (default), searches for "%Y%m%d" or "%Y-%m-%d".
 
     Returns
     -------
-    datetime.date, or list of datetime.date
+    datetime.date, or List[datetime.date]
+
+    Raises
+    ------
+    ValueError
+        If none of the strings in `slc_str` match `fmt`,
+        or if multiple dates are found in the filename portion
+        of `slc_str` (we expect only one date per SLC file).
     """
 
     def _parse(datestr, fmt="%Y%m%d") -> datetime.date:
@@ -115,7 +129,7 @@ def parse_slc_strings(slc_str: Union[Filename, List[Filename]], fmt=None):
         d_list = []
         fmt_found = None
         for f in fmt:
-            d_list.extend(get_dates(slc_str, fmt=f))
+            d_list.extend(get_dates(slc_str, fmt=f))  # type: ignore
             if len(d_list) > 0:
                 fmt_found = f
                 break

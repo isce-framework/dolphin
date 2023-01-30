@@ -42,25 +42,34 @@ def test_date_format_to_regex():
 
 
 def test_get_dates():
-    assert ["20200303", "20210101"] == utils.get_dates("20200303_20210101.int")
+    assert utils.get_dates("20200303_20210101.int") == [
+        datetime.date(2020, 3, 3),
+        datetime.date(2021, 1, 1),
+    ]
 
-    assert "20200303" == utils.get_dates("20200303.slc")[0]
-    assert "20200303" == utils.get_dates(Path("20200303.slc"))[0]
+    assert utils.get_dates("20200303.slc")[0] == datetime.date(2020, 3, 3)
+    assert utils.get_dates(Path("20200303.slc"))[0] == datetime.date(2020, 3, 3)
     # Check that it's the filename, not the path
-    assert "20200303" == utils.get_dates(Path("/usr/19990101/asdf20200303.tif"))[0]
-    assert "20200303" == utils.get_dates("/usr/19990101/asdf20200303.tif")[0]
-
-    assert ["20200303", "20210101"] == utils.get_dates(
-        "/usr/19990101/20200303_20210101.int"
+    assert utils.get_dates(Path("/usr/19990101/asdf20200303.tif"))[0] == datetime.date(
+        2020, 3, 3
     )
+    assert utils.get_dates("/usr/19990101/asdf20200303.tif")[0] == datetime.date(
+        2020, 3, 3
+    )
+
+    assert utils.get_dates("/usr/19990101/20200303_20210101.int") == [
+        datetime.date(2020, 3, 3),
+        datetime.date(2021, 1, 1),
+    ]
 
     assert utils.get_dates("/usr/19990101/notadate.tif") == []
 
     # try other date formats
     fmt = "%Y-%m-%d"
-    assert ["2020-03-03", "2021-01-01"] == utils.get_dates(
-        "2020-03-03_2021-01-01.int", fmt
-    )
+    assert utils.get_dates("2020-03-03_2021-01-01.int", fmt) == [
+        datetime.date(2020, 3, 3),
+        datetime.date(2021, 1, 1),
+    ]
 
 
 def test_parse_slc_strings():
