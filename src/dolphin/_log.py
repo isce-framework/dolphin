@@ -18,6 +18,8 @@ Usage:
 """
 import logging
 import time
+from collections.abc import Callable
+from functools import wraps
 from logging import Formatter
 
 __all__ = ["get_log", "log_runtime"]
