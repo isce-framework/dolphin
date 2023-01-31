@@ -657,18 +657,11 @@ def iter_blocks(
         the position of the current block.
         (Only returned if return_slices is True)
     """
-    ds = gdal.Open(fspath(filename))
-    if band is None:
-        # Read all bands
-        read_func = ds.ReadAsArray
-    else:
-        # Read from single band
-        read_func = ds.GetRasterBand(band).ReadAsArray
-
     # Set up the generator of ((row_start, row_end), (col_start, col_end))
+    xsize, ysize = get_raster_xysize(filename)
     slice_gen = slice_iterator(
-        (ds.RasterYSize, ds.RasterXSize),
-        block_shape,
+        arr_shape=(ysize, xsize),
+        block_shape=block_shape,
         overlaps=overlaps,
         start_offsets=start_offsets,
     )
@@ -677,16 +670,9 @@ def iter_blocks(
         if skip_empty and nodata_mask is not None:
             if nodata_mask[rows, cols].all():
                 continue
-        xoff = cols.start
-        yoff = rows.start
-        xsize = cols.stop - cols.start
-        ysize = rows.stop - rows.start
-        cur_block = read_func(
-            xoff,
-            yoff,
-            xsize,
-            ysize,
-        )
+
+        cur_block = load_gdal(filename, band=band, rows=rows, cols=cols)
+
         if skip_empty:
             # Otherwise look at the actual block we loaded
             if np.isnan(nodata):
@@ -700,7 +686,6 @@ def iter_blocks(
             yield cur_block, (rows, cols)
         else:
             yield cur_block
-    ds = None
 
 
 def slice_iterator(
