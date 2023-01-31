@@ -29,7 +29,7 @@ def _get_sys_info() -> typing.Dict[str, str]:
     }
 
 
-def _get_opera_info():
+def _get_opera_info() -> Dict[str, Optional[str]]:
     """Information on system on core modules.
 
     Returns
@@ -46,7 +46,7 @@ def _get_opera_info():
     return blob
 
 
-def _get_version(modname):
+def _get_version(modname: str) -> Optional[str]:
     if modname in sys.modules:
         mod = sys.modules[modname]
     else:
@@ -60,7 +60,7 @@ def _get_version(modname):
         return mod.version
 
 
-def _get_deps_info():
+def _get_deps_info() -> Dict[str, Optional[str]]:
     """Overview of the installed version of main dependencies.
 
     Returns
@@ -80,13 +80,13 @@ def _get_deps_info():
     return {name: _get_version(name) for name in deps}
 
 
-def _print_info_dict(info_dict):
+def _print_info_dict(info_dict: Dict) -> None:
     """Print the information dictionary."""
     for key, stat in info_dict.items():
         print(f"{key:>12}: {stat}")
 
 
-def show_versions():
+def show_versions() -> None:
     """Print useful debugging information.
 
     Examples

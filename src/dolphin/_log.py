@@ -18,6 +18,8 @@ Usage:
 """
 import logging
 import time
+from collections.abc import Callable
+from functools import wraps
 from logging import Formatter
 
 __all__ = ["get_log", "log_runtime"]
@@ -44,7 +46,7 @@ def get_log(debug: bool = False, name: str = "dolphin._log") -> logging.Logger:
     return format_log(logger, debug=debug)
 
 
-def format_log(logger, debug=False):
+def format_log(logger: logging.Logger, debug: bool = False) -> logging.Logger:
     """Make the logging output pretty and colored with times.
 
     Parameters
@@ -74,7 +76,7 @@ def format_log(logger, debug=False):
     return logger
 
 
-def log_runtime(f):
+def log_runtime(f: Callable) -> Callable:
     """Decorate a function to time how long it takes to run.
 
     Usage
@@ -85,6 +87,7 @@ def log_runtime(f):
     """
     logger = get_log()
 
+    @wraps(f)
     def wrapper(*args, **kwargs):
         t1 = time.time()
 
