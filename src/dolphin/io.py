@@ -56,6 +56,7 @@ def load_gdal(
     subsample_factor: int = 1,
     rows: Optional[slice] = None,
     cols: Optional[slice] = None,
+    masked: bool = False,
 ):
     """Load a gdal file into a numpy array.
 
@@ -72,6 +73,9 @@ def load_gdal(
         Rows to load. Default is None (load all rows).
     cols : slice, optional
         Columns to load. Default is None (load all columns).
+    masked : bool, optional
+        If True, return a masked array using the raster's `nodata` value.
+        Default is False.
 
     Returns
     -------
@@ -111,7 +115,15 @@ def load_gdal(
         out = np.empty((nrows_out, ncols_out), dtype=dt)
         bnd = ds.GetRasterBand(band)
         bnd.ReadAsArray(xoff, yoff, xsize, ysize, buf_obj=out, resample_alg=resamp)
-    return out
+
+    if not masked:
+        return out
+    # Get the nodata value
+    nd = get_nodata(filename)
+    if np.isnan(nd):
+        return np.ma.masked_invalid(out)
+    else:
+        return np.ma.masked_equal(out, nd)
 
 
 def format_nc_filename(filename: Filename, ds_name: Optional[str] = None) -> str:
@@ -210,13 +222,15 @@ def copy_projection(src_file: Filename, dst_file: Filename) -> None:
     ds_src = ds_dst = None
 
 
-def get_nodata(filename: Filename) -> Optional[float]:
+def get_nodata(filename: Filename, band: int = 1) -> Optional[float]:
     """Get the nodata value from a file.
 
     Parameters
     ----------
     filename : Filename
         Path to the file to load.
+    band : int, optional
+        Band to get nodata value for, by default 1.
 
     Returns
     -------
@@ -224,7 +238,7 @@ def get_nodata(filename: Filename) -> Optional[float]:
         Nodata value, or None if not found.
     """
     ds = gdal.Open(fspath(filename))
-    nodata = ds.GetRasterBand(1).GetNoDataValue()
+    nodata = ds.GetRasterBand(band).GetNoDataValue()
     return nodata
 
 
@@ -428,7 +442,13 @@ def write_arr(
         b = ds_like.GetRasterBand(1)
         nodata = b.GetNoDataValue()
 
-    nbands = nbands or (ds_like.RasterCount if ds_like else arr.shape[0])
+    if nbands is None:
+        if arr is not None:
+            nbands = arr.shape[0]
+        elif ds_like is not None:
+            nbands = ds_like.RasterCount
+        else:
+            nbands = 1
 
     if driver is None:
         if str(output_name).endswith(".tif"):

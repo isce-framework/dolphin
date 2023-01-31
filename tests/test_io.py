@@ -40,6 +40,19 @@ def test_load_slice_oob(raster_100_by_200):
         block = io.load_gdal(raster_100_by_200, rows=slice(300, 400), cols=slice(0, 10))
 
 
+def test_load_masked(raster_with_nan_block):
+    arr = io.load_gdal(raster_with_nan_block, masked=True)
+    assert isinstance(arr, np.ma.masked_array)
+    assert np.ma.is_masked(arr)
+    assert arr[arr.mask].size == 32 * 32
+    assert np.all(arr.mask[:32, :32])
+
+    arr = io.load_gdal(raster_with_nan_block)
+    assert not isinstance(arr, np.ma.masked_array)
+    assert not np.ma.is_masked(arr)
+    assert np.all(np.isnan(arr[:32, :32]))
+
+
 def test_compute_out_size():
     strides = {"x": 3, "y": 3}
     assert (2, 2) == io.compute_out_shape((6, 6), strides)
