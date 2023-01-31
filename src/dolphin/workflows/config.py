@@ -46,7 +46,7 @@ def _move_file_in_dir(path: PathOrStr, values: dict) -> Path:
     """
     p = Path(path)
     d = Path(values.get("directory", "."))
-    if not p.parent == d:
+    if p.parent != d:
         return d / p.name
     else:
         return p
@@ -300,10 +300,6 @@ class Inputs(BaseModel):
         values["cslc_file_list"] = [Path(f) for f in file_list]
         return values
 
-    def get_dates(self) -> List[date]:
-        """Get the dates parsed from the input files."""
-        return parse_slc_strings(self.cslc_file_list, fmt=self.cslc_date_fmt)
-
 
 class Outputs(BaseModel):
     """Options for the output format/compressions."""
@@ -503,7 +499,9 @@ class Workflow(BaseModel):
         ]
 
         # Store the dates parsed from the input files
-        self._date_list = self.inputs.get_dates()
+        self._date_list = parse_slc_strings(
+            self.inputs.cslc_file_list, fmt=self.inputs.cslc_date_fmt
+        )
 
     def create_dir_tree(self, debug=False):
         """Create the directory tree for the workflow."""
