@@ -34,7 +34,7 @@ def _move_file_in_dir(path: PathOrStr, values: dict) -> Path:
     """
     p = Path(path)
     d = Path(values.get("directory", "."))
-    if not p.parent == d:
+    if p.parent != d:
         return d / p.name
     else:
         return p
