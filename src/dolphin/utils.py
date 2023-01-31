@@ -35,7 +35,7 @@ def gdal_to_numpy_type(gdal_type):
     return gdal_array.GDALTypeCodeToNumericTypeCode(gdal_type)
 
 
-def get_dates(filename: Filename, fmt="%Y%m%d") -> List[Union[None, datetime.date]]:
+def get_dates(filename: Filename, fmt="%Y%m%d") -> List[datetime.date]:
     """Search for dates in the stem of `filename` matching `fmt`.
 
     Excludes dates that are not in the stem of `filename` (in the directories).
@@ -49,7 +49,7 @@ def get_dates(filename: Filename, fmt="%Y%m%d") -> List[Union[None, datetime.dat
 
     Returns
     -------
-    list[datetime.date or None]
+    list[datetime.date]
         List of dates found in the stem of `filename` matching `fmt`.
         Returns None if nothing is found.
 
