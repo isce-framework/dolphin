@@ -85,7 +85,8 @@ def run_evd_sequential(
         cur_dates = date_list_all[cur_slice].copy()
 
         # Make the current ministack output folder using the start/end dates
-        d0, d1 = cur_dates[0], cur_dates[-1]
+        d0 = cur_dates[0][0]
+        d1 = cur_dates[-1][0]
         start_end = io._format_date_pair(d0, d1)
         cur_output_folder = output_folder / start_end
         cur_output_folder.mkdir(parents=True, exist_ok=True)
@@ -96,7 +97,10 @@ def run_evd_sequential(
         # Add the existing compressed SLC files to the start
         cur_files = comp_slc_files + cur_files
         cur_vrt = VRTStack(
-            cur_files, outfile=cur_output_folder / f"{start_end}.vrt", sort_files=False
+            cur_files,
+            outfile=cur_output_folder / f"{start_end}.vrt",
+            sort_files=False,
+            subdataset=v_all.subdataset,
         )
 
         # mini_idx is first non-compressed SLC
@@ -383,18 +387,20 @@ def _setup_output_folder(
     """
     output_folder = vrt_stack.outfile.parent
 
-    output_files = []
-    if isinstance(vrt_stack.dates[0], (list, tuple)):
-        # Compressed SLCs will have 2 dates in the name marking the start and end
-        date_strs = [io._format_date_pair(d0, d1) for (d0, d1) in vrt_stack.dates]
-    else:
-        # Otherwise, normal SLC files will have a single date
-        date_strs = [d.strftime(io.DEFAULT_DATETIME_FORMAT) for d in vrt_stack.dates]
+    date_strs: List[str] = []
+    for d in vrt_stack.dates[start_idx:]:
+        if len(d) == 1:
+            # normal SLC files will have a single date
+            s = d[0].strftime(io.DEFAULT_DATETIME_FORMAT)
+        else:
+            # Compressed SLCs will have 2 dates in the name marking the start and end
+            s = io._format_date_pair(d[0], d[1])
+        date_strs.append(s)
 
     rows, cols = vrt_stack.shape[-2:]
-    for filename in date_strs[start_idx:]:
+    output_files = []
+    for filename in date_strs:
         slc_name = Path(filename).stem
-        # TODO: get extension from cfg?
         output_path = output_folder / f"{slc_name}.slc.tif"
 
         io.write_arr(

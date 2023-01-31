@@ -19,7 +19,7 @@ from ruamel.yaml import YAML
 from dolphin import __version__ as _dolphin_version
 from dolphin._log import get_log
 from dolphin.io import format_nc_filename
-from dolphin.utils import get_dates, parse_slc_strings, sort_files_by_date
+from dolphin.utils import get_dates, sort_files_by_date
 
 from ._enums import InterferogramNetworkType, OutputFormat, UnwrapMethod, WorkflowName
 
@@ -515,11 +515,6 @@ class Workflow(BaseModel):
             self.interferogram_network.directory,
             self.unwrap_options.directory,
         ]
-
-        # Store the dates parsed from the input files
-        self._date_list = parse_slc_strings(
-            self.inputs.cslc_file_list, fmt=self.inputs.cslc_date_fmt
-        )
 
     def create_dir_tree(self, debug=False):
         """Create the directory tree for the workflow."""

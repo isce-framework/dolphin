@@ -3,7 +3,7 @@ import datetime
 import itertools
 from os import fspath
 from pathlib import Path
-from typing import List, Optional, Sequence, Tuple, Union
+from typing import Iterable, List, Optional, Sequence, Tuple, Union
 
 from osgeo import gdal
 from pydantic import BaseModel, Extra, Field, root_validator, validator
@@ -132,15 +132,17 @@ class VRTInterferogram(BaseModel):
     @validator("path", always=True)
     def _check_output_cant_exist(cls, v, values):
         if not v:
-            # from the output file name from the dates within input files
+            # No path was passed: try and make one.
+            # Form the output file name from the dates within input files
             ref_slc, sec_slc = values.get("ref_slc"), values.get("sec_slc")
             fmt = values.get("date_format", "%Y%m%d")
-            date1 = utils.parse_slc_strings(ref_slc, fmt=fmt)
-            date2 = utils.parse_slc_strings(sec_slc, fmt=fmt)
+            date1 = utils.get_dates(ref_slc, fmt=fmt)[0]
+            date2 = utils.get_dates(sec_slc, fmt=fmt)[0]
 
             outdir = values.get("outdir")
             v = outdir / (io._format_date_pair(date1, date2, fmt) + ".vrt")
         elif Path(v).exists():
+            # If they passed one and it's there, raise an error
             raise ValueError(f"Output file {v} already exists")
         return v
 
@@ -149,8 +151,8 @@ class VRTInterferogram(BaseModel):
         """Ensure passed dates match those parsed from the input files."""
         fmt = values.get("date_format", "%Y%m%d")
         ref_slc, sec_slc = values.get("ref_slc"), values.get("sec_slc")
-        date1 = utils.parse_slc_strings(ref_slc, fmt=fmt)
-        date2 = utils.parse_slc_strings(sec_slc, fmt=fmt)
+        date1 = utils.get_dates(ref_slc, fmt=fmt)[0]
+        date2 = utils.get_dates(sec_slc, fmt=fmt)[0]
         if v is not None:
             if v != (date1, date2):
                 raise ValueError(
@@ -186,8 +188,8 @@ class VRTInterferogram(BaseModel):
     def __init__(self, **data):
         """Create a VRTInterferogram object and write the VRT file."""
         super().__init__(**data)
-        date1 = utils.parse_slc_strings(self.ref_slc, fmt=self.date_format)
-        date2 = utils.parse_slc_strings(self.sec_slc, fmt=self.date_format)
+        date1 = utils.get_dates(self.ref_slc, fmt=self.date_format)[0]
+        date2 = utils.get_dates(self.sec_slc, fmt=self.date_format)[0]
         self.dates = (date1, date2)
         self._write()
 
@@ -273,7 +275,7 @@ class Network:
             within the file.
             Defaults to None.
         """
-        self.slc_list, self.slc_dates = utils.sort_files_by_date(slc_list)
+        self.slc_list, dates = utils.sort_files_by_date(slc_list)
         self.slc_file_pairs = self._make_ifg_pairs(
             self.slc_list,
             max_bandwidth=max_bandwidth,
@@ -282,6 +284,7 @@ class Network:
             final_only=final_only,
         )
         # Save the parameters used to create the network
+        self.slc_dates = [dates[0] for dates in dates]
         self.max_bandwidth = max_bandwidth
         self.max_temporal_baseline = max_temporal_baseline
         self.reference_idx = reference_idx
@@ -333,7 +336,7 @@ class Network:
 
     def _make_ifg_pairs(
         self,
-        slc_list: List[Filename],
+        slc_list: Sequence[Filename],
         max_bandwidth: Optional[int] = None,
         max_temporal_baseline: Optional[float] = None,
         reference_idx: Optional[int] = None,
@@ -353,21 +356,23 @@ class Network:
             raise ValueError("No valid ifg list generation method specified")
 
     def _single_reference_network(
-        self, date_list: List[Filename], reference_idx=0
+        self, slc_file_list: Sequence[Filename], reference_idx=0
     ) -> List[Tuple]:
         """Form a list of single-reference interferograms."""
-        if len(date_list) < 2:
+        if len(slc_file_list) < 2:
             raise ValueError("Need at least two dates to make an interferogram list")
-        ref = date_list[reference_idx]
-        ifgs = [tuple(sorted([ref, date])) for date in date_list if date != ref]
+        ref = slc_file_list[reference_idx]
+        ifgs = [tuple(sorted([ref, date])) for date in slc_file_list if date != ref]
         return ifgs
 
-    def _limit_by_bandwidth(self, slc_date_list: List[Filename], max_bandwidth: int):
+    def _limit_by_bandwidth(
+        self, slc_file_list: Iterable[Filename], max_bandwidth: int
+    ):
         """Form a list of the "nearest-`max_bandwidth`" ifgs.
 
         Parameters
         ----------
-        slc_date_list : list
+        slc_file_list : Iterable[Filename]
             List of dates of SLCs
         max_bandwidth : int
             Largest allowed span of ifgs, by index distance, to include.
@@ -378,24 +383,24 @@ class Network:
         list
             Pairs of (date1, date2) ifgs
         """
-        slc_to_idx = {s: idx for idx, s in enumerate(slc_date_list)}
+        slc_to_idx = {s: idx for idx, s in enumerate(slc_file_list)}
         return [
             (a, b)
-            for (a, b) in self._all_pairs(slc_date_list)
+            for (a, b) in self._all_pairs(slc_file_list)
             if slc_to_idx[b] - slc_to_idx[a] <= max_bandwidth
         ]
 
     def _limit_by_temporal_baseline(
         self,
-        slc_date_list: List[Filename],
+        slc_file_list: Iterable[Filename],
         max_temporal_baseline: Optional[float] = None,
     ):
         """Form a list of the ifgs limited to a maximum temporal baseline.
 
         Parameters
         ----------
-        slc_date_list : list
-            List of dates of SLCs
+        slc_file_list : Iterable[Filename]
+            Iterable of input SLC files
         max_temporal_baseline : float, optional
             Largest allowed span of ifgs, by index distance, to include.
             max_bandwidth=1 will only include nearest-neighbor ifgs.
@@ -404,9 +409,22 @@ class Network:
         -------
         list
             Pairs of (date1, date2) ifgs
+
+        Raises
+        ------
+        ValueError
+            If any of the input files have more than one date.
         """
-        ifg_strs = self._all_pairs(slc_date_list)
-        ifg_dates = self._all_pairs(utils.parse_slc_strings(slc_date_list))
+        ifg_strs = self._all_pairs(slc_file_list)
+        slc_date_lists = [utils.get_dates(f) for f in slc_file_list]
+        # Check we've got all single-date files
+        if any(len(d) != 1 for d in slc_date_lists):
+            raise ValueError(
+                "Cannot form ifgs from multiple dates by temporal baseline."
+            )
+        slc_dates = [d[0] for d in slc_date_lists]
+
+        ifg_dates = self._all_pairs(slc_dates)
         baselines = [self._temp_baseline(ifg) for ifg in ifg_dates]
         return [
             ifg for ifg, b in zip(ifg_strs, baselines) if b <= max_temporal_baseline

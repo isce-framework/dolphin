@@ -107,12 +107,12 @@ def test_dates(vrt_stack, vrt_stack_nc_subdataset):
     assert len(dates) == len(vrt_stack)
     d0 = 20220101
     for d in dates:
-        assert d.strftime("%Y%m%d") == str(d0)
+        assert d[0].strftime("%Y%m%d") == str(d0)
         d0 += 1
 
     d0 = 20220101
     for d in vrt_stack_nc_subdataset.dates:
-        assert d.strftime("%Y%m%d") == str(d0)
+        assert d[0].strftime("%Y%m%d") == str(d0)
         d0 += 1
 
 

@@ -78,8 +78,9 @@ def get_dates(filename: Filename, fmt: str = "%Y%m%d") -> List[datetime.date]:
     >>> get_dates("/not/a/date_named_file.tif")
     []
     """  # noqa: E501
-    pat = _date_format_to_regex(fmt)
-    date_list = re.findall(pat, Path(filename).stem)
+    path = _get_path_from_gdal_str(filename)
+    pattern = _date_format_to_regex(fmt)
+    date_list = re.findall(pattern, path.stem)
     if not date_list:
         msg = f"{filename} does not contain date like {fmt}"
         logger.warning(msg)
@@ -89,65 +90,6 @@ def get_dates(filename: Filename, fmt: str = "%Y%m%d") -> List[datetime.date]:
 
 def _parse_date(datestr: str, fmt: str = "%Y%m%d") -> datetime.date:
     return datetime.datetime.strptime(datestr, fmt).date()
-
-
-def parse_slc_strings(
-    slc_str: Union[Filename, Iterable[Filename]],
-    fmt: Union[str, Iterable[str], None] = None,
-) -> Union[datetime.date, List[datetime.date]]:
-    """Parse a string/Path, or list of strings/Paths, matching `fmt` into dates.
-
-    It is expected that the date is in the filename portion of the string
-    (the `.name` part of the Path), and that the date is unique in the filename.
-
-    Note that the date may appear more than once, as in Sentinel-1 SLC product names
-    containing the acquisition stop/start datetime.
-
-    Parameters
-    ----------
-    slc_str : str or Iterable[str]
-        String or list of strings to parse for dates.
-    fmt : str, or List[str], None. Optional
-        Format of string to parse.
-        If None (default), searches for "%Y%m%d" or "%Y-%m-%d".
-
-    Returns
-    -------
-    datetime.date, or List[datetime.date]
-
-    Raises
-    ------
-    ValueError
-        If none of the strings in `slc_str` match `fmt`,
-        or if multiple dates are found in the filename portion
-        of `slc_str` (we expect only one date per SLC file).
-    """
-    if fmt is None:
-        fmt = ["%Y%m%d", "%Y-%m-%d"]
-    elif isinstance(fmt, str):
-        fmt = [fmt]
-
-    if isinstance(slc_str, str) or hasattr(slc_str, "__fspath__"):
-        path = _get_path_from_gdal_str(slc_str)  # type: ignore
-        # Unpack all returned dates from each format
-        d_list = []
-        for f in fmt:
-            d_list.extend(get_dates(path, fmt=f))
-            if len(d_list) > 0:
-                break
-        else:  # if we iterate through all formats and don't find any dates
-            raise ValueError(f"Could not find date of format {fmt} in {slc_str}")
-
-        unique_dates = np.unique(d_list)
-        if len(unique_dates) > 1:
-            raise ValueError(
-                f"Found multiple dates in {slc_str}: {unique_dates}. "
-                "Please specify a date format."
-            )
-        return unique_dates[0]
-    else:
-        # If it's an iterable of strings, run on each one
-        return [parse_slc_strings(s, fmt=fmt) for s in slc_str if s]  # type: ignore
 
 
 def _get_path_from_gdal_str(name: Filename) -> Path:
@@ -215,8 +157,15 @@ def _date_format_to_regex(date_format):
 
 def sort_files_by_date(
     files: Iterable[Filename], file_date_fmt: str = "%Y%m%d"
-) -> Tuple[List, List]:
+) -> Tuple[List[Filename], List[List[datetime.date]]]:
     """Sort a list of files by date.
+
+    If some files have multiple dates, the files with the most dates are sorted
+    first. Within each group of files with the same number of dates, the files
+    with the earliest dates are sorted first.
+
+    The multi-date files are placed first so that compressed SLCs are sorted
+    before the individual SLCs that make them up.
 
     Parameters
     ----------
@@ -228,23 +177,25 @@ def sort_files_by_date(
     Returns
     -------
     file_list : List[Filename]
-        Sorted list of files.
-    dates : List[datetime.date] or List[Tuple[datetime.date,...]]
-        Sorted list of dates corresponding to the files.
+        List of files sorted by date.
+    dates : List[List[datetime.date,...]]
+        Sorted list, where each entry has all the dates from the corresponding file.
     """
-    date_lists = [get_dates(f, fmt=file_date_fmt) for f in files]
-    # For SLCs or single-date files, just return the first date
-    if all(len(d) == 1 for d in date_lists):
-        dates = [d[0] for d in date_lists]
-    else:
-        # For multi-date files, return a List of dates
-        dates = [list(d) for d in date_lists]  # type: ignore
 
-    file_dates = sorted(
-        [(f, d) for f, d in zip(files, dates)],
-        # use the date or dates as the key
-        key=lambda f_d_tuple: f_d_tuple[1],  # type: ignore
-    )
+    def sort_key(file_date_tuple):
+        # Key for sorting:
+        # To sort the files with the most dates first (the compressed SLCs which
+        # span a date range), sort the longer date lists first.
+        # Then, within each group of dates of the same length, use the date/dates
+        _, dates = file_date_tuple
+        try:
+            return (-len(dates), dates)
+        except TypeError:
+            return (-1, dates)
+
+    date_lists = [get_dates(f, fmt=file_date_fmt) for f in files]
+    file_dates = sorted([fd_tuple for fd_tuple in zip(files, date_lists)], key=sort_key)
+
     # Unpack the sorted pairs with new sorted values
     file_list, dates = zip(*file_dates)  # type: ignore
     return list(file_list), list(dates)
