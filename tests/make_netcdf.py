@@ -21,6 +21,7 @@ def create_test_nc(
     epsg=32615,
     subdir="/",
     data=None,
+    data_ds_name="data",
     shape=(21, 15),
     dtype=np.complex64,
     xoff=0,
@@ -57,7 +58,7 @@ def create_test_nc(
     if dtype == np.complex64:
         _add_complex_type(hf)
 
-    datads = hf.create_dataset(os.path.join(subdir, "data"), data=data)
+    datads = hf.create_dataset(os.path.join(subdir, data_ds_name), data=data)
 
     #  Mapping of dimension scales to datasets is not done automatically in HDF5
     #  We should label appropriate arrays as scales and attach them to datasets

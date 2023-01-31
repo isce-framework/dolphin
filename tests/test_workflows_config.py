@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pydantic
 import pytest
+from make_netcdf import create_test_nc
 
 from dolphin.workflows import InterferogramNetworkType, config
 
@@ -237,6 +238,32 @@ def test_input_date_sort(dir_with_2_slcs):
 
     opts = config.Inputs(cslc_file_list=reversed(file_list), subdataset="data")
     assert opts.cslc_file_list == file_list
+
+
+def test_input_opera_cslc(tmp_path, slc_stack):
+    """Check that we recognize the OPERA filename format and don't need a subdataset."""
+    # Make a file with the OPERA name like OPERA_BURST_RE
+    # r"t(?P<track>\d{3})_(?P<burst_id>\d{6})_(?P<subswath>iw[1-3])"
+    start_date = 20220101
+    d = tmp_path / "opera"
+    d.mkdir()
+    name_template = d / "t001_{burst_id}_iw1_{date}.nc"
+    file_list = []
+    for i in range(len(slc_stack)):
+        burst_id = f"{i + 1:06d}"
+        fname = str(name_template).format(burst_id=burst_id, date=str(start_date + i))
+        create_test_nc(
+            fname,
+            epsg=32615,
+            subdir="science/SENTINEL1/CSLC/grids",
+            data_ds_name="VV",
+            data=slc_stack[i],
+        )
+        file_list.append(Path(fname))
+
+    opts = config.Inputs(cslc_file_list=file_list)
+    assert opts.cslc_file_list == file_list
+    assert opts.subdataset == config.OPERA_DATASET_NAME
 
 
 def test_input_cslc_empty():
