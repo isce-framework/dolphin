@@ -41,7 +41,7 @@ body:
     id: description
     attributes:
       label: Describe the feature request
-      description: A clear and concise description of your request. 
+      description: A clear and concise description of your request.
       placeholder: Tell us what you want
       value: "I need or want [...]"
     validations:
