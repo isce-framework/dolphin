@@ -46,12 +46,12 @@ def _get_opera_info() -> Dict[str, Optional[str]]:
     return blob
 
 
-def _get_version(modname: str) -> Optional[str]:
-    if modname in sys.modules:
-        mod = sys.modules[modname]
+def _get_version(module_name: str) -> Optional[str]:
+    if module_name in sys.modules:
+        mod = sys.modules[module_name]
     else:
         try:
-            mod = importlib.import_module(modname)
+            mod = importlib.import_module(module_name)
         except ImportError:
             return None
     try:

@@ -90,19 +90,22 @@ def _parse_date(datestr: str, fmt: str = "%Y%m%d") -> datetime.date:
 
 
 def parse_slc_strings(
-    slc_str: Union[Filename, Iterable[Filename]], fmt=None
+    slc_str: Union[Filename, Iterable[Filename]],
+    fmt: Union[str, Iterable[str], None] = None,
 ) -> Union[datetime.date, List[datetime.date]]:
     """Parse a string/Path, or list of strings/Paths, matching `fmt` into dates.
 
-    It is expected that the date is in the filename portion of the string,
-    and that the date is unique in the filename (although it may appear
-    more than once, as is the case with Sentinel-1 SLC product names).
+    It is expected that the date is in the filename portion of the string
+    (the `.name` part of the Path), and that the date is unique in the filename.
+
+    Note that the date may appear more than once, as in Sentinel-1 SLC product names
+    containing the acquisition stop/start datetime.
 
     Parameters
     ----------
     slc_str : str or Iterable[str]
         String or list of strings to parse for dates.
-    fmt : str, or List[str]. Optional
+    fmt : str, or List[str], None. Optional
         Format of string to parse.
         If None (default), searches for "%Y%m%d" or "%Y-%m-%d".
 
