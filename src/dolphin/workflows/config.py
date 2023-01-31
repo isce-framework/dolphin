@@ -240,8 +240,7 @@ class Inputs(BaseModel):
 
     # validators
     @validator("cslc_file_list", pre=True)
-    def _check_input_file_list(cls, v, values):
-        print("CSLC FILE LIST", v, values)
+    def _check_input_file_list(cls, v):
         if v is None:
             return []
         if isinstance(v, (str, Path)):
@@ -261,7 +260,6 @@ class Inputs(BaseModel):
 
     @validator("subdataset", pre=True, always=True)
     def _check_for_opera(cls, v, values):
-        print("SUB", v, values)
         cslc_file_list = values.get("cslc_file_list")
         # if we're not dealing with all OPERA files, just return whatever they gave
         if any(re.search(OPERA_BURST_RE, str(f)) is None for f in cslc_file_list):
