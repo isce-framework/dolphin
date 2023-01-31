@@ -11,10 +11,11 @@ gdal.UseExceptions()
 
 from dolphin._types import Filename
 from dolphin.io import write_arr, write_block
+from dolphin.stack import VRTStack
 
 
 def create_ps(
-    # *,
+    *,
     slc_vrt_file: Filename,
     output_file: Filename,
     amp_mean_file: Filename,
@@ -40,8 +41,6 @@ def create_ps(
         The maximum amount of data to read at a time (in GB).
         Default is 1.0 GB.
     """
-    from .stack import VRTStack
-
     # Initialize the output files with zeros
     types = [np.uint8, np.float32, np.float32]
     file_list = [output_file, amp_dispersion_file, amp_mean_file]
@@ -71,17 +70,20 @@ def create_ps(
         skip_empty=False,
     )
     for cur_data, (rows, cols) in tqdm(block_gen, total=num_blocks):
-        if np.all(cur_data == 0) or np.all(np.isnan(cur_data)):
-            continue
-
         cur_rows, cur_cols = cur_data.shape[-2:]
-        magnitude_cur = np.abs(cur_data, out=magnitude[:, :cur_rows, :cur_cols])
-        mean, amp_disp, ps = calc_ps_block(magnitude_cur, amp_dispersion_threshold)
 
-        # Use the UInt8 type for the PS to save.
-        # For invalid pixels, set to max Byte value
-        ps = ps.astype(np.uint8)
-        ps[amp_disp == 0] = 255
+        if not (np.all(cur_data == 0) or np.all(np.isnan(cur_data))):
+            magnitude_cur = np.abs(cur_data, out=magnitude[:, :cur_rows, :cur_cols])
+            mean, amp_disp, ps = calc_ps_block(magnitude_cur, amp_dispersion_threshold)
+
+            # Use the UInt8 type for the PS to save.
+            # For invalid pixels, set to max Byte value
+            ps = ps.astype(np.uint8)
+            ps[amp_disp == 0] = nodatas[0]
+        else:
+            # Fill the block with nodata
+            ps = np.ones((cur_rows, cur_cols), dtype=np.uint8) * nodatas[0]
+            mean = amp_disp = np.zeros((cur_rows, cur_cols), dtype=np.float32)
 
         # Write amp dispersion and the mean blocks
         write_block(mean, amp_mean_file, rows.start, cols.start)
