@@ -89,64 +89,6 @@ def _parse_date(datestr: str, fmt: str = "%Y%m%d") -> datetime.date:
     return datetime.datetime.strptime(datestr, fmt).date()
 
 
-def parse_slc_strings(
-    slc_str: Union[Filename, Iterable[Filename]],
-    fmt: Union[str, Iterable[str], None] = None,
-) -> Union[datetime.date, List[datetime.date]]:
-    """Parse a string/Path, or list of strings/Paths, matching `fmt` into dates.
-
-    It is expected that the date is in the filename portion of the string
-    (the `.name` part of the Path), and that the date is unique in the filename.
-
-    Note that the date may appear more than once, as in Sentinel-1 SLC product names
-    containing the acquisition stop/start datetime.
-
-    Parameters
-    ----------
-    slc_str : str or Iterable[str]
-        String or list of strings to parse for dates.
-    fmt : str, or List[str], None. Optional
-        Format of string to parse.
-        If None (default), searches for "%Y%m%d" or "%Y-%m-%d".
-
-    Returns
-    -------
-    datetime.date, or List[datetime.date]
-
-    Raises
-    ------
-    ValueError
-        If none of the strings in `slc_str` match `fmt`,
-        or if multiple dates are found in the filename portion
-        of `slc_str` (we expect only one date per SLC file).
-    """
-    if fmt is None:
-        fmt = ["%Y%m%d", "%Y-%m-%d"]
-    elif isinstance(fmt, str):
-        fmt = [fmt]
-
-    if isinstance(slc_str, str) or hasattr(slc_str, "__fspath__"):
-        # Unpack all returned dates from each format
-        d_list = []
-        for f in fmt:
-            d_list.extend(get_dates(slc_str, fmt=f))  # type: ignore
-            if len(d_list) > 0:
-                break
-        else:  # if we iterate through all formats and don't find any dates
-            raise ValueError(f"Could not find date of format {fmt} in {slc_str}")
-
-        unique_dates = np.unique(d_list)
-        if len(unique_dates) > 1:
-            raise ValueError(
-                f"Found multiple dates in {slc_str}: {unique_dates}. "
-                "Please specify a date format."
-            )
-        return unique_dates[0]
-    else:
-        # If it's an iterable of strings, run on each one
-        return [parse_slc_strings(s, fmt=fmt) for s in slc_str if s]  # type: ignore
-
-
 def _date_format_to_regex(date_format):
     r"""Convert a python date format string to a regular expression.
 

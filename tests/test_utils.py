@@ -2,7 +2,6 @@ import datetime
 from pathlib import Path
 
 import numpy as np
-import pytest
 
 from dolphin import utils
 
@@ -64,31 +63,13 @@ def test_get_dates():
 
     assert utils.get_dates("/usr/19990101/notadate.tif") == []
 
+
+def test_get_dates_with_format():
     # try other date formats
     fmt = "%Y-%m-%d"
     assert utils.get_dates("2020-03-03_2021-01-01.int", fmt) == [
         datetime.date(2020, 3, 3),
         datetime.date(2021, 1, 1),
-    ]
-
-
-def test_parse_slc_strings():
-    dt = datetime.date(2020, 3, 3)
-    assert utils.parse_slc_strings(Path("/usr/19990101/asdf20200303.tif")) == dt
-    assert utils.parse_slc_strings("/usr/19990101/asdf20200303.tif") == dt
-    assert utils.parse_slc_strings("20200303.tif") == dt
-    assert utils.parse_slc_strings("20200303") == dt
-    assert utils.parse_slc_strings("20200303.slc") == dt
-
-    assert utils.parse_slc_strings(["20200303.slc", "20200303.tif"]) == [dt, dt]
-
-    with pytest.raises(ValueError):
-        utils.parse_slc_strings("notadate.tif")
-
-    fmt = "%Y-%m-%d"
-    assert utils.parse_slc_strings(["2020-03-03.slc", "2020-03-03.tif"], fmt=fmt) == [
-        dt,
-        dt,
     ]
 
 
