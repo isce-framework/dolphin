@@ -8,6 +8,7 @@ from osgeo import gdal
 from pydantic import (
     BaseModel,
     BaseSettings,
+    Extra,
     Field,
     PrivateAttr,
     root_validator,
@@ -65,6 +66,9 @@ class PsOptions(BaseModel):
         description="Amplitude dispersion threshold to consider a pixel a PS.",
         gt=0.0,
     )
+
+    class Config:
+        extra = Extra.forbid  # raise error if extra fields passed in
 
     # validators: Check directory exists, and that outputs are within directory
     _move_in_dir = validator(
@@ -124,6 +128,9 @@ class InterferogramNetwork(BaseModel):
         gt=0,
     )
     network_type = InterferogramNetworkType.SINGLE_REFERENCE
+
+    class Config:
+        extra = Extra.forbid  # raise error if extra fields passed in
 
     # validation
     @root_validator
@@ -194,6 +201,7 @@ class WorkerSettings(BaseSettings):
         fields = {
             "gpu_enabled": {"env": ["dolphin_gpu_enabled", "gpu"]},
         }
+        extra = Extra.forbid  # raise error if extra fields passed in
 
 
 class Inputs(BaseModel):
@@ -227,9 +235,13 @@ class Inputs(BaseModel):
         ),
     )
 
+    class Config:
+        extra = Extra.forbid  # raise error if extra fields passed in
+
     # validators
     @validator("cslc_file_list", pre=True)
-    def _check_input_file_list(cls, v):
+    def _check_input_file_list(cls, v, values):
+        print("CSLC FILE LIST", v, values)
         if v is None:
             return []
         if isinstance(v, (str, Path)):
@@ -249,6 +261,7 @@ class Inputs(BaseModel):
 
     @validator("subdataset", pre=True, always=True)
     def _check_for_opera(cls, v, values):
+        print("SUB", v, values)
         cslc_file_list = values.get("cslc_file_list")
         # if we're not dealing with all OPERA files, just return whatever they gave
         if any(re.search(OPERA_BURST_RE, str(f)) is None for f in cslc_file_list):
@@ -293,7 +306,8 @@ class Inputs(BaseModel):
         if ext in [".h5", ".nc"]:
             subdataset = values.get("subdataset")
             # gdal formatting function will raise an error if subdataset doesn't exist
-            _ = [format_nc_filename(f, subdataset) for f in file_list]
+            for f in file_list:
+                format_nc_filename(f, subdataset)
 
         file_list, _ = sort_files_by_date(file_list, file_date_fmt=date_fmt)
         # Coerce the file_list to a list of Path objects, sorted
@@ -335,6 +349,9 @@ class Outputs(BaseModel):
         ["TILED=YES", "COMPRESS=DEFLATE", "ZLEVEL=5"],
         description="GDAL creation options for GeoTIFF files",
     )
+
+    class Config:
+        extra = Extra.forbid  # raise error if extra fields passed in
 
     # validators
     @validator("output_directory", "scratch_directory", always=True)
@@ -405,6 +422,9 @@ class Workflow(BaseModel):
     # Stores the list of directories to be created by the workflow
     _directory_list: List[Path] = PrivateAttr(default_factory=list)
     _date_list: List[date] = PrivateAttr(default_factory=list)
+
+    class Config:
+        extra = Extra.forbid  # raise error if extra fields passed in
 
     # validators
     @root_validator
