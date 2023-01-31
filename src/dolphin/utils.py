@@ -3,9 +3,10 @@ import re
 import warnings
 from os import fspath
 from pathlib import Path
-from typing import Iterable, List, Optional, Sequence, Tuple, Union
+from typing import Iterable, List, Optional, Tuple, Union
 
 import numpy as np
+from numpy.typing import DTypeLike
 from osgeo import gdal, gdal_array, gdalconst
 
 from dolphin._log import get_log
@@ -15,27 +16,43 @@ gdal.UseExceptions()
 logger = get_log()
 
 
-def numpy_to_gdal_type(np_dtype):
-    """Convert numpy dtype to gdal type."""
-    # Wrap in np.dtype in case string is passed
-    if isinstance(np_dtype, str):
-        np_dtype = np.dtype(np_dtype.lower())
-    elif isinstance(np_dtype, type):
-        np_dtype = np.dtype(np_dtype)
+def numpy_to_gdal_type(np_dtype: DTypeLike) -> int:
+    """Convert numpy dtype to gdal type.
+
+    Parameters
+    ----------
+    np_dtype : DTypeLike
+        Numpy dtype to convert.
+
+    Returns
+    -------
+    int
+        GDAL type code corresponding to `np_dtype`.
+
+    Raises
+    ------
+    TypeError
+        If `np_dtype` is not a numpy dtype, or if the provided dtype is not
+        supported by GDAL (for example, `np.dtype('>i4')`)
+    """
+    np_dtype = np.dtype(np_dtype)
 
     if np.issubdtype(bool, np_dtype):
         return gdalconst.GDT_Byte
-    return gdal_array.NumericTypeCodeToGDALTypeCode(np_dtype)
+    gdal_code = gdal_array.NumericTypeCodeToGDALTypeCode(np_dtype)
+    if gdal_code is None:
+        raise TypeError(f"dtype {np_dtype} not supported by GDAL.")
+    return gdal_code
 
 
-def gdal_to_numpy_type(gdal_type):
+def gdal_to_numpy_type(gdal_type: Union[str, int]) -> np.dtype:
     """Convert gdal type to numpy type."""
     if isinstance(gdal_type, str):
         gdal_type = gdal.GetDataTypeByName(gdal_type)
     return gdal_array.GDALTypeCodeToNumericTypeCode(gdal_type)
 
 
-def get_dates(filename: Filename, fmt="%Y%m%d") -> List[datetime.date]:
+def get_dates(filename: Filename, fmt: str = "%Y%m%d") -> List[datetime.date]:
     """Search for dates in the stem of `filename` matching `fmt`.
 
     Excludes dates that are not in the stem of `filename` (in the directories).
@@ -51,7 +68,6 @@ def get_dates(filename: Filename, fmt="%Y%m%d") -> List[datetime.date]:
     -------
     list[datetime.date]
         List of dates found in the stem of `filename` matching `fmt`.
-        Returns None if nothing is found.
 
     Examples
     --------
@@ -65,30 +81,46 @@ def get_dates(filename: Filename, fmt="%Y%m%d") -> List[datetime.date]:
     pat = _date_format_to_regex(fmt)
     date_list = re.findall(pat, Path(filename).stem)
     if not date_list:
-        msg = f"{filename} does not contain date as YYYYMMDD"
+        msg = f"{filename} does not contain date like {fmt}"
         logger.warning(msg)
         return []
     return [_parse_date(d, fmt) for d in date_list]
 
 
-def _parse_date(datestr, fmt="%Y%m%d") -> datetime.date:
+def _parse_date(datestr: str, fmt: str = "%Y%m%d") -> datetime.date:
     return datetime.datetime.strptime(datestr, fmt).date()
 
 
-def parse_slc_strings(slc_str: Union[Filename, Sequence[Filename]], fmt=None):
-    """Parse a string, or list of strings, matching `fmt` into datetime.date.
+def parse_slc_strings(
+    slc_str: Union[Filename, Iterable[Filename]],
+    fmt: Union[str, Iterable[str], None] = None,
+) -> Union[datetime.date, List[datetime.date]]:
+    """Parse a string/Path, or list of strings/Paths, matching `fmt` into dates.
+
+    It is expected that the date is in the filename portion of the string
+    (the `.name` part of the Path), and that the date is unique in the filename.
+
+    Note that the date may appear more than once, as in Sentinel-1 SLC product names
+    containing the acquisition stop/start datetime.
 
     Parameters
     ----------
-    slc_str : str or list of str
-        String or list of strings to parse.
-    fmt : str, or List[str]. Optional
+    slc_str : str or Iterable[str]
+        String or list of strings to parse for dates.
+    fmt : str, or List[str], None. Optional
         Format of string to parse.
         If None (default), searches for "%Y%m%d" or "%Y-%m-%d".
 
     Returns
     -------
-    datetime.date, or list of datetime.date
+    datetime.date, or List[datetime.date]
+
+    Raises
+    ------
+    ValueError
+        If none of the strings in `slc_str` match `fmt`,
+        or if multiple dates are found in the filename portion
+        of `slc_str` (we expect only one date per SLC file).
     """
     if fmt is None:
         fmt = ["%Y%m%d", "%Y-%m-%d"]
@@ -96,7 +128,7 @@ def parse_slc_strings(slc_str: Union[Filename, Sequence[Filename]], fmt=None):
         fmt = [fmt]
 
     if isinstance(slc_str, str) or hasattr(slc_str, "__fspath__"):
-        path = _get_path_from_gdal_str(slc_str)
+        path = _get_path_from_gdal_str(slc_str)  # type: ignore
         # Unpack all returned dates from each format
         d_list = []
         for f in fmt:
@@ -106,11 +138,16 @@ def parse_slc_strings(slc_str: Union[Filename, Sequence[Filename]], fmt=None):
         else:  # if we iterate through all formats and don't find any dates
             raise ValueError(f"Could not find date of format {fmt} in {slc_str}")
 
-        # Take the first date found
-        return d_list[0]
+        unique_dates = np.unique(d_list)
+        if len(unique_dates) > 1:
+            raise ValueError(
+                f"Found multiple dates in {slc_str}: {unique_dates}. "
+                "Please specify a date format."
+            )
+        return unique_dates[0]
     else:
         # If it's an iterable of strings, run on each one
-        return [parse_slc_strings(s, fmt=fmt) for s in slc_str if s]
+        return [parse_slc_strings(s, fmt=fmt) for s in slc_str if s]  # type: ignore
 
 
 def _get_path_from_gdal_str(name: Filename) -> Path:

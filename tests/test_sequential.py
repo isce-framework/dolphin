@@ -114,7 +114,7 @@ def test_sequential_gtiff(tmp_path, slc_file_list, gpu_enabled):
 def test_sequential_nc(tmp_path, slc_file_list_nc, half_window, strides):
     """Check various strides/windows/ministacks with a NetCDF input stack."""
     vrt_file = tmp_path / "slc_stack.vrt"
-    _ = vrt.VRTStack(slc_file_list_nc, outfile=vrt_file)
+    _ = vrt.VRTStack(slc_file_list_nc, outfile=vrt_file, subdataset="data")
 
     output_folder = tmp_path / "sequential"
     sequential.run_evd_sequential(
@@ -135,7 +135,7 @@ def test_sequential_ministack_sizes(tmp_path, slc_file_list_nc, ministack_size):
     """Check various strides/windows/ministacks with a NetCDF input stack."""
     vrt_file = tmp_path / "slc_stack.vrt"
     # Make it not a round number to test
-    vrt_stack = vrt.VRTStack(slc_file_list_nc[:21], outfile=vrt_file)
+    vrt_stack = vrt.VRTStack(slc_file_list_nc[:21], outfile=vrt_file, subdataset="data")
     _, rows, cols = vrt_stack.shape
 
     output_folder = tmp_path / "sequential"

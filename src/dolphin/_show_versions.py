@@ -7,14 +7,14 @@ which was adapted from `pandas.show_versions`
 import importlib
 import platform
 import sys
-import typing
+from typing import Dict, Optional
 
 import dolphin
 
 __all__ = ["show_versions"]
 
 
-def _get_sys_info() -> typing.Dict[str, str]:
+def _get_sys_info() -> Dict[str, str]:
     """System information.
 
     Returns
@@ -46,12 +46,12 @@ def _get_opera_info() -> Dict[str, Optional[str]]:
     return blob
 
 
-def _get_version(modname: str) -> Optional[str]:
-    if modname in sys.modules:
-        mod = sys.modules[modname]
+def _get_version(module_name: str) -> Optional[str]:
+    if module_name in sys.modules:
+        mod = sys.modules[module_name]
     else:
         try:
-            mod = importlib.import_module(modname)
+            mod = importlib.import_module(module_name)
         except ImportError:
             return None
     try:

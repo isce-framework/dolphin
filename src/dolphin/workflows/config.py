@@ -8,6 +8,7 @@ from osgeo import gdal
 from pydantic import (
     BaseModel,
     BaseSettings,
+    Extra,
     Field,
     PrivateAttr,
     root_validator,
@@ -65,6 +66,9 @@ class PsOptions(BaseModel):
         description="Amplitude dispersion threshold to consider a pixel a PS.",
         gt=0.0,
     )
+
+    class Config:
+        extra = Extra.forbid  # raise error if extra fields passed in
 
     # validators: Check directory exists, and that outputs are within directory
     _move_in_dir = validator(
@@ -124,6 +128,9 @@ class InterferogramNetwork(BaseModel):
         gt=0,
     )
     network_type = InterferogramNetworkType.SINGLE_REFERENCE
+
+    class Config:
+        extra = Extra.forbid  # raise error if extra fields passed in
 
     # validation
     @root_validator
@@ -194,6 +201,7 @@ class WorkerSettings(BaseSettings):
         fields = {
             "gpu_enabled": {"env": ["dolphin_gpu_enabled", "gpu"]},
         }
+        extra = Extra.forbid  # raise error if extra fields passed in
 
 
 class Inputs(BaseModel):
@@ -226,6 +234,9 @@ class Inputs(BaseModel):
             " 0 for no data/invalid, and 1 for data."
         ),
     )
+
+    class Config:
+        extra = Extra.forbid  # raise error if extra fields passed in
 
     # validators
     @validator("cslc_file_list", pre=True)
@@ -337,6 +348,9 @@ class Outputs(BaseModel):
         description="GDAL creation options for GeoTIFF files",
     )
 
+    class Config:
+        extra = Extra.forbid  # raise error if extra fields passed in
+
     # validators
     @validator("output_directory", "scratch_directory", always=True)
     def _dir_is_absolute(cls, v):
@@ -406,6 +420,9 @@ class Workflow(BaseModel):
     # Stores the list of directories to be created by the workflow
     _directory_list: List[Path] = PrivateAttr(default_factory=list)
     _date_list: List[date] = PrivateAttr(default_factory=list)
+
+    class Config:
+        extra = Extra.forbid  # raise error if extra fields passed in
 
     # validators
     @root_validator

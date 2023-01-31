@@ -24,7 +24,7 @@ def vrt_stack(tmp_path, slc_stack, slc_file_list):
 @pytest.fixture
 def vrt_stack_nc(tmp_path, slc_stack, slc_file_list_nc):
     vrt_file = tmp_path / "test_nc.vrt"
-    s = VRTStack(slc_file_list_nc, outfile=vrt_file)
+    s = VRTStack(slc_file_list_nc, outfile=vrt_file, subdataset="data")
 
     assert s.shape == slc_stack.shape
     return s

@@ -27,7 +27,6 @@ def slc_stack():
 def slc_file_list(tmp_path, slc_stack):
     shape = slc_stack.shape
     # Write to a file
-    # driver = gdal.GetDriverByName("ENVI")
     driver = gdal.GetDriverByName("GTiff")
     start_date = 20220101
     d = tmp_path / "gtiff"
