@@ -1,12 +1,13 @@
 import json
+import re
 from datetime import date, datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, TextIO, Union
 
+from osgeo import gdal
 from pydantic import (
     BaseModel,
     BaseSettings,
-    DirectoryPath,
     Field,
     PrivateAttr,
     root_validator,
@@ -16,15 +17,26 @@ from ruamel.yaml import YAML
 
 from dolphin import __version__ as _dolphin_version
 from dolphin._log import get_log
-from dolphin.utils import get_dates
+from dolphin.io import format_nc_filename
+from dolphin.utils import get_dates, parse_slc_strings, sort_files_by_date
 
 from ._enums import InterferogramNetworkType, OutputFormat, UnwrapMethod, WorkflowName
 
+gdal.UseExceptions()
 PathOrStr = Union[Path, str]
 
 __all__ = [
     "Workflow",
 ]
+
+logger = get_log()
+
+# Specific to OPERA CSLC products:
+OPERA_DATASET_NAME = "science/SENTINEL1/CSLC/grids/VV"
+# for example, t087_185684_iw2
+OPERA_BURST_RE = re.compile(
+    r"t(?P<track>\d{3})_(?P<burst_id>\d{6})_(?P<subswath>iw[1-3])"
+)
 
 
 def _move_file_in_dir(path: PathOrStr, values: dict) -> Path:
@@ -88,21 +100,12 @@ class PhaseLinkingOptions(BaseModel):
         15, description="Size of the ministack for sequential estimator.", gt=1
     )
     half_window = HalfWindow()
-    compressed_slc_file: Path = Path("compressed_slc.tif")
-    temp_coh_file: Path = Path("temp_coh.tif")
-
-    # validators
-    _move_in_dir = validator(
-        "compressed_slc_file", "temp_coh_file", allow_reuse=True, always=True
-    )(_move_file_in_dir)
-
-    @staticmethod
-    def _format_date_pair(start: date, end: date, fmt="%Y%m%d") -> str:
-        return f"{start.strftime(fmt)}_{end.strftime(fmt)}"
 
 
 class InterferogramNetwork(BaseModel):
     """Options to determine the type of network for interferogram formation."""
+
+    directory: Path = Path("interferograms")
 
     reference_idx: Optional[int] = Field(
         None,
@@ -196,13 +199,20 @@ class WorkerSettings(BaseSettings):
 class Inputs(BaseModel):
     """Options specifying input datasets for workflow."""
 
-    cslc_directory: DirectoryPath = Field(None, description="Path to CSLC files")
-    cslc_file_ext: Optional[str] = Field(
-        ".nc",
-        description="Extension of CSLC files (if providing `cslc_directory`)",
+    cslc_file_list: List[Path] = Field(
+        default_factory=list,
+        description=(
+            "List of CSLC files, or newline-delimited file "
+            "containing list of CSLC files."
+        ),
     )
-    cslc_file_list: List[PathOrStr] = Field(
-        default_factory=list, description="List of CSLC files"
+    subdataset: Optional[str] = Field(
+        None,
+        description=(
+            "If passing HDF5/NetCDF files, subdataset to use from CSLC files. "
+            f"If not specified, but all `cslc_file_list` looks like {OPERA_BURST_RE}, "
+            f" will use {OPERA_DATASET_NAME} as the subdataset."
+        ),
     )
     cslc_date_fmt: str = Field(
         "%Y%m%d",
@@ -218,34 +228,76 @@ class Inputs(BaseModel):
     )
 
     # validators
-    @validator("mask_files", "cslc_file_list", pre=True)
+    @validator("cslc_file_list", pre=True)
+    def _check_input_file_list(cls, v):
+        if v is None:
+            return []
+        if isinstance(v, (str, Path)):
+            v_path = Path(v)
+            # Check if it's a newline-delimited list of input files
+            if v_path.exists() and v_path.is_file():
+                filenames = [Path(f) for f in v_path.read_text().splitlines()]
+                # If given as relative paths, make them relative to the file
+                parent = v_path.parent
+                return [parent / f if not f.is_absolute() else f for f in filenames]
+            else:
+                raise ValueError(
+                    f"Input file list {v_path} does not exist or is not a file."
+                )
+
+        return [Path(f) for f in v]
+
+    @validator("subdataset", pre=True, always=True)
+    def _check_for_opera(cls, v, values):
+        cslc_file_list = values.get("cslc_file_list")
+        # if we're not dealing with all OPERA files, just return whatever they gave
+        if any(re.search(OPERA_BURST_RE, str(f)) is None for f in cslc_file_list):
+            return v
+        # Here we're dealing with all OPERA files, so we need to set the subdataset
+        if v is None:
+            # Assume that the user forgot to set the subdataset, and set it to the
+            # default OPERA dataset name
+            logger.info(
+                "CSLC files look like OPERA files, setting subdataset to"
+                f" {OPERA_DATASET_NAME}."
+            )
+            return OPERA_DATASET_NAME
+        return v
+
+    @validator("mask_files", pre=True)
     def _check_mask_files(cls, v):
-        if isinstance(v, str):
-            return [v]
+        if isinstance(v, (str, Path)):
+            # If they have passed a single mask file, return it as a list
+            return [Path(v)]
         elif v is None:
             return []
-        return v
+        return [Path(f) for f in v]
 
     @root_validator
     def _check_slc_files_exist(cls, values):
         file_list = values.get("cslc_file_list")
-        directory = values.get("cslc_directory")
+        date_fmt = values.get("cslc_date_fmt")
         if not file_list:
-            if not directory:
-                raise ValueError("Must specify either cslc_file_list or cslc_directory")
+            raise ValueError("Must specify list of input SLC files.")
 
-            ext = values.get("cslc_file_ext")
-            file_list = sorted(directory.glob(f"*{ext}"))
-            # Filter out files that don't have dates in the filename
-            date_fmt = values.get("cslc_date_fmt")
-            file_list = [str(f) for f in file_list if get_dates(f, fmt=date_fmt)]
-            values["cslc_file_list"] = file_list
-            # Save the directory, if used, as an absolute path
-            values["cslc_directory"] = directory.absolute()
-        else:
-            # If the file_list is directly provided, null out the directory/extension
-            values["cslc_directory"] = None
-            values["cslc_file_ext"] = None
+        # Filter out files that don't have dates in the filename
+        file_matching_date = [Path(f) for f in file_list if get_dates(f, fmt=date_fmt)]
+        if len(file_matching_date) < len(file_list):
+            raise ValueError(
+                f"Found {len(file_matching_date)} files with dates in the filename"
+                f" out of {len(file_list)} files."
+            )
+
+        ext = file_list[0].suffix
+        # If they're HDF5/NetCDF files, we need to check that the subdataset exists
+        if ext in [".h5", ".nc"]:
+            subdataset = values.get("subdataset")
+            # gdal formatting function will raise an error if subdataset doesn't exist
+            _ = [format_nc_filename(f, subdataset) for f in file_list]
+
+        file_list, _ = sort_files_by_date(file_list, file_date_fmt=date_fmt)
+        # Coerce the file_list to a list of Path objects, sorted
+        values["cslc_file_list"] = [Path(f) for f in file_list]
         return values
 
 
@@ -255,12 +307,13 @@ class Outputs(BaseModel):
     output_format: OutputFormat = OutputFormat.NETCDF
     scratch_directory: Path = Path("scratch")
     output_directory: Path = Path("output")
-    output_resolution: List[float] = Field(
-        [20, 20],
+    output_resolution: Optional[Dict[str, int]] = Field(
+        # {"x": 20, "y": 20},
+        None,
         description="Output (x, y) resolution (in units of input data)",
     )
-    strides: List[int] = Field(
-        [1, 1],
+    strides: Dict[str, int] = Field(
+        {"x": 1, "y": 1},
         description=(
             "Alternative to specifying output resolution: Specify the (x, y) strides"
             " (decimation factor) to perform while processing input. For example,"
@@ -288,13 +341,46 @@ class Outputs(BaseModel):
     def _dir_is_absolute(cls, v):
         return v.absolute()
 
+    @validator("output_resolution", "strides", pre=True, always=True)
+    def _check_resolution(cls, v):
+        """Allow the user to specify just one float, applying to both dimensions."""
+        if isinstance(v, (int, float)):
+            return {"x": v, "y": v}
+        return v
+
+    @validator("strides", always=True)
+    def _check_strides_against_res(cls, strides, values):
+        """Compute the output resolution from the strides."""
+        resolution = values.get("output_resolution")
+        if strides is not None and resolution is not None:
+            raise ValueError("Cannot specify both strides and output_resolution.")
+        elif strides is None and resolution is None:
+            raise ValueError("Must specify either strides or output_resolution.")
+
+        # Check that the dict has the correct keys
+        if strides is not None:
+            if not set(strides.keys()) == {"x", "y"}:
+                raise ValueError("Strides must be a dict with keys 'x' and 'y'")
+            # and that the strides are integers
+            if not all([isinstance(v, int) for v in strides.values()]):
+                raise ValueError("Strides must be integers")
+        if resolution is not None:
+            if not set(resolution.keys()) == {"x", "y"}:
+                raise ValueError("Resolution must be a dict with keys 'x' and 'y'")
+            # and that the resolution is valid, > 0. Can be int or float
+            if any([v <= 0 for v in resolution.values()]):
+                raise ValueError("Resolutions must be > 0")
+            # TODO: compute strides from resolution
+            raise NotImplementedError(
+                "output_resolution not yet implemented. Use `strides`."
+            )
+        return strides
+
 
 class Workflow(BaseModel):
     """Configuration for the workflow.
 
-    Required fields are in `Inputs`.
-    Must specify either `cslc_file_list`, or `cslc_directory` and
-    a `cslc_file_ext`.
+    Required fields are in `Inputs`, where you must specify `cslc_file_list`.
     """
 
     workflow_name: str = WorkflowName.STACK
@@ -318,6 +404,7 @@ class Workflow(BaseModel):
     # internal helpers
     # Stores the list of directories to be created by the workflow
     _directory_list: List[Path] = PrivateAttr(default_factory=list)
+    _date_list: List[date] = PrivateAttr(default_factory=list)
 
     # validators
     @root_validator
@@ -347,10 +434,10 @@ class Workflow(BaseModel):
             pl_opts.directory = scratch_dir / pl_opts.directory
         pl_opts.directory = pl_opts.directory.absolute()
 
-        if not pl_opts.compressed_slc_file.parent.parent == scratch_dir:
-            pl_opts.compressed_slc_file = scratch_dir / pl_opts.compressed_slc_file
-        if not pl_opts.temp_coh_file.parent.parent == scratch_dir:
-            pl_opts.temp_coh_file = scratch_dir / pl_opts.temp_coh_file
+        ifg_opts = values["interferogram_network"]
+        if not ifg_opts.directory.parent == scratch_dir:
+            ifg_opts.directory = scratch_dir / ifg_opts.directory
+        ifg_opts.directory = ifg_opts.directory.absolute()
 
         unw_opts = values["unwrap_options"]
         if not unw_opts.directory.parent == scratch_dir:
@@ -398,16 +485,23 @@ class Workflow(BaseModel):
         return cls(**data)
 
     def __init__(self, **data):
-        """After validation, initialize and store the directory list."""
+        """After validation, set up properties for use during workflow run."""
         super().__init__(**data)
+
         # Track the directories that need to be created at start of workflow
         self._directory_list = [
             self.outputs.scratch_directory,
             self.outputs.output_directory,
             self.ps_options.directory,
             self.phase_linking.directory,
+            self.interferogram_network.directory,
             self.unwrap_options.directory,
         ]
+
+        # Store the dates parsed from the input files
+        self._date_list = parse_slc_strings(
+            self.inputs.cslc_file_list, fmt=self.inputs.cslc_date_fmt
+        )
 
     def create_dir_tree(self, debug=False):
         """Create the directory tree for the workflow."""

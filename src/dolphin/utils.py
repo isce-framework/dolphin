@@ -1,7 +1,7 @@
 import datetime
 import re
 from pathlib import Path
-from typing import Iterable, List, Union
+from typing import Iterable, List, Tuple, Union
 
 import numpy as np
 from numpy.typing import DTypeLike
@@ -181,3 +181,40 @@ def _date_format_to_regex(date_format):
 
     # Return the resulting regular expression
     return re.compile(date_format)
+
+
+def sort_files_by_date(
+    files: Iterable[Filename], file_date_fmt: str = "%Y%m%d"
+) -> Tuple[List, List]:
+    """Sort a list of files by date.
+
+    Parameters
+    ----------
+    files : Iterable[Filename]
+        List of files to sort.
+    file_date_fmt : str, optional
+        Datetime format passed to `strptime`, by default "%Y%m%d"
+
+    Returns
+    -------
+    file_list : List[Filename]
+        Sorted list of files.
+    dates : List[datetime.date] or List[Tuple[datetime.date,...]]
+        Sorted list of dates corresponding to the files.
+    """
+    date_lists = [get_dates(f, fmt=file_date_fmt) for f in files]
+    # For SLCs or single-date files, just return the first date
+    if all(len(d) == 1 for d in date_lists):
+        dates = [d[0] for d in date_lists]
+    else:
+        # For multi-date files, return a List of dates
+        dates = [list(d) for d in date_lists]  # type: ignore
+
+    file_dates = sorted(
+        [(f, d) for f, d in zip(files, dates)],
+        # use the date or dates as the key
+        key=lambda f_d_tuple: f_d_tuple[1],  # type: ignore
+    )
+    # Unpack the sorted pairs with new sorted values
+    file_list, dates = zip(*file_dates)  # type: ignore
+    return list(file_list), list(dates)
