@@ -19,7 +19,7 @@ DEFAULT_BLOCK_BYTES = 32e6
 
 
 class VRTStack:
-    """Class for creating VRTs from a list of raster files.
+    """Class for creating a VRT for a stack of raster files.
 
     Attributes
     ----------
@@ -99,9 +99,6 @@ class VRTStack:
         self.outfile = Path(outfile).resolve()
         # Assumes that all files use the same subdataset (if NetCDF)
         self.subdataset = subdataset
-
-        # If we're using .h5 or .nc, get the GDAL-compatible paths to write to the VRT
-        # Otherwise this will just be the file_list as is
 
         self._assert_images_same_size()
 
@@ -186,6 +183,10 @@ class VRTStack:
 
     @property
     def _gdal_file_strings(self):
+        """Get the GDAL-compatible paths to write to the VRT.
+
+        If we're not using .h5 or .nc, this will just be the file_list as is.
+        """
         return [io.format_nc_filename(f, self.subdataset) for f in self.file_list]
 
     def read_stack(self, band: Optional[int] = None, subsample_factor: int = 1):

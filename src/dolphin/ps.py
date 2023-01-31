@@ -40,7 +40,7 @@ def create_ps(
         The maximum amount of data to read at a time (in GB).
         Default is 1.0 GB.
     """
-    from .vrt import VRTStack
+    from .stack import VRTStack
 
     # Initialize the output files with zeros
     types = [np.uint8, np.float32, np.float32]

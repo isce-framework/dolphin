@@ -2,7 +2,7 @@ import argparse
 from pathlib import Path
 
 from dolphin._log import get_log
-from dolphin.vrt import VRTStack
+from dolphin.stack import VRTStack
 
 logger = get_log()
 

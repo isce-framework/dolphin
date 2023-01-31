@@ -5,7 +5,7 @@ import numpy.testing as npt
 import pytest
 from osgeo import gdal
 
-from dolphin import io, vrt
+from dolphin import io, stack
 
 
 def test_load(raster_100_by_200):
@@ -219,7 +219,7 @@ def test_get_nodata_mask(tmpdir):
     gdal.Translate(str(path2), str(path1))
     file_list = [path1, path2]
 
-    vrt_stack = vrt.VRTStack(file_list, outfile=tmpdir / "stack2.vrt")
+    vrt_stack = stack.VRTStack(file_list, outfile=tmpdir / "stack2.vrt")
 
     m = io.get_stack_nodata_mask(
         vrt_stack.outfile, output_file=tmpdir / "mask.tif", buffer_pixels=0

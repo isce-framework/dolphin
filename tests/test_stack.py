@@ -5,8 +5,8 @@ import numpy.testing as npt
 import pytest
 from osgeo import gdal
 
+from dolphin.stack import VRTStack
 from dolphin.utils import _get_path_from_gdal_str
-from dolphin.vrt import VRTStack
 
 # Note: uses the fixtures from conftest.py
 

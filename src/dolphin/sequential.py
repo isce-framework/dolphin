@@ -23,8 +23,8 @@ from dolphin._log import get_log
 from dolphin._types import Filename
 from dolphin.interferogram import VRTInterferogram
 from dolphin.phase_link import PhaseLinkRuntimeError, run_mle
+from dolphin.stack import VRTStack
 from dolphin.utils import upsample_nearest
-from dolphin.vrt import VRTStack
 
 logger = get_log()
 
