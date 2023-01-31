@@ -293,7 +293,8 @@ class Inputs(BaseModel):
         if ext in [".h5", ".nc"]:
             subdataset = values.get("subdataset")
             # gdal formatting function will raise an error if subdataset doesn't exist
-            _ = [format_nc_filename(f, subdataset) for f in file_list]
+            for f in file_list:
+                format_nc_filename(f, subdataset)
 
         file_list, _ = sort_files_by_date(file_list, file_date_fmt=date_fmt)
         # Coerce the file_list to a list of Path objects, sorted

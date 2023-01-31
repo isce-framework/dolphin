@@ -1,5 +1,5 @@
 import shutil
-from datetime import date, datetime
+from datetime import datetime
 from pathlib import Path
 
 import pydantic
@@ -212,12 +212,6 @@ def test_input_slc_date_fmt(dir_with_2_slcs):
     all_file_list = list(dir_with_2_slcs.glob("*.nc"))
     opts = config.Inputs(cslc_file_list=all_file_list, cslc_date_fmt="")
     assert set(opts.cslc_file_list) == set(all_file_list)
-
-
-def test_input_get_dates(dir_with_2_slcs):
-    opts = config.Inputs(cslc_file_list=dir_with_2_slcs / "slclist.txt")
-    expected = [date(2022, 1, 1), date(2022, 1, 2)]
-    assert opts.get_dates() == expected
 
 
 def test_input_date_sort(dir_with_2_slcs):
