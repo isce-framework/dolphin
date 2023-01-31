@@ -439,7 +439,7 @@ def _nodata_to_zero(
     if outfile is None:
         if ext is None:
             ext = in_p.suffix
-        out_dir: Path = in_p.parent if out_dir is None else Path(out_dir)
+        out_dir = in_p.parent
         outfile = out_dir / (in_p.stem + "_tmp" + ext)
 
     ds_in = gdal.Open(fspath(infile))
