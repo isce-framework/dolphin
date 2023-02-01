@@ -1,3 +1,8 @@
+"""Functions for reading from and writing to raster files.
+
+This module heavily relies on GDAL and provides many convenience/
+wrapper functions to write/iterate over blocks of large raster files.
+"""
 import copy
 from datetime import date
 from os import fspath
@@ -161,41 +166,6 @@ def format_nc_filename(filename: Filename, ds_name: Optional[str] = None) -> str
         raise ValueError("Must provide dataset name for HDF5/NetCDF files")
 
     return f'NETCDF:"{filename}":"//{ds_name.lstrip("/")}"'
-
-
-def _guess_gdal_dataset(filename: Filename) -> str:
-    """Guess the GDAL dataset from a NetCDF/HDF5 filename.
-
-    Parameters
-    ----------
-    filename : str or Path
-        Path to the file to load.
-
-    Returns
-    -------
-    ds : str
-        GDAL dataset.
-    """
-    logger.debug(
-        "No dataset name specified for %s, guessing from file contents", filename
-    )
-    info = gdal.Info(fspath(filename), format="json")
-    if len(info["bands"]) > 0:
-        # This means that gdal already found bands to read with just `filename`
-        # so try that
-        return fspath(filename)
-    # Otherwise, check if it found subdatasets
-    sds = info.get("metadata", {}).get("SUBDATASETS", {})
-    if not sds:
-        raise ValueError(f"No subdatasets found in {filename}")
-    # {'SUBDATASET_1_NAME': 'HDF5:"t087_185682_iw2_20180306_VV.h5"://SLC/VV',
-    #  'SUBDATASET_1_DESC': '[4720x20220] //SLC/VV (complex, 32-bit floating-point)', ...
-    for i in range(len(sds) // 2):
-        k = f"SUBDATASET_{i+1}_NAME"
-        d = f"SUBDATASET_{i+1}_DESC"
-        if "complex" in sds[d]:
-            return sds[k].replace("HDF5:", "NETCDF:")
-    raise ValueError(f"No complex subdatasets found in {filename}")
 
 
 def copy_projection(src_file: Filename, dst_file: Filename) -> None:
