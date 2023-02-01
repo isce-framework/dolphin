@@ -194,7 +194,7 @@ def merge_images(
         cur_out = io.load_gdal(
             outfile, rows=slice(row_top, row_bottom), cols=slice(col_left, col_right)
         )
-        in_nodata = io.get_nodata(f)
+        in_nodata = io.get_nodata(f)  # Assume all bands have same nodata as band 1
         cur_out = _blend_new_arr(
             cur_out, arr_in, nodata_vals=[in_nodata, out_nodata, np.nan]
         )

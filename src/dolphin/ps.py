@@ -2,6 +2,7 @@
 import warnings
 from os import fspath
 from pathlib import Path
+from typing import Optional
 
 import numpy as np
 from osgeo import gdal
@@ -20,7 +21,7 @@ def create_ps(
     output_file: Filename,
     amp_mean_file: Filename,
     amp_dispersion_file: Filename,
-    amp_dispersion_threshold: float = 0.42,
+    amp_dispersion_threshold: float = 0.35,
     max_ram_gb: float = 1.0,
 ):
     """Create the amplitude dispersion, mean, and PS files.
@@ -36,7 +37,7 @@ def create_ps(
     amp_mean_file : Filename
         The output mean amplitude file.
     amp_dispersion_threshold : float, optional
-        The threshold for the amplitude dispersion. Default is 0.42.
+        The threshold for the amplitude dispersion. Default is 0.35.
     max_ram_gb : int, optional
         The maximum amount of data to read at a time (in GB).
         Default is 1.0 GB.
@@ -91,7 +92,11 @@ def create_ps(
         write_block(ps, output_file, rows.start, cols.start)
 
 
-def calc_ps_block(stack_mag: np.ndarray, amp_dispersion_threshold: float = 0.42):
+def calc_ps_block(
+    stack_mag: np.ndarray,
+    amp_dispersion_threshold: float = 0.35,
+    min_count: Optional[int] = None,
+):
     r"""Calculate the amplitude dispersion for a block of data.
 
     The amplitude dispersion is defined as the standard deviation of a pixel's
@@ -110,7 +115,12 @@ def calc_ps_block(stack_mag: np.ndarray, amp_dispersion_threshold: float = 0.42)
     amp_dispersion_threshold : float, optional
         The threshold for the amplitude dispersion to label a pixel as a PS:
             ps = amp_disp < amp_dispersion_threshold
-        Default is 0.42.
+        Default is 0.35.
+    min_count : int, optional
+        The minimum number of valid pixels to calculate the mean and standard
+        deviation. If the number of valid pixels is less than `min_count`,
+        then the mean and standard deviation are set to 0 (and the pixel is
+        not a PS). Default is 90% the number of SLCs: `int(0.9 * stack_mag.shape[0])`.
 
     Returns
     -------
@@ -123,21 +133,35 @@ def calc_ps_block(stack_mag: np.ndarray, amp_dispersion_threshold: float = 0.42)
     ps : np.ndarray
         The persistent scatterers for the block.
         dtype: bool
+
+    Notes
+    -----
+    The min_count is used to prevent the mean and standard deviation from being
+    calculated for pixels that are not valid for most of the SLCs. This happens
+    when the burst footprints shift around and pixels near the edge get only one or
+    two acquisitions.
+    Since fewer samples are used to calculate the mean and standard deviation,
+    there is a higher false positive risk for these edge pixels.
     """
     if np.iscomplexobj(stack_mag):
         raise ValueError("The input `stack_mag` must be real-valued.")
-    # Make the nans into 0s to ignore them
-    np.nan_to_num(stack_mag, copy=False)
 
-    # TODO: is it worth creating each ndarray in advance and use `out=`?
-    mean = np.nanmean(stack_mag, axis=0)
-    std_dev = np.nanstd(stack_mag, axis=0)
+    if min_count is None:
+        min_count = int(0.9 * stack_mag.shape[0])
 
-    # Calculate the amplitude dispersion and replace nans with 0s
     with warnings.catch_warnings():
-        # ignore the warning about nansum of empty slice
+        # ignore the warning about nansum/nanmean of empty slice
         warnings.simplefilter("ignore", category=RuntimeWarning)
+
+        # TODO: is it worth creating each ndarray in advance and use `out=`?
+        mean = np.nanmean(stack_mag, axis=0)
+        std_dev = np.nanstd(stack_mag, axis=0)
+        count = np.count_nonzero(~np.isnan(stack_mag), axis=0)
         amp_disp = std_dev / mean
+    # Mask out the pixels with too few valid pixels
+    amp_disp[count < min_count] = np.nan
+    # replace nans/infinities with 0s, which will mean nodata
+    mean = np.nan_to_num(mean, nan=0, posinf=0, neginf=0, copy=False)
     amp_disp = np.nan_to_num(amp_disp, nan=0, posinf=0, neginf=0, copy=False)
 
     ps = amp_disp < amp_dispersion_threshold
