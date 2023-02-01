@@ -1,7 +1,7 @@
 site_name: Documentation for dolphin
 
 theme:
-  name: "readthedocs"
+  name: "material"
   favicon: img/favicon.ico
   logo: img/apple-touch-icon.png
   highlightjs: true

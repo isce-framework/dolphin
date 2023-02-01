@@ -102,9 +102,9 @@ def calc_ps_block(
     The amplitude dispersion is defined as the standard deviation of a pixel's
     magnitude divided by the mean of the magnitude:
 
-        \[
-        d_a = \frac{\sigma(|Z|)}{\mu(|Z|)}
-        \]
+    \[
+    d_a = \frac{\sigma(|Z|)}{\mu(|Z|)}
+    \]
 
     where $Z \in \mathbb{R}^{N}$ is one pixel's complex data for $N$ SLCs.
 
