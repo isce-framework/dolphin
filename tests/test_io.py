@@ -1,9 +1,11 @@
+from pathlib import Path
+
 import numpy as np
 import numpy.testing as npt
 import pytest
 from osgeo import gdal
 
-from dolphin import io, vrt
+from dolphin import io, stack
 
 
 def test_load(raster_100_by_200):
@@ -38,6 +40,19 @@ def test_load_slice_oob(raster_100_by_200):
         block = io.load_gdal(raster_100_by_200, rows=slice(300, 400), cols=slice(0, 10))
 
 
+def test_load_masked(raster_with_nan_block):
+    arr = io.load_gdal(raster_with_nan_block, masked=True)
+    assert isinstance(arr, np.ma.masked_array)
+    assert np.ma.is_masked(arr)
+    assert arr[arr.mask].size == 32 * 32
+    assert np.all(arr.mask[:32, :32])
+
+    arr = io.load_gdal(raster_with_nan_block)
+    assert not isinstance(arr, np.ma.masked_array)
+    assert not np.ma.is_masked(arr)
+    assert np.all(np.isnan(arr[:32, :32]))
+
+
 def test_compute_out_size():
     strides = {"x": 3, "y": 3}
     assert (2, 2) == io.compute_out_shape((6, 6), strides)
@@ -58,7 +73,7 @@ def test_get_raster_bounds(slc_file_list_nc_wgs84):
     assert bnds == expected
 
 
-def test_save_like(raster_100_by_200, tmpdir):
+def test_write_arr_like(raster_100_by_200, tmpdir):
     arr = io.load_gdal(raster_100_by_200)
 
     ones = np.ones_like(arr)
@@ -69,7 +84,7 @@ def test_save_like(raster_100_by_200, tmpdir):
     npt.assert_array_almost_equal(ones, ones_loaded)
 
 
-def test_save_empty_like(raster_100_by_200, tmpdir):
+def test_write_empty_like(raster_100_by_200, tmpdir):
     save_name = tmpdir / "empty.tif"
     io.write_arr(arr=None, like_filename=raster_100_by_200, output_name=save_name)
 
@@ -77,7 +92,28 @@ def test_save_empty_like(raster_100_by_200, tmpdir):
     zeros = np.zeros_like(empty_loaded)
     npt.assert_array_almost_equal(empty_loaded, zeros)
 
-    # TODO: test other metadata
+
+def test_write_metadata(raster_100_by_200, tmpdir):
+    save_name = tmpdir / "empty_nometa.tif"
+    io.write_arr(arr=None, like_filename=raster_100_by_200, output_name=save_name)
+    assert io.get_dtype(save_name) == np.complex64
+    assert io.get_nodata(save_name) is None
+
+    save_name = tmpdir / "empty_bool_255_nodata.tif"
+    io.write_arr(
+        arr=None,
+        like_filename=raster_100_by_200,
+        output_name=save_name,
+        dtype=bool,
+        nodata=255,
+    )
+    assert io.get_nodata(save_name) == 255
+
+    save_name = tmpdir / "empty_nan_nodata.tif"
+    io.write_arr(
+        arr=None, like_filename=raster_100_by_200, output_name=save_name, nodata=np.nan
+    )
+    assert np.isnan(io.get_nodata(save_name))
 
 
 def test_save_strided(raster_100_by_200, tmpdir):
@@ -196,7 +232,7 @@ def test_get_nodata_mask(tmpdir):
     gdal.Translate(str(path2), str(path1))
     file_list = [path1, path2]
 
-    vrt_stack = vrt.VRTStack(file_list, outfile=tmpdir / "stack2.vrt")
+    vrt_stack = stack.VRTStack(file_list, outfile=tmpdir / "stack2.vrt")
 
     m = io.get_stack_nodata_mask(
         vrt_stack.outfile, output_file=tmpdir / "mask.tif", buffer_pixels=0
@@ -376,3 +412,31 @@ def test_iter_blocks_nodata_mask(tiled_raster_100_by_200):
         )
     )
     assert len(blocks) == expected_num_blocks - 1
+
+
+def test_format_nc_filename():
+    expected = 'NETCDF:"/usr/19990101/20200303_20210101.nc":"//variable"'
+    assert (
+        io.format_nc_filename("/usr/19990101/20200303_20210101.nc", "variable")
+        == expected
+    )
+
+    # check on Path
+    assert (
+        io.format_nc_filename(Path("/usr/19990101/20200303_20210101.nc"), "variable")
+        == expected
+    )
+
+    # check non-netcdf file
+    assert (
+        io.format_nc_filename("/usr/19990101/20200303_20210101.tif")
+        == "/usr/19990101/20200303_20210101.tif"
+    )
+    assert (
+        io.format_nc_filename("/usr/19990101/20200303_20210101.int", "ignored")
+        == "/usr/19990101/20200303_20210101.int"
+    )
+
+    with pytest.raises(ValueError):
+        # Missing the subdataset name
+        io.format_nc_filename("/usr/19990101/20200303_20210101.nc")

@@ -56,6 +56,7 @@ def load_gdal(
     subsample_factor: int = 1,
     rows: Optional[slice] = None,
     cols: Optional[slice] = None,
+    masked: bool = False,
 ):
     """Load a gdal file into a numpy array.
 
@@ -72,6 +73,9 @@ def load_gdal(
         Rows to load. Default is None (load all rows).
     cols : slice, optional
         Columns to load. Default is None (load all columns).
+    masked : bool, optional
+        If True, return a masked array using the raster's `nodata` value.
+        Default is False.
 
     Returns
     -------
@@ -111,11 +115,40 @@ def load_gdal(
         out = np.empty((nrows_out, ncols_out), dtype=dt)
         bnd = ds.GetRasterBand(band)
         bnd.ReadAsArray(xoff, yoff, xsize, ysize, buf_obj=out, resample_alg=resamp)
-    return out
+
+    if not masked:
+        return out
+    # Get the nodata value
+    nd = get_nodata(filename)
+    if np.isnan(nd):
+        return np.ma.masked_invalid(out)
+    else:
+        return np.ma.masked_equal(out, nd)
 
 
 def format_nc_filename(filename: Filename, ds_name: Optional[str] = None) -> str:
-    """Format an HDF5/NetCDF filename, with dataset for reading using GDAL."""
+    """Format an HDF5/NetCDF filename with dataset for reading using GDAL.
+
+    If `filename` is already formatted, or if `filename` is not an HDF5/NetCDF
+    file (based on the file extension), it is returned unchanged.
+
+    Parameters
+    ----------
+    filename : str or PathLike
+        Filename to format.
+    ds_name : str, optional
+        Dataset name to use. If not provided for a .h5 or .nc file, an error is raised.
+
+    Returns
+    -------
+    str
+        Formatted filename.
+
+    Raises
+    ------
+    ValueError
+        If `ds_name` is not provided for a .h5 or .nc file.
+    """
     # If we've already formatted the filename, return it
     if str(filename).startswith("NETCDF:") or str(filename).startswith("HDF5:"):
         return str(filename)
@@ -123,10 +156,11 @@ def format_nc_filename(filename: Filename, ds_name: Optional[str] = None) -> str
     if not (fspath(filename).endswith(".nc") or fspath(filename).endswith(".h5")):
         return fspath(filename)
 
+    # Now we're definitely dealing with an HDF5/NetCDF file
     if ds_name is None:
-        return _guess_gdal_dataset(filename)
-    else:
-        return f'NETCDF:"{filename}":"//{ds_name.lstrip("/")}"'
+        raise ValueError("Must provide dataset name for HDF5/NetCDF files")
+
+    return f'NETCDF:"{filename}":"//{ds_name.lstrip("/")}"'
 
 
 def _guess_gdal_dataset(filename: Filename) -> str:
@@ -188,13 +222,15 @@ def copy_projection(src_file: Filename, dst_file: Filename) -> None:
     ds_src = ds_dst = None
 
 
-def get_nodata(filename: Filename) -> Optional[float]:
+def get_nodata(filename: Filename, band: int = 1) -> Optional[float]:
     """Get the nodata value from a file.
 
     Parameters
     ----------
     filename : Filename
         Path to the file to load.
+    band : int, optional
+        Band to get nodata value for, by default 1.
 
     Returns
     -------
@@ -202,7 +238,7 @@ def get_nodata(filename: Filename) -> Optional[float]:
         Nodata value, or None if not found.
     """
     ds = gdal.Open(fspath(filename))
-    nodata = ds.GetRasterBand(1).GetNoDataValue()
+    nodata = ds.GetRasterBand(band).GetNoDataValue()
     return nodata
 
 
@@ -406,7 +442,13 @@ def write_arr(
         b = ds_like.GetRasterBand(1)
         nodata = b.GetNoDataValue()
 
-    nbands = nbands or (ds_like.RasterCount if ds_like else arr.shape[0])
+    if nbands is None:
+        if arr is not None:
+            nbands = arr.shape[0]
+        elif ds_like is not None:
+            nbands = ds_like.RasterCount
+        else:
+            nbands = 1
 
     if driver is None:
         if str(output_name).endswith(".tif"):
@@ -446,11 +488,16 @@ def write_arr(
     # Write the actual data
     if arr is not None:
         for i in range(nbands):
-            print(f"Writing band {i+1}/{nbands}")
+            logger.debug(f"Writing band {i+1}/{nbands}")
             bnd = ds_out.GetRasterBand(i + 1)
             bnd.WriteArray(arr[i])
-            if nodata is not None:
-                bnd.SetNoDataValue(nodata)
+
+    # Set the nodata value for each band
+    if nodata is not None:
+        for i in range(nbands):
+            logger.debug(f"Setting nodata for band {i+1}/{nbands}")
+            bnd = ds_out.GetRasterBand(i + 1)
+            bnd.SetNoDataValue(nodata)
 
     ds_out.FlushCache()
     ds_like = ds_out = None
@@ -543,7 +590,7 @@ def get_stack_nodata_mask(
     # cap buffer pixel length to be no more the image size
     buffer_pixels = min(buffer_pixels, min(ds.RasterXSize, ds.RasterYSize))
     for b in compute_bands:
-        print(f"Computing mask for band {b}")
+        logger.debug(f"Computing mask for band {b}")
         bnd = ds.GetRasterBand(b)
         arr = bnd.ReadAsArray()
         if np.isnan(nodata):
@@ -553,7 +600,7 @@ def get_stack_nodata_mask(
 
         # Expand the region with a convolution
         if buffer_pixels > 0:
-            print(f"Padding mask with {buffer_pixels} pixels")
+            logger.debug(f"Padding mask with {buffer_pixels} pixels")
             out_mask &= _erode_nodata(nodata_mask, buffer_pixels)
         else:
             out_mask &= nodata_mask
@@ -652,18 +699,11 @@ def iter_blocks(
         the position of the current block.
         (Only returned if return_slices is True)
     """
-    ds = gdal.Open(fspath(filename))
-    if band is None:
-        # Read all bands
-        read_func = ds.ReadAsArray
-    else:
-        # Read from single band
-        read_func = ds.GetRasterBand(band).ReadAsArray
-
     # Set up the generator of ((row_start, row_end), (col_start, col_end))
+    xsize, ysize = get_raster_xysize(filename)
     slice_gen = slice_iterator(
-        (ds.RasterYSize, ds.RasterXSize),
-        block_shape,
+        arr_shape=(ysize, xsize),
+        block_shape=block_shape,
         overlaps=overlaps,
         start_offsets=start_offsets,
     )
@@ -672,16 +712,9 @@ def iter_blocks(
         if skip_empty and nodata_mask is not None:
             if nodata_mask[rows, cols].all():
                 continue
-        xoff = cols.start
-        yoff = rows.start
-        xsize = cols.stop - cols.start
-        ysize = rows.stop - rows.start
-        cur_block = read_func(
-            xoff,
-            yoff,
-            xsize,
-            ysize,
-        )
+
+        cur_block = load_gdal(filename, band=band, rows=rows, cols=cols)
+
         if skip_empty:
             # Otherwise look at the actual block we loaded
             if np.isnan(nodata):
@@ -695,7 +728,6 @@ def iter_blocks(
             yield cur_block, (rows, cols)
         else:
             yield cur_block
-    ds = None
 
 
 def slice_iterator(
@@ -831,6 +863,6 @@ def get_raster_block_size(filename):
     block_size = ds.GetRasterBand(1).GetBlockSize()
     for i in range(2, ds.RasterCount + 1):
         if block_size != ds.GetRasterBand(i).GetBlockSize():
-            print(f"Warning: {filename} bands have different block shapes.")
+            logger.warning(f"Warning: {filename} bands have different block shapes.")
             break
     return block_size

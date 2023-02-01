@@ -3,7 +3,6 @@ from pathlib import Path
 
 import numpy as np
 import numpy.testing as npt
-import pytest
 
 from dolphin import utils
 
@@ -65,6 +64,8 @@ def test_get_dates():
 
     assert utils.get_dates("/usr/19990101/notadate.tif") == []
 
+
+def test_get_dates_with_format():
     # try other date formats
     fmt = "%Y-%m-%d"
     assert utils.get_dates("2020-03-03_2021-01-01.int", fmt) == [
@@ -75,7 +76,13 @@ def test_get_dates():
 
 def test_get_dates_with_gdal_string():
     # Checks that is can parse 'NETCDF:"/path/to/file.nc":variable'
-    assert utils.get_dates('NETCDF:"/usr/19990101/20200303_20210101.int":variable') == [
+    assert utils.get_dates('NETCDF:"/usr/19990101/20200303_20210101.nc":variable') == [
+        datetime.date(2020, 3, 3),
+        datetime.date(2021, 1, 1),
+    ]
+    assert utils.get_dates(
+        'NETCDF:"/usr/19990101/20200303_20210101.nc":"//variable/2"'
+    ) == [
         datetime.date(2020, 3, 3),
         datetime.date(2021, 1, 1),
     ]
@@ -83,36 +90,6 @@ def test_get_dates_with_gdal_string():
     assert utils.get_dates(
         'DERIVED_SUBDATASET:AMPLITUDE:"/usr/19990101/20200303_20210101.int"'
     ) == [datetime.date(2020, 3, 3), datetime.date(2021, 1, 1)]
-
-
-def test_parse_slc_strings():
-    dt = datetime.date(2020, 3, 3)
-    assert utils.parse_slc_strings(Path("/usr/19990101/asdf20200303.tif")) == dt
-    assert utils.parse_slc_strings("/usr/19990101/asdf20200303.tif") == dt
-    assert utils.parse_slc_strings("20200303.tif") == dt
-    assert utils.parse_slc_strings("20200303") == dt
-    assert utils.parse_slc_strings("20200303.slc") == dt
-
-    assert utils.parse_slc_strings(["20200303.slc", "20200303.tif"]) == [dt, dt]
-
-    with pytest.raises(ValueError):
-        utils.parse_slc_strings("notadate.tif")
-
-    fmt = "%Y-%m-%d"
-    assert utils.parse_slc_strings(["2020-03-03.slc", "2020-03-03.tif"], fmt=fmt) == [
-        dt,
-        dt,
-    ]
-
-
-def test_parse_slc_strings_with_gdal_string():
-    # Checks that is can parse 'NETCDF:"/path/to/file.nc":variable'
-    dt = datetime.date(2020, 3, 3)
-    s = 'NETCDF:"/usr/19990101/asdf20200303.tif":variable'
-    assert utils.parse_slc_strings(s) == dt
-    # Check the derived dataset name too
-    s = 'DERIVED_SUBDATASET:AMPLITUDE:"/usr/19990101/asdf20200303.tif"'
-    assert utils.parse_slc_strings(s) == dt
 
 
 def test_sort_files_by_date():
@@ -123,10 +100,10 @@ def test_sort_files_by_date():
         "slc_20180101.tif",
     ]
     expected_dates = [
-        datetime.date(2018, 1, 1),
-        datetime.date(2019, 1, 1),
-        datetime.date(2020, 3, 3),
-        datetime.date(2021, 1, 1),
+        [datetime.date(2018, 1, 1)],
+        [datetime.date(2019, 1, 1)],
+        [datetime.date(2020, 3, 3)],
+        [datetime.date(2021, 1, 1)],
     ]
     expected_files = sorted(files)
 
@@ -169,6 +146,37 @@ def test_sort_files_by_date_interferograms():
     sorted_files, sorted_dates = utils.sort_files_by_date(files)
     assert sorted_files == sorted(files)  # here lexicographic order is correct
     assert sorted_dates == sorted(dates)
+
+
+def test_sort_files_by_date_compressed_first():
+    # Check that compressed SLCs go first, then SLCs are sorted by date
+    unsorted_files = [
+        "slc_20200101.tif",
+        "slc_20210101.tif",
+        "slc_20190101.tif",
+        "compressed_20180101_20200101.tif",
+        "slc_20180101.tif",
+        "compressed_20200101_20210101.tif",
+    ]
+    expected_dates = [
+        [datetime.date(2018, 1, 1), datetime.date(2020, 1, 1)],
+        [datetime.date(2020, 1, 1), datetime.date(2021, 1, 1)],
+        [datetime.date(2018, 1, 1)],
+        [datetime.date(2019, 1, 1)],
+        [datetime.date(2020, 1, 1)],
+        [datetime.date(2021, 1, 1)],
+    ]
+
+    sorted_files, sorted_dates = utils.sort_files_by_date(unsorted_files)
+    assert sorted_files == [
+        "compressed_20180101_20200101.tif",
+        "compressed_20200101_20210101.tif",
+        "slc_20180101.tif",
+        "slc_20190101.tif",
+        "slc_20200101.tif",
+        "slc_20210101.tif",
+    ]
+    assert sorted_dates == expected_dates
 
 
 def test_take_looks():

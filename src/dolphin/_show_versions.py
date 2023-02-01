@@ -7,14 +7,14 @@ which was adapted from `pandas.show_versions`
 import importlib
 import platform
 import sys
-import typing
+from typing import Dict, Optional
 
 import dolphin
 
 __all__ = ["show_versions"]
 
 
-def _get_sys_info() -> typing.Dict[str, str]:
+def _get_sys_info() -> Dict[str, str]:
     """System information.
 
     Returns
@@ -29,7 +29,7 @@ def _get_sys_info() -> typing.Dict[str, str]:
     }
 
 
-def _get_opera_info():
+def _get_opera_info() -> Dict[str, Optional[str]]:
     """Information on system on core modules.
 
     Returns
@@ -46,12 +46,12 @@ def _get_opera_info():
     return blob
 
 
-def _get_version(modname):
-    if modname in sys.modules:
-        mod = sys.modules[modname]
+def _get_version(module_name: str) -> Optional[str]:
+    if module_name in sys.modules:
+        mod = sys.modules[module_name]
     else:
         try:
-            mod = importlib.import_module(modname)
+            mod = importlib.import_module(module_name)
         except ImportError:
             return None
     try:
@@ -60,7 +60,7 @@ def _get_version(modname):
         return mod.version
 
 
-def _get_deps_info():
+def _get_deps_info() -> Dict[str, Optional[str]]:
     """Overview of the installed version of main dependencies.
 
     Returns
@@ -80,13 +80,13 @@ def _get_deps_info():
     return {name: _get_version(name) for name in deps}
 
 
-def _print_info_dict(info_dict):
+def _print_info_dict(info_dict: Dict) -> None:
     """Print the information dictionary."""
     for key, stat in info_dict.items():
         print(f"{key:>12}: {stat}")
 
 
-def show_versions():
+def show_versions() -> None:
     """Print useful debugging information.
 
     Examples

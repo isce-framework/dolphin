@@ -27,7 +27,6 @@ def slc_stack():
 def slc_file_list(tmp_path, slc_stack):
     shape = slc_stack.shape
     # Write to a file
-    # driver = gdal.GetDriverByName("ENVI")
     driver = gdal.GetDriverByName("GTiff")
     start_date = 20220101
     d = tmp_path / "gtiff"
@@ -200,7 +199,10 @@ def raster_with_nan(tmpdir, tiled_raster_100_by_200):
     nan_arr[0, 0] = np.nan
     output_name = tmpdir / "with_one_nan.tif"
     write_arr(
-        arr=nan_arr, like_filename=tiled_raster_100_by_200, output_name=output_name
+        arr=nan_arr,
+        like_filename=tiled_raster_100_by_200,
+        output_name=output_name,
+        nodata=np.nan,
     )
     return output_name
 
@@ -212,7 +214,10 @@ def raster_with_nan_block(tmpdir, tiled_raster_100_by_200):
     nan_arr = load_gdal(tiled_raster_100_by_200)
     nan_arr[:32, :32] = np.nan
     write_arr(
-        arr=nan_arr, like_filename=tiled_raster_100_by_200, output_name=output_name
+        arr=nan_arr,
+        like_filename=tiled_raster_100_by_200,
+        output_name=output_name,
+        nodata=np.nan,
     )
     return output_name
 

@@ -1,8 +1,11 @@
 import numpy as np
 import numpy.testing as npt
+import pytest
 from osgeo import gdal
 
 import dolphin.ps
+from dolphin import io
+from dolphin.stack import VRTStack
 
 
 def test_ps_block(slc_stack):
@@ -47,6 +50,28 @@ def test_ps_threshold(slc_stack):
     assert ps_pixels.sum() == 0
 
 
+@pytest.fixture
+def vrt_stack(tmp_path, slc_file_list):
+    vrt_file = tmp_path / "test.vrt"
+    return VRTStack(slc_file_list, outfile=vrt_file)
+
+
+def test_create_ps(tmp_path, vrt_stack):
+    dolphin.ps.create_ps(
+        slc_vrt_file=vrt_stack.outfile,
+        amp_dispersion_file=tmp_path / "amp_disp.tif",
+        amp_mean_file=tmp_path / "amp_mean.tif",
+        output_file=tmp_path / "ps_pixels.tif",
+    )
+    pass
+
+
+@pytest.fixture
+def vrt_stack_with_nans(tmp_path, raster_with_nan_block):
+    vrt_file = tmp_path / "test_with_nans.vrt"
+    return VRTStack([raster_with_nan_block, raster_with_nan_block], outfile=vrt_file)
+
+
 def _write_zeros(file, shape):
     driver = gdal.GetDriverByName("ENVI")
     ds = driver.Create(str(file), shape[1], shape[0], 1, gdal.GDT_Float32)
@@ -56,33 +81,8 @@ def _write_zeros(file, shape):
     ds = bnd = None
 
 
-def _read_file(file):
-    ds = gdal.Open(str(file))
-    data = ds.ReadAsArray()
-    ds = None
-    return data
-
-
-def _make_slc_vrt_file(tmp_path, slc_stack):
-    shape = slc_stack.shape
-    # Write to a file
-    driver = gdal.GetDriverByName("ENVI")
-    data_file = tmp_path / f"stack{len(slc_stack)}.slc"
-    ds = driver.Create(str(data_file), shape[2], shape[1], shape[0], gdal.GDT_CFloat32)
-    for i in range(shape[0]):
-        bnd = ds.GetRasterBand(i + 1)
-        bnd.WriteArray(slc_stack[i])
-        bnd = None
-    ds = None
-    # and make a VRT for it
-    vrt_file = data_file.with_suffix(".slc.vrt")
-    gdal.Translate(str(vrt_file), str(data_file))
-
-    return vrt_file
-
-
-def test_update_amp_disp(tmp_path, slc_stack):
-    slc_vrt_file = _make_slc_vrt_file(tmp_path, slc_stack[:1])
+def test_update_amp_disp(tmp_path, vrt_stack, slc_stack, slc_file_list):
+    slc_vrt_file = vrt_stack.outfile
     amp_disp_file = slc_vrt_file.parent / "amp_disp"
     amp_mean_file = slc_vrt_file.parent / "amp_mean"
     # Start out the files with all zeros, and N=0
@@ -95,17 +95,20 @@ def test_update_amp_disp(tmp_path, slc_stack):
 
     for i in range(slc_stack.shape[0]):
         # Make a new VRT file as the stack gets bigger
-        slc_vrt_file = _make_slc_vrt_file(tmp_path, slc_stack[: i + 1])
+
+        # slc_vrt_file = _make_slc_vrt_file(tmp_path, slc_stack[: i + 1])
+        cur_slc_vrt_file = slc_vrt_file.parent / f"slc_{i}.vrt"
+        VRTStack(slc_file_list[: i + 1], outfile=cur_slc_vrt_file)
         dolphin.ps.update_amp_disp(
             amp_mean_file=amp_mean_file,
             amp_dispersion_file=amp_disp_file,
-            slc_vrt_file=slc_vrt_file,
+            slc_vrt_file=cur_slc_vrt_file,
             output_directory=out_path,
         )
         new_amp_file = out_path / amp_mean_file.name
         new_disp_file = out_path / amp_disp_file.name
-        computed_mean = _read_file(new_amp_file)
-        computed_disp = _read_file(new_disp_file)
+        computed_mean = io.load_gdal(new_amp_file)
+        computed_disp = io.load_gdal(new_disp_file)
 
         mean = amp_stack[: i + 1].mean(axis=0)
         sigma = amp_stack[: i + 1].std(axis=0)

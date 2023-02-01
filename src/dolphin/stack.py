@@ -11,8 +11,6 @@ from dolphin import io, utils
 from dolphin._log import get_log
 from dolphin._types import Filename
 
-SENTINEL_WAVELENGTH = 0.05546576
-
 gdal.UseExceptions()
 logger = get_log()
 
@@ -21,7 +19,7 @@ DEFAULT_BLOCK_BYTES = 32e6
 
 
 class VRTStack:
-    """Class for creating VRTs from a list of raster files.
+    """Class for creating a VRT for a stack of raster files.
 
     Attributes
     ----------
@@ -29,10 +27,15 @@ class VRTStack:
         Names of files to stack
     outfile : pathlib.Path, optional (default = Path("slc_stack.vrt"))
         Name of output file to write
-    dates : list[datetime.date]
-        List of datetimes matched from the files in file_list
+    dates : List[List[datetime.date]]
+        List, where each entry is all dates matched from the corresponding file
+        in `file_list`. This is used to sort the files by date.
+        Each entry is a list because some files (compressed SLCs) may have
+        multiple dates in the filename.
     use_abs_path : bool, optional (default = True)
         Write the filepaths of the SLCs in the VRT as "relative=0"
+    subdataset : str, optional
+        Subdataset to use from the files in `file_list`, if using NetCDF files.
     pixel_bbox : tuple[int], optional
         Desired bounding box (in pixels) of subset as (left, bottom, right, top)
     target_extent : tuple[int], optional
@@ -81,22 +84,21 @@ class VRTStack:
         if use_abs_path:
             files = [p.resolve() for p in files]
         # Extract the date/datetimes from the filenames
-        dates = [utils.parse_slc_strings(f, fmt=file_date_fmt) for f in files]
+        dates = [utils.get_dates(f, fmt=file_date_fmt) for f in files]
         if sort_files:
-            files, dates = utils.sort_files_by_date(files, file_date_fmt=file_date_fmt)
+            files, dates = utils.sort_files_by_date(  # type: ignore
+                files, file_date_fmt=file_date_fmt
+            )
 
         # Save the attributes
-        self.file_list = list(files)
-        self.dates = list(dates)
+        self.file_list = files
+        self.dates = dates
         # save for future parsing of dates with `add_file`
         self.file_date_fmt = file_date_fmt
 
         self.outfile = Path(outfile).resolve()
         # Assumes that all files use the same subdataset (if NetCDF)
-        self._subdataset = subdataset
-
-        # If we're using .h5 or .nc, get the GDAL-compatible paths to write to the VRT
-        # Otherwise this will just be the file_list as is
+        self.subdataset = subdataset
 
         self._assert_images_same_size()
 
@@ -181,7 +183,11 @@ class VRTStack:
 
     @property
     def _gdal_file_strings(self):
-        return [io.format_nc_filename(f, self._subdataset) for f in self.file_list]
+        """Get the GDAL-compatible paths to write to the VRT.
+
+        If we're not using .h5 or .nc, this will just be the file_list as is.
+        """
+        return [io.format_nc_filename(f, self.subdataset) for f in self.file_list]
 
     def read_stack(self, band: Optional[int] = None, subsample_factor: int = 1):
         """Read in the SLC stack."""
@@ -199,10 +205,10 @@ class VRTStack:
         self.file_list.append(new_file)
 
         # Parse the new date, and add it to the list
-        new_date = utils.parse_slc_strings(new_file, fmt=self.file_date_fmt)
+        new_date = utils.get_dates(new_file, fmt=self.file_date_fmt)
         self.dates.append(new_date)
         if sort_files:
-            self.file_list, self.dates = utils.sort_files_by_date(
+            self.file_list, self.dates = utils.sort_files_by_date(  # type: ignore
                 self.file_list, file_date_fmt=self.file_date_fmt
             )
 
@@ -310,10 +316,12 @@ class VRTStack:
             name_triplets = [name.split(":") for name in file_strings]
             prefixes, filepaths, subdatasets = zip(*name_triplets)
             # Remove quoting if it was present
-            filepaths = [f.strip('"').strip("'") for f in filepaths]
+            filepaths = [f.replace('"', "").replace("'", "") for f in filepaths]
             if len(set(subdatasets)) > 1:
                 raise NotImplementedError("Only 1 subdataset name is supported")
-            sds = subdatasets[0].lstrip("/")  # Only returning one subdataset name
+            sds = (
+                subdatasets[0].replace('"', "").replace("'", "").lstrip("/")
+            )  # Only returning one subdataset name
         else:
             # If no prefix, the file_strings are actually paths
             filepaths, sds = file_strings, None

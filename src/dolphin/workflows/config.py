@@ -8,6 +8,7 @@ from osgeo import gdal
 from pydantic import (
     BaseModel,
     BaseSettings,
+    Extra,
     Field,
     PrivateAttr,
     root_validator,
@@ -18,7 +19,7 @@ from ruamel.yaml import YAML
 from dolphin import __version__ as _dolphin_version
 from dolphin._log import get_log
 from dolphin.io import format_nc_filename
-from dolphin.utils import get_dates, parse_slc_strings, sort_files_by_date
+from dolphin.utils import get_dates, sort_files_by_date
 
 from ._enums import InterferogramNetworkType, OutputFormat, UnwrapMethod, WorkflowName
 
@@ -46,7 +47,7 @@ def _move_file_in_dir(path: PathOrStr, values: dict) -> Path:
     """
     p = Path(path)
     d = Path(values.get("directory", "."))
-    if not p.parent == d:
+    if p.parent != d:
         return d / p.name
     else:
         return p
@@ -61,10 +62,13 @@ class PsOptions(BaseModel):
     amp_mean_file: Path = Path("amp_mean.tif")
 
     amp_dispersion_threshold: float = Field(
-        0.42,
+        0.35,
         description="Amplitude dispersion threshold to consider a pixel a PS.",
         gt=0.0,
     )
+
+    class Config:
+        extra = Extra.forbid  # raise error if extra fields passed in
 
     # validators: Check directory exists, and that outputs are within directory
     _move_in_dir = validator(
@@ -124,6 +128,9 @@ class InterferogramNetwork(BaseModel):
         gt=0,
     )
     network_type = InterferogramNetworkType.SINGLE_REFERENCE
+
+    class Config:
+        extra = Extra.forbid  # raise error if extra fields passed in
 
     # validation
     @root_validator
@@ -194,6 +201,7 @@ class WorkerSettings(BaseSettings):
         fields = {
             "gpu_enabled": {"env": ["dolphin_gpu_enabled", "gpu"]},
         }
+        extra = Extra.forbid  # raise error if extra fields passed in
 
 
 class Inputs(BaseModel):
@@ -226,6 +234,9 @@ class Inputs(BaseModel):
             " 0 for no data/invalid, and 1 for data."
         ),
     )
+
+    class Config:
+        extra = Extra.forbid  # raise error if extra fields passed in
 
     # validators
     @validator("cslc_file_list", pre=True)
@@ -293,16 +304,13 @@ class Inputs(BaseModel):
         if ext in [".h5", ".nc"]:
             subdataset = values.get("subdataset")
             # gdal formatting function will raise an error if subdataset doesn't exist
-            _ = [format_nc_filename(f, subdataset) for f in file_list]
+            for f in file_list:
+                format_nc_filename(f, subdataset)
 
         file_list, _ = sort_files_by_date(file_list, file_date_fmt=date_fmt)
         # Coerce the file_list to a list of Path objects, sorted
         values["cslc_file_list"] = [Path(f) for f in file_list]
         return values
-
-    def get_dates(self) -> List[date]:
-        """Get the dates parsed from the input files."""
-        return parse_slc_strings(self.cslc_file_list, fmt=self.cslc_date_fmt)
 
 
 class Outputs(BaseModel):
@@ -339,6 +347,9 @@ class Outputs(BaseModel):
         ["TILED=YES", "COMPRESS=DEFLATE", "ZLEVEL=5"],
         description="GDAL creation options for GeoTIFF files",
     )
+
+    class Config:
+        extra = Extra.forbid  # raise error if extra fields passed in
 
     # validators
     @validator("output_directory", "scratch_directory", always=True)
@@ -409,6 +420,9 @@ class Workflow(BaseModel):
     # Stores the list of directories to be created by the workflow
     _directory_list: List[Path] = PrivateAttr(default_factory=list)
     _date_list: List[date] = PrivateAttr(default_factory=list)
+
+    class Config:
+        extra = Extra.forbid  # raise error if extra fields passed in
 
     # validators
     @root_validator
@@ -501,9 +515,6 @@ class Workflow(BaseModel):
             self.interferogram_network.directory,
             self.unwrap_options.directory,
         ]
-
-        # Store the dates parsed from the input files
-        self._date_list = self.inputs.get_dates()
 
     def create_dir_tree(self, debug=False):
         """Create the directory tree for the workflow."""

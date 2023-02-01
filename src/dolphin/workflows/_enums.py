@@ -19,7 +19,7 @@ class OutputFormat(str, Enum):
     """Possible output formats for the workflow."""
 
     ENVI = "ENVI"
-    GTiff = "GTiff"
+    GTIFF = "GTiff"
     NETCDF = "NetCDF"
 
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 from typing import List
 
-from dolphin import ps, sequential, vrt
+from dolphin import ps, sequential, stack
 from dolphin._log import get_log, log_runtime
 from dolphin.interferogram import Network, VRTInterferogram
 
@@ -32,9 +32,9 @@ def run(cfg: Workflow, debug: bool = False) -> List[VRTInterferogram]:
     subdataset = cfg.inputs.subdataset
     vrt_path = scratch_dir / "slc_stack.vrt"
     if vrt_path.exists():
-        vrt_stack = vrt.VRTStack.from_vrt_file(vrt_path)
+        vrt_stack = stack.VRTStack.from_vrt_file(vrt_path)
     else:
-        vrt_stack = vrt.VRTStack(
+        vrt_stack = stack.VRTStack(
             input_file_list,
             subdataset=subdataset,
             outfile=scratch_dir / "slc_stack.vrt",
