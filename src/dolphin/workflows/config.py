@@ -62,7 +62,7 @@ class PsOptions(BaseModel):
     amp_mean_file: Path = Path("amp_mean.tif")
 
     amp_dispersion_threshold: float = Field(
-        0.42,
+        0.35,
         description="Amplitude dispersion threshold to consider a pixel a PS.",
         gt=0.0,
     )
