@@ -46,14 +46,6 @@ DEFAULT_DATETIME_FORMAT = "%Y%m%d"
 logger = get_log()
 
 
-def get_raster_xysize(filename: Filename) -> Tuple[int, int]:
-    """Get the xsize/ysize of a GDAL-readable raster."""
-    ds = gdal.Open(fspath(filename))
-    xsize, ysize = ds.RasterXSize, ds.RasterYSize
-    ds = None
-    return xsize, ysize
-
-
 def load_gdal(
     filename: Filename,
     *,
@@ -192,6 +184,14 @@ def copy_projection(src_file: Filename, dst_file: Filename) -> None:
     ds_src = ds_dst = None
 
 
+def get_raster_xysize(filename: Filename) -> Tuple[int, int]:
+    """Get the xsize/ysize of a GDAL-readable raster."""
+    ds = gdal.Open(fspath(filename))
+    xsize, ysize = ds.RasterXSize, ds.RasterYSize
+    ds = None
+    return xsize, ysize
+
+
 def get_nodata(filename: Filename, band: int = 1) -> Optional[float]:
     """Get the nodata value from a file.
 
@@ -228,6 +228,24 @@ def get_dtype(filename: Filename) -> np.dtype:
     ds = gdal.Open(fspath(filename))
     dt = gdal_to_numpy_type(ds.GetRasterBand(1).DataType)
     return dt
+
+
+def get_raster_bounds(
+    filename: Optional[Filename] = None, ds: Optional[gdal.Dataset] = None
+) -> Tuple[float, float, float, float]:
+    """Get the (left, bottom, right, top) bounds of the image."""
+    if ds is None:
+        if filename is None:
+            raise ValueError("Must provide either `filename` or `ds`")
+        ds = gdal.Open(fspath(filename))
+
+    gt = ds.GetGeoTransform()
+    xsize, ysize = ds.RasterXSize, ds.RasterYSize
+
+    left, top = _apply_gt(gt=gt, x=0, y=0)
+    right, bottom = _apply_gt(gt=gt, x=xsize, y=ysize)
+
+    return (left, bottom, right, top)
 
 
 def rowcol_to_xy(
@@ -274,24 +292,6 @@ def _apply_gt(
     x = gt[0] + x * gt[1] + y * gt[2]
     y = gt[3] + x * gt[4] + y * gt[5]
     return x, y
-
-
-def get_raster_bounds(
-    filename: Optional[Filename] = None, ds: Optional[gdal.Dataset] = None
-) -> Tuple[float, float, float, float]:
-    """Get the (left, bottom, right, top) bounds of the image."""
-    if ds is None:
-        if filename is None:
-            raise ValueError("Must provide either `filename` or `ds`")
-        ds = gdal.Open(fspath(filename))
-
-    gt = ds.GetGeoTransform()
-    xsize, ysize = ds.RasterXSize, ds.RasterYSize
-
-    left, top = _apply_gt(gt=gt, x=0, y=0)
-    right, bottom = _apply_gt(gt=gt, x=xsize, y=ysize)
-
-    return (left, bottom, right, top)
 
 
 def compute_out_shape(
@@ -517,108 +517,6 @@ def write_block(
 
 def _format_date_pair(start: date, end: date, fmt=DEFAULT_DATETIME_FORMAT) -> str:
     return f"{start.strftime(fmt)}_{end.strftime(fmt)}"
-
-
-def get_stack_nodata_mask(
-    stack_filename: Filename,
-    output_file: Optional[Filename] = None,
-    compute_bands: Optional[List[int]] = None,
-    buffer_pixels: int = 100,
-    nodata: float = np.nan,
-):
-    """Get a mask of pixels that are nodata in all bands of `slc_stack_vrt`.
-
-    Parameters
-    ----------
-    stack_filename : Path or str
-        File containing the SLC stack as separate bands.
-    output_file : Path or str, optional
-        Name of file to save to., by default None
-    compute_bands : List[int], optional
-        List of bands in vrt_stack to read.
-        If None, reads in the first, middle, and last images.
-    buffer_pixels : int, optional
-        Number of pixels to expand the good-data area, by default 100
-    nodata : float, optional
-        Value of no data in the vrt_stack, by default np.nan
-
-    Returns
-    -------
-    mask : np.ndarray[bool]
-        Array where True indicates all bands are nodata.
-    """
-    ds = gdal.Open(fspath(stack_filename))
-    if compute_bands is None:
-        count = ds.RasterCount
-        # Get the first and last file
-        compute_bands = list(sorted(set([1, count])))
-
-    # Start with ones, then only keep pixels that are nodata
-    # in all the bands we check (reducing using logical_and)
-    out_mask = np.ones((ds.RasterYSize, ds.RasterXSize), dtype=bool)
-
-    # cap buffer pixel length to be no more the image size
-    buffer_pixels = min(buffer_pixels, min(ds.RasterXSize, ds.RasterYSize))
-    for b in compute_bands:
-        logger.debug(f"Computing mask for band {b}")
-        bnd = ds.GetRasterBand(b)
-        arr = bnd.ReadAsArray()
-        if np.isnan(nodata):
-            nodata_mask = np.isnan(arr)
-        else:
-            nodata_mask = arr == nodata
-
-        # Expand the region with a convolution
-        if buffer_pixels > 0:
-            logger.debug(f"Padding mask with {buffer_pixels} pixels")
-            out_mask &= _erode_nodata(nodata_mask, buffer_pixels)
-        else:
-            out_mask &= nodata_mask
-
-    if output_file:
-        write_arr(
-            arr=out_mask,
-            output_name=output_file,
-            like_filename=stack_filename,
-            nbands=1,
-            dtype="Byte",
-        )
-    return out_mask
-
-
-def _erode_nodata(nd_mask, buffer_pixels=25):
-    """Erode the nodata mask by `buffer_pixels`.
-
-    This makes the nodata mask more conservative:
-    there will be fewer pixels marked as nodata after.
-
-    Parameters
-    ----------
-    nd_mask : np.ndarray[bool]
-        Array where True indicates nodata.
-    buffer_pixels : int, optional
-        Size (in pixels) of erosion structural element to use.
-        By default 25.
-
-    Returns
-    -------
-    np.ndarray[bool]
-        Same size as `nd_mask`, with no data pixels shrunk
-        after erosion.
-    """
-    # invert so that good pixels are 1
-    # we want to expand the area that is considered "good"
-    # since we're being conservative with what we completely ignore
-    out = (~nd_mask).astype("float32").copy()
-    strel = np.ones(buffer_pixels)
-    for i in range(out.shape[0]):
-        o = np.convolve(out[i, :], strel, mode="same")
-        out[i, :] = o
-    for j in range(out.shape[1]):
-        o = np.convolve(out[:, j], strel, mode="same")
-        out[:, j] = o
-    # convert back to binary mask, and re-invert
-    return ~(out > 1e-3)
 
 
 def iter_blocks(
