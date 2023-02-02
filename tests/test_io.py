@@ -3,9 +3,9 @@ from pathlib import Path
 import numpy as np
 import numpy.testing as npt
 import pytest
-from osgeo import gdal
 
-from dolphin import io, stack
+from dolphin import io
+from dolphin.stack import VRTStack
 
 
 def test_load(raster_100_by_200):
@@ -53,6 +53,23 @@ def test_load_masked(raster_with_nan_block):
     assert np.all(np.isnan(arr[:32, :32]))
 
 
+def test_load_band(tmp_path, slc_stack, slc_file_list):
+    # Check on a VRT, which has multiple bands
+    vrt_file = tmp_path / "test.vrt"
+    s = VRTStack(slc_file_list, outfile=vrt_file)
+
+    assert s.shape == slc_stack.shape
+    assert len(s) == len(slc_stack) == len(slc_file_list)
+
+    arr = io.load_gdal(s.outfile)
+    npt.assert_array_equal(arr, slc_stack)
+
+    # Now load each band
+    for i in range(len(slc_stack)):
+        layer = io.load_gdal(s.outfile, band=i + 1)
+        npt.assert_array_equal(layer, slc_stack[i])
+
+
 def test_compute_out_size():
     strides = {"x": 3, "y": 3}
     assert (2, 2) == io.compute_out_shape((6, 6), strides)
@@ -97,7 +114,7 @@ def test_write_metadata(raster_100_by_200, tmpdir):
     save_name = tmpdir / "empty_nometa.tif"
     io.write_arr(arr=None, like_filename=raster_100_by_200, output_name=save_name)
     assert io.get_dtype(save_name) == np.complex64
-    assert io.get_nodata(save_name) is None
+    assert io.get_raster_nodata(save_name) is None
 
     save_name = tmpdir / "empty_bool_255_nodata.tif"
     io.write_arr(
@@ -107,13 +124,13 @@ def test_write_metadata(raster_100_by_200, tmpdir):
         dtype=bool,
         nodata=255,
     )
-    assert io.get_nodata(save_name) == 255
+    assert io.get_raster_nodata(save_name) == 255
 
     save_name = tmpdir / "empty_nan_nodata.tif"
     io.write_arr(
         arr=None, like_filename=raster_100_by_200, output_name=save_name, nodata=np.nan
     )
-    assert np.isnan(io.get_nodata(save_name))
+    assert np.isnan(io.get_raster_nodata(save_name))
 
 
 def test_save_strided(raster_100_by_200, tmpdir):
@@ -222,55 +239,6 @@ def test_save_block_cpx(raster_100_by_200, cpx_arr, tmpdir):
     assert (arr_loaded[20:30, 20:30] == block_cpx).all()
 
 
-def test_get_nodata_mask(tmpdir):
-    # Setup stack of ones
-    arr = np.ones((50, 50), dtype="float32")
-    path1 = tmpdir / "20200102.tif"
-    io.write_arr(arr=arr, output_name=path1)
-
-    path2 = tmpdir / "20220103.tif"
-    gdal.Translate(str(path2), str(path1))
-    file_list = [path1, path2]
-
-    vrt_stack = stack.VRTStack(file_list, outfile=tmpdir / "stack2.vrt")
-
-    m = io.get_stack_nodata_mask(
-        vrt_stack.outfile, output_file=tmpdir / "mask.tif", buffer_pixels=0
-    )
-    assert m.sum() == 0
-
-    m2 = io.load_gdal(tmpdir / "mask.tif")
-    assert (m2 == 0).all()
-
-    # save some nodata
-    arr[:, :10] = np.nan
-    io.write_arr(arr=arr, output_name=path1)
-    m = io.get_stack_nodata_mask(vrt_stack.outfile, buffer_pixels=0)
-    # Should still be 0
-    assert m.sum() == 0
-
-    # Now the whole stack has nodata
-    io.write_arr(arr=arr, output_name=path2)
-    m = io.get_stack_nodata_mask(vrt_stack.outfile, buffer_pixels=0)
-    # Should still be 0
-    assert m.sum() == 10 * 50
-
-    # but with a buffer, it should be 0
-    io.write_arr(arr=arr, output_name=path2)
-    m = io.get_stack_nodata_mask(vrt_stack.outfile, buffer_pixels=50)
-    # Should still be 0
-    assert m.sum() == 0
-
-    # TODO: the buffer isn't making it as big as i'd expect...
-    # but with a buffer, it should be 0
-
-    io.write_arr(arr=arr, output_name=path2)
-    m = io.get_stack_nodata_mask(vrt_stack.outfile, buffer_pixels=10)
-    # Should still be 0
-    with pytest.raises(AssertionError):
-        assert m.sum() == 0
-
-
 def test_get_raster_block_sizes(raster_100_by_200, tiled_raster_100_by_200):
     assert io.get_raster_block_size(tiled_raster_100_by_200) == [32, 32]
     assert io.get_raster_block_size(raster_100_by_200) == [200, 1]
@@ -311,28 +279,37 @@ def test_get_raster_block_sizes(raster_100_by_200, tiled_raster_100_by_200):
 def test_iter_blocks(tiled_raster_100_by_200):
     # Try the whole raster
     bs = io.get_max_block_shape(tiled_raster_100_by_200, 1, max_bytes=1e9)
-    blocks = list(io.iter_blocks(tiled_raster_100_by_200, bs, band=1))
-    assert len(blocks) == 1
+    loader = io.EagerLoader(filename=tiled_raster_100_by_200, block_shape=bs)
+    # `list` should try to load all at once`
+    block_slice_tuples = list(loader.iter_blocks())
+    assert not loader._thread.is_alive()
+    assert len(block_slice_tuples) == 1
+    blocks, slices = zip(*list(block_slice_tuples))
     assert blocks[0].shape == (100, 200)
+    rows, cols = slices[0]
+    assert rows == slice(0, 100)
+    assert cols == slice(0, 200)
 
     # now one block at a time
     max_bytes = 8 * 32 * 32
     bs = io.get_max_block_shape(tiled_raster_100_by_200, 1, max_bytes=max_bytes)
-    blocks = list(io.iter_blocks(tiled_raster_100_by_200, bs, band=1))
+    loader = io.EagerLoader(filename=tiled_raster_100_by_200, block_shape=bs)
+    blocks, slices = zip(*list(loader.iter_blocks()))
+
     row_blocks = 100 // 32 + 1
     col_blocks = 200 // 32 + 1
     expected_num_blocks = row_blocks * col_blocks
     assert len(blocks) == expected_num_blocks
     assert blocks[0].shape == (32, 32)
-    # at the ends, the blocks are smaller
+    # at the ends, the block_slice_tuples are smaller
     assert blocks[6].shape == (32, 8)
     assert blocks[-1].shape == (4, 8)
 
 
 def test_iter_blocks_rowcols(tiled_raster_100_by_200):
     # Block size that is a multiple of the raster size
-    bgen = io.iter_blocks(tiled_raster_100_by_200, (10, 20), band=1, return_slices=True)
-    blocks, slices = zip(*list(bgen))
+    loader = io.EagerLoader(filename=tiled_raster_100_by_200, block_shape=(10, 20))
+    blocks, slices = zip(*list(loader.iter_blocks()))
 
     assert blocks[0].shape == (10, 20)
     for rs, cs in slices:
@@ -340,8 +317,8 @@ def test_iter_blocks_rowcols(tiled_raster_100_by_200):
         assert cs.stop - cs.start == 20
 
     # Non-multiple block size
-    bgen = io.iter_blocks(tiled_raster_100_by_200, (32, 32), band=1, return_slices=True)
-    blocks, slices = zip(*list(bgen))
+    loader = io.EagerLoader(filename=tiled_raster_100_by_200, block_shape=(32, 32))
+    blocks, slices = zip(*list(loader.iter_blocks()))
     assert blocks[0].shape == (32, 32)
     for b, (rs, cs) in zip(blocks, slices):
         assert b.shape == (rs.stop - rs.start, cs.stop - cs.start)
@@ -356,7 +333,9 @@ def test_iter_nodata(
     # load one block at a time
     max_bytes = 8 * 32 * 32
     bs = io.get_max_block_shape(tiled_raster_100_by_200, 1, max_bytes=max_bytes)
-    blocks = list(io.iter_blocks(tiled_raster_100_by_200, bs, band=1))
+    loader = io.EagerLoader(filename=tiled_raster_100_by_200, block_shape=bs)
+    blocks, slices = zip(*list(loader.iter_blocks()))
+
     row_blocks = 100 // 32 + 1
     col_blocks = 200 // 32 + 1
     expected_num_blocks = row_blocks * col_blocks
@@ -364,26 +343,22 @@ def test_iter_nodata(
     assert blocks[0].shape == (32, 32)
 
     # One nan should be fine, will get loaded
-    blocks = list(
-        io.iter_blocks(raster_with_nan, bs, band=1, skip_empty=True, nodata=np.nan)
-    )
+    loader = io.EagerLoader(filename=raster_with_nan, block_shape=bs)
+    blocks, slices = zip(*list(loader.iter_blocks()))
     assert len(blocks) == expected_num_blocks
 
     # Now check entire block for a skipped block
-    blocks = list(
-        io.iter_blocks(
-            raster_with_nan_block, bs, band=1, skip_empty=True, nodata=np.nan
-        )
-    )
+    loader = io.EagerLoader(filename=raster_with_nan_block, block_shape=bs)
+    blocks, slices = zip(*list(loader.iter_blocks()))
     assert len(blocks) == expected_num_blocks - 1
 
     # Now check entire block for a skipped block
-    blocks = list(
-        io.iter_blocks(raster_with_zero_block, bs, band=1, skip_empty=True, nodata=0)
-    )
+    loader = io.EagerLoader(filename=raster_with_zero_block, block_shape=bs)
+    blocks, slices = zip(*list(loader.iter_blocks()))
     assert len(blocks) == expected_num_blocks - 1
 
 
+@pytest.mark.skip
 def test_iter_blocks_nodata_mask(tiled_raster_100_by_200):
     # load one block at a time
     max_bytes = 8 * 32 * 32

@@ -3,8 +3,9 @@ from math import nan
 from os import fspath
 from pathlib import Path
 from pprint import pformat
-from typing import Optional, Sequence, Tuple
+from typing import Generator, Optional, Sequence, Tuple
 
+import numpy as np
 from osgeo import gdal
 
 from dolphin import io, utils
@@ -103,7 +104,7 @@ class VRTStack:
         self._assert_images_same_size()
 
         if nodata_value is None:
-            self.nodata_value = io.get_nodata(self._gdal_file_strings[0]) or nan
+            self.nodata_value = io.get_raster_nodata(self._gdal_file_strings[0]) or nan
         self.nodata_mask_file = (
             self.outfile.parent / f"{self.outfile.stem}_nodata_mask.tif"
         )
@@ -373,13 +374,11 @@ class VRTStack:
     def iter_blocks(
         self,
         overlaps: Tuple[int, int] = (0, 0),
-        start_offsets: Tuple[int, int] = (0, 0),
         block_shape: Optional[Tuple[int, int]] = None,
         max_bytes: Optional[float] = DEFAULT_BLOCK_BYTES,
-        return_slices: bool = False,
         skip_empty: bool = True,
         use_nodata_mask: bool = False,
-    ):
+    ) -> Generator[Tuple[np.ndarray, Tuple[slice, slice]], None, None]:
         """Iterate over blocks of the stack.
 
         Loads all images for one window at a time into memory.
@@ -389,9 +388,6 @@ class VRTStack:
         overlaps : Tuple[int, int], optional
             Pixels to overlap each block by (rows, cols)
             By default (0, 0)
-        start_offsets : Tuple[int, int], optional
-            (row, col) number of pixels to offset initial block
-            By default (0, 0)
         block_shape : Optional[Tuple[int, int]], optional
             If provided, force the blocks to load in the given shape.
             Otherwise, calculates how much blocks are possible to load
@@ -399,8 +395,6 @@ class VRTStack:
             internal chunking/tiling structure.
         max_bytes : Optional[int], optional
             RAM size (in Bytes) to attempt to stay under with each loaded block.
-        return_slices : bool, optional (default False)
-            return (row_slice, col_slice) indicating the position of the current block.
         skip_empty : bool, optional (default True)
             Skip blocks that are entirely empty (all NaNs)
         use_nodata_mask : bool, optional (default True)
@@ -414,20 +408,19 @@ class VRTStack:
         """
         if block_shape is None:
             block_shape = self._get_block_shape(max_bytes=max_bytes)
-        ndm = None
-        if skip_empty and use_nodata_mask:
-            ndm = self._get_nodata_mask(nodata=self.nodata_value, buffer_pixels=100)
 
-        yield from io.iter_blocks(
+        ndm = None  # TODO: get the polygon indicating nodata
+        if use_nodata_mask:
+            logger.info("Nodata mask not implemented, skipping")
+
+        loader = io.EagerLoader(
             self.outfile,
             block_shape=block_shape,
             overlaps=overlaps,
-            start_offsets=start_offsets,
-            return_slices=return_slices,
             skip_empty=skip_empty,
-            nodata=self.nodata_value,
             nodata_mask=ndm,
         )
+        yield from loader.iter_blocks()
 
     def _get_block_shape(self, max_bytes=DEFAULT_BLOCK_BYTES):
         test_file = self._get_non_vrt_file(self._gdal_file_strings[0])
@@ -438,28 +431,6 @@ class VRTStack:
             test_file,
             len(self),
             max_bytes=max_bytes,
-        )
-
-    def _get_num_blocks(
-        self,
-        max_bytes=DEFAULT_BLOCK_BYTES,
-        overlaps: Tuple[int, int] = (0, 0),
-        start_offsets: Tuple[int, int] = (0, 0),
-    ):
-        """Get the number of blocks that will be loaded when iterating over the stack.
-
-        Assumes no empty blocks will be skipped.
-        """
-        block_shape = self._get_block_shape(max_bytes=max_bytes)
-        return len(
-            list(
-                io.slice_iterator(
-                    arr_shape=self.shape[-2:],
-                    block_shape=block_shape,
-                    overlaps=overlaps,
-                    start_offsets=start_offsets,
-                )
-            )
         )
 
     def _get_nodata_mask(self, nodata=nan, buffer_pixels=100):

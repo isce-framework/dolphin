@@ -165,13 +165,13 @@ def test_add_file(vrt_stack, slc_stack):
 
 
 def test_iter_blocks(vrt_stack):
-    blocks = list(vrt_stack.iter_blocks(block_shape=(5, 5)))
+    blocks, slices = zip(*list(vrt_stack.iter_blocks(block_shape=(5, 5))))
     # (5, 10) total shape, breaks into 5x5 blocks
     assert len(blocks) == 2
     for b in blocks:
         assert b.shape == (len(vrt_stack), 5, 5)
 
-    blocks = list(vrt_stack.iter_blocks(block_shape=(1, 2)))
+    blocks, slices = zip(*list(vrt_stack.iter_blocks(block_shape=(1, 2))))
     assert len(blocks) == 25
     for b in blocks:
         assert b.shape == (len(vrt_stack), 1, 2)
@@ -181,9 +181,9 @@ def test_tiled_iter_blocks(tmp_path, tiled_file_list):
     outfile = tmp_path / "stack.vrt"
     vrt_stack = VRTStack(tiled_file_list, outfile=outfile)
     max_bytes = len(vrt_stack) * 32 * 32 * 8
-    blocks = list(vrt_stack.iter_blocks(max_bytes=max_bytes))
+    blocks, slices = zip(*list(vrt_stack.iter_blocks(max_bytes=max_bytes)))
     # (100, 200) total shape, breaks into 32x32 blocks
-    assert len(blocks) == 28
+    assert len(blocks) == len(slices) == 28
     for i, b in enumerate(blocks, start=1):
         # Account for the smaller block sizes at the ends
         if i % 7 == 0:
@@ -194,5 +194,5 @@ def test_tiled_iter_blocks(tmp_path, tiled_file_list):
                 assert b.shape == (len(vrt_stack), 32, 8)
 
     max_bytes = len(vrt_stack) * 32 * 32 * 8 * 4
-    blocks = list(vrt_stack.iter_blocks(max_bytes=max_bytes))
-    assert len(blocks) == 8
+    blocks, slices = zip(*list(vrt_stack.iter_blocks(max_bytes=max_bytes)))
+    assert len(blocks) == len(slices) == 8

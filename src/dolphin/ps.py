@@ -5,14 +5,17 @@ from pathlib import Path
 from typing import Optional
 
 import numpy as np
+from numpy.typing import ArrayLike
 from osgeo import gdal
-from tqdm.auto import tqdm
 
 gdal.UseExceptions()
 
+from dolphin import io
+from dolphin._log import get_log
 from dolphin._types import Filename
-from dolphin.io import write_arr, write_block
 from dolphin.stack import VRTStack
+
+logger = get_log()
 
 
 def create_ps(
@@ -47,7 +50,7 @@ def create_ps(
     file_list = [output_file, amp_dispersion_file, amp_mean_file]
     nodatas = [255, 0, 0]
     for fn, dtype, nodata in zip(file_list, types, nodatas):
-        write_arr(
+        io.write_arr(
             arr=None,
             like_filename=slc_vrt_file,
             output_name=fn,
@@ -58,19 +61,18 @@ def create_ps(
 
     vrt_stack = VRTStack.from_vrt_file(slc_vrt_file)
     max_bytes = 1e9 * max_ram_gb
-    num_blocks = vrt_stack._get_num_blocks(max_bytes=max_bytes)
     block_shape = vrt_stack._get_block_shape(max_bytes=max_bytes)
 
     # Initialize the intermediate arrays for the calculation
     magnitude = np.zeros((len(vrt_stack), *block_shape), dtype=np.float32)
 
+    writer = io.Writer()
     # Make the generator for the blocks
     block_gen = vrt_stack.iter_blocks(
-        return_slices=True,
         max_bytes=max_bytes,
         skip_empty=False,
     )
-    for cur_data, (rows, cols) in tqdm(block_gen, total=num_blocks):
+    for cur_data, (rows, cols) in block_gen:
         cur_rows, cur_cols = cur_data.shape[-2:]
 
         if not (np.all(cur_data == 0) or np.all(np.isnan(cur_data))):
@@ -87,13 +89,17 @@ def create_ps(
             mean = amp_disp = np.zeros((cur_rows, cur_cols), dtype=np.float32)
 
         # Write amp dispersion and the mean blocks
-        write_block(mean, amp_mean_file, rows.start, cols.start)
-        write_block(amp_disp, amp_dispersion_file, rows.start, cols.start)
-        write_block(ps, output_file, rows.start, cols.start)
+        writer.queue_write(mean, amp_mean_file, rows.start, cols.start)
+        writer.queue_write(amp_disp, amp_dispersion_file, rows.start, cols.start)
+        writer.queue_write(ps, output_file, rows.start, cols.start)
+
+    logger.info(f"Waiting to write {writer.num_queued} blocks of data.")
+    writer.notify_finished()
+    logger.info("Finished writing out PS files")
 
 
 def calc_ps_block(
-    stack_mag: np.ndarray,
+    stack_mag: ArrayLike,
     amp_dispersion_threshold: float = 0.35,
     min_count: Optional[int] = None,
 ):
@@ -110,7 +116,7 @@ def calc_ps_block(
 
     Parameters
     ----------
-    stack_mag : np.ndarray
+    stack_mag : ArrayLike
         The magnitude of the stack of SLCs.
     amp_dispersion_threshold : float, optional
         The threshold for the amplitude dispersion to label a pixel as a PS:
