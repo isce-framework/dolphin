@@ -119,7 +119,7 @@ def load_gdal(
     if not masked:
         return out
     # Get the nodata value
-    nd = get_nodata(filename)
+    nd = get_raster_nodata(filename)
     if np.isnan(nd):
         return np.ma.masked_invalid(out)
     else:
@@ -195,7 +195,7 @@ def get_raster_xysize(filename: Filename) -> Tuple[int, int]:
     return xsize, ysize
 
 
-def get_nodata(filename: Filename, band: int = 1) -> Optional[float]:
+def get_raster_nodata(filename: Filename, band: int = 1) -> Optional[float]:
     """Get the nodata value from a file.
 
     Parameters
@@ -609,7 +609,6 @@ class EagerLoader(BackgroundReader):
         filename,
         block_shape: Tuple[int, int],
         overlaps: Tuple[int, int] = (0, 0),
-        start_offsets: Tuple[int, int] = (0, 0),
         skip_empty: bool = True,
         nodata_mask: Optional[np.ndarray] = None,
         queue_size=2,
@@ -625,12 +624,14 @@ class EagerLoader(BackgroundReader):
                 arr_shape=(ysize, xsize),
                 block_shape=block_shape,
                 overlaps=overlaps,
-                start_offsets=start_offsets,
             )
         )
         self._queue_size = queue_size
         self._skip_empty = skip_empty
         self._nodata_mask = nodata_mask
+        self._nodata = get_raster_nodata(filename)
+        if self._nodata is None:
+            self._nodata = np.nan
 
     def read(self, rows: slice, cols: slice) -> Tuple[np.ndarray, Tuple[slice, slice]]:
         logger.debug(f"EagerLoader reading {rows}, {cols}")

@@ -186,7 +186,7 @@ def run_evd_sequential(
             except PhaseLinkRuntimeError as e:
                 # note: this is a warning instead of info, since it should
                 # get caught at the "skip_empty" step
-                logger.warning(f"Skipping block: {e}")
+                logger.warning(f"Exception at ({rows}, {cols}): {e}")
                 continue
 
             # Save each of the MLE estimates (ignoring the compressed SLCs)

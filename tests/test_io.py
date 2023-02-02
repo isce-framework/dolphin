@@ -97,7 +97,7 @@ def test_write_metadata(raster_100_by_200, tmpdir):
     save_name = tmpdir / "empty_nometa.tif"
     io.write_arr(arr=None, like_filename=raster_100_by_200, output_name=save_name)
     assert io.get_dtype(save_name) == np.complex64
-    assert io.get_nodata(save_name) is None
+    assert io.get_raster_nodata(save_name) is None
 
     save_name = tmpdir / "empty_bool_255_nodata.tif"
     io.write_arr(
@@ -107,13 +107,13 @@ def test_write_metadata(raster_100_by_200, tmpdir):
         dtype=bool,
         nodata=255,
     )
-    assert io.get_nodata(save_name) == 255
+    assert io.get_raster_nodata(save_name) == 255
 
     save_name = tmpdir / "empty_nan_nodata.tif"
     io.write_arr(
         arr=None, like_filename=raster_100_by_200, output_name=save_name, nodata=np.nan
     )
-    assert np.isnan(io.get_nodata(save_name))
+    assert np.isnan(io.get_raster_nodata(save_name))
 
 
 def test_save_strided(raster_100_by_200, tmpdir):
