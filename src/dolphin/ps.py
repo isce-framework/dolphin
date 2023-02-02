@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Optional
 
 import numpy as np
+from numpy.typing import ArrayLike
 from osgeo import gdal
 
 gdal.UseExceptions()
@@ -92,12 +93,13 @@ def create_ps(
         writer.queue_write(amp_disp, amp_dispersion_file, rows.start, cols.start)
         writer.queue_write(ps, output_file, rows.start, cols.start)
 
+    logger.info(f"Waiting to write {writer.num_queued} blocks of data.")
     writer.notify_finished()
     logger.info("Finished writing out PS files")
 
 
 def calc_ps_block(
-    stack_mag: np.ndarray,
+    stack_mag: ArrayLike,
     amp_dispersion_threshold: float = 0.35,
     min_count: Optional[int] = None,
 ):
@@ -114,7 +116,7 @@ def calc_ps_block(
 
     Parameters
     ----------
-    stack_mag : np.ndarray
+    stack_mag : ArrayLike
         The magnitude of the stack of SLCs.
     amp_dispersion_threshold : float, optional
         The threshold for the amplitude dispersion to label a pixel as a PS:

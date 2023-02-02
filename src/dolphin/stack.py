@@ -5,7 +5,7 @@ from pathlib import Path
 from pprint import pformat
 from typing import Generator, Optional, Sequence, Tuple
 
-from numpy.typing import NDArray
+import numpy as np
 from osgeo import gdal
 
 from dolphin import io, utils
@@ -378,7 +378,7 @@ class VRTStack:
         max_bytes: Optional[float] = DEFAULT_BLOCK_BYTES,
         skip_empty: bool = True,
         use_nodata_mask: bool = False,
-    ) -> Generator[Tuple[NDArray, Tuple[slice, slice]], None, None]:
+    ) -> Generator[Tuple[np.ndarray, Tuple[slice, slice]], None, None]:
         """Iterate over blocks of the stack.
 
         Loads all images for one window at a time into memory.

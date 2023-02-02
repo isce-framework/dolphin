@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any, Dict, Generator, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
-from numpy.typing import DTypeLike, NDArray
+from numpy.typing import ArrayLike, DTypeLike
 from osgeo import gdal
 from pyproj import CRS
 from tqdm.auto import tqdm
@@ -22,7 +22,12 @@ from dolphin.utils import gdal_to_numpy_type, numpy_to_gdal_type
 
 gdal.UseExceptions()
 
-__all__ = ["load_gdal", "write_arr", "write_block", "EagerLoader"]
+__all__ = [
+    "load_gdal",
+    "write_arr",
+    "write_block",
+    "EagerLoader",
+]
 
 
 DEFAULT_TILE_SIZE = [128, 128]
@@ -333,7 +338,7 @@ def compute_out_shape(
 
 def write_arr(
     *,
-    arr: Optional[NDArray],
+    arr: Optional[ArrayLike],
     output_name: Filename,
     like_filename: Optional[Filename] = None,
     driver: Optional[str] = "GTiff",
@@ -354,7 +359,7 @@ def write_arr(
 
     Parameters
     ----------
-    arr : NDArray, optional
+    arr : ArrayLike, optional
         Array to save. If None, create an empty file.
     output_name : str or Path
         Path to save the file to.
@@ -473,7 +478,7 @@ def write_arr(
 
 
 def write_block(
-    cur_block: NDArray,
+    cur_block: ArrayLike,
     filename: Filename,
     row_start: int,
     col_start: int,
@@ -482,7 +487,7 @@ def write_block(
 
     Parameters
     ----------
-    cur_block : NDArray
+    cur_block : ArrayLike
         2D or 3D data array
     filename : Filename
         List of output files to save to, or (if cur_block is 2D) a single file.
@@ -520,12 +525,14 @@ class Writer(BackgroundWriter):
     def __init__(self, max_queue=0, **kw):
         super().__init__(nq=max_queue, **kw)
 
-    def write(self, data: NDArray, filename: Filename, row_start: int, col_start: int):
+    def write(
+        self, data: ArrayLike, filename: Filename, row_start: int, col_start: int
+    ):
         """Write out an ndarray to a subset of the pre-made `filename`.
 
         Parameters
         ----------
-        data : NDArray
+        data : ArrayLike
             2D or 3D data array to save.
         filename : Filename
             List of output files to save to, or (if cur_block is 2D) a single file.
@@ -541,6 +548,11 @@ class Writer(BackgroundWriter):
         """
         write_block(data, filename, row_start, col_start)
 
+    @property
+    def num_queued(self):
+        """Number of items waiting in the queue to be written."""
+        return self._work_queue.qsize()
+
 
 class EagerLoader(BackgroundReader):
     """Class to pre-fetch data chunks in a background thread."""
@@ -551,7 +563,7 @@ class EagerLoader(BackgroundReader):
         block_shape: Tuple[int, int],
         overlaps: Tuple[int, int] = (0, 0),
         skip_empty: bool = True,
-        nodata_mask: Optional[NDArray] = None,
+        nodata_mask: Optional[ArrayLike] = None,
         queue_size=2,
         timeout=_DEFAULT_TIMEOUT,
     ):
@@ -634,12 +646,12 @@ def _slice_iterator(
 
     Examples
     --------
-        >>> list(slice_iterator((180, 250), (100, 100)))
+        >>> list(_slice_iterator((180, 250), (100, 100)))
         [(slice(0, 100, None), slice(0, 100, None)), (slice(0, 100, None), \
 slice(100, 200, None)), (slice(0, 100, None), slice(200, 250, None)), \
 (slice(100, 180, None), slice(0, 100, None)), (slice(100, 180, None), \
 slice(100, 200, None)), (slice(100, 180, None), slice(200, 250, None))]
-        >>> list(slice_iterator((180, 250), (100, 100), overlaps=(10, 10)))
+        >>> list(_slice_iterator((180, 250), (100, 100), overlaps=(10, 10)))
         [(slice(0, 100, None), slice(0, 100, None)), (slice(0, 100, None), \
 slice(90, 190, None)), (slice(0, 100, None), slice(180, 250, None)), \
 (slice(90, 180, None), slice(0, 100, None)), (slice(90, 180, None), \

@@ -203,6 +203,7 @@ def run_evd_sequential(
             # tqdm.write(" Finished block, loading next block.")
 
         # Block until all the writers for this ministack have finished
+        logger.info(f"Waiting to write {writer.num_queued} blocks of data.")
         writer.notify_finished()
         logger.info(f"Finished ministack {mini_idx} of size {cur_vrt.shape}.")
 
