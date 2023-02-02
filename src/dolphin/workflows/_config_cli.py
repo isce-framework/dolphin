@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 from typing import List, Optional, Tuple, Union
 
-from .config import Workflow
+from .config import OPERA_DATASET_NAME, Workflow
 
 
 def create_config(
@@ -79,7 +79,10 @@ def get_parser(subparser=None, subcommand_name="run"):
     inputs.add_argument(
         "-sds",
         "--subdataset",
-        help="Subdataset to use from HDF5/NetCDF files.",
+        help=(
+            "Subdataset to use from HDF5/NetCDF files. For OPERA CSLC NetCDF files, if"
+            f" None is passed, the default is {OPERA_DATASET_NAME}."
+        ),
     )
 
     # Phase linking options
