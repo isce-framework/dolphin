@@ -15,7 +15,7 @@ from osgeo import gdal
 from pyproj import CRS
 from tqdm.auto import tqdm
 
-from dolphin._background import _DEFAULT_TIMEOUT, BackgroundReader
+from dolphin._background import _DEFAULT_TIMEOUT, BackgroundReader, BackgroundWriter
 from dolphin._log import get_log
 from dolphin._types import Filename
 from dolphin.utils import gdal_to_numpy_type, numpy_to_gdal_type
@@ -483,7 +483,7 @@ def write_block(
     Parameters
     ----------
     cur_block : NDArray
-        Array of shape (n_bands, block_rows, block_cols)
+        2D or 3D data array
     filename : Filename
         List of output files to save to, or (if cur_block is 2D) a single file.
     row_start : int
@@ -514,8 +514,32 @@ def write_block(
     ds = None
 
 
-def _format_date_pair(start: date, end: date, fmt=DEFAULT_DATETIME_FORMAT) -> str:
-    return f"{start.strftime(fmt)}_{end.strftime(fmt)}"
+class Writer(BackgroundWriter):
+    """Class to write data to files in a background thread."""
+
+    def __init__(self, max_queue=0, **kw):
+        super().__init__(nq=max_queue, **kw)
+
+    def write(self, data: NDArray, filename: Filename, row_start: int, col_start: int):
+        """Write out an ndarray to a subset of the pre-made `filename`.
+
+        Parameters
+        ----------
+        data : NDArray
+            2D or 3D data array to save.
+        filename : Filename
+            List of output files to save to, or (if cur_block is 2D) a single file.
+        row_start : int
+            Row index to start writing at.
+        col_start : int
+            Column index to start writing at.
+
+        Raises
+        ------
+        ValueError
+            If length of `output_files` does not match length of `cur_block`.
+        """
+        write_block(data, filename, row_start, col_start)
 
 
 class EagerLoader(BackgroundReader):
@@ -719,3 +743,7 @@ def get_raster_block_size(filename):
             logger.warning(f"Warning: {filename} bands have different block shapes.")
             break
     return block_size
+
+
+def _format_date_pair(start: date, end: date, fmt=DEFAULT_DATETIME_FORMAT) -> str:
+    return f"{start.strftime(fmt)}_{end.strftime(fmt)}"
