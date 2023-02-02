@@ -15,19 +15,14 @@ from osgeo import gdal
 from pyproj import CRS
 from tqdm.auto import tqdm
 
+from dolphin._background import _DEFAULT_TIMEOUT, BackgroundReader
 from dolphin._log import get_log
 from dolphin._types import Filename
 from dolphin.utils import gdal_to_numpy_type, numpy_to_gdal_type
 
-from ._background import _DEFAULT_TIMEOUT, BackgroundReader
-
 gdal.UseExceptions()
 
-__all__ = [
-    "load_gdal",
-    "write_arr",
-    "write_block",
-]
+__all__ = ["load_gdal", "write_arr", "write_block", "EagerLoader"]
 
 
 DEFAULT_TILE_SIZE = (128, 128)
@@ -521,85 +516,6 @@ def write_block(
 
 def _format_date_pair(start: date, end: date, fmt=DEFAULT_DATETIME_FORMAT) -> str:
     return f"{start.strftime(fmt)}_{end.strftime(fmt)}"
-
-
-def iter_blocks(
-    filename,
-    block_shape: Tuple[int, int],
-    band=None,
-    overlaps: Tuple[int, int] = (0, 0),
-    start_offsets: Tuple[int, int] = (0, 0),
-    return_slices: bool = False,
-    skip_empty: bool = True,
-    nodata: float = np.nan,
-    nodata_mask: Optional[NDArray] = None,
-):
-    """Read blocks of a raster as a generator.
-
-    Parameters
-    ----------
-    filename : str or Path
-        path to raster file
-    block_shape : tuple[int, int]
-        (height, width), size of accessing blocks (default (None, None))
-    band : int, optional
-        band to read (default None, whole stack)
-    overlaps : tuple[int, int], optional
-        (row_overlap, col_overlap), number of pixels to re-include
-        after sliding the block (default (0, 0))
-    start_offsets : tuple[int, int], optional
-        (row_start, col_start), start reading from this offset
-    return_slices : bool, optional (default False)
-        return the (row, col) slice indicating the position of the current block
-    skip_empty : bool, optional (default True)
-        Skip blocks that are entirely empty (all NaNs)
-    nodata : float, optional (default np.nan)
-        Value to use for nodata to determine if a block is empty.
-        Not used if `skip_empty` is False.
-    nodata_mask : ndarray, optional
-        A boolean mask of the same shape as the raster, where True indicates
-        nodata. Ignored if `skip_empty` is False.
-        If provided, `nodata` is ignored.
-
-    Yields
-    ------
-    ndarray:
-        Current block being loaded
-
-    tuple[slice, slice]:
-        ((row_start, row_end), (col_start, col_end)) slice indicating
-        the position of the current block.
-        (Only returned if return_slices is True)
-    """
-    # Set up the generator of ((row_start, row_end), (col_start, col_end))
-    xsize, ysize = get_raster_xysize(filename)
-    slice_gen = _slice_iterator(
-        arr_shape=(ysize, xsize),
-        block_shape=block_shape,
-        overlaps=overlaps,
-        start_offsets=start_offsets,
-    )
-    for rows, cols in slice_gen:
-        # Skip empty blocks before reading if we have a nodata mask
-        if skip_empty and nodata_mask is not None:
-            if nodata_mask[rows, cols].all():
-                continue
-
-        cur_block = load_gdal(filename, band=band, rows=rows, cols=cols)
-
-        if skip_empty:
-            # Otherwise look at the actual block we loaded
-            if np.isnan(nodata):
-                block_nodata = np.isnan(cur_block)
-            else:
-                block_nodata = cur_block == nodata
-            if np.all(block_nodata):
-                continue
-
-        if return_slices:
-            yield cur_block, (rows, cols)
-        else:
-            yield cur_block
 
 
 class EagerLoader(BackgroundReader):
