@@ -17,8 +17,8 @@ from pydantic import (
 from ruamel.yaml import YAML
 
 from dolphin import __version__ as _dolphin_version
+from dolphin import io
 from dolphin._log import get_log
-from dolphin.io import format_nc_filename
 from dolphin.utils import get_dates, sort_files_by_date
 
 from ._enums import InterferogramNetworkType, OutputFormat, UnwrapMethod, WorkflowName
@@ -305,7 +305,7 @@ class Inputs(BaseModel):
             subdataset = values.get("subdataset")
             # gdal formatting function will raise an error if subdataset doesn't exist
             for f in file_list:
-                format_nc_filename(f, subdataset)
+                io.format_nc_filename(f, subdataset)
 
         file_list, _ = sort_files_by_date(file_list, file_date_fmt=date_fmt)
         # Coerce the file_list to a list of Path objects, sorted
@@ -335,16 +335,11 @@ class Outputs(BaseModel):
     )
 
     hdf5_creation_options: Dict = Field(
-        dict(
-            chunks=True,
-            compression="gzip",
-            compression_opts=4,
-            shuffle=True,
-        ),
+        io.DEFAULT_HDF5_OPTIONS,
         description="Options for `create_dataset` with h5py.",
     )
     gtiff_creation_options: List[str] = Field(
-        ["TILED=YES", "COMPRESS=DEFLATE", "ZLEVEL=5"],
+        list(io.DEFAULT_TIFF_OPTIONS),
         description="GDAL creation options for GeoTIFF files",
     )
 
