@@ -5,6 +5,7 @@ import numpy.testing as npt
 import pytest
 
 from dolphin import io
+from dolphin.stack import VRTStack
 
 
 def test_load(raster_100_by_200):
@@ -50,6 +51,23 @@ def test_load_masked(raster_with_nan_block):
     assert not isinstance(arr, np.ma.masked_array)
     assert not np.ma.is_masked(arr)
     assert np.all(np.isnan(arr[:32, :32]))
+
+
+def test_load_band(tmp_path, slc_stack, slc_file_list):
+    # Check on a VRT, which has multiple bands
+    vrt_file = tmp_path / "test.vrt"
+    s = VRTStack(slc_file_list, outfile=vrt_file)
+
+    assert s.shape == slc_stack.shape
+    assert len(s) == len(slc_stack) == len(slc_file_list)
+
+    arr = io.load_gdal(s.outfile)
+    npt.assert_array_equal(arr, slc_stack)
+
+    # Now load each band
+    for i in range(len(slc_stack)):
+        layer = io.load_gdal(s.outfile, band=i + 1)
+        npt.assert_array_equal(layer, slc_stack[i])
 
 
 def test_compute_out_size():
