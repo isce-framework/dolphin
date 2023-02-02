@@ -103,7 +103,7 @@ class VRTStack:
         self._assert_images_same_size()
 
         if nodata_value is None:
-            self.nodata_value = io.get_nodata(self._gdal_file_strings[0]) or nan
+            self.nodata_value = io.get_raster_nodata(self._gdal_file_strings[0]) or nan
         self.nodata_mask_file = (
             self.outfile.parent / f"{self.outfile.stem}_nodata_mask.tif"
         )
@@ -414,20 +414,17 @@ class VRTStack:
         """
         if block_shape is None:
             block_shape = self._get_block_shape(max_bytes=max_bytes)
-        ndm = None
-        if skip_empty and use_nodata_mask:
-            ndm = self._get_nodata_mask(nodata=self.nodata_value, buffer_pixels=100)
 
-        yield from io.iter_blocks(
+        ndm = None  # TODO: get the polygon indicating nodata
+
+        loader = io.EagerLoader(
             self.outfile,
             block_shape=block_shape,
             overlaps=overlaps,
-            start_offsets=start_offsets,
-            return_slices=return_slices,
             skip_empty=skip_empty,
-            nodata=self.nodata_value,
             nodata_mask=ndm,
         )
+        yield from loader.iter_blocks()
 
     def _get_block_shape(self, max_bytes=DEFAULT_BLOCK_BYTES):
         test_file = self._get_non_vrt_file(self._gdal_file_strings[0])
@@ -438,28 +435,6 @@ class VRTStack:
             test_file,
             len(self),
             max_bytes=max_bytes,
-        )
-
-    def _get_num_blocks(
-        self,
-        max_bytes=DEFAULT_BLOCK_BYTES,
-        overlaps: Tuple[int, int] = (0, 0),
-        start_offsets: Tuple[int, int] = (0, 0),
-    ):
-        """Get the number of blocks that will be loaded when iterating over the stack.
-
-        Assumes no empty blocks will be skipped.
-        """
-        block_shape = self._get_block_shape(max_bytes=max_bytes)
-        return len(
-            list(
-                io.slice_iterator(
-                    arr_shape=self.shape[-2:],
-                    block_shape=block_shape,
-                    overlaps=overlaps,
-                    start_offsets=start_offsets,
-                )
-            )
         )
 
     def _get_nodata_mask(self, nodata=nan, buffer_pixels=100):
