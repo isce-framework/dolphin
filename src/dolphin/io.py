@@ -12,10 +12,13 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 import numpy as np
 from osgeo import gdal
 from pyproj import CRS
+from tqdm.auto import tqdm
 
 from dolphin._log import get_log
 from dolphin._types import Filename
 from dolphin.utils import gdal_to_numpy_type, numpy_to_gdal_type
+
+from ._background import _DEFAULT_TIMEOUT, BackgroundReader
 
 gdal.UseExceptions()
 
@@ -596,6 +599,68 @@ def iter_blocks(
             yield cur_block, (rows, cols)
         else:
             yield cur_block
+
+
+class EagerLoader(BackgroundReader):
+    """Class to pre-fetch data chunks in a background thread."""
+
+    def __init__(
+        self,
+        filename,
+        block_shape: Tuple[int, int],
+        overlaps: Tuple[int, int] = (0, 0),
+        start_offsets: Tuple[int, int] = (0, 0),
+        skip_empty: bool = True,
+        nodata_mask: Optional[np.ndarray] = None,
+        queue_size=2,
+        timeout=_DEFAULT_TIMEOUT,
+    ):
+        super().__init__(nq=queue_size, timeout=timeout)
+        self.filename = filename
+        # Set up the generator of ((row_start, row_end), (col_start, col_end))
+        xsize, ysize = get_raster_xysize(filename)
+        # convert the slice generator to a list so we have the size
+        self.slices = list(
+            slice_iterator(
+                arr_shape=(ysize, xsize),
+                block_shape=block_shape,
+                overlaps=overlaps,
+                start_offsets=start_offsets,
+            )
+        )
+        self._queue_size = queue_size
+        self._skip_empty = skip_empty
+        self._nodata_mask = nodata_mask
+
+    def read(self, rows: slice, cols: slice) -> Tuple[np.ndarray, Tuple[slice, slice]]:
+        logger.debug(f"EagerLoader reading {rows}, {cols}")
+        cur_block = load_gdal(self.filename, rows=rows, cols=cols)
+        return cur_block, (rows, cols)
+
+    def iter_blocks(self):
+        # Queue up all slices to the work queue
+        for rows, cols in self.slices:
+            self.queue_read(rows, cols)
+
+        for _ in tqdm(range(len(self.slices))):
+            cur_block, (rows, cols) = self.get_data()
+            logger.debug(f"got data for {rows, cols}: {cur_block.shape}")
+
+            if self._skip_empty and self._nodata_mask is not None:
+                if self._nodata_mask[rows, cols].all():
+                    continue
+
+            if self._skip_empty:
+                # Otherwise look at the actual block we loaded
+                if np.isnan(self._nodata):
+                    block_nodata = np.isnan(cur_block)
+                else:
+                    block_nodata = cur_block == self._nodata
+                if np.all(block_nodata):
+                    continue
+            yield cur_block, (rows, cols)
+
+        self.notify_finished()
 
 
 def slice_iterator(
