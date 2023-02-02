@@ -10,8 +10,8 @@ from tqdm.auto import tqdm
 
 gdal.UseExceptions()
 
+from dolphin import io
 from dolphin._types import Filename
-from dolphin.io import write_arr, write_block
 from dolphin.stack import VRTStack
 
 
@@ -47,7 +47,7 @@ def create_ps(
     file_list = [output_file, amp_dispersion_file, amp_mean_file]
     nodatas = [255, 0, 0]
     for fn, dtype, nodata in zip(file_list, types, nodatas):
-        write_arr(
+        io.write_arr(
             arr=None,
             like_filename=slc_vrt_file,
             output_name=fn,
@@ -64,6 +64,7 @@ def create_ps(
     # Initialize the intermediate arrays for the calculation
     magnitude = np.zeros((len(vrt_stack), *block_shape), dtype=np.float32)
 
+    writer = io.Writer()
     # Make the generator for the blocks
     block_gen = vrt_stack.iter_blocks(
         return_slices=True,
@@ -87,9 +88,9 @@ def create_ps(
             mean = amp_disp = np.zeros((cur_rows, cur_cols), dtype=np.float32)
 
         # Write amp dispersion and the mean blocks
-        write_block(mean, amp_mean_file, rows.start, cols.start)
-        write_block(amp_disp, amp_dispersion_file, rows.start, cols.start)
-        write_block(ps, output_file, rows.start, cols.start)
+        writer.queue_write(mean, amp_mean_file, rows.start, cols.start)
+        writer.queue_write(amp_disp, amp_dispersion_file, rows.start, cols.start)
+        writer.queue_write(ps, output_file, rows.start, cols.start)
 
 
 def calc_ps_block(
