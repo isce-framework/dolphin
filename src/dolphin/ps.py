@@ -6,13 +6,15 @@ from typing import Optional
 
 import numpy as np
 from osgeo import gdal
-from tqdm.auto import tqdm
 
 gdal.UseExceptions()
 
 from dolphin import io
+from dolphin._log import get_log
 from dolphin._types import Filename
 from dolphin.stack import VRTStack
+
+logger = get_log()
 
 
 def create_ps(
@@ -58,7 +60,6 @@ def create_ps(
 
     vrt_stack = VRTStack.from_vrt_file(slc_vrt_file)
     max_bytes = 1e9 * max_ram_gb
-    num_blocks = vrt_stack._get_num_blocks(max_bytes=max_bytes)
     block_shape = vrt_stack._get_block_shape(max_bytes=max_bytes)
 
     # Initialize the intermediate arrays for the calculation
@@ -67,11 +68,10 @@ def create_ps(
     writer = io.Writer()
     # Make the generator for the blocks
     block_gen = vrt_stack.iter_blocks(
-        return_slices=True,
         max_bytes=max_bytes,
         skip_empty=False,
     )
-    for cur_data, (rows, cols) in tqdm(block_gen, total=num_blocks):
+    for cur_data, (rows, cols) in block_gen:
         cur_rows, cur_cols = cur_data.shape[-2:]
 
         if not (np.all(cur_data == 0) or np.all(np.isnan(cur_data))):
@@ -91,6 +91,9 @@ def create_ps(
         writer.queue_write(mean, amp_mean_file, rows.start, cols.start)
         writer.queue_write(amp_disp, amp_dispersion_file, rows.start, cols.start)
         writer.queue_write(ps, output_file, rows.start, cols.start)
+
+    writer.notify_finished()
+    logger.info("Finished writing out PS files")
 
 
 def calc_ps_block(

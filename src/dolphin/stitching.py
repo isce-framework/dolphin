@@ -159,6 +159,8 @@ def merge_images(
 
     out_left, out_bottom, out_right, out_top = bounds
     # Now loop through the files and write them to the output
+    writer = io.Writer()
+
     for f in warped_file_list:
         logger.info(f"Stitching {f} into {outfile}")
         ds_in = gdal.Open(fspath(f))
@@ -201,13 +203,14 @@ def merge_images(
             cur_out, arr_in, nodata_vals=[in_nodata, out_nodata, np.nan]
         )
         # Write the input data to the output in this window
-        io.write_block(
+        writer.queue_write(
             cur_out,
             filename=outfile,
             row_start=row_top,
             col_start=col_left,
         )
 
+    writer.notify_finished()
     # Remove the tempdir
     temp_dir.cleanup()
 
