@@ -231,6 +231,9 @@ def raster_with_zero_block(tmpdir, tiled_raster_100_by_200):
 
     out_arr[:32, :32] = 0
     write_arr(
-        arr=out_arr, like_filename=tiled_raster_100_by_200, output_name=output_name
+        arr=out_arr,
+        like_filename=tiled_raster_100_by_200,
+        output_name=output_name,
+        nodata=0,
     )
     return output_name
