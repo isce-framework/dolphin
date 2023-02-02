@@ -82,7 +82,7 @@ def test_outputs_defaults(tmpdir):
         assert opts.output_resolution is None
         assert opts.strides == {"x": 1, "y": 1}
         assert opts.hdf5_creation_options == dict(
-            chunks=True,
+            chunks=[128, 128],
             compression="gzip",
             compression_opts=4,
             shuffle=True,

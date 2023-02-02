@@ -25,7 +25,7 @@ gdal.UseExceptions()
 __all__ = ["load_gdal", "write_arr", "write_block", "EagerLoader"]
 
 
-DEFAULT_TILE_SIZE = (128, 128)
+DEFAULT_TILE_SIZE = [128, 128]
 DEFAULT_TIFF_OPTIONS = (
     "COMPRESS=DEFLATE",
     "ZLEVEL=4",

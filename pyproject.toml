@@ -63,11 +63,9 @@ python_version = "3.7"
 ignore_missing_imports = true
 
 [tool.pydocstyle]
-ignore = "D100,D102,D104,D105,D106,D203,D204,D213,D413"
+ignore = "D100,D102,D104,D105,D106,D107,D203,D204,D213,D413"
 
 [tool.pytest.ini_options]
 # addopts = " -n auto --maxprocesses=8 --doctest-modules --cov=dolphin --ignore=scripts --ignore=docs --ignore=data"
 addopts = " --doctest-modules --cov=dolphin --ignore=scripts --ignore=docs --ignore=data"
-filterwarnings = [
-    "error",
-]
+filterwarnings = ["error"]
