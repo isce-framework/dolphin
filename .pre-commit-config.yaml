@@ -48,4 +48,4 @@ repos:
       - id: pydocstyle
         # https://github.com/PyCQA/pydocstyle/pull/608#issuecomment-1381168417
         additional_dependencies: ['.[toml]']
-        exclude: test
+        exclude: tests
