@@ -24,7 +24,8 @@ plugins:
         options:
           docstring_style: numpy
           members_order: alphabetical # source
-
+- mkdocs-jupyter:
+    include: ["*.ipynb"]
 
 markdown_extensions:
   - pymdownx.arithmatex:
@@ -48,3 +49,4 @@ nav:
 # trailing slash: that mkdocs-literate-nav knows a summary.md file is in that folder.
 - Code Reference: reference/
 - background-theory.md
+- Notebook page: notebooks/walkthrough.ipynb
