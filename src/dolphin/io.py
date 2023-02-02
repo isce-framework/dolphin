@@ -7,9 +7,10 @@ import copy
 from datetime import date
 from os import fspath
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
+from typing import Any, Dict, Generator, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
+from numpy.typing import DTypeLike, NDArray
 from osgeo import gdal
 from pyproj import CRS
 from tqdm.auto import tqdm
@@ -337,14 +338,14 @@ def compute_out_shape(
 
 def write_arr(
     *,
-    arr: Optional[np.ndarray],
+    arr: Optional[NDArray],
     output_name: Filename,
     like_filename: Optional[Filename] = None,
     driver: Optional[str] = "GTiff",
     options: Optional[List] = None,
     nbands: Optional[int] = None,
     shape: Optional[Tuple[int, int]] = None,
-    dtype: Optional[Union[str, np.dtype, type]] = None,
+    dtype: Optional[DTypeLike] = None,
     geotransform: Optional[Sequence[float]] = None,
     projection: Optional[Any] = None,
     nodata: Optional[Union[float, str]] = None,
@@ -358,7 +359,7 @@ def write_arr(
 
     Parameters
     ----------
-    arr : np.ndarray, optional
+    arr : NDArray, optional
         Array to save. If None, create an empty file.
     output_name : str or Path
         Path to save the file to.
@@ -373,7 +374,7 @@ def write_arr(
     shape : tuple, optional
         (rows, cols) of desired output file.
         Overrides the shape of the output file, if using `like_filename`.
-    dtype : str or np.dtype or type, optional
+    dtype : DTypeLike, optional
         Data type to save. Default is `arr.dtype` or the datatype of like_filename.
     geotransform : List, optional
         Geotransform to save. Default is the geotransform of like_filename.
@@ -477,7 +478,7 @@ def write_arr(
 
 
 def write_block(
-    cur_block: np.ndarray,
+    cur_block: NDArray,
     filename: Filename,
     row_start: int,
     col_start: int,
@@ -486,7 +487,7 @@ def write_block(
 
     Parameters
     ----------
-    cur_block : np.ndarray
+    cur_block : NDArray
         Array of shape (n_bands, block_rows, block_cols)
     filename : Filename
         List of output files to save to, or (if cur_block is 2D) a single file.
@@ -531,7 +532,7 @@ def iter_blocks(
     return_slices: bool = False,
     skip_empty: bool = True,
     nodata: float = np.nan,
-    nodata_mask: Optional[np.ndarray] = None,
+    nodata_mask: Optional[NDArray] = None,
 ):
     """Read blocks of a raster as a generator.
 
@@ -572,7 +573,7 @@ def iter_blocks(
     """
     # Set up the generator of ((row_start, row_end), (col_start, col_end))
     xsize, ysize = get_raster_xysize(filename)
-    slice_gen = slice_iterator(
+    slice_gen = _slice_iterator(
         arr_shape=(ysize, xsize),
         block_shape=block_shape,
         overlaps=overlaps,
@@ -610,7 +611,7 @@ class EagerLoader(BackgroundReader):
         block_shape: Tuple[int, int],
         overlaps: Tuple[int, int] = (0, 0),
         skip_empty: bool = True,
-        nodata_mask: Optional[np.ndarray] = None,
+        nodata_mask: Optional[NDArray] = None,
         queue_size=2,
         timeout=_DEFAULT_TIMEOUT,
     ):
@@ -620,7 +621,7 @@ class EagerLoader(BackgroundReader):
         xsize, ysize = get_raster_xysize(filename)
         # convert the slice generator to a list so we have the size
         self.slices = list(
-            slice_iterator(
+            _slice_iterator(
                 arr_shape=(ysize, xsize),
                 block_shape=block_shape,
                 overlaps=overlaps,
@@ -638,7 +639,9 @@ class EagerLoader(BackgroundReader):
         cur_block = load_gdal(self.filename, rows=rows, cols=cols)
         return cur_block, (rows, cols)
 
-    def iter_blocks(self):
+    def iter_blocks(
+        self,
+    ) -> Generator[Tuple[np.ndarray, Tuple[slice, slice]], None, None]:
         # Queue up all slices to the work queue
         for rows, cols in self.slices:
             self.queue_read(rows, cols)
@@ -664,7 +667,7 @@ class EagerLoader(BackgroundReader):
         self.notify_finished()
 
 
-def slice_iterator(
+def _slice_iterator(
     arr_shape,
     block_shape: Tuple[int, int],
     overlaps: Tuple[int, int] = (0, 0),

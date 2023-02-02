@@ -3,8 +3,9 @@ from math import nan
 from os import fspath
 from pathlib import Path
 from pprint import pformat
-from typing import Optional, Sequence, Tuple
+from typing import Generator, Optional, Sequence, Tuple
 
+from numpy.typing import NDArray
 from osgeo import gdal
 
 from dolphin import io, utils
@@ -373,13 +374,11 @@ class VRTStack:
     def iter_blocks(
         self,
         overlaps: Tuple[int, int] = (0, 0),
-        start_offsets: Tuple[int, int] = (0, 0),
         block_shape: Optional[Tuple[int, int]] = None,
         max_bytes: Optional[float] = DEFAULT_BLOCK_BYTES,
-        return_slices: bool = False,
         skip_empty: bool = True,
         use_nodata_mask: bool = False,
-    ):
+    ) -> Generator[Tuple[NDArray, Tuple[slice, slice]], None, None]:
         """Iterate over blocks of the stack.
 
         Loads all images for one window at a time into memory.
@@ -389,9 +388,6 @@ class VRTStack:
         overlaps : Tuple[int, int], optional
             Pixels to overlap each block by (rows, cols)
             By default (0, 0)
-        start_offsets : Tuple[int, int], optional
-            (row, col) number of pixels to offset initial block
-            By default (0, 0)
         block_shape : Optional[Tuple[int, int]], optional
             If provided, force the blocks to load in the given shape.
             Otherwise, calculates how much blocks are possible to load
@@ -399,8 +395,6 @@ class VRTStack:
             internal chunking/tiling structure.
         max_bytes : Optional[int], optional
             RAM size (in Bytes) to attempt to stay under with each loaded block.
-        return_slices : bool, optional (default False)
-            return (row_slice, col_slice) indicating the position of the current block.
         skip_empty : bool, optional (default True)
             Skip blocks that are entirely empty (all NaNs)
         use_nodata_mask : bool, optional (default True)
@@ -416,6 +410,8 @@ class VRTStack:
             block_shape = self._get_block_shape(max_bytes=max_bytes)
 
         ndm = None  # TODO: get the polygon indicating nodata
+        if use_nodata_mask:
+            logger.info("Nodata mask not implemented, skipping")
 
         loader = io.EagerLoader(
             self.outfile,
