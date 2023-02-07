@@ -291,11 +291,7 @@ def _fill_ps_pixels(
             # ignore the warning about nansum/nanmean of empty slice
             warnings.simplefilter("ignore", category=RuntimeWarning)
             avg_mag = np.nanmean(np.abs(slc_stack), axis=0)
-
     mag = avg_mag.copy()
-    # Ensure that where avg_mag is NaN and `nodata_mask` are in sync
-    mag[nodata_mask] = np.nan
-    nodata_mask[np.isnan(mag)] = True
 
     # null out all the non-PS pixels when finding the brightest PS pixels
     mag[~ps_mask] = np.nan
@@ -303,23 +299,15 @@ def _fill_ps_pixels(
     slc_r_idxs, slc_c_idxs = _get_maxes(mag, strides["y"], strides["x"])
     # For ps_mask, we set to True if any pixels within the window were PS
     ps_mask_looked = take_looks(
-        ps_mask, strides["y"], strides["x"], func_type="any", edge_strategy="cutoff"
+        ps_mask, strides["y"], strides["x"], func_type="any", edge_strategy="pad"
     )
+    # make sure it's the same size as the MLE result/temp_coh after padding
+    ps_mask_looked = ps_mask_looked[: mle_est.shape[1], : mle_est.shape[2]]
 
-    nodata_mask_looked = take_looks(
-        nodata_mask,
-        strides["y"],
-        strides["x"],
-        func_type="all",
-    )
-
-    # we're only filling where there's both a PS pixel and valid data
-    # Now that the sum of this mask should be equal to the shape of `slc_r_idxs`
-    fill_mask = ps_mask_looked & ~nodata_mask_looked
-    # ref = np.conj(slc_stack[0][ps_mask])
+    # we're only filling where there are PS pixels
     ref = np.conj(slc_stack[0][slc_r_idxs, slc_c_idxs])
     for i in range(len(slc_stack)):
-        mle_est[i][fill_mask] = slc_stack[i][slc_r_idxs, slc_c_idxs] * ref
+        mle_est[i][ps_mask_looked] = slc_stack[i][slc_r_idxs, slc_c_idxs] * ref
     # Force PS pixels to have high temporal coherence
     temp_coh[ps_mask_looked] = 1
 
@@ -330,8 +318,11 @@ def _get_maxes(arr, row_looks, col_looks):
         return np.where(arr == arr)
     # Get the max value in each look window
     max_nums = take_looks(
-        arr, row_looks, col_looks, func_type="nanmax", edge_strategy="cutoff"
+        arr, row_looks, col_looks, func_type="nanmax", edge_strategy="pad"
     )
+    out_rows, out_cols = np.array(arr.shape) / [row_looks, col_looks]
+    max_nums = max_nums[:out_rows, :out_cols]
+
     # Repeat the max values to back to the original size
     maxes_filled = upsample_nearest(
         max_nums, arr.shape[-2:], looks=(row_looks, col_looks)
