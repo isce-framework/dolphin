@@ -317,10 +317,13 @@ def _get_maxes(arr, row_looks, col_looks):
         # No need to pad if we're not looking
         return np.where(arr == arr)
     # Get the max value in each look window
+    # Start by dithering the array to avoid ties in the max
+    arr = arr.copy() + 1e-5 * np.random.rand(*arr.shape)
     max_nums = take_looks(
         arr, row_looks, col_looks, func_type="nanmax", edge_strategy="pad"
     )
-    out_rows, out_cols = np.array(arr.shape) / [row_looks, col_looks]
+    out_rows, out_cols = np.array(arr.shape) // [row_looks, col_looks]
+    # Make sure it's the output size we want:
     max_nums = max_nums[:out_rows, :out_cols]
 
     # Repeat the max values to back to the original size

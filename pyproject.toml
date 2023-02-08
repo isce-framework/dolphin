@@ -66,5 +66,5 @@ ignore_missing_imports = true
 ignore = "D100,D102,D104,D105,D106,D107,D203,D204,D213,D413"
 
 [tool.pytest.ini_options]
-addopts = "  --cov=dolphin --dist each -n auto --maxprocesses=8 --doctest-modules --ignore=scripts --ignore=docs --ignore=data"
+addopts = "  --cov=dolphin  -n auto --maxprocesses=8 --doctest-modules --ignore=scripts --ignore=docs --ignore=data"
 filterwarnings = ["error"]

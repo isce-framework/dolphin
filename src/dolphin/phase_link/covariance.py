@@ -94,7 +94,7 @@ def coh_mat_single(neighbor_stack, cov_mat=None):
     """Given a (n_slc, n_samps) samples, estimate the coherence matrix."""
     nslc = neighbor_stack.shape[0]
     if cov_mat is None:
-        cov_mat = np.zeros((nslc, nslc), dtype="complex64")
+        cov_mat = np.zeros((nslc, nslc), dtype=neighbor_stack.dtype)
 
     for ti in range(nslc):
         # Start with the diagonal equal to 1
