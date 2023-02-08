@@ -316,9 +316,18 @@ class Inputs(BaseModel):
 class Outputs(BaseModel):
     """Options for the output format/compressions."""
 
-    output_format: OutputFormat = OutputFormat.NETCDF
-    scratch_directory: Path = Path("scratch")
-    output_directory: Path = Path("output")
+    output_format: OutputFormat = Field(
+        OutputFormat.NETCDF,
+        description="Output raster format for the workflow final product.",
+    )
+    scratch_directory: Path = Field(
+        Path("scratch"),
+        description="Directory to store intermediate files.",
+    )
+    output_directory: Path = Field(
+        Path("output"),
+        description="Directory to store final output files.",
+    )
     output_resolution: Optional[Dict[str, int]] = Field(
         # {"x": 20, "y": 20},
         None,

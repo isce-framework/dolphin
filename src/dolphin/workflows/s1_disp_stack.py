@@ -85,6 +85,7 @@ def run(cfg: Workflow, debug: bool = False):
 def _group_by_burst(
     file_list: Sequence[Filename],
     burst_id_fmt: Union[str, Pattern[str]] = OPERA_BURST_RE,
+    minimum_slcs: int = 2,
 ) -> Dict[str, List[Path]]:
     """Group Sentinel CSLC files by burst.
 
@@ -95,6 +96,10 @@ def _group_by_burst(
     burst_id_fmt: str
         format of the burst id in the filename.
         Default is [OPERA_BURST_RE][]
+    minimum_slcs: int
+        Minimum number of SLCs needed to run the workflow for each burst.
+        If there are fewer SLCs in a burst, it will be skipped and
+        a warning will be logged.
 
     Returns
     -------
@@ -125,6 +130,7 @@ def _group_by_burst(
         file_list, burst_ids = zip(*file_burst_tups)  # type: ignore
         return file_list
 
+    logger = get_log()
     sorted_file_list = sort_by_burst_id(file_list)
     # Now collapse into groups, sorted by the burst_id
     grouped_images = {
@@ -133,7 +139,17 @@ def _group_by_burst(
             sorted_file_list, key=lambda x: get_burst_id(x)
         )
     }
-    return grouped_images
+    # Make sure that each burst has at least the minimum number of SLCs
+    out = {}
+    for burst_id, slc_list in grouped_images.items():
+        if len(slc_list) < minimum_slcs:
+            logger.warning(
+                f"Skipping burst {burst_id} because it has only {len(slc_list)} SLCs."
+                f"Minimum number of SLCs is {minimum_slcs}"
+            )
+        else:
+            out[burst_id] = slc_list
+    return out
 
 
 def _create_burst_cfg(
