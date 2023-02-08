@@ -72,7 +72,6 @@ def run_evd_sequential(
 
     xhalf, yhalf = half_window["x"], half_window["y"]
     xs, ys = strides["x"], strides["y"]
-    out_shape = io.compute_out_shape((nrows, ncols), strides)
 
     # Solve each ministack using the current chunk (and the previous compressed SLCs)
     ministack_starts = range(0, len(file_list_all), ministack_size)
@@ -122,9 +121,7 @@ def run_evd_sequential(
             like_filename=cur_vrt.outfile,
             output_name=cur_comp_slc_file,
             nbands=1,
-            # shape=out_shape,
-            # The compressed SLC is the same size as the original SLC
-            shape=(nrows, ncols),
+            # Note that the compressed SLC is the same size as the original SLC
         )
         comp_slc_files.append(cur_comp_slc_file)
 
@@ -136,7 +133,7 @@ def run_evd_sequential(
             output_name=tcorr_file,
             nbands=1,
             dtype=np.float32,
-            shape=out_shape,
+            strides=strides,
         )
         tcorr_files.append(tcorr_file)
 
@@ -389,7 +386,6 @@ def _setup_output_folder(
             s = io._format_date_pair(d[0], d[1])
         date_strs.append(s)
 
-    rows, cols = vrt_stack.shape[-2:]
     output_files = []
     for filename in date_strs:
         slc_name = Path(filename).stem
@@ -402,7 +398,7 @@ def _setup_output_folder(
             driver=driver,
             nbands=1,
             dtype=dtype,
-            shape=io.compute_out_shape((rows, cols), strides),
+            strides=strides,
             options=creation_options,
         )
 
