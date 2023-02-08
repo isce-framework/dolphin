@@ -347,6 +347,7 @@ def write_arr(
     shape: Optional[Tuple[int, int]] = None,
     dtype: Optional[DTypeLike] = None,
     geotransform: Optional[Sequence[float]] = None,
+    strides: Optional[Dict[str, int]] = None,
     projection: Optional[Any] = None,
     nodata: Optional[Union[float, str]] = None,
 ):
@@ -379,6 +380,9 @@ def write_arr(
     geotransform : List, optional
         Geotransform to save. Default is the geotransform of like_filename.
         See https://gdal.org/tutorials/geotransforms_tut.html .
+    strides : dict, optional
+        If using `like_filename`, used to change the pixel size of the output file.
+        {"x": x strides, "y": y strides}
     projection : str or int, optional
         Projection to save. Default is the projection of like_filename.
         Possible values are anything parse-able by ``pyproj.CRS.from_user_input``
@@ -400,10 +404,15 @@ def write_arr(
         ysize, xsize = arr.shape[-2:]
         gdal_dtype = numpy_to_gdal_type(arr.dtype)
     else:
+        # If not passing an array to write, get shape/dtype from like_filename
         if shape is not None:
             ysize, xsize = shape
         else:
             xsize, ysize = ds_like.RasterXSize, ds_like.RasterYSize
+            # If using strides, adjust the output shape
+            if strides is not None:
+                ysize, xsize = compute_out_shape((ysize, xsize), strides)
+
         if dtype is not None:
             gdal_dtype = numpy_to_gdal_type(dtype)
         else:
@@ -449,6 +458,11 @@ def write_arr(
         projection = ds_like.GetProjection()
     if geotransform is None and ds_like is not None:
         geotransform = ds_like.GetGeoTransform()
+        # If we're using strides, adjust the geotransform
+        if strides is not None:
+            geotransform = list(geotransform)
+            geotransform[1] *= strides["x"]
+            geotransform[5] *= strides["y"]
 
     # Set the geo/proj information
     if projection:
@@ -456,6 +470,7 @@ def write_arr(
         # this still works if we're passed a WKT string
         projection = CRS.from_user_input(projection).to_wkt()
         ds_out.SetProjection(projection)
+
     if geotransform is not None:
         ds_out.SetGeoTransform(geotransform)
 

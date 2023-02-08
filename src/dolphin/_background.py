@@ -1,12 +1,24 @@
 import abc
 from queue import Empty, Queue
 from threading import Event, Thread
+from threading import enumerate as threading_enumerate
 
 from dolphin._log import get_log
 
 logger = get_log()
 
 _DEFAULT_TIMEOUT = 1.0
+
+
+def is_main_thread_active() -> bool:
+    """Check if the main thread is still active.
+
+    Used to check if the writing thread should exit if there was
+    some exception in the main thread.
+
+    Source: https://stackoverflow.com/a/23443397/4174466
+    """
+    return any((i.name == "MainThread") and i.is_alive() for i in threading_enumerate())
 
 
 class BackgroundWorker(abc.ABC):
