@@ -4,6 +4,7 @@ This module heavily relies on GDAL and provides many convenience/
 wrapper functions to write/iterate over blocks of large raster files.
 """
 import copy
+import math
 from datetime import date
 from os import fspath
 from pathlib import Path
@@ -273,8 +274,9 @@ def xy_to_rowcol(
     col, row = _apply_gt(ds, filename, x, y, inverse=True)
     # Need to convert to int, otherwise we get a float
     if do_round:
-        row = round(row)
-        col = round(col)
+        # round up to the nearest pixel, instead of banker's rounding
+        row = int(math.floor(row + 0.5))
+        col = int(math.floor(col + 0.5))
     return int(row), int(col)
 
 

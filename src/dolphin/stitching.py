@@ -192,6 +192,10 @@ def merge_images(
             int_left, int_top, filename=outfile, do_round=False
         )
         row_bottom, col_right = io.xy_to_rowcol(int_right, int_bottom, filename=outfile)
+        # Cap the bottom and right to the same size as arr_in
+        row_bottom = min(row_bottom, row_top + arr_in.shape[0])
+        col_right = min(col_right, col_left + arr_in.shape[1])
+
         # Read it in so we can blend out the write for this block
         cur_out = io.load_gdal(
             outfile, rows=slice(row_top, row_bottom), cols=slice(col_left, col_right)
@@ -417,9 +421,10 @@ def _get_combined_bounds_gt(
 def _get_output_shape(bounds, res):
     """Get the output shape of the combined image."""
     left, bottom, right, top = bounds
-    out_width = int(round((right - left) / abs(res[0])))
-    out_height = int(round((top - bottom) / abs(res[1])))
-    return (out_height, out_width)
+    # Always round up to the nearest pixel, instead of banker's rounding
+    out_width = math.floor(0.5 + (right - left) / abs(res[0]))
+    out_height = math.floor(0.5 + (top - bottom) / abs(res[1]))
+    return int(out_height), int(out_width)
 
 
 def _align_bounds(bounds, res):
