@@ -153,15 +153,11 @@ def test_ps_fill(slc_samples, strides):
     ps_mask = np.zeros((11, 11), dtype=bool)
     ps_mask[ps_idx, ps_idx] = True
 
-    # all valid data
-    nodata_mask = np.zeros((11, 11), dtype=bool)
-
     mle._fill_ps_pixels(
         mle_est,
         temp_coh,
         slc_stack,
         ps_mask,
-        nodata_mask,
         {"x": strides, "y": strides},
         None,  # avg_mag
     )

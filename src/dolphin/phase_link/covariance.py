@@ -42,7 +42,14 @@ def estimate_stack_covariance_cpu(
     C_arrays : np.ndarray
         The covariance matrix at each pixel, with shape
         (n_rows, n_cols, n_slc, n_slc).
+
+    Raises
+    ------
+    ValueError
+        If `slc_stack` is not complex data.
     """
+    if not np.iscomplexobj(slc_stack):
+        raise ValueError("The SLC stack must be complex.")
     # Get the dimensions
     nslc, rows, cols = slc_stack.shape
     dtype = slc_stack.dtype
