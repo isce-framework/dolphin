@@ -152,9 +152,7 @@ def run_mle(
 
     # Fill in the PS pixels from the original SLC stack, if it was given
     if np.any(ps_mask):
-        _fill_ps_pixels(
-            mle_est, temp_coh, slc_stack, ps_mask, nodata_mask, strides, avg_mag
-        )
+        _fill_ps_pixels(mle_est, temp_coh, slc_stack, ps_mask, strides, avg_mag)
 
     return mle_est, temp_coh
 
@@ -259,9 +257,7 @@ def _check_all_nans(slc_stack):
         raise PhaseLinkRuntimeError(f"SLC stack[{bad_slc_idxs}] has are all NaNs.")
 
 
-def _fill_ps_pixels(
-    mle_est, temp_coh, slc_stack, ps_mask, nodata_mask, strides, avg_mag
-):
+def _fill_ps_pixels(mle_est, temp_coh, slc_stack, ps_mask, strides, avg_mag):
     """Fill in the PS locations in the MLE estimate with the original SLC data.
 
     Overwrites `mle_est` and `temp_coh` in place.
@@ -276,8 +272,6 @@ def _fill_ps_pixels(
         The original SLC stack, with shape (n_images, n_rows, n_cols)
     ps_mask : ndarray, shape = (rows, cols)
         Boolean mask of pixels marking persistent scatterers (PS).
-    nodata_mask : ndarray, shape = (rows, cols)
-        Boolean mask of pixels marking no data pixels.
     strides : dict
         The look window strides
     avg_mag : np.ndarray, optional
