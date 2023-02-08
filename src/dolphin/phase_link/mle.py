@@ -25,7 +25,7 @@ def run_mle(
     slc_stack: np.ndarray,
     half_window: Dict[str, int],
     strides: Dict[str, int] = {"x": 1, "y": 1},
-    beta: float = 0.0,
+    beta: float = 0.01,
     reference_idx: int = 0,
     nodata_mask: np.ndarray = None,
     ps_mask: Optional[np.ndarray] = None,
@@ -48,7 +48,7 @@ def run_mle(
         The (x, y) strides (in pixels) to use for the sliding window.
         By default {"x": 1, "y": 1}
     beta : float, optional
-        The regularization parameter, by default 0.0.
+        The regularization parameter, by default 0.01.
     reference_idx : int, optional
         The index of the (non compressed) reference SLC, by default 0
     nodata_mask : np.ndarray, optional
@@ -157,7 +157,7 @@ def run_mle(
     return mle_est, temp_coh
 
 
-def mle_stack(C_arrays, beta: float = 0.0, reference_idx: float = 0):
+def mle_stack(C_arrays, beta: float = 0.01, reference_idx: float = 0):
     """Estimate the linked phase for a stack of covariance matrices.
 
     This function is used for both the CPU and GPU versions after
@@ -173,6 +173,7 @@ def mle_stack(C_arrays, beta: float = 0.0, reference_idx: float = 0):
     beta : float, optional
         The regularization parameter for inverting Gamma = |C|
         The regularization is applied as (1 - beta) * Gamma + beta * I
+        Default is 0.01.
     reference_idx : int, optional
         The index of the reference acquisition, by default 0
         If the SLC stack from which `C_arrays` was computed contained

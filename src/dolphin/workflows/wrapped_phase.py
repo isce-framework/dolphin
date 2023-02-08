@@ -79,7 +79,7 @@ def run(cfg: Workflow, debug: bool = False) -> List[VRTInterferogram]:
             max_bytes=cfg.worker_settings.max_ram_gb * 1e9,
             n_workers=cfg.worker_settings.n_workers,
             gpu_enabled=cfg.worker_settings.gpu_enabled,
-            beta=0.0,
+            beta=0.01,
         )
 
     # ###################################################
