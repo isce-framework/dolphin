@@ -4,7 +4,7 @@ from threading import Event, Thread
 
 from dolphin._log import get_log
 
-log = get_log()
+logger = get_log()
 
 _DEFAULT_TIMEOUT = 1.0
 
@@ -55,17 +55,17 @@ class BackgroundWorker(abc.ABC):
 
     def _consume_work_queue(self):
         while not self._finished_event.is_set():
-            log.debug("getting work")
+            logger.debug("getting work")
             try:
                 args, kw = self._work_queue.get(timeout=self.timeout)
             except Empty:
-                log.debug("timed out, checking if done")
+                logger.debug("timed out, checking if done")
                 continue
-            log.debug("processing")
+            logger.debug("processing")
             result = self.process(*args, **kw)
-            log.debug("got result")
+            logger.debug("got result")
             if self.store_results:
-                log.debug("saving result in queue")
+                logger.debug("saving result in queue")
                 self._results_queue.put(result)
 
     @abc.abstractmethod

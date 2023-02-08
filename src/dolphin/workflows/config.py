@@ -522,7 +522,7 @@ class Workflow(BaseModel):
 
     def create_dir_tree(self, debug=False):
         """Create the directory tree for the workflow."""
-        log = get_log(debug=debug)
+        logger = get_log(debug=debug)
         for d in self._directory_list:
-            log.debug(f"Creating directory: {d}")
+            logger.debug(f"Creating directory: {d}")
             d.mkdir(parents=True, exist_ok=True)
