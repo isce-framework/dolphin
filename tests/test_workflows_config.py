@@ -351,13 +351,20 @@ def test_config_roundtrip_json(dir_with_1_slc):
 
 
 def test_config_roundtrip_yaml(tmp_path, dir_with_1_slc):
-    c = config.Workflow(
-        inputs={"cslc_file_list": dir_with_1_slc / "slclist.txt", "subdataset": "data"}
-    )
     outfile = tmp_path / "config.yaml"
     c = config.Workflow(
         inputs={"cslc_file_list": dir_with_1_slc / "slclist.txt", "subdataset": "data"}
     )
     c.to_yaml(outfile)
+    c2 = config.Workflow.from_yaml(outfile)
+    assert c == c2
+
+
+def test_config_roundtrip_yaml_with_comments(tmp_path, dir_with_1_slc):
+    outfile = tmp_path / "config.yaml"
+    c = config.Workflow(
+        inputs={"cslc_file_list": dir_with_1_slc / "slclist.txt", "subdataset": "data"}
+    )
+    c.to_yaml(outfile, with_comments=True)
     c2 = config.Workflow.from_yaml(outfile)
     assert c == c2
