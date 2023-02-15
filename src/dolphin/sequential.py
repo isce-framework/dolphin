@@ -73,9 +73,17 @@ def run_evd_sequential(
     xhalf, yhalf = half_window["x"], half_window["y"]
     xs, ys = strides["x"], strides["y"]
 
+    # If we were passed any compressed SLCs in `file_list_all`,
+    # then we want the first `mini_idx` start at the first non-compressed index
+    last_comp_slc = 0
+    for filename in file_list_all:
+        if "compressed" not in filename:
+            break
+        last_comp_slc += 1
+
     # Solve each ministack using the current chunk (and the previous compressed SLCs)
     ministack_starts = range(0, len(file_list_all), ministack_size)
-    for mini_idx, full_stack_idx in enumerate(ministack_starts):
+    for mini_idx, full_stack_idx in enumerate(ministack_starts, start=last_comp_slc):
         cur_slice = slice(full_stack_idx, full_stack_idx + ministack_size)
         cur_files = file_list_all[cur_slice].copy()
         cur_dates = date_list_all[cur_slice].copy()
