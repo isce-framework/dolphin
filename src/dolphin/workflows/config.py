@@ -123,6 +123,15 @@ class PhaseLinkingOptions(BaseModel):
         15, description="Size of the ministack for sequential estimator.", gt=1
     )
     half_window = HalfWindow()
+    beta: float = Field(
+        0.01,
+        description=(
+            "Beta regularization parameter for correlation matrix inversion. 0 is no"
+            " regularization."
+        ),
+        gt=0.0,
+        lt=1.0,
+    )
 
 
 class InterferogramNetwork(BaseModel):
