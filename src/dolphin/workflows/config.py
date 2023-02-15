@@ -1,6 +1,9 @@
 import json
 import re
+import sys
+import textwrap
 from datetime import date, datetime
+from io import StringIO
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, TextIO, Union
 
@@ -15,10 +18,11 @@ from pydantic import (
     validator,
 )
 from ruamel.yaml import YAML
+from ruamel.yaml.comments import CommentedMap
 
 from dolphin import __version__ as _dolphin_version
-from dolphin import io
 from dolphin._log import get_log
+from dolphin.io import DEFAULT_HDF5_OPTIONS, DEFAULT_TIFF_OPTIONS, format_nc_filename
 from dolphin.utils import get_dates, sort_files_by_date
 
 from ._enums import InterferogramNetworkType, OutputFormat, UnwrapMethod, WorkflowName
@@ -56,10 +60,22 @@ def _move_file_in_dir(path: PathOrStr, values: dict) -> Path:
 class PsOptions(BaseModel):
     """Options for the PS pixel selection portion of the workflow."""
 
-    directory: Path = Path("PS")
-    output_file: Path = Path("ps_pixels.tif")
-    amp_dispersion_file: Path = Path("amp_dispersion.tif")
-    amp_mean_file: Path = Path("amp_mean.tif")
+    directory: Path = Field(
+        Path("PS"),
+        description="Sub-directory name to store PS pixel selection results.",
+    )
+    output_file: Path = Field(
+        Path("ps_pixels.tif"),
+        description="Output file name for PS pixel selection results.",
+    )
+    amp_dispersion_file: Path = Field(
+        Path("amp_dispersion.tif"),
+        description="Output file name for amplitude dispersion results.",
+    )
+    amp_mean_file: Path = Field(
+        Path("amp_mean.tif"),
+        description="Output file name for mean amplitude results.",
+    )
 
     amp_dispersion_threshold: float = Field(
         0.35,
@@ -99,7 +115,10 @@ class HalfWindow(BaseModel):
 class PhaseLinkingOptions(BaseModel):
     """Configurable options for wrapped phase estimation."""
 
-    directory: Path = Path("linked_phase")
+    directory: Path = Field(
+        Path("linked_phase"),
+        description="Sub-directory name to store wrapped phase estimation results.",
+    )
     ministack_size: int = Field(
         15, description="Size of the ministack for sequential estimator.", gt=1
     )
@@ -109,7 +128,10 @@ class PhaseLinkingOptions(BaseModel):
 class InterferogramNetwork(BaseModel):
     """Options to determine the type of network for interferogram formation."""
 
-    directory: Path = Path("interferograms")
+    directory: Path = Field(
+        Path("interferograms"),
+        description="Sub-directory name to store interferogram results.",
+    )
 
     reference_idx: Optional[int] = Field(
         None,
@@ -163,13 +185,28 @@ class InterferogramNetwork(BaseModel):
 class UnwrapOptions(BaseModel):
     """Options for unwrapping after wrapped phase estimation."""
 
-    run_unwrap: bool = False
-    directory: Path = Path("unwrap")
-    unwrap_method: UnwrapMethod = UnwrapMethod.SNAPHU
-    tiles: Sequence[int] = [1, 1]
-    init_method: str = "mcf"
-
-    # validators
+    run_unwrap: bool = Field(
+        False,
+        description=(
+            "Whether to run the unwrapping step after wrapped phase estimation."
+        ),
+    )
+    directory: Path = Field(
+        Path("unwrap"),
+        description="Sub-directory name to store unwrapping results.",
+    )
+    unwrap_method: UnwrapMethod = Field(
+        UnwrapMethod.SNAPHU,
+        description="Method to use for unwrapping.",
+    )
+    tiles: Sequence[int] = Field(
+        [1, 1],
+        description="Number of tiles to split the unwrapping into (for Tophu).",
+    )
+    init_method: str = Field(
+        "mcf",
+        description="Initialization method for SNAPHU.",
+    )
 
 
 class WorkerSettings(BaseSettings):
@@ -237,6 +274,7 @@ class Inputs(BaseModel):
 
     class Config:
         extra = Extra.forbid  # raise error if extra fields passed in
+        schema_extra = {"required": ["cslc_file_list"]}
 
     # validators
     @validator("cslc_file_list", pre=True)
@@ -305,7 +343,7 @@ class Inputs(BaseModel):
             subdataset = values.get("subdataset")
             # gdal formatting function will raise an error if subdataset doesn't exist
             for f in file_list:
-                io.format_nc_filename(f, subdataset)
+                format_nc_filename(f, subdataset)
 
         file_list, _ = sort_files_by_date(file_list, file_date_fmt=date_fmt)
         # Coerce the file_list to a list of Path objects, sorted
@@ -318,15 +356,15 @@ class Outputs(BaseModel):
 
     output_format: OutputFormat = Field(
         OutputFormat.NETCDF,
-        description="Output raster format for the workflow final product.",
+        description="Output format for the workflow",
     )
     scratch_directory: Path = Field(
         Path("scratch"),
-        description="Directory to store intermediate files.",
+        description="Name of sub-directory to use for scratch files",
     )
     output_directory: Path = Field(
         Path("output"),
-        description="Directory to store final output files.",
+        description="Name of sub-directory to use for output files",
     )
     output_resolution: Optional[Dict[str, int]] = Field(
         # {"x": 20, "y": 20},
@@ -344,11 +382,11 @@ class Outputs(BaseModel):
     )
 
     hdf5_creation_options: Dict = Field(
-        io.DEFAULT_HDF5_OPTIONS,
+        DEFAULT_HDF5_OPTIONS,
         description="Options for `create_dataset` with h5py.",
     )
     gtiff_creation_options: List[str] = Field(
-        list(io.DEFAULT_TIFF_OPTIONS),
+        list(DEFAULT_TIFF_OPTIONS),
         description="GDAL creation options for GeoTIFF files",
     )
 
@@ -402,7 +440,10 @@ class Workflow(BaseModel):
     Required fields are in `Inputs`, where you must specify `cslc_file_list`.
     """
 
-    workflow_name: str = WorkflowName.STACK
+    workflow_name: str = Field(
+        WorkflowName.STACK,
+        description="Name of the workflow to run",
+    )
 
     inputs: Inputs
     outputs: Outputs = Field(default_factory=Outputs)
@@ -417,13 +458,17 @@ class Workflow(BaseModel):
 
     # General workflow metadata
     worker_settings: WorkerSettings = Field(default_factory=WorkerSettings)
-    creation_time_utc: datetime = Field(default_factory=datetime.utcnow)
-    dolphin_version: str = _dolphin_version
+    creation_time_utc: datetime = Field(
+        default_factory=datetime.utcnow, description="Time the config file was created"
+    )
+    dolphin_version: str = Field(
+        _dolphin_version, description="Version of Dolphin used."
+    )
 
     # internal helpers
     # Stores the list of directories to be created by the workflow
     _directory_list: List[Path] = PrivateAttr(default_factory=list)
-    _date_list: List[date] = PrivateAttr(default_factory=list)
+    _date_list: List[Union[date, List[date]]] = PrivateAttr(default_factory=list)
 
     class Config:
         extra = Extra.forbid  # raise error if extra fields passed in
@@ -469,7 +514,7 @@ class Workflow(BaseModel):
         return values
 
     # Extra model exporting options beyond .dict() or .json()
-    def to_yaml(self, output_path: Union[PathOrStr, TextIO]):
+    def to_yaml(self, output_path: Union[PathOrStr, TextIO], with_comments=True):
         """Save workflow configuration as a yaml file.
 
         Used to record the default-filled version of a supplied yaml.
@@ -478,14 +523,20 @@ class Workflow(BaseModel):
         ----------
         output_path : Pathlike
             Path to the yaml file to save.
+        with_comments : bool, default = False.
+            Whether to add comments containing the type/descriptions to all fields.
         """
-        data = json.loads(self.json())
+        yaml_obj = self._to_yaml_obj()
+
+        if with_comments:
+            _add_comments(yaml_obj, self.schema())
+
         y = YAML()
         if hasattr(output_path, "write"):
-            y.dump(data, output_path)
+            y.dump(yaml_obj, output_path)
         else:
             with open(output_path, "w") as f:
-                y.dump(data, f)
+                y.dump(yaml_obj, f)
 
     @classmethod
     def from_yaml(cls, yaml_path: PathOrStr):
@@ -504,7 +555,25 @@ class Workflow(BaseModel):
         y = YAML(typ="safe")
         with open(yaml_path, "r") as f:
             data = y.load(f)
+
         return cls(**data)
+
+    @classmethod
+    def print_yaml_schema(cls, output_path: Union[PathOrStr, TextIO] = sys.stdout):
+        """Print/save an empty configuration with defaults filled in.
+
+        Ignores the required `cslc_file_list` input, so a user can
+        inspect all fields.
+
+        Parameters
+        ----------
+        output_path : Pathlike
+            Path or stream to save to the yaml file to.
+            By default, prints to stdout.
+        """
+        # The .construct is a pydantic method to disable validation
+        # https://docs.pydantic.dev/usage/models/#creating-models-without-validation
+        cls(inputs=Inputs.construct()).to_yaml(output_path, with_comments=True)
 
     def __init__(self, **data):
         """After validation, set up properties for use during workflow run."""
@@ -522,7 +591,79 @@ class Workflow(BaseModel):
 
     def create_dir_tree(self, debug=False):
         """Create the directory tree for the workflow."""
-        logger = get_log(debug=debug)
+        log = get_log(debug=debug)
         for d in self._directory_list:
-            logger.debug(f"Creating directory: {d}")
+            log.debug(f"Creating directory: {d}")
             d.mkdir(parents=True, exist_ok=True)
+
+    def _to_yaml_obj(self) -> CommentedMap:
+        # Make the YAML object to add comments to
+        # We can't just do `dumps` for some reason, need a stream
+        y = YAML()
+        ss = StringIO()
+        y.dump(json.loads(self.json()), ss)
+        yaml_obj = y.load(ss.getvalue())
+        return yaml_obj
+
+
+def _add_comments(
+    loaded_yaml: CommentedMap,
+    schema: dict,
+    indent: int = 0,
+    definitions: Optional[dict] = None,
+):
+    """Add comments above each YAML field using the pydantic model schema."""
+    # Definitions are in schemas that contain nested pydantic Models
+    if definitions is None:
+        definitions = schema.get("definitions")
+
+    for key, val in schema["properties"].items():
+        reference = ""
+        # Get sub-schema if it exists
+        if "$ref" in val.keys():
+            # At top level, example is 'outputs': {'$ref': '#/definitions/Outputs'}
+            reference = val["$ref"]
+        elif "allOf" in val.keys():
+            # within 'definitions', it looks like
+            #  'allOf': [{'$ref': '#/definitions/HalfWindow'}]
+            reference = val["allOf"][0]["$ref"]
+
+        ref_key = reference.split("/")[-1]
+        if ref_key:  # The current property is a reference to something else
+            if "enum" in definitions[ref_key]:  # type: ignore
+                # This is just an Enum, not a sub schema.
+                # Overwrite the value with the referenced value
+                val = definitions[ref_key]  # type: ignore
+            else:
+                # The reference is a sub schema, so we need to recurse
+                sub_schema = definitions[ref_key]  # type: ignore
+                # Get the sub-model
+                sub_loaded_yaml = loaded_yaml[key]
+                # recurse on the sub-model
+                _add_comments(
+                    sub_loaded_yaml,
+                    sub_schema,
+                    indent=indent + 2,
+                    definitions=definitions,
+                )
+                continue
+
+        # add each description along with the type information
+        desc = "\n".join(
+            textwrap.wrap(f"{val['description']}.", width=90, subsequent_indent="  ")
+        )
+        type_str = f"\n  Type: {val['type']}."
+        choices = f"\n  Options: {val['enum']}." if "enum" in val.keys() else ""
+
+        # Combine the description/type/choices as the YAML comment
+        comment = f"{desc}{type_str}{choices}"
+        comment = comment.replace("..", ".")  # Remove double periods
+
+        # Prepend the required label for fields that are required
+        is_required = key in schema.get("required", [])
+        if is_required:
+            comment = "REQUIRED: " + comment
+
+        # This method comes from here
+        # https://yaml.readthedocs.io/en/latest/detail.html#round-trip-including-comments
+        loaded_yaml.yaml_set_comment_before_after_key(key, comment, indent=indent)
