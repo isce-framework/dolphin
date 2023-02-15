@@ -5,7 +5,7 @@ import textwrap
 from datetime import date, datetime
 from io import StringIO
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Sequence, TextIO, Tuple, Union
+from typing import Dict, List, Optional, TextIO, Tuple, Union
 
 from osgeo import gdal
 from pydantic import (
@@ -133,6 +133,9 @@ class PhaseLinkingOptions(BaseModel):
         lt=1.0,
     )
 
+    class Config:
+        extra = Extra.forbid  # raise error if extra fields passed in
+
 
 class InterferogramNetwork(BaseModel):
     """Options to determine the type of network for interferogram formation."""
@@ -158,7 +161,7 @@ class InterferogramNetwork(BaseModel):
         description="Maximum temporal baseline of interferograms.",
         gt=0,
     )
-    indexes: Optional[Iterable[Tuple[int, int]]] = Field(
+    indexes: Optional[List[Tuple[int, int]]] = Field(
         None,
         description=(
             "For manual-index network: List of (ref_idx, sec_idx) defining the"
@@ -212,7 +215,7 @@ class UnwrapOptions(BaseModel):
         description="Sub-directory name to store unwrapping results.",
     )
     unwrap_method: UnwrapMethod = UnwrapMethod.SNAPHU
-    tiles: Sequence[int] = Field(
+    tiles: List[int] = Field(
         [1, 1],
         description="Number of tiles to split the unwrapping into (for Tophu).",
     )
