@@ -155,10 +155,11 @@ class InterferogramNetwork(BaseModel):
     )
     max_temporal_baseline: Optional[int] = Field(
         None,
-        description="Maximum temporal baseline of interferograms",
+        description="Maximum temporal baseline of interferograms.",
         gt=0,
     )
-    network_type = InterferogramNetworkType.SINGLE_REFERENCE
+
+    network_type: InterferogramNetworkType = InterferogramNetworkType.SINGLE_REFERENCE
 
     class Config:
         extra = Extra.forbid  # raise error if extra fields passed in
@@ -204,10 +205,7 @@ class UnwrapOptions(BaseModel):
         Path("unwrap"),
         description="Sub-directory name to store unwrapping results.",
     )
-    unwrap_method: UnwrapMethod = Field(
-        UnwrapMethod.SNAPHU,
-        description="Method to use for unwrapping.",
-    )
+    unwrap_method: UnwrapMethod = UnwrapMethod.SNAPHU
     tiles: Sequence[int] = Field(
         [1, 1],
         description="Number of tiles to split the unwrapping into (for Tophu).",
@@ -363,10 +361,7 @@ class Inputs(BaseModel):
 class Outputs(BaseModel):
     """Options for the output format/compressions."""
 
-    output_format: OutputFormat = Field(
-        OutputFormat.NETCDF,
-        description="Output format for the workflow",
-    )
+    output_format: OutputFormat = OutputFormat.NETCDF
     scratch_directory: Path = Field(
         Path("scratch"),
         description="Name of sub-directory to use for scratch files",
@@ -449,10 +444,7 @@ class Workflow(BaseModel):
     Required fields are in `Inputs`, where you must specify `cslc_file_list`.
     """
 
-    workflow_name: str = Field(
-        WorkflowName.STACK,
-        description="Name of the workflow to run",
-    )
+    workflow_name: WorkflowName = WorkflowName.STACK
 
     inputs: Inputs
     outputs: Outputs = Field(default_factory=Outputs)
