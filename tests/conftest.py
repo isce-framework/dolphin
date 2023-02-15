@@ -1,3 +1,4 @@
+import warnings
 from pathlib import Path
 
 import numpy as np
@@ -7,6 +8,14 @@ from osgeo import gdal
 
 from dolphin.io import load_gdal, write_arr
 from dolphin.phase_link import simulate
+
+# Warning thrown in pkg_resources/__init__.py:2297: in declare_namespace
+#   DeprecationWarning: Implementing implicit namespace packages (as specified in PEP 420)
+#     is preferred to `pkg_resources.declare_namespace`.
+warnings.filterwarnings(
+    "ignore", message="*namespace packages*", category=DeprecationWarning
+)
+
 
 simulate._seed(1234)
 NUM_ACQ = 30
