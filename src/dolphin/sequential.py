@@ -77,7 +77,7 @@ def run_evd_sequential(
     # then we want the first `mini_idx` start at the first non-compressed index
     last_comp_slc = 0
     for filename in file_list_all:
-        if "compressed" not in filename:
+        if "compressed" not in str(filename):
             break
         last_comp_slc += 1
 
