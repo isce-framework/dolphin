@@ -363,7 +363,7 @@ class Inputs(BaseModel):
 
         # Coerce the file_list to a sorted list of absolute Path objects
         file_list, _ = sort_files_by_date(file_list, file_date_fmt=date_fmt)
-        values["cslc_file_list"] = [Path(f).absolute() for f in file_list]
+        values["cslc_file_list"] = [Path(f).resolve() for f in file_list]
         return values
 
 
@@ -489,7 +489,7 @@ class Workflow(BaseModel):
         """Ensure outputs from workflow steps are within scratch directory."""
         scratch_dir = values["outputs"].scratch_directory
         # Save all directories as absolute paths
-        scratch_dir = scratch_dir.absolute()
+        scratch_dir = scratch_dir.resolve(strict=False)
 
         # For each workflow step that has an output folder, move it inside
         # the scratch directory (if it's not already inside).
@@ -497,7 +497,7 @@ class Workflow(BaseModel):
         ps_opts = values["ps_options"]
         if not ps_opts.directory.parent == scratch_dir:
             ps_opts.directory = scratch_dir / ps_opts.directory
-        ps_opts.directory = ps_opts.directory.absolute()
+        ps_opts.directory = ps_opts.directory.resolve(strict=False)
 
         if not ps_opts.amp_dispersion_file.parent.parent == scratch_dir:
             ps_opts.amp_dispersion_file = scratch_dir / ps_opts.amp_dispersion_file
@@ -509,17 +509,17 @@ class Workflow(BaseModel):
         pl_opts = values["phase_linking"]
         if not pl_opts.directory.parent == scratch_dir:
             pl_opts.directory = scratch_dir / pl_opts.directory
-        pl_opts.directory = pl_opts.directory.absolute()
+        pl_opts.directory = pl_opts.directory.resolve(strict=False)
 
         ifg_opts = values["interferogram_network"]
         if not ifg_opts.directory.parent == scratch_dir:
             ifg_opts.directory = scratch_dir / ifg_opts.directory
-        ifg_opts.directory = ifg_opts.directory.absolute()
+        ifg_opts.directory = ifg_opts.directory.resolve(strict=False)
 
         unw_opts = values["unwrap_options"]
         if not unw_opts.directory.parent == scratch_dir:
             unw_opts.directory = scratch_dir / unw_opts.directory
-        unw_opts.directory = unw_opts.directory.absolute()
+        unw_opts.directory = unw_opts.directory.resolve(strict=False)
 
         return values
 

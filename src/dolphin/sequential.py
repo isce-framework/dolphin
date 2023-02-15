@@ -77,7 +77,7 @@ def run_evd_sequential(
     # then we want the first `mini_idx` start at the first non-compressed index
     last_comp_slc = 0
     for filename in file_list_all:
-        if "compressed" not in str(filename):
+        if not Path(filename).name.startswith("compressed"):
             break
         last_comp_slc += 1
 
@@ -218,10 +218,10 @@ def run_evd_sequential(
     # final_output_folder.mkdir(parents=True, exist_ok=True)
 
     # Average the temporal coherence files in each ministack
+    # TODO: do we want to include the date span in this filename?
     output_tcorr_file = output_folder / "tcorr_average.tif"
     # Find the offsets between stacks by doing a phase linking only compressed SLCs
-
-    # ...But only if we have multiple ministacks
+    # (But only if we have >1 ministacks. If only one, just rename the outputs)
     if len(comp_slc_files) == 1:
         # There was only one ministack, so we can skip this step
         logger.info("Only one ministack, skipping offset calculation.")
@@ -229,7 +229,11 @@ def run_evd_sequential(
         assert len(tcorr_files) == 1
         for slc_fname in output_slc_files[0]:
             slc_fname.rename(output_folder / slc_fname.name)
+
         tcorr_files[0].rename(output_tcorr_file)
+
+        output_comp_slc_file = output_folder / comp_slc_files[0].name
+        comp_slc_files[0].rename(output_comp_slc_file)
         return
 
     # Compute the adjustments by running EVD on the compressed SLCs

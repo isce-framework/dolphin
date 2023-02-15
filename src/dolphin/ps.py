@@ -8,12 +8,12 @@ import numpy as np
 from numpy.typing import ArrayLike
 from osgeo import gdal
 
-gdal.UseExceptions()
-
 from dolphin import io
 from dolphin._log import get_log
 from dolphin._types import Filename
 from dolphin.stack import VRTStack
+
+gdal.UseExceptions()
 
 logger = get_log()
 
@@ -159,7 +159,6 @@ def calc_ps_block(
         # ignore the warning about nansum/nanmean of empty slice
         warnings.simplefilter("ignore", category=RuntimeWarning)
 
-        # TODO: is it worth creating each ndarray in advance and use `out=`?
         mean = np.nanmean(stack_mag, axis=0)
         std_dev = np.nanstd(stack_mag, axis=0)
         count = np.count_nonzero(~np.isnan(stack_mag), axis=0)

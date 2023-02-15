@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+from pathlib import Path
 from typing import List
 
 from dolphin import ps, sequential, stack
@@ -94,7 +94,7 @@ def run(cfg: Workflow, debug: bool = False) -> List[VRTInterferogram]:
         logger.info(
             f"Creating virtual interferograms from {len(phase_linked_slcs)} files"
         )
-        if "compressed" in vrt_stack.file_list[0]:
+        if Path(vrt_stack.file_list[0]).name.startswith("compressed"):
             # The first file is a compressed SLC, so we want to use that as the reference
             # TODO: will this fail with anything by single-refernce/manual-index?
             slc_list = [vrt_stack.file_list[0]] + phase_linked_slcs

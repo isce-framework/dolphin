@@ -30,7 +30,7 @@ def create_config(
         # Override the ministack size so that only one phase linking is run
         ministack_size = 1000
     else:
-        interferogram_network = None  # Use default
+        interferogram_network = {}  # Use default
 
     cfg = Workflow(
         inputs=dict(

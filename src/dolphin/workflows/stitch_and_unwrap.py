@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 from typing import List
 
 from dolphin import stitching, unwrap
