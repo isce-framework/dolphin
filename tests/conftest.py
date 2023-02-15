@@ -13,7 +13,7 @@ from dolphin.phase_link import simulate
 #   DeprecationWarning: Implementing implicit namespace packages (as specified in PEP 420)
 #     is preferred to `pkg_resources.declare_namespace`.
 warnings.filterwarnings(
-    "ignore", message="*namespace packages*", category=DeprecationWarning
+    "ignore", message=".*namespace packages.*", category=DeprecationWarning
 )
 
 
