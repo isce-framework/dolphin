@@ -90,22 +90,24 @@ def run(cfg: Workflow, debug: bool = False) -> List[VRTInterferogram]:
     if len(existing_ifgs) > 0:
         logger.info(f"Skipping interferogram step, {len(existing_ifgs)} exists")
     else:
-        # TODO: intermediate extension should be in config
         phase_linked_slcs = sorted(pl_path.glob("20*.tif"))
-        compressed_slcs = sorted(pl_path.glob("compressed_*.tif"))
         logger.info(
-            f"Creating virtual interferograms from {len(phase_linked_slcs)} files and"
-            f" {len(compressed_slcs)} compressed files"
+            f"Creating virtual interferograms from {len(phase_linked_slcs)} files"
         )
-        if compressed_slcs:
-            slc_list = [compressed_slcs[0]] + phase_linked_slcs
+        if "compressed" in vrt_stack.file_list[0]:
+            # The first file is a compressed SLC, so we want to use that as the reference
+            # TODO: will this fail with anything by single-refernce/manual-index?
+            slc_list = [vrt_stack.file_list[0]] + phase_linked_slcs
         else:
             slc_list = phase_linked_slcs
+
+        # TODO: if we pass in a comp slc for single
         network = Network(
             slc_list=slc_list,
             reference_idx=cfg.interferogram_network.reference_idx,
             max_bandwidth=cfg.interferogram_network.max_bandwidth,
             max_temporal_baseline=cfg.interferogram_network.max_temporal_baseline,
+            indexes=cfg.interferogram_network.indexes,
             outdir=ifg_dir,
         )
         if len(network) == 0:
