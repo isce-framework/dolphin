@@ -5,7 +5,7 @@ import textwrap
 from datetime import date, datetime
 from io import StringIO
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence, TextIO, Union
+from typing import Dict, Iterable, List, Optional, Sequence, TextIO, Tuple, Union
 
 from osgeo import gdal
 from pydantic import (
@@ -158,7 +158,13 @@ class InterferogramNetwork(BaseModel):
         description="Maximum temporal baseline of interferograms.",
         gt=0,
     )
-
+    indexes: Optional[Iterable[Tuple[int, int]]] = Field(
+        None,
+        description=(
+            "For manual-index network: List of (ref_idx, sec_idx) defining the"
+            " interferograms to form."
+        ),
+    )
     network_type: InterferogramNetworkType = InterferogramNetworkType.SINGLE_REFERENCE
 
     class Config:

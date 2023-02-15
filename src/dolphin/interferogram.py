@@ -246,7 +246,7 @@ class Network:
         max_bandwidth: Optional[int] = None,
         max_temporal_baseline: Optional[float] = None,
         reference_idx: Optional[int] = None,
-        final_only: bool = False,
+        indexes: Optional[Sequence[Tuple[int, int]]] = None,
         subdataset: Optional[str] = None,
     ):
         """Create a network of interferograms from a list of SLCs.
@@ -267,9 +267,8 @@ class Network:
         reference_idx : Optional[int]
             Index of the SLC to use as the reference for all interferograms.
             Defaults to None.
-        final_only : bool, optional
-            If True, only form the final nearest-neighbor interferogram.
-            Defaults to False.
+        indexes : Optional[Sequence[Tuple[int, int]]]
+            List of (ref_idx, sec_idx) pairs to use to create interferograms.
         subdataset : Optional[str]
             If passing NetCDF files in `slc_list, the subdataset of the image data
             within the file.
@@ -281,7 +280,7 @@ class Network:
             max_bandwidth=max_bandwidth,
             max_temporal_baseline=max_temporal_baseline,
             reference_idx=reference_idx,
-            final_only=final_only,
+            indexes=indexes,
         )
         # Save the parameters used to create the network
         self.slc_dates = [dates[0] for dates in dates]
@@ -340,12 +339,14 @@ class Network:
         max_bandwidth: Optional[int] = None,
         max_temporal_baseline: Optional[float] = None,
         reference_idx: Optional[int] = None,
-        final_only: bool = False,
+        indexes: Optional[Sequence[Tuple[int, int]]] = None,
     ) -> List[Tuple]:
         """Form interferogram pairs from a list of SLC files sorted by date."""
-        if final_only:
-            # Just form the final nearest-neighbor ifg
-            return [tuple(slc_list[-2:])]
+        if indexes is not None:
+            # Give the option to select exactly which interferograms to create
+            return [
+                (slc_list[ref_idx], slc_list[sec_idx]) for ref_idx, sec_idx in indexes
+            ]
         elif max_bandwidth is not None:
             return self._limit_by_bandwidth(slc_list, max_bandwidth)
         elif max_temporal_baseline is not None:

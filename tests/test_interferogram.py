@@ -185,3 +185,19 @@ def test_limit_by_temporal_baseline(tmp_path, four_slc_files):
         ("20220102", "20220104"),
         ("20220103", "20220104"),
     ]
+
+
+def test_manual_indexes(tmp_path, four_slc_files):
+    n = Network(four_slc_files, indexes=[], outdir=tmp_path)
+    assert _get_pair_stems(n.slc_file_pairs) == []
+
+    n = Network(four_slc_files, indexes=[(0, 1)], outdir=tmp_path)
+    assert _get_pair_stems(n.slc_file_pairs) == [
+        ("20220101", "20220102"),
+    ]
+
+    n = Network(four_slc_files, indexes=[(0, -1), (0, 1)], outdir=tmp_path)
+    assert _get_pair_stems(n.slc_file_pairs) == [
+        ("20220101", "20220104"),
+        ("20220101", "20220102"),
+    ]
