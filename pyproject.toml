@@ -67,4 +67,11 @@ ignore = "D100,D102,D104,D105,D106,D107,D203,D204,D213,D413"
 
 [tool.pytest.ini_options]
 addopts = "  --cov=dolphin  -n auto --maxprocesses=8 --doctest-modules --ignore=scripts --ignore=docs --ignore=data"
-filterwarnings = ["error"]
+filterwarnings = [
+  "error",
+  # Warning thrown in pkg_resources/__init__.py:2297: in declare_namespace
+  #   DeprecationWarning: Implementing implicit namespace packages (as specified in PEP 420)
+  #     is preferred to `pkg_resources.declare_namespace`.
+  #     See https://setuptools.pypa.io/en/latest/references/keywords.html#keyword-namespace-packages
+  "ignore::DeprecationWarning:.*pkg_resources.*",
+]

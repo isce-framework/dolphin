@@ -39,7 +39,7 @@ def run_evd_sequential(
     ministack_size: int = 10,
     mask_file: Optional[Filename] = None,
     ps_mask_file: Optional[Filename] = None,
-    beta: float = 0.1,
+    beta: float = 0.01,
     max_bytes: float = 32e6,
     n_workers: int = 1,
     gpu_enabled: bool = True,

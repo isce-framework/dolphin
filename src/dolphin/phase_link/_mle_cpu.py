@@ -15,7 +15,7 @@ def run_cpu(
     slc_stack: np.ndarray,
     half_window: Dict[str, int],
     strides: Dict[str, int] = {"x": 1, "y": 1},
-    beta: float = 0.0,
+    beta: float = 0.01,
     reference_idx: int = 0,
     use_slc_amp: bool = True,
     output_cov_file: Optional[Filename] = None,
@@ -35,7 +35,7 @@ def run_cpu(
         The (x, y) strides (in pixels) to use for the sliding window.
         By default {"x": 1, "y": 1}
     beta : float, optional
-        The regularization parameter, by default 0.0.
+        The regularization parameter, by default 0.01.
     reference_idx : int, optional
         The index of the (non compressed) reference SLC, by default 0
     use_slc_amp : bool, optional
