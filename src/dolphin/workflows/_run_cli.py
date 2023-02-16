@@ -21,9 +21,9 @@ def run(config_file: str, debug: bool = False):
     cfg = Workflow.from_yaml(config_file)
     cfg.create_dir_tree(debug=debug)
     if cfg.workflow_name == "stack":
-        from dolphin.workflows import s1_disp_stack
+        from dolphin.workflows import s1_disp
 
-        s1_disp_stack.run(cfg, debug=debug)
+        s1_disp.run(cfg, debug=debug)
     elif cfg.workflow_name == "single":
         raise NotImplementedError("Single interferogram workflow not yet implemented")
     else:
