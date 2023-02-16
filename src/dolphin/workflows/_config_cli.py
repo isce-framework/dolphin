@@ -14,6 +14,7 @@ def create_config(
     subdataset: Optional[str] = None,
     mask_files: Optional[List[str]] = None,
     ministack_size: Optional[int] = 15,
+    amp_dispersion_threshold: float = 0.35,
     strides: Tuple[int, int],
     max_ram_gb: float = 1,
     n_workers: int = 16,
@@ -44,6 +45,9 @@ def create_config(
         ),
         phase_linking=dict(
             ministack_size=ministack_size,
+        ),
+        ps_options=dict(
+            amp_dispersion_threshold=amp_dispersion_threshold,
         ),
         worker_settings=dict(
             max_ram_gb=max_ram_gb,
@@ -105,6 +109,15 @@ def get_parser(subparser=None, subcommand_name="run"):
         "--ministack-size",
         default=15,
         help="Strides/decimation factor (x, y) (in pixels) to use when determining",
+    )
+
+    # PS options
+    ps_group = parser.add_argument_group("PS options")
+    ps_group.add_argument(
+        "--amp-dispersion-threshold",
+        type=float,
+        default=0.35,
+        help="Threshold for the amplitude dispersion.",
     )
 
     # Get Outputs from the command line
