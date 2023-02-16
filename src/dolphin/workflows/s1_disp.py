@@ -3,7 +3,7 @@ import itertools
 import re
 from pathlib import Path
 from pprint import pformat
-from typing import Dict, List, Pattern, Sequence, Union
+from typing import Dict, List, Optional, Pattern, Sequence, Union
 
 from dolphin._log import get_log, log_runtime
 from dolphin._types import Filename
@@ -14,7 +14,7 @@ from .config import OPERA_BURST_RE, Workflow
 
 
 @log_runtime
-def run(cfg: Workflow, debug: bool = False):
+def run(cfg: Workflow, debug: bool = False, log_file: Optional[str] = None):
     """Run the displacement workflow on a stack of SLCs.
 
     Parameters
@@ -23,8 +23,10 @@ def run(cfg: Workflow, debug: bool = False):
         [Workflow][dolphin.workflows.config.Workflow] object with workflow parameters
     debug : bool, optional
         Enable debug logging, by default False.
+    log_file : str, optional
+        If provided, will log to this file in addition to stderr.
     """
-    logger = get_log(debug=debug)
+    logger = get_log(debug=debug, filename=log_file)
     logger.debug(pformat(cfg.dict()))
 
     try:
