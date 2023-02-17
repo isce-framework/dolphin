@@ -73,21 +73,34 @@ def run_evd_sequential(
     xhalf, yhalf = half_window["x"], half_window["y"]
     xs, ys = strides["x"], strides["y"]
 
+    # If we were passed any compressed SLCs in `file_list_all`,
+    # then we want the first `mini_idx` start at the first non-compressed index
+    first_non_comp_idx = 0
+    for filename in file_list_all:
+        if not Path(filename).name.startswith("compressed"):
+            break
+        first_non_comp_idx += 1
+
     # Solve each ministack using the current chunk (and the previous compressed SLCs)
     ministack_starts = range(0, len(file_list_all), ministack_size)
-    for mini_idx, full_stack_idx in enumerate(ministack_starts):
+    for mini_idx, full_stack_idx in enumerate(
+        ministack_starts, start=first_non_comp_idx
+    ):
         cur_slice = slice(full_stack_idx, full_stack_idx + ministack_size)
         cur_files = file_list_all[cur_slice].copy()
         cur_dates = date_list_all[cur_slice].copy()
 
         # Make the current ministack output folder using the start/end dates
-        d0 = cur_dates[0][0]
+        d0 = cur_dates[first_non_comp_idx][0]
         d1 = cur_dates[-1][0]
         start_end = io._format_date_pair(d0, d1)
         cur_output_folder = output_folder / start_end
         cur_output_folder.mkdir(parents=True, exist_ok=True)
 
-        msg = f"Processing {len(cur_files)} files + {len(comp_slc_files)} compressed. "
+        msg = (
+            f"Processing {len(cur_files) - first_non_comp_idx} SLCs +"
+            f" {len(comp_slc_files) + first_non_comp_idx} compressed SLCs. "
+        )
         msg += f"Output folder: {cur_output_folder}"
         logger.info(msg)
         # Add the existing compressed SLC files to the start
@@ -210,18 +223,22 @@ def run_evd_sequential(
     # final_output_folder.mkdir(parents=True, exist_ok=True)
 
     # Average the temporal coherence files in each ministack
+    # TODO: do we want to include the date span in this filename?
     output_tcorr_file = output_folder / "tcorr_average.tif"
     # Find the offsets between stacks by doing a phase linking only compressed SLCs
-
-    # ...But only if we have multiple ministacks
+    # (But only if we have >1 ministacks. If only one, just rename the outputs)
     if len(comp_slc_files) == 1:
         # There was only one ministack, so we can skip this step
         logger.info("Only one ministack, skipping offset calculation.")
         assert len(output_slc_files) == 1
         assert len(tcorr_files) == 1
-        for slc_fname in output_slc_files[0]:
+        for slc_fname in output_slc_files[first_non_comp_idx]:
             slc_fname.rename(output_folder / slc_fname.name)
+
         tcorr_files[0].rename(output_tcorr_file)
+
+        output_comp_slc_file = output_folder / comp_slc_files[0].name
+        comp_slc_files[0].rename(output_comp_slc_file)
         return
 
     # Compute the adjustments by running EVD on the compressed SLCs

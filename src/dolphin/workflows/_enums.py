@@ -9,14 +9,14 @@ __all__ = [
 
 
 class WorkflowName(str, Enum):
-    """Names of workflows."""
+    """Name of workflows."""
 
     STACK = "stack"
     SINGLE = "single"
 
 
 class OutputFormat(str, Enum):
-    """Possible output formats for the workflow."""
+    """Raster format for the final workflow output."""
 
     ENVI = "ENVI"
     GTIFF = "GTiff"
@@ -24,15 +24,16 @@ class OutputFormat(str, Enum):
 
 
 class UnwrapMethod(str, Enum):
-    """Methods passable to Tophu unwrapping functions."""
+    """Phase unwrapping method, passable to Tophu."""
 
     SNAPHU = "snaphu"
     ICU = "icu"
 
 
 class InterferogramNetworkType(str, Enum):
-    """Types of interferogram networks."""
+    """Type of interferogram network to create from phase-linking results."""
 
     SINGLE_REFERENCE = "single-reference"
+    MANUAL_INDEX = "manual-index"
     MAX_BANDWIDTH = "max-bandwidth"
     MAX_TEMPORAL_BASELINE = "max-temporal-baseline"

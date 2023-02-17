@@ -234,7 +234,7 @@ def run(
     logger.info(f"{len(out_files)} left to unwrap")
 
     if mask_file:
-        mask_file = Path(mask_file).absolute()
+        mask_file = Path(mask_file).resolve()
 
     with ThreadPoolExecutor(max_workers=max_jobs) as exc:
         futures = [

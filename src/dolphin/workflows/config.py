@@ -5,7 +5,7 @@ import textwrap
 from datetime import date, datetime
 from io import StringIO
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence, TextIO, Union
+from typing import Dict, List, Optional, TextIO, Tuple, Union
 
 from osgeo import gdal
 from pydantic import (
@@ -133,6 +133,9 @@ class PhaseLinkingOptions(BaseModel):
         lt=1.0,
     )
 
+    class Config:
+        extra = Extra.forbid  # raise error if extra fields passed in
+
 
 class InterferogramNetwork(BaseModel):
     """Options to determine the type of network for interferogram formation."""
@@ -155,10 +158,17 @@ class InterferogramNetwork(BaseModel):
     )
     max_temporal_baseline: Optional[int] = Field(
         None,
-        description="Maximum temporal baseline of interferograms",
+        description="Maximum temporal baseline of interferograms.",
         gt=0,
     )
-    network_type = InterferogramNetworkType.SINGLE_REFERENCE
+    indexes: Optional[List[Tuple[int, int]]] = Field(
+        None,
+        description=(
+            "For manual-index network: List of (ref_idx, sec_idx) defining the"
+            " interferograms to form."
+        ),
+    )
+    network_type: InterferogramNetworkType = InterferogramNetworkType.SINGLE_REFERENCE
 
     class Config:
         extra = Extra.forbid  # raise error if extra fields passed in
@@ -204,11 +214,8 @@ class UnwrapOptions(BaseModel):
         Path("unwrap"),
         description="Sub-directory name to store unwrapping results.",
     )
-    unwrap_method: UnwrapMethod = Field(
-        UnwrapMethod.SNAPHU,
-        description="Method to use for unwrapping.",
-    )
-    tiles: Sequence[int] = Field(
+    unwrap_method: UnwrapMethod = UnwrapMethod.SNAPHU
+    tiles: List[int] = Field(
         [1, 1],
         description="Number of tiles to split the unwrapping into (for Tophu).",
     )
@@ -273,7 +280,7 @@ class Inputs(BaseModel):
         description="Format of dates contained in CSLC filenames",
     )
 
-    mask_files: List[str] = Field(
+    mask_files: List[Path] = Field(
         default_factory=list,
         description=(
             "List of mask files to use, where convention is"
@@ -354,19 +361,16 @@ class Inputs(BaseModel):
             for f in file_list:
                 format_nc_filename(f, subdataset)
 
+        # Coerce the file_list to a sorted list of absolute Path objects
         file_list, _ = sort_files_by_date(file_list, file_date_fmt=date_fmt)
-        # Coerce the file_list to a list of Path objects, sorted
-        values["cslc_file_list"] = [Path(f) for f in file_list]
+        values["cslc_file_list"] = [Path(f).resolve() for f in file_list]
         return values
 
 
 class Outputs(BaseModel):
     """Options for the output format/compressions."""
 
-    output_format: OutputFormat = Field(
-        OutputFormat.NETCDF,
-        description="Output format for the workflow",
-    )
+    output_format: OutputFormat = OutputFormat.NETCDF
     scratch_directory: Path = Field(
         Path("scratch"),
         description="Name of sub-directory to use for scratch files",
@@ -449,10 +453,7 @@ class Workflow(BaseModel):
     Required fields are in `Inputs`, where you must specify `cslc_file_list`.
     """
 
-    workflow_name: str = Field(
-        WorkflowName.STACK,
-        description="Name of the workflow to run",
-    )
+    workflow_name: WorkflowName = WorkflowName.STACK
 
     inputs: Inputs
     outputs: Outputs = Field(default_factory=Outputs)
@@ -488,7 +489,7 @@ class Workflow(BaseModel):
         """Ensure outputs from workflow steps are within scratch directory."""
         scratch_dir = values["outputs"].scratch_directory
         # Save all directories as absolute paths
-        scratch_dir = scratch_dir.absolute()
+        scratch_dir = scratch_dir.resolve(strict=False)
 
         # For each workflow step that has an output folder, move it inside
         # the scratch directory (if it's not already inside).
@@ -496,7 +497,7 @@ class Workflow(BaseModel):
         ps_opts = values["ps_options"]
         if not ps_opts.directory.parent == scratch_dir:
             ps_opts.directory = scratch_dir / ps_opts.directory
-        ps_opts.directory = ps_opts.directory.absolute()
+        ps_opts.directory = ps_opts.directory.resolve(strict=False)
 
         if not ps_opts.amp_dispersion_file.parent.parent == scratch_dir:
             ps_opts.amp_dispersion_file = scratch_dir / ps_opts.amp_dispersion_file
@@ -508,17 +509,17 @@ class Workflow(BaseModel):
         pl_opts = values["phase_linking"]
         if not pl_opts.directory.parent == scratch_dir:
             pl_opts.directory = scratch_dir / pl_opts.directory
-        pl_opts.directory = pl_opts.directory.absolute()
+        pl_opts.directory = pl_opts.directory.resolve(strict=False)
 
         ifg_opts = values["interferogram_network"]
         if not ifg_opts.directory.parent == scratch_dir:
             ifg_opts.directory = scratch_dir / ifg_opts.directory
-        ifg_opts.directory = ifg_opts.directory.absolute()
+        ifg_opts.directory = ifg_opts.directory.resolve(strict=False)
 
         unw_opts = values["unwrap_options"]
         if not unw_opts.directory.parent == scratch_dir:
             unw_opts.directory = scratch_dir / unw_opts.directory
-        unw_opts.directory = unw_opts.directory.absolute()
+        unw_opts.directory = unw_opts.directory.resolve(strict=False)
 
         return values
 

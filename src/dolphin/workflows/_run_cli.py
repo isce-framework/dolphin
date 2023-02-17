@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 import argparse
+from typing import Optional
 
 from dolphin._log import log_runtime
 
@@ -8,7 +9,7 @@ from .config import Workflow
 
 
 @log_runtime
-def run(config_file: str, debug: bool = False):
+def run(config_file: str, debug: bool = False, log_file: Optional[str] = None):
     """Run the displacement workflow.
 
     Parameters
@@ -17,13 +18,15 @@ def run(config_file: str, debug: bool = False):
         YAML file containing the workflow options.
     debug : bool, optional
         Enable debug logging, by default False.
+    log_file : str, optional
+        If provided, will log to this file in addition to stderr.
     """
     cfg = Workflow.from_yaml(config_file)
     cfg.create_dir_tree(debug=debug)
     if cfg.workflow_name == "stack":
-        from dolphin.workflows import s1_disp_stack
+        from dolphin.workflows import s1_disp
 
-        s1_disp_stack.run(cfg, debug=debug)
+        s1_disp.run(cfg, debug=debug, log_file=log_file)
     elif cfg.workflow_name == "single":
         raise NotImplementedError("Single interferogram workflow not yet implemented")
     else:
@@ -53,6 +56,10 @@ def get_parser(subparser=None, subcommand_name="run"):
         "--debug",
         action="store_true",
         help="Print debug messages to the log.",
+    )
+    parser.add_argument(
+        "--log-file",
+        help="If provided, will log to this file in addition to stderr.",
     )
     parser.set_defaults(run_func=run)
     return parser

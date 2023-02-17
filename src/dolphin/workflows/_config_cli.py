@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 from typing import List, Optional, Tuple, Union
 
-from .config import OPERA_DATASET_NAME, Workflow
+from .config import OPERA_DATASET_NAME, InterferogramNetworkType, Workflow
 
 
 def create_config(
@@ -14,23 +14,40 @@ def create_config(
     subdataset: Optional[str] = None,
     mask_files: Optional[List[str]] = None,
     ministack_size: Optional[int] = 15,
+    amp_dispersion_threshold: float = 0.35,
     strides: Tuple[int, int],
     max_ram_gb: float = 1,
     n_workers: int = 16,
     no_gpu: bool = False,
+    single_update: bool = False,
 ):
     """Create a config for a displacement workflow."""
+    if single_update:
+        # create only one interferogram from the first and last SLC images
+        interferogram_network = dict(
+            network_type=InterferogramNetworkType.MANUAL_INDEX,
+            indexes=[(0, -1)],
+        )
+        # Override the ministack size so that only one phase linking is run
+        ministack_size = 1000
+    else:
+        interferogram_network = {}  # Use default
+
     cfg = Workflow(
         inputs=dict(
             cslc_file_list=slc_files,
             mask_files=mask_files,
             subdataset=subdataset,
         ),
+        interferogram_network=interferogram_network,
         outputs=dict(
             strides={"x": strides[0], "y": strides[1]},
         ),
         phase_linking=dict(
             ministack_size=ministack_size,
+        ),
+        ps_options=dict(
+            amp_dispersion_threshold=amp_dispersion_threshold,
         ),
         worker_settings=dict(
             max_ram_gb=max_ram_gb,
@@ -94,8 +111,22 @@ def get_parser(subparser=None, subcommand_name="run"):
         help="Strides/decimation factor (x, y) (in pixels) to use when determining",
     )
 
+    # PS options
+    ps_group = parser.add_argument_group("PS options")
+    ps_group.add_argument(
+        "--amp-dispersion-threshold",
+        type=float,
+        default=0.35,
+        help="Threshold for the amplitude dispersion.",
+    )
+
     # Get Outputs from the command line
     out_group = parser.add_argument_group("Output options")
+    out_group.add_argument(
+        "--single-update",
+        action="store_true",
+        help="Create only one interferogram from the first and last SLC images.",
+    )
     out_group.add_argument(
         "-s",
         "--strides",

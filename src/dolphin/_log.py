@@ -21,11 +21,14 @@ import time
 from collections.abc import Callable
 from functools import wraps
 from logging import Formatter
+from typing import Optional
 
 __all__ = ["get_log", "log_runtime"]
 
 
-def get_log(debug: bool = False, name: str = "dolphin._log") -> logging.Logger:
+def get_log(
+    debug: bool = False, name: str = "dolphin._log", filename: Optional[str] = None
+) -> logging.Logger:
     """Create a nice log format for use across multiple files.
 
     Default logging level is INFO
@@ -37,16 +40,20 @@ def get_log(debug: bool = False, name: str = "dolphin._log") -> logging.Logger:
     name : str, optional
         The name the logger will use when printing statements
         (Default value = "dolphin._log")
+    filename : str, optional
+        If provided, will log to this file in addition to stderr.
 
     Returns
     -------
     logging.Logger
     """
     logger = logging.getLogger(name)
-    return format_log(logger, debug=debug)
+    return format_log(logger, debug=debug, filename=filename)
 
 
-def format_log(logger: logging.Logger, debug: bool = False) -> logging.Logger:
+def format_log(
+    logger: logging.Logger, debug: bool = False, filename: Optional[str] = None
+) -> logging.Logger:
     """Make the logging output pretty and colored with times.
 
     Parameters
@@ -55,6 +62,8 @@ def format_log(logger: logging.Logger, debug: bool = False) -> logging.Logger:
         The logger to format
     debug : bool (Default value = False)
         If true, sets logging level to DEBUG
+    filename : str, optional
+        If provided, will log to this file in addition to stderr.
 
     Returns
     -------
@@ -70,6 +79,12 @@ def format_log(logger: logging.Logger, debug: bool = False) -> logging.Logger:
     if not logger.handlers:
         logger.addHandler(handler)
         logger.setLevel(log_level)
+
+    if filename is not None:
+        file_handler = logging.FileHandler(filename)
+        file_handler.setFormatter(formatter)
+        logger.addHandler(file_handler)
+
     if debug:
         logger.setLevel(debug)
 

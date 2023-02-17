@@ -76,9 +76,9 @@ def test_unwrap_options_defaults(tmpdir):
 def test_outputs_defaults(tmpdir):
     with tmpdir.as_cwd():
         opts = config.Outputs()
-        assert opts.output_directory == Path("output").absolute()
+        assert opts.output_directory == Path("output").resolve()
         assert opts.output_format == config.OutputFormat.NETCDF
-        assert opts.scratch_directory == Path("scratch").absolute()
+        assert opts.scratch_directory == Path("scratch").resolve()
         assert opts.output_resolution is None
         assert opts.strides == {"x": 1, "y": 1}
         assert opts.hdf5_creation_options == dict(
@@ -159,7 +159,7 @@ def test_inputs_defaults(dir_with_1_slc):
         cslc_file_list=dir_with_1_slc / "slclist.txt", subdataset="data"
     )
 
-    assert opts.cslc_file_list[0].parent == dir_with_1_slc.absolute()
+    assert opts.cslc_file_list[0].parent == dir_with_1_slc.resolve()
     assert opts.cslc_date_fmt == "%Y%m%d"
     assert len(opts.cslc_file_list) == 1
     assert isinstance(opts.cslc_file_list[0], Path)
@@ -286,17 +286,15 @@ def test_config_defaults(dir_with_1_slc):
 
     # Check the defaults for the sub-configs, where the folders
     # should have been moved to the scratch directory
-    assert c.ps_options.directory == Path("scratch/PS").absolute()
-    assert c.ps_options.amp_mean_file == Path("scratch/PS/amp_mean.tif").absolute()
+    assert c.ps_options.directory == Path("scratch/PS").resolve()
+    assert c.ps_options.amp_mean_file == Path("scratch/PS/amp_mean.tif").resolve()
 
     p = Path("scratch/PS/amp_dispersion.tif")
-    assert c.ps_options.amp_dispersion_file == p.absolute()
+    assert c.ps_options.amp_dispersion_file == p.resolve()
 
-    assert c.phase_linking.directory == Path("scratch/linked_phase").absolute()
+    assert c.phase_linking.directory == Path("scratch/linked_phase").resolve()
 
-    assert (
-        c.interferogram_network.directory == Path("scratch/interferograms").absolute()
-    )
+    assert c.interferogram_network.directory == Path("scratch/interferograms").resolve()
     assert c.interferogram_network.reference_idx == 0
     assert (
         c.interferogram_network.network_type
@@ -306,7 +304,7 @@ def test_config_defaults(dir_with_1_slc):
     assert c.interferogram_network.max_bandwidth is None
     assert c.interferogram_network.max_temporal_baseline is None
 
-    assert c.unwrap_options.directory == Path("scratch/unwrap").absolute()
+    assert c.unwrap_options.directory == Path("scratch/unwrap").resolve()
 
     now = datetime.utcnow()
     assert (now - c.creation_time_utc).seconds == 0
