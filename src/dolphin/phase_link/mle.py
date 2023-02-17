@@ -225,6 +225,10 @@ def mle_stack(C_arrays, beta: float = 0.01, reference_idx: float = 0):
 
 def _get_eigvecs(C):
     xp = get_array_module(C)
+    if xp == np:
+        # The block splitting isn't needed for numpy.
+        return np.linalg.eigh(C)[1]
+
     # Make sure we don't overflow: cupy https://github.com/cupy/cupy/issues/7261
     # The work_size must be less than 2**30, so
     # Keep (rows*cols) approximately less than 2**21? make it 2**20 to be safer

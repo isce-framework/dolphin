@@ -280,7 +280,7 @@ class Inputs(BaseModel):
         description="Format of dates contained in CSLC filenames",
     )
 
-    mask_files: List[str] = Field(
+    mask_files: List[Path] = Field(
         default_factory=list,
         description=(
             "List of mask files to use, where convention is"
