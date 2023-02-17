@@ -62,7 +62,6 @@ def run(cfg: Workflow, debug: bool = False) -> List[VRTInterferogram]:
     # #########################
     pl_path = cfg.phase_linking.directory
 
-    # TODO: get intermediate ext from config
     existing_files = list(pl_path.glob("*.tif"))
     if len(existing_files) > 0:
         logger.info(f"Skipping EVD step, {len(existing_files)} files already exist")
@@ -96,12 +95,11 @@ def run(cfg: Workflow, debug: bool = False) -> List[VRTInterferogram]:
         )
         if Path(vrt_stack.file_list[0]).name.startswith("compressed"):
             # The first file is a compressed SLC, so we want to use that as the reference
-            # TODO: will this fail with anything by single-refernce/manual-index?
+            # TODO: will this fail with anything by single-reference/manual-index?
             slc_list = [vrt_stack.file_list[0]] + phase_linked_slcs
         else:
             slc_list = phase_linked_slcs
 
-        # TODO: if we pass in a comp slc for single
         network = Network(
             slc_list=slc_list,
             reference_idx=cfg.interferogram_network.reference_idx,
