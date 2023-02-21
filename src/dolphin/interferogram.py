@@ -195,6 +195,7 @@ class VRTInterferogram(BaseModel):
 
     def _write(self):
         xsize, ysize = io.get_raster_xysize(self.ref_slc)
+        self.path.parent.mkdir(parents=True, exist_ok=True)
         with open(self.path, "w") as f:
             f.write(
                 self._template.format(
@@ -215,6 +216,40 @@ class VRTInterferogram(BaseModel):
     def shape(self):
         xsize, ysize = io.get_raster_xysize(self.path)
         return (ysize, xsize)
+
+    @classmethod
+    def from_vrt_file(cls, path: Filename) -> "VRTInterferogram":
+        """Load a VRTInterferogram from an existing VRT file.
+
+        Parameters
+        ----------
+        path : Filename
+            Path to VRT file.
+
+        Returns
+        -------
+        VRTInterferogram
+            VRTInterferogram object.
+
+        """
+        from dolphin.stack import VRTStack
+
+        # Use the parsing function
+        (ref_slc, sec_slc), subdataset = VRTStack._parse_vrt_file(path)
+        if subdataset is not None:
+            ref_slc = io.format_nc_filename(ref_slc, subdataset)
+            sec_slc = io.format_nc_filename(sec_slc, subdataset)
+        # TODO: any good way/reason to store the date fmt?
+        date1 = utils.get_dates(ref_slc, fmt="%Y%m%d")[0]
+        date2 = utils.get_dates(sec_slc, fmt="%Y%m%d")[0]
+
+        return cls.construct(
+            ref_slc=ref_slc,
+            sec_slc=sec_slc,
+            path=Path(path).resolve(),
+            subdataset=subdataset,
+            dates=(date1, date2),
+        )
 
 
 class Network:
@@ -333,8 +368,8 @@ class Network:
             f"reference_idx={self.reference_idx}"
         )
 
+    @staticmethod
     def _make_ifg_pairs(
-        self,
         slc_list: Sequence[Filename],
         max_bandwidth: Optional[int] = None,
         max_temporal_baseline: Optional[float] = None,
@@ -348,16 +383,17 @@ class Network:
                 (slc_list[ref_idx], slc_list[sec_idx]) for ref_idx, sec_idx in indexes
             ]
         elif max_bandwidth is not None:
-            return self._limit_by_bandwidth(slc_list, max_bandwidth)
+            return Network._limit_by_bandwidth(slc_list, max_bandwidth)
         elif max_temporal_baseline is not None:
-            return self._limit_by_temporal_baseline(slc_list, max_temporal_baseline)
+            return Network._limit_by_temporal_baseline(slc_list, max_temporal_baseline)
         elif reference_idx is not None:
-            return self._single_reference_network(slc_list, reference_idx)
+            return Network._single_reference_network(slc_list, reference_idx)
         else:
             raise ValueError("No valid ifg list generation method specified")
 
+    @staticmethod
     def _single_reference_network(
-        self, slc_file_list: Sequence[Filename], reference_idx=0
+        slc_file_list: Sequence[Filename], reference_idx=0
     ) -> List[Tuple]:
         """Form a list of single-reference interferograms."""
         if len(slc_file_list) < 2:
@@ -366,9 +402,8 @@ class Network:
         ifgs = [tuple(sorted([ref, date])) for date in slc_file_list if date != ref]
         return ifgs
 
-    def _limit_by_bandwidth(
-        self, slc_file_list: Iterable[Filename], max_bandwidth: int
-    ):
+    @staticmethod
+    def _limit_by_bandwidth(slc_file_list: Iterable[Filename], max_bandwidth: int):
         """Form a list of the "nearest-`max_bandwidth`" ifgs.
 
         Parameters
@@ -387,12 +422,12 @@ class Network:
         slc_to_idx = {s: idx for idx, s in enumerate(slc_file_list)}
         return [
             (a, b)
-            for (a, b) in self._all_pairs(slc_file_list)
+            for (a, b) in Network._all_pairs(slc_file_list)
             if slc_to_idx[b] - slc_to_idx[a] <= max_bandwidth
         ]
 
+    @staticmethod
     def _limit_by_temporal_baseline(
-        self,
         slc_file_list: Iterable[Filename],
         max_temporal_baseline: Optional[float] = None,
     ):
@@ -416,7 +451,7 @@ class Network:
         ValueError
             If any of the input files have more than one date.
         """
-        ifg_strs = self._all_pairs(slc_file_list)
+        ifg_strs = Network._all_pairs(slc_file_list)
         slc_date_lists = [utils.get_dates(f) for f in slc_file_list]
         # Check we've got all single-date files
         if any(len(d) != 1 for d in slc_date_lists):
@@ -425,8 +460,8 @@ class Network:
             )
         slc_dates = [d[0] for d in slc_date_lists]
 
-        ifg_dates = self._all_pairs(slc_dates)
-        baselines = [self._temp_baseline(ifg) for ifg in ifg_dates]
+        ifg_dates = Network._all_pairs(slc_dates)
+        baselines = [Network._temp_baseline(ifg) for ifg in ifg_dates]
         return [
             ifg for ifg, b in zip(ifg_strs, baselines) if b <= max_temporal_baseline
         ]

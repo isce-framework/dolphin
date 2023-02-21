@@ -303,15 +303,7 @@ class VRTStack:
                 # Get the middle part of < >filename</ >
                 fn = line.split(">")[1].strip().split("<")[0]
                 file_strings.append(fn)
-        # double check we got the same count
-        ds = gdal.Open(fspath(vrt_file))
-        count = ds.RasterCount
-        ds = None
-        if count != len(file_strings):
-            raise ValueError(
-                f"Found {len(file_strings)} parsing {vrt_file}, but file has"
-                f" {count} bands."
-            )
+
         testname = file_strings[0].upper()
         if testname.startswith("HDF5:") or testname.startswith("NETCDF:"):
             name_triplets = [name.split(":") for name in file_strings]

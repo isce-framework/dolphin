@@ -4,7 +4,7 @@ import math
 import tempfile
 from os import fspath
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Iterable, List, Optional, Sequence, Tuple
 
 import numpy as np
 from numpy.typing import DTypeLike
@@ -28,7 +28,7 @@ def merge_by_date(
 
     Parameters
     ----------
-    image_file_list : List[Filename]
+    image_file_list : Iterable[Filename]
         List of paths to images.
     file_date_fmt : Optional[str]
         Format of the date in the filename. Default is %Y%m%d
@@ -71,7 +71,7 @@ def merge_by_date(
 
 
 def merge_images(
-    file_list: List[Filename],
+    file_list: Sequence[Filename],
     outfile: Filename,
     target_aligned_pixels: bool = True,
     driver: str = "ENVI",
@@ -220,13 +220,13 @@ def merge_images(
 
 
 def _group_by_date(
-    file_list: List[Filename], file_date_fmt: str = io.DEFAULT_DATETIME_FORMAT
+    file_list: Iterable[Filename], file_date_fmt: str = io.DEFAULT_DATETIME_FORMAT
 ):
     """Combine Sentinel objects by date.
 
     Parameters
     ----------
-    file_list: List[Filename]
+    file_list: Iterable[Filename]
         path to folder containing CSLC files
     file_date_fmt: str
         format of the date in the filename.
@@ -261,7 +261,7 @@ def _group_by_date(
 
 
 def _blend_new_arr(
-    cur_arr: np.ndarray, new_arr: np.ndarray, nodata_vals: List[Optional[float]]
+    cur_arr: np.ndarray, new_arr: np.ndarray, nodata_vals: Iterable[Optional[float]]
 ):
     """Blend two arrays together, replacing values in cur_arr with new_arr.
 
@@ -274,7 +274,7 @@ def _blend_new_arr(
         The array to blend into.
     new_arr : np.ndarray
         The new array to add/overwrite with.
-    nodata_vals : List[float]
+    nodata_vals : Iterable[float]
         The nodata values to replace in cur_arr.
 
     Returns
@@ -298,7 +298,7 @@ def _blend_new_arr(
 
 
 def _warp_to_projection(
-    filenames: List[Filename],
+    filenames: Iterable[Filename],
     dirname: Filename,
     projection: str,
     res: Tuple[float, float],
@@ -307,7 +307,7 @@ def _warp_to_projection(
 
     Parameters
     ----------
-    filenames : List[Filename]
+    filenames : Iterable[Filename]
         List of filenames to warp.
     dirname : Filename
         The directory to write the warped files to.
@@ -351,13 +351,13 @@ def _warp_to_projection(
     return warped_files
 
 
-def _get_mode_projection(filenames: List[Filename]) -> str:
+def _get_mode_projection(filenames: Iterable[Filename]) -> str:
     """Get the most common projection in the list."""
     projs = [gdal.Open(fspath(fn)).GetProjection() for fn in filenames]
     return max(set(projs), key=projs.count)
 
 
-def _get_resolution(filenames: List[Filename]) -> Tuple[float, float]:
+def _get_resolution(filenames: Iterable[Filename]) -> Tuple[float, float]:
     """Get the most common resolution in the list."""
     gts = [gdal.Open(fspath(fn)).GetGeoTransform() for fn in filenames]
     res = [(gt[1], gt[5]) for gt in gts]
@@ -418,7 +418,7 @@ def _get_combined_bounds_gt(
     return bounds, gt_total
 
 
-def _get_output_shape(bounds, res):
+def _get_output_shape(bounds: Iterable[float], res: Tuple[float, float]):
     """Get the output shape of the combined image."""
     left, bottom, right, top = bounds
     # Always round up to the nearest pixel, instead of banker's rounding
@@ -427,7 +427,7 @@ def _get_output_shape(bounds, res):
     return int(out_height), int(out_width)
 
 
-def _align_bounds(bounds, res):
+def _align_bounds(bounds: Iterable[float], res: Tuple[float, float]):
     left, bottom, right, top = bounds
     left = math.floor(left / res[0]) * res[0]
     right = math.ceil(right / res[0]) * res[0]
@@ -437,7 +437,7 @@ def _align_bounds(bounds, res):
 
 
 def _nodata_to_zero(
-    infile,
+    infile: Filename,
     outfile: Optional[Filename] = None,
     ext: Optional[str] = None,
     in_band: int = 1,
