@@ -159,8 +159,6 @@ def merge_images(
 
     out_left, out_bottom, out_right, out_top = bounds
     # Now loop through the files and write them to the output
-    writer = io.Writer()
-
     for f in warped_file_list:
         logger.info(f"Stitching {f} into {outfile}")
         ds_in = gdal.Open(fspath(f))
@@ -200,21 +198,19 @@ def merge_images(
         cur_out = io.load_gdal(
             outfile, rows=slice(row_top, row_bottom), cols=slice(col_left, col_right)
         )
-        in_nodata = io.get_raster_nodata(
-            f
-        )  # Assume all bands have same nodata as band 1
+        # Assume all bands have same nodata as band 1
+        in_nodata = io.get_raster_nodata(f)
         cur_out = _blend_new_arr(
-            cur_out, arr_in, nodata_vals=[in_nodata, out_nodata, np.nan]
+            cur_out, arr_in, nodata_vals=[in_nodata, out_nodata, math.nan, 0]
         )
         # Write the input data to the output in this window
-        writer.queue_write(
+        io.write_block(
             cur_out,
             filename=outfile,
             row_start=row_top,
             col_start=col_left,
         )
 
-    writer.notify_finished()
     # Remove the tempdir
     temp_dir.cleanup()
 
@@ -284,7 +280,7 @@ def _blend_new_arr(
     """
     # Replace nodata values in cur_arr with new_arr
     good_pixels = np.ones(cur_arr.shape, dtype=bool)
-    for nodata in nodata_vals:
+    for nodata in set(nodata_vals):
         if nodata is not None:
             if np.isnan(nodata):
                 nd_mask = np.isnan(new_arr)
