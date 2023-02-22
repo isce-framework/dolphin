@@ -11,6 +11,7 @@ def setup_output_folder(
     start_idx: int = 0,
     strides: Dict[str, int] = {"y": 1, "x": 1},
     creation_options: Optional[List] = None,
+    output_folder: Optional[Path] = None,
 ) -> List[Path]:
     """Create empty output files for each band after `start_idx` in `vrt_stack`.
 
@@ -35,13 +36,17 @@ def setup_output_folder(
         [dolphin.io.compute_out_shape][]
     creation_options : list, optional
         List of options to pass to the GDAL driver, by default None
+    output_folder : Path, optional
+        Path to output folder, by default None
+        If None, will use the same folder as the first SLC in `vrt_stack`
 
     Returns
     -------
     List[Path]
         List of saved empty files.
     """
-    output_folder = vrt_stack.outfile.parent
+    if output_folder is None:
+        output_folder = vrt_stack.outfile.parent
 
     date_strs: List[str] = []
     for d in vrt_stack.dates[start_idx:]:
