@@ -3,9 +3,10 @@ import numpy.testing as npt
 import pytest
 from osgeo import gdal
 
-from dolphin import io, sequential, stack
+from dolphin import io, stack
 from dolphin.phase_link import mle, simulate
 from dolphin.utils import gpu_is_available
+from dolphin.workflows import sequential
 
 GPU_AVAILABLE = gpu_is_available()
 simulate._seed(1234)

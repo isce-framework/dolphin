@@ -6,7 +6,6 @@ References
     efficient InSAR time series analysis. IEEE Transactions on Geoscience and
     Remote Sensing, 55(10), 5637-5652.
 """
-import warnings
 from collections import defaultdict
 from math import nan
 from os import fspath
@@ -20,13 +19,12 @@ from dolphin import io
 from dolphin._log import get_log
 from dolphin._types import Filename
 from dolphin.interferogram import VRTInterferogram
-from dolphin.phase_link import PhaseLinkRuntimeError, run_mle
+from dolphin.phase_link import PhaseLinkRuntimeError, compress, run_mle
 from dolphin.stack import VRTStack
-from dolphin.utils import upsample_nearest
 
 logger = get_log()
 
-__all__ = ["run_evd_sequential", "compress"]
+__all__ = ["run_evd_sequential"]
 
 
 def run_evd_sequential(
@@ -73,34 +71,21 @@ def run_evd_sequential(
     xhalf, yhalf = half_window["x"], half_window["y"]
     xs, ys = strides["x"], strides["y"]
 
-    # If we were passed any compressed SLCs in `file_list_all`,
-    # then we want the first `mini_idx` start at the first non-compressed index
-    first_non_comp_idx = 0
-    for filename in file_list_all:
-        if not Path(filename).name.startswith("compressed"):
-            break
-        first_non_comp_idx += 1
-
     # Solve each ministack using the current chunk (and the previous compressed SLCs)
     ministack_starts = range(0, len(file_list_all), ministack_size)
-    for mini_idx, full_stack_idx in enumerate(
-        ministack_starts, start=first_non_comp_idx
-    ):
+    for mini_idx, full_stack_idx in enumerate(ministack_starts):
         cur_slice = slice(full_stack_idx, full_stack_idx + ministack_size)
         cur_files = file_list_all[cur_slice].copy()
         cur_dates = date_list_all[cur_slice].copy()
 
         # Make the current ministack output folder using the start/end dates
-        d0 = cur_dates[first_non_comp_idx][0]
+        d0 = cur_dates[0][0]
         d1 = cur_dates[-1][0]
         start_end = io._format_date_pair(d0, d1)
         cur_output_folder = output_folder / start_end
         cur_output_folder.mkdir(parents=True, exist_ok=True)
 
-        msg = (
-            f"Processing {len(cur_files) - first_non_comp_idx} SLCs +"
-            f" {len(comp_slc_files) + first_non_comp_idx} compressed SLCs. "
-        )
+        msg = f"Processing {len(cur_files)} SLCs."
         msg += f"Output folder: {cur_output_folder}"
         logger.info(msg)
         # Add the existing compressed SLC files to the start
@@ -232,7 +217,7 @@ def run_evd_sequential(
         logger.info("Only one ministack, skipping offset calculation.")
         assert len(output_slc_files) == 1
         assert len(tcorr_files) == 1
-        for slc_fname in output_slc_files[first_non_comp_idx]:
+        for slc_fname in output_slc_files[0]:
             slc_fname.rename(output_folder / slc_fname.name)
 
         tcorr_files[0].rename(output_tcorr_file)
@@ -317,41 +302,6 @@ def run_evd_sequential(
         A=tcorr_files,
         calc="numpy.nanmean(A, axis=0)",
     )
-
-
-def compress(
-    slc_stack: np.ndarray,
-    mle_estimate: np.ndarray,
-):
-    """Compress the stack of SLC data using the estimated phase.
-
-    Parameters
-    ----------
-    slc_stack : np.array
-        The stack of complex SLC data, shape (nslc, rows, cols)
-    mle_estimate : np.array
-        The estimated phase from [`run_mle`][dolphin.phase_link.mle.run_mle],
-        shape (nslc, rows // strides['y'], cols // strides['x'])
-
-    Returns
-    -------
-    np.array
-        The compressed SLC data, shape (rows, cols)
-    """
-    # If the output is downsampled, we need to make `mle_estimate` the same shape
-    # as the output
-    mle_estimate_upsampled = upsample_nearest(mle_estimate, slc_stack.shape[1:])
-    # For each pixel, project the SLCs onto the (normalized) estimated phase
-    # by performing a pixel-wise complex dot product
-    mle_norm = np.linalg.norm(mle_estimate_upsampled, axis=0)
-    # Avoid divide by zero (there may be 0s at the upsampled boundary)
-    mle_norm[mle_norm == 0] = np.nan
-    with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", message="invalid value encountered")
-        return (
-            np.nansum(slc_stack * np.conjugate(mle_estimate_upsampled), axis=0)
-            / mle_norm
-        )
 
 
 def _setup_output_folder(
