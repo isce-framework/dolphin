@@ -27,7 +27,7 @@ __all__ = ["get_log", "log_runtime"]
 
 
 def get_log(
-    debug: bool = False, name: str = "dolphin._log", filename: Optional[str] = None
+    name: str = "dolphin._log", debug: bool = False, filename: Optional[str] = None
 ) -> logging.Logger:
     """Create a nice log format for use across multiple files.
 
