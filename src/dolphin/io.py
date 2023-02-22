@@ -48,7 +48,7 @@ DEFAULT_HDF5_OPTIONS = dict(
 )
 DEFAULT_DATETIME_FORMAT = "%Y%m%d"
 
-logger = get_log()
+logger = get_log(__name__)
 
 
 def load_gdal(

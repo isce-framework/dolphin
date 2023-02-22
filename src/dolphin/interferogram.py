@@ -14,7 +14,7 @@ from dolphin._types import Filename
 
 gdal.UseExceptions()
 
-logger = get_log()
+logger = get_log(__name__)
 
 
 class VRTInterferogram(BaseModel):

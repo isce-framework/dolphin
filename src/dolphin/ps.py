@@ -15,7 +15,7 @@ from dolphin.stack import VRTStack
 
 gdal.UseExceptions()
 
-logger = get_log()
+logger = get_log(__name__)
 
 
 def create_ps(

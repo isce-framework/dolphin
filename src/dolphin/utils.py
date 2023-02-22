@@ -13,7 +13,7 @@ from dolphin._log import get_log
 from dolphin._types import Filename
 
 gdal.UseExceptions()
-logger = get_log()
+logger = get_log(__name__)
 
 
 def numpy_to_gdal_type(np_dtype: DTypeLike) -> int:

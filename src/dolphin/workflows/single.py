@@ -6,27 +6,23 @@ References
     linking using joined distributed and persistent scatterers." Computers &
     Geosciences (2022): 105291.
 """
-import warnings
 from collections import defaultdict
-from math import nan
-from os import fspath
 from pathlib import Path
 from typing import Dict, List, Optional
 
 import numpy as np
-from osgeo_utils import gdal_calc
 
 from dolphin import io
 from dolphin._log import get_log
 from dolphin._types import Filename
-from dolphin.interferogram import VRTInterferogram
-from dolphin.phase_link import PhaseLinkRuntimeError, run_mle
+from dolphin.phase_link import PhaseLinkRuntimeError, compress, run_mle
 from dolphin.stack import VRTStack
-from dolphin.utils import upsample_nearest
 
-logger = get_log()
+from ._utils import setup_output_folder
 
-__all__ = ["run_evd_update", "compress"]
+logger = get_log(__name__)
+
+__all__ = ["run_evd_update"]
 
 
 def run_evd_update(
@@ -119,7 +115,7 @@ def run_evd_update(
             f" {Path(cur_vrt.file_list[-1]).name}"
         )
         # Set up the output folder with empty files to write into
-        cur_output_files = _setup_output_folder(
+        cur_output_files = setup_output_folder(
             cur_vrt, driver="GTiff", start_idx=mini_idx, strides=strides
         )
         # Save these for the final adjustment later
@@ -216,11 +212,6 @@ def run_evd_update(
         writer.notify_finished()
         logger.info(f"Finished ministack {mini_idx} of size {cur_vrt.shape}.")
 
-    ##############################################
-    # Set up the output folder with empty files to write into
-    # final_output_folder = output_folder / "final"
-    # final_output_folder.mkdir(parents=True, exist_ok=True)
-
     # Average the temporal coherence files in each ministack
     # TODO: do we want to include the date span in this filename?
     output_tcorr_file = output_folder / "tcorr_average.tif"
@@ -239,184 +230,3 @@ def run_evd_update(
         output_comp_slc_file = output_folder / comp_slc_files[0].name
         comp_slc_files[0].rename(output_comp_slc_file)
         return
-
-    # Compute the adjustments by running EVD on the compressed SLCs
-    comp_output_folder = output_folder / "adjustments"
-    comp_output_folder.mkdir(parents=True, exist_ok=True)
-    adjustment_vrt_stack = VRTStack(
-        comp_slc_files, outfile=comp_output_folder / "compressed_stack.vrt"
-    )
-
-    logger.info(f"Running EVD on compressed files: {adjustment_vrt_stack}")
-    adjusted_comp_slc_files = _setup_output_folder(
-        adjustment_vrt_stack, driver="GTiff", strides=strides
-    )
-
-    writer = io.Writer()
-    # Iterate over the ministack in blocks
-    # Note the overlap to redo the edge effects
-    block_gen = adjustment_vrt_stack.iter_blocks(
-        overlaps=(yhalf, xhalf),
-        # Note: dividing by len of stack because cov is shape (rows, cols, nslc, nslc)
-        max_bytes=max_bytes / len(adjustment_vrt_stack),
-        skip_empty=True,
-    )
-    for cur_data, (rows, cols) in block_gen:
-        msg = f"Processing block {rows.start}:{rows.stop}, {cols.start}:{cols.stop}"
-        logger.debug(msg)
-
-        # Run the phase linking process on the current adjustment stack
-        cur_mle_stack, tcorr = run_mle(
-            cur_data,
-            half_window=half_window,
-            strides=strides,
-            beta=beta,
-            reference_idx=0,
-            nodata_mask=nodata_mask[rows, cols],
-            ps_mask=None,  # PS mask doesn't matter for the adjustments
-            use_slc_amp=False,  # Make adjustments unit-amplitude
-            n_workers=n_workers,
-            gpu_enabled=gpu_enabled,
-        )
-
-        # Get the location within the output file, shrinking down the slices
-        out_row_start = rows.start // ys
-        out_col_start = cols.start // xs
-        # Save each of the MLE estimates (ignoring the compressed SLCs)
-        for img, f in zip(cur_mle_stack, adjusted_comp_slc_files):
-            writer.queue_write(img, f, out_row_start, out_col_start)
-        # Don't think I care about the temporal coherence here
-
-    writer.notify_finished()
-    # Compensate for the offsets between ministacks (aka "datum adjustments")
-    for mini_idx, slc_files in output_slc_files.items():
-        adjustment_fname = adjusted_comp_slc_files[mini_idx]
-
-        for slc_fname in slc_files:
-            logger.info(f"Compensating {slc_fname} with {adjustment_fname}")
-            outfile = output_folder / f"{slc_fname.name}"
-            VRTInterferogram(
-                ref_slc=slc_fname,
-                sec_slc=adjustment_fname,
-                path=outfile,
-                pixel_function="mul",
-            )
-
-    # Can pass the list of files to gdal_calc, which interprets it
-    # as a multi-band file
-    logger.info(f"Averaging temporal coherence files into: {output_tcorr_file}")
-    gdal_calc.Calc(
-        NoDataValue=nan,
-        format="GTiff",
-        outfile=fspath(output_tcorr_file),
-        type="Float32",
-        quiet=True,
-        overwrite=True,
-        creation_options=io.DEFAULT_TIFF_OPTIONS,
-        A=tcorr_files,
-        calc="numpy.nanmean(A, axis=0)",
-    )
-
-
-def compress(
-    slc_stack: np.ndarray,
-    mle_estimate: np.ndarray,
-):
-    """Compress the stack of SLC data using the estimated phase.
-
-    Parameters
-    ----------
-    slc_stack : np.array
-        The stack of complex SLC data, shape (nslc, rows, cols)
-    mle_estimate : np.array
-        The estimated phase from [`run_mle`][dolphin.phase_link.mle.run_mle],
-        shape (nslc, rows // strides['y'], cols // strides['x'])
-
-    Returns
-    -------
-    np.array
-        The compressed SLC data, shape (rows, cols)
-    """
-    # If the output is downsampled, we need to make `mle_estimate` the same shape
-    # as the output
-    mle_estimate_upsampled = upsample_nearest(mle_estimate, slc_stack.shape[1:])
-    # For each pixel, project the SLCs onto the (normalized) estimated phase
-    # by performing a pixel-wise complex dot product
-    mle_norm = np.linalg.norm(mle_estimate_upsampled, axis=0)
-    # Avoid divide by zero (there may be 0s at the upsampled boundary)
-    mle_norm[mle_norm == 0] = np.nan
-    with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", message="invalid value encountered")
-        return (
-            np.nansum(slc_stack * np.conjugate(mle_estimate_upsampled), axis=0)
-            / mle_norm
-        )
-
-
-def _setup_output_folder(
-    vrt_stack,
-    driver: str = "GTiff",
-    dtype="complex64",
-    start_idx: int = 0,
-    strides: Dict[str, int] = {"y": 1, "x": 1},
-    creation_options: Optional[List] = None,
-) -> List[Path]:
-    """Create empty output files for each band after `start_idx` in `vrt_stack`.
-
-    Also creates an empty file for the compressed SLC.
-    Used to prepare output for block processing.
-
-    Parameters
-    ----------
-    vrt_stack : VRTStack
-        object containing the current stack of SLCs
-    driver : str, optional
-        Name of GDAL driver, by default "GTiff"
-    dtype : str, optional
-        Numpy datatype of output files, by default "complex64"
-    start_idx : int, optional
-        Index of vrt_stack to begin making output files.
-        This should match the ministack index to avoid re-creating the
-        past compressed SLCs.
-    strides : Dict[str, int], optional
-        Strides to use when creating the empty files, by default {"y": 1, "x": 1}
-        Larger strides will create smaller output files, computed using
-        [dolphin.io.compute_out_shape][]
-    creation_options : list, optional
-        List of options to pass to the GDAL driver, by default None
-
-    Returns
-    -------
-    List[Path]
-        List of saved empty files.
-    """
-    output_folder = vrt_stack.outfile.parent
-
-    date_strs: List[str] = []
-    for d in vrt_stack.dates[start_idx:]:
-        if len(d) == 1:
-            # normal SLC files will have a single date
-            s = d[0].strftime(io.DEFAULT_DATETIME_FORMAT)
-        else:
-            # Compressed SLCs will have 2 dates in the name marking the start and end
-            s = io._format_date_pair(d[0], d[1])
-        date_strs.append(s)
-
-    output_files = []
-    for filename in date_strs:
-        slc_name = Path(filename).stem
-        output_path = output_folder / f"{slc_name}.slc.tif"
-
-        io.write_arr(
-            arr=None,
-            like_filename=vrt_stack.outfile,
-            output_name=output_path,
-            driver=driver,
-            nbands=1,
-            dtype=dtype,
-            strides=strides,
-            options=creation_options,
-        )
-
-        output_files.append(output_path)
-    return output_files
