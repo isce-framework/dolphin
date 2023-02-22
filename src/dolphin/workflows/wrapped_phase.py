@@ -1,10 +1,11 @@
 from pathlib import Path
 from typing import List
 
-from dolphin import ps, sequential, stack
+from dolphin import ps, stack
 from dolphin._log import get_log, log_runtime
 from dolphin.interferogram import Network, VRTInterferogram
 
+from . import sequential, single
 from .config import Workflow
 
 
@@ -67,19 +68,34 @@ def run(cfg: Workflow, debug: bool = False) -> List[VRTInterferogram]:
         logger.info(f"Skipping EVD step, {len(existing_files)} files already exist")
     else:
         logger.info(f"Running sequential EMI step in {pl_path}")
-        sequential.run_evd_sequential(
-            slc_vrt_file=vrt_stack.outfile,
-            output_folder=pl_path,
-            half_window=cfg.phase_linking.half_window.dict(),
-            strides=cfg.outputs.strides,
-            ministack_size=cfg.phase_linking.ministack_size,
-            # mask_file=cfg.inputs.mask_file,
-            ps_mask_file=cfg.ps_options.output_file,
-            max_bytes=cfg.worker_settings.max_ram_gb * 1e9,
-            n_workers=cfg.worker_settings.n_workers,
-            gpu_enabled=cfg.worker_settings.gpu_enabled,
-            beta=cfg.phase_linking.beta,
-        )
+        if cfg.workflow_name == "single":
+            single.run_evd_single(
+                slc_vrt_file=vrt_stack.outfile,
+                output_folder=pl_path,
+                half_window=cfg.phase_linking.half_window.dict(),
+                strides=cfg.outputs.strides,
+                reference_idx=0,
+                # mask_file=cfg.inputs.mask_file,
+                ps_mask_file=cfg.ps_options.output_file,
+                max_bytes=cfg.worker_settings.max_ram_gb * 1e9,
+                n_workers=cfg.worker_settings.n_workers,
+                gpu_enabled=cfg.worker_settings.gpu_enabled,
+                beta=cfg.phase_linking.beta,
+            )
+        else:
+            sequential.run_evd_sequential(
+                slc_vrt_file=vrt_stack.outfile,
+                output_folder=pl_path,
+                half_window=cfg.phase_linking.half_window.dict(),
+                strides=cfg.outputs.strides,
+                ministack_size=cfg.phase_linking.ministack_size,
+                # mask_file=cfg.inputs.mask_file,
+                ps_mask_file=cfg.ps_options.output_file,
+                max_bytes=cfg.worker_settings.max_ram_gb * 1e9,
+                n_workers=cfg.worker_settings.n_workers,
+                gpu_enabled=cfg.worker_settings.gpu_enabled,
+                beta=cfg.phase_linking.beta,
+            )
 
     # ###################################################
     # 4. Form interferograms from estimated wrapped phase

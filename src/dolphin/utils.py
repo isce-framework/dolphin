@@ -13,7 +13,7 @@ from dolphin._log import get_log
 from dolphin._types import Filename
 
 gdal.UseExceptions()
-logger = get_log()
+logger = get_log(__name__)
 
 
 def numpy_to_gdal_type(np_dtype: DTypeLike) -> int:
@@ -103,20 +103,26 @@ def _get_path_from_gdal_str(name: Filename) -> Path:
     return Path(p)
 
 
-def _resolve_gdal_path(gdal_str):
+def _resolve_gdal_path(gdal_str: Filename) -> Filename:
     """Resolve the file portion of a gdal-openable string to an absolute path."""
     s = str(gdal_str)
     if s.startswith("DERIVED_SUBDATASET"):
         # like DERIVED_SUBDATASET:AMPLITUDE:slc_filepath.tif
         file_part = s.split(":")[-1]
+        is_gdal_str = True
     elif ":" in s and (s.startswith("NETCDF") or s.startswith("HDF")):
         # like NETCDF:"slc_filepath.nc":slc_var
         file_part = s.split(":")[1]
+        is_gdal_str = True
+    else:
+        file_part = s
+        is_gdal_str = False
 
     # strip quotes to add back in after
     file_part = file_part.strip('"').strip("'")
     file_part_resolved = Path(file_part).resolve()
-    return gdal_str.replace(file_part, str(file_part_resolved))
+    resolved = s.replace(file_part, str(file_part_resolved))
+    return Path(resolved) if not is_gdal_str else resolved
 
 
 def _date_format_to_regex(date_format):

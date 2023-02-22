@@ -6,7 +6,7 @@ nice formatting out of the box across multiple files.
 Usage:
 
     from ._log import get_log
-    logger = get_log()
+    logger = get_log(__name__)
 
     logger.info("Something happened")
     logger.warning("Something concerning happened")
@@ -100,7 +100,7 @@ def log_runtime(f: Callable) -> Callable:
     def test_func():
         return 2 + 4
     """
-    logger = get_log()
+    logger = get_log(__name__)
 
     @wraps(f)
     def wrapper(*args, **kwargs):

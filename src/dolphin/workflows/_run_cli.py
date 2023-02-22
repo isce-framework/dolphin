@@ -4,7 +4,7 @@ from typing import Optional
 
 from dolphin._log import log_runtime
 
-from ._enums import WorkflowName
+from . import s1_disp
 from .config import Workflow
 
 
@@ -23,17 +23,8 @@ def run(config_file: str, debug: bool = False, log_file: Optional[str] = None):
     """
     cfg = Workflow.from_yaml(config_file)
     cfg.create_dir_tree(debug=debug)
-    if cfg.workflow_name == "stack":
-        from dolphin.workflows import s1_disp
 
-        s1_disp.run(cfg, debug=debug, log_file=log_file)
-    elif cfg.workflow_name == "single":
-        raise NotImplementedError("Single interferogram workflow not yet implemented")
-    else:
-        choices = WorkflowName.__members__.values()
-        raise ValueError(
-            f"Unknown workflow name: {cfg.workflow_name}. Must be one of {choices}"
-        )
+    s1_disp.run(cfg, debug=debug, log_file=log_file)
 
 
 def get_parser(subparser=None, subcommand_name="run"):

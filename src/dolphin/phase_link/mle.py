@@ -220,7 +220,7 @@ def mle_stack(C_arrays, beta: float = 0.01, reference_idx: float = 0):
     # Return the phase (still as a GPU array)
     phase_stack = xp.angle(evd_estimate)
     # Move the SLC dimension to the front (to match the SLC stack shape)
-    return np.moveaxis(phase_stack, -1, 0)
+    return xp.moveaxis(phase_stack, -1, 0)
 
 
 def _get_eigvecs(C):

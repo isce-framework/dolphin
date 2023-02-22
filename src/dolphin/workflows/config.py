@@ -34,7 +34,7 @@ __all__ = [
     "Workflow",
 ]
 
-logger = get_log()
+logger = get_log(__name__)
 
 # Specific to OPERA CSLC products:
 OPERA_DATASET_NAME = "science/SENTINEL1/CSLC/grids/VV"

@@ -5,9 +5,9 @@ from threading import enumerate as threading_enumerate
 
 from dolphin._log import get_log
 
-logger = get_log()
+logger = get_log(__name__)
 
-_DEFAULT_TIMEOUT = 1.0
+_DEFAULT_TIMEOUT = 0.5
 
 
 def is_main_thread_active() -> bool:

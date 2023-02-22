@@ -14,7 +14,7 @@ from dolphin import io, utils
 from dolphin._log import get_log
 from dolphin._types import Filename
 
-logger = get_log()
+logger = get_log(__name__)
 
 
 def merge_by_date(

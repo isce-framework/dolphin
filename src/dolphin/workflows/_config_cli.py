@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 from typing import List, Optional, Tuple, Union
 
-from .config import OPERA_DATASET_NAME, InterferogramNetworkType, Workflow
+from .config import OPERA_DATASET_NAME, InterferogramNetworkType, Workflow, WorkflowName
 
 
 def create_config(
@@ -28,12 +28,15 @@ def create_config(
             network_type=InterferogramNetworkType.MANUAL_INDEX,
             indexes=[(0, -1)],
         )
+        workflow_name = WorkflowName.SINGLE
         # Override the ministack size so that only one phase linking is run
         ministack_size = 1000
     else:
         interferogram_network = {}  # Use default
+        workflow_name = WorkflowName.STACK
 
     cfg = Workflow(
+        workflow_name=workflow_name,
         inputs=dict(
             cslc_file_list=slc_files,
             mask_files=mask_files,

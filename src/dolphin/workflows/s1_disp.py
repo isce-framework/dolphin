@@ -7,7 +7,7 @@ from dolphin._log import get_log, log_runtime
 from dolphin.interferogram import VRTInterferogram
 
 from . import stitch_and_unwrap, wrapped_phase
-from ._grouping import group_by_burst
+from ._utils import group_by_burst
 from .config import Workflow
 
 

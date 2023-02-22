@@ -14,7 +14,7 @@ from dolphin._types import Filename
 from dolphin.io import get_raster_xysize
 from dolphin.utils import numpy_to_gdal_type
 
-logger = get_log()
+logger = get_log(__name__)
 
 gdal.UseExceptions()
 
