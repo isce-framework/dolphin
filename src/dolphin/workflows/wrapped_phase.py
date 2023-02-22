@@ -69,11 +69,12 @@ def run(cfg: Workflow, debug: bool = False) -> List[VRTInterferogram]:
     else:
         logger.info(f"Running sequential EMI step in {pl_path}")
         if cfg.workflow_name == "single":
-            single.run_evd_update(
+            single.run_evd_single(
                 slc_vrt_file=vrt_stack.outfile,
                 output_folder=pl_path,
                 half_window=cfg.phase_linking.half_window.dict(),
                 strides=cfg.outputs.strides,
+                reference_idx=0,
                 # mask_file=cfg.inputs.mask_file,
                 ps_mask_file=cfg.ps_options.output_file,
                 max_bytes=cfg.worker_settings.max_ram_gb * 1e9,

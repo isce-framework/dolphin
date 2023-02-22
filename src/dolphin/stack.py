@@ -3,7 +3,7 @@ from math import nan
 from os import fspath
 from pathlib import Path
 from pprint import pformat
-from typing import Generator, Optional, Sequence, Tuple
+from typing import Generator, List, Optional, Sequence, Tuple
 
 import numpy as np
 from osgeo import gdal
@@ -80,10 +80,10 @@ class VRTStack:
                 "To create from an existing VRT, use the `from_vrt_file` method."
             )
 
-        files = [Path(f) for f in file_list]
+        files: List[Filename] = [Path(f) for f in file_list]
         self._use_abs_path = use_abs_path
         if use_abs_path:
-            files = [p.resolve() for p in files]
+            files = [utils._resolve_gdal_path(p) for p in files]
         # Extract the date/datetimes from the filenames
         dates = [utils.get_dates(f, fmt=file_date_fmt) for f in files]
         if sort_files:

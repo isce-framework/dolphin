@@ -19,10 +19,11 @@ from dolphin import io
 from dolphin._log import get_log
 from dolphin._types import Filename
 from dolphin.interferogram import VRTInterferogram
-from dolphin.phase_link import PhaseLinkRuntimeError, compress, run_mle
+from dolphin.phase_link import run_mle
 from dolphin.stack import VRTStack
 
 from ._utils import setup_output_folder
+from .single import run_evd_single
 
 logger = get_log(__name__)
 
@@ -98,116 +99,26 @@ def run_evd_sequential(
             sort_files=False,
             subdataset=v_all.subdataset,
         )
-        # Create the background writer for this ministack
-        writer = io.Writer()
-
-        # mini_idx is first non-compressed SLC
-        logger.info(
-            f"{cur_vrt}: from {Path(cur_vrt.file_list[mini_idx]).name} to"
-            f" {Path(cur_vrt.file_list[-1]).name}"
-        )
-        # Set up the output folder with empty files to write into
-        cur_output_files = setup_output_folder(
-            cur_vrt, driver="GTiff", start_idx=mini_idx, strides=strides
-        )
-        # Save these for the final adjustment later
-        # Keep the list of compressed SLCs to prepend to next VRTStack.file_list
-        output_slc_files[mini_idx] = cur_output_files
-
-        # Create the empty compressed SLC file
-        cur_comp_slc_file = cur_output_folder / f"compressed_{start_end}.tif"
-        io.write_arr(
-            arr=None,
-            like_filename=cur_vrt.outfile,
-            output_name=cur_comp_slc_file,
-            nbands=1,
-            # Note that the compressed SLC is the same size as the original SLC
-        )
-        comp_slc_files.append(cur_comp_slc_file)
-
-        # Create the empty compressed temporal coherence file
-        tcorr_file = cur_output_folder / f"tcorr_{start_end}.tif"
-        io.write_arr(
-            arr=None,
-            like_filename=cur_vrt.outfile,
-            output_name=tcorr_file,
-            nbands=1,
-            dtype=np.float32,
+        cur_output_files, cur_comp_slc_file, tcorr_file = run_evd_single(
+            slc_vrt_file=cur_vrt,
+            output_folder=cur_output_folder,
+            half_window=half_window,
             strides=strides,
+            reference_idx=mini_idx,
+            mask_file=mask_file,
+            ps_mask_file=ps_mask_file,
+            beta=beta,
+            max_bytes=max_bytes,
+            n_workers=n_workers,
+            gpu_enabled=gpu_enabled,
         )
+
+        output_slc_files[mini_idx] = cur_output_files
+        comp_slc_files.append(cur_comp_slc_file)
         tcorr_files.append(tcorr_file)
-
-        # Iterate over the ministack in blocks
-        # Note the overlap to redo the edge effects
-        # TODO: adjust the writing to avoid the overlap
-
-        # Note: dividing by len(stack) since cov is shape (rows, cols, nslc, nslc)
-        # so we need to load less to not overflow memory
-        stack_max_bytes = max_bytes / len(cur_vrt)
-        overlaps = (yhalf, xhalf)
-        block_gen = cur_vrt.iter_blocks(
-            overlaps=overlaps,
-            max_bytes=stack_max_bytes,
-            skip_empty=True,
-            # TODO: get the nodata value from the vrt stack
-            # this involves verifying that COMPASS correctly sets the nodata value
-        )
-        for cur_data, (rows, cols) in block_gen:
-            if np.all(cur_data == 0):
-                continue
-            cur_data = cur_data.astype(np.complex64)
-
-            # Run the phase linking process on the current ministack
-            try:
-                cur_mle_stack, tcorr = run_mle(
-                    cur_data,
-                    half_window=half_window,
-                    strides=strides,
-                    beta=beta,
-                    reference_idx=mini_idx,
-                    nodata_mask=nodata_mask[rows, cols],
-                    ps_mask=ps_mask[rows, cols],
-                    n_workers=n_workers,
-                    gpu_enabled=gpu_enabled,
-                )
-            except PhaseLinkRuntimeError as e:
-                # note: this is a warning instead of info, since it should
-                # get caught at the "skip_empty" step
-                logger.warning(f"Exception at ({rows}, {cols}): {e}")
-                continue
-
-            # Save each of the MLE estimates (ignoring the compressed SLCs)
-            assert len(cur_mle_stack[mini_idx:]) == len(cur_output_files)
-            # Get the location within the output file, shrinking down the slices
-            out_row_start = rows.start // ys
-            out_col_start = cols.start // xs
-            for img, f in zip(cur_mle_stack[mini_idx:], cur_output_files):
-                writer.queue_write(img, f, out_row_start, out_col_start)
-
-            # Save the temporal coherence blocks
-            writer.queue_write(tcorr, tcorr_file, out_row_start, out_col_start)
-
-            # Compress the ministack using only the non-compressed SLCs
-            cur_comp_slc = compress(
-                cur_data[mini_idx:],
-                cur_mle_stack[mini_idx:],
-            )
-            # Save the compressed SLC block
-            writer.queue_write(
-                cur_comp_slc, cur_comp_slc_file, out_row_start, out_col_start
-            )
-            # logger.debug(f"Saved compressed block SLC to {cur_comp_slc_file}")
-            # tqdm.write(" Finished block, loading next block.")
-
-        # Block until all the writers for this ministack have finished
-        logger.info(f"Waiting to write {writer.num_queued} blocks of data.")
-        writer.notify_finished()
-        logger.info(f"Finished ministack {mini_idx} of size {cur_vrt.shape}.")
 
     ##############################################
     # Set up the output folder with empty files to write into
-    # final_output_folder = output_folder / "final"
-    # final_output_folder.mkdir(parents=True, exist_ok=True)
 
     # Average the temporal coherence files in each ministack
     # TODO: do we want to include the date span in this filename?

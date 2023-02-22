@@ -21,16 +21,17 @@ from ._utils import setup_output_folder
 
 logger = get_log(__name__)
 
-__all__ = ["run_evd_update"]
+__all__ = ["run_evd_single"]
 
 
-def run_evd_update(
+def run_evd_single(
     *,
     slc_vrt_file: Filename,
     # weight_file: Filename,
     output_folder: Filename,
     half_window: dict,
     strides: dict = {"x": 1, "y": 1},
+    reference_idx: int = 0,
     mask_file: Optional[Filename] = None,
     ps_mask_file: Optional[Filename] = None,
     beta: float = 0.01,
@@ -149,7 +150,7 @@ def run_evd_update(
                 half_window=half_window,
                 strides=strides,
                 beta=beta,
-                # reference_idx=0,
+                reference_idx=reference_idx,
                 nodata_mask=nodata_mask[rows, cols],
                 ps_mask=ps_mask[rows, cols],
                 n_workers=n_workers,
@@ -187,3 +188,5 @@ def run_evd_update(
     logger.info(f"Waiting to write {writer.num_queued} blocks of data.")
     writer.notify_finished()
     logger.info(f"Finished ministack of size {vrt.shape}.")
+
+    return output_slc_files, comp_slc_file, tcorr_file
