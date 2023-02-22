@@ -94,9 +94,9 @@ def _parse_date(datestr: str, fmt: str = "%Y%m%d") -> datetime.date:
 
 def _get_path_from_gdal_str(name: Filename) -> Path:
     s = str(name)
-    if s.startswith("DERIVED_SUBDATASET"):
+    if s.upper().startswith("DERIVED_SUBDATASET"):
         p = s.split(":")[-1].strip('"').strip("'")
-    elif ":" in s and (s.startswith("NETCDF") or s.startswith("HDF")):
+    elif ":" in s and (s.upper().startswith("NETCDF") or s.upper().startswith("HDF")):
         p = s.split(":")[1].strip('"').strip("'")
     else:
         return Path(name)
@@ -106,11 +106,11 @@ def _get_path_from_gdal_str(name: Filename) -> Path:
 def _resolve_gdal_path(gdal_str: Filename) -> Filename:
     """Resolve the file portion of a gdal-openable string to an absolute path."""
     s = str(gdal_str)
-    if s.startswith("DERIVED_SUBDATASET"):
+    if s.upper().startswith("DERIVED_SUBDATASET"):
         # like DERIVED_SUBDATASET:AMPLITUDE:slc_filepath.tif
         file_part = s.split(":")[-1]
         is_gdal_str = True
-    elif ":" in s and (s.startswith("NETCDF") or s.startswith("HDF")):
+    elif ":" in s and (s.upper().startswith("NETCDF") or s.upper().startswith("HDF")):
         # like NETCDF:"slc_filepath.nc":slc_var
         file_part = s.split(":")[1]
         is_gdal_str = True
