@@ -78,6 +78,7 @@ def merge_images(
     out_nodata: Optional[float] = 0,
     out_dtype: Optional[DTypeLike] = None,
     overwrite=False,
+    options: Optional[Sequence[str]] = ["SUFFIX=ADD"],
 ):
     """Combine multiple SLC images on the same date into one image.
 
@@ -103,6 +104,8 @@ def merge_images(
         of the first image in the list.
     overwrite : bool
         Overwrite existing files. Default is False.
+    options : Optional[Sequence[str]]
+        Driver-specific creation options passed to GDAL. Default is ["SUFFIX=ADD"]
     """
     if Path(outfile).exists():
         if not overwrite:
@@ -119,6 +122,7 @@ def merge_images(
             file_list[0],
             outfile=outfile,
             driver=driver,
+            creation_options=options,
         )
         return
 
@@ -155,6 +159,7 @@ def merge_images(
         nodata=out_nodata,
         geotransform=gt,
         projection=projection,
+        options=options,
     )
 
     out_left, out_bottom, out_right, out_top = bounds
