@@ -318,14 +318,14 @@ def _warp_to_projection(
         The warped filenames.
     """
     warped_files = []
-    for fn in filenames:
+    for idx, fn in enumerate(filenames):
         fn = Path(fn)
         ds = gdal.Open(fspath(fn))
         proj_in = ds.GetProjection()
         if proj_in == projection:
             warped_files.append(fn)
             continue
-        warped_fn = Path(dirname) / f"{fn.name}.warped.tif"
+        warped_fn = Path(dirname) / f"{fn.stem}_{idx}_warped.tif"
         from_srs_name = ds.GetSpatialRef().GetName()
         to_srs_name = osr.SpatialReference(projection).GetName()
         logger.info(

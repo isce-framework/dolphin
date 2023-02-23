@@ -21,9 +21,9 @@ gdal.UseExceptions()
 
 def unwrap(
     ifg_file: Filename,
-    cor_file: Optional[Filename],
     out_file: Filename,
-    mask_file: Optional[Filename],
+    cor_file: Optional[Filename] = None,
+    mask_file: Optional[Filename] = None,
     do_tile: bool = False,
     init_method: str = "mcf",
     looks: Tuple[int, int] = (5, 1),
@@ -241,8 +241,8 @@ def run(
             exc.submit(
                 unwrap,
                 inf,
-                cor_file,
                 outf,
+                cor_file,
                 mask_file,
                 not no_tile,
                 init_method,
