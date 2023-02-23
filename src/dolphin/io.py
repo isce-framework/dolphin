@@ -8,7 +8,7 @@ import math
 from datetime import date
 from os import fspath
 from pathlib import Path
-from typing import Any, Dict, Generator, List, Optional, Sequence, Tuple, Union
+from typing import Any, Dict, Generator, Optional, Sequence, Tuple, Union
 
 import numpy as np
 from numpy.typing import ArrayLike, DTypeLike
@@ -344,7 +344,7 @@ def write_arr(
     output_name: Filename,
     like_filename: Optional[Filename] = None,
     driver: Optional[str] = "GTiff",
-    options: Optional[List] = None,
+    options: Optional[Sequence] = None,
     nbands: Optional[int] = None,
     shape: Optional[Tuple[int, int]] = None,
     dtype: Optional[DTypeLike] = None,

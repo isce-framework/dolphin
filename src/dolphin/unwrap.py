@@ -11,8 +11,7 @@ from tqdm import tqdm
 
 from dolphin._log import get_log, log_runtime
 from dolphin._types import Filename
-from dolphin.io import get_raster_xysize
-from dolphin.utils import numpy_to_gdal_type
+from dolphin.io import copy_projection, get_raster_xysize
 
 logger = get_log(__name__)
 
@@ -21,18 +20,52 @@ gdal.UseExceptions()
 
 def unwrap(
     ifg_file: Filename,
-    cor_file: Optional[Filename],
     out_file: Filename,
-    mask_file: Optional[Filename],
+    cor_file: Optional[Filename] = None,
+    mask_file: Optional[Filename] = None,
     do_tile: bool = False,
     init_method: str = "mcf",
     looks: Tuple[int, int] = (5, 1),
-):
-    """Unwrap a single interferogram."""
+    alt_line_data: bool = True,
+) -> subprocess.CompletedProcess:
+    """Unwrap a single interferogram using snaphu.
+
+    Parameters
+    ----------
+    ifg_file : Filename
+        The interferogram file to unwrap.
+    out_file : Filename
+        The output file to save the unwrapped interferogram.
+    cor_file : Optional[Filename], optional
+        The coherence file to use for unwrapping, by default None
+    mask_file : Optional[Filename], optional
+        The mask file to use for unwrapping, by default None.
+    do_tile : bool, optional
+        Whether to tile the unwrapping, by default False.
+    init_method : str, optional
+        The unwrapping initialization method, by default "mcf"
+    looks : Tuple[int, int], optional
+        The number of looks in range and azimuth, by default (5, 1).
+    alt_line_data : bool, optional
+        Whether to use alternate line data, by default True.
+
+    Returns
+    -------
+    subprocess.CompletedProcess
+        The subprocess.CompletedProcess object from the unwrapping command.
+        This object contains `.return_code`, `.stdout`, and `.stderr`
+
+    Raises
+    ------
+    ValueError
+        If the init_method is not "mcf" or "mst".
+    CalledProcessError
+        If the snaphu unwrapping command fails for some reason.
+    """
     if init_method.lower() not in ("mcf", "mst"):
         raise ValueError(f"Invalid init_method {init_method}")
+
     conncomp_file = Path(out_file).with_suffix(".unw.conncomp")
-    alt_line_data = True
     cmd = _snaphu_cmd(
         fspath(ifg_file),
         fspath(cor_file or ""),
@@ -44,13 +77,15 @@ def unwrap(
         init_method=init_method,
         looks=looks,
     )
-    logger.info(cmd)
-    subprocess.check_call(cmd, shell=True)
+    logger.debug(cmd)
+    # copy_projection
+    output = subprocess.run(cmd, shell=True, check=True, capture_output=True, text=True)
     _save_with_metadata(
         ifg_file, out_file, alt_line_data=alt_line_data, dtype="float32"
     )
-    _save_with_metadata(ifg_file, conncomp_file, alt_line_data=False, dtype="byte")
-    _set_unw_zeros(out_file, ifg_file)
+    _save_with_metadata(ifg_file, conncomp_file, alt_line_data=False, dtype="uint8")
+    _set_unw_zeros(out_file, ifg_file, alt_line_data=alt_line_data)
+    return output
 
 
 def _snaphu_cmd(
@@ -125,53 +160,47 @@ CONNCOMPFILE {conncomp_file}   # TODO: snaphu has a bug for tiling conncomps
     return cmd
 
 
-def _set_unw_zeros(unw_filename, ifg_filename):
+def _set_unw_zeros(unw_filename, ifg_filename, alt_line_data=True):
     """Set areas that are 0 in the ifg to be 0 in the unw."""
     tmp_file = str(unw_filename).replace(".unw", "_tmp.unw")
+    driver = "ENVI" if not alt_line_data else "ROI_PAC"
     cmd = (
-        f"gdal_calc.py --quiet --outfile={tmp_file} --type=Float32 --format=ROI_PAC "
-        f'--allBands=A -A {unw_filename} -B {ifg_filename} --calc "A * (B!=0)"'
+        f"gdal_calc.py --quiet --outfile={tmp_file} --type=Float32 --co SUFFIX=ADD "
+        f" --format={driver} --NoDataValue 0 --allBands=A -A {unw_filename} -B"
+        f' {ifg_filename} --calc "A * (B!=0)"'
     )
-    print(f"Setting zeros for {unw_filename}")
-    print(cmd)
+    logger.debug(f"Setting zeros for {unw_filename}")
+    logger.debug(cmd)
     subprocess.check_call(cmd, shell=True)
     subprocess.check_call(f"mv {tmp_file} {unw_filename}", shell=True)
     # remove the header file
     subprocess.check_call(f"rm -f {tmp_file}.*", shell=True)
 
 
-def _save_with_metadata(meta_file, data_file, alt_line_data=True, dtype="float32"):
-    """Write out a metadata file for `data_file` using the `meta_file` metadata."""
-    cols, rows = get_raster_xysize(meta_file)
+def _save_with_metadata(like_file, raw_data_file, alt_line_data=True, dtype="float32"):
+    """Write out a metadata file for `raw_data_file` using the `like_file` metadata."""
+    cols, rows = get_raster_xysize(like_file)
 
-    # read in using fromfile, since we can't use gdal yet
-    dtype = np.dtype(str(dtype).lower())
-    data = np.fromfile(data_file, dtype=dtype)
+    # Write a bare minimum auxiliary file so we can use gdal
     if alt_line_data:
-        amp = data.reshape((rows, 2 * cols))[:, :cols]
-        phase = data.reshape((rows, 2 * cols))[:, cols:]
-        driver = "ROI_PAC"
-        nbands = 2
+        min_rsc = f"WIDTH {cols}\nFILE_LENGTH {rows}\n"
+        with open(str(raw_data_file) + ".rsc", "w") as f:
+            f.write(min_rsc)
     else:
-        amp = None
-        phase = data.reshape((rows, cols))
-        driver = "ENVI"
-        nbands = 1
+        # Get ENVI data number l3harrisgeospatial.com/docs/enviheaderfiles.html
+        if np.dtype(dtype) == np.float32:
+            dt = 4
+        elif np.dtype(dtype) == np.uint8:
+            dt = 1
+        else:
+            raise ValueError(f"Unsupported data type: {dtype}")
+        min_hdr = (
+            f"ENVI\nsamples = {cols}\nlines = {rows}\nbands = 1\ndata type = {dt}\n"
+        )
+        with open(str(raw_data_file) + ".hdr", "w") as f:
+            f.write(min_hdr)
 
-    gdal_dt = numpy_to_gdal_type(dtype)
-    drv = gdal.GetDriverByName(driver)
-    options = ["SUFFIX=ADD"] if driver == "ENVI" else []
-    ds_out = drv.Create(fspath(data_file), cols, rows, nbands, gdal_dt, options=options)
-    # print("saving to", data_file, "with driver", driver)
-    if amp is None:
-        bnd = ds_out.GetRasterBand(1)
-        bnd.WriteArray(phase)
-    else:
-        bnd = ds_out.GetRasterBand(1)
-        bnd.WriteArray(amp)
-        bnd = ds_out.GetRasterBand(2)
-        bnd.WriteArray(phase)
-    bnd = ds_out = None
+    copy_projection(like_file, raw_data_file)
 
 
 @log_runtime
@@ -241,8 +270,8 @@ def run(
             exc.submit(
                 unwrap,
                 inf,
-                cor_file,
                 outf,
+                cor_file,
                 mask_file,
                 not no_tile,
                 init_method,
