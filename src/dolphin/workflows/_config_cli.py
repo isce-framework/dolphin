@@ -135,6 +135,7 @@ def get_parser(subparser=None, subcommand_name="run"):
         "--strides",
         nargs=2,
         type=int,
+        metavar=("X", "Y"),
         default=(1, 1),
         help=(
             "Strides/decimation factor (x, y) (in pixels) to use when determining"
