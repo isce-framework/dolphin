@@ -1,5 +1,5 @@
 import abc
-from queue import Empty, Queue
+from queue import Empty, Full, Queue
 from threading import Event, Thread
 from threading import enumerate as threading_enumerate
 
@@ -55,18 +55,21 @@ class BackgroundWorker(abc.ABC):
         num_work_queue=0,
         num_results_queue=0,
         store_results=True,
+        drop_unfinished_results=False,
         timeout=_DEFAULT_TIMEOUT,
+        name="BackgroundWorker",
     ):
         self.store_results = store_results
         self.timeout = timeout
         self._finished_event = Event()
         self._work_queue = Queue(num_work_queue)
         self._results_queue = Queue(num_results_queue)
-        self._thread = Thread(target=self._consume_work_queue)
+        self._thread = Thread(target=self._consume_work_queue, name=name)
         self._thread.start()
+        self._drop_unfinished_results = drop_unfinished_results
 
     def _consume_work_queue(self):
-        while not self._finished_event.is_set():
+        while not self._finished_event.is_set() and is_main_thread_active():
             logger.debug("getting work")
             try:
                 args, kw = self._work_queue.get(timeout=self.timeout)
@@ -78,7 +81,10 @@ class BackgroundWorker(abc.ABC):
             logger.debug("got result")
             if self.store_results:
                 logger.debug("saving result in queue")
-                self._results_queue.put(result)
+                try:
+                    self._results_queue.put(result, timeout=2)
+                except Full:
+                    logger.debug("result queue full, waiting...")
 
     @abc.abstractmethod
     def process(self, *args, **kw):
@@ -105,7 +111,7 @@ class BackgroundWorker(abc.ABC):
         self._results_queue.task_done()
         return result
 
-    def notify_finished(self):
+    def notify_finished(self, timeout=None):
         """Signal that all work has finished.
 
         Indicate that no more work will be added to the queue, and block until
@@ -113,8 +119,9 @@ class BackgroundWorker(abc.ABC):
         If `store_results=True` also block until all results have been retrieved.
         """
         self._finished_event.set()
-        self._results_queue.join()
-        self._thread.join()
+        if not self._drop_unfinished_results:
+            self._results_queue.join()
+        self._thread.join(timeout)
 
     def __del__(self):
         self.notify_finished()
@@ -137,8 +144,13 @@ class BackgroundWriter(BackgroundWorker):
         queue is empty.
     """
 
-    def __init__(self, nq=1, timeout=_DEFAULT_TIMEOUT):
-        super().__init__(num_work_queue=nq, store_results=False, timeout=timeout)
+    def __init__(self, nq=1, timeout=_DEFAULT_TIMEOUT, **kwargs):
+        super().__init__(
+            num_work_queue=nq,
+            store_results=False,
+            timeout=timeout,
+            **kwargs,
+        )
 
     # rename queue_work -> queue_write
     def queue_write(self, *args, **kw):
@@ -180,8 +192,15 @@ class BackgroundReader(BackgroundWorker):
         queue is empty.
     """
 
-    def __init__(self, nq=1, timeout=_DEFAULT_TIMEOUT):
-        super().__init__(num_results_queue=nq, timeout=timeout)
+    def __init__(self, nq=1, timeout=_DEFAULT_TIMEOUT, **kwargs):
+        super().__init__(
+            num_results_queue=nq,
+            timeout=timeout,
+            store_results=True,
+            # If we're reading data, we don't care about the result queue
+            drop_unfinished_results=True,
+            **kwargs,
+        )
 
     # rename queue_work -> queue_read
     def queue_read(self, *args, **kw):

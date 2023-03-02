@@ -63,7 +63,7 @@ def run_cpu(
     if output_cov_file:
         covariance._save_covariance(output_cov_file, C_arrays)
 
-    output_phase = mle_stack(C_arrays, beta, reference_idx)
+    output_phase = mle_stack(C_arrays, beta, reference_idx, n_workers=n_workers)
     cpx_phase = np.exp(1j * output_phase)
     # Get the temporal coherence
     temp_coh = metrics.estimate_temp_coh(cpx_phase, C_arrays)
