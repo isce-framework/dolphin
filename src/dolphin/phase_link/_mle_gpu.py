@@ -20,6 +20,7 @@ def run_gpu(
     use_slc_amp: bool = True,
     output_cov_file: Optional[Filename] = None,
     threads_per_block: Tuple[int, int] = (16, 16),
+    free_mem: bool = False,
     **kwargs,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """Run the GPU version of the stack covariance estimator and MLE solver.
@@ -46,6 +47,9 @@ def run_gpu(
     threads_per_block : Tuple[int, int], optional
         The number of threads per block to use for the GPU kernel.
         By default (16, 16)
+    free_mem : bool, optional
+        Whether to free the memory of the covariance matrix after the MLE
+        estimation. By default False.
 
     Returns
     -------
@@ -91,7 +95,10 @@ def run_gpu(
     # # https://docs.cupy.dev/en/stable/user_guide/memory.html
     # may just be cached a lot of the huge memory available on aurora
     # But if we need to free GPU memory:
-    # cp.get_default_memory_pool().free_all_blocks()
+    if free_mem:
+        del d_slc_stack
+        del d_C_arrays
+        cp.get_default_pinned_memory_pool().free_all_blocks()
 
     if use_slc_amp:
         # use the amplitude from the original SLCs, accounting for strides
