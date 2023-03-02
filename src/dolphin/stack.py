@@ -20,7 +20,7 @@ DEFAULT_BLOCK_BYTES = 32e6
 
 
 class VRTStack:
-    """Class for creating a VRT for a stack of raster files.
+    """Class for creating a virtual stack of raster files.
 
     Attributes
     ----------
@@ -140,18 +140,18 @@ class VRTStack:
             )
 
             for idx, filename in enumerate(self._gdal_file_strings, start=1):
-                block_size = io.get_raster_block_size(filename)
-                # blocks in a vrt have a min of 16, max of 2**14=16384
+                chunk_size = io.get_raster_chunk_size(filename)
+                # chunks in a vrt have a min of 16, max of 2**14=16384
                 # https://github.com/OSGeo/gdal/blob/2530defa1e0052827bc98696e7806037a6fec86e/frmts/vrt/vrtrasterband.cpp#L339
-                if any([b < 16 for b in block_size]) or any(
-                    [b > 16384 for b in block_size]
+                if any([b < 16 for b in chunk_size]) or any(
+                    [b > 16384 for b in chunk_size]
                 ):
-                    block_str = ""
+                    chunk_str = ""
                 else:
-                    block_str = (
-                        f'blockXSize="{block_size[0]}" blockYSize="{block_size[1]}"'
+                    chunk_str = (
+                        f'blockXSize="{chunk_size[0]}" blockYSize="{chunk_size[1]}"'
                     )
-                outstr = f"""  <VRTRasterBand dataType="{self.dtype}" band="{idx}" {block_str}>
+                outstr = f"""  <VRTRasterBand dataType="{self.dtype}" band="{idx}" {chunk_str}>
     <SimpleSource>
       <SourceFilename>{filename}</SourceFilename>
       <SourceBand>1</SourceBand>

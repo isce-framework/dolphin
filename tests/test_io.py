@@ -240,18 +240,21 @@ def test_save_block_cpx(raster_100_by_200, cpx_arr, tmpdir):
 
 
 def test_get_raster_block_sizes(raster_100_by_200, tiled_raster_100_by_200):
-    assert io.get_raster_block_size(tiled_raster_100_by_200) == [32, 32]
-    assert io.get_raster_block_size(raster_100_by_200) == [200, 1]
+    assert io.get_raster_chunk_size(tiled_raster_100_by_200) == [32, 32]
+    assert io.get_raster_chunk_size(raster_100_by_200) == [200, 1]
+
+
+def test_get_max_block_shape(raster_100_by_200, tiled_raster_100_by_200):
     # for io.get_max_block_shape, the rasters are 8 bytes per pixel
     # if we have 1 GB, the whole raster should fit in memory
-    bs = io.get_max_block_shape(tiled_raster_100_by_200, 1, max_bytes=1e9)
+    bs = io.get_max_block_shape(tiled_raster_100_by_200, nstack=1, max_bytes=1e9)
     assert bs == (100, 200)
 
     # for untiled, the block size is one line
-    bs = io.get_max_block_shape(raster_100_by_200, 1, max_bytes=0)
+    bs = io.get_max_block_shape(raster_100_by_200, nstack=1, max_bytes=0)
     # The function forces at least 16 lines to be read at a time
     assert bs == (16, 200)
-    bs = io.get_max_block_shape(raster_100_by_200, 1, max_bytes=8 * 17 * 200)
+    bs = io.get_max_block_shape(raster_100_by_200, nstack=1, max_bytes=8 * 17 * 200)
     assert bs == (32, 200)
 
     # Pretend we have a stack of 10 images
@@ -269,11 +272,10 @@ def test_get_raster_block_sizes(raster_100_by_200, tiled_raster_100_by_200):
     )
     assert bs == (32, 64)
 
-    # 200 / 32 = 6.25, so with 7, it should add a new row
     bs = io.get_max_block_shape(
-        tiled_raster_100_by_200, nstack, max_bytes=7 * bytes_per_tile
+        tiled_raster_100_by_200, nstack, max_bytes=4 * bytes_per_tile
     )
-    assert bs == (64, 200)
+    assert bs == (64, 64)
 
 
 def test_iter_blocks(tiled_raster_100_by_200):
@@ -322,6 +324,7 @@ def test_iter_blocks_rowcols(tiled_raster_100_by_200):
     assert blocks[0].shape == (32, 32)
     for b, (rs, cs) in zip(blocks, slices):
         assert b.shape == (rs.stop - rs.start, cs.stop - cs.start)
+    loader.notify_finished()
 
 
 def test_iter_nodata(
@@ -341,21 +344,25 @@ def test_iter_nodata(
     expected_num_blocks = row_blocks * col_blocks
     assert len(blocks) == expected_num_blocks
     assert blocks[0].shape == (32, 32)
+    loader.notify_finished()
 
     # One nan should be fine, will get loaded
     loader = io.EagerLoader(filename=raster_with_nan, block_shape=bs)
     blocks, slices = zip(*list(loader.iter_blocks()))
     assert len(blocks) == expected_num_blocks
+    loader.notify_finished()
 
     # Now check entire block for a skipped block
     loader = io.EagerLoader(filename=raster_with_nan_block, block_shape=bs)
     blocks, slices = zip(*list(loader.iter_blocks()))
     assert len(blocks) == expected_num_blocks - 1
+    loader.notify_finished()
 
     # Now check entire block for a skipped block
     loader = io.EagerLoader(filename=raster_with_zero_block, block_shape=bs)
     blocks, slices = zip(*list(loader.iter_blocks()))
     assert len(blocks) == expected_num_blocks - 1
+    loader.notify_finished()
 
 
 @pytest.mark.skip

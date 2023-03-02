@@ -49,7 +49,7 @@ def gdal_to_numpy_type(gdal_type: Union[str, int]) -> np.dtype:
     """Convert gdal type to numpy type."""
     if isinstance(gdal_type, str):
         gdal_type = gdal.GetDataTypeByName(gdal_type)
-    return gdal_array.GDALTypeCodeToNumericTypeCode(gdal_type)
+    return np.dtype(gdal_array.GDALTypeCodeToNumericTypeCode(gdal_type))
 
 
 def get_dates(filename: Filename, fmt: str = "%Y%m%d") -> List[datetime.date]:
