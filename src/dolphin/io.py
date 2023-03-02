@@ -538,8 +538,8 @@ def write_block(
 class Writer(BackgroundWriter):
     """Class to write data to files in a background thread."""
 
-    def __init__(self, max_queue=0, **kw):
-        super().__init__(nq=max_queue, **kw)
+    def __init__(self, max_queue: int = 0, **kwargs):
+        super().__init__(nq=max_queue, name="Writer", **kwargs)
 
     def write(
         self, data: ArrayLike, filename: Filename, row_start: int, col_start: int
@@ -575,15 +575,15 @@ class EagerLoader(BackgroundReader):
 
     def __init__(
         self,
-        filename,
+        filename: Filename,
         block_shape: Tuple[int, int],
         overlaps: Tuple[int, int] = (0, 0),
         skip_empty: bool = True,
         nodata_mask: Optional[ArrayLike] = None,
-        queue_size=2,
-        timeout=_DEFAULT_TIMEOUT,
+        queue_size: int = 2,
+        timeout: float = _DEFAULT_TIMEOUT,
     ):
-        super().__init__(nq=queue_size, timeout=timeout)
+        super().__init__(nq=queue_size, timeout=timeout, name="EagerLoader")
         self.filename = filename
         # Set up the generator of ((row_start, row_end), (col_start, col_end))
         xsize, ysize = get_raster_xysize(filename)
@@ -636,7 +636,7 @@ class EagerLoader(BackgroundReader):
 
 
 def _slice_iterator(
-    arr_shape,
+    arr_shape: Tuple[int, int],
     block_shape: Tuple[int, int],
     overlaps: Tuple[int, int] = (0, 0),
     start_offsets: Tuple[int, int] = (0, 0),
@@ -746,7 +746,7 @@ def get_max_block_shape(
     )
 
 
-def get_raster_chunk_size(filename) -> List[int]:
+def get_raster_chunk_size(filename: Filename) -> List[int]:
     """Get size the raster's chunks on disk.
 
     This is called blockXsize, blockYsize by GDAL.
