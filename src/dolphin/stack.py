@@ -395,8 +395,9 @@ class VRTStack:
 
         Yields
         ------
-        Tuple[Tuple[int, int], Tuple[int, int]]
-            Iterator of ((row_start, row_stop), (col_start, col_stop))
+        Tuple[np.ndarray, Tuple[slice, slice]]
+            Iterator of (data, (slice(row_start, row_stop), slice(col_start, col_stop))
+
         """
         if block_shape is None:
             block_shape = self._get_block_shape(max_bytes=max_bytes)
