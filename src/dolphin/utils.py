@@ -383,7 +383,18 @@ def take_looks(arr, row_looks, col_looks, func_type="nansum", edge_strategy="cut
         return arr
 
     if arr.ndim >= 3:
-        return xp.stack([take_looks(a, row_looks, col_looks, func_type) for a in arr])
+        return xp.stack(
+            [
+                take_looks(
+                    a,
+                    row_looks,
+                    col_looks,
+                    func_type=func_type,
+                    edge_strategy=edge_strategy,
+                )
+                for a in arr
+            ]
+        )
 
     arr = _make_dims_multiples(arr, row_looks, col_looks, how=edge_strategy)
 

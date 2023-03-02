@@ -406,14 +406,14 @@ class VRTStack:
         if use_nodata_mask:
             logger.info("Nodata mask not implemented, skipping")
 
-        loader = io.EagerLoader(
+        self._loader = io.EagerLoader(
             self.outfile,
             block_shape=block_shape,
             overlaps=overlaps,
             skip_empty=skip_empty,
             nodata_mask=ndm,
         )
-        yield from loader.iter_blocks()
+        yield from self._loader.iter_blocks()
 
     def _get_block_shape(self, max_bytes=DEFAULT_BLOCK_BYTES):
         test_file = self._get_non_vrt_file(self._gdal_file_strings[0])
