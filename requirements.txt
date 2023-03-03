@@ -7,4 +7,5 @@ pymp-pypi>=0.4.5
 pyproj>=3.2
 ruamel_yaml>=0.15
 scipy>=1.5
+threadpoolctl>=3.0
 tqdm>=4.60
