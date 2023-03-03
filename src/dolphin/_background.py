@@ -70,21 +70,24 @@ class BackgroundWorker(abc.ABC):
 
     def _consume_work_queue(self):
         while not self._finished_event.is_set() and is_main_thread_active():
-            logger.debug("getting work")
+            logger.debug(f"{self.name} getting work")
             try:
                 args, kw = self._work_queue.get(timeout=self.timeout)
             except Empty:
-                logger.debug("timed out, checking if done")
+                logger.debug(f"{self.name} timed out, checking if done")
                 continue
-            logger.debug("processing")
+            logger.debug(f"{self.name} processing")
             result = self.process(*args, **kw)
-            logger.debug("got result")
+            logger.debug(f"{self.name} got result")
             if self.store_results:
-                logger.debug("saving result in queue")
-                try:
-                    self._results_queue.put(result, timeout=2)
-                except Full:
-                    logger.debug("result queue full, waiting...")
+                logger.debug(f"{self.name} saving result in queue")
+                while True:
+                    try:
+                        self._results_queue.put(result, timeout=2)
+                        break
+                    except Full:
+                        logger.debug(f"{self.name} result queue full, waiting...")
+                        continue
 
     @abc.abstractmethod
     def process(self, *args, **kw):
@@ -107,8 +110,16 @@ class BackgroundWorker(abc.ABC):
         Blocks until a result is available.
         Same output interface as `process`.
         """
-        result = self._results_queue.get()
-        self._results_queue.task_done()
+        while True:
+            try:
+                result = self._results_queue.get(timeout=self.timeout)
+                self._results_queue.task_done()
+                break
+            except Empty:
+                logger.debug(f"{self.name} get_result timed out, checking if done")
+                if self._finished_event.is_set():
+                    raise RuntimeError("Attempted to get_result after notify_finished!")
+                continue
         return result
 
     def notify_finished(self, timeout=None):
