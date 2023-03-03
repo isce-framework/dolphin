@@ -18,6 +18,7 @@ def create_config(
     strides: Tuple[int, int],
     max_ram_gb: float = 1,
     n_workers: int = 16,
+    threads_per_worker: int = 1,
     no_gpu: bool = False,
     single_update: bool = False,
 ):
@@ -55,6 +56,7 @@ def create_config(
         worker_settings=dict(
             max_ram_gb=max_ram_gb,
             n_workers=n_workers,
+            threads_per_worker=threads_per_worker,
             gpu_enabled=(not no_gpu),
         ),
     )
@@ -160,6 +162,12 @@ def get_parser(subparser=None, subcommand_name="run"):
         type=int,
         default=16,
         help="Number of workers to use.",
+    )
+    worker_group.add_argument(
+        "--threads-per-worker",
+        type=int,
+        default=1,
+        help="Number of threads to use per worker.",
     )
     # parser.add_argument(
     #     "--mask-files",

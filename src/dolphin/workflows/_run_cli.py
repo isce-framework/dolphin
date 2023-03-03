@@ -24,6 +24,13 @@ def run(config_file: str, debug: bool = False, log_file: Optional[str] = None):
     cfg = Workflow.from_yaml(config_file)
     cfg.create_dir_tree(debug=debug)
 
+    # Set the environment variables for the workers
+    # TODO: Is this the best place to do this?
+    from threadpoolctl import ThreadpoolController
+
+    controller = ThreadpoolController()
+    controller.limit(limits=cfg.worker_settings.threads_per_worker)
+
     s1_disp.run(cfg, debug=debug, log_file=log_file)
 
 

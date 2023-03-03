@@ -240,6 +240,14 @@ class WorkerSettings(BaseSettings):
     n_workers: int = Field(
         16, ge=1, description="Number of cpu cores to use for processing (if CPU)"
     )
+    threads_per_worker: int = Field(
+        4,
+        ge=1,
+        description=(
+            "Number of threads to use per worker. This sets the OMP_NUM_THREADS"
+            " environment variable."
+        ),
+    )
     max_ram_gb: float = Field(
         1.0,
         description="Maximum RAM (in GB) to use for processing",
