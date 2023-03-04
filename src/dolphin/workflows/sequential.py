@@ -148,7 +148,10 @@ def run_evd_sequential(
 
     logger.info(f"Running EVD on compressed files: {adjustment_vrt_stack}")
     adjusted_comp_slc_files = setup_output_folder(
-        adjustment_vrt_stack, driver="GTiff", strides=strides
+        adjustment_vrt_stack,
+        driver="GTiff",
+        strides=strides,
+        nodata=0,
     )
 
     writer = io.Writer()
@@ -165,7 +168,7 @@ def run_evd_sequential(
         logger.debug(msg)
 
         # Run the phase linking process on the current adjustment stack
-        cur_mle_stack, tcorr = run_mle(
+        cur_mle_stack, _ = run_mle(
             cur_data,
             half_window=half_window,
             strides=strides,
@@ -177,6 +180,7 @@ def run_evd_sequential(
             n_workers=n_workers,
             gpu_enabled=gpu_enabled,
         )
+        np.nan_to_num(cur_mle_stack, copy=False)
 
         # Get the location within the output file, shrinking down the slices
         out_row_start = rows.start // ys

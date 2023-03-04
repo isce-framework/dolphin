@@ -98,6 +98,7 @@ def run_evd_single(
         start_idx=first_non_comp_idx,
         strides=strides,
         output_folder=output_folder,
+        nodata=0,
     )
 
     # Create the empty compressed SLC file
@@ -107,6 +108,7 @@ def run_evd_single(
         like_filename=vrt.outfile,
         output_name=comp_slc_file,
         nbands=1,
+        nodata=0,
         # Note that the compressed SLC is the same size as the original SLC
     )
 
@@ -119,6 +121,7 @@ def run_evd_single(
         nbands=1,
         dtype=np.float32,
         strides=strides,
+        nodata=0,
     )
 
     # Iterate over the stack in blocks
@@ -161,6 +164,10 @@ def run_evd_single(
             # get caught at the "skip_empty" step
             logger.warning(f"Exception at ({rows}, {cols}): {e}")
             continue
+
+        # Fill in the nan values with 0
+        np.nan_to_num(cur_mle_stack, copy=False)
+        np.nan_to_num(tcorr, copy=False)
 
         # Save each of the MLE estimates (ignoring the compressed SLCs)
         assert len(cur_mle_stack[first_non_comp_idx:]) == len(output_slc_files)
