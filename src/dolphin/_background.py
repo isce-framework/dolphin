@@ -59,6 +59,7 @@ class BackgroundWorker(abc.ABC):
         timeout=_DEFAULT_TIMEOUT,
         name="BackgroundWorker",
     ):
+        self.name = name
         self.store_results = store_results
         self.timeout = timeout
         self._finished_event = Event()
