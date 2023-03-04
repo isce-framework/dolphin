@@ -189,7 +189,6 @@ def run_evd_single(
         # TODO: make a flag? We don't always need to save the compressed SLCs
         writer.queue_write(cur_comp_slc, comp_slc_file, out_row_start, out_col_start)
         # logger.debug(f"Saved compressed block SLC to {cur_comp_slc_file}")
-        # tqdm.write(" Finished block, loading next block.")
 
     # Block until all the writers for this ministack have finished
     logger.info(f"Waiting to write {writer.num_queued} blocks of data.")

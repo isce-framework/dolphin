@@ -13,12 +13,11 @@ import numpy as np
 from numpy.typing import ArrayLike, DTypeLike
 from osgeo import gdal
 from pyproj import CRS
-from rich.progress import MofNCompleteColumn, Progress, SpinnerColumn, TimeElapsedColumn
 
 from dolphin._background import _DEFAULT_TIMEOUT, BackgroundReader, BackgroundWriter
 from dolphin._log import get_log
 from dolphin._types import Filename
-from dolphin.utils import gdal_to_numpy_type, numpy_to_gdal_type
+from dolphin.utils import gdal_to_numpy_type, numpy_to_gdal_type, progress
 
 gdal.UseExceptions()
 
@@ -613,12 +612,6 @@ class EagerLoader(BackgroundReader):
         # Queue up all slices to the work queue
         for rows, cols in self.slices:
             self.queue_read(rows, cols)
-        progress = Progress(
-            SpinnerColumn(),
-            MofNCompleteColumn(),
-            *Progress.get_default_columns()[:-1],  # Skip the ETA column
-            TimeElapsedColumn(),
-        )
 
         s_iter = range(len(self.slices))
         with progress:

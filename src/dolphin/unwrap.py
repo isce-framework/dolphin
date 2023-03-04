@@ -7,11 +7,11 @@ from typing import Optional, Tuple
 
 import numpy as np
 from osgeo import gdal
-from tqdm import tqdm
 
 from dolphin._log import get_log, log_runtime
 from dolphin._types import Filename
 from dolphin.io import copy_projection, get_raster_xysize
+from dolphin.utils import progress
 
 logger = get_log(__name__)
 
@@ -278,8 +278,8 @@ def run(
             )
             for inf, outf in zip(in_files, out_files)
         ]
-        for idx, fut in enumerate(tqdm(as_completed(futures)), start=1):
-            fut.result()
-            tqdm.write("Done with {} / {}".format(idx, len(futures)))
+        with progress:
+            for fut in progress.track(as_completed(futures)):
+                fut.result()
 
     return all_out_files

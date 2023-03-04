@@ -8,12 +8,21 @@ from typing import Iterable, List, Optional, Tuple, Union
 import numpy as np
 from numpy.typing import DTypeLike
 from osgeo import gdal, gdal_array, gdalconst
+from rich.progress import MofNCompleteColumn, Progress, SpinnerColumn, TimeElapsedColumn
 
 from dolphin._log import get_log
 from dolphin._types import Filename
 
 gdal.UseExceptions()
 logger = get_log(__name__)
+
+# Can be used like `from dolphin.utils import progress; with progress: ...`
+progress = Progress(
+    SpinnerColumn(),
+    MofNCompleteColumn(),
+    *Progress.get_default_columns()[:-1],  # Skip the ETA column
+    TimeElapsedColumn(),
+)
 
 
 def numpy_to_gdal_type(np_dtype: DTypeLike) -> int:
@@ -82,8 +91,6 @@ def get_dates(filename: Filename, fmt: str = "%Y%m%d") -> List[datetime.date]:
     pattern = _date_format_to_regex(fmt)
     date_list = re.findall(pattern, path.stem)
     if not date_list:
-        msg = f"{filename} does not contain date like {fmt}"
-        logger.warning(msg)
         return []
     return [_parse_date(d, fmt) for d in date_list]
 
