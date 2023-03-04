@@ -17,6 +17,7 @@
     - The `sequential.py` and `single.py` are where these differences are handled.
 - More uniform naming in `io.get_raster_<X>` functions.
 - The SLC compression is now done in `_compress.py` to declutter the `mle.py` module.
+- Replace `tqdm` with `rich` for progress bars.
 
 - Docs are now using the mkdocs `material` theme.
 
@@ -31,11 +32,16 @@
 Added requirements:
 
 - pyproj>=3.2
+- rich>=12.0
 - threadpoolctl>=3.0
 
 For docs:
 - mkdocs-material
 - pymdown-extensions
+
+Removed requirements:
+
+- tqdm
 
 
 # 0.0.3
