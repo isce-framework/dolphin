@@ -13,7 +13,7 @@ import numpy as np
 from numpy.typing import ArrayLike, DTypeLike
 from osgeo import gdal
 from pyproj import CRS
-from tqdm.auto import tqdm
+from rich.progress import MofNCompleteColumn, Progress, SpinnerColumn, TimeElapsedColumn
 
 from dolphin._background import _DEFAULT_TIMEOUT, BackgroundReader, BackgroundWriter
 from dolphin._log import get_log
@@ -613,24 +613,32 @@ class EagerLoader(BackgroundReader):
         # Queue up all slices to the work queue
         for rows, cols in self.slices:
             self.queue_read(rows, cols)
+        progress = Progress(
+            SpinnerColumn(),
+            MofNCompleteColumn(),
+            *Progress.get_default_columns()[:-1],  # Skip the ETA column
+            TimeElapsedColumn(),
+        )
 
-        for _ in tqdm(range(len(self.slices))):
-            cur_block, (rows, cols) = self.get_data()
-            logger.debug(f"got data for {rows, cols}: {cur_block.shape}")
+        s_iter = range(len(self.slices))
+        with progress:
+            for _ in progress.track(s_iter, description="Loading data blocks..."):
+                cur_block, (rows, cols) = self.get_data()
+                logger.debug(f"got data for {rows, cols}: {cur_block.shape}")
 
-            if self._skip_empty and self._nodata_mask is not None:
-                if self._nodata_mask[rows, cols].all():
-                    continue
+                if self._skip_empty and self._nodata_mask is not None:
+                    if self._nodata_mask[rows, cols].all():
+                        continue
 
-            if self._skip_empty:
-                # Otherwise look at the actual block we loaded
-                if np.isnan(self._nodata):
-                    block_nodata = np.isnan(cur_block)
-                else:
-                    block_nodata = cur_block == self._nodata
-                if np.all(block_nodata):
-                    continue
-            yield cur_block, (rows, cols)
+                if self._skip_empty:
+                    # Otherwise look at the actual block we loaded
+                    if np.isnan(self._nodata):
+                        block_nodata = np.isnan(cur_block)
+                    else:
+                        block_nodata = cur_block == self._nodata
+                    if np.all(block_nodata):
+                        continue
+                yield cur_block, (rows, cols)
 
         self.notify_finished()
 

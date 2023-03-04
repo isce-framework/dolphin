@@ -2,10 +2,7 @@
 import argparse
 from typing import Optional
 
-from dolphin._log import log_runtime
-
-from . import s1_disp
-from .config import Workflow
+from dolphin._log import get_log, log_runtime
 
 
 @log_runtime
@@ -21,12 +18,18 @@ def run(config_file: str, debug: bool = False, log_file: Optional[str] = None):
     log_file : str, optional
         If provided, will log to this file in addition to stderr.
     """
-    cfg = Workflow.from_yaml(config_file)
-    cfg.create_dir_tree(debug=debug)
+    from threadpoolctl import ThreadpoolController
+
+    from . import s1_disp
+    from .config import Workflow
+
+    # Set the logging level for all `dolphin.` modules
+    get_log("dolphin", debug=debug)
 
     # Set the environment variables for the workers
     # TODO: Is this the best place to do this?
-    from threadpoolctl import ThreadpoolController
+    cfg = Workflow.from_yaml(config_file)
+    cfg.create_dir_tree(debug=debug)
 
     controller = ThreadpoolController()
     controller.limit(limits=cfg.worker_settings.threads_per_worker)
@@ -67,6 +70,7 @@ def main(args=None):
     """Get the command line arguments and run the workflow."""
     parser = get_parser()
     parsed_args = parser.parse_args(args)
+
     run(parsed_args.config_file, debug=parsed_args.debug)
 
 
