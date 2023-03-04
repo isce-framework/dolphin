@@ -284,7 +284,9 @@ def _check_all_nans(slc_stack):
     # Check that there are no SLCS which are all nans:
     bad_slc_idxs = np.where(np.all(nans, axis=(1, 2)))[0]
     if bad_slc_idxs.size > 0:
-        raise PhaseLinkRuntimeError(f"SLC stack[{bad_slc_idxs}] has are all NaNs.")
+        raise PhaseLinkRuntimeError(
+            f"slc_stack[{bad_slc_idxs}] out of {len(slc_stack)} are all NaNs."
+        )
 
 
 def _fill_ps_pixels(

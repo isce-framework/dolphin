@@ -91,6 +91,7 @@ def run_evd_single(
         f"{vrt}: from {Path(vrt.file_list[first_non_comp_idx]).name} to"
         f" {Path(vrt.file_list[-1]).name}"
     )
+    logger.info(f"Total stack size (in pixels): {vrt.shape}")
     # Set up the output folder with empty files to write into
     output_slc_files = setup_output_folder(
         vrt,
@@ -162,8 +163,14 @@ def run_evd_single(
         except PhaseLinkRuntimeError as e:
             # note: this is a warning instead of info, since it should
             # get caught at the "skip_empty" step
-            logger.warning(f"Exception at ({rows}, {cols}): {e}")
-            continue
+            msg = f"At block {rows.start}, {cols.start}: {e}"
+            if "are all NaNs" in e.args[0]:
+                # Some SLCs in the ministack are all NaNs
+                # This happens from a shifting burst window near the edges,
+                # and seems to cause no issues
+                logger.info(msg)
+            else:
+                logger.warning(msg)
 
         # Fill in the nan values with 0
         np.nan_to_num(cur_mle_stack, copy=False)

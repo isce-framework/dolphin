@@ -597,6 +597,7 @@ class EagerLoader(BackgroundReader):
         self._queue_size = queue_size
         self._skip_empty = skip_empty
         self._nodata_mask = nodata_mask
+        self._block_shape = block_shape
         self._nodata = get_raster_nodata(filename)
         if self._nodata is None:
             self._nodata = np.nan
@@ -614,8 +615,9 @@ class EagerLoader(BackgroundReader):
             self.queue_read(rows, cols)
 
         s_iter = range(len(self.slices))
+        desc = f"Processing {self._block_shape} sized blocks..."
         with progress:
-            for _ in progress.track(s_iter, description="Loading data blocks..."):
+            for _ in progress.track(s_iter, description=desc):
                 cur_block, (rows, cols) = self.get_data()
                 logger.debug(f"got data for {rows, cols}: {cur_block.shape}")
 
