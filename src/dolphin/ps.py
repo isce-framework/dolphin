@@ -25,7 +25,7 @@ def create_ps(
     amp_mean_file: Filename,
     amp_dispersion_file: Filename,
     amp_dispersion_threshold: float = 0.35,
-    max_ram_gb: float = 1.0,
+    block_size_gb: float = 1.0,
 ):
     """Create the amplitude dispersion, mean, and PS files.
 
@@ -41,7 +41,7 @@ def create_ps(
         The output mean amplitude file.
     amp_dispersion_threshold : float, optional
         The threshold for the amplitude dispersion. Default is 0.35.
-    max_ram_gb : int, optional
+    block_size_gb : int, optional
         The maximum amount of data to read at a time (in GB).
         Default is 1.0 GB.
     """
@@ -60,7 +60,7 @@ def create_ps(
         )
 
     vrt_stack = VRTStack.from_vrt_file(slc_vrt_file)
-    max_bytes = 1e9 * max_ram_gb
+    max_bytes = 1e9 * block_size_gb
     block_shape = vrt_stack._get_block_shape(max_bytes=max_bytes)
 
     # Initialize the intermediate arrays for the calculation

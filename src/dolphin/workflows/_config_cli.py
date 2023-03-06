@@ -16,7 +16,7 @@ def create_config(
     ministack_size: Optional[int] = 15,
     amp_dispersion_threshold: float = 0.35,
     strides: Tuple[int, int],
-    max_ram_gb: float = 1,
+    block_size_gb: float = 1,
     n_workers: int = 16,
     threads_per_worker: int = 1,
     no_gpu: bool = False,
@@ -54,7 +54,7 @@ def create_config(
             amp_dispersion_threshold=amp_dispersion_threshold,
         ),
         worker_settings=dict(
-            max_ram_gb=max_ram_gb,
+            block_size_gb=block_size_gb,
             n_workers=n_workers,
             threads_per_worker=threads_per_worker,
             gpu_enabled=(not no_gpu),
@@ -152,10 +152,10 @@ def get_parser(subparser=None, subcommand_name="run"):
         help="Disable the GPU (if using a machine that has one available).",
     )
     worker_group.add_argument(
-        "--max-ram-gb",
+        "--block-size-gb",
         type=float,
         default=1,
-        help="Maximum amount of RAM to use per worker.",
+        help="Size (in GB) of blocks of data to load at once time.",
     )
     worker_group.add_argument(
         "--n-workers",

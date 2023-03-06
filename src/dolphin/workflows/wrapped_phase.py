@@ -55,7 +55,7 @@ def run(cfg: Workflow, debug: bool = False) -> List[VRTInterferogram]:
             amp_mean_file=cfg.ps_options.amp_mean_file,
             amp_dispersion_file=cfg.ps_options.amp_dispersion_file,
             amp_dispersion_threshold=cfg.ps_options.amp_dispersion_threshold,
-            max_ram_gb=cfg.worker_settings.max_ram_gb,
+            block_size_gb=cfg.worker_settings.block_size_gb,
         )
 
     # #########################
@@ -77,7 +77,7 @@ def run(cfg: Workflow, debug: bool = False) -> List[VRTInterferogram]:
                 reference_idx=0,
                 # mask_file=cfg.inputs.mask_file,
                 ps_mask_file=cfg.ps_options.output_file,
-                max_bytes=cfg.worker_settings.max_ram_gb * 1e9,
+                max_bytes=cfg.worker_settings.block_size_gb * 1e9,
                 n_workers=cfg.worker_settings.n_workers,
                 gpu_enabled=cfg.worker_settings.gpu_enabled,
                 beta=cfg.phase_linking.beta,
@@ -91,7 +91,7 @@ def run(cfg: Workflow, debug: bool = False) -> List[VRTInterferogram]:
                 ministack_size=cfg.phase_linking.ministack_size,
                 # mask_file=cfg.inputs.mask_file,
                 ps_mask_file=cfg.ps_options.output_file,
-                max_bytes=cfg.worker_settings.max_ram_gb * 1e9,
+                max_bytes=cfg.worker_settings.block_size_gb * 1e9,
                 n_workers=cfg.worker_settings.n_workers,
                 gpu_enabled=cfg.worker_settings.gpu_enabled,
                 beta=cfg.phase_linking.beta,

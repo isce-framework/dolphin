@@ -94,7 +94,7 @@ def test_worker_settings_defaults():
     assert ws.gpu_enabled is True
     assert ws.gpu_id == 0
     assert ws.n_workers == 16
-    assert ws.max_ram_gb == 1.0
+    assert ws.block_size_gb == 1.0
 
 
 def test_worker_env_defaults(monkeypatch):
@@ -124,9 +124,9 @@ def test_worker_env_defaults(monkeypatch):
     ws = config.WorkerSettings()
     assert ws.n_workers == 8
 
-    monkeypatch.setenv("DOLPHIN_MAX_RAM_GB", "4.5")
+    monkeypatch.setenv("DOLPHIN_BLOCK_SIZE_GB", "4.5")
     ws = config.WorkerSettings()
-    assert ws.max_ram_gb == 4.5
+    assert ws.block_size_gb == 4.5
 
 
 @pytest.fixture()

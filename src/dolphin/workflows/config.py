@@ -248,9 +248,9 @@ class WorkerSettings(BaseSettings):
             " environment variable."
         ),
     )
-    max_ram_gb: float = Field(
+    block_size_gb: float = Field(
         1.0,
-        description="Maximum RAM (in GB) to use for processing",
+        description="Size (in GB) of blocks of data to load at once time.",
         gt=0.1,
     )
 
