@@ -100,14 +100,15 @@ def log_runtime(f: Callable) -> Callable:
         result = f(*args, **kwargs)
 
         t2 = time.time()
-        elapsed_time = t2 - t1
-        time_string = "Total elapsed time for {} : {} minutes ({} seconds)".format(
-            f.__name__,
-            "{0:.2f}".format(elapsed_time / 60.0),
-            "{0:.2f}".format(elapsed_time),
+        elapsed_seconds = t2 - t1
+        elapsed_minutes = elapsed_seconds / 60.0
+        time_string = (
+            f"Total elapsed time for {f.__module__}.{f.__name__} : "
+            f"{elapsed_minutes:.2f} minutes ({elapsed_seconds:.2f} seconds)"
         )
 
         logger.info(time_string)
+
         return result
 
     return wrapper

@@ -2,10 +2,9 @@
 import argparse
 from typing import Optional
 
-from dolphin._log import get_log, log_runtime
+from dolphin._log import get_log
 
 
-@log_runtime
 def run(config_file: str, debug: bool = False, log_file: Optional[str] = None):
     """Run the displacement workflow.
 
@@ -20,11 +19,13 @@ def run(config_file: str, debug: bool = False, log_file: Optional[str] = None):
     """
     from threadpoolctl import ThreadpoolController
 
+    from dolphin.utils import get_max_memory_usage
+
     from . import s1_disp
     from .config import Workflow
 
     # Set the logging level for all `dolphin.` modules
-    get_log("dolphin", debug=debug)
+    logger = get_log("dolphin", debug=debug)
 
     # Set the environment variables for the workers
     # TODO: Is this the best place to do this?
@@ -35,6 +36,10 @@ def run(config_file: str, debug: bool = False, log_file: Optional[str] = None):
     controller.limit(limits=cfg.worker_settings.threads_per_worker)
 
     s1_disp.run(cfg, debug=debug, log_file=log_file)
+
+    # Print the maximum memory usage for each worker
+    max_mem = get_max_memory_usage(units="GB")
+    logger.info(f"Maximum memory usage: {max_mem:.2f} GB")
 
 
 def get_parser(subparser=None, subcommand_name="run"):

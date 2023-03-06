@@ -1,5 +1,7 @@
 import datetime
 import re
+import resource
+import sys
 import warnings
 from os import fspath
 from pathlib import Path
@@ -493,3 +495,50 @@ def upsample_nearest(
     arr_out = xp.zeros(shape=shape, dtype=arr.dtype)
     arr_out[..., :out_r, :out_c] = arr_up[..., :out_r, :out_c]
     return arr_out
+
+
+def get_max_memory_usage(units: str = "GB", children: bool = True) -> float:
+    """Get the maximum memory usage of the current process.
+
+    Parameters
+    ----------
+    units : str, optional, choices=["GB", "MB", "KB", "byte"]
+        The units to return, by default "GB".
+    children : bool, optional
+        Whether to include the memory usage of child processes, by default True
+
+    Returns
+    -------
+    float
+        The maximum memory usage in the specified units.
+
+    Raises
+    ------
+    ValueError
+        If the units are not recognized.
+
+    References
+    ----------
+    1. https://stackoverflow.com/a/7669279/4174466
+    2. https://unix.stackexchange.com/a/30941/295194
+    3. https://manpages.debian.org/bullseye/manpages-dev/getrusage.2.en.html
+
+    """
+    max_mem = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    if children:
+        max_mem += resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss
+    if units.lower().startswith("g"):
+        factor = 1e9
+    elif units.lower().startswith("m"):
+        factor = 1e6
+    elif units.lower().startswith("k"):
+        factor = 1e3
+    elif units.lower().startswith("byte"):
+        factor = 1.0
+    else:
+        raise ValueError(f"Unknown units: {units}")
+    if sys.platform.startswith("linux"):
+        # on linux, ru_maxrss is in kilobytes, while on mac, ru_maxrss is in bytes
+        factor /= 1e3
+
+    return max_mem / factor
