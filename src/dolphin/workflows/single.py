@@ -171,6 +171,7 @@ def run_evd_single(
                 logger.info(msg)
             else:
                 logger.warning(msg)
+            continue
 
         # Fill in the nan values with 0
         np.nan_to_num(cur_mle_stack, copy=False)

@@ -63,6 +63,9 @@ def run(cfg: Workflow, debug: bool = False) -> List[VRTInterferogram]:
     # #########################
     pl_path = cfg.phase_linking.directory
 
+    from dolphin._background import NvidiaMemoryWatcher
+
+    watcher = NvidiaMemoryWatcher() if cfg.worker_settings.gpu_enabled else None
     existing_files = list(pl_path.glob("*.tif"))
     if len(existing_files) > 0:
         logger.info(f"Skipping EVD step, {len(existing_files)} files already exist")
@@ -96,6 +99,8 @@ def run(cfg: Workflow, debug: bool = False) -> List[VRTInterferogram]:
                 gpu_enabled=cfg.worker_settings.gpu_enabled,
                 beta=cfg.phase_linking.beta,
             )
+    if watcher:
+        watcher.notify_finished()
 
     # ###################################################
     # 4. Form interferograms from estimated wrapped phase

@@ -278,8 +278,8 @@ def run(
             )
             for inf, outf in zip(in_files, out_files)
         ]
-        with progress:
-            for fut in progress.track(as_completed(futures)):
+        with progress() as p:
+            for fut in p.track(as_completed(futures)):
                 fut.result()
 
     return all_out_files
