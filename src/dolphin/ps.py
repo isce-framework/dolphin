@@ -24,7 +24,7 @@ def create_ps(
     output_file: Filename,
     amp_mean_file: Filename,
     amp_dispersion_file: Filename,
-    amp_dispersion_threshold: float = 0.35,
+    amp_dispersion_threshold: float = 0.25,
     block_size_gb: float = 1.0,
 ):
     """Create the amplitude dispersion, mean, and PS files.
@@ -40,7 +40,7 @@ def create_ps(
     amp_mean_file : Filename
         The output mean amplitude file.
     amp_dispersion_threshold : float, optional
-        The threshold for the amplitude dispersion. Default is 0.35.
+        The threshold for the amplitude dispersion. Default is 0.25.
     block_size_gb : int, optional
         The maximum amount of data to read at a time (in GB).
         Default is 1.0 GB.
@@ -100,7 +100,7 @@ def create_ps(
 
 def calc_ps_block(
     stack_mag: ArrayLike,
-    amp_dispersion_threshold: float = 0.35,
+    amp_dispersion_threshold: float = 0.25,
     min_count: Optional[int] = None,
 ):
     r"""Calculate the amplitude dispersion for a block of data.
@@ -121,7 +121,7 @@ def calc_ps_block(
     amp_dispersion_threshold : float, optional
         The threshold for the amplitude dispersion to label a pixel as a PS:
             ps = amp_disp < amp_dispersion_threshold
-        Default is 0.35.
+        Default is 0.25.
     min_count : int, optional
         The minimum number of valid pixels to calculate the mean and standard
         deviation. If the number of valid pixels is less than `min_count`,

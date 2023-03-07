@@ -14,7 +14,7 @@ def create_config(
     subdataset: Optional[str] = None,
     mask_files: Optional[List[str]] = None,
     ministack_size: Optional[int] = 15,
-    amp_dispersion_threshold: float = 0.35,
+    amp_dispersion_threshold: float = 0.25,
     strides: Tuple[int, int],
     block_size_gb: float = 1,
     n_workers: int = 16,
@@ -121,7 +121,7 @@ def get_parser(subparser=None, subcommand_name="run"):
     ps_group.add_argument(
         "--amp-dispersion-threshold",
         type=float,
-        default=0.35,
+        default=0.25,
         help="Threshold for the amplitude dispersion.",
     )
 

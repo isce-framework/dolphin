@@ -34,7 +34,7 @@ def test_ps_options_defaults(tmpdir):
     # Change directory so the creation of the default files doesn't fail
     with tmpdir.as_cwd():
         pso = config.PsOptions()
-        assert pso.amp_dispersion_threshold == 0.35
+        assert pso.amp_dispersion_threshold == 0.25
         assert pso.directory == Path("PS")
         assert pso.output_file == Path("PS/ps_pixels.tif")
         assert pso.amp_dispersion_file == Path("PS/amp_dispersion.tif")

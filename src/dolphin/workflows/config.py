@@ -78,7 +78,7 @@ class PsOptions(BaseModel):
     )
 
     amp_dispersion_threshold: float = Field(
-        0.35,
+        0.25,
         description="Amplitude dispersion threshold to consider a pixel a PS.",
         gt=0.0,
     )
