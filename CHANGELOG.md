@@ -1,5 +1,7 @@
 # Unreleased
 
+# v0.0.4
+
 **Added**
 
 - Created first version of the single-update workflow, usable with `dolphin config --single`
