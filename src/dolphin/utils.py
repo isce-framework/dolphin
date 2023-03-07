@@ -27,6 +27,7 @@ def progress():
     >>> with progress() as p:
     ...     for i in p.track(range(10)):
     ...         pass
+    10/10 Working... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 100% 0:00:00
     """
     return Progress(
         SpinnerColumn(),
