@@ -73,7 +73,6 @@ class BackgroundWorker(abc.ABC):
         self._drop_unfinished_results = drop_unfinished_results
 
     def _consume_work_queue(self):
-        # while not self._finished_event.is_set() and is_main_thread_active():
         while True:
             if not is_main_thread_active():
                 break
