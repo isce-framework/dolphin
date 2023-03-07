@@ -616,8 +616,8 @@ class EagerLoader(BackgroundReader):
 
         s_iter = range(len(self.slices))
         desc = f"Processing {self._block_shape} sized blocks..."
-        with progress:
-            for _ in progress.track(s_iter, description=desc):
+        with progress() as p:
+            for _ in p.track(s_iter, description=desc):
                 cur_block, (rows, cols) = self.get_data()
                 logger.debug(f"got data for {rows, cols}: {cur_block.shape}")
 

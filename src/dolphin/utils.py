@@ -18,13 +18,22 @@ from dolphin._types import Filename
 gdal.UseExceptions()
 logger = get_log(__name__)
 
-# Can be used like `from dolphin.utils import progress; with progress: ...`
-progress = Progress(
-    SpinnerColumn(),
-    MofNCompleteColumn(),
-    *Progress.get_default_columns()[:-1],  # Skip the ETA column
-    TimeElapsedColumn(),
-)
+
+def progress():
+    """Create a Progress bar context manager.
+
+    Usage
+    -----
+    >>> with progress() as p:
+    ...     for i in p.track(range(10)):
+    ...         pass
+    """
+    return Progress(
+        SpinnerColumn(),
+        MofNCompleteColumn(),
+        *Progress.get_default_columns()[:-1],  # Skip the ETA column
+        TimeElapsedColumn(),
+    )
 
 
 def numpy_to_gdal_type(np_dtype: DTypeLike) -> int:
@@ -542,3 +551,31 @@ def get_max_memory_usage(units: str = "GB", children: bool = True) -> float:
         factor /= 1e3
 
     return max_mem / factor
+
+
+def get_gpu_memory(pid: Optional[int] = None, gpu_id: int = 0) -> float:
+    """Get the memory usage (in GiB) of the GPU for the current pid."""
+    try:
+        from pynvml.smi import nvidia_smi
+    except ImportError:
+        raise ImportError("Please install pynvml through pip or conda")
+
+    def get_mem(process):
+        used_mem = process["used_memory"] if process else 0
+        if process["unit"] == "MiB":
+            multiplier = 1 / 1024
+        else:
+            logger.warning(f"Unknown unit: {process['unit']}")
+        return used_mem * multiplier
+
+    nvsmi = nvidia_smi.getInstance()
+    processes = nvsmi.DeviceQuery()["gpu"][gpu_id]["processes"]
+    if not processes:
+        return 0.0
+
+    if pid is None:
+        # Return sum of all processes
+        return sum(get_mem(p) for p in processes)
+    else:
+        procs = [p for p in processes if p["pid"] == pid]
+        return get_mem(procs[0]) if procs else 0.0
