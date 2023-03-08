@@ -98,6 +98,9 @@ def run_gpu(
     if free_mem:
         del d_slc_stack
         del d_C_arrays
+        del d_output_phase
+        del d_cpx_phase
+        cp.get_default_memory_pool().free_all_blocks()
         cp.get_default_pinned_memory_pool().free_all_blocks()
 
     if use_slc_amp:

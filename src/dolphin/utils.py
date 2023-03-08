@@ -1,5 +1,7 @@
 import datetime
 import re
+import resource
+import sys
 import warnings
 from os import fspath
 from pathlib import Path
@@ -8,12 +10,31 @@ from typing import Iterable, List, Optional, Tuple, Union
 import numpy as np
 from numpy.typing import DTypeLike
 from osgeo import gdal, gdal_array, gdalconst
+from rich.progress import MofNCompleteColumn, Progress, SpinnerColumn, TimeElapsedColumn
 
 from dolphin._log import get_log
 from dolphin._types import Filename
 
 gdal.UseExceptions()
 logger = get_log(__name__)
+
+
+def progress():
+    """Create a Progress bar context manager.
+
+    Usage
+    -----
+    >>> with progress() as p:
+    ...     for i in p.track(range(10)):
+    ...         pass
+    10/10 Working... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 100% 0:00:00
+    """
+    return Progress(
+        SpinnerColumn(),
+        MofNCompleteColumn(),
+        *Progress.get_default_columns()[:-1],  # Skip the ETA column
+        TimeElapsedColumn(),
+    )
 
 
 def numpy_to_gdal_type(np_dtype: DTypeLike) -> int:
@@ -82,8 +103,6 @@ def get_dates(filename: Filename, fmt: str = "%Y%m%d") -> List[datetime.date]:
     pattern = _date_format_to_regex(fmt)
     date_list = re.findall(pattern, path.stem)
     if not date_list:
-        msg = f"{filename} does not contain date like {fmt}"
-        logger.warning(msg)
         return []
     return [_parse_date(d, fmt) for d in date_list]
 
@@ -486,3 +505,78 @@ def upsample_nearest(
     arr_out = xp.zeros(shape=shape, dtype=arr.dtype)
     arr_out[..., :out_r, :out_c] = arr_up[..., :out_r, :out_c]
     return arr_out
+
+
+def get_max_memory_usage(units: str = "GB", children: bool = True) -> float:
+    """Get the maximum memory usage of the current process.
+
+    Parameters
+    ----------
+    units : str, optional, choices=["GB", "MB", "KB", "byte"]
+        The units to return, by default "GB".
+    children : bool, optional
+        Whether to include the memory usage of child processes, by default True
+
+    Returns
+    -------
+    float
+        The maximum memory usage in the specified units.
+
+    Raises
+    ------
+    ValueError
+        If the units are not recognized.
+
+    References
+    ----------
+    1. https://stackoverflow.com/a/7669279/4174466
+    2. https://unix.stackexchange.com/a/30941/295194
+    3. https://manpages.debian.org/bullseye/manpages-dev/getrusage.2.en.html
+
+    """
+    max_mem = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    if children:
+        max_mem += resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss
+    if units.lower().startswith("g"):
+        factor = 1e9
+    elif units.lower().startswith("m"):
+        factor = 1e6
+    elif units.lower().startswith("k"):
+        factor = 1e3
+    elif units.lower().startswith("byte"):
+        factor = 1.0
+    else:
+        raise ValueError(f"Unknown units: {units}")
+    if sys.platform.startswith("linux"):
+        # on linux, ru_maxrss is in kilobytes, while on mac, ru_maxrss is in bytes
+        factor /= 1e3
+
+    return max_mem / factor
+
+
+def get_gpu_memory(pid: Optional[int] = None, gpu_id: int = 0) -> float:
+    """Get the memory usage (in GiB) of the GPU for the current pid."""
+    try:
+        from pynvml.smi import nvidia_smi
+    except ImportError:
+        raise ImportError("Please install pynvml through pip or conda")
+
+    def get_mem(process):
+        used_mem = process["used_memory"] if process else 0
+        if process["unit"] == "MiB":
+            multiplier = 1 / 1024
+        else:
+            logger.warning(f"Unknown unit: {process['unit']}")
+        return used_mem * multiplier
+
+    nvsmi = nvidia_smi.getInstance()
+    processes = nvsmi.DeviceQuery()["gpu"][gpu_id]["processes"]
+    if not processes:
+        return 0.0
+
+    if pid is None:
+        # Return sum of all processes
+        return sum(get_mem(p) for p in processes)
+    else:
+        procs = [p for p in processes if p["pid"] == pid]
+        return get_mem(procs[0]) if procs else 0.0

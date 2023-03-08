@@ -13,12 +13,11 @@ import numpy as np
 from numpy.typing import ArrayLike, DTypeLike
 from osgeo import gdal
 from pyproj import CRS
-from tqdm.auto import tqdm
 
 from dolphin._background import _DEFAULT_TIMEOUT, BackgroundReader, BackgroundWriter
 from dolphin._log import get_log
 from dolphin._types import Filename
-from dolphin.utils import gdal_to_numpy_type, numpy_to_gdal_type
+from dolphin.utils import gdal_to_numpy_type, numpy_to_gdal_type, progress
 
 gdal.UseExceptions()
 
@@ -598,6 +597,7 @@ class EagerLoader(BackgroundReader):
         self._queue_size = queue_size
         self._skip_empty = skip_empty
         self._nodata_mask = nodata_mask
+        self._block_shape = block_shape
         self._nodata = get_raster_nodata(filename)
         if self._nodata is None:
             self._nodata = np.nan
@@ -614,23 +614,26 @@ class EagerLoader(BackgroundReader):
         for rows, cols in self.slices:
             self.queue_read(rows, cols)
 
-        for _ in tqdm(range(len(self.slices))):
-            cur_block, (rows, cols) = self.get_data()
-            logger.debug(f"got data for {rows, cols}: {cur_block.shape}")
+        s_iter = range(len(self.slices))
+        desc = f"Processing {self._block_shape} sized blocks..."
+        with progress() as p:
+            for _ in p.track(s_iter, description=desc):
+                cur_block, (rows, cols) = self.get_data()
+                logger.debug(f"got data for {rows, cols}: {cur_block.shape}")
 
-            if self._skip_empty and self._nodata_mask is not None:
-                if self._nodata_mask[rows, cols].all():
-                    continue
+                if self._skip_empty and self._nodata_mask is not None:
+                    if self._nodata_mask[rows, cols].all():
+                        continue
 
-            if self._skip_empty:
-                # Otherwise look at the actual block we loaded
-                if np.isnan(self._nodata):
-                    block_nodata = np.isnan(cur_block)
-                else:
-                    block_nodata = cur_block == self._nodata
-                if np.all(block_nodata):
-                    continue
-            yield cur_block, (rows, cols)
+                if self._skip_empty:
+                    # Otherwise look at the actual block we loaded
+                    if np.isnan(self._nodata):
+                        block_nodata = np.isnan(cur_block)
+                    else:
+                        block_nodata = cur_block == self._nodata
+                    if np.all(block_nodata):
+                        continue
+                yield cur_block, (rows, cols)
 
         self.notify_finished()
 

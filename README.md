@@ -43,8 +43,9 @@ Example usage:
 
 ```bash
 $ dolphin config --slc-files /path/to/slcs/*tif
+$ dolphin run dolphin_config.yaml
 ```
-This will create a YAML file (by default `dolphin_config.yaml` in the current directory).
+The `config` command creates a YAML file (by default `dolphin_config.yaml` in the current directory).
 
 The only required inputs for the workflow is a list of coregistered SLC files (in either geographic or radar coordinates).
 If the SLC files are spread over multiple files, you can either

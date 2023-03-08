@@ -24,7 +24,7 @@ main() {
 
     # Get concretized package list.
     local PKGLIST
-    PKGLIST=$(docker run \
+    PKGLIST=$(docker run --network=host \
         -v "$ENVFILE:/tmp/environment.yml:ro" --rm \
         mambaorg/micromamba:1.1.0 bash -c '\
             micromamba install -y -n base -f /tmp/environment.yml > /dev/null && \

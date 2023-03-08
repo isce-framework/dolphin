@@ -1,4 +1,6 @@
 import abc
+import os
+import time
 from queue import Empty, Full, Queue
 from threading import Event, Thread
 from threading import enumerate as threading_enumerate
@@ -59,32 +61,56 @@ class BackgroundWorker(abc.ABC):
         timeout=_DEFAULT_TIMEOUT,
         name="BackgroundWorker",
     ):
+        self.name = name
         self.store_results = store_results
         self.timeout = timeout
         self._finished_event = Event()
         self._work_queue = Queue(num_work_queue)
-        self._results_queue = Queue(num_results_queue)
+        if self.store_results:
+            self._results_queue = Queue(num_results_queue)
         self._thread = Thread(target=self._consume_work_queue, name=name)
         self._thread.start()
         self._drop_unfinished_results = drop_unfinished_results
 
     def _consume_work_queue(self):
-        while not self._finished_event.is_set() and is_main_thread_active():
-            logger.debug("getting work")
+        while True:
+            if not is_main_thread_active():
+                break
+
+            logger.debug(f"{self.name} getting work")
+            if self._finished_event.is_set():
+                do_exit = self._drop_unfinished_results or (
+                    self._work_queue.unfinished_tasks == 0
+                )
+                if do_exit:
+                    break
+                else:
+                    # Keep going even if finished event is set
+                    logger.debug(
+                        f"{self.name} Finished... but waiting for work queue to empty,"
+                        f" {self._work_queue.qsize()} items left,"
+                        f" {self._work_queue.unfinished_tasks} unfinished"
+                    )
             try:
                 args, kw = self._work_queue.get(timeout=self.timeout)
+                logger.debug(f"{self.name} processing")
+                result = self.process(*args, **kw)
+                self._work_queue.task_done()
+                # Notify the queue that processing is done
+                logger.debug(f"{self.name} got result")
             except Empty:
-                logger.debug("timed out, checking if done")
+                logger.debug(f"{self.name} timed out, checking if done")
                 continue
-            logger.debug("processing")
-            result = self.process(*args, **kw)
-            logger.debug("got result")
+
             if self.store_results:
-                logger.debug("saving result in queue")
-                try:
-                    self._results_queue.put(result, timeout=2)
-                except Full:
-                    logger.debug("result queue full, waiting...")
+                logger.debug(f"{self.name} saving result in queue")
+                while True:
+                    try:
+                        self._results_queue.put(result, timeout=2)
+                        break
+                    except Full:
+                        logger.debug(f"{self.name} result queue full, waiting...")
+                        continue
 
     @abc.abstractmethod
     def process(self, *args, **kw):
@@ -107,8 +133,16 @@ class BackgroundWorker(abc.ABC):
         Blocks until a result is available.
         Same output interface as `process`.
         """
-        result = self._results_queue.get()
-        self._results_queue.task_done()
+        while True:
+            try:
+                result = self._results_queue.get(timeout=self.timeout)
+                self._results_queue.task_done()
+                break
+            except Empty:
+                logger.debug(f"{self.name} get_result timed out, checking if done")
+                if self._finished_event.is_set():
+                    raise RuntimeError("Attempted to get_result after notify_finished!")
+                continue
         return result
 
     def notify_finished(self, timeout=None):
@@ -119,7 +153,7 @@ class BackgroundWorker(abc.ABC):
         If `store_results=True` also block until all results have been retrieved.
         """
         self._finished_event.set()
-        if not self._drop_unfinished_results:
+        if self.store_results and not self._drop_unfinished_results:
             self._results_queue.join()
         self._thread.join(timeout)
 
@@ -227,3 +261,74 @@ class BackgroundReader(BackgroundWorker):
     def read(self, *args, **kw):
         """User-defined method for reading a chunk of data."""
         pass
+
+
+class NvidiaMemoryWatcher(Thread):
+    """Watch the memory usage of the GPU and log it to a file.
+
+    Parameters
+    ----------
+    log_file : str
+        The file to write the memory usage to.
+    refresh_rate : float, optional
+        The refresh_rate in seconds to check the memory usage, by default 1.0
+    """
+
+    def __init__(
+        self,
+        log_file: str = "nvidia_memory.log",
+        refresh_rate: float = 1.0,
+        gpu_id: int = 0,
+    ):
+        try:
+            from pynvml.smi import nvidia_smi  # noqa: F401
+        except ImportError:
+            raise ImportError("Please install pynvml through pip or conda")
+
+        super().__init__(name="NvidiaMemoryWatcher")
+        self.log_file = log_file
+        self.pid = os.getpid()
+        self.t0 = time.time()
+        self.refresh_rate = refresh_rate
+        self.gpu_id = gpu_id
+        # The query lag is the time it takes to query the GPU memory
+        # This is used to try and refresh close to the refresh rate
+        self._query_lag = 0.5
+        self._finished_event = Event()
+        self._thread = Thread(target=self.run)
+
+        self._thread.start()
+
+    def run(self):
+        """Run the background task."""
+        logger.info(
+            f"Logging GPU memory usage to {self.log_file} every {self.refresh_rate} s"
+        )
+        with open(self.log_file, "w") as f:
+            # Write the header
+            f.write("time(s),memory(GB)\n")
+
+        while not self._finished_event.is_set() and is_main_thread_active():
+            mem = self._get_gpu_memory()
+            t_cur = time.time() - self.t0
+            with open(self.log_file, "a") as f:
+                row = f"{t_cur:.3f},{mem:.2f}\n"
+                f.write(row)
+
+            # Sleep until the next refresh
+            time.sleep(max(0, self.refresh_rate - self._query_lag))
+
+    def join(self):
+        """Wait for the thread to finish."""
+        self._thread.join()
+
+    def notify_finished(self):
+        """Notify the thread that it should finish."""
+        self._finished_event.set()
+        self._thread.join()
+
+    def _get_gpu_memory(self) -> float:
+        """Get the memory usage (in GiB) of the GPU for the current pid."""
+        from dolphin.utils import get_gpu_memory
+
+        return get_gpu_memory(pid=self.pid, gpu_id=self.gpu_id)

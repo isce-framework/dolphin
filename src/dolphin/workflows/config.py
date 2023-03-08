@@ -78,7 +78,7 @@ class PsOptions(BaseModel):
     )
 
     amp_dispersion_threshold: float = Field(
-        0.35,
+        0.25,
         description="Amplitude dispersion threshold to consider a pixel a PS.",
         gt=0.0,
     )
@@ -240,9 +240,17 @@ class WorkerSettings(BaseSettings):
     n_workers: int = Field(
         16, ge=1, description="Number of cpu cores to use for processing (if CPU)"
     )
-    max_ram_gb: float = Field(
+    threads_per_worker: int = Field(
+        4,
+        ge=1,
+        description=(
+            "Number of threads to use per worker. This sets the OMP_NUM_THREADS"
+            " environment variable."
+        ),
+    )
+    block_size_gb: float = Field(
         1.0,
-        description="Maximum RAM (in GB) to use for processing",
+        description="Size (in GB) of blocks of data to load at once time.",
         gt=0.1,
     )
 

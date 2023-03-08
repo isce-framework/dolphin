@@ -91,6 +91,7 @@ def run_evd_single(
         f"{vrt}: from {Path(vrt.file_list[first_non_comp_idx]).name} to"
         f" {Path(vrt.file_list[-1]).name}"
     )
+    logger.info(f"Total stack size (in pixels): {vrt.shape}")
     # Set up the output folder with empty files to write into
     output_slc_files = setup_output_folder(
         vrt,
@@ -98,6 +99,7 @@ def run_evd_single(
         start_idx=first_non_comp_idx,
         strides=strides,
         output_folder=output_folder,
+        nodata=0,
     )
 
     # Create the empty compressed SLC file
@@ -107,6 +109,7 @@ def run_evd_single(
         like_filename=vrt.outfile,
         output_name=comp_slc_file,
         nbands=1,
+        nodata=0,
         # Note that the compressed SLC is the same size as the original SLC
     )
 
@@ -119,6 +122,7 @@ def run_evd_single(
         nbands=1,
         dtype=np.float32,
         strides=strides,
+        nodata=0,
     )
 
     # Iterate over the stack in blocks
@@ -159,8 +163,19 @@ def run_evd_single(
         except PhaseLinkRuntimeError as e:
             # note: this is a warning instead of info, since it should
             # get caught at the "skip_empty" step
-            logger.warning(f"Exception at ({rows}, {cols}): {e}")
+            msg = f"At block {rows.start}, {cols.start}: {e}"
+            if "are all NaNs" in e.args[0]:
+                # Some SLCs in the ministack are all NaNs
+                # This happens from a shifting burst window near the edges,
+                # and seems to cause no issues
+                logger.info(msg)
+            else:
+                logger.warning(msg)
             continue
+
+        # Fill in the nan values with 0
+        np.nan_to_num(cur_mle_stack, copy=False)
+        np.nan_to_num(tcorr, copy=False)
 
         # Save each of the MLE estimates (ignoring the compressed SLCs)
         assert len(cur_mle_stack[first_non_comp_idx:]) == len(output_slc_files)
@@ -182,7 +197,6 @@ def run_evd_single(
         # TODO: make a flag? We don't always need to save the compressed SLCs
         writer.queue_write(cur_comp_slc, comp_slc_file, out_row_start, out_col_start)
         # logger.debug(f"Saved compressed block SLC to {cur_comp_slc_file}")
-        # tqdm.write(" Finished block, loading next block.")
 
     # Block until all the writers for this ministack have finished
     logger.info(f"Waiting to write {writer.num_queued} blocks of data.")

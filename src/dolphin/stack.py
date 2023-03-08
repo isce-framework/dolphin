@@ -416,12 +416,8 @@ class VRTStack:
         yield from self._loader.iter_blocks()
 
     def _get_block_shape(self, max_bytes=DEFAULT_BLOCK_BYTES):
-        test_file = self._get_non_vrt_file(self._gdal_file_strings[0])
-
         return io.get_max_block_shape(
-            # Note that we're using the actual first file, not the VRT
-            # since the VRT always has the same block size.
-            test_file,
+            self._gdal_file_strings[0],
             len(self),
             max_bytes=max_bytes,
         )
@@ -438,20 +434,6 @@ class VRTStack:
                 nodata=nodata,
                 buffer_pixels=buffer_pixels,
             )
-
-    @staticmethod
-    def _get_non_vrt_file(filename: Filename):
-        """Get one of the files within a VRT.
-
-        If the file is not a VRT, return the file itself.
-        Will traverse nested VRTs.
-        """
-        if Path(filename).suffix == ".vrt":
-            file_list = gdal.Info(fspath(filename), format="json")["files"]
-            if len(file_list) <= 1:
-                raise ValueError(f"VRT file {filename} contains no files")
-            return VRTStack._get_non_vrt_file(file_list[1])
-        return filename
 
     @property
     def shape(self):

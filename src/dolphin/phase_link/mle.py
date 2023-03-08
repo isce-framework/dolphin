@@ -7,12 +7,7 @@ import pymp
 from scipy.linalg import eigh
 
 from dolphin._types import Filename
-from dolphin.utils import (
-    get_array_module,
-    gpu_is_available,
-    take_looks,
-    upsample_nearest,
-)
+from dolphin.utils import get_array_module, gpu_is_available, take_looks
 
 logger = logging.getLogger(__name__)
 
@@ -284,7 +279,9 @@ def _check_all_nans(slc_stack):
     # Check that there are no SLCS which are all nans:
     bad_slc_idxs = np.where(np.all(nans, axis=(1, 2)))[0]
     if bad_slc_idxs.size > 0:
-        raise PhaseLinkRuntimeError(f"SLC stack[{bad_slc_idxs}] has are all NaNs.")
+        raise PhaseLinkRuntimeError(
+            f"slc_stack[{bad_slc_idxs}] out of {len(slc_stack)} are all NaNs."
+        )
 
 
 def _fill_ps_pixels(
@@ -332,20 +329,19 @@ def _fill_ps_pixels(
     ps_mask_looked = ps_mask_looked[: mle_est.shape[1], : mle_est.shape[2]]
 
     if use_max_ps:
+        print("Using max PS pixel to fill in MLE estimate")
         # Get the indices of the brightest pixels within each look window
-        slc_r_idxs, slc_c_idxs = _get_maxes(mag, strides["y"], strides["x"])
+        slc_r_idxs, slc_c_idxs = _get_max_idxs(mag, strides["y"], strides["x"])
         # we're only filling where there are PS pixels
         ref = np.conj(slc_stack[0][slc_r_idxs, slc_c_idxs])
         for i in range(len(slc_stack)):
             mle_est[i][ps_mask_looked] = slc_stack[i][slc_r_idxs, slc_c_idxs] * ref
     else:
         # Get the average of all PS pixels within each look window
-
+        # The referencing to SLC 0 is done in _get_avg_ps
         avg_ps = _get_avg_ps(slc_stack, ps_mask, strides)[
             :, : mle_est.shape[1], : mle_est.shape[2]
         ]
-        ref = np.conj(avg_ps[0])[None, :, :]
-        avg_ps *= ref
         mle_est[:, ps_mask_looked] = avg_ps[:, ps_mask_looked]
 
     # Force PS pixels to have high temporal coherence
@@ -358,6 +354,8 @@ def _get_avg_ps(
     # First, set all non-PS pixels to NaN
     slc_stack_nanned = slc_stack.copy()
     slc_stack_nanned[:, ~ps_mask] = np.nan
+    # Reference all ps pixels in the SLC stack to the first SLC
+    slc_stack_nanned[:, ps_mask] *= np.conj(slc_stack_nanned[0, ps_mask])[None]
     # Then, take the average of all PS pixels within each look window
     return take_looks(
         slc_stack_nanned,
@@ -368,23 +366,31 @@ def _get_avg_ps(
     )
 
 
-def _get_maxes(arr, row_looks, col_looks):
+def _get_max_idxs(arr, row_looks, col_looks):
+    """Get the indices of the maximum value in each look window."""
     if row_looks == 1 and col_looks == 1:
         # No need to pad if we're not looking
         return np.where(arr == arr)
-    # Get the max value in each look window
-    # Start by dithering the array to avoid ties in the max
-    arr = arr.copy() + 1e-5 * np.random.rand(*arr.shape)
-    max_nums = take_looks(
-        arr, row_looks, col_looks, func_type="nanmax", edge_strategy="pad"
-    )
-    out_rows, out_cols = np.array(arr.shape) // [row_looks, col_looks]
-    # Make sure it's the output size we want:
-    max_nums = max_nums[:out_rows, :out_cols]
+    # Adjusted from this answer to not take every moving window
+    # https://stackoverflow.com/a/72742009/4174466
+    windows = np.lib.stride_tricks.sliding_window_view(arr, (row_looks, col_looks))[
+        ::row_looks, ::col_looks
+    ]
+    maxvals = np.nanmax(windows, axis=(2, 3))
+    indx = np.array((windows == np.expand_dims(maxvals, axis=(2, 3))).nonzero())
 
-    # Repeat the max values to back to the original size
-    maxes_filled = upsample_nearest(
-        max_nums, arr.shape[-2:], looks=(row_looks, col_looks)
-    )
-    # Find the indices of the max values in the original image
-    return np.where(maxes_filled == arr)
+    # In [82]: (windows == np.expand_dims(maxvals, axis = (2, 3))).nonzero()
+    # This gives 4 arrays:
+    # First two are the window indices
+    # (array([0, 0, 0, 1, 1, 1]),
+    # array([0, 1, 2, 0, 1, 2]),
+    # last two are the relative indices (within each window)
+    # array([0, 0, 1, 1, 1, 1]),
+    # array([1, 1, 1, 1, 1, 0]))
+    window_positions, relative_positions = indx.reshape((2, 2, -1))
+    # Multiply the first two by the window size to get the absolute indices
+    # of the top lefts of the windows
+    window_offsets = np.array([row_looks, col_looks]).reshape((2, 1))
+    # Then add the last two to get the relative indices
+    rows, cols = relative_positions + window_positions * window_offsets
+    return rows, cols
