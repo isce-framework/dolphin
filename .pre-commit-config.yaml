@@ -41,6 +41,7 @@ repos:
       - id: mypy
         additional_dependencies:
         - types-pkg_resources
+        - types-requests
 
   - repo: https://github.com/PyCQA/pydocstyle
     rev: "6.3.0"

@@ -1,5 +1,16 @@
 # Unreleased
 
+**Added**
+
+- Sample test data for the `dolphin` package loaded onto Zenodo.
+
+
+**Dependencies**
+
+Added testing requirements:
+- pooch
+
+
 # v0.0.4
 
 **Added**
