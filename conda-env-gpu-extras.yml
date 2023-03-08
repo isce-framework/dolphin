@@ -9,3 +9,4 @@ channels:
 dependencies:
   - cupy>=11.0
   - cudatoolkit
+  - pynvml>=11.0

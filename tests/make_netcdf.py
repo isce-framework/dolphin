@@ -21,14 +21,20 @@ def create_test_nc(
     epsg=32615,
     subdir="/",
     data=None,
+    data_ds_name="data",
     shape=(21, 15),
     dtype=np.complex64,
+    xoff=0,
+    yoff=0,
     write_mode="w",
 ):
     if isinstance(subdir, list):
         # Create groups in the same file to make multiple SubDatasets
         return [
-            create_test_nc(outfile, epsg, s, data, shape, dtype, "a") for s in subdir
+            create_test_nc(
+                outfile, epsg, s, data, data_ds_name, shape, dtype, xoff, yoff, "a"
+            )
+            for s in subdir
         ]
 
     if data is None:
@@ -45,16 +51,16 @@ def create_test_nc(
     hf.attrs["Conventions"] = "CF-1.8"
 
     xds = hf.create_dataset(
-        os.path.join(subdir, "x"), data=(np.arange(cols) - cols / 2)
+        os.path.join(subdir, "x"), data=xoff + (np.arange(cols) - cols / 2)
     )
     yds = hf.create_dataset(
-        os.path.join(subdir, "y"), data=np.arange(rows, 0, -1) - rows / 2
+        os.path.join(subdir, "y"), data=yoff + (np.arange(rows, 0, -1) - rows / 2)
     )
 
     if dtype == np.complex64:
         _add_complex_type(hf)
 
-    datads = hf.create_dataset(os.path.join(subdir, "data"), data=data)
+    datads = hf.create_dataset(os.path.join(subdir, data_ds_name), data=data)
 
     #  Mapping of dimension scales to datasets is not done automatically in HDF5
     #  We should label appropriate arrays as scales and attach them to datasets

@@ -1,12 +1,9 @@
 # dolphin
+[![Pytest and build docker image](https://github.com/opera-adt/dolphin/actions/workflows/tests.yml/badge.svg?branch=main)](https://github.com/opera-adt/dolphin/actions/workflows/tests.yml)
 
-High resolution wrapped phase estimation for InSAR
+High resolution wrapped phase estimation for InSAR using combined PS/DS processing.
 
 <!-- DeformatiOn Land surface Products in High resolution using INsar -->
-
-
-🚨 This toolbox is still in **pre-alpha** stage and undergoing **rapid development**. 🚨
-
 
 
 
@@ -46,8 +43,9 @@ Example usage:
 
 ```bash
 $ dolphin config --slc-files /path/to/slcs/*tif
+$ dolphin run dolphin_config.yaml
 ```
-This will create a YAML file (by default `dolphin_config.yaml` in the current directory).
+The `config` command creates a YAML file (by default `dolphin_config.yaml` in the current directory).
 
 The only required inputs for the workflow is a list of coregistered SLC files (in either geographic or radar coordinates).
 If the SLC files are spread over multiple files, you can either

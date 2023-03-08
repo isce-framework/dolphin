@@ -1,10 +1,10 @@
 import argparse
 from pathlib import Path
 
-from dolphin.log import get_log
-from dolphin.vrt import VRTStack
+from dolphin._log import get_log
+from dolphin.stack import VRTStack
 
-logger = get_log()
+logger = get_log(__name__)
 
 
 def get_cli_args():

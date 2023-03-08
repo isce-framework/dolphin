@@ -5,7 +5,7 @@ import pytest
 from make_netcdf import create_test_nc
 from osgeo import gdal
 
-from dolphin.io import load_gdal, save_arr
+from dolphin.io import load_gdal, write_arr
 from dolphin.phase_link import simulate
 
 simulate._seed(1234)
@@ -16,20 +16,22 @@ NUM_ACQ = 30
 def slc_stack():
     shape = (NUM_ACQ, 5, 10)
     sigma = 0.5
-    data = np.random.normal(0, sigma, size=shape).astype(np.complex64)
-    # Phase doesn't matter here
-    complex_data = data * np.exp(1j * np.zeros_like(data))
-    return complex_data
+    data = np.random.normal(0, sigma, size=shape) + 1j * np.random.normal(
+        0, sigma, size=shape
+    )
+    data = data.astype(np.complex64)
+    return data
 
 
 @pytest.fixture()
 def slc_file_list(tmp_path, slc_stack):
     shape = slc_stack.shape
     # Write to a file
-    # driver = gdal.GetDriverByName("ENVI")
     driver = gdal.GetDriverByName("GTiff")
     start_date = 20220101
-    name_template = tmp_path / "{date}.slc.tif"
+    d = tmp_path / "gtiff"
+    d.mkdir()
+    name_template = d / "{date}.slc.tif"
     file_list = []
     for i in range(shape[0]):
         fname = str(name_template).format(date=str(start_date + i))
@@ -39,7 +41,7 @@ def slc_file_list(tmp_path, slc_stack):
         ds = None
 
     # Write the list of SLC files to a text file
-    with open(tmp_path / "slclist.txt", "w") as f:
+    with open(d / "slclist.txt", "w") as f:
         f.write("\n".join([str(f) for f in file_list]))
     return file_list
 
@@ -48,15 +50,18 @@ def slc_file_list(tmp_path, slc_stack):
 def slc_file_list_nc(tmp_path, slc_stack):
     """Save the slc stack as a series of NetCDF files."""
     start_date = 20220101
-    name_template = tmp_path / "{date}.nc"
+    d = tmp_path / "32615"
+    d.mkdir()
+    name_template = d / "{date}.nc"
     file_list = []
     for i in range(len(slc_stack)):
         fname = str(name_template).format(date=str(start_date + i))
         create_test_nc(fname, epsg=32615, subdir="/", data=slc_stack[i])
+        assert 'AUTHORITY["EPSG","32615"]]' in gdal.Open(fname).GetProjection()
         file_list.append(Path(fname))
 
     # Write the list of SLC files to a text file
-    with open(tmp_path / "slclist.txt", "w") as f:
+    with open(d / "slclist.txt", "w") as f:
         f.write("\n".join([str(f) for f in file_list]))
     return file_list
 
@@ -66,14 +71,17 @@ def slc_file_list_nc_wgs84(tmp_path, slc_stack):
     """Make one with lat/lon as the projection system."""
 
     start_date = 20220101
-    name_template = tmp_path / "{date}.nc"
+    d = tmp_path / "wgs84"
+    d.mkdir()
+    name_template = d / "{date}.nc"
     file_list = []
     for i in range(len(slc_stack)):
         fname = str(name_template).format(date=str(start_date + i))
         create_test_nc(fname, epsg=4326, subdir="/", data=slc_stack[i])
+        assert 'AUTHORITY["EPSG","4326"]]' in gdal.Open(fname).GetProjection()
         file_list.append(Path(fname))
 
-    with open(tmp_path / "slclist.txt", "w") as f:
+    with open(d / "slclist.txt", "w") as f:
         f.write("\n".join([str(f) for f in file_list]))
     return file_list
 
@@ -82,7 +90,9 @@ def slc_file_list_nc_wgs84(tmp_path, slc_stack):
 def slc_file_list_nc_with_sds(tmp_path, slc_stack):
     """Save NetCDF files with multiple valid datsets."""
     start_date = 20220101
-    name_template = tmp_path / "{date}.nc"
+    d = tmp_path / "nc_with_sds"
+    name_template = d / "{date}.nc"
+    d.mkdir()
     file_list = []
     subdirs = ["/slc", "/slc2"]
     for i in range(len(slc_stack)):
@@ -92,7 +102,7 @@ def slc_file_list_nc_with_sds(tmp_path, slc_stack):
         file_list.append(f"NETCDF:{fname}:/slc/data")
 
     # Write the list of SLC files to a text file
-    with open(tmp_path / "slclist.txt", "w") as f:
+    with open(d / "slclist.txt", "w") as f:
         f.write("\n".join([str(f) for f in file_list]))
     return file_list
 
@@ -128,7 +138,9 @@ def raster_100_by_200(tmp_path):
     ysize, xsize = 100, 200
     # Create a test raster
     driver = gdal.GetDriverByName("ENVI")
-    filename = str(tmp_path / "test.bin")
+    d = tmp_path / "raster_100_by_200"
+    d.mkdir()
+    filename = str(d / "test.bin")
     ds = driver.Create(filename, xsize, ysize, 1, gdal.GDT_CFloat32)
     ds.FlushCache()
     ds = None
@@ -148,7 +160,9 @@ def tiled_raster_100_by_200(tmp_path):
     ]
     # Create a test raster
     driver = gdal.GetDriverByName("GTiff")
-    filename = tmp_path / "20220101test.tif"
+    d = tmp_path / "tiled"
+    d.mkdir()
+    filename = d / "20220101test.tif"
     ds = driver.Create(
         str(filename), xsize, ysize, 1, gdal.GDT_CFloat32, options=creation_options
     )
@@ -170,7 +184,9 @@ def tiled_file_list(tiled_raster_100_by_200):
 @pytest.fixture()
 def raster_10_by_20(tmp_path, tiled_raster_100_by_200):
     # Write a small image to a file
-    outname2 = tmp_path / "20220102small.tif"
+    d = tmp_path / "raster_10_by_20"
+    d.mkdir()
+    outname2 = d / "20220102small.tif"
     gdal.Translate(str(outname2), str(tiled_raster_100_by_200), height=10, width=20)
     return outname2
 
@@ -182,8 +198,11 @@ def raster_with_nan(tmpdir, tiled_raster_100_by_200):
     nan_arr = start_arr.copy()
     nan_arr[0, 0] = np.nan
     output_name = tmpdir / "with_one_nan.tif"
-    save_arr(
-        arr=nan_arr, like_filename=tiled_raster_100_by_200, output_name=output_name
+    write_arr(
+        arr=nan_arr,
+        like_filename=tiled_raster_100_by_200,
+        output_name=output_name,
+        nodata=np.nan,
     )
     return output_name
 
@@ -194,8 +213,11 @@ def raster_with_nan_block(tmpdir, tiled_raster_100_by_200):
     output_name = tmpdir / "with_nans.tif"
     nan_arr = load_gdal(tiled_raster_100_by_200)
     nan_arr[:32, :32] = np.nan
-    save_arr(
-        arr=nan_arr, like_filename=tiled_raster_100_by_200, output_name=output_name
+    write_arr(
+        arr=nan_arr,
+        like_filename=tiled_raster_100_by_200,
+        output_name=output_name,
+        nodata=np.nan,
     )
     return output_name
 
@@ -208,7 +230,10 @@ def raster_with_zero_block(tmpdir, tiled_raster_100_by_200):
     out_arr[:] = 1.0
 
     out_arr[:32, :32] = 0
-    save_arr(
-        arr=out_arr, like_filename=tiled_raster_100_by_200, output_name=output_name
+    write_arr(
+        arr=out_arr,
+        like_filename=tiled_raster_100_by_200,
+        output_name=output_name,
+        nodata=0,
     )
     return output_name

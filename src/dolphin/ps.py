@@ -2,25 +2,30 @@
 import warnings
 from os import fspath
 from pathlib import Path
+from typing import Optional
 
 import numpy as np
+from numpy.typing import ArrayLike
 from osgeo import gdal
-from tqdm.auto import tqdm
+
+from dolphin import io
+from dolphin._log import get_log
+from dolphin._types import Filename
+from dolphin.stack import VRTStack
 
 gdal.UseExceptions()
 
-from dolphin._types import Filename
-from dolphin.io import save_arr, save_block
+logger = get_log(__name__)
 
 
 def create_ps(
-    # *,
+    *,
     slc_vrt_file: Filename,
     output_file: Filename,
     amp_mean_file: Filename,
     amp_dispersion_file: Filename,
-    amp_dispersion_threshold: float = 0.42,
-    max_ram_gb: float = 1.0,
+    amp_dispersion_threshold: float = 0.25,
+    block_size_gb: float = 1.0,
 ):
     """Create the amplitude dispersion, mean, and PS files.
 
@@ -35,19 +40,17 @@ def create_ps(
     amp_mean_file : Filename
         The output mean amplitude file.
     amp_dispersion_threshold : float, optional
-        The threshold for the amplitude dispersion. Default is 0.42.
-    max_ram_gb : int, optional
+        The threshold for the amplitude dispersion. Default is 0.25.
+    block_size_gb : int, optional
         The maximum amount of data to read at a time (in GB).
         Default is 1.0 GB.
     """
-    from .vrt import VRTStack
-
     # Initialize the output files with zeros
     types = [np.uint8, np.float32, np.float32]
     file_list = [output_file, amp_dispersion_file, amp_mean_file]
     nodatas = [255, 0, 0]
     for fn, dtype, nodata in zip(file_list, types, nodatas):
-        save_arr(
+        io.write_arr(
             arr=None,
             like_filename=slc_vrt_file,
             output_name=fn,
@@ -57,58 +60,73 @@ def create_ps(
         )
 
     vrt_stack = VRTStack.from_vrt_file(slc_vrt_file)
-    max_bytes = 1e9 * max_ram_gb
-    num_blocks = vrt_stack._get_num_blocks(max_bytes=max_bytes)
+    max_bytes = 1e9 * block_size_gb
     block_shape = vrt_stack._get_block_shape(max_bytes=max_bytes)
 
     # Initialize the intermediate arrays for the calculation
     magnitude = np.zeros((len(vrt_stack), *block_shape), dtype=np.float32)
 
+    writer = io.Writer()
     # Make the generator for the blocks
     block_gen = vrt_stack.iter_blocks(
-        return_slices=True,
         max_bytes=max_bytes,
         skip_empty=False,
     )
-    for cur_data, (rows, cols) in tqdm(block_gen, total=num_blocks):
-        if np.all(cur_data == 0) or np.all(np.isnan(cur_data)):
-            continue
-
+    for cur_data, (rows, cols) in block_gen:
         cur_rows, cur_cols = cur_data.shape[-2:]
-        magnitude_cur = np.abs(cur_data, out=magnitude[:, :cur_rows, cur_cols])
-        mean, amp_disp, ps = calc_ps_block(magnitude_cur, amp_dispersion_threshold)
 
-        # Use the UInt8 type for the PS to save.
-        # For invalid pixels, set to max Byte value
-        ps = ps.astype(np.uint8)
-        ps[amp_disp == 0] = 255
+        if not (np.all(cur_data == 0) or np.all(np.isnan(cur_data))):
+            magnitude_cur = np.abs(cur_data, out=magnitude[:, :cur_rows, :cur_cols])
+            mean, amp_disp, ps = calc_ps_block(magnitude_cur, amp_dispersion_threshold)
+
+            # Use the UInt8 type for the PS to save.
+            # For invalid pixels, set to max Byte value
+            ps = ps.astype(np.uint8)
+            ps[amp_disp == 0] = nodatas[0]
+        else:
+            # Fill the block with nodata
+            ps = np.ones((cur_rows, cur_cols), dtype=np.uint8) * nodatas[0]
+            mean = amp_disp = np.zeros((cur_rows, cur_cols), dtype=np.float32)
 
         # Write amp dispersion and the mean blocks
-        save_block(mean, amp_mean_file, rows, cols)
-        save_block(amp_disp, amp_dispersion_file, rows, cols)
-        save_block(ps, output_file, rows, cols)
+        writer.queue_write(mean, amp_mean_file, rows.start, cols.start)
+        writer.queue_write(amp_disp, amp_dispersion_file, rows.start, cols.start)
+        writer.queue_write(ps, output_file, rows.start, cols.start)
+
+    logger.info(f"Waiting to write {writer.num_queued} blocks of data.")
+    writer.notify_finished()
+    logger.info("Finished writing out PS files")
 
 
-def calc_ps_block(stack_mag: np.ndarray, amp_dispersion_threshold: float = 0.42):
+def calc_ps_block(
+    stack_mag: ArrayLike,
+    amp_dispersion_threshold: float = 0.25,
+    min_count: Optional[int] = None,
+):
     r"""Calculate the amplitude dispersion for a block of data.
 
     The amplitude dispersion is defined as the standard deviation of a pixel's
     magnitude divided by the mean of the magnitude:
 
-        \[
-        d_a = \frac{\sigma(|Z|)}{\mu(|Z|)}
-        \]
+    \[
+    d_a = \frac{\sigma(|Z|)}{\mu(|Z|)}
+    \]
 
     where $Z \in \mathbb{R}^{N}$ is one pixel's complex data for $N$ SLCs.
 
     Parameters
     ----------
-    stack_mag : np.ndarray
+    stack_mag : ArrayLike
         The magnitude of the stack of SLCs.
     amp_dispersion_threshold : float, optional
         The threshold for the amplitude dispersion to label a pixel as a PS:
             ps = amp_disp < amp_dispersion_threshold
-        Default is 0.42.
+        Default is 0.25.
+    min_count : int, optional
+        The minimum number of valid pixels to calculate the mean and standard
+        deviation. If the number of valid pixels is less than `min_count`,
+        then the mean and standard deviation are set to 0 (and the pixel is
+        not a PS). Default is 90% the number of SLCs: `int(0.9 * stack_mag.shape[0])`.
 
     Returns
     -------
@@ -117,22 +135,38 @@ def calc_ps_block(stack_mag: np.ndarray, amp_dispersion_threshold: float = 0.42)
         dtype: float32
     amp_disp : np.ndarray
         The amplitude dispersion for the block.
+        dtype: float32
     ps : np.ndarray
         The persistent scatterers for the block.
         dtype: bool
+
+    Notes
+    -----
+    The min_count is used to prevent the mean and standard deviation from being
+    calculated for pixels that are not valid for most of the SLCs. This happens
+    when the burst footprints shift around and pixels near the edge get only one or
+    two acquisitions.
+    Since fewer samples are used to calculate the mean and standard deviation,
+    there is a higher false positive risk for these edge pixels.
     """
-    # Make the nans into 0s to ignore them
-    np.nan_to_num(stack_mag, copy=False)
+    if np.iscomplexobj(stack_mag):
+        raise ValueError("The input `stack_mag` must be real-valued.")
 
-    # TODO: is it worth creating each ndarray in advance and use `out=`?
-    mean = np.nanmean(stack_mag, axis=0)
-    std_dev = np.nanstd(stack_mag, axis=0)
+    if min_count is None:
+        min_count = int(0.9 * stack_mag.shape[0])
 
-    # Calculate the amplitude dispersion and replace nans with 0s
     with warnings.catch_warnings():
-        # ignore the warning about nansum of empty slice
+        # ignore the warning about nansum/nanmean of empty slice
         warnings.simplefilter("ignore", category=RuntimeWarning)
+
+        mean = np.nanmean(stack_mag, axis=0)
+        std_dev = np.nanstd(stack_mag, axis=0)
+        count = np.count_nonzero(~np.isnan(stack_mag), axis=0)
         amp_disp = std_dev / mean
+    # Mask out the pixels with too few valid pixels
+    amp_disp[count < min_count] = np.nan
+    # replace nans/infinities with 0s, which will mean nodata
+    mean = np.nan_to_num(mean, nan=0, posinf=0, neginf=0, copy=False)
     amp_disp = np.nan_to_num(amp_disp, nan=0, posinf=0, neginf=0, copy=False)
 
     ps = amp_disp < amp_dispersion_threshold

@@ -30,8 +30,7 @@ conda env update --name dolphin-env --file conda-env-gpu-extras.yml
 
 ## Usage
 
-Dolphin has a main command line entry point to run the algorithms and tools in workflows.
-The main entry point is named `dolphin`, which has two subcommands:
+The main entry point for running the phase estimation/stitching and unwrapping workflows is named `dolphin`, which has two subcommands:
 
 1. `dolphin config`: create a workflow configuration file.
 2. `dolphin run` : run the workflow using this file.
@@ -39,13 +38,28 @@ The main entry point is named `dolphin`, which has two subcommands:
 Example usage:
 
 ```bash
-$ dolphin config --slc-directory /path/to/slc --ext ".tif"
+$ dolphin config --slc-files /path/to/slcs/*tif
 ```
 This will create a YAML file (by default `dolphin_config.yaml` in the current directory).
-You can also directly use a list of SLC files as input, e.g.:
+
+The only required inputs for the workflow is a list of coregistered SLC files (in either geographic or radar coordinates).
+If the SLC files are spread over multiple files, you can either
+1. use the `--slc-files` option with a bash glob pattern:
+
 ```bash
-$ dolphin config --slc-files /path/to/slc1.tif /path/to/slc2.tif
+dolphin config --slc-files /path/to/SLCs/*/*.slc
 ```
+Another example: `dolphin config --slc-files merged/SLC/*/*.slc` would match the [ISCE2 stack processor output](https://github.com/isce-framework/isce2/tree/main/contrib/stack) )
+
+
+2. Store all input SLC files in a text file delimited by newlines (e.g. `my_slc_list.txt`), and give the name of this text file prefixed by the `@` character :
+
+```bash
+dolphin config --slc-files @my_slc_list.txt
+```
+
+The full set of options is written to the configuration file; you can edit this file, or you can see which commonly tuned options by are changeable running `dolphin config --help`.
+
 
 ## Setup for Developers
 

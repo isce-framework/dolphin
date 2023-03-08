@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 import os
 import subprocess
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -8,77 +7,85 @@ from typing import Optional, Tuple
 
 import numpy as np
 from osgeo import gdal
-from tqdm import tqdm
 
+from dolphin._log import get_log, log_runtime
 from dolphin._types import Filename
-from dolphin.io import get_raster_xysize
-from dolphin.log import get_log, log_runtime
-from dolphin.utils import numpy_to_gdal_type
+from dolphin.io import copy_projection, get_raster_xysize
+from dolphin.utils import progress
 
-logger = get_log()
+logger = get_log(__name__)
 
 gdal.UseExceptions()
 
 
 def unwrap(
     ifg_file: Filename,
-    cor_file: Filename,
     out_file: Filename,
-    mask_file: Optional[Filename],
+    cor_file: Optional[Filename] = None,
+    mask_file: Optional[Filename] = None,
     do_tile: bool = False,
     init_method: str = "mcf",
     looks: Tuple[int, int] = (5, 1),
-):
-    """Unwrap a single interferogram."""
+    alt_line_data: bool = True,
+) -> subprocess.CompletedProcess:
+    """Unwrap a single interferogram using snaphu.
+
+    Parameters
+    ----------
+    ifg_file : Filename
+        The interferogram file to unwrap.
+    out_file : Filename
+        The output file to save the unwrapped interferogram.
+    cor_file : Optional[Filename], optional
+        The coherence file to use for unwrapping, by default None
+    mask_file : Optional[Filename], optional
+        The mask file to use for unwrapping, by default None.
+    do_tile : bool, optional
+        Whether to tile the unwrapping, by default False.
+    init_method : str, optional
+        The unwrapping initialization method, by default "mcf"
+    looks : Tuple[int, int], optional
+        The number of looks in range and azimuth, by default (5, 1).
+    alt_line_data : bool, optional
+        Whether to use alternate line data, by default True.
+
+    Returns
+    -------
+    subprocess.CompletedProcess
+        The subprocess.CompletedProcess object from the unwrapping command.
+        This object contains `.return_code`, `.stdout`, and `.stderr`
+
+    Raises
+    ------
+    ValueError
+        If the init_method is not "mcf" or "mst".
+    CalledProcessError
+        If the snaphu unwrapping command fails for some reason.
+    """
     if init_method.lower() not in ("mcf", "mst"):
         raise ValueError(f"Invalid init_method {init_method}")
+
     conncomp_file = Path(out_file).with_suffix(".unw.conncomp")
-    alt_line_data = True
-    tmp_intfile = _nan_to_zero(ifg_file)
     cmd = _snaphu_cmd(
-        fspath(tmp_intfile),
-        cor_file,
+        fspath(ifg_file),
+        fspath(cor_file or ""),
         Path(out_file),
         conncomp_file,
-        mask_file,
+        fspath(mask_file or ""),
         do_tile=do_tile,
         alt_line_data=alt_line_data,
         init_method=init_method,
         looks=looks,
     )
-    logger.info(cmd)
-    subprocess.check_call(cmd, shell=True)
+    logger.debug(cmd)
+    # copy_projection
+    output = subprocess.run(cmd, shell=True, check=True, capture_output=True, text=True)
     _save_with_metadata(
-        tmp_intfile, out_file, alt_line_data=alt_line_data, dtype="float32"
+        ifg_file, out_file, alt_line_data=alt_line_data, dtype="float32"
     )
-    _save_with_metadata(tmp_intfile, conncomp_file, alt_line_data=False, dtype="byte")
-    _set_unw_zeros(out_file, tmp_intfile)
-    os.remove(tmp_intfile)
-
-
-def _nan_to_zero(infile):
-    """Make a copy of infile and replace NaNs with 0."""
-    in_p = Path(infile)
-    tmp_file = (in_p.parent) / (in_p.stem + "_tmp" + in_p.suffix)
-
-    ds_in = gdal.Open(fspath(infile))
-    drv = ds_in.GetDriver()
-    ds_out = drv.CreateCopy(fspath(tmp_file), ds_in, options=["SUFFIX=ADD"])
-
-    bnd = ds_in.GetRasterBand(1)
-    nodata = bnd.GetNoDataValue()
-    arr = bnd.ReadAsArray()
-    mask = np.logical_or(np.isnan(arr), arr == nodata)
-    arr[mask] = 0
-    ds_out.GetRasterBand(1).WriteArray(arr)
-    ds_out = None
-    # cmd = (
-    #     f"gdal_calc.py -A {infile} --out_file={tmp_file} --overwrite "
-    #     "--NoDataValue 0 --format ROI_PAC --calc='np.isnan(A)*0 + (~np.isnan(A))*A' "
-    # )
-    # logger.info(cmd)
-    # subprocess.check_call(cmd, shell=True)
-    return tmp_file
+    _save_with_metadata(ifg_file, conncomp_file, alt_line_data=False, dtype="uint8")
+    _set_unw_zeros(out_file, ifg_file, alt_line_data=alt_line_data)
+    return output
 
 
 def _snaphu_cmd(
@@ -109,9 +116,9 @@ CONNCOMPFILE {conncomp_file}   # TODO: snaphu has a bug for tiling conncomps
     # Need to specify the input file format in a config file
     # the rest of the options are overwritten by command line options
     # conf_string += "INFILEFORMAT     COMPLEX_DATA\n"
-    # conf_string += "CORRFILEFORMAT   ALT_LINE_DATA"
-    conf_string += "CORRFILEFORMAT   FLOAT_DATA\n"
-    conf_string += f"CORRFILE	{cor_file}\n"
+    if cor_file:
+        conf_string += "CORRFILEFORMAT   FLOAT_DATA\n"
+        conf_string += f"CORRFILE	{cor_file}\n"
 
     if mask_file:
         conf_string += f"BYTEMASKFILE {mask_file}\n"
@@ -153,65 +160,58 @@ CONNCOMPFILE {conncomp_file}   # TODO: snaphu has a bug for tiling conncomps
     return cmd
 
 
-def _set_unw_zeros(unw_filename, ifg_filename):
+def _set_unw_zeros(unw_filename, ifg_filename, alt_line_data=True):
     """Set areas that are 0 in the ifg to be 0 in the unw."""
     tmp_file = str(unw_filename).replace(".unw", "_tmp.unw")
+    driver = "ENVI" if not alt_line_data else "ROI_PAC"
     cmd = (
-        f"gdal_calc.py --quiet --outfile={tmp_file} --type=Float32 --format=ROI_PAC "
-        f'--allBands=A -A {unw_filename} -B {ifg_filename} --calc "A * (B!=0)"'
+        f"gdal_calc.py --quiet --outfile={tmp_file} --type=Float32 --co SUFFIX=ADD "
+        f" --format={driver} --NoDataValue 0 --allBands=A -A {unw_filename} -B"
+        f' {ifg_filename} --calc "A * (B!=0)"'
     )
-    print(f"Setting zeros for {unw_filename}")
-    print(cmd)
+    logger.debug(f"Setting zeros for {unw_filename}")
+    logger.debug(cmd)
     subprocess.check_call(cmd, shell=True)
     subprocess.check_call(f"mv {tmp_file} {unw_filename}", shell=True)
     # remove the header file
     subprocess.check_call(f"rm -f {tmp_file}.*", shell=True)
 
 
-def _save_with_metadata(meta_file, data_file, alt_line_data=True, dtype="float32"):
-    """Write out a metadata file for `data_file` using the `meta_file` metadata."""
-    cols, rows = get_raster_xysize(meta_file)
+def _save_with_metadata(like_file, raw_data_file, alt_line_data=True, dtype="float32"):
+    """Write out a metadata file for `raw_data_file` using the `like_file` metadata."""
+    cols, rows = get_raster_xysize(like_file)
 
-    # read in using fromfile, since we can't use gdal yet
-    dtype = np.dtype(str(dtype).lower())
-    data = np.fromfile(data_file, dtype=dtype)
+    # Write a bare minimum auxiliary file so we can use gdal
     if alt_line_data:
-        amp = data.reshape((rows, 2 * cols))[:, :cols]
-        phase = data.reshape((rows, 2 * cols))[:, cols:]
-        driver = "ROI_PAC"
-        nbands = 2
+        min_rsc = f"WIDTH {cols}\nFILE_LENGTH {rows}\n"
+        with open(str(raw_data_file) + ".rsc", "w") as f:
+            f.write(min_rsc)
     else:
-        amp = None
-        phase = data.reshape((rows, cols))
-        driver = "ENVI"
-        nbands = 1
+        # Get ENVI data number l3harrisgeospatial.com/docs/enviheaderfiles.html
+        if np.dtype(dtype) == np.float32:
+            dt = 4
+        elif np.dtype(dtype) == np.uint8:
+            dt = 1
+        else:
+            raise ValueError(f"Unsupported data type: {dtype}")
+        min_hdr = (
+            f"ENVI\nsamples = {cols}\nlines = {rows}\nbands = 1\ndata type = {dt}\n"
+        )
+        with open(str(raw_data_file) + ".hdr", "w") as f:
+            f.write(min_hdr)
 
-    gdal_dt = numpy_to_gdal_type(dtype)
-    drv = gdal.GetDriverByName(driver)
-    options = ["SUFFIX=ADD"] if driver == "ENVI" else []
-    ds_out = drv.Create(fspath(data_file), cols, rows, nbands, gdal_dt, options=options)
-    # print("saving to", data_file, "with driver", driver)
-    if amp is None:
-        bnd = ds_out.GetRasterBand(1)
-        bnd.WriteArray(phase)
-    else:
-        bnd = ds_out.GetRasterBand(1)
-        bnd.WriteArray(amp)
-        bnd = ds_out.GetRasterBand(2)
-        bnd.WriteArray(phase)
-    bnd = ds_out = None
+    copy_projection(like_file, raw_data_file)
 
 
 @log_runtime
 def run(
     ifg_path: Filename,
     output_path: Filename,
-    cor_file: Filename = "tcorr_ps_ds.bin",
+    cor_file: Optional[Filename] = "tcorr_ps_ds.bin",
     mask_file: Optional[Filename] = None,
-    max_jobs: int = 20,
+    max_jobs: int = 10,
     overwrite: bool = False,
     no_tile: bool = True,
-    create_isce_headers: bool = False,
     init_method: str = "mcf",
 ):
     """Run snaphu on all interferograms in a directory.
@@ -232,10 +232,13 @@ def run(
         overwrite results, by default False
     no_tile : bool, optional
         don't perform tiling on big interferograms, by default True
-    create_isce_headers : bool, optional
-        Create .xml files for isce, by default False
     init_method : str, choices = {"mcf", "mst"}
         SNAPHU initialization method, by default "mcf"
+
+    Returns
+    -------
+    list[Path]
+        list of unwrapped files names
     """
     filenames = list(Path(ifg_path).glob("*.int"))
     if len(filenames) == 0:
@@ -246,9 +249,6 @@ def run(
         raise ValueError(f"Invalid init_method {init_method}")
 
     output_path = Path(output_path)
-
-    cols, rows = get_raster_xysize(filenames[0])
-    shape = (rows, cols)
 
     ext_unw = ".unw"
     all_out_files = [(output_path / f.name).with_suffix(ext_unw) for f in filenames]
@@ -263,34 +263,23 @@ def run(
     logger.info(f"{len(out_files)} left to unwrap")
 
     if mask_file:
-        mask_file = Path(mask_file).absolute()
+        mask_file = Path(mask_file).resolve()
 
     with ThreadPoolExecutor(max_workers=max_jobs) as exc:
         futures = [
             exc.submit(
                 unwrap,
                 inf,
-                cor_file,
                 outf,
+                cor_file,
                 mask_file,
                 not no_tile,
                 init_method,
             )
             for inf, outf in zip(in_files, out_files)
         ]
-        for idx, fut in enumerate(tqdm(as_completed(futures)), start=1):
-            fut.result()
-            tqdm.write("Done with {} / {}".format(idx, len(futures)))
+        with progress() as p:
+            for fut in p.track(as_completed(futures)):
+                fut.result()
 
-    if not create_isce_headers:
-        return
-
-    from apertools import isce_helpers, utils
-
-    for f in tqdm(filenames):
-        f = f.with_suffix(ext_unw)
-
-        dirname, fname = os.path.split(f)
-        with utils.chdir_then_revert(dirname):
-            isce_helpers.create_unw_image(fname, shape=shape)
-            # isce_helpers.create_int_image(fname)
+    return all_out_files

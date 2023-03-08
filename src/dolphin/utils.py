@@ -1,41 +1,79 @@
 import datetime
 import re
+import resource
+import sys
 import warnings
 from os import fspath
 from pathlib import Path
-from typing import List, Optional, Sequence, Tuple, Union
+from typing import Iterable, List, Optional, Tuple, Union
 
 import numpy as np
+from numpy.typing import DTypeLike
 from osgeo import gdal, gdal_array, gdalconst
+from rich.progress import MofNCompleteColumn, Progress, SpinnerColumn, TimeElapsedColumn
 
 from dolphin._log import get_log
 from dolphin._types import Filename
 
 gdal.UseExceptions()
-logger = get_log()
+logger = get_log(__name__)
 
 
-def numpy_to_gdal_type(np_dtype):
-    """Convert numpy dtype to gdal type."""
-    # Wrap in np.dtype in case string is passed
-    if isinstance(np_dtype, str):
-        np_dtype = np.dtype(np_dtype.lower())
-    elif isinstance(np_dtype, type):
-        np_dtype = np.dtype(np_dtype)
+def progress():
+    """Create a Progress bar context manager.
+
+    Usage
+    -----
+    >>> with progress() as p:
+    ...     for i in p.track(range(10)):
+    ...         pass
+    10/10 Working... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 100% 0:00:00
+    """
+    return Progress(
+        SpinnerColumn(),
+        MofNCompleteColumn(),
+        *Progress.get_default_columns()[:-1],  # Skip the ETA column
+        TimeElapsedColumn(),
+    )
+
+
+def numpy_to_gdal_type(np_dtype: DTypeLike) -> int:
+    """Convert numpy dtype to gdal type.
+
+    Parameters
+    ----------
+    np_dtype : DTypeLike
+        Numpy dtype to convert.
+
+    Returns
+    -------
+    int
+        GDAL type code corresponding to `np_dtype`.
+
+    Raises
+    ------
+    TypeError
+        If `np_dtype` is not a numpy dtype, or if the provided dtype is not
+        supported by GDAL (for example, `np.dtype('>i4')`)
+    """
+    np_dtype = np.dtype(np_dtype)
 
     if np.issubdtype(bool, np_dtype):
         return gdalconst.GDT_Byte
-    return gdal_array.NumericTypeCodeToGDALTypeCode(np_dtype)
+    gdal_code = gdal_array.NumericTypeCodeToGDALTypeCode(np_dtype)
+    if gdal_code is None:
+        raise TypeError(f"dtype {np_dtype} not supported by GDAL.")
+    return gdal_code
 
 
-def gdal_to_numpy_type(gdal_type):
+def gdal_to_numpy_type(gdal_type: Union[str, int]) -> np.dtype:
     """Convert gdal type to numpy type."""
     if isinstance(gdal_type, str):
         gdal_type = gdal.GetDataTypeByName(gdal_type)
-    return gdal_array.GDALTypeCodeToNumericTypeCode(gdal_type)
+    return np.dtype(gdal_array.GDALTypeCodeToNumericTypeCode(gdal_type))
 
 
-def get_dates(filename: Filename, fmt="%Y%m%d") -> List[Union[None, str]]:
+def get_dates(filename: Filename, fmt: str = "%Y%m%d") -> List[datetime.date]:
     """Search for dates in the stem of `filename` matching `fmt`.
 
     Excludes dates that are not in the stem of `filename` (in the directories).
@@ -49,97 +87,61 @@ def get_dates(filename: Filename, fmt="%Y%m%d") -> List[Union[None, str]]:
 
     Returns
     -------
-    list[str] or None
+    list[datetime.date]
         List of dates found in the stem of `filename` matching `fmt`.
-        Returns None if nothing is found.
 
     Examples
     --------
     >>> get_dates("/path/to/20191231.slc.tif")
-    ['20191231']
+    [datetime.date(2019, 12, 31)]
     >>> get_dates("S1A_IW_SLC__1SDV_20191231T000000_20191231T000000_032123_03B8F1_1C1D.nc")
-    ['20191231', '20191231']
+    [datetime.date(2019, 12, 31), datetime.date(2019, 12, 31)]
     >>> get_dates("/not/a/date_named_file.tif")
     []
     """  # noqa: E501
-    pat = _date_format_to_regex(fmt)
-    date_list = re.findall(pat, Path(filename).stem)
+    path = _get_path_from_gdal_str(filename)
+    pattern = _date_format_to_regex(fmt)
+    date_list = re.findall(pattern, path.stem)
     if not date_list:
-        msg = f"{filename} does not contain date as YYYYMMDD"
-        logger.warning(msg)
         return []
-    return date_list
+    return [_parse_date(d, fmt) for d in date_list]
 
 
-def parse_slc_strings(slc_str: Union[Filename, Sequence[Filename]], fmt=None):
-    """Parse a string, or list of strings, matching `fmt` into datetime.date.
-
-    Parameters
-    ----------
-    slc_str : str or list of str
-        String or list of strings to parse.
-    fmt : str, or List[str]. Optional
-        Format of string to parse.
-        If None (default), searches for "%Y%m%d" or "%Y-%m-%d".
-
-    Returns
-    -------
-    datetime.date, or list of datetime.date
-    """
-
-    def _parse(datestr, fmt="%Y%m%d") -> datetime.date:
-        return datetime.datetime.strptime(datestr, fmt).date()
-
-    if fmt is None:
-        fmt = ["%Y%m%d", "%Y-%m-%d"]
-    elif isinstance(fmt, str):
-        fmt = [fmt]
-
-    if isinstance(slc_str, str) or hasattr(slc_str, "__fspath__"):
-        path = _get_path_from_gdal_str(slc_str)
-        # Unpack all returned dates from each format
-        d_list = []
-        fmt_found = None
-        for f in fmt:
-            d_list.extend(get_dates(path, fmt=f))
-            if len(d_list) > 0:
-                fmt_found = f
-                break
-        else:  # if we iterate through all formats and don't find any dates
-            raise ValueError(f"Could not find date of format {fmt} in {slc_str}")
-
-        # Take the first date found
-        return _parse(d_list[0], fmt=fmt_found)
-    else:
-        # If it's an iterable of strings, run on each one
-        return [parse_slc_strings(s, fmt=fmt) for s in slc_str if s]
+def _parse_date(datestr: str, fmt: str = "%Y%m%d") -> datetime.date:
+    return datetime.datetime.strptime(datestr, fmt).date()
 
 
 def _get_path_from_gdal_str(name: Filename) -> Path:
     s = str(name)
-    if s.startswith("DERIVED_SUBDATASET"):
+    if s.upper().startswith("DERIVED_SUBDATASET"):
         p = s.split(":")[-1].strip('"').strip("'")
-    elif ":" in s and (s.startswith("NETCDF") or s.startswith("HDF")):
+    elif ":" in s and (s.upper().startswith("NETCDF") or s.upper().startswith("HDF")):
         p = s.split(":")[1].strip('"').strip("'")
     else:
         return Path(name)
     return Path(p)
 
 
-def _resolve_gdal_path(gdal_str):
+def _resolve_gdal_path(gdal_str: Filename) -> Filename:
     """Resolve the file portion of a gdal-openable string to an absolute path."""
     s = str(gdal_str)
-    if s.startswith("DERIVED_SUBDATASET"):
+    if s.upper().startswith("DERIVED_SUBDATASET"):
         # like DERIVED_SUBDATASET:AMPLITUDE:slc_filepath.tif
         file_part = s.split(":")[-1]
-    elif ":" in s and (s.startswith("NETCDF") or s.startswith("HDF")):
+        is_gdal_str = True
+    elif ":" in s and (s.upper().startswith("NETCDF") or s.upper().startswith("HDF")):
         # like NETCDF:"slc_filepath.nc":slc_var
         file_part = s.split(":")[1]
+        is_gdal_str = True
+    else:
+        file_part = s
+        is_gdal_str = False
 
     # strip quotes to add back in after
     file_part = file_part.strip('"').strip("'")
     file_part_resolved = Path(file_part).resolve()
-    return gdal_str.replace(file_part, str(file_part_resolved))
+    resolved = s.replace(file_part, str(file_part_resolved))
+    return Path(resolved) if not is_gdal_str else resolved
 
 
 def _date_format_to_regex(date_format):
@@ -178,31 +180,50 @@ def _date_format_to_regex(date_format):
     return re.compile(date_format)
 
 
-def rowcol_to_xy(row, col, ds=None, filename=None):
-    """Convert indexes in the image space to georeferenced coordinates."""
-    return _apply_gt(ds, filename, col, row)
+def sort_files_by_date(
+    files: Iterable[Filename], file_date_fmt: str = "%Y%m%d"
+) -> Tuple[List[Filename], List[List[datetime.date]]]:
+    """Sort a list of files by date.
 
+    If some files have multiple dates, the files with the most dates are sorted
+    first. Within each group of files with the same number of dates, the files
+    with the earliest dates are sorted first.
 
-def xy_to_rowcol(x, y, ds=None, filename=None):
-    """Convert coordinates in the georeferenced space to a row and column index."""
-    return _apply_gt(ds, filename, x, y, inverse=True)
+    The multi-date files are placed first so that compressed SLCs are sorted
+    before the individual SLCs that make them up.
 
+    Parameters
+    ----------
+    files : Iterable[Filename]
+        List of files to sort.
+    file_date_fmt : str, optional
+        Datetime format passed to `strptime`, by default "%Y%m%d"
 
-def _apply_gt(ds=None, filename=None, x=None, y=None, inverse=False):
-    """Read the (possibly inverse) geotransform, apply to the x/y coordinates."""
-    if ds is None:
-        ds = gdal.Open(fspath(filename))
-        gt = ds.GetGeoTransform()
-        ds = None
-    else:
-        gt = ds.GetGeoTransform()
+    Returns
+    -------
+    file_list : List[Filename]
+        List of files sorted by date.
+    dates : List[List[datetime.date,...]]
+        Sorted list, where each entry has all the dates from the corresponding file.
+    """
 
-    if inverse:
-        gt = gdal.InvGeoTransform(gt)
-    # Reference: https://gdal.org/tutorials/geotransforms_tut.html
-    x = gt[0] + x * gt[1] + y * gt[2]
-    y = gt[3] + x * gt[4] + y * gt[5]
-    return x, y
+    def sort_key(file_date_tuple):
+        # Key for sorting:
+        # To sort the files with the most dates first (the compressed SLCs which
+        # span a date range), sort the longer date lists first.
+        # Then, within each group of dates of the same length, use the date/dates
+        _, dates = file_date_tuple
+        try:
+            return (-len(dates), dates)
+        except TypeError:
+            return (-1, dates)
+
+    date_lists = [get_dates(f, fmt=file_date_fmt) for f in files]
+    file_dates = sorted([fd_tuple for fd_tuple in zip(files, date_lists)], key=sort_key)
+
+    # Unpack the sorted pairs with new sorted values
+    file_list, dates = zip(*file_dates)  # type: ignore
+    return list(file_list), list(dates)
 
 
 def combine_mask_files(
@@ -381,7 +402,18 @@ def take_looks(arr, row_looks, col_looks, func_type="nansum", edge_strategy="cut
         return arr
 
     if arr.ndim >= 3:
-        return xp.stack([take_looks(a, row_looks, col_looks, func_type) for a in arr])
+        return xp.stack(
+            [
+                take_looks(
+                    a,
+                    row_looks,
+                    col_looks,
+                    func_type=func_type,
+                    edge_strategy=edge_strategy,
+                )
+                for a in arr
+            ]
+        )
 
     arr = _make_dims_multiples(arr, row_looks, col_looks, how=edge_strategy)
 
@@ -473,3 +505,78 @@ def upsample_nearest(
     arr_out = xp.zeros(shape=shape, dtype=arr.dtype)
     arr_out[..., :out_r, :out_c] = arr_up[..., :out_r, :out_c]
     return arr_out
+
+
+def get_max_memory_usage(units: str = "GB", children: bool = True) -> float:
+    """Get the maximum memory usage of the current process.
+
+    Parameters
+    ----------
+    units : str, optional, choices=["GB", "MB", "KB", "byte"]
+        The units to return, by default "GB".
+    children : bool, optional
+        Whether to include the memory usage of child processes, by default True
+
+    Returns
+    -------
+    float
+        The maximum memory usage in the specified units.
+
+    Raises
+    ------
+    ValueError
+        If the units are not recognized.
+
+    References
+    ----------
+    1. https://stackoverflow.com/a/7669279/4174466
+    2. https://unix.stackexchange.com/a/30941/295194
+    3. https://manpages.debian.org/bullseye/manpages-dev/getrusage.2.en.html
+
+    """
+    max_mem = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    if children:
+        max_mem += resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss
+    if units.lower().startswith("g"):
+        factor = 1e9
+    elif units.lower().startswith("m"):
+        factor = 1e6
+    elif units.lower().startswith("k"):
+        factor = 1e3
+    elif units.lower().startswith("byte"):
+        factor = 1.0
+    else:
+        raise ValueError(f"Unknown units: {units}")
+    if sys.platform.startswith("linux"):
+        # on linux, ru_maxrss is in kilobytes, while on mac, ru_maxrss is in bytes
+        factor /= 1e3
+
+    return max_mem / factor
+
+
+def get_gpu_memory(pid: Optional[int] = None, gpu_id: int = 0) -> float:
+    """Get the memory usage (in GiB) of the GPU for the current pid."""
+    try:
+        from pynvml.smi import nvidia_smi
+    except ImportError:
+        raise ImportError("Please install pynvml through pip or conda")
+
+    def get_mem(process):
+        used_mem = process["used_memory"] if process else 0
+        if process["unit"] == "MiB":
+            multiplier = 1 / 1024
+        else:
+            logger.warning(f"Unknown unit: {process['unit']}")
+        return used_mem * multiplier
+
+    nvsmi = nvidia_smi.getInstance()
+    processes = nvsmi.DeviceQuery()["gpu"][gpu_id]["processes"]
+    if not processes:
+        return 0.0
+
+    if pid is None:
+        # Return sum of all processes
+        return sum(get_mem(p) for p in processes)
+    else:
+        procs = [p for p in processes if p["pid"] == pid]
+        return get_mem(procs[0]) if procs else 0.0

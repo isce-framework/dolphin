@@ -1,11 +1,12 @@
 import shutil
-from datetime import date, datetime
+from datetime import datetime
 from pathlib import Path
 
 import pydantic
 import pytest
+from make_netcdf import create_test_nc
 
-from dolphin.workflows import config
+from dolphin.workflows import InterferogramNetworkType, config
 
 
 # Testing what the defaults look like for each class
@@ -33,7 +34,7 @@ def test_ps_options_defaults(tmpdir):
     # Change directory so the creation of the default files doesn't fail
     with tmpdir.as_cwd():
         pso = config.PsOptions()
-        assert pso.amp_dispersion_threshold == 0.42
+        assert pso.amp_dispersion_threshold == 0.25
         assert pso.directory == Path("PS")
         assert pso.output_file == Path("PS/ps_pixels.tif")
         assert pso.amp_dispersion_file == Path("PS/amp_dispersion.tif")
@@ -46,8 +47,6 @@ def test_phase_linking_options_defaults(tmpdir):
         assert opts.ministack_size == 15
         assert opts.directory == Path("linked_phase")
         assert opts.half_window == config.HalfWindow()
-        assert opts.compressed_slc_file == Path("linked_phase/compressed_slc.tif")
-        assert opts.temp_coh_file == Path("linked_phase/temp_coh.tif")
 
 
 def test_phase_linking_options_bad_size(tmpdir):
@@ -62,7 +61,7 @@ def test_interferogram_network_defaults(tmpdir):
         assert opts.reference_idx == 0
         assert opts.max_bandwidth is None
         assert opts.max_temporal_baseline is None
-        assert opts.network_type == config.InterferogramNetworkType.SINGLE_REFERENCE
+        assert opts.network_type == InterferogramNetworkType.SINGLE_REFERENCE
 
 
 def test_unwrap_options_defaults(tmpdir):
@@ -77,13 +76,13 @@ def test_unwrap_options_defaults(tmpdir):
 def test_outputs_defaults(tmpdir):
     with tmpdir.as_cwd():
         opts = config.Outputs()
-        assert opts.output_directory == Path("output").absolute()
+        assert opts.output_directory == Path("output").resolve()
         assert opts.output_format == config.OutputFormat.NETCDF
-        assert opts.scratch_directory == Path("scratch").absolute()
+        assert opts.scratch_directory == Path("scratch").resolve()
         assert opts.output_resolution is None
         assert opts.strides == {"x": 1, "y": 1}
         assert opts.hdf5_creation_options == dict(
-            chunks=True,
+            chunks=[128, 128],
             compression="gzip",
             compression_opts=4,
             shuffle=True,
@@ -95,7 +94,7 @@ def test_worker_settings_defaults():
     assert ws.gpu_enabled is True
     assert ws.gpu_id == 0
     assert ws.n_workers == 16
-    assert ws.max_ram_gb == 1.0
+    assert ws.block_size_gb == 1.0
 
 
 def test_worker_env_defaults(monkeypatch):
@@ -125,9 +124,9 @@ def test_worker_env_defaults(monkeypatch):
     ws = config.WorkerSettings()
     assert ws.n_workers == 8
 
-    monkeypatch.setenv("DOLPHIN_MAX_RAM_GB", "4.5")
+    monkeypatch.setenv("DOLPHIN_BLOCK_SIZE_GB", "4.5")
     ws = config.WorkerSettings()
-    assert ws.max_ram_gb == 4.5
+    assert ws.block_size_gb == 4.5
 
 
 @pytest.fixture()
@@ -156,9 +155,11 @@ def dir_with_2_slcs(tmp_path, slc_file_list_nc):
 
 def test_inputs_defaults(dir_with_1_slc):
     # make a dummy file
-    opts = config.Inputs(cslc_file_list=dir_with_1_slc / "slclist.txt")
+    opts = config.Inputs(
+        cslc_file_list=dir_with_1_slc / "slclist.txt", subdataset="data"
+    )
 
-    assert opts.cslc_file_list[0].parent == dir_with_1_slc.absolute()
+    assert opts.cslc_file_list[0].parent == dir_with_1_slc.resolve()
     assert opts.cslc_date_fmt == "%Y%m%d"
     assert len(opts.cslc_file_list) == 1
     assert isinstance(opts.cslc_file_list[0], Path)
@@ -166,24 +167,41 @@ def test_inputs_defaults(dir_with_1_slc):
     assert opts.mask_files == []
 
     # check it's coerced to a list of Paths
-    opts2 = config.Inputs(cslc_file_list=[str(opts.cslc_file_list[0])])
+    opts2 = config.Inputs(
+        cslc_file_list=[str(opts.cslc_file_list[0])], subdataset="data"
+    )
     assert isinstance(opts2.cslc_file_list[0], Path)
+
+
+def test_inputs_bad_filename(tmp_path):
+    # make a dummy file
+    bad_cslc_file = tmp_path / "nonexistent_slclist.txt"
+    with pytest.raises(pydantic.ValidationError, match="does not exist"):
+        config.Inputs(cslc_file_list=bad_cslc_file)
 
 
 def test_input_find_slcs(slc_file_list_nc):
     cslc_dir = Path(slc_file_list_nc[0]).parent
 
-    opts = config.Inputs(cslc_file_list=slc_file_list_nc)
+    opts = config.Inputs(cslc_file_list=slc_file_list_nc, subdataset="data")
     assert opts.cslc_file_list == slc_file_list_nc
 
-    opts2 = config.Inputs(cslc_file_list=cslc_dir / "slclist.txt")
+    opts2 = config.Inputs(cslc_file_list=cslc_dir / "slclist.txt", subdataset="data")
     opts2.dict() == opts.dict()
+
+
+def test_input_nc_missing_subdataset(slc_file_list_nc):
+    cslc_dir = Path(slc_file_list_nc[0]).parent
+
+    # opts = config.Inputs(cslc_file_list=slc_file_list_nc)
+    with pytest.raises(pydantic.ValidationError, match="Must provide dataset name"):
+        config.Inputs(cslc_file_list=cslc_dir / "slclist.txt")
 
 
 def test_input_slc_date_fmt(dir_with_2_slcs):
     expected_slcs = [Path(str(p)) for p in sorted(dir_with_2_slcs.glob("*.nc"))]
 
-    opts = config.Inputs(cslc_file_list=expected_slcs)
+    opts = config.Inputs(cslc_file_list=expected_slcs, subdataset="data")
     assert opts.cslc_file_list == expected_slcs
 
     # If files don't all match the date format, it should error
@@ -191,7 +209,7 @@ def test_input_slc_date_fmt(dir_with_2_slcs):
     shutil.copy(expected_slcs[0], bad_date_slc)
     new_file_list = dir_with_2_slcs.glob("*.nc")
     with pytest.raises(pydantic.ValidationError):
-        opts = config.Inputs(cslc_file_list=new_file_list)
+        opts = config.Inputs(cslc_file_list=new_file_list, subdataset="data")
 
     slc_file1 = dir_with_2_slcs / "2022-01-01.nc"
     slc_file2 = dir_with_2_slcs / "2022-01-02.nc"
@@ -199,29 +217,53 @@ def test_input_slc_date_fmt(dir_with_2_slcs):
     shutil.copy(expected_slcs[1], slc_file2)
     new_file_list = dir_with_2_slcs.glob("2022-*.nc")
 
-    opts = config.Inputs(cslc_file_list=new_file_list, cslc_date_fmt="%Y-%m-%d")
+    opts = config.Inputs(
+        cslc_file_list=new_file_list, cslc_date_fmt="%Y-%m-%d", subdataset="data"
+    )
     assert opts.cslc_file_list == [slc_file1, slc_file2]
 
     # Check that we can get slcs by passing empty string
     # Should match all created files
     all_file_list = list(dir_with_2_slcs.glob("*.nc"))
-    opts = config.Inputs(cslc_file_list=all_file_list, cslc_date_fmt="")
+    opts = config.Inputs(
+        cslc_file_list=all_file_list, cslc_date_fmt="", subdataset="data"
+    )
     assert set(opts.cslc_file_list) == set(all_file_list)
-
-
-def test_input_get_dates(dir_with_2_slcs):
-    opts = config.Inputs(cslc_file_list=dir_with_2_slcs / "slclist.txt")
-    expected = [date(2022, 1, 1), date(2022, 1, 2)]
-    assert opts.get_dates() == expected
 
 
 def test_input_date_sort(dir_with_2_slcs):
     file_list = [Path(str(p)) for p in sorted(dir_with_2_slcs.glob("*.nc"))]
-    opts = config.Inputs(cslc_file_list=file_list)
+    opts = config.Inputs(cslc_file_list=file_list, subdataset="data")
     assert opts.cslc_file_list == file_list
 
-    opts = config.Inputs(cslc_file_list=reversed(file_list))
+    opts = config.Inputs(cslc_file_list=reversed(file_list), subdataset="data")
     assert opts.cslc_file_list == file_list
+
+
+def test_input_opera_cslc(tmp_path, slc_stack):
+    """Check that we recognize the OPERA filename format and don't need a subdataset."""
+    # Make a file with the OPERA name like OPERA_BURST_RE
+    # r"t(?P<track>\d{3})_(?P<burst_id>\d{6})_(?P<subswath>iw[1-3])"
+    start_date = 20220101
+    d = tmp_path / "opera"
+    d.mkdir()
+    name_template = d / "t001_{burst_id}_iw1_{date}.nc"
+    file_list = []
+    for i in range(len(slc_stack)):
+        burst_id = f"{i + 1:06d}"
+        fname = str(name_template).format(burst_id=burst_id, date=str(start_date + i))
+        create_test_nc(
+            fname,
+            epsg=32615,
+            subdir="science/SENTINEL1/CSLC/grids",
+            data_ds_name="VV",
+            data=slc_stack[i],
+        )
+        file_list.append(Path(fname))
+
+    opts = config.Inputs(cslc_file_list=file_list)
+    assert opts.cslc_file_list == file_list
+    assert opts.subdataset == config.OPERA_DATASET_NAME
 
 
 def test_input_cslc_empty():
@@ -232,28 +274,37 @@ def test_input_cslc_empty():
 
 
 def test_config_defaults(dir_with_1_slc):
-    c = config.Workflow(inputs={"cslc_file_list": dir_with_1_slc / "slclist.txt"})
+    c = config.Workflow(
+        inputs={"cslc_file_list": dir_with_1_slc / "slclist.txt", "subdataset": "data"}
+    )
     # These should be the defaults
-    assert c.interferogram_network == config.InterferogramNetwork()
     assert c.outputs == config.Outputs()
     assert c.worker_settings == config.WorkerSettings()
-    assert c.inputs == config.Inputs(cslc_file_list=dir_with_1_slc / "slclist.txt")
+    assert c.inputs == config.Inputs(
+        cslc_file_list=dir_with_1_slc / "slclist.txt", subdataset="data"
+    )
 
     # Check the defaults for the sub-configs, where the folders
     # should have been moved to the scratch directory
-    assert c.ps_options.directory == Path("scratch/PS").absolute()
-    assert c.ps_options.amp_mean_file == Path("scratch/PS/amp_mean.tif").absolute()
+    assert c.ps_options.directory == Path("scratch/PS").resolve()
+    assert c.ps_options.amp_mean_file == Path("scratch/PS/amp_mean.tif").resolve()
 
     p = Path("scratch/PS/amp_dispersion.tif")
-    assert c.ps_options.amp_dispersion_file == p.absolute()
+    assert c.ps_options.amp_dispersion_file == p.resolve()
 
-    assert c.phase_linking.directory == Path("scratch/linked_phase").absolute()
-    p = Path("scratch/linked_phase/compressed_slc.tif")
-    assert c.phase_linking.compressed_slc_file == p.absolute()
-    p = Path("scratch/linked_phase/temp_coh.tif")
-    assert c.phase_linking.temp_coh_file == p.absolute()
+    assert c.phase_linking.directory == Path("scratch/linked_phase").resolve()
 
-    assert c.unwrap_options.directory == Path("scratch/unwrap").absolute()
+    assert c.interferogram_network.directory == Path("scratch/interferograms").resolve()
+    assert c.interferogram_network.reference_idx == 0
+    assert (
+        c.interferogram_network.network_type
+        == InterferogramNetworkType.SINGLE_REFERENCE
+    )
+
+    assert c.interferogram_network.max_bandwidth is None
+    assert c.interferogram_network.max_temporal_baseline is None
+
+    assert c.unwrap_options.directory == Path("scratch/unwrap").resolve()
 
     now = datetime.utcnow()
     assert (now - c.creation_time_utc).seconds == 0
@@ -264,9 +315,10 @@ def test_config_create_dir_tree(tmpdir, slc_file_list_nc):
     shutil.copy(slc_file_list_nc[0], tmpdir / fname0)
 
     with tmpdir.as_cwd():
-        c = config.Workflow(inputs={"cslc_file_list": [fname0]})
+        c = config.Workflow(inputs={"cslc_file_list": [fname0], "subdataset": "data"})
         c.create_dir_tree()
         assert c.ps_options.directory.exists()
+        assert c.interferogram_network.directory.exists()
         assert c.phase_linking.directory.exists()
         assert c.unwrap_options.directory.exists()
 
@@ -279,23 +331,38 @@ def test_config_create_dir_tree(tmpdir, slc_file_list_nc):
 
 
 def test_config_roundtrip_dict(dir_with_1_slc):
-    c = config.Workflow(inputs={"cslc_file_list": dir_with_1_slc / "slclist.txt"})
+    c = config.Workflow(
+        inputs={"cslc_file_list": dir_with_1_slc / "slclist.txt", "subdataset": "data"}
+    )
     c_dict = c.dict()
     c2 = config.Workflow.parse_obj(c_dict)
     assert c == c2
 
 
 def test_config_roundtrip_json(dir_with_1_slc):
-    c = config.Workflow(inputs={"cslc_file_list": dir_with_1_slc / "slclist.txt"})
+    c = config.Workflow(
+        inputs={"cslc_file_list": dir_with_1_slc / "slclist.txt", "subdataset": "data"}
+    )
     c_json = c.json()
     c2 = config.Workflow.parse_raw(c_json)
     assert c == c2
 
 
 def test_config_roundtrip_yaml(tmp_path, dir_with_1_slc):
-    c = config.Workflow(inputs={"cslc_file_list": dir_with_1_slc / "slclist.txt"})
     outfile = tmp_path / "config.yaml"
-    c = config.Workflow(inputs={"cslc_file_list": dir_with_1_slc / "slclist.txt"})
+    c = config.Workflow(
+        inputs={"cslc_file_list": dir_with_1_slc / "slclist.txt", "subdataset": "data"}
+    )
     c.to_yaml(outfile)
+    c2 = config.Workflow.from_yaml(outfile)
+    assert c == c2
+
+
+def test_config_roundtrip_yaml_with_comments(tmp_path, dir_with_1_slc):
+    outfile = tmp_path / "config.yaml"
+    c = config.Workflow(
+        inputs={"cslc_file_list": dir_with_1_slc / "slclist.txt", "subdataset": "data"}
+    )
+    c.to_yaml(outfile, with_comments=True)
     c2 = config.Workflow.from_yaml(outfile)
     assert c == c2

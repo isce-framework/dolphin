@@ -15,12 +15,13 @@ def run_gpu(
     slc_stack: np.ndarray,
     half_window: Dict[str, int],
     strides: Dict[str, int] = {"x": 1, "y": 1},
-    beta: float = 0.0,
+    beta: float = 0.01,
     reference_idx: int = 0,
     use_slc_amp: bool = True,
     output_cov_file: Optional[Filename] = None,
     threads_per_block: Tuple[int, int] = (16, 16),
     do_shp: bool = False,
+    free_mem: bool = False,
     **kwargs,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """Run the GPU version of the stack covariance estimator and MLE solver.
@@ -36,7 +37,7 @@ def run_gpu(
         The (x, y) strides (in pixels) to use for the sliding window.
         By default {"x": 1, "y": 1}
     beta : float, optional
-        The regularization parameter, by default 0.0.
+        The regularization parameter, by default 0.01.
     reference_idx : int, optional
         The index of the (non compressed) reference SLC, by default 0
     use_slc_amp : bool, optional
@@ -50,6 +51,9 @@ def run_gpu(
     do_shp : bool, optional
         Whether to use the SHP estimator to multilook.
         By default False (use a rectangular window).
+    free_mem : bool, optional
+        Whether to free the memory of the covariance matrix after the MLE
+        estimation. By default False.
 
     Returns
     -------
@@ -118,13 +122,22 @@ def run_gpu(
     # # https://docs.cupy.dev/en/stable/user_guide/memory.html
     # may just be cached a lot of the huge memory available on aurora
     # But if we need to free GPU memory:
-    # cp.get_default_memory_pool().free_all_blocks()
+    if free_mem:
+        del d_slc_stack
+        del d_C_arrays
+        del d_output_phase
+        del d_cpx_phase
+        cp.get_default_memory_pool().free_all_blocks()
+        cp.get_default_pinned_memory_pool().free_all_blocks()
 
     if use_slc_amp:
         # use the amplitude from the original SLCs, accounting for strides
         xs, ys = strides["x"], strides["y"]
-        slcs_decimated = slc_stack[
-            :, ys // 2 : rows - ys // 2 : ys, xs // 2 : cols - xs // 2 : xs
-        ]
+        # we need to match `io.compute_out_shape` here
+        start_r = ys // 2
+        start_c = xs // 2
+        end_r = (rows // ys) * ys + 1
+        end_c = (cols // xs) * xs + 1
+        slcs_decimated = slc_stack[:, start_r:end_r:ys, start_c:end_c:xs]
         mle_est *= np.abs(slcs_decimated)
     return mle_est, temp_coh
