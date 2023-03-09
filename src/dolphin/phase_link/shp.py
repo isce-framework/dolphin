@@ -5,6 +5,7 @@ from typing import Tuple
 import numba
 import numpy as np
 from numba import cuda
+from numpy.typing import ArrayLike, NDArray
 
 from ._utils import _get_slices_gpu
 
@@ -139,7 +140,6 @@ def estimate_neighbors(
     if r >= rows or c >= cols:
         return
 
-    _get_ecdf_critical_distance_gpu
     ecdf_dist_cutoff = _get_ecdf_critical_distance_gpu(num_slc, alpha)
     half_row, half_col = half_rowcol
 
@@ -257,3 +257,116 @@ def _get_ecdf_critical_distance(nslc, alpha):
 
 _get_ecdf_critical_distance_gpu = cuda.jit(device=True)(_get_ecdf_critical_distance)
 _get_ecdf_critical_distance_cpu = numba.njit(_get_ecdf_critical_distance)
+
+
+def kl_dist(mu1, mu2, v1, v2):
+    r"""Compute the Kullback-Leibler distance between two Gaussians.
+
+    Parameters
+    ----------
+    mu1 : float
+        Mean of the first Gaussian
+    mu2 : float
+        Mean of the second Gaussian
+    v1 : float
+        Variance of the first Gaussian
+    v2 : float
+        Variance of the second Gaussian
+
+    Returns
+    -------
+    float
+        KL distance between the two Gaussians
+
+    Examples
+    --------
+    >>> kl_dist(0, 0, 1, 1)
+    0.0
+    >>> kl_dist(0, 0, 1, 2)
+    0.0965735902799727
+    >>> kl_dist(0, 0, 2, 1)
+    0.1534264097200273
+    >>> kl_dist(1, 3, 1, 1)
+    2.0
+
+    Notes
+    -----
+    The KL distance is defined [1]_ as
+
+
+    \[
+    KL(p || q) = \int p(x) \log \frac{p(x)}{q(x)} dx
+    \]
+
+    where :math:`p` and :math:`q` are two probability distributions.
+    In this case, :math:`p` is a Gaussian with mean :math:`\mu_1` and variance
+    :math:`v_1` and :math:`q` is a Gaussian with mean :math:`\mu_2` and
+    variance :math:`v_2`. This special case simplifies the integral to
+
+    \[
+    KL(p || q) = \frac{1}{2} \log \frac{v_2}{v_1} +
+    \frac{v_1 + (\mu_1 - \mu_2)^2}{2 v_2} - \frac{1}{2}
+    \]
+
+
+    References
+    ----------
+    .. [1] Cover, Thomas M., and Joy A. Thomas. Elements of information theory.
+    """
+    return (np.log(v2 / v1) + ((v1 + (mu1 - mu2) ** 2) / v2) - 1) / 2
+
+
+_kl_dist_gpu = cuda.jit(device=True)(kl_dist)
+_kl_dist_cpu = numba.njit(kl_dist)
+
+
+@numba.njit
+def kl_block(
+    mean: ArrayLike, var: ArrayLike, halfwin_rowcol: Tuple[int, int]
+) -> NDArray:
+    """Compute the KL distance for each pixel in a block.
+
+    Parameters
+    ----------
+    mean : ArrayLike, 2D
+        Mean amplitude of each pixel
+    var : ArrayLike, 2D
+        Variance of each pixel's amplitude
+    halfwin_rowcol : Tuple[int, int]
+        Half the size of the block in (row, col) dimensions
+
+    Returns
+    -------
+    Nd, 4D
+        KL distance for each pixel in the block
+        Shape is (rows, cols, window_rows, window_cols)
+        where window_rows = 2 * halfwin_rowcol[0] + 1
+              window_cols = 2 * halfwin_rowcol[1] + 1
+
+
+    """
+    half_r, half_c = halfwin_rowcol
+    rows, cols = mean.shape
+
+    out = np.zeros((rows, cols, 2 * half_r + 1, 2 * half_c + 1))
+    for r in range(half_r, rows - half_r):
+        for c in range(half_c, cols - half_c):
+            for i in range(-half_r, half_r + 1):
+                for j in range(-half_c, half_c + 1):
+                    kld = kl_dist(
+                        mean[r, c],
+                        mean[r + i, c + j],
+                        var[r, c],
+                        var[r + i, c + j],
+                    )
+                    out[r, c, i + half_r, j + half_c] = kld
+    return out
+
+
+@numba.njit
+def kl_dist_2samp(p: ArrayLike, q: ArrayLike) -> float:
+    """Compute the Kullback-Leibler distance between two samples.
+
+    Assumes the samples are independent and normally distributed.
+    """
+    return kl_dist(np.mean(p), np.mean(q), np.var(p), np.var(q))
