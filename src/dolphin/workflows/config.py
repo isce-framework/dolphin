@@ -25,7 +25,13 @@ from dolphin._log import get_log
 from dolphin.io import DEFAULT_HDF5_OPTIONS, DEFAULT_TIFF_OPTIONS, format_nc_filename
 from dolphin.utils import get_dates, sort_files_by_date
 
-from ._enums import InterferogramNetworkType, OutputFormat, UnwrapMethod, WorkflowName
+from ._enums import (
+    InterferogramNetworkType,
+    OutputFormat,
+    ShpMethod,
+    UnwrapMethod,
+    WorkflowName,
+)
 
 gdal.UseExceptions()
 PathOrStr = Union[Path, str]
@@ -132,6 +138,7 @@ class PhaseLinkingOptions(BaseModel):
         gt=0.0,
         lt=1.0,
     )
+    shp_method: ShpMethod = ShpMethod.KS
 
     class Config:
         extra = Extra.forbid  # raise error if extra fields passed in

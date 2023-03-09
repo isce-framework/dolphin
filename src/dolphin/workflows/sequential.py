@@ -41,6 +41,7 @@ def run_evd_sequential(
     mask_file: Optional[Filename] = None,
     ps_mask_file: Optional[Filename] = None,
     beta: float = 0.01,
+    shp_method: str = "KL",
     max_bytes: float = 32e6,
     n_workers: int = 1,
     gpu_enabled: bool = True,
@@ -105,9 +106,10 @@ def run_evd_sequential(
             half_window=half_window,
             strides=strides,
             reference_idx=mini_idx,
+            beta=beta,
+            shp_method=shp_method,
             mask_file=mask_file,
             ps_mask_file=ps_mask_file,
-            beta=beta,
             max_bytes=max_bytes,
             n_workers=n_workers,
             gpu_enabled=gpu_enabled,
@@ -177,6 +179,7 @@ def run_evd_sequential(
             nodata_mask=nodata_mask[rows, cols],
             ps_mask=None,  # PS mask doesn't matter for the adjustments
             use_slc_amp=False,  # Make adjustments unit-amplitude
+            shp_method="rect",  # No SHP for the adjustments
             n_workers=n_workers,
             gpu_enabled=gpu_enabled,
         )

@@ -24,9 +24,11 @@ def run_mle(
     strides: Dict[str, int] = {"x": 1, "y": 1},
     beta: float = 0.01,
     reference_idx: int = 0,
+    shp_method: str = "KL",
     nodata_mask: np.ndarray = None,
     ps_mask: Optional[np.ndarray] = None,
     avg_mag: Optional[np.ndarray] = None,
+    var_mag: Optional[np.ndarray] = None,
     use_slc_amp: bool = True,
     output_cov_file: Optional[Filename] = None,
     n_workers: int = 1,
@@ -48,6 +50,10 @@ def run_mle(
         The regularization parameter, by default 0.01.
     reference_idx : int, optional
         The index of the (non compressed) reference SLC, by default 0
+    shp_method : Optional[str]
+        The SHP estimator to use. Either None, "KL" or "KS".
+        By default "KL", uses the KL distance estimator.
+        If None, turns of the SHP search and uses a rectangular window.
     nodata_mask : np.ndarray, optional
         A mask of bad/nodata pixels to ignore when estimating the covariance.
         Pixels with `True` (or 1) are ignored, by default None
@@ -60,10 +66,13 @@ def run_mle(
         The phase from these pixels will be inserted back
         into the final estimate directly from `slc_stack`.
     avg_mag : np.ndarray, optional
-        The average magnitude of the SLC stack, used to to find the brightest
+        The average magnitude of the SLC stack, used to find the brightest
         PS pixels to fill within each look window.
         If None, the average magnitude is estimated from the SLC stack.
         By default None.
+    var_mag : np.ndarray, optional
+        The variance of the magnitude of the SLC stack, used to find the
+        SHP neighbors to fill within each look window if shp_
     use_slc_amp : bool, optional
         Whether to use the SLC amplitude when outputting the MLE estimate,
         or to set the SLC amplitude to 1.0. By default True.
@@ -120,24 +129,28 @@ def run_mle(
     #######################################
     if not gpu_enabled or not gpu_is_available():
         mle_est, temp_coh = _run_cpu(
-            slc_stack_masked,
-            half_window,
-            strides,
-            beta,
-            reference_idx,
-            use_slc_amp,
-            output_cov_file,
+            slc_stack=slc_stack_masked,
+            half_window=half_window,
+            strides=strides,
+            beta=beta,
+            reference_idx=reference_idx,
+            shp_method=shp_method,
+            avg_mag=avg_mag,
+            var_mag=var_mag,
+            use_slc_amp=use_slc_amp,
+            output_cov_file=output_cov_file,
             n_workers=n_workers,
         )
     else:
         mle_est, temp_coh = _run_gpu(
-            slc_stack_masked,
-            half_window,
-            strides,
-            beta,
-            reference_idx,
-            use_slc_amp,
-            output_cov_file,
+            slc_stack=slc_stack_masked,
+            half_window=half_window,
+            strides=strides,
+            beta=beta,
+            reference_idx=reference_idx,
+            shp_method=shp_method,
+            use_slc_amp=use_slc_amp,
+            output_cov_file=output_cov_file,
             # is it worth passing the blocks-per-grid?
         )
 

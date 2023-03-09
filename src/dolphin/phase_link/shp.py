@@ -321,10 +321,13 @@ _kl_dist_cpu = numba.njit(kl_dist)
 
 
 @numba.njit
-def kl_block(
-    mean: ArrayLike, var: ArrayLike, halfwin_rowcol: Tuple[int, int]
+def estimate_neighbors_kl_cpu(
+    mean: ArrayLike,
+    var: ArrayLike,
+    halfwin_rowcol: Tuple[int, int],
+    threshold: float = 0.5,
 ) -> NDArray:
-    """Compute the KL distance for each pixel in a block.
+    """Get the SHPs using the KL distance for each pixel in a block.
 
     Parameters
     ----------
@@ -334,21 +337,21 @@ def kl_block(
         Variance of each pixel's amplitude
     halfwin_rowcol : Tuple[int, int]
         Half the size of the block in (row, col) dimensions
+    threshold : float, optional
+        Threshold for the KL distance, by default 0.5
 
     Returns
     -------
-    Nd, 4D
-        KL distance for each pixel in the block
-        Shape is (rows, cols, window_rows, window_cols)
-        where window_rows = 2 * halfwin_rowcol[0] + 1
-              window_cols = 2 * halfwin_rowcol[1] + 1
-
-
+    is_shp : np.ndarray, 4D
+        Boolean array marking which neighbors are SHPs for each pixel in the block.
+        Shape is (rows, cols, window_rows, window_cols), where
+            window_rows = 2 * halfwin_rowcol[0] + 1
+            window_cols = 2 * halfwin_rowcol[1] + 1
     """
     half_row, half_col = halfwin_rowcol
     rows, cols = mean.shape
 
-    out = np.zeros((rows, cols, 2 * half_row + 1, 2 * half_col + 1))
+    is_shp = np.zeros((rows, cols, 2 * half_row + 1, 2 * half_col + 1), dtype=bool)
     for r in range(half_row, rows - half_row):
         for c in range(half_col, cols - half_col):
             for i in range(-half_row, half_row + 1):
@@ -359,12 +362,12 @@ def kl_block(
                         var[r, c],
                         var[r + i, c + j],
                     )
-                    out[r, c, i + half_row, j + half_col] = kld
-    return out
+                    is_shp[r, c, i + half_row, j + half_col] = kld <= threshold
+    return is_shp
 
 
 @cuda.jit
-def estimate_neighbors_kl(
+def estimate_neighbors_kl_gpu(
     mean: ArrayLike,
     var: ArrayLike,
     halfwin_rowcol: Tuple[int, int],
