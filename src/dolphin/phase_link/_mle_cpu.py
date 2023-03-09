@@ -4,8 +4,9 @@ from typing import Dict, Optional
 import numpy as np
 
 from dolphin._types import Filename
+from dolphin.workflows import ShpMethod
 
-from . import covariance, metrics
+from . import covariance, metrics, shp
 from .mle import mle_stack
 
 logger = logging.getLogger(__name__)
@@ -18,6 +19,9 @@ def run_cpu(
     beta: float = 0.01,
     reference_idx: int = 0,
     use_slc_amp: bool = True,
+    shp_method: str = ShpMethod.KL,
+    avg_mag: Optional[np.ndarray] = None,
+    var_mag: Optional[np.ndarray] = None,
     output_cov_file: Optional[Filename] = None,
     n_workers: int = 1,
     **kwargs,
@@ -41,6 +45,18 @@ def run_cpu(
     use_slc_amp : bool, optional
         Whether to use the SLC amplitude when outputting the MLE estimate,
         or to set the SLC amplitude to 1.0. By default True.
+    shp_method : Optional[str]
+        The SHP estimator to use. Either None, "KL" or "KS".
+        By default "KL", uses the KL distance estimator.
+        If None, turns of the SHP search and uses a rectangular window.
+    avg_mag : np.ndarray, optional
+        The average magnitude of the SLC stack, used to find the SHP
+        neighbors to fill within each look window if shp_method is "KL".
+        If None, the average magnitude is estimated from the SLC stack.
+        By default None.
+    var_mag : np.ndarray, optional
+        The variance of the magnitude of the SLC stack, used to find the
+        SHP neighbors to fill within each look window if shp_
     output_cov_file : str, optional
         HDF5 filename to save the estimated covariance at each pixel.
     n_workers : int, optional
@@ -54,10 +70,28 @@ def run_cpu(
     temp_coh : np.ndarray[np.float32]
         The temporal coherence at each pixel, shape (n_rows, n_cols)
     """
+    if shp_method.lower() == ShpMethod.KL:
+        if avg_mag is None:
+            avg_mag = np.mean(np.abs(slc_stack), axis=0)
+        if var_mag is None:
+            var_mag = np.var(np.abs(slc_stack), axis=0)
+        halfwin_rowcol = (half_window["y"], half_window["x"])
+        # TODO: threshold as a parameter?
+        logger.info("Estimating SHP neighbors using KL distance")
+        neighbor_arrays = shp.estimate_neighbors_kl_cpu(
+            avg_mag, var_mag, halfwin_rowcol=halfwin_rowcol, threshold=0.5
+        )
+    elif shp_method == ShpMethod.RECT:
+        neighbor_arrays = None
+    else:
+        logger.warning(f"SHP method {shp_method} is not implemented for CPU yet")
+        neighbor_arrays = None
+
     C_arrays = covariance.estimate_stack_covariance_cpu(
         slc_stack,
         half_window,
         strides,
+        neighbor_arrays=neighbor_arrays,
         n_workers=n_workers,
     )
     if output_cov_file:

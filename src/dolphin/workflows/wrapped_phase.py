@@ -78,13 +78,13 @@ def run(cfg: Workflow, debug: bool = False) -> List[VRTInterferogram]:
                 half_window=cfg.phase_linking.half_window.dict(),
                 strides=cfg.outputs.strides,
                 reference_idx=0,
+                beta=cfg.phase_linking.beta,
+                shp_method=cfg.phase_linking.shp_method,
                 # mask_file=cfg.inputs.mask_file,
                 ps_mask_file=cfg.ps_options.output_file,
                 max_bytes=cfg.worker_settings.block_size_gb * 1e9,
                 n_workers=cfg.worker_settings.n_workers,
                 gpu_enabled=cfg.worker_settings.gpu_enabled,
-                beta=cfg.phase_linking.beta,
-                do_shp=cfg.phase_linking.do_shp,
             )
         else:
             sequential.run_evd_sequential(
@@ -92,14 +92,14 @@ def run(cfg: Workflow, debug: bool = False) -> List[VRTInterferogram]:
                 output_folder=pl_path,
                 half_window=cfg.phase_linking.half_window.dict(),
                 strides=cfg.outputs.strides,
+                beta=cfg.phase_linking.beta,
+                shp_method=cfg.phase_linking.shp_method,
                 ministack_size=cfg.phase_linking.ministack_size,
-                # mask_file=cfg.inputs.mask_file,
-                ps_mask_file=cfg.ps_options.output_file,
                 max_bytes=cfg.worker_settings.block_size_gb * 1e9,
                 n_workers=cfg.worker_settings.n_workers,
                 gpu_enabled=cfg.worker_settings.gpu_enabled,
-                beta=cfg.phase_linking.beta,
-                do_shp=cfg.phase_linking.do_shp,
+                # mask_file=cfg.inputs.mask_file,
+                ps_mask_file=cfg.ps_options.output_file,
             )
     if watcher:
         watcher.notify_finished()

@@ -4,7 +4,7 @@ Contains for CPU and GPU versions (which will not be available if no GPU).
 """
 from cmath import isnan
 from cmath import sqrt as csqrt
-from typing import Dict, Tuple
+from typing import Dict, Optional, Tuple
 
 import numba
 import numpy as np
@@ -22,6 +22,7 @@ def estimate_stack_covariance_cpu(
     slc_stack: np.ndarray,
     half_window: Dict[str, int],
     strides: Dict[str, int] = {"x": 1, "y": 1},
+    neighbor_arrays: Optional[np.ndarray] = None,
     n_workers=1,
 ):
     """Estimate the linked phase at all pixels of `slc_stack` on the CPU.
@@ -36,6 +37,9 @@ def estimate_stack_covariance_cpu(
     strides : Dict[str, int], optional
         The (x, y) strides (in pixels) to use for the sliding window.
         By default {"x": 1, "y": 1}
+    neighbor_arrays : np.ndarray, optional
+        The neighbor arrays to use for SHP, shape = (n_rows, n_cols, *window_shape).
+        If None, a rectangular window is used. By default None.
     n_workers : int, optional
         The number of workers to use for (CPU version) multiprocessing.
         If 1 (default), no multiprocessing is used.
@@ -64,6 +68,15 @@ def estimate_stack_covariance_cpu(
 
     row_strides, col_strides = strides["y"], strides["x"]
     half_col, half_row = half_window["x"], half_window["y"]
+
+    cur_neighbors = np.ones((2 * half_row + 1, 2 * half_col + 1), dtype=bool)
+    if neighbor_arrays is not None:
+        do_shp = True
+        neighbor_arrays_shared = pymp.shared.array(neighbor_arrays.shape, dtype=bool)
+        neighbor_arrays_shared[:] = neighbor_arrays[:]
+    else:
+        do_shp = False
+
     with pymp.Parallel(n_workers) as p:
         # Looping over linear index for pixels (less nesting of pymp context managers)
         for idx in p.range(out_rows * out_cols):
@@ -83,9 +96,20 @@ def estimate_stack_covariance_cpu(
             )
             # Read the 3D current chunk
             samples_stack = slcs_shared[:, r_start:r_end, c_start:c_end]
+            # Read the current neighbor mask
+            if do_shp:
+                cur_neighbors = neighbor_arrays_shared[
+                    # TODO: these in_r/c will change when incorporating strides
+                    in_r,
+                    in_c,
+                    r_start:r_end,
+                    c_start:c_end,
+                ]
             # Compute one covariance matrix for the output pixel
             coh_mat_single(
-                samples_stack.reshape(nslc, -1), C_arrays[out_r, out_c, :, :]
+                samples_stack.reshape(nslc, -1),
+                C_arrays[out_r, out_c, :, :],
+                cur_neighbors.ravel(),
             )
 
     del slcs_shared
@@ -93,26 +117,43 @@ def estimate_stack_covariance_cpu(
 
 
 @njit(cache=True)
-def coh_mat_single(neighbor_stack, cov_mat=None):
+def coh_mat_single(slc_samples, cov_mat=None, neighbor_mask=None):
     """Given a (n_slc, n_samps) samples, estimate the coherence matrix."""
-    nslc = neighbor_stack.shape[0]
+    nslc, nsamps = slc_samples.shape
     if cov_mat is None:
-        cov_mat = np.zeros((nslc, nslc), dtype=neighbor_stack.dtype)
+        cov_mat = np.zeros((nslc, nslc), dtype=slc_samples.dtype)
+    if neighbor_mask is None:
+        neighbor_mask = np.ones((nsamps), dtype=np.bool_)
 
     for ti in range(nslc):
         # Start with the diagonal equal to 1
         cov_mat[ti, ti] = 1.0
         for tj in range(ti + 1, nslc):
-            c1, c2 = neighbor_stack[ti, :], neighbor_stack[tj, :]
-            a1 = np.nansum(np.abs(c1) ** 2)
-            a2 = np.nansum(np.abs(c2) ** 2)
+            c1, c2 = slc_samples[ti, :], slc_samples[tj, :]
+            # a1 = np.nansum(np.abs(c1) ** 2)
+            # a2 = np.nansum(np.abs(c2) ** 2)
+            # Manually sum to skip based on the neighbor mask
+            a1 = a2 = 0.0
+            for sidx in range(nsamps):
+                if neighbor_mask[sidx]:
+                    # if not np.isnan(c1[sidx]) and not np.isnan(c2[sidx]):
+                    if not np.isnan(c1[sidx]):
+                        a1 += np.abs(c1[sidx]) ** 2
+                    if not np.isnan(c2[sidx]):
+                        a2 += np.abs(c2[sidx]) ** 2
 
             # check if either had 0 good pixels
             a_prod = a1 * a2
             if abs(a_prod) < 1e-6:
                 cov = 0.0 + 0.0j
             else:
-                cov = np.nansum(c1 * np.conjugate(c2)) / np.sqrt(a_prod)
+                # cov = np.nansum(c1 * np.conjugate(c2)) / np.sqrt(a_prod)
+                for sidx in range(nsamps):
+                    if neighbor_mask[sidx]:
+                        # if not np.isnan(c1[sidx]) and not np.isnan(c2[sidx]):
+                        if np.isnan(c1[sidx]):
+                            continue
+                        cov += c1[sidx] * np.conjugate(c2[sidx])
 
             cov_mat[ti, tj] = cov
             cov_mat[tj, ti] = np.conjugate(cov)
@@ -139,10 +180,10 @@ def estimate_stack_covariance_gpu(
         return
 
     row_strides, col_strides = strides_rowcol
-    r_start = row_strides // 2
-    c_start = col_strides // 2
-    in_r = r_start + out_y * row_strides
-    in_c = c_start + out_x * col_strides
+    r1 = row_strides // 2
+    c1 = col_strides // 2
+    in_r = r1 + out_y * row_strides
+    in_c = c1 + out_x * col_strides
 
     half_row, half_col = half_rowcol
 
@@ -152,6 +193,7 @@ def estimate_stack_covariance_gpu(
         half_row, half_col, in_r, in_c, rows, cols
     )
     samples_stack = slc_stack[:, r_start:r_end, c_start:c_end]
+    # TODO: make it a method instead of do/dont do
     if do_shp:
         # neighbors_stack = neighbor_arrays[in_r, in_c, :, :]
         neighbors_stack = neighbor_arrays[out_y, out_x, :, :]

@@ -3,6 +3,7 @@ from enum import Enum
 __all__ = [
     "WorkflowName",
     "OutputFormat",
+    "ShpMethod",
     "UnwrapMethod",
     "InterferogramNetworkType",
 ]
@@ -21,6 +22,16 @@ class OutputFormat(str, Enum):
     ENVI = "ENVI"
     GTIFF = "GTiff"
     NETCDF = "NetCDF"
+
+
+class ShpMethod(str, Enum):
+    """Method for finding SHPs during phase linking."""
+
+    KL = "KL"
+    KS = "KS"
+    RECT = "rect"
+    # Alias for no SHP search
+    NONE = "rect"
 
 
 class UnwrapMethod(str, Enum):
