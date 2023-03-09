@@ -21,6 +21,7 @@ def run_gpu(
     output_cov_file: Optional[Filename] = None,
     threads_per_block: Tuple[int, int] = (16, 16),
     do_shp: bool = False,
+    shp_method: str = "KL",
     free_mem: bool = False,
     **kwargs,
 ) -> Tuple[np.ndarray, np.ndarray]:
@@ -51,6 +52,8 @@ def run_gpu(
     do_shp : bool, optional
         Whether to use the SHP estimator to multilook.
         By default False (use a rectangular window).
+    shp_method : str, optional
+        The SHP estimator to use. Either "KL" or "KS". By default "KL".
     free_mem : bool, optional
         Whether to free the memory of the covariance matrix after the MLE
         estimation. By default False.
@@ -86,19 +89,36 @@ def run_gpu(
     d_C_arrays = cp.zeros((out_rows, out_cols, num_slc, num_slc), dtype=np.complex64)
 
     # TODO: use the strides as well to compute a smaller neighbor array
-    d_neighbor_arrays = cp.zeros((rows, cols, row_win, col_win), dtype=np.bool_)
-    d_amp_stack = cp.abs(d_slc_stack)
     if do_shp:
-        d_amp_stack.sort(
-            axis=0
-        )  # Sort each pixel by amplitude to easily compute the ECDFs
-        shp.estimate_neighbors[blocks, threads_per_block](
-            d_amp_stack,
-            halfwin_rowcol,
-            # strides_rowcol,  # TODO: use the strides as well
-            0.05,  # alpha
-            d_neighbor_arrays,
-        )
+        d_neighbor_arrays = cp.zeros((rows, cols, row_win, col_win), dtype=np.bool_)
+    else:
+        d_neighbor_arrays = cp.zeros((1, 1, 1, 1), dtype=np.bool_)
+
+    if do_shp:
+        d_amp_stack = cp.abs(d_slc_stack)
+        if shp_method == "KS":
+            # Sort each pixel by amplitude to easily compute the ECDFs
+            d_amp_stack.sort(axis=0)
+            shp.estimate_neighbors_ks[blocks, threads_per_block](
+                d_amp_stack,
+                halfwin_rowcol,
+                # strides_rowcol,  # TODO: use the strides as well
+                0.05,  # alpha
+                d_neighbor_arrays,
+            )
+        elif shp_method == "KL":
+            # TODO: Should be loading the pre-computed mean/variance,
+            # in case we're using the longer-time-window versions
+            mean = cp.mean(d_amp_stack, axis=0)
+            var = cp.var(d_amp_stack, axis=0)
+            shp.estimate_neighbors_kl[blocks, threads_per_block](
+                mean,
+                var,
+                halfwin_rowcol,
+                # strides_rowcol,  # TODO: use the strides as well
+                d_neighbor_arrays,
+                threshold=0.5,  # TODO: make this a parameter
+            )
 
     covariance.estimate_stack_covariance_gpu[blocks, threads_per_block](
         d_slc_stack,

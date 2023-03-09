@@ -124,13 +124,13 @@ def _compute_prob_outside_square(n, h):
     return 2 * P
 
 
-# GPU version of the SHP finding algorithm
+# GPU version of the SHP finding algorithm using KS test
 @cuda.jit
-def estimate_neighbors(
+def estimate_neighbors_ks(
     sorted_amp_stack,
     half_rowcol: Tuple[int, int],
     alpha: float,
-    neighbor_arrays,
+    neighbor_arrays: ArrayLike,
 ):
     """Estimate the linked phase at all pixels of `slc_stack` on the GPU."""
     # Get the global position within the 2D GPU grid
@@ -345,28 +345,62 @@ def kl_block(
 
 
     """
-    half_r, half_c = halfwin_rowcol
+    half_row, half_col = halfwin_rowcol
     rows, cols = mean.shape
 
-    out = np.zeros((rows, cols, 2 * half_r + 1, 2 * half_c + 1))
-    for r in range(half_r, rows - half_r):
-        for c in range(half_c, cols - half_c):
-            for i in range(-half_r, half_r + 1):
-                for j in range(-half_c, half_c + 1):
-                    kld = kl_dist(
+    out = np.zeros((rows, cols, 2 * half_row + 1, 2 * half_col + 1))
+    for r in range(half_row, rows - half_row):
+        for c in range(half_col, cols - half_col):
+            for i in range(-half_row, half_row + 1):
+                for j in range(-half_col, half_col + 1):
+                    kld = _kl_dist_cpu(
                         mean[r, c],
                         mean[r + i, c + j],
                         var[r, c],
                         var[r + i, c + j],
                     )
-                    out[r, c, i + half_r, j + half_c] = kld
+                    out[r, c, i + half_row, j + half_col] = kld
     return out
 
 
-@numba.njit
-def kl_dist_2samp(p: ArrayLike, q: ArrayLike) -> float:
-    """Compute the Kullback-Leibler distance between two samples.
+@cuda.jit
+def estimate_neighbors_kl(
+    mean: ArrayLike,
+    var: ArrayLike,
+    halfwin_rowcol: Tuple[int, int],
+    out_neighbor_arrays: ArrayLike,
+    threshold: float = 0.5,
+):
+    """Estimate the number of neighbors for each pixel using KL distance.
 
-    Assumes the samples are independent and normally distributed.
+    Parameters
+    ----------
+    mean : ArrayLike, 2D
+        Mean amplitude of each pixel
+    var : ArrayLike, 2D
+        Variance of each pixel's amplitude
+    halfwin_rowcol : Tuple[int, int]
+        Half the size of the block in (row, col) dimensions
+    out_neighbor_arrays : ArrayLike, 4D
+        Boolean array indicating whether a pixel is a neighbor.
+        Shape is (rows, cols, window_rows, window_cols)
+    threshold : float
+        Threshold for the KL distance to label a pixel as a neighbor
     """
-    return kl_dist(np.mean(p), np.mean(q), np.var(p), np.var(q))
+    half_row, half_col = halfwin_rowcol
+    rows, cols = mean.shape
+
+    c, r = cuda.grid(2)
+    if r >= rows or c >= cols:
+        return
+
+    # Get the slices to use for the current pixel
+    (r_start, r_end), (c_start, c_end) = _get_slices_gpu(
+        half_row, half_col, r, c, rows, cols
+    )
+
+    # Compute the KL distance for each pixel in the block
+    for i in range(r_start, r_end):
+        for j in range(c_start, c_end):
+            kld = _kl_dist_gpu(mean[r, c], mean[i, j], var[r, c], var[i, j])
+            out_neighbor_arrays[r, c, i - r, j - c] = kld < threshold
