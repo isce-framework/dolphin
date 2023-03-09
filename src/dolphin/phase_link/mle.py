@@ -24,6 +24,7 @@ def run_mle(
     strides: Dict[str, int] = {"x": 1, "y": 1},
     beta: float = 0.01,
     reference_idx: int = 0,
+    do_shp: bool = False,
     nodata_mask: np.ndarray = None,
     ps_mask: Optional[np.ndarray] = None,
     avg_mag: Optional[np.ndarray] = None,
@@ -48,6 +49,9 @@ def run_mle(
         The regularization parameter, by default 0.01.
     reference_idx : int, optional
         The index of the (non compressed) reference SLC, by default 0
+    do_shp : bool, optional
+        Whether to use the SHP estimator to multilook.
+        By default False (use a rectangular window).
     nodata_mask : np.ndarray, optional
         A mask of bad/nodata pixels to ignore when estimating the covariance.
         Pixels with `True` (or 1) are ignored, by default None
@@ -138,6 +142,7 @@ def run_mle(
             reference_idx,
             use_slc_amp,
             output_cov_file,
+            do_shp=do_shp,
             # is it worth passing the blocks-per-grid?
         )
 

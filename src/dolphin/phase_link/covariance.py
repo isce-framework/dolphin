@@ -153,7 +153,8 @@ def estimate_stack_covariance_gpu(
     )
     samples_stack = slc_stack[:, r_start:r_end, c_start:c_end]
     if do_shp:
-        neighbors_stack = neighbor_arrays[in_r, in_c, :, :]
+        # neighbors_stack = neighbor_arrays[in_r, in_c, :, :]
+        neighbors_stack = neighbor_arrays[out_y, out_x, :, :]
     else:
         neighbors_stack = cuda.local.array((2, 2), dtype=numba.bool_)
 

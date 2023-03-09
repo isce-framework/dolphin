@@ -84,6 +84,7 @@ def run(cfg: Workflow, debug: bool = False) -> List[VRTInterferogram]:
                 n_workers=cfg.worker_settings.n_workers,
                 gpu_enabled=cfg.worker_settings.gpu_enabled,
                 beta=cfg.phase_linking.beta,
+                do_shp=cfg.phase_linking.do_shp,
             )
         else:
             sequential.run_evd_sequential(
@@ -98,6 +99,7 @@ def run(cfg: Workflow, debug: bool = False) -> List[VRTInterferogram]:
                 n_workers=cfg.worker_settings.n_workers,
                 gpu_enabled=cfg.worker_settings.gpu_enabled,
                 beta=cfg.phase_linking.beta,
+                do_shp=cfg.phase_linking.do_shp,
             )
     if watcher:
         watcher.notify_finished()

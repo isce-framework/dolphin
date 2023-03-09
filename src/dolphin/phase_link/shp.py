@@ -128,31 +128,49 @@ def _compute_prob_outside_square(n, h):
 def estimate_neighbors(
     sorted_amp_stack,
     half_rowcol: Tuple[int, int],
+    strides_rowcol: Tuple[int, int],
     alpha: float,
     neighbor_arrays,
 ):
     """Estimate the linked phase at all pixels of `slc_stack` on the GPU."""
     # Get the global position within the 2D GPU grid
-    c, r = cuda.grid(2)
-    num_slc, rows, cols = sorted_amp_stack.shape
+    out_x, out_y = cuda.grid(2)
+    out_rows, out_cols = neighbor_arrays.shape[:2]
     # Check if we are within the bounds of the array
-    if r >= rows or c >= cols:
+    if out_y >= out_rows or out_x >= out_cols:
         return
+
+    num_slc, rows, cols = sorted_amp_stack.shape
+    # c, r = cuda.grid(2)
+    # # Check if we are within the bounds of the array
+    # if r >= rows or c >= cols:
+    #     return
+    # # Get the input slices, clamping the window to the image bounds
+    # (r_start, r_end), (c_start, c_end) = _get_slices_gpu(
+    #     half_row, half_col, r, c, rows, cols
+    # )
 
     _get_ecdf_critical_distance_gpu
     ecdf_dist_cutoff = _get_ecdf_critical_distance_gpu(num_slc, alpha)
     half_row, half_col = half_rowcol
 
+    row_strides, col_strides = strides_rowcol
+    r_start = row_strides // 2
+    c_start = col_strides // 2
+    in_r = r_start + out_y * row_strides
+    in_c = c_start + out_x * col_strides
+
     # Get the input slices, clamping the window to the image bounds
     (r_start, r_end), (c_start, c_end) = _get_slices_gpu(
-        half_row, half_col, r, c, rows, cols
+        half_row, half_col, in_r, in_c, rows, cols
     )
+
     amp_block = sorted_amp_stack[:, r_start:r_end, c_start:c_end]
     # TODO: if this is a bottleneck, we can do something smarter
     # by computing only the bottom right corner, then mirroring
     # also, we can use strides to only compute the output
     # pixels that are actually needed
-    neighbors_pixel = neighbor_arrays[r, c, :, :]
+    neighbors_pixel = neighbor_arrays[out_y, out_x, :, :]
     _get_neighbors(amp_block, half_rowcol, ecdf_dist_cutoff, neighbors_pixel)
 
 

@@ -132,6 +132,12 @@ class PhaseLinkingOptions(BaseModel):
         gt=0.0,
         lt=1.0,
     )
+    do_shp: bool = Field(
+        True,
+        description=(
+            "Whether to SHP-based multi-looking (False uses a rectangular window)."
+        ),
+    )
 
     class Config:
         extra = Extra.forbid  # raise error if extra fields passed in

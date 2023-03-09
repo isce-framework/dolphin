@@ -86,7 +86,7 @@ def run_gpu(
     d_C_arrays = cp.zeros((out_rows, out_cols, num_slc, num_slc), dtype=np.complex64)
 
     # TODO: use the strides as well to compute a smaller neighbor array
-    d_neighbor_arrays = cp.zeros((rows, cols, row_win, col_win), dtype=np.bool_)
+    d_neighbor_arrays = cp.zeros((out_rows, out_cols, row_win, col_win), dtype=np.bool_)
     d_amp_stack = cp.abs(d_slc_stack)
     if do_shp:
         d_amp_stack.sort(
@@ -95,7 +95,7 @@ def run_gpu(
         shp.estimate_neighbors[blocks, threads_per_block](
             d_amp_stack,
             halfwin_rowcol,
-            # strides_rowcol,  # TODO: use the strides as well
+            strides_rowcol,  # TODO: use the strides as well
             0.05,  # alpha
             d_neighbor_arrays,
         )
