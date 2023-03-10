@@ -1,4 +1,4 @@
-from math import exp, gcd, sqrt
+from math import exp, gcd, log, sqrt
 from typing import Tuple
 
 # import cupy as cp
@@ -207,11 +207,11 @@ def _get_max_cdf_dist(x1, x2):
     >>> x1 = np.array([1, 2, 3, 4, 5])
     >>> x2 = np.array([1, 2, 3, 4, 5])
     >>> _get_max_cdf_dist(x1, x2)
-    0.0
+    0
     >>> x2 = np.array([2, 3, 4, 5, 6])
-    >>> _get_max_cdf_dist(x1, x2)
+    >>> round(_get_max_cdf_dist(x1, x2), 2)
     0.2
-    >>> _get_max_cdf_dist(x2, x1)
+    >>> round(_get_max_cdf_dist(x2, x1), 2)
     0.2
     >>> x2 = np.array([6, 7, 8, 9, 10])
     >>> _get_max_cdf_dist(x1, x2)
@@ -232,9 +232,15 @@ def _get_max_cdf_dist(x1, x2):
         elif x1[i1] < x2[i2]:
             cdf1 += 1 / n
             i1 += 1
-        else:
+        elif x1[i1] > x2[i2]:
             cdf2 += 1 / n
             i2 += 1
+        else:  # a tie
+            cdf1 += 1 / n
+            cdf2 += 1 / n
+            i1 += 1
+            i2 += 1
+            i_out += 1  # jumping 2 ahead for tie
         i_out += 1
         max_dist = max(max_dist, abs(cdf1 - cdf2))
     return max_dist
@@ -322,7 +328,7 @@ def kl_dist(mu1, mu2, v1, v2):
     ----------
     .. [1] Cover, Thomas M., and Joy A. Thomas. Elements of information theory.
     """
-    return (np.log(v2 / v1) + ((v1 + (mu1 - mu2) ** 2) / v2) - 1) / 2
+    return (log(v2 / v1) + ((v1 + (mu1 - mu2) ** 2) / v2) - 1) / 2
 
 
 _kl_dist_gpu = cuda.jit(device=True)(kl_dist)
@@ -415,4 +421,4 @@ def estimate_neighbors_kl_gpu(
     for i in range(r_start, r_end):
         for j in range(c_start, c_end):
             kld = _kl_dist_gpu(mean[r, c], mean[i, j], var[r, c], var[i, j])
-            out_neighbor_arrays[r, c, i - r, j - c] = kld < threshold
+            out_neighbor_arrays[r, c, i - r, j - c] = kld <= threshold

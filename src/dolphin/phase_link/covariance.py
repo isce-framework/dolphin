@@ -130,30 +130,30 @@ def coh_mat_single(slc_samples, cov_mat=None, neighbor_mask=None):
         cov_mat[ti, ti] = 1.0
         for tj in range(ti + 1, nslc):
             c1, c2 = slc_samples[ti, :], slc_samples[tj, :]
-            # a1 = np.nansum(np.abs(c1) ** 2)
-            # a2 = np.nansum(np.abs(c2) ** 2)
-            # Manually sum to skip based on the neighbor mask
-            a1 = a2 = 0.0
-            for sidx in range(nsamps):
-                if neighbor_mask[sidx]:
-                    # if not np.isnan(c1[sidx]) and not np.isnan(c2[sidx]):
-                    if not np.isnan(c1[sidx]):
-                        a1 += np.abs(c1[sidx]) ** 2
-                    if not np.isnan(c2[sidx]):
-                        a2 += np.abs(c2[sidx]) ** 2
+            a1 = np.nansum(np.abs(c1) ** 2)
+            a2 = np.nansum(np.abs(c2) ** 2)
+            # # Manually sum to skip based on the neighbor mask
+            # a1 = a2 = 0.0
+            # for sidx in range(nsamps):
+            #     # if neighbor_mask[sidx]:
+            #     # if not np.isnan(c1[sidx]) and not np.isnan(c2[sidx]):
+            #     if not np.isnan(c1[sidx]):
+            #         a1 += np.abs(c1[sidx]) ** 2
+            #     if not np.isnan(c2[sidx]):
+            #         a2 += np.abs(c2[sidx]) ** 2
 
             # check if either had 0 good pixels
             a_prod = a1 * a2
             if abs(a_prod) < 1e-6:
                 cov = 0.0 + 0.0j
             else:
-                # cov = np.nansum(c1 * np.conjugate(c2)) / np.sqrt(a_prod)
-                for sidx in range(nsamps):
-                    if neighbor_mask[sidx]:
-                        # if not np.isnan(c1[sidx]) and not np.isnan(c2[sidx]):
-                        if np.isnan(c1[sidx]):
-                            continue
-                        cov += c1[sidx] * np.conjugate(c2[sidx])
+                cov = np.nansum(c1 * np.conjugate(c2)) / np.sqrt(a_prod)
+                # for sidx in range(nsamps):
+                #     # if neighbor_mask[sidx]:
+                #     # # if not np.isnan(c1[sidx]) and not np.isnan(c2[sidx]):
+                #     if np.isnan(c1[sidx]):
+                #         continue
+                #     cov += c1[sidx] * np.conjugate(c2[sidx])
 
             cov_mat[ti, tj] = cov
             cov_mat[tj, ti] = np.conjugate(cov)

@@ -112,7 +112,7 @@ def run_gpu(
             halfwin_rowcol,
             # strides_rowcol,  # TODO: use the strides as well
             d_neighbor_arrays,
-            threshold=0.50,  # TODO: make this a parameter
+            0.50,  # threshold # TODO: make this a parameter
         )
         do_shp = True
     else:
@@ -126,7 +126,7 @@ def run_gpu(
         strides_rowcol,
         d_neighbor_arrays,
         d_C_arrays,
-        do_shp=do_shp,
+        do_shp,
     )
 
     if output_cov_file:

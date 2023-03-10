@@ -4,7 +4,13 @@ import sys
 from pathlib import Path
 from typing import List, Optional, Tuple, Union
 
-from .config import OPERA_DATASET_NAME, InterferogramNetworkType, Workflow, WorkflowName
+from .config import (
+    OPERA_DATASET_NAME,
+    InterferogramNetworkType,
+    ShpMethod,
+    Workflow,
+    WorkflowName,
+)
 
 
 def create_config(
@@ -15,7 +21,7 @@ def create_config(
     mask_files: Optional[List[str]] = None,
     ministack_size: Optional[int] = 15,
     half_window_size: Tuple[int, int] = (11, 5),
-    do_shp: bool = False,
+    shp_method: ShpMethod = ShpMethod.KL,
     amp_dispersion_threshold: float = 0.25,
     strides: Tuple[int, int],
     block_size_gb: float = 1,
@@ -52,7 +58,7 @@ def create_config(
         phase_linking=dict(
             ministack_size=ministack_size,
             half_window={"x": half_window_size[0], "y": half_window_size[1]},
-            do_shp=do_shp,
+            shp_method=shp_method,
         ),
         ps_options=dict(
             amp_dispersion_threshold=amp_dispersion_threshold,
@@ -129,11 +135,12 @@ def get_parser(subparser=None, subcommand_name="run"):
         metavar=("X", "Y"),
         help="Half window size for the phase linking algorithm",
     )
-    # do SHP
     pl_group.add_argument(
-        "--do-shp",
-        action="store_true",
-        help="Perform SHP on the phase linking results.",
+        "--shp-method",
+        type=ShpMethod,
+        choices=[s.value for s in ShpMethod],
+        default=ShpMethod.KL,
+        help="Method used to calculate the SHP.",
     )
 
     # PS options
