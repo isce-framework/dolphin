@@ -64,22 +64,25 @@ def run(cfg: Workflow, debug: bool = False, log_file: Optional[str] = None):
     # ###################################
     # 2. Stitch and unwrap interferograms
     # ###################################
-    unwrapped_paths = stitch_and_unwrap.run(ifg_list, cfg, debug=debug)
+    unwrapped_paths, conncomp_paths = stitch_and_unwrap.run(ifg_list, cfg, debug=debug)
 
     # ######################################
     # 3. Finalize the output as an HDF5 product
     # ######################################
     # TODO: make the HDF5 product
-    logger.info(f"Creating outputs in {cfg.outputs.output_directory}")
-    for p in unwrapped_paths:
+    logger.info(
+        f"Creating {len(unwrapped_paths), len(conncomp_paths)} outputs in"
+        f" {cfg.outputs.output_directory}"
+    )
+    for unw_p, cc_p in zip(unwrapped_paths, conncomp_paths):
         # for now, just move the unwrapped results
         #
         # get all the associated header/conncomp files too
-        for ext in ["", ".rsc", ".conncomp", ".conncomp.hdr"]:
-            name = p.name + ext
-            new_name = cfg.outputs.output_directory / name
-            logger.info(f"Moving {p} to {new_name}")
-            (p.parent / name).rename(new_name)
+        unw_new_name = cfg.outputs.output_directory / unw_p.name
+        cc_new_name = cfg.outputs.output_directory / cc_p.name
+        logger.info(f"Moving {unw_p} and {cc_p} into {cfg.outputs.output_directory}")
+        unw_p.rename(unw_new_name)
+        cc_p.rename(cc_new_name)
 
 
 def _create_burst_cfg(

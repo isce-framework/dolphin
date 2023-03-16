@@ -1,4 +1,5 @@
-from typing import List
+from pathlib import Path
+from typing import List, Tuple
 
 from dolphin import stitching, unwrap
 from dolphin._log import get_log, log_runtime
@@ -12,7 +13,7 @@ def run(
     ifg_list: List[VRTInterferogram],
     cfg: Workflow,
     debug: bool = False,
-):
+) -> Tuple[List[Path], List[Path]]:
     """Run the displacement workflow on a stack of SLCs.
 
     Parameters
@@ -60,13 +61,13 @@ def run(
     # #####################################
     if not cfg.unwrap_options.run_unwrap:
         logger.info("Skipping unwrap step")
-        return []
+        return [], []
 
     logger.info(f"Unwrapping interferograms in {stitched_ifg_dir}")
     # Compute the looks for the unwrapping
     row_looks, col_looks = cfg.phase_linking.half_window.to_looks()
     nlooks = row_looks * col_looks
-    unwrapped_paths = unwrap.run(
+    unwrapped_paths, conncomp_paths = unwrap.run(
         ifg_path=stitched_ifg_dir,
         output_path=cfg.unwrap_options.directory,
         cor_file=stitched_cor_file,
@@ -83,4 +84,4 @@ def run(
     # ####################
     # TODO: Determine format for the tropospheric/ionospheric phase correction
 
-    return unwrapped_paths
+    return unwrapped_paths, conncomp_paths

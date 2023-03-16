@@ -20,7 +20,7 @@ gdal.UseExceptions()
 # Input file extension
 EXT_IFG = ".int"
 # Output file extensions
-EXT_CCL = ".conncomp.tif"
+EXT_CCL = ".unw.conncomp.tif"
 EXT_UNW = ".unw.tif"
 
 
@@ -108,7 +108,9 @@ def run(
             for fut in p.track(as_completed(futures), total=len(out_files)):
                 fut.result()
 
-    conncomp_files = [Path(outf).with_suffix(EXT_CCL) for outf in out_files]
+    conncomp_files = [
+        Path(str(outf).replace(EXT_UNW, EXT_CCL)) for outf in all_out_files
+    ]
     return all_out_files, conncomp_files
 
 
@@ -130,7 +132,7 @@ def _run_isce3_snaphu(
     unw_raster = isce3.io.gdal.Raster(
         fspath(unw_filename), xsize, ysize, np.float32, driver
     )
-    conncomp_filename = Path(unw_filename).with_suffix(EXT_CCL)
+    conncomp_filename = str(unw_filename).replace(EXT_UNW, EXT_CCL)
     conncomp_raster = isce3.io.gdal.Raster(
         fspath(conncomp_filename),
         xsize,
