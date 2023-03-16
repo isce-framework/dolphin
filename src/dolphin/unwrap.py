@@ -1,4 +1,4 @@
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from os import fspath
 from pathlib import Path
 from typing import List, Optional, Tuple
@@ -65,7 +65,7 @@ def run(
         list of connected-component-label files names
 
     """
-    filenames = list(Path(ifg_path).glob(EXT_IFG))
+    filenames = list(Path(ifg_path).glob("*" + EXT_IFG))
     if len(filenames) == 0:
         raise ValueError(
             f"No interferograms found in {ifg_path} with extension {EXT_IFG}"
@@ -92,7 +92,7 @@ def run(
         # TODO: include mask_file in snaphu
         # Make sure it's the right format with 1s and 0s for include/exclude
 
-    with ThreadPoolExecutor(max_workers=max_jobs) as exc:
+    with ProcessPoolExecutor(max_workers=max_jobs) as exc:
         futures = [
             exc.submit(
                 _run_isce3_snaphu,
@@ -105,7 +105,7 @@ def run(
             for inf, outf in zip(in_files, out_files)
         ]
         with progress() as p:
-            for fut in p.track(as_completed(futures)):
+            for fut in p.track(as_completed(futures), total=len(out_files)):
                 fut.result()
 
     conncomp_files = [Path(outf).with_suffix(EXT_CCL) for outf in out_files]
@@ -119,6 +119,7 @@ def _run_isce3_snaphu(
     nlooks: float,
     init_method: str = "mst",
     cost: str = "smooth",
+    log_to_file: bool = True,
 ) -> Tuple[Path, Path]:
     xsize, ysize = get_raster_xysize(ifg_filename)
     igram_raster = isce3.io.gdal.Raster(fspath(ifg_filename))
@@ -137,6 +138,14 @@ def _run_isce3_snaphu(
         np.uint32,
         driver,
     )
+    if log_to_file:
+        import journal
+
+        logfile = Path(unw_filename).with_suffix(".log")
+        logger.info(f"Unwrapping {unw_filename}: logging to {logfile}")
+        journal.info("isce3.unwrap.snaphu").device = journal.logfile(
+            fspath(logfile), "w"
+        )
 
     snaphu.unwrap(
         unw_raster,

@@ -45,7 +45,8 @@ def run(
     )
 
     # Stitch the correlation files
-    tcorr_files = list(cfg.pl_path.rglob("tcorr_average.tif"))
+    pl_path = cfg.phase_linking.directory
+    tcorr_files = list(pl_path.rglob("tcorr_average.tif"))
     stitched_cor_file = stitched_ifg_dir / "tcorr_average.tif"
     stitching.merge_images(
         tcorr_files,
@@ -71,7 +72,8 @@ def run(
         cor_file=stitched_cor_file,
         nlooks=nlooks,
         # mask_file: Optional[Filename] = None,
-        max_jobs=20,
+        # TODO: max jobs based on the CPUs and the available RAM?
+        # max_jobs=20,
         # overwrite: bool = False,
         no_tile=True,
     )
