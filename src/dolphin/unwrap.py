@@ -8,6 +8,7 @@ import numpy as np
 from isce3.unwrap import snaphu
 from osgeo import gdal
 
+from dolphin._background import DummyProcessPoolExecutor
 from dolphin._log import get_log, log_runtime
 from dolphin._types import Filename
 from dolphin.utils import full_suffix, progress
@@ -93,7 +94,9 @@ def run(
         # TODO: include mask_file in snaphu
         # Make sure it's the right format with 1s and 0s for include/exclude
 
-    with ProcessPoolExecutor(max_workers=max_jobs) as exc:
+    # Don't even bother with the executor if there's only one job
+    Executor = ProcessPoolExecutor if max_jobs > 1 else DummyProcessPoolExecutor
+    with Executor(max_workers=max_jobs) as exc:
         futures = [
             exc.submit(
                 unwrap,

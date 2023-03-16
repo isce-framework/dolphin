@@ -1,9 +1,12 @@
 import abc
 import os
 import time
+from collections.abc import Callable
+from concurrent.futures import Executor, Future
 from queue import Empty, Full, Queue
 from threading import Event, Thread
 from threading import enumerate as threading_enumerate
+from typing import Any, Optional
 
 from dolphin._log import get_log
 
@@ -332,3 +335,25 @@ class NvidiaMemoryWatcher(Thread):
         from dolphin.utils import get_gpu_memory
 
         return get_gpu_memory(pid=self.pid, gpu_id=self.gpu_id)
+
+
+class DummyProcessPoolExecutor(Executor):
+    """Dummy ProcessPoolExecutor for to avoid forking for single_job purposes."""
+
+    def __init__(self, max_workers: Optional[int] = None):
+        self._max_workers = max_workers
+
+    def submit(self, fn: Callable, *args, **kwargs) -> Future:
+        future: Future = Future()
+        result = fn(*args, **kwargs)
+        future.set_result(result)
+        return future
+
+    def shutdown(self, wait: bool = True):
+        pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any):
+        pass
