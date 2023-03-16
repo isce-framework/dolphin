@@ -8,7 +8,11 @@ from .config import Workflow
 
 
 @log_runtime
-def run(ifg_list: List[VRTInterferogram], cfg: Workflow, debug: bool = False):
+def run(
+    ifg_list: List[VRTInterferogram],
+    cfg: Workflow,
+    debug: bool = False,
+):
     """Run the displacement workflow on a stack of SLCs.
 
     Parameters
@@ -39,8 +43,16 @@ def run(ifg_list: List[VRTInterferogram], cfg: Workflow, debug: bool = False):
         file_date_fmt=cfg.inputs.cslc_date_fmt,
         output_dir=stitched_ifg_dir,
     )
-    # TODO: Stitch the correlation files
-    # tcorr_file = pl_path / "tcorr_average.tif"
+
+    # Stitch the correlation files
+    tcorr_files = list(cfg.pl_path.rglob("tcorr_average.tif"))
+    stitched_cor_file = stitched_ifg_dir / "tcorr_average.tif"
+    stitching.merge_images(
+        tcorr_files,
+        outfile=stitched_cor_file,
+        driver="GTiff",
+        overwrite=False,
+    )
 
     # #####################################
     # 2. Unwrap the stitched interferograms
@@ -50,10 +62,14 @@ def run(ifg_list: List[VRTInterferogram], cfg: Workflow, debug: bool = False):
         return []
 
     logger.info(f"Unwrapping interferograms in {stitched_ifg_dir}")
+    # Compute the looks for the unwrapping
+    row_looks, col_looks = cfg.phase_linking.half_window.to_looks()
+    nlooks = row_looks * col_looks
     unwrapped_paths = unwrap.run(
         ifg_path=stitched_ifg_dir,
         output_path=cfg.unwrap_options.directory,
-        cor_file=None,  # TODO: tcorr_file,
+        cor_file=stitched_cor_file,
+        nlooks=nlooks,
         # mask_file: Optional[Filename] = None,
         max_jobs=20,
         # overwrite: bool = False,

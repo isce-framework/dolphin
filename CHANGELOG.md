@@ -1,5 +1,15 @@
 # Unreleased
 
+**Changed**
+
+- The `unwrap.py` module now uses isce3 to unwrap the interferogram.
+
+**Dependencies**
+
+Added requirements:
+
+- isce3>=0.8.0
+
 # v0.0.4
 
 **Added**
