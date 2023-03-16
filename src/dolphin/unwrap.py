@@ -1,3 +1,4 @@
+import sys
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from os import fspath
 from pathlib import Path
@@ -5,9 +6,10 @@ from typing import List, Optional, Tuple
 
 import isce3
 import numpy as np
-from isce3.unwrap import snaphu
+from isce3.unwrap import ICU, snaphu
 from osgeo import gdal
 
+from dolphin import io
 from dolphin._background import DummyProcessPoolExecutor
 from dolphin._log import get_log, log_runtime
 from dolphin._types import Filename
@@ -126,8 +128,9 @@ def unwrap(
     init_method: str = "mst",
     cost: str = "smooth",
     log_to_file: bool = True,
+    use_icu: bool = False,
 ) -> Tuple[Path, Path]:
-    """Unwrap a single interferogram using isce3's SNAPHU bindings.
+    """Unwrap a single interferogram using isce3's SNAPHU/ICU bindings.
 
     Parameters
     ----------
@@ -145,6 +148,8 @@ def unwrap(
         SNAPHU cost function, by default "smooth"
     log_to_file : bool, optional
         Log to file, by default True
+    use_icu : bool, optional, default = False
+        Force the unwrapping to use ICU
 
     Returns
     -------
@@ -152,12 +157,20 @@ def unwrap(
         Path to output unwrapped phase file.
     conncomp_path : Path
         Path to output connected component label file.
+
+    Notes
+    -----
+    On MacOS, the SNAPHU unwrapper doesn't work due to a MemoryMap bug.
+    ICU is used instead.
     """
-    igram_raster = isce3.io.gdal.Raster(fspath(ifg_filename))
-    corr_raster = isce3.io.gdal.Raster(fspath(corr_filename))
+    # check not MacOS
+    use_snaphu = sys.platform != "darwin" and not use_icu
+    Raster = isce3.io.gdal.Raster if use_snaphu else isce3.io.Raster
+
+    igram_raster = Raster(fspath(ifg_filename))
+    corr_raster = Raster(fspath(corr_filename))
 
     unw_suffix = full_suffix(unw_filename)
-    from dolphin import io
 
     # Get the driver based on the output file extension
     if Path(unw_filename).suffix == ".tif":
@@ -177,7 +190,6 @@ def unwrap(
         dtype=np.float32,
         options=opts,
     )
-    unw_raster = isce3.io.gdal.Raster(fspath(unw_filename), 1, "w")
     # Always use ENVI for conncomp
     conncomp_filename = str(unw_filename).replace(unw_suffix, CONNCOMP_SUFFIX)
     io.write_arr(
@@ -188,7 +200,14 @@ def unwrap(
         like_filename=ifg_filename,
         options=io.DEFAULT_ENVI_OPTIONS,
     )
-    conncomp_raster = isce3.io.gdal.Raster(fspath(conncomp_filename), 1, "w")
+    if use_snaphu:
+        unw_raster = Raster(fspath(unw_filename), 1, "w")
+        conncomp_raster = Raster(fspath(conncomp_filename), 1, "w")
+    else:
+        # The different raster classes have different APIs, so we need to
+        # create the raster objects differently.
+        unw_raster = Raster(fspath(unw_filename), True)
+        conncomp_raster = Raster(fspath(conncomp_filename), True)
     if log_to_file:
         import journal
 
@@ -198,14 +217,24 @@ def unwrap(
             fspath(logfile), "w"
         )
 
-    snaphu.unwrap(
-        unw_raster,
-        conncomp_raster,
-        igram_raster,
-        corr_raster,
-        nlooks=nlooks,
-        cost=cost,
-        init_method=init_method,
-    )
+    if use_snaphu:
+        snaphu.unwrap(
+            unw_raster,
+            conncomp_raster,
+            igram_raster,
+            corr_raster,
+            nlooks=nlooks,
+            cost=cost,
+            init_method=init_method,
+        )
+    else:
+        # Snaphu will fail on Mac OS due to a MemoryMap bug. Use ICU instead.
+        icu = ICU()
+        icu.unwrap(
+            unw_raster,
+            conncomp_raster,
+            igram_raster,
+            corr_raster,
+        )
     del unw_raster, conncomp_raster
     return Path(unw_filename), Path(conncomp_filename)

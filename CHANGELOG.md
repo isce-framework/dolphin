@@ -6,9 +6,11 @@
 
 **Dependencies**
 
+
 Added requirements:
 
 - isce3>=0.8.0
+- Dropped support for Python 3.7
 
 # v0.0.4
 
