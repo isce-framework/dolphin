@@ -28,7 +28,7 @@ jobs:
               python=3.7
               gdal=3.3
               h5py=3.6
-              isce3=0.8.0
+              # isce3=0.8.0
               numpy=1.20
               numba=0.54
               pydantic=1.10
