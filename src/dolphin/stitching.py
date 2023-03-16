@@ -78,7 +78,7 @@ def merge_images(
     out_nodata: Optional[float] = 0,
     out_dtype: Optional[DTypeLike] = None,
     overwrite=False,
-    options: Optional[Sequence[str]] = ["SUFFIX=ADD"],
+    options: Optional[Sequence[str]] = io.DEFAULT_ENVI_OPTIONS,
 ):
     """Combine multiple SLC images on the same date into one image.
 
@@ -443,7 +443,7 @@ def _nodata_to_zero(
     ext: Optional[str] = None,
     in_band: int = 1,
     driver="ENVI",
-    creation_options=["SUFFIX=ADD"],
+    creation_options=io.DEFAULT_ENVI_OPTIONS,
 ):
     """Make a copy of infile and replace NaNs with 0."""
     in_p = Path(infile)

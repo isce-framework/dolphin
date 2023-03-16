@@ -10,18 +10,13 @@ from osgeo import gdal
 
 from dolphin._log import get_log, log_runtime
 from dolphin._types import Filename
-from dolphin.io import get_raster_xysize
-from dolphin.utils import progress
+from dolphin.utils import full_suffix, progress
 
 logger = get_log(__name__)
 
 gdal.UseExceptions()
 
-# Input file extension
-EXT_IFG = ".int"
-# Output file extensions
-EXT_CCL = ".unw.conncomp.tif"
-EXT_UNW = ".unw.tif"
+CONNCOMP_SUFFIX = ".unw.conncomp"
 
 
 @log_runtime
@@ -32,7 +27,9 @@ def run(
     nlooks: float = 5,
     init_method: str = "mst",
     mask_file: Optional[Filename] = None,
-    max_jobs: int = 4,
+    ifg_suffix: str = ".int",
+    unw_suffix: str = ".unw.tif",
+    max_jobs: int = 1,
     overwrite: bool = False,
     **kwargs,
 ) -> Tuple[List[Path], List[Path]]:
@@ -41,21 +38,25 @@ def run(
     Parameters
     ----------
     ifg_path : Filename
-        Path to input interferograms
+        Path to input interferograms.
     output_path : Filename
-        Path to output directory
+        Path to output directory.
     cor_file : str, optional
-        location of (temporal) correlation file
+        location of (temporal) correlation file.
     nlooks : int, optional
         Effective number of spatial looks used to form the input correlation data.
     mask_file : Filename, optional
-        Path to mask file, by default None
-    max_jobs : int, optional
-        Maximum parallel processes, by default 4
-    overwrite : bool, optional
-        overwrite results, by default False
+        Path to mask file, by default None.
+    ifg_suffix : str, optional, default = ".int"
+        interferogram suffix to search for in `ifg_path`.
+    unw_suffix : str, optional, default = ".unw.tif"
+        unwrapped file suffix to use for creating/searching for existing files.
+    max_jobs : int, optional, default = 4
+        Maximum parallel processes.
+    overwrite : bool, optional, default = False
+        Overwrite existing unwrapped files.
     init_method : str, choices = {"mcf", "mst"}
-        SNAPHU initialization method, by default "mst"
+        SNAPHU initialization method, by default "mst".
 
     Returns
     -------
@@ -65,10 +66,10 @@ def run(
         list of connected-component-label files names
 
     """
-    filenames = list(Path(ifg_path).glob("*" + EXT_IFG))
+    filenames = list(Path(ifg_path).glob("*" + ifg_suffix))
     if len(filenames) == 0:
         raise ValueError(
-            f"No interferograms found in {ifg_path} with extension {EXT_IFG}"
+            f"No interferograms found in {ifg_path} with extension {ifg_suffix}"
         )
 
     if init_method.lower() not in ("mcf", "mst"):
@@ -76,7 +77,7 @@ def run(
 
     output_path = Path(output_path)
 
-    all_out_files = [(output_path / f.name).with_suffix(EXT_UNW) for f in filenames]
+    all_out_files = [(output_path / f.name).with_suffix(unw_suffix) for f in filenames]
     in_files, out_files = [], []
     for inf, outf in zip(filenames, all_out_files):
         if Path(outf).exists() and not overwrite:
@@ -95,7 +96,7 @@ def run(
     with ProcessPoolExecutor(max_workers=max_jobs) as exc:
         futures = [
             exc.submit(
-                _run_isce3_snaphu,
+                unwrap,
                 inf,
                 cor_file,
                 outf,
@@ -109,12 +110,12 @@ def run(
                 fut.result()
 
     conncomp_files = [
-        Path(str(outf).replace(EXT_UNW, EXT_CCL)) for outf in all_out_files
+        Path(str(outf).replace(unw_suffix, CONNCOMP_SUFFIX)) for outf in all_out_files
     ]
     return all_out_files, conncomp_files
 
 
-def _run_isce3_snaphu(
+def unwrap(
     ifg_filename: Filename,
     corr_filename: Filename,
     unw_filename: Filename,
@@ -123,23 +124,68 @@ def _run_isce3_snaphu(
     cost: str = "smooth",
     log_to_file: bool = True,
 ) -> Tuple[Path, Path]:
-    xsize, ysize = get_raster_xysize(ifg_filename)
+    """Unwrap a single interferogram using isce3's SNAPHU bindings.
+
+    Parameters
+    ----------
+    ifg_filename : Filename
+        Path to input interferogram.
+    corr_filename : Filename
+        Path to input correlation file.
+    unw_filename : Filename
+        Path to output unwrapped phase file.
+    nlooks : float
+        Effective number of spatial looks used to form the input correlation data.
+    init_method : str, choices = {"mcf", "mst"}
+        SNAPHU initialization method, by default "mst"
+    cost : str, choices = {"smooth", "defo", "p-norm",}
+        SNAPHU cost function, by default "smooth"
+    log_to_file : bool, optional
+        Log to file, by default True
+
+    Returns
+    -------
+    unw_path : Path
+        Path to output unwrapped phase file.
+    conncomp_path : Path
+        Path to output connected component label file.
+    """
     igram_raster = isce3.io.gdal.Raster(fspath(ifg_filename))
     corr_raster = isce3.io.gdal.Raster(fspath(corr_filename))
 
+    unw_suffix = full_suffix(unw_filename)
+    from dolphin import io
+
+    # Get the driver based on the output file extension
+    if Path(unw_filename).suffix == ".tif":
+        driver = "GTiff"
+        opts = list(io.DEFAULT_TIFF_OPTIONS)
+    else:
+        driver = "ENVI"
+        opts = list(io.DEFAULT_ENVI_OPTIONS)
+
     # Create output rasters for unwrapped phase & connected component labels.
-    driver = "GTiff"
-    unw_raster = isce3.io.gdal.Raster(
-        fspath(unw_filename), xsize, ysize, np.float32, driver
+    # Writing with `io.write_arr` because isce3 doesn't have creation options
+    io.write_arr(
+        arr=None,
+        output_name=unw_filename,
+        driver=driver,
+        like_filename=ifg_filename,
+        dtype=np.float32,
+        options=opts,
     )
-    conncomp_filename = str(unw_filename).replace(EXT_UNW, EXT_CCL)
-    conncomp_raster = isce3.io.gdal.Raster(
-        fspath(conncomp_filename),
-        xsize,
-        ysize,
-        np.uint32,
-        driver,
+    unw_raster = isce3.io.gdal.Raster(fspath(unw_filename), 1, "w")
+    # Always use ENVI for conncomp
+    conncomp_filename = str(unw_filename).replace(unw_suffix, CONNCOMP_SUFFIX)
+    io.write_arr(
+        arr=None,
+        output_name=conncomp_filename,
+        driver="ENVI",
+        dtype=np.uint32,
+        like_filename=ifg_filename,
+        options=io.DEFAULT_ENVI_OPTIONS,
     )
+    conncomp_raster = isce3.io.gdal.Raster(fspath(conncomp_filename), 1, "w")
     if log_to_file:
         import journal
 
