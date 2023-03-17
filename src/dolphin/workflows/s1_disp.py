@@ -51,6 +51,7 @@ def run(cfg: Workflow, debug: bool = False, log_file: Optional[str] = None):
     # 1. Wrapped phase estimation
     # ###########################
     ifg_list: List[VRTInterferogram] = []
+    tcorr_list: List[Path] = []
     # Now for each burst, run the wrapped phase estimation
     for burst, burst_cfg in wrapped_phase_cfgs:
         msg = "Running wrapped phase estimation"
@@ -58,18 +59,24 @@ def run(cfg: Workflow, debug: bool = False, log_file: Optional[str] = None):
             msg += f" for burst {burst}"
         logger.info(msg)
         logger.debug(pformat(burst_cfg.dict()))
-        cur_ifg_list = wrapped_phase.run(burst_cfg, debug=debug)
+        cur_ifg_list, comp_slc, tcorr = wrapped_phase.run(burst_cfg, debug=debug)
         ifg_list.extend(cur_ifg_list)
+        tcorr_list.append(tcorr)
+
+    # TODO: store the compressed SLCs somewhere
+    # if cfg.outputs.store_compressed_slcs:
+    #     pass
 
     # ###################################
     # 2. Stitch and unwrap interferograms
     # ###################################
-    unwrapped_paths, conncomp_paths = stitch_and_unwrap.run(ifg_list, cfg, debug=debug)
+    unwrapped_paths, conncomp_paths = stitch_and_unwrap.run(
+        ifg_list=ifg_list, tcorr_file_list=tcorr_list, cfg=cfg, debug=debug
+    )
 
     # ######################################
     # 3. Finalize the output as an HDF5 product
     # ######################################
-    # TODO: make the HDF5 product
     logger.info(
         f"Creating {len(unwrapped_paths), len(conncomp_paths)} outputs in"
         f" {cfg.outputs.output_directory}"

@@ -580,7 +580,7 @@ class EagerLoader(BackgroundReader):
         overlaps: Tuple[int, int] = (0, 0),
         skip_empty: bool = True,
         nodata_mask: Optional[ArrayLike] = None,
-        queue_size: int = 2,
+        queue_size: int = 1,
         timeout: float = _DEFAULT_TIMEOUT,
     ):
         super().__init__(nq=queue_size, timeout=timeout, name="EagerLoader")
