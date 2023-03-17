@@ -1,14 +1,19 @@
 """Module for creating the OPERA output product in NetCDF format."""
+from os import fspath
+from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import h5py
 import numpy as np
 import pyproj
 from numpy.typing import ArrayLike
-from osgeo import gdal, osr
+from osgeo import gdal
 
+from dolphin._log import get_log
 from dolphin._types import Filename
 from dolphin.io import DEFAULT_HDF5_OPTIONS
+
+logger = get_log(__name__)
 
 BASE_GROUP = "/science/SENTINEL1"
 DISP_GROUP = f"{BASE_GROUP}/DISP"
@@ -83,30 +88,30 @@ def _create_correction_dsets(
 
 
 def create_output_product(
-    filename: Filename,
-    output_name="output.nc",
+    unw_filename: Filename,
+    conncomp_filename: Filename,
+    output_name: Filename,
     corrections: Optional[Dict[str, ArrayLike]] = None,
 ):
     """Create the OPERA output product in NetCDF format.
 
     Parameters
     ----------
-    filename : str
-        The path to the input displacement image.
-    output_name : str, optional
+    unw_filename : Filename
+        The path to the input unwrapped phase image.
+    conncomp_filename : Filename
+        The path to the input connected components image.
+    output_name : Filename, optional
         The path to the output NetCDF file, by default "output.nc"
     corrections : Dict[str, ArrayLike], optional
         A dictionary of corrections to write to the output file, by default None
     """
     # Read the Geotiff file and its metadata
-    displacement_ds = gdal.Open(filename)
+    displacement_ds = gdal.Open(fspath(unw_filename))
     gt = displacement_ds.GetGeoTransform()
     crs = pyproj.CRS.from_wkt(displacement_ds.GetProjection())
     arr = displacement_ds.ReadAsArray()
     displacement_ds = None
-
-    srs = osr.SpatialReference()
-    srs.ImportFromWkt(displacement_ds.GetProjection())
 
     # Create the NetCDF file
     with h5py.File(output_name, "w") as f:
@@ -135,3 +140,15 @@ def create_output_product(
         if corrections:
             # Write the tropospheric/ionospheric correction images (if they exist)
             _create_correction_dsets(corrections_group, corrections)
+
+
+def _move_files_to_output_folder(
+    unwrapped_paths: List[Path], conncomp_paths: List[Path], output_directory: Path
+):
+    for unw_p, cc_p in zip(unwrapped_paths, conncomp_paths):
+        # get all the associated header/conncomp files too
+        unw_new_name = output_directory / unw_p.name
+        cc_new_name = output_directory / cc_p.name
+        logger.info(f"Moving {unw_p} and {cc_p} into {output_directory}")
+        unw_p.rename(unw_new_name)
+        cc_p.rename(cc_new_name)

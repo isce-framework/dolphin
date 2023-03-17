@@ -6,7 +6,7 @@ from typing import Dict, List, Optional
 from dolphin._log import get_log, log_runtime
 from dolphin.interferogram import VRTInterferogram
 
-from . import stitch_and_unwrap, wrapped_phase
+from . import OutputFormat, _product, stitch_and_unwrap, wrapped_phase
 from ._utils import group_by_burst
 from .config import Workflow
 
@@ -81,15 +81,23 @@ def run(cfg: Workflow, debug: bool = False, log_file: Optional[str] = None):
         f"Creating {len(unwrapped_paths), len(conncomp_paths)} outputs in"
         f" {cfg.outputs.output_directory}"
     )
-    for unw_p, cc_p in zip(unwrapped_paths, conncomp_paths):
-        # for now, just move the unwrapped results
-        #
-        # get all the associated header/conncomp files too
-        unw_new_name = cfg.outputs.output_directory / unw_p.name
-        cc_new_name = cfg.outputs.output_directory / cc_p.name
-        logger.info(f"Moving {unw_p} and {cc_p} into {cfg.outputs.output_directory}")
-        unw_p.rename(unw_new_name)
-        cc_p.rename(cc_new_name)
+    if cfg.outputs.output_format == OutputFormat.NETCDF:
+        for unw_p, cc_p in zip(unwrapped_paths, conncomp_paths):
+            output_name = cfg.outputs.output_directory / unw_p.with_suffix(".nc").name
+            _product.create_output_product(
+                unw_filename=unw_p,
+                conncomp_filename=cc_p,
+                # TODO: How am i going to create the output name?
+                # output_name=cfg.outputs.output_name,
+                output_name=output_name,
+                corrections={},
+            )
+    else:
+        _product._move_files_to_output_folder(
+            unwrapped_paths,
+            conncomp_paths,
+            cfg.outputs.output_directory,
+        )
 
 
 def _create_burst_cfg(

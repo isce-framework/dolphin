@@ -40,7 +40,7 @@ DEFAULT_TIFF_OPTIONS = (
 DEFAULT_ENVI_OPTIONS = ("SUFFIX=ADD",)
 DEFAULT_HDF5_OPTIONS = dict(
     # https://docs.h5py.org/en/stable/high/dataset.html#filter-pipeline
-    chunks=DEFAULT_TILE_SIZE,
+    chunks=tuple(DEFAULT_TILE_SIZE),
     compression="gzip",
     compression_opts=4,
     shuffle=True,
@@ -214,6 +214,24 @@ def get_raster_nodata(filename: Filename, band: int = 1) -> Optional[float]:
     ds = gdal.Open(fspath(filename))
     nodata = ds.GetRasterBand(band).GetNoDataValue()
     return nodata
+
+
+def get_raster_crs(filename: Filename) -> CRS:
+    """Get the CRS from a file.
+
+    Parameters
+    ----------
+    filename : Filename
+        Path to the file to load.
+
+    Returns
+    -------
+    CRS
+        CRS.
+    """
+    ds = gdal.Open(fspath(filename))
+    crs = CRS.from_wkt(ds.GetProjection())
+    return crs
 
 
 def get_dtype(filename: Filename) -> np.dtype:

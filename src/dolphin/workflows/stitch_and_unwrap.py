@@ -73,6 +73,7 @@ def run(
         output_path=cfg.unwrap_options.directory,
         cor_file=stitched_cor_file,
         nlooks=nlooks,
+        output_format=cfg.outputs.output_format,
         # mask_file: Optional[Filename] = None,
         # TODO: max jobs based on the CPUs and the available RAM?
         # max_jobs=20,
