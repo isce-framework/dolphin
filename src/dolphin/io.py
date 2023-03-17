@@ -37,6 +37,7 @@ DEFAULT_TIFF_OPTIONS = (
     f"BLOCKXSIZE={DEFAULT_TILE_SIZE[1]}",
     f"BLOCKYSIZE={DEFAULT_TILE_SIZE[0]}",
 )
+DEFAULT_ENVI_OPTIONS = ("SUFFIX=ADD",)
 DEFAULT_HDF5_OPTIONS = dict(
     # https://docs.h5py.org/en/stable/high/dataset.html#filter-pipeline
     chunks=DEFAULT_TILE_SIZE,

@@ -7,7 +7,6 @@ References
     Remote Sensing, 55(10), 5637-5652.
 """
 from collections import defaultdict
-from math import nan
 from os import fspath
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -209,7 +208,7 @@ def run_evd_sequential(
     # as a multi-band file
     logger.info(f"Averaging temporal coherence files into: {output_tcorr_file}")
     gdal_calc.Calc(
-        NoDataValue=nan,
+        NoDataValue=0,
         format="GTiff",
         outfile=fspath(output_tcorr_file),
         type="Float32",

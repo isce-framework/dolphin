@@ -1,260 +1,89 @@
-import os
-import subprocess
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import sys
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from os import fspath
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 
+import isce3
 import numpy as np
+from isce3.unwrap import ICU, snaphu
 from osgeo import gdal
 
+from dolphin import io
+from dolphin._background import DummyProcessPoolExecutor
 from dolphin._log import get_log, log_runtime
 from dolphin._types import Filename
-from dolphin.io import copy_projection, get_raster_xysize
-from dolphin.utils import progress
+from dolphin.utils import full_suffix, progress
 
 logger = get_log(__name__)
 
 gdal.UseExceptions()
 
-
-def unwrap(
-    ifg_file: Filename,
-    out_file: Filename,
-    cor_file: Optional[Filename] = None,
-    mask_file: Optional[Filename] = None,
-    do_tile: bool = False,
-    init_method: str = "mcf",
-    looks: Tuple[int, int] = (5, 1),
-    alt_line_data: bool = True,
-) -> subprocess.CompletedProcess:
-    """Unwrap a single interferogram using snaphu.
-
-    Parameters
-    ----------
-    ifg_file : Filename
-        The interferogram file to unwrap.
-    out_file : Filename
-        The output file to save the unwrapped interferogram.
-    cor_file : Optional[Filename], optional
-        The coherence file to use for unwrapping, by default None
-    mask_file : Optional[Filename], optional
-        The mask file to use for unwrapping, by default None.
-    do_tile : bool, optional
-        Whether to tile the unwrapping, by default False.
-    init_method : str, optional
-        The unwrapping initialization method, by default "mcf"
-    looks : Tuple[int, int], optional
-        The number of looks in range and azimuth, by default (5, 1).
-    alt_line_data : bool, optional
-        Whether to use alternate line data, by default True.
-
-    Returns
-    -------
-    subprocess.CompletedProcess
-        The subprocess.CompletedProcess object from the unwrapping command.
-        This object contains `.return_code`, `.stdout`, and `.stderr`
-
-    Raises
-    ------
-    ValueError
-        If the init_method is not "mcf" or "mst".
-    CalledProcessError
-        If the snaphu unwrapping command fails for some reason.
-    """
-    if init_method.lower() not in ("mcf", "mst"):
-        raise ValueError(f"Invalid init_method {init_method}")
-
-    conncomp_file = Path(out_file).with_suffix(".unw.conncomp")
-    cmd = _snaphu_cmd(
-        fspath(ifg_file),
-        fspath(cor_file or ""),
-        Path(out_file),
-        conncomp_file,
-        fspath(mask_file or ""),
-        do_tile=do_tile,
-        alt_line_data=alt_line_data,
-        init_method=init_method,
-        looks=looks,
-    )
-    logger.debug(cmd)
-    # copy_projection
-    output = subprocess.run(cmd, shell=True, check=True, capture_output=True, text=True)
-    _save_with_metadata(
-        ifg_file, out_file, alt_line_data=alt_line_data, dtype="float32"
-    )
-    _save_with_metadata(ifg_file, conncomp_file, alt_line_data=False, dtype="uint8")
-    _set_unw_zeros(out_file, ifg_file, alt_line_data=alt_line_data)
-    return output
-
-
-def _snaphu_cmd(
-    ifg_file,
-    cor_file,
-    out_file,
-    conncomp_file,
-    mask_file,
-    do_tile=False,
-    alt_line_data=True,
-    init_method="mcf",
-    looks=(5, 1),
-):
-    conf_name = out_file.with_suffix(out_file.suffix + ".snaphu_conf")
-    width, _ = get_raster_xysize(ifg_file)
-    # Need to specify the conncomp file format in a config file
-    conf_string = f"""STATCOSTMODE SMOOTH
-INFILE {ifg_file}
-LINELENGTH {width}
-OUTFILE {out_file}
-CONNCOMPFILE {conncomp_file}   # TODO: snaphu has a bug for tiling conncomps
-"""
-    if alt_line_data:
-        conf_string += "OUTFILEFORMAT		ALT_LINE_DATA\n"
-    else:
-        conf_string += "OUTFILEFORMAT		FLOAT_DATA\n"
-
-    # Need to specify the input file format in a config file
-    # the rest of the options are overwritten by command line options
-    # conf_string += "INFILEFORMAT     COMPLEX_DATA\n"
-    if cor_file:
-        conf_string += "CORRFILEFORMAT   FLOAT_DATA\n"
-        conf_string += f"CORRFILE	{cor_file}\n"
-
-    if mask_file:
-        conf_string += f"BYTEMASKFILE {mask_file}\n"
-
-    # Calculate the tiles sizes/number of processes to use, separate for width/height
-    nprocs = 1
-    if do_tile:
-        if width > 1000:
-            conf_string += "NTILECOL 3\nCOLOVRLP 400\n"
-            nprocs *= 3
-            # cmd += " -S --tile 3 3 400 400 --nproc 9"
-        elif width > 500:
-            conf_string += "NTILECOL 2\nCOLOVRLP 400\n"
-            nprocs *= 2
-            # cmd += " -S --tile 2 2 400 400 --nproc 4"
-
-        height = os.path.getsize(ifg_file) / width / 8
-        if height > 1000:
-            conf_string += "NTILEROW 3\nROWOVRLP 400\n"
-            nprocs *= 3
-        elif height > 500:
-            conf_string += "NTILEROW 2\nROWOVRLP 400\n"
-            nprocs *= 2
-    if nprocs > 1:
-        conf_string += f"NPROC {nprocs}\n"
-
-    conf_string += f"INITMETHOD {init_method.upper()}\n"
-
-    row_looks, col_looks = looks
-    conf_string += "\n"
-    conf_string += f"NLOOKSRANGE {col_looks}\n"
-    conf_string += f"NLOOKSAZ {row_looks}\n"
-    conf_string += f"NCORRLOOKS {row_looks * col_looks}\n"
-
-    with open(conf_name, "w") as f:
-        f.write(conf_string)
-
-    cmd = f"snaphu -f {conf_name} "
-    return cmd
-
-
-def _set_unw_zeros(unw_filename, ifg_filename, alt_line_data=True):
-    """Set areas that are 0 in the ifg to be 0 in the unw."""
-    tmp_file = str(unw_filename).replace(".unw", "_tmp.unw")
-    driver = "ENVI" if not alt_line_data else "ROI_PAC"
-    cmd = (
-        f"gdal_calc.py --quiet --outfile={tmp_file} --type=Float32 --co SUFFIX=ADD "
-        f" --format={driver} --NoDataValue 0 --allBands=A -A {unw_filename} -B"
-        f' {ifg_filename} --calc "A * (B!=0)"'
-    )
-    logger.debug(f"Setting zeros for {unw_filename}")
-    logger.debug(cmd)
-    subprocess.check_call(cmd, shell=True)
-    subprocess.check_call(f"mv {tmp_file} {unw_filename}", shell=True)
-    # remove the header file
-    subprocess.check_call(f"rm -f {tmp_file}.*", shell=True)
-
-
-def _save_with_metadata(like_file, raw_data_file, alt_line_data=True, dtype="float32"):
-    """Write out a metadata file for `raw_data_file` using the `like_file` metadata."""
-    cols, rows = get_raster_xysize(like_file)
-
-    # Write a bare minimum auxiliary file so we can use gdal
-    if alt_line_data:
-        min_rsc = f"WIDTH {cols}\nFILE_LENGTH {rows}\n"
-        with open(str(raw_data_file) + ".rsc", "w") as f:
-            f.write(min_rsc)
-    else:
-        # Get ENVI data number l3harrisgeospatial.com/docs/enviheaderfiles.html
-        if np.dtype(dtype) == np.float32:
-            dt = 4
-        elif np.dtype(dtype) == np.uint8:
-            dt = 1
-        else:
-            raise ValueError(f"Unsupported data type: {dtype}")
-        min_hdr = (
-            f"ENVI\nsamples = {cols}\nlines = {rows}\nbands = 1\ndata type = {dt}\n"
-        )
-        with open(str(raw_data_file) + ".hdr", "w") as f:
-            f.write(min_hdr)
-
-    copy_projection(like_file, raw_data_file)
+CONNCOMP_SUFFIX = ".unw.conncomp"
 
 
 @log_runtime
 def run(
     ifg_path: Filename,
     output_path: Filename,
-    cor_file: Optional[Filename] = "tcorr_ps_ds.bin",
+    cor_file: Filename,
+    nlooks: float = 5,
+    init_method: str = "mst",
     mask_file: Optional[Filename] = None,
-    max_jobs: int = 10,
+    ifg_suffix: str = ".int",
+    unw_suffix: str = ".unw.tif",
+    max_jobs: int = 1,
     overwrite: bool = False,
-    no_tile: bool = True,
-    init_method: str = "mcf",
-):
+    **kwargs,
+) -> Tuple[List[Path], List[Path]]:
     """Run snaphu on all interferograms in a directory.
 
     Parameters
     ----------
     ifg_path : Filename
-        Path to input interferograms
+        Path to input interferograms.
     output_path : Filename
-        Path to output directory
+        Path to output directory.
     cor_file : str, optional
-        location of temporal correlation, by default "tcorr_ps_ds.bin"
+        location of (temporal) correlation file.
+    nlooks : int, optional
+        Effective number of spatial looks used to form the input correlation data.
     mask_file : Filename, optional
-        Path to mask file, by default None
-    max_jobs : int, optional
-        Maximum parallel processes, by default 20
-    overwrite : bool, optional
-        overwrite results, by default False
-    no_tile : bool, optional
-        don't perform tiling on big interferograms, by default True
+        Path to mask file, by default None.
+    ifg_suffix : str, optional, default = ".int"
+        interferogram suffix to search for in `ifg_path`.
+    unw_suffix : str, optional, default = ".unw.tif"
+        unwrapped file suffix to use for creating/searching for existing files.
+    max_jobs : int, optional, default = 4
+        Maximum parallel processes.
+    overwrite : bool, optional, default = False
+        Overwrite existing unwrapped files.
     init_method : str, choices = {"mcf", "mst"}
-        SNAPHU initialization method, by default "mcf"
+        SNAPHU initialization method, by default "mst".
 
     Returns
     -------
-    list[Path]
+    unw_paths : list[Path]
         list of unwrapped files names
+    conncomp_paths : list[Path]
+        list of connected-component-label files names
+
     """
-    filenames = list(Path(ifg_path).glob("*.int"))
+    filenames = list(Path(ifg_path).glob("*" + ifg_suffix))
     if len(filenames) == 0:
-        logger.error("No files found. Exiting.")
-        return
+        raise ValueError(
+            f"No interferograms found in {ifg_path} with extension {ifg_suffix}"
+        )
 
     if init_method.lower() not in ("mcf", "mst"):
         raise ValueError(f"Invalid init_method {init_method}")
 
     output_path = Path(output_path)
 
-    ext_unw = ".unw"
-    all_out_files = [(output_path / f.name).with_suffix(ext_unw) for f in filenames]
+    all_out_files = [(output_path / f.name).with_suffix(unw_suffix) for f in filenames]
     in_files, out_files = [], []
     for inf, outf in zip(filenames, all_out_files):
-        if os.path.exists(outf) and not overwrite:
+        if Path(outf).exists() and not overwrite:
             logger.info(f"{outf} exists. Skipping.")
             continue
 
@@ -264,22 +93,148 @@ def run(
 
     if mask_file:
         mask_file = Path(mask_file).resolve()
+        # TODO: include mask_file in snaphu
+        # Make sure it's the right format with 1s and 0s for include/exclude
 
-    with ThreadPoolExecutor(max_workers=max_jobs) as exc:
+    # Don't even bother with the executor if there's only one job
+    Executor = ProcessPoolExecutor if max_jobs > 1 else DummyProcessPoolExecutor
+    with Executor(max_workers=max_jobs) as exc:
         futures = [
             exc.submit(
                 unwrap,
                 inf,
-                outf,
                 cor_file,
-                mask_file,
-                not no_tile,
+                outf,
+                nlooks,
                 init_method,
             )
             for inf, outf in zip(in_files, out_files)
         ]
         with progress() as p:
-            for fut in p.track(as_completed(futures)):
+            for fut in p.track(as_completed(futures), total=len(out_files)):
                 fut.result()
 
-    return all_out_files
+    conncomp_files = [
+        Path(str(outf).replace(unw_suffix, CONNCOMP_SUFFIX)) for outf in all_out_files
+    ]
+    return all_out_files, conncomp_files
+
+
+def unwrap(
+    ifg_filename: Filename,
+    corr_filename: Filename,
+    unw_filename: Filename,
+    nlooks: float,
+    init_method: str = "mst",
+    cost: str = "smooth",
+    log_to_file: bool = True,
+    use_icu: bool = False,
+) -> Tuple[Path, Path]:
+    """Unwrap a single interferogram using isce3's SNAPHU/ICU bindings.
+
+    Parameters
+    ----------
+    ifg_filename : Filename
+        Path to input interferogram.
+    corr_filename : Filename
+        Path to input correlation file.
+    unw_filename : Filename
+        Path to output unwrapped phase file.
+    nlooks : float
+        Effective number of spatial looks used to form the input correlation data.
+    init_method : str, choices = {"mcf", "mst"}
+        SNAPHU initialization method, by default "mst"
+    cost : str, choices = {"smooth", "defo", "p-norm",}
+        SNAPHU cost function, by default "smooth"
+    log_to_file : bool, optional
+        Log to file, by default True
+    use_icu : bool, optional, default = False
+        Force the unwrapping to use ICU
+
+    Returns
+    -------
+    unw_path : Path
+        Path to output unwrapped phase file.
+    conncomp_path : Path
+        Path to output connected component label file.
+
+    Notes
+    -----
+    On MacOS, the SNAPHU unwrapper doesn't work due to a MemoryMap bug.
+    ICU is used instead.
+    """
+    # check not MacOS
+    use_snaphu = sys.platform != "darwin" and not use_icu
+    Raster = isce3.io.gdal.Raster if use_snaphu else isce3.io.Raster
+
+    igram_raster = Raster(fspath(ifg_filename))
+    corr_raster = Raster(fspath(corr_filename))
+
+    unw_suffix = full_suffix(unw_filename)
+
+    # Get the driver based on the output file extension
+    if Path(unw_filename).suffix == ".tif":
+        driver = "GTiff"
+        opts = list(io.DEFAULT_TIFF_OPTIONS)
+    else:
+        driver = "ENVI"
+        opts = list(io.DEFAULT_ENVI_OPTIONS)
+
+    # Create output rasters for unwrapped phase & connected component labels.
+    # Writing with `io.write_arr` because isce3 doesn't have creation options
+    io.write_arr(
+        arr=None,
+        output_name=unw_filename,
+        driver=driver,
+        like_filename=ifg_filename,
+        dtype=np.float32,
+        options=opts,
+    )
+    # Always use ENVI for conncomp
+    conncomp_filename = str(unw_filename).replace(unw_suffix, CONNCOMP_SUFFIX)
+    io.write_arr(
+        arr=None,
+        output_name=conncomp_filename,
+        driver="ENVI",
+        dtype=np.uint32,
+        like_filename=ifg_filename,
+        options=io.DEFAULT_ENVI_OPTIONS,
+    )
+    if use_snaphu:
+        unw_raster = Raster(fspath(unw_filename), 1, "w")
+        conncomp_raster = Raster(fspath(conncomp_filename), 1, "w")
+    else:
+        # The different raster classes have different APIs, so we need to
+        # create the raster objects differently.
+        unw_raster = Raster(fspath(unw_filename), True)
+        conncomp_raster = Raster(fspath(conncomp_filename), True)
+    if log_to_file:
+        import journal
+
+        logfile = Path(unw_filename).with_suffix(".log")
+        logger.info(f"Unwrapping {unw_filename}: logging to {logfile}")
+        journal.info("isce3.unwrap.snaphu").device = journal.logfile(
+            fspath(logfile), "w"
+        )
+
+    if use_snaphu:
+        snaphu.unwrap(
+            unw_raster,
+            conncomp_raster,
+            igram_raster,
+            corr_raster,
+            nlooks=nlooks,
+            cost=cost,
+            init_method=init_method,
+        )
+    else:
+        # Snaphu will fail on Mac OS due to a MemoryMap bug. Use ICU instead.
+        icu = ICU()
+        icu.unwrap(
+            unw_raster,
+            conncomp_raster,
+            igram_raster,
+            corr_raster,
+        )
+    del unw_raster, conncomp_raster
+    return Path(unw_filename), Path(conncomp_filename)
