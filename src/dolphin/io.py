@@ -40,7 +40,7 @@ DEFAULT_TIFF_OPTIONS = (
 DEFAULT_ENVI_OPTIONS = ("SUFFIX=ADD",)
 DEFAULT_HDF5_OPTIONS = dict(
     # https://docs.h5py.org/en/stable/high/dataset.html#filter-pipeline
-    chunks=tuple(DEFAULT_TILE_SIZE),
+    chunks=DEFAULT_TILE_SIZE,
     compression="gzip",
     compression_opts=4,
     shuffle=True,

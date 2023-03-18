@@ -15,6 +15,7 @@ from dolphin.io import DEFAULT_HDF5_OPTIONS
 
 logger = get_log(__name__)
 
+
 BASE_GROUP = "/science/SENTINEL1"
 DISP_GROUP = f"{BASE_GROUP}/DISP"
 CORRECTIONS_GROUP = f"{BASE_GROUP}/corrections"
@@ -27,6 +28,9 @@ GLOBAL_ATTRS = dict(
     title="OPERA L3_DISP_S1 Product",
 )
 GRID_MAPPING_DSET = "spatial_ref"
+# Convert chunks to a tuple or h5py errors
+HDF5_OPTS = DEFAULT_HDF5_OPTIONS.copy()
+HDF5_OPTS["chunks"] = tuple(HDF5_OPTS["chunks"])  # type: ignore
 
 
 def create_output_product(
@@ -89,7 +93,7 @@ def create_output_product(
                 name,
                 data=img,
                 fillvalue=fv,
-                **DEFAULT_HDF5_OPTIONS,
+                **HDF5_OPTS,
             )
             dset.attrs["grid_mapping"] = GRID_MAPPING_DSET
             # # Attach the X/Y coordinates
@@ -157,7 +161,7 @@ def _create_correction_dsets(
     troposphere = corrections.get("troposphere")
     if troposphere:
         troposphere_dset = corrections_group.create_dataset(
-            "troposphere", data=troposphere, **DEFAULT_HDF5_OPTIONS
+            "troposphere", data=troposphere, **HDF5_OPTS
         )
         troposphere_dset.attrs["grid_mapping"] = "crs"
 
@@ -165,7 +169,7 @@ def _create_correction_dsets(
     if ionosphere:
         # Write the ionosphere correction image
         ionosphere_dset = corrections_group.create_dataset(
-            "ionosphere", data=ionosphere, **DEFAULT_HDF5_OPTIONS
+            "ionosphere", data=ionosphere, **HDF5_OPTS
         )
         ionosphere_dset.attrs["grid_mapping"] = "crs"
 
