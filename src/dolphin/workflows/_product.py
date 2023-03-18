@@ -29,9 +29,6 @@ GLOBAL_ATTRS = dict(
 GRID_MAPPING_DSET = "spatial_ref"
 
 
-import h5netcdf
-
-
 def create_output_product(
     unw_filename: Filename,
     conncomp_filename: Filename,
@@ -73,14 +70,9 @@ def create_output_product(
         "connected_components": 0,
     }
 
-    # with h5py.File(output_name, "w") as f:
-    # Create the NetCDF file
-    with h5netcdf.File(output_name, "w") as f:
+    with h5py.File(output_name, "w") as f:
+        # Create the NetCDF file
         f.attrs.update(GLOBAL_ATTRS)
-        f.dimensions = {
-            "y_coordinates": unw_arr.shape[0],
-            "x_coordinates": unw_arr.shape[1],
-        }
 
         # Create the '/science/SENTINEL1/DISP/grids/displacement' group
         displacement_group = f.create_group(DISP_GROUP)
@@ -93,21 +85,18 @@ def create_output_product(
 
         # Write the displacement array / conncomp arrays
         for img, (name, fv) in zip([unw_arr, conncomp_arr], fill_values.items()):
-            # dset = displacement_group.create_dataset(
-            dset = displacement_group.create_variable(
+            dset = displacement_group.create_dataset(
                 name,
-                list(f.dimensions.keys()),  # h5netcdf only
                 data=img,
                 fillvalue=fv,
                 **DEFAULT_HDF5_OPTIONS,
             )
             dset.attrs["grid_mapping"] = GRID_MAPPING_DSET
             # # Attach the X/Y coordinates
-            # dset.dims[0].attach_scale(y_ds)
-            # dset.dims[1].attach_scale(x_ds)
+            dset.dims[0].attach_scale(y_ds)
+            dset.dims[1].attach_scale(x_ds)
 
         # Create the '/science/SENTINEL1/DISP/corrections' group
-        # corrections_group = f.require_group(CORRECTIONS_GROUP)
         corrections_group = f.create_group(CORRECTIONS_GROUP)
         if corrections:
             # Write the tropospheric/ionospheric correction images (if they exist)
@@ -137,14 +126,8 @@ def _create_xy_dsets(
     x, y = _create_xy(gt, shape)
 
     # Create the datasets
-    # x_ds = group.create_dataset("x_coordinates", data=x, dtype=float)
-    # y_ds = group.create_dataset("y_coordinates", data=y, dtype=float)
-    x_ds = group.create_variable(
-        "x_coordinates", ("x_coordinates",), np.float64, data=x
-    )
-    y_ds = group.create_variable(
-        "y_coordinates", ("y_coordinates",), np.float64, data=y
-    )
+    x_ds = group.create_dataset("x_coordinates", data=x, dtype=float)
+    y_ds = group.create_dataset("y_coordinates", data=y, dtype=float)
 
     for name, ds in zip(["x", "y"], [x_ds, y_ds]):
         # ds.make_scale(name)
@@ -158,8 +141,7 @@ def _create_xy_dsets(
 def _create_grid_mapping(group, crs: pyproj.CRS, gt: List[float]) -> h5py.Dataset:
     """Set up the grid mapping variable."""
     # https://github.com/corteva/rioxarray/blob/21284f67db536d9c104aa872ab0bbc261259e59e/rioxarray/rioxarray.py#L34
-    # dset = group.create_dataset(GRID_MAPPING_DSET, data=0, dtype=int)
-    dset = group.create_variable(GRID_MAPPING_DSET, data=0, dtype=int)
+    dset = group.create_dataset(GRID_MAPPING_DSET, data=0, dtype=int)
 
     dset.attrs.update(crs.to_cf())
     # Also add the GeoTransform
