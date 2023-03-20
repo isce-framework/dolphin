@@ -2,17 +2,6 @@
 
 **Changed**
 
-- The `unwrap.py` module now uses isce3 to unwrap the interferogram.
-
-**Dependencies**
-
-
-Added requirements:
-
-- isce3>=0.8.0
-- pyproj>=3.3
-- Dropped support for Python 3.7
-
 # v0.0.4
 
 **Added**
@@ -33,6 +22,7 @@ Added requirements:
 - More uniform naming in `io.get_raster_<X>` functions.
 - The SLC compression is now done in `_compress.py` to declutter the `mle.py` module.
 - Replace `tqdm` with `rich` for progress bars.
+- The `unwrap.py` module now uses isce3 to unwrap the interferogram.
 
 - Docs are now using the mkdocs `material` theme.
 
@@ -49,6 +39,9 @@ Added requirements:
 - pyproj>=3.2
 - rich>=12.0
 - threadpoolctl>=3.0
+- isce3>=0.8.0
+- pyproj>=3.3
+- Dropped support for Python 3.7
 
 For docs:
 - mkdocs-material

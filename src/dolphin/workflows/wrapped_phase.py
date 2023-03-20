@@ -1,16 +1,20 @@
 from pathlib import Path
-from typing import List
+from typing import List, Tuple
 
 from dolphin import ps, stack
+from dolphin._background import NvidiaMemoryWatcher
 from dolphin._log import get_log, log_runtime
 from dolphin.interferogram import Network, VRTInterferogram
+from dolphin.utils import gpu_is_available
 
 from . import sequential, single
 from .config import Workflow
 
 
 @log_runtime
-def run(cfg: Workflow, debug: bool = False) -> List[VRTInterferogram]:
+def run(
+    cfg: Workflow, debug: bool = False
+) -> Tuple[List[VRTInterferogram], Path, Path]:
     """Run the displacement workflow on a stack of SLCs.
 
     Parameters
@@ -19,6 +23,17 @@ def run(cfg: Workflow, debug: bool = False) -> List[VRTInterferogram]:
         [`Workflow`][dolphin.workflows.config.Workflow] object with workflow parameters
     debug : bool, optional
         Enable debug logging, by default False.
+
+    Returns
+    -------
+    List[VRTInterferogram]
+        List of virtual interferograms created.
+    Path
+        Path the final compressed SLC file created.
+    Path
+        Path to temporal correlation file created.
+        In the case of a single phase linking step, this is the one tcorr file.
+        In the case of sequential phase linking, this is the average tcorr file.
     """
     logger = get_log(debug=debug)
     scratch_dir = cfg.outputs.scratch_directory
@@ -63,16 +78,16 @@ def run(cfg: Workflow, debug: bool = False) -> List[VRTInterferogram]:
     # #########################
     pl_path = cfg.phase_linking.directory
 
-    from dolphin._background import NvidiaMemoryWatcher
-
-    watcher = NvidiaMemoryWatcher() if cfg.worker_settings.gpu_enabled else None
-    existing_files = list(pl_path.glob("*.tif"))
-    if len(existing_files) > 0:
-        logger.info(f"Skipping EVD step, {len(existing_files)} files already exist")
+    watcher = NvidiaMemoryWatcher() if gpu_is_available() else None
+    phase_linked_slcs = list(pl_path.glob("2*.tif"))
+    if len(phase_linked_slcs) > 0:
+        logger.info(f"Skipping EVD step, {len(phase_linked_slcs)} files already exist")
+        comp_slc_file = next(pl_path.glob("compressed*tif"))
+        tcorr_file = next(pl_path.glob("tcorr*tif"))
     else:
         logger.info(f"Running sequential EMI step in {pl_path}")
         if cfg.workflow_name == "single":
-            single.run_evd_single(
+            phase_linked_slcs, comp_slc_file, tcorr_file = single.run_evd_single(
                 slc_vrt_file=vrt_stack.outfile,
                 output_folder=pl_path,
                 half_window=cfg.phase_linking.half_window.dict(),
@@ -86,7 +101,7 @@ def run(cfg: Workflow, debug: bool = False) -> List[VRTInterferogram]:
                 beta=cfg.phase_linking.beta,
             )
         else:
-            sequential.run_evd_sequential(
+            phase_linked_slcs, comp_slcs, tcorr_file = sequential.run_evd_sequential(
                 slc_vrt_file=vrt_stack.outfile,
                 output_folder=pl_path,
                 half_window=cfg.phase_linking.half_window.dict(),
@@ -99,6 +114,8 @@ def run(cfg: Workflow, debug: bool = False) -> List[VRTInterferogram]:
                 gpu_enabled=cfg.worker_settings.gpu_enabled,
                 beta=cfg.phase_linking.beta,
             )
+            comp_slc_file = comp_slcs[-1]
+
     if watcher:
         watcher.notify_finished()
 
@@ -110,7 +127,7 @@ def run(cfg: Workflow, debug: bool = False) -> List[VRTInterferogram]:
     if len(existing_ifgs) > 0:
         logger.info(f"Skipping interferogram step, {len(existing_ifgs)} exists")
     else:
-        phase_linked_slcs = sorted(pl_path.glob("20*.tif"))
+        # phase_linked_slcs = sorted(pl_path.glob("20*.tif"))
         logger.info(
             f"Creating virtual interferograms from {len(phase_linked_slcs)} files"
         )
@@ -132,4 +149,4 @@ def run(cfg: Workflow, debug: bool = False) -> List[VRTInterferogram]:
         if len(network) == 0:
             raise ValueError("No interferograms were created")
 
-    return network.ifg_list
+    return network.ifg_list, comp_slc_file, tcorr_file

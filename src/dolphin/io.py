@@ -216,6 +216,42 @@ def get_raster_nodata(filename: Filename, band: int = 1) -> Optional[float]:
     return nodata
 
 
+def get_raster_crs(filename: Filename) -> CRS:
+    """Get the CRS from a file.
+
+    Parameters
+    ----------
+    filename : Filename
+        Path to the file to load.
+
+    Returns
+    -------
+    CRS
+        CRS.
+    """
+    ds = gdal.Open(fspath(filename))
+    crs = CRS.from_wkt(ds.GetProjection())
+    return crs
+
+
+def get_raster_gt(filename: Filename) -> List[float]:
+    """Get the geotransform from a file.
+
+    Parameters
+    ----------
+    filename : Filename
+        Path to the file to load.
+
+    Returns
+    -------
+    Tuple[float, float, float, float, float, float]
+        Geotransform.
+    """
+    ds = gdal.Open(fspath(filename))
+    gt = ds.GetGeoTransform()
+    return gt
+
+
 def get_dtype(filename: Filename) -> np.dtype:
     """Get the data type from a file.
 
@@ -580,7 +616,7 @@ class EagerLoader(BackgroundReader):
         overlaps: Tuple[int, int] = (0, 0),
         skip_empty: bool = True,
         nodata_mask: Optional[ArrayLike] = None,
-        queue_size: int = 2,
+        queue_size: int = 1,
         timeout: float = _DEFAULT_TIMEOUT,
     ):
         super().__init__(nq=queue_size, timeout=timeout, name="EagerLoader")

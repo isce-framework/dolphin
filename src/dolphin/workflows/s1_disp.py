@@ -6,7 +6,7 @@ from typing import Dict, List, Optional
 from dolphin._log import get_log, log_runtime
 from dolphin.interferogram import VRTInterferogram
 
-from . import stitch_and_unwrap, wrapped_phase
+from . import OutputFormat, _product, stitch_and_unwrap, wrapped_phase
 from ._utils import group_by_burst
 from .config import Workflow
 
@@ -51,6 +51,7 @@ def run(cfg: Workflow, debug: bool = False, log_file: Optional[str] = None):
     # 1. Wrapped phase estimation
     # ###########################
     ifg_list: List[VRTInterferogram] = []
+    tcorr_list: List[Path] = []
     # Now for each burst, run the wrapped phase estimation
     for burst, burst_cfg in wrapped_phase_cfgs:
         msg = "Running wrapped phase estimation"
@@ -58,31 +59,46 @@ def run(cfg: Workflow, debug: bool = False, log_file: Optional[str] = None):
             msg += f" for burst {burst}"
         logger.info(msg)
         logger.debug(pformat(burst_cfg.dict()))
-        cur_ifg_list = wrapped_phase.run(burst_cfg, debug=debug)
+        cur_ifg_list, comp_slc, tcorr = wrapped_phase.run(burst_cfg, debug=debug)
         ifg_list.extend(cur_ifg_list)
+        tcorr_list.append(tcorr)
+
+    # TODO: store the compressed SLCs somewhere
+    # if cfg.outputs.store_compressed_slcs:
+    #     pass
 
     # ###################################
     # 2. Stitch and unwrap interferograms
     # ###################################
-    unwrapped_paths, conncomp_paths = stitch_and_unwrap.run(ifg_list, cfg, debug=debug)
+    unwrapped_paths, conncomp_paths, stitched_tcorr = stitch_and_unwrap.run(
+        ifg_list=ifg_list, tcorr_file_list=tcorr_list, cfg=cfg, debug=debug
+    )
 
     # ######################################
     # 3. Finalize the output as an HDF5 product
     # ######################################
-    # TODO: make the HDF5 product
     logger.info(
         f"Creating {len(unwrapped_paths), len(conncomp_paths)} outputs in"
         f" {cfg.outputs.output_directory}"
     )
-    for unw_p, cc_p in zip(unwrapped_paths, conncomp_paths):
-        # for now, just move the unwrapped results
-        #
-        # get all the associated header/conncomp files too
-        unw_new_name = cfg.outputs.output_directory / unw_p.name
-        cc_new_name = cfg.outputs.output_directory / cc_p.name
-        logger.info(f"Moving {unw_p} and {cc_p} into {cfg.outputs.output_directory}")
-        unw_p.rename(unw_new_name)
-        cc_p.rename(cc_new_name)
+    if cfg.outputs.output_format == OutputFormat.NETCDF:
+        for unw_p, cc_p in zip(unwrapped_paths, conncomp_paths):
+            output_name = cfg.outputs.output_directory / unw_p.with_suffix(".nc").name
+            _product.create_output_product(
+                unw_filename=unw_p,
+                conncomp_filename=cc_p,
+                tcorr_filename=stitched_tcorr,
+                # TODO: How am i going to create the output name?
+                # output_name=cfg.outputs.output_name,
+                output_name=output_name,
+                corrections={},
+            )
+    else:
+        _product._move_files_to_output_folder(
+            unwrapped_paths,
+            conncomp_paths,
+            cfg.outputs.output_directory,
+        )
 
 
 def _create_burst_cfg(

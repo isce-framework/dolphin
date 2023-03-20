@@ -7,7 +7,7 @@ References
     Geosciences (2022): 105291.
 """
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional, Tuple
 
 import numpy as np
 
@@ -38,7 +38,7 @@ def run_evd_single(
     max_bytes: float = 32e6,
     n_workers: int = 1,
     gpu_enabled: bool = True,
-):
+) -> Tuple[List[Path], Path, Path]:
     """Estimate wrapped phase for one ministack."""
     # TODO: extract common stuff between here and sequential
     output_folder = Path(output_folder)

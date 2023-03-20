@@ -205,7 +205,7 @@ class UnwrapOptions(BaseModel):
     """Options for unwrapping after wrapped phase estimation."""
 
     run_unwrap: bool = Field(
-        False,
+        True,
         description=(
             "Whether to run the unwrapping step after wrapped phase estimation."
         ),
