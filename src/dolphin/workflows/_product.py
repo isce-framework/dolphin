@@ -17,8 +17,8 @@ logger = get_log(__name__)
 
 BASE_GROUP = "/science/SENTINEL1"
 DISP_GROUP = f"{BASE_GROUP}/DISP"
-QUALITY_GROUP = f"{BASE_GROUP}/quality"
-CORRECTIONS_GROUP = f"{BASE_GROUP}/corrections"
+QUALITY_GROUP = f"{DISP_GROUP}/quality"
+CORRECTIONS_GROUP = f"{DISP_GROUP}/corrections"
 GLOBAL_ATTRS = dict(
     Conventions="CF-1.8",
     contact="operaops@jpl.nasa.gov",
