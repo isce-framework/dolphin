@@ -35,18 +35,18 @@ def test_ps_options_defaults(tmpdir):
     with tmpdir.as_cwd():
         pso = config.PsOptions()
         assert pso.amp_dispersion_threshold == 0.25
-        assert pso.directory == Path("PS")
-        assert pso.output_file == Path("PS/ps_pixels.tif")
-        assert pso.amp_dispersion_file == Path("PS/amp_dispersion.tif")
-        assert pso.amp_mean_file == Path("PS/amp_mean.tif")
+        assert pso._directory == Path("PS")
+        assert pso._output_file == Path("PS/ps_pixels.tif")
+        assert pso._amp_dispersion_file == Path("PS/amp_dispersion.tif")
+        assert pso._amp_mean_file == Path("PS/amp_mean.tif")
 
 
 def test_phase_linking_options_defaults(tmpdir):
     with tmpdir.as_cwd():
         opts = config.PhaseLinkingOptions()
         assert opts.ministack_size == 15
-        assert opts.directory == Path("linked_phase")
         assert opts.half_window == config.HalfWindow()
+        assert opts._directory == Path("linked_phase")
 
 
 def test_phase_linking_options_bad_size(tmpdir):
@@ -70,7 +70,7 @@ def test_unwrap_options_defaults(tmpdir):
         assert opts.unwrap_method == config.UnwrapMethod.SNAPHU
         assert opts.tiles == [1, 1]
         assert opts.init_method == "mcf"
-        assert opts.directory == Path("unwrap")
+        assert opts._directory == Path("unwrap")
 
 
 def test_outputs_defaults(tmpdir):
@@ -286,15 +286,17 @@ def test_config_defaults(dir_with_1_slc):
 
     # Check the defaults for the sub-configs, where the folders
     # should have been moved to the scratch directory
-    assert c.ps_options.directory == Path("scratch/PS").resolve()
-    assert c.ps_options.amp_mean_file == Path("scratch/PS/amp_mean.tif").resolve()
+    assert c.ps_options._directory == Path("scratch/PS").resolve()
+    assert c.ps_options._amp_mean_file == Path("scratch/PS/amp_mean.tif").resolve()
 
     p = Path("scratch/PS/amp_dispersion.tif")
-    assert c.ps_options.amp_dispersion_file == p.resolve()
+    assert c.ps_options._amp_dispersion_file == p.resolve()
 
-    assert c.phase_linking.directory == Path("scratch/linked_phase").resolve()
+    assert c.phase_linking._directory == Path("scratch/linked_phase").resolve()
 
-    assert c.interferogram_network.directory == Path("scratch/interferograms").resolve()
+    assert (
+        c.interferogram_network._directory == Path("scratch/interferograms").resolve()
+    )
     assert c.interferogram_network.reference_idx == 0
     assert (
         c.interferogram_network.network_type
@@ -304,7 +306,7 @@ def test_config_defaults(dir_with_1_slc):
     assert c.interferogram_network.max_bandwidth is None
     assert c.interferogram_network.max_temporal_baseline is None
 
-    assert c.unwrap_options.directory == Path("scratch/unwrap").resolve()
+    assert c.unwrap_options._directory == Path("scratch/unwrap").resolve()
 
     now = datetime.utcnow()
     assert (now - c.creation_time_utc).seconds == 0
@@ -317,10 +319,10 @@ def test_config_create_dir_tree(tmpdir, slc_file_list_nc):
     with tmpdir.as_cwd():
         c = config.Workflow(inputs={"cslc_file_list": [fname0], "subdataset": "data"})
         c.create_dir_tree()
-        assert c.ps_options.directory.exists()
-        assert c.interferogram_network.directory.exists()
-        assert c.phase_linking.directory.exists()
-        assert c.unwrap_options.directory.exists()
+        assert c.ps_options._directory.exists()
+        assert c.interferogram_network._directory.exists()
+        assert c.phase_linking._directory.exists()
+        assert c.unwrap_options._directory.exists()
 
         # Check that the scratch directory is created
         assert Path("scratch").exists()

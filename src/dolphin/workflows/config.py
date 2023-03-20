@@ -50,7 +50,7 @@ def _move_file_in_dir(path: PathOrStr, values: dict) -> Path:
     Used for validation in different workflow steps' outputs.
     """
     p = Path(path)
-    d = Path(values.get("directory", "."))
+    d = Path(values.get("_directory", "."))
     if p.parent != d:
         return d / p.name
     else:
@@ -60,22 +60,10 @@ def _move_file_in_dir(path: PathOrStr, values: dict) -> Path:
 class PsOptions(BaseModel):
     """Options for the PS pixel selection portion of the workflow."""
 
-    directory: Path = Field(
-        Path("PS"),
-        description="Sub-directory name to store PS pixel selection results.",
-    )
-    output_file: Path = Field(
-        Path("ps_pixels.tif"),
-        description="Output file name for PS pixel selection results.",
-    )
-    amp_dispersion_file: Path = Field(
-        Path("amp_dispersion.tif"),
-        description="Output file name for amplitude dispersion results.",
-    )
-    amp_mean_file: Path = Field(
-        Path("amp_mean.tif"),
-        description="Output file name for mean amplitude results.",
-    )
+    _directory: Path = PrivateAttr(Path("PS"))
+    _output_file: Path = PrivateAttr(Path("PS/ps_pixels.tif"))
+    _amp_dispersion_file: Path = PrivateAttr(Path("PS/amp_dispersion.tif"))
+    _amp_mean_file: Path = PrivateAttr(Path("PS/amp_mean.tif"))
 
     amp_dispersion_threshold: float = Field(
         0.25,
@@ -85,15 +73,6 @@ class PsOptions(BaseModel):
 
     class Config:
         extra = Extra.forbid  # raise error if extra fields passed in
-
-    # validators: Check directory exists, and that outputs are within directory
-    _move_in_dir = validator(
-        "output_file",
-        "amp_dispersion_file",
-        "amp_mean_file",
-        always=True,
-        allow_reuse=True,
-    )(_move_file_in_dir)
 
 
 class HalfWindow(BaseModel):
@@ -115,10 +94,7 @@ class HalfWindow(BaseModel):
 class PhaseLinkingOptions(BaseModel):
     """Configurable options for wrapped phase estimation."""
 
-    directory: Path = Field(
-        Path("linked_phase"),
-        description="Sub-directory name to store wrapped phase estimation results.",
-    )
+    _directory: Path = PrivateAttr(Path("linked_phase"))
     ministack_size: int = Field(
         15, description="Size of the ministack for sequential estimator.", gt=1
     )
@@ -140,10 +116,7 @@ class PhaseLinkingOptions(BaseModel):
 class InterferogramNetwork(BaseModel):
     """Options to determine the type of network for interferogram formation."""
 
-    directory: Path = Field(
-        Path("interferograms"),
-        description="Sub-directory name to store interferogram results.",
-    )
+    _directory: Path = PrivateAttr(Path("interferograms"))
 
     reference_idx: Optional[int] = Field(
         None,
@@ -210,10 +183,7 @@ class UnwrapOptions(BaseModel):
             "Whether to run the unwrapping step after wrapped phase estimation."
         ),
     )
-    directory: Path = Field(
-        Path("unwrap"),
-        description="Sub-directory name to store unwrapping results.",
-    )
+    _directory: Path = PrivateAttr(Path("unwrap"))
     unwrap_method: UnwrapMethod = UnwrapMethod.SNAPHU
     tiles: List[int] = Field(
         [1, 1],
@@ -417,7 +387,7 @@ class Outputs(BaseModel):
     # validators
     @validator("output_directory", "scratch_directory", always=True)
     def _dir_is_absolute(cls, v):
-        return v.absolute()
+        return v.resolve()
 
     @validator("output_resolution", "strides", pre=True, always=True)
     def _check_resolution(cls, v):
@@ -491,46 +461,6 @@ class Workflow(BaseModel):
     class Config:
         extra = Extra.forbid  # raise error if extra fields passed in
 
-    # validators
-    @root_validator
-    def _move_dirs_inside_scratch(cls, values):
-        """Ensure outputs from workflow steps are within scratch directory."""
-        scratch_dir = values["outputs"].scratch_directory
-        # Save all directories as absolute paths
-        scratch_dir = scratch_dir.resolve(strict=False)
-
-        # For each workflow step that has an output folder, move it inside
-        # the scratch directory (if it's not already inside).
-        # They may already be inside if we're loading from a json/yaml file.
-        ps_opts = values["ps_options"]
-        if not ps_opts.directory.parent == scratch_dir:
-            ps_opts.directory = scratch_dir / ps_opts.directory
-        ps_opts.directory = ps_opts.directory.resolve(strict=False)
-
-        if not ps_opts.amp_dispersion_file.parent.parent == scratch_dir:
-            ps_opts.amp_dispersion_file = scratch_dir / ps_opts.amp_dispersion_file
-        if not ps_opts.amp_mean_file.parent.parent == scratch_dir:
-            ps_opts.amp_mean_file = scratch_dir / ps_opts.amp_mean_file
-        if not ps_opts.output_file.parent.parent == scratch_dir:
-            ps_opts.output_file = scratch_dir / ps_opts.output_file
-
-        pl_opts = values["phase_linking"]
-        if not pl_opts.directory.parent == scratch_dir:
-            pl_opts.directory = scratch_dir / pl_opts.directory
-        pl_opts.directory = pl_opts.directory.resolve(strict=False)
-
-        ifg_opts = values["interferogram_network"]
-        if not ifg_opts.directory.parent == scratch_dir:
-            ifg_opts.directory = scratch_dir / ifg_opts.directory
-        ifg_opts.directory = ifg_opts.directory.resolve(strict=False)
-
-        unw_opts = values["unwrap_options"]
-        if not unw_opts.directory.parent == scratch_dir:
-            unw_opts.directory = scratch_dir / unw_opts.directory
-        unw_opts.directory = unw_opts.directory.resolve(strict=False)
-
-        return values
-
     # Extra model exporting options beyond .dict() or .json()
     def to_yaml(self, output_path: Union[PathOrStr, TextIO], with_comments=True):
         """Save workflow configuration as a yaml file.
@@ -597,15 +527,41 @@ class Workflow(BaseModel):
         """After validation, set up properties for use during workflow run."""
         super().__init__(**data)
 
+        # Ensure outputs from workflow steps are within scratch directory.
+        scratch_dir = self.outputs.scratch_directory
+        # Save all directories as absolute paths
+        scratch_dir = scratch_dir.resolve(strict=False)
+
+        # For each workflow step that has an output folder, move it inside
+        # the scratch directory (if it's not already inside).
+        # They may already be inside if we're loading from a json/yaml file.
+        for step in [
+            "ps_options",
+            "phase_linking",
+            "interferogram_network",
+            "unwrap_options",
+        ]:
+            opts = getattr(self, step)
+            if not opts._directory.parent == scratch_dir:
+                opts._directory = scratch_dir / opts._directory
+            opts._directory = opts._directory.resolve(strict=False)
+
         # Track the directories that need to be created at start of workflow
         self._directory_list = [
             self.outputs.scratch_directory,
             self.outputs.output_directory,
-            self.ps_options.directory,
-            self.phase_linking.directory,
-            self.interferogram_network.directory,
-            self.unwrap_options.directory,
+            self.ps_options._directory,
+            self.phase_linking._directory,
+            self.interferogram_network._directory,
+            self.unwrap_options._directory,
         ]
+        # Add the output PS files we'll create to the `PS` directory, making
+        # sure they're inside the scratch directory
+        ps_opts = self.ps_options
+        scratch_dir = self.outputs.scratch_directory
+        ps_opts._amp_dispersion_file = scratch_dir / ps_opts._amp_dispersion_file
+        ps_opts._amp_mean_file = scratch_dir / ps_opts._amp_mean_file
+        ps_opts._output_file = scratch_dir / ps_opts._output_file
 
     def create_dir_tree(self, debug=False):
         """Create the directory tree for the workflow."""
