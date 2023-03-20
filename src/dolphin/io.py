@@ -234,6 +234,24 @@ def get_raster_crs(filename: Filename) -> CRS:
     return crs
 
 
+def get_raster_gt(filename: Filename) -> List[float]:
+    """Get the geotransform from a file.
+
+    Parameters
+    ----------
+    filename : Filename
+        Path to the file to load.
+
+    Returns
+    -------
+    Tuple[float, float, float, float, float, float]
+        Geotransform.
+    """
+    ds = gdal.Open(fspath(filename))
+    gt = ds.GetGeoTransform()
+    return gt
+
+
 def get_dtype(filename: Filename) -> np.dtype:
     """Get the data type from a file.
 

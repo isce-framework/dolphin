@@ -70,7 +70,7 @@ def run(cfg: Workflow, debug: bool = False, log_file: Optional[str] = None):
     # ###################################
     # 2. Stitch and unwrap interferograms
     # ###################################
-    unwrapped_paths, conncomp_paths = stitch_and_unwrap.run(
+    unwrapped_paths, conncomp_paths, stitched_tcorr = stitch_and_unwrap.run(
         ifg_list=ifg_list, tcorr_file_list=tcorr_list, cfg=cfg, debug=debug
     )
 
@@ -87,6 +87,7 @@ def run(cfg: Workflow, debug: bool = False, log_file: Optional[str] = None):
             _product.create_output_product(
                 unw_filename=unw_p,
                 conncomp_filename=cc_p,
+                tcorr_filename=stitched_tcorr,
                 # TODO: How am i going to create the output name?
                 # output_name=cfg.outputs.output_name,
                 output_name=output_name,

@@ -14,7 +14,7 @@ def run(
     tcorr_file_list: Sequence[Path],
     cfg: Workflow,
     debug: bool = False,
-) -> Tuple[List[Path], List[Path]]:
+) -> Tuple[List[Path], List[Path], Path]:
     """Run the displacement workflow on a stack of SLCs.
 
     Parameters
@@ -62,7 +62,7 @@ def run(
     # #####################################
     if not cfg.unwrap_options.run_unwrap:
         logger.info("Skipping unwrap step")
-        return [], []
+        return [], [], stitched_cor_file
 
     logger.info(f"Unwrapping interferograms in {stitched_ifg_dir}")
     # Compute the looks for the unwrapping
@@ -86,4 +86,4 @@ def run(
     # ####################
     # TODO: Determine format for the tropospheric/ionospheric phase correction
 
-    return unwrapped_paths, conncomp_paths
+    return unwrapped_paths, conncomp_paths, stitched_cor_file

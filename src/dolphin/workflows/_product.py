@@ -1,23 +1,23 @@
 """Module for creating the OPERA output product in NetCDF format."""
-from os import fspath
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import h5py
 import numpy as np
 import pyproj
 from numpy.typing import ArrayLike
-from osgeo import gdal
 
+from dolphin import io
 from dolphin._log import get_log
 from dolphin._types import Filename
-from dolphin.io import DEFAULT_HDF5_OPTIONS
 
 logger = get_log(__name__)
 
 
 BASE_GROUP = "/science/SENTINEL1"
 DISP_GROUP = f"{BASE_GROUP}/DISP"
+QUALITY_GROUP = f"{BASE_GROUP}/quality"
 CORRECTIONS_GROUP = f"{BASE_GROUP}/corrections"
 GLOBAL_ATTRS = dict(
     Conventions="CF-1.8",
@@ -27,17 +27,131 @@ GLOBAL_ATTRS = dict(
     reference_document="TBD",
     title="OPERA L3_DISP_S1 Product",
 )
+
 GRID_MAPPING_DSET = "spatial_ref"
 # Convert chunks to a tuple or h5py errors
-HDF5_OPTS = DEFAULT_HDF5_OPTIONS.copy()
+HDF5_OPTS = io.DEFAULT_HDF5_OPTIONS.copy()
 HDF5_OPTS["chunks"] = tuple(HDF5_OPTS["chunks"])  # type: ignore
+
+
+# Make a class holding the dataset names/attrs
+# so we can use it in the create_dataset calls
+@dataclass
+class DatasetInfo:
+    """Convenience class to create a dataset in the output product."""
+
+    name: str
+    data: ArrayLike
+    description: str
+    fillvalue: Optional[float] = None
+    attrs: Dict[str, Any] = field(default_factory=dict)
+    xy_scales: Optional[Tuple[h5py.Dataset, h5py.Dataset]] = None
+
+    def __post_init__(self):
+        self.attrs.update(long_name=self.description)
+        if self.fillvalue is not None:
+            self.attrs["_FillValue"] = self.fillvalue
+
+    def create(
+        self,
+        group: h5py.Group,
+    ):
+        """Create the dataset in the given h5py.Group."""
+        dset = group.create_dataset(
+            self.name,
+            data=self.data,
+            fillvalue=self.fillvalue,
+            **HDF5_OPTS,
+        )
+        if self.xy_scales is not None:
+            self._attach_scales(dset, *self.xy_scales)
+        dset.attrs.update(self.attrs)
+
+    def _attach_scales(
+        self, dset: h5py.Dataset, x_ds: h5py.Dataset, y_ds: h5py.Dataset
+    ):
+        # Attach the X/Y coordinates
+        self.attrs["grid_mapping"] = GRID_MAPPING_DSET
+        dset.dims[0].attach_scale(y_ds)
+        dset.dims[1].attach_scale(x_ds)
+
+
+class ConnCompDatasetInfo(DatasetInfo):
+    """Class for the connected components dataset."""
+
+    def __init__(self, data: ArrayLike, xy_scales: Tuple[h5py.Dataset, h5py.Dataset]):
+        super().__init__(
+            name="connected_components",
+            data=data,
+            description="Connected components of the unwrapped phase",
+            fillvalue=0,
+            attrs=dict(units="unitless"),
+            xy_scales=xy_scales,
+        )
+
+
+class UnwrappedDatasetInfo(DatasetInfo):
+    """Class for the unwrapped phase dataset."""
+
+    def __init__(self, data: ArrayLike, xy_scales: Tuple[h5py.Dataset, h5py.Dataset]):
+        super().__init__(
+            name="unwrapped_phase",
+            data=data,
+            description="Unwrapped phase",
+            fillvalue=np.nan,
+            attrs=dict(units="radians"),
+            xy_scales=xy_scales,
+        )
+
+
+class TcorrDatasetInfo(DatasetInfo):
+    """Class for the temporal correlation dataset."""
+
+    def __init__(self, data: ArrayLike, xy_scales: Tuple[h5py.Dataset, h5py.Dataset]):
+        super().__init__(
+            name="temporal_correlation",
+            data=data,
+            description="Temporal correlation of phase inversion",
+            fillvalue=np.nan,
+            attrs=dict(units="unitless"),
+            xy_scales=xy_scales,
+        )
+
+
+class TropoDatasetInfo(DatasetInfo):
+    """Class for the tropospheric delay dataset."""
+
+    def __init__(self, data: ArrayLike, xy_scales: Tuple[h5py.Dataset, h5py.Dataset]):
+        super().__init__(
+            name="tropospheric_delay",
+            data=data,
+            description="Tropospheric phase delay used to correct the unwrapped phase",
+            fillvalue=np.nan,
+            attrs=dict(units="radians"),
+            xy_scales=xy_scales,
+        )
+
+
+class IonosphereDatasetInfo(DatasetInfo):
+    """Class for the ionospheric delay dataset."""
+
+    def __init__(self, data: ArrayLike, xy_scales: Tuple[h5py.Dataset, h5py.Dataset]):
+        super().__init__(
+            name="ionospheric_delay",
+            data=data,
+            description="Ionospheric phase delay used to correct the unwrapped phase",
+            fillvalue=np.nan,
+            attrs=dict(units="radians"),
+            xy_scales=xy_scales,
+        )
 
 
 def create_output_product(
     unw_filename: Filename,
     conncomp_filename: Filename,
+    tcorr_filename: Filename,
     output_name: Filename,
-    corrections: Optional[Dict[str, ArrayLike]] = None,
+    corrections: Dict[str, ArrayLike] = {},
 ):
     """Create the OPERA output product in NetCDF format.
 
@@ -47,32 +161,25 @@ def create_output_product(
         The path to the input unwrapped phase image.
     conncomp_filename : Filename
         The path to the input connected components image.
+    tcorr_filename : Filename
+        The path to the input temporal correlation image.
     output_name : Filename, optional
         The path to the output NetCDF file, by default "output.nc"
     corrections : Dict[str, ArrayLike], optional
         A dictionary of corrections to write to the output file, by default None
     """
     # Read the Geotiff file and its metadata
-    displacement_ds = gdal.Open(fspath(unw_filename))
-    gt = displacement_ds.GetGeoTransform()
-    crs = pyproj.CRS.from_wkt(displacement_ds.GetProjection())
-    unw_arr = displacement_ds.ReadAsArray()
-    displacement_ds = None
+    crs = io.get_raster_crs(unw_filename)
+    gt = io.get_raster_gt(unw_filename)
+    unw_arr = io.load_gdal(unw_filename)
+
+    conncomp_arr = io.load_gdal(conncomp_filename)
+    tcorr_arr = io.load_gdal(tcorr_filename)
 
     # Get the nodata mask (which for snaphu is 0)
     mask = unw_arr == 0
     # Set to NaN for final output
     unw_arr[mask] = np.nan
-
-    conncomp_ds = gdal.Open(fspath(conncomp_filename))
-    conncomp_arr = conncomp_ds.ReadAsArray()
-    conncomp_ds = None
-    # the conncomp nodata is 0
-
-    fill_values = {
-        "unwrapped_phase": np.nan,
-        "connected_components": 0,
-    }
 
     with h5py.File(output_name, "w") as f:
         # Create the NetCDF file
@@ -80,6 +187,7 @@ def create_output_product(
 
         # Create the '/science/SENTINEL1/DISP/grids/displacement' group
         displacement_group = f.create_group(DISP_GROUP)
+        quality_group = f.create_group(QUALITY_GROUP)
 
         # Set up the grid mapping variable
         _create_grid_mapping(displacement_group, crs, gt)
@@ -88,23 +196,20 @@ def create_output_product(
         x_ds, y_ds = _create_xy_dsets(displacement_group, gt, unw_arr.shape)
 
         # Write the displacement array / conncomp arrays
-        for img, (name, fv) in zip([unw_arr, conncomp_arr], fill_values.items()):
-            dset = displacement_group.create_dataset(
-                name,
-                data=img,
-                fillvalue=fv,
-                **HDF5_OPTS,
-            )
-            dset.attrs["grid_mapping"] = GRID_MAPPING_DSET
-            # # Attach the X/Y coordinates
-            dset.dims[0].attach_scale(y_ds)
-            dset.dims[1].attach_scale(x_ds)
+        UnwrappedDatasetInfo(unw_arr, (x_ds, y_ds)).create(displacement_group)
+
+        ConnCompDatasetInfo(conncomp_arr, (x_ds, y_ds)).create(quality_group)
+        TcorrDatasetInfo(tcorr_arr, (x_ds, y_ds)).create(quality_group)
 
         # Create the '/science/SENTINEL1/DISP/corrections' group
         corrections_group = f.create_group(CORRECTIONS_GROUP)
-        if corrections:
-            # Write the tropospheric/ionospheric correction images (if they exist)
-            _create_correction_dsets(corrections_group, corrections)
+        ionosphere = corrections.get("ionosphere")
+        if ionosphere is not None:
+            IonosphereDatasetInfo(ionosphere, (x_ds, y_ds)).create(corrections_group)
+
+        troposphere = corrections.get("troposphere")
+        if troposphere is not None:
+            TropoDatasetInfo(troposphere, (x_ds, y_ds)).create(corrections_group)
 
 
 def _create_xy(
@@ -152,26 +257,6 @@ def _create_grid_mapping(group, crs: pyproj.CRS, gt: List[float]) -> h5py.Datase
     gt_string = " ".join([str(x) for x in gt])
     dset.attrs["GeoTransform"] = gt_string
     return dset
-
-
-def _create_correction_dsets(
-    corrections_group: h5py.Group, corrections: Dict[str, ArrayLike]
-):
-    """Create datasets for the tropospheric/ionospheric/other corrections."""
-    troposphere = corrections.get("troposphere")
-    if troposphere:
-        troposphere_dset = corrections_group.create_dataset(
-            "troposphere", data=troposphere, **HDF5_OPTS
-        )
-        troposphere_dset.attrs["grid_mapping"] = "crs"
-
-    ionosphere = corrections["ionosphere"]
-    if ionosphere:
-        # Write the ionosphere correction image
-        ionosphere_dset = corrections_group.create_dataset(
-            "ionosphere", data=ionosphere, **HDF5_OPTS
-        )
-        ionosphere_dset.attrs["grid_mapping"] = "crs"
 
 
 def _move_files_to_output_folder(
