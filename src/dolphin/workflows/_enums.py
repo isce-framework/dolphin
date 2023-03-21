@@ -2,7 +2,6 @@ from enum import Enum
 
 __all__ = [
     "WorkflowName",
-    "OutputFormat",
     "UnwrapMethod",
     "InterferogramNetworkType",
 ]
@@ -13,14 +12,6 @@ class WorkflowName(str, Enum):
 
     STACK = "stack"
     SINGLE = "single"
-
-
-class OutputFormat(str, Enum):
-    """Raster format for the final workflow output."""
-
-    ENVI = "ENVI"
-    GTIFF = "GTiff"
-    NETCDF = "NetCDF"
 
 
 class UnwrapMethod(str, Enum):

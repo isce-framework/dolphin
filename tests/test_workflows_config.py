@@ -77,7 +77,6 @@ def test_outputs_defaults(tmpdir):
     with tmpdir.as_cwd():
         opts = config.Outputs()
         assert opts.output_directory == Path("output").resolve()
-        assert opts.output_format == config.OutputFormat.NETCDF
         assert opts.scratch_directory == Path("scratch").resolve()
         assert opts.output_resolution is None
         assert opts.strides == {"x": 1, "y": 1}

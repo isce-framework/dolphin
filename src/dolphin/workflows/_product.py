@@ -1,5 +1,4 @@
 """Module for creating the OPERA output product in NetCDF format."""
-from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import h5py
@@ -275,15 +274,3 @@ def _create_grid_mapping(group, crs: pyproj.CRS, gt: List[float]) -> h5py.Datase
     gt_string = " ".join([str(x) for x in gt])
     dset.attrs["GeoTransform"] = gt_string
     return dset
-
-
-def _move_files_to_output_folder(
-    unwrapped_paths: List[Path], conncomp_paths: List[Path], output_directory: Path
-):
-    for unw_p, cc_p in zip(unwrapped_paths, conncomp_paths):
-        # get all the associated header/conncomp files too
-        unw_new_name = output_directory / unw_p.name
-        cc_new_name = output_directory / cc_p.name
-        logger.info(f"Moving {unw_p} and {cc_p} into {output_directory}")
-        unw_p.rename(unw_new_name)
-        cc_p.rename(cc_new_name)

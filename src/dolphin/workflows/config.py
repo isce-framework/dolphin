@@ -25,7 +25,7 @@ from dolphin._log import get_log
 from dolphin.io import DEFAULT_HDF5_OPTIONS, DEFAULT_TIFF_OPTIONS, format_nc_filename
 from dolphin.utils import get_dates, sort_files_by_date
 
-from ._enums import InterferogramNetworkType, OutputFormat, UnwrapMethod, WorkflowName
+from ._enums import InterferogramNetworkType, UnwrapMethod, WorkflowName
 
 gdal.UseExceptions()
 PathOrStr = Union[Path, str]
@@ -212,7 +212,7 @@ class WorkerSettings(BaseSettings, extra=Extra.forbid):
         }
 
 
-class Inputs(BaseModel, extra=Extra.forbid):
+class InputFiles(BaseModel, extra=Extra.forbid):
     """Options specifying input datasets for workflow."""
 
     cslc_file_list: List[Path] = Field(
@@ -222,6 +222,9 @@ class Inputs(BaseModel, extra=Extra.forbid):
             "containing list of CSLC files."
         ),
     )
+
+
+class InputMeta(BaseModel, extra=Extra.forbid):
     subdataset: Optional[str] = Field(
         None,
         description=(
@@ -242,9 +245,6 @@ class Inputs(BaseModel, extra=Extra.forbid):
             " 0 for no data/invalid, and 1 for data."
         ),
     )
-
-    class Config:
-        schema_extra = {"required": ["cslc_file_list"]}
 
     # validators
     @validator("cslc_file_list", pre=True)
@@ -324,7 +324,6 @@ class Inputs(BaseModel, extra=Extra.forbid):
 class Outputs(BaseModel, extra=Extra.forbid):
     """Options for the output format/compressions."""
 
-    output_format: OutputFormat = OutputFormat.NETCDF
     scratch_directory: Path = Field(
         Path("scratch"),
         description="Name of sub-directory to use for scratch files",
@@ -399,14 +398,19 @@ class Outputs(BaseModel, extra=Extra.forbid):
 
 
 class Workflow(BaseModel, extra=Extra.forbid):
-    """Configuration for the workflow.
-
-    Required fields are in `Inputs`, where you must specify `cslc_file_list`.
-    """
+    """Configuration for the workflow."""
 
     workflow_name: WorkflowName = WorkflowName.STACK
 
-    inputs: Inputs
+    cslc_file_list: List[Path] = Field(
+        default_factory=list,
+        description=(
+            "List of CSLC files, or newline-delimited file "
+            "containing list of CSLC files."
+        ),
+    )
+
+    input_meta: InputMeta = Field(default_factory=InputMeta)
     outputs: Outputs = Field(default_factory=Outputs)
 
     # Options for each step in the workflow
@@ -430,6 +434,9 @@ class Workflow(BaseModel, extra=Extra.forbid):
     # Stores the list of directories to be created by the workflow
     _directory_list: List[Path] = PrivateAttr(default_factory=list)
     _date_list: List[Union[date, List[date]]] = PrivateAttr(default_factory=list)
+
+    class Config:
+        schema_extra = {"required": ["cslc_file_list"]}
 
     # Extra model exporting options beyond .dict() or .json()
     def to_yaml(self, output_path: Union[PathOrStr, TextIO], with_comments=True):
@@ -491,7 +498,7 @@ class Workflow(BaseModel, extra=Extra.forbid):
         """
         # The .construct is a pydantic method to disable validation
         # https://docs.pydantic.dev/usage/models/#creating-models-without-validation
-        cls(inputs=Inputs.construct()).to_yaml(output_path, with_comments=True)
+        cls.construct().to_yaml(output_path, with_comments=True)
 
     def __init__(self, **data):
         """After validation, set up properties for use during workflow run."""
