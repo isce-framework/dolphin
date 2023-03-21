@@ -38,8 +38,8 @@ def create_config(
 
     cfg = Workflow(
         workflow_name=workflow_name,
-        inputs=dict(
-            cslc_file_list=slc_files,
+        cslc_file_list=slc_files,
+        input_meta=dict(
             mask_files=mask_files,
             subdataset=subdataset,
         ),

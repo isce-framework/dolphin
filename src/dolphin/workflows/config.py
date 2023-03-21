@@ -173,7 +173,7 @@ class UnwrapOptions(BaseModel):
     )
 
 
-class WorkerSettings(BaseSettings, extra=Extra.forbid):
+class WorkerSettings(BaseSettings):
     """Settings configurable based on environment variables."""
 
     gpu_enabled: bool = Field(
@@ -205,6 +205,7 @@ class WorkerSettings(BaseSettings, extra=Extra.forbid):
     class Config:
         """Pydantic class configuration for BaseSettings."""
 
+        extra = Extra.forbid
         # https://docs.pydantic.dev/usage/settings/#parsing-environment-variable-values
         env_prefix = "dolphin_"  # e.g. DOLPHIN_N_WORKERS=4 for n_workers
         fields = {
@@ -246,43 +247,6 @@ class InputMeta(BaseModel, extra=Extra.forbid):
         ),
     )
 
-    # validators
-    @validator("cslc_file_list", pre=True)
-    def _check_input_file_list(cls, v):
-        if v is None:
-            return []
-        if isinstance(v, (str, Path)):
-            v_path = Path(v)
-            # Check if it's a newline-delimited list of input files
-            if v_path.exists() and v_path.is_file():
-                filenames = [Path(f) for f in v_path.read_text().splitlines()]
-                # If given as relative paths, make them relative to the file
-                parent = v_path.parent
-                return [parent / f if not f.is_absolute() else f for f in filenames]
-            else:
-                raise ValueError(
-                    f"Input file list {v_path} does not exist or is not a file."
-                )
-
-        return [Path(f) for f in v]
-
-    @validator("subdataset", pre=True, always=True)
-    def _check_for_opera(cls, v, values):
-        cslc_file_list = values.get("cslc_file_list")
-        # if we're not dealing with all OPERA files, just return whatever they gave
-        if any(re.search(OPERA_BURST_RE, str(f)) is None for f in cslc_file_list):
-            return v
-        # Here we're dealing with all OPERA files, so we need to set the subdataset
-        if v is None:
-            # Assume that the user forgot to set the subdataset, and set it to the
-            # default OPERA dataset name
-            logger.info(
-                "CSLC files look like OPERA files, setting subdataset to"
-                f" {OPERA_DATASET_NAME}."
-            )
-            return OPERA_DATASET_NAME
-        return v
-
     @validator("mask_files", pre=True)
     def _check_mask_files(cls, v):
         if isinstance(v, (str, Path)):
@@ -291,34 +255,6 @@ class InputMeta(BaseModel, extra=Extra.forbid):
         elif v is None:
             return []
         return [Path(f) for f in v]
-
-    @root_validator
-    def _check_slc_files_exist(cls, values):
-        file_list = values.get("cslc_file_list")
-        date_fmt = values.get("cslc_date_fmt")
-        if not file_list:
-            raise ValueError("Must specify list of input SLC files.")
-
-        # Filter out files that don't have dates in the filename
-        file_matching_date = [Path(f) for f in file_list if get_dates(f, fmt=date_fmt)]
-        if len(file_matching_date) < len(file_list):
-            raise ValueError(
-                f"Found {len(file_matching_date)} files with dates in the filename"
-                f" out of {len(file_list)} files."
-            )
-
-        ext = file_list[0].suffix
-        # If they're HDF5/NetCDF files, we need to check that the subdataset exists
-        if ext in [".h5", ".nc"]:
-            subdataset = values.get("subdataset")
-            # gdal formatting function will raise an error if subdataset doesn't exist
-            for f in file_list:
-                format_nc_filename(f, subdataset)
-
-        # Coerce the file_list to a sorted list of absolute Path objects
-        file_list, _ = sort_files_by_date(file_list, file_date_fmt=date_fmt)
-        values["cslc_file_list"] = [Path(f).resolve() for f in file_list]
-        return values
 
 
 class Outputs(BaseModel, extra=Extra.forbid):
@@ -397,11 +333,12 @@ class Outputs(BaseModel, extra=Extra.forbid):
         return strides
 
 
-class Workflow(BaseModel, extra=Extra.forbid):
+class Workflow(BaseModel):
     """Configuration for the workflow."""
 
     workflow_name: WorkflowName = WorkflowName.STACK
 
+    input_meta: InputMeta = Field(default_factory=InputMeta)
     cslc_file_list: List[Path] = Field(
         default_factory=list,
         description=(
@@ -409,8 +346,6 @@ class Workflow(BaseModel, extra=Extra.forbid):
             "containing list of CSLC files."
         ),
     )
-
-    input_meta: InputMeta = Field(default_factory=InputMeta)
     outputs: Outputs = Field(default_factory=Outputs)
 
     # Options for each step in the workflow
@@ -436,7 +371,74 @@ class Workflow(BaseModel, extra=Extra.forbid):
     _date_list: List[Union[date, List[date]]] = PrivateAttr(default_factory=list)
 
     class Config:
+        extra = Extra.forbid
         schema_extra = {"required": ["cslc_file_list"]}
+
+    # validators
+    @validator("cslc_file_list", pre=True)
+    def _check_input_file_list(cls, v):
+        if v is None:
+            return []
+        if isinstance(v, (str, Path)):
+            v_path = Path(v)
+            # Check if it's a newline-delimited list of input files
+            if v_path.exists() and v_path.is_file():
+                filenames = [Path(f) for f in v_path.read_text().splitlines()]
+                # If given as relative paths, make them relative to the file
+                parent = v_path.parent
+                return [parent / f if not f.is_absolute() else f for f in filenames]
+            else:
+                raise ValueError(
+                    f"Input file list {v_path} does not exist or is not a file."
+                )
+
+        return [Path(f) for f in v]
+
+    @staticmethod
+    def _is_opera_file_list(cslc_file_list):
+        return all(
+            re.search(OPERA_BURST_RE, str(f)) is not None for f in cslc_file_list
+        )
+
+    @root_validator
+    def _check_slc_files_exist(cls, values):
+        # import ipdb
+        # ipdb.set_trace()
+        file_list = values.get("cslc_file_list")
+        if not file_list:
+            raise ValueError("Must specify list of input SLC files.")
+
+        input_meta = values.get("input_meta")
+        date_fmt = input_meta.cslc_date_fmt
+        # Filter out files that don't have dates in the filename
+        file_matching_date = [Path(f) for f in file_list if get_dates(f, fmt=date_fmt)]
+        if len(file_matching_date) < len(file_list):
+            raise ValueError(
+                f"Found {len(file_matching_date)} files with dates in the filename"
+                f" out of {len(file_list)} files."
+            )
+
+        ext = file_list[0].suffix
+        # If they're HDF5/NetCDF files, we need to check that the subdataset exists
+        if ext in [".h5", ".nc"]:
+            subdataset = input_meta.subdataset
+            if subdataset is None and cls._is_opera_file_list(file_list):
+                # Assume that the user forgot to set the subdataset, and set it to the
+                # default OPERA dataset name
+                logger.info(
+                    "CSLC files look like OPERA files, setting subdataset to"
+                    f" {OPERA_DATASET_NAME}."
+                )
+                subdataset = input_meta.subdataset = OPERA_DATASET_NAME
+
+            # gdal formatting function will raise an error if subdataset doesn't exist
+            for f in file_list:
+                format_nc_filename(f, subdataset)
+
+        # Coerce the file_list to a sorted list of absolute Path objects
+        file_list, _ = sort_files_by_date(file_list, file_date_fmt=date_fmt)
+        values["cslc_file_list"] = [Path(f).resolve() for f in file_list]
+        return values
 
     # Extra model exporting options beyond .dict() or .json()
     def to_yaml(self, output_path: Union[PathOrStr, TextIO], with_comments=True):

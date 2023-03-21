@@ -36,7 +36,7 @@ def run(
     # #########################################
 
     # TODO: this should be made in the config
-    stitched_ifg_dir = cfg.interferogram_network.directory / "stitched"
+    stitched_ifg_dir = cfg.interferogram_network._directory / "stitched"
     stitched_ifg_dir.mkdir(exist_ok=True)
 
     # Also preps for snaphu, which needs binary format with no nans
@@ -44,7 +44,7 @@ def run(
     ifg_filenames = [ifg.path for ifg in ifg_list]
     stitching.merge_by_date(
         image_file_list=ifg_filenames,  # type: ignore
-        file_date_fmt=cfg.inputs.cslc_date_fmt,
+        file_date_fmt=cfg.input_meta.cslc_date_fmt,
         output_dir=stitched_ifg_dir,
     )
 
@@ -70,10 +70,9 @@ def run(
     nlooks = row_looks * col_looks
     unwrapped_paths, conncomp_paths = unwrap.run(
         ifg_path=stitched_ifg_dir,
-        output_path=cfg.unwrap_options.directory,
+        output_path=cfg.unwrap_options._directory,
         cor_file=stitched_cor_file,
         nlooks=nlooks,
-        output_format=cfg.outputs.output_format,
         # mask_file: Optional[Filename] = None,
         # TODO: max jobs based on the CPUs and the available RAM?
         # max_jobs=20,

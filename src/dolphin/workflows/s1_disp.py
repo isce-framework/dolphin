@@ -99,11 +99,8 @@ def _create_burst_cfg(
 ) -> Workflow:
     cfg_temp_dict = cfg.copy(deep=True, exclude={"cslc_file_list"}).dict()
 
-    top_level_scratch = cfg_temp_dict["outputs"]["scratch_directory"]
-    new_input_dict = dict(
-        cslc_file_list=grouped_slc_files[burst_id],
-        outputs={"scratch_directory": top_level_scratch / burst_id},
-    )
     # Just update the inputs and the scratch directory
-    cfg_temp_dict["outputs"].update(new_input_dict["outputs"])
+    top_level_scratch = cfg_temp_dict["outputs"]["scratch_directory"]
+    cfg_temp_dict["outputs"].update({"scratch_directory": top_level_scratch / burst_id})
+    cfg_temp_dict["cslc_file_list"] = grouped_slc_files[burst_id]
     return Workflow(**cfg_temp_dict)
