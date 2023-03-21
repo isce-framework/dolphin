@@ -1,5 +1,4 @@
 """Module for creating the OPERA output product in NetCDF format."""
-from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -28,122 +27,140 @@ GLOBAL_ATTRS = dict(
     title="OPERA L3_DISP_S1 Product",
 )
 
-GRID_MAPPING_DSET = "spatial_ref"
 # Convert chunks to a tuple or h5py errors
 HDF5_OPTS = io.DEFAULT_HDF5_OPTIONS.copy()
 HDF5_OPTS["chunks"] = tuple(HDF5_OPTS["chunks"])  # type: ignore
+# The GRID_MAPPING_DSET variable is used to store the name of the dataset containing
+# the grid mapping information, which includes the coordinate reference system (CRS)
+# and the GeoTransform. This is in accordance with the CF 1.8 conventions for adding
+# geospatial metadata to NetCDF files.
+# http://cfconventions.org/cf-conventions/cf-conventions.html#grid-mappings-and-projections
+# Note that the name "spatial_ref" used here is arbitrary, but it follows the default
+# used by other libraries, such as rioxarray:
+# https://github.com/corteva/rioxarray/blob/5783693895b4b055909c5758a72a5d40a365ef11/rioxarray/rioxarray.py#L34 # noqa
+GRID_MAPPING_DSET = "spatial_ref"
 
 
-# Make a class holding the dataset names/attrs
-# so we can use it in the create_dataset calls
-@dataclass
-class DatasetInfo:
-    """Convenience class to create a dataset in the output product."""
-
-    name: str
-    data: ArrayLike
-    description: str
-    fillvalue: Optional[float] = None
-    attrs: Dict[str, Any] = field(default_factory=dict)
-    xy_scales: Optional[Tuple[h5py.Dataset, h5py.Dataset]] = None
-
-    def __post_init__(self):
-        self.attrs.update(long_name=self.description)
-        if self.fillvalue is not None:
-            self.attrs["_FillValue"] = self.fillvalue
-
-    def create(
-        self,
-        group: h5py.Group,
-    ):
-        """Create the dataset in the given h5py.Group."""
-        dset = group.create_dataset(
-            self.name,
-            data=self.data,
-            fillvalue=self.fillvalue,
-            **HDF5_OPTS,
-        )
-        if self.xy_scales is not None:
-            self._attach_scales(dset, *self.xy_scales)
-        dset.attrs.update(self.attrs)
-
-    def _attach_scales(
-        self, dset: h5py.Dataset, x_ds: h5py.Dataset, y_ds: h5py.Dataset
-    ):
-        # Attach the X/Y coordinates
-        self.attrs["grid_mapping"] = GRID_MAPPING_DSET
-        dset.dims[0].attach_scale(y_ds)
-        dset.dims[1].attach_scale(x_ds)
+def _create_dataset(
+    *,
+    group: h5py.Group,
+    name: str,
+    data: np.ndarray,
+    description: str,
+    fillvalue: Optional[float],
+    attrs: Optional[Dict[str, Any]],
+) -> h5py.Dataset:
+    if attrs is None:
+        attrs = {}
+    attrs.update(long_name=description)
+    attrs["_FillValue"] = fillvalue
+    dset = group.create_dataset(name, data=data, fillvalue=fillvalue, **HDF5_OPTS)
+    dset.attrs.update(attrs)
+    return dset
 
 
-class ConnCompDatasetInfo(DatasetInfo):
-    """Class for the connected components dataset."""
-
-    def __init__(self, data: ArrayLike, xy_scales: Tuple[h5py.Dataset, h5py.Dataset]):
-        super().__init__(
-            name="connected_components",
-            data=data,
-            description="Connected components of the unwrapped phase",
-            fillvalue=0,
-            attrs=dict(units="unitless"),
-            xy_scales=xy_scales,
-        )
-
-
-class UnwrappedDatasetInfo(DatasetInfo):
-    """Class for the unwrapped phase dataset."""
-
-    def __init__(self, data: ArrayLike, xy_scales: Tuple[h5py.Dataset, h5py.Dataset]):
-        super().__init__(
-            name="unwrapped_phase",
-            data=data,
-            description="Unwrapped phase",
-            fillvalue=np.nan,
-            attrs=dict(units="radians"),
-            xy_scales=xy_scales,
-        )
+def _create_geo_dataset(
+    *,
+    group: h5py.Group,
+    name: str,
+    data: np.ndarray,
+    description: str,
+    fillvalue: Optional[float],
+    attrs: Optional[Dict[str, Any]],
+    scales: Tuple[h5py.Dataset, ...],
+) -> h5py.Dataset:
+    dset = _create_dataset(
+        group=group,
+        name=name,
+        data=data,
+        description=description,
+        fillvalue=fillvalue,
+        attrs=attrs,
+    )
+    dset.attrs["grid_mapping"] = GRID_MAPPING_DSET
+    for dim, scale in zip(dset.dims, scales):
+        dim.attach_scale(scale)
+    return dset
 
 
-class TcorrDatasetInfo(DatasetInfo):
-    """Class for the temporal correlation dataset."""
-
-    def __init__(self, data: ArrayLike, xy_scales: Tuple[h5py.Dataset, h5py.Dataset]):
-        super().__init__(
-            name="temporal_correlation",
-            data=data,
-            description="Temporal correlation of phase inversion",
-            fillvalue=np.nan,
-            attrs=dict(units="unitless"),
-            xy_scales=xy_scales,
-        )
-
-
-class TropoDatasetInfo(DatasetInfo):
-    """Class for the tropospheric delay dataset."""
-
-    def __init__(self, data: ArrayLike, xy_scales: Tuple[h5py.Dataset, h5py.Dataset]):
-        super().__init__(
-            name="tropospheric_delay",
-            data=data,
-            description="Tropospheric phase delay used to correct the unwrapped phase",
-            fillvalue=np.nan,
-            attrs=dict(units="radians"),
-            xy_scales=xy_scales,
-        )
+def _create_unwrapped_dataset(
+    group: h5py.Group,
+    data: np.ndarray,
+    scales: Tuple[h5py.Dataset, ...],
+) -> h5py.Dataset:
+    return _create_geo_dataset(
+        group=group,
+        name="unwrapped_phase",
+        data=data,
+        description="Unwrapped phase",
+        fillvalue=np.nan,
+        attrs=dict(units="radians"),
+        scales=scales,
+    )
 
 
-class IonosphereDatasetInfo(DatasetInfo):
-    """Class for the ionospheric delay dataset."""
+def _create_conn_comp_dataset(
+    group: h5py.Group,
+    data: np.ndarray,
+    scales: Tuple[h5py.Dataset, ...],
+) -> h5py.Dataset:
+    return _create_geo_dataset(
+        group=group,
+        name="connected_components",
+        data=data,
+        description="Connected components of the unwrapped phase",
+        fillvalue=0,
+        attrs=dict(units="unitless"),
+        scales=scales,
+    )
 
-    def __init__(self, data: ArrayLike, xy_scales: Tuple[h5py.Dataset, h5py.Dataset]):
-        super().__init__(
-            name="ionospheric_delay",
-            data=data,
-            description="Ionospheric phase delay used to correct the unwrapped phase",
-            fillvalue=np.nan,
-            attrs=dict(units="radians"),
-            xy_scales=xy_scales,
-        )
+
+def _create_tcorr_dataset(
+    group: h5py.Group,
+    data: np.ndarray,
+    scales: Tuple[h5py.Dataset, ...],
+) -> h5py.Dataset:
+    return _create_geo_dataset(
+        group=group,
+        name="temporal_correlation",
+        data=data,
+        description="Temporal correlation of phase inversion",
+        fillvalue=np.nan,
+        attrs=dict(units="unitless"),
+        scales=scales,
+    )
+
+
+def _create_tropo_dataset(
+    group: h5py.Group,
+    data: np.ndarray,
+    scales: Tuple[h5py.Dataset, ...],
+) -> h5py.Dataset:
+    return _create_geo_dataset(
+        group=group,
+        name="tropospheric_delay",
+        data=data,
+        description="Tropospheric phase delay used to correct the unwrapped phase",
+        fillvalue=np.nan,
+        attrs=dict(units="radians"),
+        scales=scales,
+    )
+
+
+def _create_iono_dataset(
+    group: h5py.Group,
+    data: np.ndarray,
+    scales: Tuple[h5py.Dataset, ...],
+) -> h5py.Dataset:
+    return _create_geo_dataset(
+        group=group,
+        name="ionospheric_delay",
+        data=data,
+        description="Ionospheric phase delay used to correct the unwrapped phase",
+        fillvalue=np.nan,
+        attrs=dict(units="radians"),
+        scales=scales,
+    )
 
 
 def create_output_product(
@@ -193,23 +210,24 @@ def create_output_product(
         _create_grid_mapping(displacement_group, crs, gt)
 
         # Set up the X/Y variables
-        x_ds, y_ds = _create_xy_dsets(displacement_group, gt, unw_arr.shape)
+        scales = _create_xy_dsets(displacement_group, gt, unw_arr.shape)
 
         # Write the displacement array / conncomp arrays
-        UnwrappedDatasetInfo(unw_arr, (x_ds, y_ds)).create(displacement_group)
+        _create_unwrapped_dataset(displacement_group, unw_arr, scales)
 
-        ConnCompDatasetInfo(conncomp_arr, (x_ds, y_ds)).create(quality_group)
-        TcorrDatasetInfo(tcorr_arr, (x_ds, y_ds)).create(quality_group)
+        _create_conn_comp_dataset(quality_group, conncomp_arr, scales)
+        _create_tcorr_dataset(quality_group, tcorr_arr, scales)
 
         # Create the '/science/SENTINEL1/DISP/corrections' group
         corrections_group = f.create_group(CORRECTIONS_GROUP)
-        ionosphere = corrections.get("ionosphere")
-        if ionosphere is not None:
-            IonosphereDatasetInfo(ionosphere, (x_ds, y_ds)).create(corrections_group)
 
         troposphere = corrections.get("troposphere")
         if troposphere is not None:
-            TropoDatasetInfo(troposphere, (x_ds, y_ds)).create(corrections_group)
+            # TropoDatasetInfo(troposphere, scales).create(corrections_group)
+            _create_tropo_dataset(corrections_group, troposphere, scales)
+        ionosphere = corrections.get("ionosphere")
+        if ionosphere is not None:
+            _create_iono_dataset(corrections_group, ionosphere, scales)
 
 
 def _create_xy(
