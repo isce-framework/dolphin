@@ -44,20 +44,7 @@ OPERA_BURST_RE = re.compile(
 )
 
 
-def _move_file_in_dir(path: PathOrStr, values: dict) -> Path:
-    """Make sure the `path` is within `values['directory']`.
-
-    Used for validation in different workflow steps' outputs.
-    """
-    p = Path(path)
-    d = Path(values.get("_directory", "."))
-    if p.parent != d:
-        return d / p.name
-    else:
-        return p
-
-
-class PsOptions(BaseModel):
+class PsOptions(BaseModel, extra=Extra.forbid):
     """Options for the PS pixel selection portion of the workflow."""
 
     _directory: Path = PrivateAttr(Path("PS"))
@@ -71,11 +58,8 @@ class PsOptions(BaseModel):
         gt=0.0,
     )
 
-    class Config:
-        extra = Extra.forbid  # raise error if extra fields passed in
 
-
-class HalfWindow(BaseModel):
+class HalfWindow(BaseModel, extra=Extra.forbid):
     """Class to hold half-window size for multi-looking during phase linking."""
 
     x: int = Field(11, description="Half window size (in pixels) for x direction", gt=0)
@@ -91,7 +75,7 @@ class HalfWindow(BaseModel):
         return cls(x=col_looks // 2, y=row_looks // 2)
 
 
-class PhaseLinkingOptions(BaseModel):
+class PhaseLinkingOptions(BaseModel, extra=Extra.forbid):
     """Configurable options for wrapped phase estimation."""
 
     _directory: Path = PrivateAttr(Path("linked_phase"))
@@ -109,11 +93,8 @@ class PhaseLinkingOptions(BaseModel):
         lt=1.0,
     )
 
-    class Config:
-        extra = Extra.forbid  # raise error if extra fields passed in
 
-
-class InterferogramNetwork(BaseModel):
+class InterferogramNetwork(BaseModel, extra=Extra.forbid):
     """Options to determine the type of network for interferogram formation."""
 
     _directory: Path = PrivateAttr(Path("interferograms"))
@@ -142,9 +123,6 @@ class InterferogramNetwork(BaseModel):
         ),
     )
     network_type: InterferogramNetworkType = InterferogramNetworkType.SINGLE_REFERENCE
-
-    class Config:
-        extra = Extra.forbid  # raise error if extra fields passed in
 
     # validation
     @root_validator
@@ -195,7 +173,7 @@ class UnwrapOptions(BaseModel):
     )
 
 
-class WorkerSettings(BaseSettings):
+class WorkerSettings(BaseSettings, extra=Extra.forbid):
     """Settings configurable based on environment variables."""
 
     gpu_enabled: bool = Field(
@@ -232,10 +210,9 @@ class WorkerSettings(BaseSettings):
         fields = {
             "gpu_enabled": {"env": ["dolphin_gpu_enabled", "gpu"]},
         }
-        extra = Extra.forbid  # raise error if extra fields passed in
 
 
-class Inputs(BaseModel):
+class Inputs(BaseModel, extra=Extra.forbid):
     """Options specifying input datasets for workflow."""
 
     cslc_file_list: List[Path] = Field(
@@ -267,7 +244,6 @@ class Inputs(BaseModel):
     )
 
     class Config:
-        extra = Extra.forbid  # raise error if extra fields passed in
         schema_extra = {"required": ["cslc_file_list"]}
 
     # validators
@@ -345,7 +321,7 @@ class Inputs(BaseModel):
         return values
 
 
-class Outputs(BaseModel):
+class Outputs(BaseModel, extra=Extra.forbid):
     """Options for the output format/compressions."""
 
     output_format: OutputFormat = OutputFormat.NETCDF
@@ -380,9 +356,6 @@ class Outputs(BaseModel):
         list(DEFAULT_TIFF_OPTIONS),
         description="GDAL creation options for GeoTIFF files",
     )
-
-    class Config:
-        extra = Extra.forbid  # raise error if extra fields passed in
 
     # validators
     @validator("output_directory", "scratch_directory", always=True)
@@ -425,7 +398,7 @@ class Outputs(BaseModel):
         return strides
 
 
-class Workflow(BaseModel):
+class Workflow(BaseModel, extra=Extra.forbid):
     """Configuration for the workflow.
 
     Required fields are in `Inputs`, where you must specify `cslc_file_list`.
@@ -457,9 +430,6 @@ class Workflow(BaseModel):
     # Stores the list of directories to be created by the workflow
     _directory_list: List[Path] = PrivateAttr(default_factory=list)
     _date_list: List[Union[date, List[date]]] = PrivateAttr(default_factory=list)
-
-    class Config:
-        extra = Extra.forbid  # raise error if extra fields passed in
 
     # Extra model exporting options beyond .dict() or .json()
     def to_yaml(self, output_path: Union[PathOrStr, TextIO], with_comments=True):
