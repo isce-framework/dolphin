@@ -82,86 +82,6 @@ def _create_geo_dataset(
     return dset
 
 
-def _create_unwrapped_dataset(
-    group: h5py.Group,
-    data: np.ndarray,
-    scales: Tuple[h5py.Dataset, ...],
-) -> h5py.Dataset:
-    return _create_geo_dataset(
-        group=group,
-        name="unwrapped_phase",
-        data=data,
-        description="Unwrapped phase",
-        fillvalue=np.nan,
-        attrs=dict(units="radians"),
-        scales=scales,
-    )
-
-
-def _create_conn_comp_dataset(
-    group: h5py.Group,
-    data: np.ndarray,
-    scales: Tuple[h5py.Dataset, ...],
-) -> h5py.Dataset:
-    return _create_geo_dataset(
-        group=group,
-        name="connected_components",
-        data=data,
-        description="Connected components of the unwrapped phase",
-        fillvalue=0,
-        attrs=dict(units="unitless"),
-        scales=scales,
-    )
-
-
-def _create_tcorr_dataset(
-    group: h5py.Group,
-    data: np.ndarray,
-    scales: Tuple[h5py.Dataset, ...],
-) -> h5py.Dataset:
-    return _create_geo_dataset(
-        group=group,
-        name="temporal_correlation",
-        data=data,
-        description="Temporal correlation of phase inversion",
-        fillvalue=np.nan,
-        attrs=dict(units="unitless"),
-        scales=scales,
-    )
-
-
-def _create_tropo_dataset(
-    group: h5py.Group,
-    data: np.ndarray,
-    scales: Tuple[h5py.Dataset, ...],
-) -> h5py.Dataset:
-    return _create_geo_dataset(
-        group=group,
-        name="tropospheric_delay",
-        data=data,
-        description="Tropospheric phase delay used to correct the unwrapped phase",
-        fillvalue=np.nan,
-        attrs=dict(units="radians"),
-        scales=scales,
-    )
-
-
-def _create_iono_dataset(
-    group: h5py.Group,
-    data: np.ndarray,
-    scales: Tuple[h5py.Dataset, ...],
-) -> h5py.Dataset:
-    return _create_geo_dataset(
-        group=group,
-        name="ionospheric_delay",
-        data=data,
-        description="Ionospheric phase delay used to correct the unwrapped phase",
-        fillvalue=np.nan,
-        attrs=dict(units="radians"),
-        scales=scales,
-    )
-
-
 def create_output_product(
     unw_filename: Filename,
     conncomp_filename: Filename,
@@ -212,10 +132,34 @@ def create_output_product(
         scales = _create_xy_dsets(displacement_group, gt, unw_arr.shape)
 
         # Write the displacement array / conncomp arrays
-        _create_unwrapped_dataset(displacement_group, unw_arr, scales)
+        _create_geo_dataset(
+            group=displacement_group,
+            name="unwrapped_phase",
+            data=unw_arr,
+            description="Unwrapped phase",
+            fillvalue=np.nan,
+            attrs=dict(units="radians"),
+            scales=scales,
+        )
 
-        _create_conn_comp_dataset(quality_group, conncomp_arr, scales)
-        _create_tcorr_dataset(quality_group, tcorr_arr, scales)
+        _create_geo_dataset(
+            group=quality_group,
+            name="connected_components",
+            data=conncomp_arr,
+            description="Connected components of the unwrapped phase",
+            fillvalue=0,
+            attrs=dict(units="unitless"),
+            scales=scales,
+        )
+        _create_geo_dataset(
+            group=quality_group,
+            name="temporal_correlation",
+            data=tcorr_arr,
+            description="Temporal correlation of phase inversion",
+            fillvalue=np.nan,
+            attrs=dict(units="unitless"),
+            scales=scales,
+        )
 
         # Create the '/science/SENTINEL1/DISP/corrections' group
         corrections_group = f.create_group(CORRECTIONS_GROUP)
@@ -223,10 +167,30 @@ def create_output_product(
         troposphere = corrections.get("troposphere")
         if troposphere is not None:
             # TropoDatasetInfo(troposphere, scales).create(corrections_group)
-            _create_tropo_dataset(corrections_group, troposphere, scales)
+            _create_geo_dataset(
+                group=corrections_group,
+                name="tropospheric_delay",
+                data=troposphere,
+                description=(
+                    "Tropospheric phase delay used to correct the unwrapped phase"
+                ),
+                fillvalue=np.nan,
+                attrs=dict(units="radians"),
+                scales=scales,
+            )
         ionosphere = corrections.get("ionosphere")
         if ionosphere is not None:
-            _create_iono_dataset(corrections_group, ionosphere, scales)
+            _create_geo_dataset(
+                group=corrections_group,
+                name="ionospheric_delay",
+                data=ionosphere,
+                description=(
+                    "Ionospheric phase delay used to correct the unwrapped phase"
+                ),
+                fillvalue=np.nan,
+                attrs=dict(units="radians"),
+                scales=scales,
+            )
 
 
 def _create_xy(
