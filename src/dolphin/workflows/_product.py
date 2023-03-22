@@ -168,7 +168,6 @@ def create_output_product(
         _create_grid_mapping(group=corrections_group, crs=crs, gt=gt)
         _create_yx_dsets(group=corrections_group, gt=gt, shape=unw_arr.shape)
         if troposphere is not None:
-            # TropoDatasetInfo(troposphere, scales).create(corrections_group)
             _create_geo_dataset(
                 group=corrections_group,
                 name="tropospheric_delay",
@@ -213,7 +212,7 @@ def _create_yx_dsets(
     group: h5netcdf.Group,
     gt: List[float],
     shape: Tuple[int, int],
-) -> Tuple[h5netcdf.Dataset, h5netcdf.Dataset]:
+) -> Tuple[h5netcdf.Variable, h5netcdf.Variable]:
     """Create the x and y coordinate datasets."""
     y, x = _create_yx(gt, shape)
 
@@ -231,7 +230,7 @@ def _create_yx_dsets(
     return y_ds, x_ds
 
 
-def _create_grid_mapping(group, crs: pyproj.CRS, gt: List[float]) -> h5netcdf.Dataset:
+def _create_grid_mapping(group, crs: pyproj.CRS, gt: List[float]) -> h5netcdf.Variable:
     """Set up the grid mapping variable."""
     # https://github.com/corteva/rioxarray/blob/21284f67db536d9c104aa872ab0bbc261259e59e/rioxarray/rioxarray.py#L34
     dset = group.create_variable(GRID_MAPPING_DSET, (), data=0, dtype=int)

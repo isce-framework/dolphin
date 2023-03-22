@@ -7,6 +7,7 @@ from pydantic import BaseModel, Extra, Field
 
 from ._yaml_model import YamlModel
 from .config import (
+    OPERA_DATASET_NAME,
     InterferogramNetwork,
     OutputOptions,
     PhaseLinkingOptions,
@@ -20,9 +21,13 @@ from .config import (
 class InputFileGroup(BaseModel):
     """A group of input files."""
 
-    input_cslc_files: List[Path] = Field(
+    cslc_file_list: List[Path] = Field(
         default_factory=list,
-        description="List of paths ot CSLC files.",
+        description="List of paths to CSLC files.",
+    )
+    subdataset: str = Field(
+        default=OPERA_DATASET_NAME,
+        description="Name of the subdataset to use in the input NetCDF files.",
     )
 
     class Config:
@@ -136,7 +141,7 @@ class RunConfig(YamlModel, extra=Extra.forbid):
         default=Path("disp_s1_workflow.log"), description="Path to the output log file."
     )
 
-    # Override the constructor to allow recursively construct
+    # Override the constructor to allow recursively construct without validation
     @classmethod
     def construct(cls, **kwargs):
         dg = DynamicAncillaryFileGroup.construct()
@@ -156,18 +161,21 @@ class RunConfig(YamlModel, extra=Extra.forbid):
         # the output directory, and the scratch directory.
         # All the other things come from the AlgorithmParameters.
 
-        input_cslc_files = self.input_file_group.input_cslc_files
+        cslc_file_list = self.input_file_group.cslc_file_list
         output_directory = self.product_path_group.output_directory
         scratch_directory = self.product_path_group.scratch_path
         mask_files = self.dynamic_ancillary_file_group.mask_files
+        input_options = dict(subdataset=self.input_file_group.subdataset)
 
         # Load the algorithm parameters from the file
         algorithm_parameters = AlgorithmParameters.from_yaml(
             self.dynamic_ancillary_file_group.algorithm_parameters_file
         )
+        # This get's unpacked to load the rest of the parameters for the Workflow
 
         return Workflow(
-            input_cslc_files=input_cslc_files,
+            cslc_file_list=cslc_file_list,
+            input_options=input_options,
             mask_files=mask_files,
             output_directory=output_directory,
             scratch_directory=scratch_directory,
