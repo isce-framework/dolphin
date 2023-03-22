@@ -2,6 +2,13 @@
 
 **Changed**
 
+
+**Dependencies**
+
+Added requirements:
+
+- h5netcdf>=1.1
+
 # v0.0.4
 
 **Added**
