@@ -1,10 +1,10 @@
 """Module for creating the OPERA output product in NetCDF format."""
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import h5netcdf
 import numpy as np
 import pyproj
-from numpy.typing import ArrayLike
+from numpy.typing import ArrayLike, DTypeLike
 
 from dolphin import io
 from dolphin._log import get_log
@@ -43,21 +43,26 @@ def _create_dataset(
     *,
     group: h5netcdf.Group,
     name: str,
+    dimensions: Optional[Sequence[str]],
     data: np.ndarray,
     description: str,
-    fillvalue: Optional[float],
-    attrs: Optional[Dict[str, Any]],
+    fillvalue: float,
+    attrs: Optional[Dict[str, Any]] = None,
+    dtype: Optional[DTypeLike] = None,
 ) -> h5netcdf.Variable:
     if attrs is None:
         attrs = {}
     attrs.update(long_name=description)
 
+    # Scalars don't need chunks/compression
+    options = HDF5_OPTS if np.array(data).size > 1 else {}
     dset = group.create_variable(
         name,
-        ["y_coordinate", "x_coordinate"],
+        dimensions=dimensions,
         data=data,
+        dtype=dtype,
         fillvalue=fillvalue,
-        **HDF5_OPTS,
+        **options,
     )
     dset.attrs.update(attrs)
     return dset
@@ -69,12 +74,14 @@ def _create_geo_dataset(
     name: str,
     data: np.ndarray,
     description: str,
-    fillvalue: Optional[float],
+    fillvalue: float,
     attrs: Optional[Dict[str, Any]],
 ) -> h5netcdf.Variable:
+    dimensions = ["y_coordinate", "x_coordinate"]
     dset = _create_dataset(
         group=group,
         name=name,
+        dimensions=dimensions,
         data=data,
         description=description,
         fillvalue=fillvalue,
@@ -161,35 +168,68 @@ def create_output_product(
             attrs=dict(units="unitless"),
         )
 
-        # Create the '/science/SENTINEL1/DISP/corrections' group
+        # Create the group holding phase corrections that were used on the unwrapped phase
         corrections_group = f.create_group(CORRECTIONS_GROUP)
+        f.attrs["description"] = "Phase corrections applied to the unwrapped_phase"
 
-        troposphere = corrections.get("troposphere")
+        # TODO: Are we going to downsample these for space?
+        # if so, they need they're own X/Y variables and GeoTransform
         _create_grid_mapping(group=corrections_group, crs=crs, gt=gt)
         _create_yx_dsets(group=corrections_group, gt=gt, shape=unw_arr.shape)
-        if troposphere is not None:
-            _create_geo_dataset(
-                group=corrections_group,
-                name="tropospheric_delay",
-                data=troposphere,
-                description=(
-                    "Tropospheric phase delay used to correct the unwrapped phase"
-                ),
-                fillvalue=np.nan,
-                attrs=dict(units="radians"),
-            )
-        ionosphere = corrections.get("ionosphere")
-        if ionosphere is not None:
-            _create_geo_dataset(
-                group=corrections_group,
-                name="ionospheric_delay",
-                data=ionosphere,
-                description=(
-                    "Ionospheric phase delay used to correct the unwrapped phase"
-                ),
-                fillvalue=np.nan,
-                attrs=dict(units="radians"),
-            )
+        troposphere = corrections.get("troposphere", np.zeros_like(unw_arr))
+        _create_geo_dataset(
+            group=corrections_group,
+            name="tropospheric_delay",
+            data=troposphere,
+            description="Tropospheric phase delay used to correct the unwrapped phase",
+            fillvalue=np.nan,
+            attrs=dict(units="radians"),
+        )
+        ionosphere = corrections.get("ionosphere", np.zeros_like(unw_arr))
+        _create_geo_dataset(
+            group=corrections_group,
+            name="ionospheric_delay",
+            data=ionosphere,
+            description="Ionospheric phase delay used to correct the unwrapped phase",
+            fillvalue=np.nan,
+            attrs=dict(units="radians"),
+        )
+        solid_earth = corrections.get("solid_earth", np.zeros_like(unw_arr))
+        _create_geo_dataset(
+            group=corrections_group,
+            name="solid_earth_tide",
+            data=solid_earth,
+            description="Solid Earth tide used to correct the unwrapped phase",
+            fillvalue=np.nan,
+            attrs=dict(units="radians"),
+        )
+        plate_motion = corrections.get("plate_motion", np.zeros_like(unw_arr))
+        _create_geo_dataset(
+            group=corrections_group,
+            name="plate_motion",
+            data=plate_motion,
+            description="Phase ramp caused by plate",
+            fillvalue=np.nan,
+            attrs=dict(units="radians"),
+        )
+        # Make a scalar dataset for the reference point
+        reference_point = corrections.get("reference_point", 0.0)
+        _create_dataset(
+            group=corrections_group,
+            name="reference_point",
+            dimensions=(),
+            data=reference_point,
+            fillvalue=np.nan,
+            description=(
+                "The constant phase subtracted from the unwrapped phase to"
+                " zero-reference."
+            ),
+            dtype=np.float32,
+            # Note: the dataset is only a scalar, but it could have come from multiple
+            # points (e.g. some boxcar average of an area).
+            # So the attributes will be lists of those locations used
+            attrs=dict(units="radians", rows=[], cols=[], latitudes=[], longitudes=[]),
+        )
 
 
 def _create_yx(

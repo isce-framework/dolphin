@@ -43,6 +43,10 @@ def run(cfg: Workflow, debug: bool = False, log_file: Optional[str] = None):
             (burst, _create_burst_cfg(cfg, burst, grouped_slc_files))
             for burst in grouped_slc_files
         ]
+        # Remove the PS/linked_phase directories which will be empty from re-grouping
+        _remove_dir_if_empty(cfg.phase_linking._directory)
+        _remove_dir_if_empty(cfg.ps_options._directory)
+
         for _, burst_cfg in wrapped_phase_cfgs:
             burst_cfg.create_dir_tree()
     else:
@@ -104,3 +108,10 @@ def _create_burst_cfg(
     cfg_temp_dict["outputs"].update({"scratch_directory": top_level_scratch / burst_id})
     cfg_temp_dict["cslc_file_list"] = grouped_slc_files[burst_id]
     return Workflow(**cfg_temp_dict)
+
+
+def _remove_dir_if_empty(d: Path) -> None:
+    try:
+        d.rmdir()
+    except OSError:
+        pass
