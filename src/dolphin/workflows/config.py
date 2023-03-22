@@ -1,7 +1,7 @@
 import re
 from datetime import date, datetime
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 from pydantic import (
     BaseModel,
@@ -419,9 +419,9 @@ class Workflow(YamlModel):
         values["cslc_file_list"] = [Path(f).resolve() for f in file_list]
         return values
 
-    def __init__(self, **data):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         """After validation, set up properties for use during workflow run."""
-        super().__init__(**data)
+        super().__init__(*args, **kwargs)
 
         # Ensure outputs from workflow steps are within scratch directory.
         scratch_dir = self.scratch_directory

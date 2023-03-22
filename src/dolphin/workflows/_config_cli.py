@@ -44,7 +44,7 @@ def create_config(
             subdataset=subdataset,
         ),
         interferogram_network=interferogram_network,
-        outputs=dict(
+        output_options=dict(
             strides={"x": strides[0], "y": strides[1]},
         ),
         phase_linking=dict(

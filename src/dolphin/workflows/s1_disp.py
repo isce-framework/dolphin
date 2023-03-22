@@ -26,6 +26,7 @@ def run(cfg: Workflow, debug: bool = False, log_file: Optional[str] = None):
     """
     logger = get_log(debug=debug, filename=log_file)
     logger.debug(pformat(cfg.dict()))
+    cfg.create_dir_tree(debug=debug)
 
     try:
         grouped_slc_files = group_by_burst(cfg.cslc_file_list)
@@ -43,12 +44,12 @@ def run(cfg: Workflow, debug: bool = False, log_file: Optional[str] = None):
             (burst, _create_burst_cfg(cfg, burst, grouped_slc_files))
             for burst in grouped_slc_files
         ]
-        # Remove the PS/linked_phase directories which will be empty from re-grouping
+        for _, burst_cfg in wrapped_phase_cfgs:
+            burst_cfg.create_dir_tree()
+        # Remove the mid-level directories which will be empty due to re-grouping
         _remove_dir_if_empty(cfg.phase_linking._directory)
         _remove_dir_if_empty(cfg.ps_options._directory)
 
-        for _, burst_cfg in wrapped_phase_cfgs:
-            burst_cfg.create_dir_tree()
     else:
         wrapped_phase_cfgs = [("", cfg)]
     # ###########################
@@ -104,8 +105,8 @@ def _create_burst_cfg(
     cfg_temp_dict = cfg.copy(deep=True, exclude={"cslc_file_list"}).dict()
 
     # Just update the inputs and the scratch directory
-    top_level_scratch = cfg_temp_dict["outputs"]["scratch_directory"]
-    cfg_temp_dict["outputs"].update({"scratch_directory": top_level_scratch / burst_id})
+    top_level_scratch = cfg_temp_dict["scratch_directory"]
+    cfg_temp_dict.update({"scratch_directory": top_level_scratch / burst_id})
     cfg_temp_dict["cslc_file_list"] = grouped_slc_files[burst_id]
     return Workflow(**cfg_temp_dict)
 

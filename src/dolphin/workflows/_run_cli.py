@@ -30,7 +30,6 @@ def run(config_file: str, debug: bool = False, log_file: Optional[str] = None):
     # Set the environment variables for the workers
     # TODO: Is this the best place to do this?
     cfg = Workflow.from_yaml(config_file)
-    cfg.create_dir_tree(debug=debug)
 
     controller = ThreadpoolController()
     controller.limit(limits=cfg.worker_settings.threads_per_worker)
