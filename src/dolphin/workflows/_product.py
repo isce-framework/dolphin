@@ -2,7 +2,6 @@
 from typing import Any, Dict, List, Optional, Tuple
 
 import h5netcdf
-import h5py
 import numpy as np
 import pyproj
 from numpy.typing import ArrayLike
@@ -16,7 +15,6 @@ logger = get_log(__name__)
 
 BASE_GROUP = "/science/SENTINEL1"
 DISP_GROUP = f"{BASE_GROUP}/DISP"
-QUALITY_GROUP = f"{DISP_GROUP}/quality"
 CORRECTIONS_GROUP = f"{DISP_GROUP}/corrections"
 GLOBAL_ATTRS = dict(
     Conventions="CF-1.8",
@@ -43,22 +41,18 @@ GRID_MAPPING_DSET = "spatial_ref"
 
 def _create_dataset(
     *,
-    # group: h5py.Group,
     group: h5netcdf.Group,
     name: str,
     data: np.ndarray,
     description: str,
     fillvalue: Optional[float],
     attrs: Optional[Dict[str, Any]],
-) -> h5py.Dataset:
+) -> h5netcdf.Variable:
     if attrs is None:
         attrs = {}
     attrs.update(long_name=description)
-    # attrs["_FillValue"] = fillvalue
 
-    # dset = group.create_dataset(name, data=data, fillvalue=fillvalue, **HDF5_OPTS)
     dset = group.create_variable(
-        # name, list(group.dims), data=data, fillvalue=fillvalue, **HDF5_OPTS
         name,
         ["y_coordinate", "x_coordinate"],
         data=data,
@@ -71,15 +65,13 @@ def _create_dataset(
 
 def _create_geo_dataset(
     *,
-    # group: h5py.Group,
     group: h5netcdf.Group,
-    # dims: List[h5netcdf.Dimension],
     name: str,
     data: np.ndarray,
     description: str,
     fillvalue: Optional[float],
     attrs: Optional[Dict[str, Any]],
-) -> h5py.Dataset:
+) -> h5netcdf.Variable:
     dset = _create_dataset(
         group=group,
         name=name,
@@ -89,8 +81,6 @@ def _create_geo_dataset(
         attrs=attrs,
     )
     dset.attrs["grid_mapping"] = GRID_MAPPING_DSET
-    # for dim, scale in zip(dset.dims, scales):
-    #     dim.attach_scale(scale)
     return dset
 
 
@@ -138,11 +128,9 @@ def create_output_product(
 
         # Create the '/science/SENTINEL1/DISP/grids/displacement' group
         displacement_group = f.create_group(DISP_GROUP)
-        quality_group = f.create_group(QUALITY_GROUP)
 
         # Set up the grid mapping variable for each group with rasters
         _create_grid_mapping(group=displacement_group, crs=crs, gt=gt)
-        _create_grid_mapping(group=quality_group, crs=crs, gt=gt)
 
         # Set up the X/Y variables for each group
         _create_yx_dsets(group=displacement_group, gt=gt, shape=unw_arr.shape)
@@ -158,7 +146,7 @@ def create_output_product(
 
         # scales2 = _create_yx_dsets(group=quality_group, gt=gt, shape=unw_arr.shape)
         _create_geo_dataset(
-            group=quality_group,
+            group=displacement_group,
             name="connected_components",
             data=conncomp_arr,
             description="Connected components of the unwrapped phase",
@@ -166,7 +154,7 @@ def create_output_product(
             attrs=dict(units="unitless"),
         )
         _create_geo_dataset(
-            group=quality_group,
+            group=displacement_group,
             name="temporal_correlation",
             data=tcorr_arr,
             description="Temporal correlation of phase inversion",
@@ -208,7 +196,7 @@ def create_output_product(
 
 def _create_yx(
     gt: List[float], shape: Tuple[int, int]
-) -> Tuple[h5py.Dataset, h5py.Dataset]:
+) -> Tuple[np.ndarray, np.ndarray]:
     """Create the x and y coordinate datasets."""
     ysize, xsize = shape
     # Parse the geotransform
@@ -223,24 +211,20 @@ def _create_yx(
 
 
 def _create_yx_dsets(
-    # group: h5py.Group,
     group: h5netcdf.Group,
     gt: List[float],
     shape: Tuple[int, int],
-) -> Tuple[h5py.Dataset, h5py.Dataset]:
+) -> Tuple[h5netcdf.Dataset, h5netcdf.Dataset]:
     """Create the x and y coordinate datasets."""
     y, x = _create_yx(gt, shape)
 
     if not group.dimensions:
         group.dimensions = dict(y_coordinate=y.size, x_coordinate=x.size)
     # Create the datasets
-    # y_ds = group.create_dataset("y_coordinate", data=y, dtype=float)
-    # x_ds = group.create_dataset("x_coordinate", data=x, dtype=float)
     y_ds = group.create_variable("y_coordinate", ("y_coordinate",), data=y, dtype=float)
     x_ds = group.create_variable("x_coordinate", ("x_coordinate",), data=x, dtype=float)
 
     for name, ds in zip(["y_coordinate", "x_coordinate"], [y_ds, x_ds]):
-        # ds.make_scale(name)
         ds.attrs["standard_name"] = f"projection_{name}"
         ds.attrs["long_name"] = f"{name.replace('_', ' ')} of projection"
         ds.attrs["units"] = "m"
@@ -248,10 +232,9 @@ def _create_yx_dsets(
     return y_ds, x_ds
 
 
-def _create_grid_mapping(group, crs: pyproj.CRS, gt: List[float]) -> h5py.Dataset:
+def _create_grid_mapping(group, crs: pyproj.CRS, gt: List[float]) -> h5netcdf.Dataset:
     """Set up the grid mapping variable."""
     # https://github.com/corteva/rioxarray/blob/21284f67db536d9c104aa872ab0bbc261259e59e/rioxarray/rioxarray.py#L34
-    # dset = group.create_dataset(GRID_MAPPING_DSET, data=0, dtype=int)
     dset = group.create_variable(GRID_MAPPING_DSET, (), data=0, dtype=int)
 
     dset.attrs.update(crs.to_cf())
