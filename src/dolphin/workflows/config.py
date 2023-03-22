@@ -19,7 +19,7 @@ from dolphin.io import DEFAULT_HDF5_OPTIONS, DEFAULT_TIFF_OPTIONS, format_nc_fil
 from dolphin.utils import get_dates, sort_files_by_date
 
 from ._enums import InterferogramNetworkType, UnwrapMethod, WorkflowName
-from ._yaml_mixin import YamlMixin
+from ._yaml_model import YamlModel
 
 __all__ = [
     "Workflow",
@@ -285,7 +285,7 @@ class OutputOptions(BaseModel, extra=Extra.forbid):
         return strides
 
 
-class Workflow(BaseModel, YamlMixin):
+class Workflow(YamlModel):
     """Configuration for the workflow."""
 
     workflow_name: WorkflowName = WorkflowName.STACK

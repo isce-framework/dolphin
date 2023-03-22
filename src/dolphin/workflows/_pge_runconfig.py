@@ -5,7 +5,7 @@ from typing import ClassVar, List, Optional
 
 from pydantic import BaseModel, Extra, Field
 
-from ._yaml_mixin import YamlMixin
+from ._yaml_model import YamlModel
 from .config import (
     InterferogramNetwork,
     OutputOptions,
@@ -105,7 +105,7 @@ class ProductPathGroup(BaseModel):
         schema_extra = {"required": ["product_path"]}
 
 
-class AlgorithmParameters(BaseModel, YamlMixin, extra=Extra.forbid):
+class AlgorithmParameters(YamlModel, extra=Extra.forbid):
     """Class containing all the other [`Workflow`][dolphin.workflows.config] classes."""
 
     # Options for each step in the workflow
@@ -121,7 +121,7 @@ class AlgorithmParameters(BaseModel, YamlMixin, extra=Extra.forbid):
     worker_settings: WorkerSettings = Field(default_factory=WorkerSettings)
 
 
-class RunConfig(BaseModel, YamlMixin, extra=Extra.forbid):
+class RunConfig(YamlModel, extra=Extra.forbid):
     """A PGE run configuration."""
 
     # Used for the top-level key
