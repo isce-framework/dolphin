@@ -126,7 +126,6 @@ def create_output_product(
         # Create the NetCDF file
         f.attrs.update(GLOBAL_ATTRS)
 
-        # Create the '/science/SENTINEL1/DISP/grids/displacement' group
         displacement_group = f.create_group(DISP_GROUP)
 
         # Set up the grid mapping variable for each group with rasters

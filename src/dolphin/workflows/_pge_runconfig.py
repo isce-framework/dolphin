@@ -5,23 +5,38 @@ from typing import ClassVar, List, Optional
 
 from pydantic import BaseModel, Extra, Field
 
-from .config import Workflow
+from ._yaml_mixin import YamlMixin
+from .config import (
+    InterferogramNetwork,
+    OutputOptions,
+    PhaseLinkingOptions,
+    PsOptions,
+    UnwrapOptions,
+    WorkerSettings,
+    Workflow,
+)
 
 
-class InputFileGroup(BaseModel, extra=Extra.forbid):
+class InputFileGroup(BaseModel):
     """A group of input files."""
 
-    input_file_paths: List[Path] = Field(
+    input_cslc_files: List[Path] = Field(
         default_factory=list,
         description="List of paths ot CSLC files.",
     )
 
+    class Config:
+        """Pydantic config class."""
 
-class DynamicAncillaryFileGroup(BaseModel, extra=Extra.forbid):
+        extra = Extra.forbid
+        schema_extra = {"required": ["input_file_paths"]}
+
+
+class DynamicAncillaryFileGroup(BaseModel):
     """A group of dynamic ancillary files."""
 
-    algorithm_parameters: Path = Field(
-        ...,
+    algorithm_parameters_file: Path = Field(  # type: ignore
+        None,
         description="Path to file containing SAS algorithm parameters.",
     )
     amp_disp_file: Optional[Path] = Field(
@@ -44,38 +59,69 @@ class DynamicAncillaryFileGroup(BaseModel, extra=Extra.forbid):
         ),
     )
 
+    class Config:
+        """Pydantic config class."""
+
+        extra = Extra.forbid
+        schema_extra = {"required": ["algorithm_parameters_file"]}
+
 
 class PrimaryExecutable(BaseModel, extra=Extra.forbid):
     """Group describing the primary executable."""
 
-    product_type: str = "DISP_S1"
+    product_type: str = Field(
+        default="DISP_S1",
+        description="Product type of the PGE.",
+    )
 
 
-class ProductPathGroup(BaseModel, extra=Extra.forbid):
+class ProductPathGroup(BaseModel):
     """Group describing the product paths."""
 
-    product_path: Path = Field(
-        default=..., description="Directory where PGE will place results"
+    product_path: Path = Field(  # type: ignore
+        default=None, description="Directory where PGE will place results"
     )
     scratch_path: Path = Field(
-        default=Path("scratch"),
+        default=Path("./scratch"),
         description="Path to the scratch directory.",
     )
-    sas_output_path: Path = Field(
-        default=Path("sas_output_path"),
+    output_directory: Path = Field(
+        default=Path("./output"),
         description="Path to the SAS output directory.",
+        # The alias means that in the YAML file, the key will be "sas_output_path"
+        # instead of "output_directory", but the python instance attribute is
+        # "output_directory" (to match Workflow)
+        alias="sas_output_path",
     )
     product_version: str = Field(
         default="0.1",
         description="Version of the product.",
     )
 
+    class Config:
+        """Pydantic config class."""
 
-class AlgorithmParameters(Workflow):
-    """Override the Workflow class to remove the Inputs and Outputs."""
+        extra = Extra.forbid
+        schema_extra = {"required": ["product_path"]}
 
 
-class RunConfig(BaseModel, extra=Extra.forbid):
+class AlgorithmParameters(BaseModel, YamlMixin, extra=Extra.forbid):
+    """Class containing all the other [`Workflow`][dolphin.workflows.config] classes."""
+
+    # Options for each step in the workflow
+    ps_options: PsOptions = Field(default_factory=PsOptions)
+    phase_linking: PhaseLinkingOptions = Field(default_factory=PhaseLinkingOptions)
+    interferogram_network: InterferogramNetwork = Field(
+        default_factory=InterferogramNetwork
+    )
+    unwrap_options: UnwrapOptions = Field(default_factory=UnwrapOptions)
+    output_options: OutputOptions = Field(default_factory=OutputOptions)
+
+    # General workflow metadata
+    worker_settings: WorkerSettings = Field(default_factory=WorkerSettings)
+
+
+class RunConfig(BaseModel, YamlMixin, extra=Extra.forbid):
     """A PGE run configuration."""
 
     # Used for the top-level key
@@ -90,15 +136,40 @@ class RunConfig(BaseModel, extra=Extra.forbid):
         default=Path("disp_s1_workflow.log"), description="Path to the output log file."
     )
 
+    # Override the constructor to allow recursively construct
+    @classmethod
+    def construct(cls, **kwargs):
+        dg = DynamicAncillaryFileGroup.construct()
+        ppg = ProductPathGroup.construct()
+        return super().construct(
+            dynamic_ancillary_file_group=dg, product_path_group=ppg, **kwargs
+        )
+
     def to_workflow(self):
-        """Convert this run configuration to a workflow."""
+        """Convert to a [`Workflow`][dolphin.workflows.config.Workflow] object."""
         # We need to go to/from the PGE format to our internal Workflow object:
         # Note that the top two levels of nesting can be accomplished by wrapping
         # the normal model export in a dict.
         #
-        # The only things from the RunConfig that are used in the
-        # Workflow are the input files and PS amp mean/disp files.
+        # The things from the RunConfig that are used in the
+        # Workflow are the input files, PS amp mean/disp files,
+        # the output directory, and the scratch directory.
         # All the other things come from the AlgorithmParameters.
 
-        # take the input file paths, use them for the Inputs
-        # input_cslc_files = self.input_file_group.input_file_paths
+        input_cslc_files = self.input_file_group.input_cslc_files
+        output_directory = self.product_path_group.output_directory
+        scratch_directory = self.product_path_group.scratch_path
+        mask_files = self.dynamic_ancillary_file_group.mask_files
+
+        # Load the algorithm parameters from the file
+        algorithm_parameters = AlgorithmParameters.from_yaml(
+            self.dynamic_ancillary_file_group.algorithm_parameters_file
+        )
+
+        return Workflow(
+            input_cslc_files=input_cslc_files,
+            mask_files=mask_files,
+            output_directory=output_directory,
+            scratch_directory=scratch_directory,
+            **algorithm_parameters.dict(),
+        )

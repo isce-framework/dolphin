@@ -64,7 +64,7 @@ def run(cfg: Workflow, debug: bool = False, log_file: Optional[str] = None):
         tcorr_list.append(tcorr)
 
     # TODO: store the compressed SLCs somewhere
-    # if cfg.outputs.store_compressed_slcs:
+    # if cfg.store_compressed_slcs:
     #     pass
 
     # ###################################
@@ -79,10 +79,10 @@ def run(cfg: Workflow, debug: bool = False, log_file: Optional[str] = None):
     # ######################################
     logger.info(
         f"Creating {len(unwrapped_paths), len(conncomp_paths)} outputs in"
-        f" {cfg.outputs.output_directory}"
+        f" {cfg.output_directory}"
     )
     for unw_p, cc_p in zip(unwrapped_paths, conncomp_paths):
-        output_name = cfg.outputs.output_directory / unw_p.with_suffix(".nc").name
+        output_name = cfg.output_directory / unw_p.with_suffix(".nc").name
         _product.create_output_product(
             unw_filename=unw_p,
             conncomp_filename=cc_p,

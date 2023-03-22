@@ -1,13 +1,8 @@
-import json
 import re
-import sys
-import textwrap
 from datetime import date, datetime
-from io import StringIO
 from pathlib import Path
-from typing import Dict, List, Optional, TextIO, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
-from osgeo import gdal
 from pydantic import (
     BaseModel,
     BaseSettings,
@@ -17,8 +12,6 @@ from pydantic import (
     root_validator,
     validator,
 )
-from ruamel.yaml import YAML
-from ruamel.yaml.comments import CommentedMap
 
 from dolphin import __version__ as _dolphin_version
 from dolphin._log import get_log
@@ -26,9 +19,7 @@ from dolphin.io import DEFAULT_HDF5_OPTIONS, DEFAULT_TIFF_OPTIONS, format_nc_fil
 from dolphin.utils import get_dates, sort_files_by_date
 
 from ._enums import InterferogramNetworkType, UnwrapMethod, WorkflowName
-
-gdal.UseExceptions()
-PathOrStr = Union[Path, str]
+from ._yaml_mixin import YamlMixin
 
 __all__ = [
     "Workflow",
@@ -213,19 +204,9 @@ class WorkerSettings(BaseSettings):
         }
 
 
-class InputFiles(BaseModel, extra=Extra.forbid):
+class InputOptions(BaseModel, extra=Extra.forbid):
     """Options specifying input datasets for workflow."""
 
-    cslc_file_list: List[Path] = Field(
-        default_factory=list,
-        description=(
-            "List of CSLC files, or newline-delimited file "
-            "containing list of CSLC files."
-        ),
-    )
-
-
-class InputMeta(BaseModel, extra=Extra.forbid):
     subdataset: Optional[str] = Field(
         None,
         description=(
@@ -239,35 +220,10 @@ class InputMeta(BaseModel, extra=Extra.forbid):
         description="Format of dates contained in CSLC filenames",
     )
 
-    mask_files: List[Path] = Field(
-        default_factory=list,
-        description=(
-            "List of mask files to use, where convention is"
-            " 0 for no data/invalid, and 1 for data."
-        ),
-    )
 
-    @validator("mask_files", pre=True)
-    def _check_mask_files(cls, v):
-        if isinstance(v, (str, Path)):
-            # If they have passed a single mask file, return it as a list
-            return [Path(v)]
-        elif v is None:
-            return []
-        return [Path(f) for f in v]
+class OutputOptions(BaseModel, extra=Extra.forbid):
+    """Options for the output size/format/compressions."""
 
-
-class Outputs(BaseModel, extra=Extra.forbid):
-    """Options for the output format/compressions."""
-
-    scratch_directory: Path = Field(
-        Path("scratch"),
-        description="Name of sub-directory to use for scratch files",
-    )
-    output_directory: Path = Field(
-        Path("output"),
-        description="Name of sub-directory to use for output files",
-    )
     output_resolution: Optional[Dict[str, int]] = Field(
         # {"x": 20, "y": 20},
         None,
@@ -293,10 +249,6 @@ class Outputs(BaseModel, extra=Extra.forbid):
     )
 
     # validators
-    @validator("output_directory", "scratch_directory", always=True)
-    def _dir_is_absolute(cls, v):
-        return v.resolve()
-
     @validator("output_resolution", "strides", pre=True, always=True)
     def _check_resolution(cls, v):
         """Allow the user to specify just one float, applying to both dimensions."""
@@ -333,12 +285,13 @@ class Outputs(BaseModel, extra=Extra.forbid):
         return strides
 
 
-class Workflow(BaseModel):
+class Workflow(BaseModel, YamlMixin):
     """Configuration for the workflow."""
 
     workflow_name: WorkflowName = WorkflowName.STACK
 
-    input_meta: InputMeta = Field(default_factory=InputMeta)
+    # Paths to input/output files
+    input_options: InputOptions = Field(default_factory=InputOptions)
     cslc_file_list: List[Path] = Field(
         default_factory=list,
         description=(
@@ -346,7 +299,21 @@ class Workflow(BaseModel):
             "containing list of CSLC files."
         ),
     )
-    outputs: Outputs = Field(default_factory=Outputs)
+    mask_files: List[Path] = Field(
+        default_factory=list,
+        description=(
+            "List of mask files to use, where convention is"
+            " 0 for no data/invalid, and 1 for data."
+        ),
+    )
+    scratch_directory: Path = Field(
+        Path("scratch"),
+        description="Name of sub-directory to use for scratch files",
+    )
+    output_directory: Path = Field(
+        Path("output"),
+        description="Name of sub-directory to use for output files",
+    )
 
     # Options for each step in the workflow
     ps_options: PsOptions = Field(default_factory=PsOptions)
@@ -355,6 +322,7 @@ class Workflow(BaseModel):
         default_factory=InterferogramNetwork
     )
     unwrap_options: UnwrapOptions = Field(default_factory=UnwrapOptions)
+    output_options: OutputOptions = Field(default_factory=OutputOptions)
 
     # General workflow metadata
     worker_settings: WorkerSettings = Field(default_factory=WorkerSettings)
@@ -373,6 +341,19 @@ class Workflow(BaseModel):
     class Config:
         extra = Extra.forbid
         schema_extra = {"required": ["cslc_file_list"]}
+
+    @validator("output_directory", "scratch_directory", always=True)
+    def _dir_is_absolute(cls, v):
+        return v.resolve()
+
+    @validator("mask_files", pre=True)
+    def _check_mask_files(cls, v):
+        if v is None:
+            return []
+        if isinstance(v, (str, Path)):
+            # If they have passed a single mask file, return it as a list
+            v = [Path(v)]
+        return [Path(f).resolve() for f in v]
 
     # validators
     @validator("cslc_file_list", pre=True)
@@ -402,14 +383,12 @@ class Workflow(BaseModel):
 
     @root_validator
     def _check_slc_files_exist(cls, values):
-        # import ipdb
-        # ipdb.set_trace()
         file_list = values.get("cslc_file_list")
         if not file_list:
             raise ValueError("Must specify list of input SLC files.")
 
-        input_meta = values.get("input_meta")
-        date_fmt = input_meta.cslc_date_fmt
+        input_options = values.get("input_options")
+        date_fmt = input_options.cslc_date_fmt
         # Filter out files that don't have dates in the filename
         file_matching_date = [Path(f) for f in file_list if get_dates(f, fmt=date_fmt)]
         if len(file_matching_date) < len(file_list):
@@ -421,7 +400,7 @@ class Workflow(BaseModel):
         ext = file_list[0].suffix
         # If they're HDF5/NetCDF files, we need to check that the subdataset exists
         if ext in [".h5", ".nc"]:
-            subdataset = input_meta.subdataset
+            subdataset = input_options.subdataset
             if subdataset is None and cls._is_opera_file_list(file_list):
                 # Assume that the user forgot to set the subdataset, and set it to the
                 # default OPERA dataset name
@@ -429,7 +408,7 @@ class Workflow(BaseModel):
                     "CSLC files look like OPERA files, setting subdataset to"
                     f" {OPERA_DATASET_NAME}."
                 )
-                subdataset = input_meta.subdataset = OPERA_DATASET_NAME
+                subdataset = input_options.subdataset = OPERA_DATASET_NAME
 
             # gdal formatting function will raise an error if subdataset doesn't exist
             for f in file_list:
@@ -440,74 +419,12 @@ class Workflow(BaseModel):
         values["cslc_file_list"] = [Path(f).resolve() for f in file_list]
         return values
 
-    # Extra model exporting options beyond .dict() or .json()
-    def to_yaml(self, output_path: Union[PathOrStr, TextIO], with_comments=True):
-        """Save workflow configuration as a yaml file.
-
-        Used to record the default-filled version of a supplied yaml.
-
-        Parameters
-        ----------
-        output_path : Pathlike
-            Path to the yaml file to save.
-        with_comments : bool, default = False.
-            Whether to add comments containing the type/descriptions to all fields.
-        """
-        yaml_obj = self._to_yaml_obj()
-
-        if with_comments:
-            _add_comments(yaml_obj, self.schema())
-
-        y = YAML()
-        if hasattr(output_path, "write"):
-            y.dump(yaml_obj, output_path)
-        else:
-            with open(output_path, "w") as f:
-                y.dump(yaml_obj, f)
-
-    @classmethod
-    def from_yaml(cls, yaml_path: PathOrStr):
-        """Load a workflow configuration from a yaml file.
-
-        Parameters
-        ----------
-        yaml_path : Pathlike
-            Path to the yaml file to load.
-
-        Returns
-        -------
-        Config
-            Workflow configuration
-        """
-        y = YAML(typ="safe")
-        with open(yaml_path, "r") as f:
-            data = y.load(f)
-
-        return cls(**data)
-
-    @classmethod
-    def print_yaml_schema(cls, output_path: Union[PathOrStr, TextIO] = sys.stdout):
-        """Print/save an empty configuration with defaults filled in.
-
-        Ignores the required `cslc_file_list` input, so a user can
-        inspect all fields.
-
-        Parameters
-        ----------
-        output_path : Pathlike
-            Path or stream to save to the yaml file to.
-            By default, prints to stdout.
-        """
-        # The .construct is a pydantic method to disable validation
-        # https://docs.pydantic.dev/usage/models/#creating-models-without-validation
-        cls.construct().to_yaml(output_path, with_comments=True)
-
     def __init__(self, **data):
         """After validation, set up properties for use during workflow run."""
         super().__init__(**data)
 
         # Ensure outputs from workflow steps are within scratch directory.
-        scratch_dir = self.outputs.scratch_directory
+        scratch_dir = self.scratch_directory
         # Save all directories as absolute paths
         scratch_dir = scratch_dir.resolve(strict=False)
 
@@ -527,8 +444,8 @@ class Workflow(BaseModel):
 
         # Track the directories that need to be created at start of workflow
         self._directory_list = [
-            self.outputs.scratch_directory,
-            self.outputs.output_directory,
+            scratch_dir,
+            self.output_directory,
             self.ps_options._directory,
             self.phase_linking._directory,
             self.interferogram_network._directory,
@@ -537,7 +454,6 @@ class Workflow(BaseModel):
         # Add the output PS files we'll create to the `PS` directory, making
         # sure they're inside the scratch directory
         ps_opts = self.ps_options
-        scratch_dir = self.outputs.scratch_directory
         ps_opts._amp_dispersion_file = scratch_dir / ps_opts._amp_dispersion_file
         ps_opts._amp_mean_file = scratch_dir / ps_opts._amp_mean_file
         ps_opts._output_file = scratch_dir / ps_opts._output_file
@@ -548,75 +464,3 @@ class Workflow(BaseModel):
         for d in self._directory_list:
             log.debug(f"Creating directory: {d}")
             d.mkdir(parents=True, exist_ok=True)
-
-    def _to_yaml_obj(self) -> CommentedMap:
-        # Make the YAML object to add comments to
-        # We can't just do `dumps` for some reason, need a stream
-        y = YAML()
-        ss = StringIO()
-        y.dump(json.loads(self.json()), ss)
-        yaml_obj = y.load(ss.getvalue())
-        return yaml_obj
-
-
-def _add_comments(
-    loaded_yaml: CommentedMap,
-    schema: dict,
-    indent: int = 0,
-    definitions: Optional[dict] = None,
-):
-    """Add comments above each YAML field using the pydantic model schema."""
-    # Definitions are in schemas that contain nested pydantic Models
-    if definitions is None:
-        definitions = schema.get("definitions")
-
-    for key, val in schema["properties"].items():
-        reference = ""
-        # Get sub-schema if it exists
-        if "$ref" in val.keys():
-            # At top level, example is 'outputs': {'$ref': '#/definitions/Outputs'}
-            reference = val["$ref"]
-        elif "allOf" in val.keys():
-            # within 'definitions', it looks like
-            #  'allOf': [{'$ref': '#/definitions/HalfWindow'}]
-            reference = val["allOf"][0]["$ref"]
-
-        ref_key = reference.split("/")[-1]
-        if ref_key:  # The current property is a reference to something else
-            if "enum" in definitions[ref_key]:  # type: ignore
-                # This is just an Enum, not a sub schema.
-                # Overwrite the value with the referenced value
-                val = definitions[ref_key]  # type: ignore
-            else:
-                # The reference is a sub schema, so we need to recurse
-                sub_schema = definitions[ref_key]  # type: ignore
-                # Get the sub-model
-                sub_loaded_yaml = loaded_yaml[key]
-                # recurse on the sub-model
-                _add_comments(
-                    sub_loaded_yaml,
-                    sub_schema,
-                    indent=indent + 2,
-                    definitions=definitions,
-                )
-                continue
-
-        # add each description along with the type information
-        desc = "\n".join(
-            textwrap.wrap(f"{val['description']}.", width=90, subsequent_indent="  ")
-        )
-        type_str = f"\n  Type: {val['type']}."
-        choices = f"\n  Options: {val['enum']}." if "enum" in val.keys() else ""
-
-        # Combine the description/type/choices as the YAML comment
-        comment = f"{desc}{type_str}{choices}"
-        comment = comment.replace("..", ".")  # Remove double periods
-
-        # Prepend the required label for fields that are required
-        is_required = key in schema.get("required", [])
-        if is_required:
-            comment = "REQUIRED: " + comment
-
-        # This method comes from here
-        # https://yaml.readthedocs.io/en/latest/detail.html#round-trip-including-comments
-        loaded_yaml.yaml_set_comment_before_after_key(key, comment, indent=indent)

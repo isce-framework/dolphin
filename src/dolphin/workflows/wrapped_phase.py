@@ -36,7 +36,6 @@ def run(
         In the case of sequential phase linking, this is the average tcorr file.
     """
     logger = get_log(debug=debug)
-    scratch_dir = cfg.outputs.scratch_directory
 
     input_file_list = cfg.cslc_file_list
     if not input_file_list:
@@ -45,15 +44,15 @@ def run(
     # #############################################
     # 1. Make a VRT pointing to the input SLC files
     # #############################################
-    subdataset = cfg.input_meta.subdataset
-    vrt_path = scratch_dir / "slc_stack.vrt"
+    subdataset = cfg.input_options.subdataset
+    vrt_path = cfg.scratch_directory / "slc_stack.vrt"
     if vrt_path.exists():
         vrt_stack = stack.VRTStack.from_vrt_file(vrt_path)
     else:
         vrt_stack = stack.VRTStack(
             input_file_list,
             subdataset=subdataset,
-            outfile=scratch_dir / "slc_stack.vrt",
+            outfile=cfg.scratch_directory / "slc_stack.vrt",
         )
 
     # ###############
@@ -91,9 +90,9 @@ def run(
                 slc_vrt_file=vrt_stack.outfile,
                 output_folder=pl_path,
                 half_window=cfg.phase_linking.half_window.dict(),
-                strides=cfg.outputs.strides,
+                strides=cfg.output_options.strides,
                 reference_idx=0,
-                # mask_file=cfg.inputs.mask_file,
+                # mask_file=cfg.mask_file,
                 ps_mask_file=ps_output,
                 max_bytes=cfg.worker_settings.block_size_gb * 1e9,
                 n_workers=cfg.worker_settings.n_workers,
@@ -105,9 +104,9 @@ def run(
                 slc_vrt_file=vrt_stack.outfile,
                 output_folder=pl_path,
                 half_window=cfg.phase_linking.half_window.dict(),
-                strides=cfg.outputs.strides,
+                strides=cfg.output_options.strides,
                 ministack_size=cfg.phase_linking.ministack_size,
-                # mask_file=cfg.inputs.mask_file,
+                # mask_file=cfg.mask_file,
                 ps_mask_file=ps_output,
                 max_bytes=cfg.worker_settings.block_size_gb * 1e9,
                 n_workers=cfg.worker_settings.n_workers,

@@ -75,7 +75,7 @@ def test_unwrap_options_defaults(tmpdir):
 
 def test_outputs_defaults(tmpdir):
     with tmpdir.as_cwd():
-        opts = config.Outputs()
+        opts = config.OutputOptions()
         assert opts.output_directory == Path("output").resolve()
         assert opts.scratch_directory == Path("scratch").resolve()
         assert opts.output_resolution is None
@@ -277,7 +277,7 @@ def test_config_defaults(dir_with_1_slc):
         inputs={"cslc_file_list": dir_with_1_slc / "slclist.txt", "subdataset": "data"}
     )
     # These should be the defaults
-    assert c.outputs == config.Outputs()
+    assert c.outputs == config.OutputOptions()
     assert c.worker_settings == config.WorkerSettings()
     assert c.inputs == config.Inputs(
         cslc_file_list=dir_with_1_slc / "slclist.txt", subdataset="data"

@@ -44,7 +44,7 @@ def run(
     ifg_filenames = [ifg.path for ifg in ifg_list]
     stitching.merge_by_date(
         image_file_list=ifg_filenames,  # type: ignore
-        file_date_fmt=cfg.input_meta.cslc_date_fmt,
+        file_date_fmt=cfg.input_options.cslc_date_fmt,
         output_dir=stitched_ifg_dir,
     )
 
