@@ -38,9 +38,9 @@ def create_config(
 
     cfg = Workflow(
         workflow_name=workflow_name,
-        inputs=dict(
-            cslc_file_list=slc_files,
-            mask_files=mask_files,
+        cslc_file_list=slc_files,
+        mask_files=mask_files,
+        input_options=dict(
             subdataset=subdataset,
         ),
         interferogram_network=interferogram_network,

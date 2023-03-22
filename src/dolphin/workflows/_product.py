@@ -1,9 +1,7 @@
 """Module for creating the OPERA output product in NetCDF format."""
-from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-import h5py
+import h5netcdf
 import numpy as np
 import pyproj
 from numpy.typing import ArrayLike
@@ -17,7 +15,6 @@ logger = get_log(__name__)
 
 BASE_GROUP = "/science/SENTINEL1"
 DISP_GROUP = f"{BASE_GROUP}/DISP"
-QUALITY_GROUP = f"{DISP_GROUP}/quality"
 CORRECTIONS_GROUP = f"{DISP_GROUP}/corrections"
 GLOBAL_ATTRS = dict(
     Conventions="CF-1.8",
@@ -28,122 +25,63 @@ GLOBAL_ATTRS = dict(
     title="OPERA L3_DISP_S1 Product",
 )
 
-GRID_MAPPING_DSET = "spatial_ref"
 # Convert chunks to a tuple or h5py errors
 HDF5_OPTS = io.DEFAULT_HDF5_OPTIONS.copy()
 HDF5_OPTS["chunks"] = tuple(HDF5_OPTS["chunks"])  # type: ignore
+# The GRID_MAPPING_DSET variable is used to store the name of the dataset containing
+# the grid mapping information, which includes the coordinate reference system (CRS)
+# and the GeoTransform. This is in accordance with the CF 1.8 conventions for adding
+# geospatial metadata to NetCDF files.
+# http://cfconventions.org/cf-conventions/cf-conventions.html#grid-mappings-and-projections
+# Note that the name "spatial_ref" used here is arbitrary, but it follows the default
+# used by other libraries, such as rioxarray:
+# https://github.com/corteva/rioxarray/blob/5783693895b4b055909c5758a72a5d40a365ef11/rioxarray/rioxarray.py#L34 # noqa
+GRID_MAPPING_DSET = "spatial_ref"
 
 
-# Make a class holding the dataset names/attrs
-# so we can use it in the create_dataset calls
-@dataclass
-class DatasetInfo:
-    """Convenience class to create a dataset in the output product."""
+def _create_dataset(
+    *,
+    group: h5netcdf.Group,
+    name: str,
+    data: np.ndarray,
+    description: str,
+    fillvalue: Optional[float],
+    attrs: Optional[Dict[str, Any]],
+) -> h5netcdf.Variable:
+    if attrs is None:
+        attrs = {}
+    attrs.update(long_name=description)
 
-    name: str
-    data: ArrayLike
-    description: str
-    fillvalue: Optional[float] = None
-    attrs: Dict[str, Any] = field(default_factory=dict)
-    xy_scales: Optional[Tuple[h5py.Dataset, h5py.Dataset]] = None
-
-    def __post_init__(self):
-        self.attrs.update(long_name=self.description)
-        if self.fillvalue is not None:
-            self.attrs["_FillValue"] = self.fillvalue
-
-    def create(
-        self,
-        group: h5py.Group,
-    ):
-        """Create the dataset in the given h5py.Group."""
-        dset = group.create_dataset(
-            self.name,
-            data=self.data,
-            fillvalue=self.fillvalue,
-            **HDF5_OPTS,
-        )
-        if self.xy_scales is not None:
-            self._attach_scales(dset, *self.xy_scales)
-        dset.attrs.update(self.attrs)
-
-    def _attach_scales(
-        self, dset: h5py.Dataset, x_ds: h5py.Dataset, y_ds: h5py.Dataset
-    ):
-        # Attach the X/Y coordinates
-        self.attrs["grid_mapping"] = GRID_MAPPING_DSET
-        dset.dims[0].attach_scale(y_ds)
-        dset.dims[1].attach_scale(x_ds)
+    dset = group.create_variable(
+        name,
+        ["y_coordinate", "x_coordinate"],
+        data=data,
+        fillvalue=fillvalue,
+        **HDF5_OPTS,
+    )
+    dset.attrs.update(attrs)
+    return dset
 
 
-class ConnCompDatasetInfo(DatasetInfo):
-    """Class for the connected components dataset."""
-
-    def __init__(self, data: ArrayLike, xy_scales: Tuple[h5py.Dataset, h5py.Dataset]):
-        super().__init__(
-            name="connected_components",
-            data=data,
-            description="Connected components of the unwrapped phase",
-            fillvalue=0,
-            attrs=dict(units="unitless"),
-            xy_scales=xy_scales,
-        )
-
-
-class UnwrappedDatasetInfo(DatasetInfo):
-    """Class for the unwrapped phase dataset."""
-
-    def __init__(self, data: ArrayLike, xy_scales: Tuple[h5py.Dataset, h5py.Dataset]):
-        super().__init__(
-            name="unwrapped_phase",
-            data=data,
-            description="Unwrapped phase",
-            fillvalue=np.nan,
-            attrs=dict(units="radians"),
-            xy_scales=xy_scales,
-        )
-
-
-class TcorrDatasetInfo(DatasetInfo):
-    """Class for the temporal correlation dataset."""
-
-    def __init__(self, data: ArrayLike, xy_scales: Tuple[h5py.Dataset, h5py.Dataset]):
-        super().__init__(
-            name="temporal_correlation",
-            data=data,
-            description="Temporal correlation of phase inversion",
-            fillvalue=np.nan,
-            attrs=dict(units="unitless"),
-            xy_scales=xy_scales,
-        )
-
-
-class TropoDatasetInfo(DatasetInfo):
-    """Class for the tropospheric delay dataset."""
-
-    def __init__(self, data: ArrayLike, xy_scales: Tuple[h5py.Dataset, h5py.Dataset]):
-        super().__init__(
-            name="tropospheric_delay",
-            data=data,
-            description="Tropospheric phase delay used to correct the unwrapped phase",
-            fillvalue=np.nan,
-            attrs=dict(units="radians"),
-            xy_scales=xy_scales,
-        )
-
-
-class IonosphereDatasetInfo(DatasetInfo):
-    """Class for the ionospheric delay dataset."""
-
-    def __init__(self, data: ArrayLike, xy_scales: Tuple[h5py.Dataset, h5py.Dataset]):
-        super().__init__(
-            name="ionospheric_delay",
-            data=data,
-            description="Ionospheric phase delay used to correct the unwrapped phase",
-            fillvalue=np.nan,
-            attrs=dict(units="radians"),
-            xy_scales=xy_scales,
-        )
+def _create_geo_dataset(
+    *,
+    group: h5netcdf.Group,
+    name: str,
+    data: np.ndarray,
+    description: str,
+    fillvalue: Optional[float],
+    attrs: Optional[Dict[str, Any]],
+) -> h5netcdf.Variable:
+    dset = _create_dataset(
+        group=group,
+        name=name,
+        data=data,
+        description=description,
+        fillvalue=fillvalue,
+        attrs=attrs,
+    )
+    dset.attrs["grid_mapping"] = GRID_MAPPING_DSET
+    return dset
 
 
 def create_output_product(
@@ -181,40 +119,82 @@ def create_output_product(
     # Set to NaN for final output
     unw_arr[mask] = np.nan
 
-    with h5py.File(output_name, "w") as f:
+    assert unw_arr.shape == conncomp_arr.shape == tcorr_arr.shape
+
+    # with h5py.File(output_name, "w") as f:
+    with h5netcdf.File(output_name, "w") as f:
         # Create the NetCDF file
         f.attrs.update(GLOBAL_ATTRS)
 
-        # Create the '/science/SENTINEL1/DISP/grids/displacement' group
         displacement_group = f.create_group(DISP_GROUP)
-        quality_group = f.create_group(QUALITY_GROUP)
 
-        # Set up the grid mapping variable
-        _create_grid_mapping(displacement_group, crs, gt)
+        # Set up the grid mapping variable for each group with rasters
+        _create_grid_mapping(group=displacement_group, crs=crs, gt=gt)
 
-        # Set up the X/Y variables
-        x_ds, y_ds = _create_xy_dsets(displacement_group, gt, unw_arr.shape)
-
+        # Set up the X/Y variables for each group
+        _create_yx_dsets(group=displacement_group, gt=gt, shape=unw_arr.shape)
         # Write the displacement array / conncomp arrays
-        UnwrappedDatasetInfo(unw_arr, (x_ds, y_ds)).create(displacement_group)
+        _create_geo_dataset(
+            group=displacement_group,
+            name="unwrapped_phase",
+            data=unw_arr,
+            description="Unwrapped phase",
+            fillvalue=np.nan,
+            attrs=dict(units="radians"),
+        )
 
-        ConnCompDatasetInfo(conncomp_arr, (x_ds, y_ds)).create(quality_group)
-        TcorrDatasetInfo(tcorr_arr, (x_ds, y_ds)).create(quality_group)
+        # scales2 = _create_yx_dsets(group=quality_group, gt=gt, shape=unw_arr.shape)
+        _create_geo_dataset(
+            group=displacement_group,
+            name="connected_components",
+            data=conncomp_arr,
+            description="Connected components of the unwrapped phase",
+            fillvalue=0,
+            attrs=dict(units="unitless"),
+        )
+        _create_geo_dataset(
+            group=displacement_group,
+            name="temporal_correlation",
+            data=tcorr_arr,
+            description="Temporal correlation of phase inversion",
+            fillvalue=np.nan,
+            attrs=dict(units="unitless"),
+        )
 
         # Create the '/science/SENTINEL1/DISP/corrections' group
         corrections_group = f.create_group(CORRECTIONS_GROUP)
-        ionosphere = corrections.get("ionosphere")
-        if ionosphere is not None:
-            IonosphereDatasetInfo(ionosphere, (x_ds, y_ds)).create(corrections_group)
 
         troposphere = corrections.get("troposphere")
+        _create_grid_mapping(group=corrections_group, crs=crs, gt=gt)
+        _create_yx_dsets(group=corrections_group, gt=gt, shape=unw_arr.shape)
         if troposphere is not None:
-            TropoDatasetInfo(troposphere, (x_ds, y_ds)).create(corrections_group)
+            _create_geo_dataset(
+                group=corrections_group,
+                name="tropospheric_delay",
+                data=troposphere,
+                description=(
+                    "Tropospheric phase delay used to correct the unwrapped phase"
+                ),
+                fillvalue=np.nan,
+                attrs=dict(units="radians"),
+            )
+        ionosphere = corrections.get("ionosphere")
+        if ionosphere is not None:
+            _create_geo_dataset(
+                group=corrections_group,
+                name="ionospheric_delay",
+                data=ionosphere,
+                description=(
+                    "Ionospheric phase delay used to correct the unwrapped phase"
+                ),
+                fillvalue=np.nan,
+                attrs=dict(units="radians"),
+            )
 
 
-def _create_xy(
+def _create_yx(
     gt: List[float], shape: Tuple[int, int]
-) -> Tuple[h5py.Dataset, h5py.Dataset]:
+) -> Tuple[np.ndarray, np.ndarray]:
     """Create the x and y coordinate datasets."""
     ysize, xsize = shape
     # Parse the geotransform
@@ -223,49 +203,40 @@ def _create_xy(
     # Make the x/y arrays
     # Note that these are the center of the pixels, whereas the GeoTransform
     # is the upper left corner of the top left pixel.
-    x = np.arange(x_origin + x_res / 2, x_origin + x_res * xsize, x_res)
     y = np.arange(y_origin + y_res / 2, y_origin + y_res * ysize, y_res)
-    return x, y
+    x = np.arange(x_origin + x_res / 2, x_origin + x_res * xsize, x_res)
+    return y, x
 
 
-def _create_xy_dsets(
-    group: h5py.Group, gt: List[float], shape: Tuple[int, int]
-) -> Tuple[h5py.Dataset, h5py.Dataset]:
+def _create_yx_dsets(
+    group: h5netcdf.Group,
+    gt: List[float],
+    shape: Tuple[int, int],
+) -> Tuple[h5netcdf.Variable, h5netcdf.Variable]:
     """Create the x and y coordinate datasets."""
-    x, y = _create_xy(gt, shape)
+    y, x = _create_yx(gt, shape)
 
+    if not group.dimensions:
+        group.dimensions = dict(y_coordinate=y.size, x_coordinate=x.size)
     # Create the datasets
-    x_ds = group.create_dataset("x_coordinates", data=x, dtype=float)
-    y_ds = group.create_dataset("y_coordinates", data=y, dtype=float)
+    y_ds = group.create_variable("y_coordinate", ("y_coordinate",), data=y, dtype=float)
+    x_ds = group.create_variable("x_coordinate", ("x_coordinate",), data=x, dtype=float)
 
-    for name, ds in zip(["x", "y"], [x_ds, y_ds]):
-        # ds.make_scale(name)
-        ds.attrs["standard_name"] = f"projection_{name}_coordinate"
-        ds.attrs["long_name"] = f"{name} coordinate of projection"
+    for name, ds in zip(["y_coordinate", "x_coordinate"], [y_ds, x_ds]):
+        ds.attrs["standard_name"] = f"projection_{name}"
+        ds.attrs["long_name"] = f"{name.replace('_', ' ')} of projection"
         ds.attrs["units"] = "m"
 
-    return x_ds, y_ds
+    return y_ds, x_ds
 
 
-def _create_grid_mapping(group, crs: pyproj.CRS, gt: List[float]) -> h5py.Dataset:
+def _create_grid_mapping(group, crs: pyproj.CRS, gt: List[float]) -> h5netcdf.Variable:
     """Set up the grid mapping variable."""
     # https://github.com/corteva/rioxarray/blob/21284f67db536d9c104aa872ab0bbc261259e59e/rioxarray/rioxarray.py#L34
-    dset = group.create_dataset(GRID_MAPPING_DSET, data=0, dtype=int)
+    dset = group.create_variable(GRID_MAPPING_DSET, (), data=0, dtype=int)
 
     dset.attrs.update(crs.to_cf())
     # Also add the GeoTransform
     gt_string = " ".join([str(x) for x in gt])
     dset.attrs["GeoTransform"] = gt_string
     return dset
-
-
-def _move_files_to_output_folder(
-    unwrapped_paths: List[Path], conncomp_paths: List[Path], output_directory: Path
-):
-    for unw_p, cc_p in zip(unwrapped_paths, conncomp_paths):
-        # get all the associated header/conncomp files too
-        unw_new_name = output_directory / unw_p.name
-        cc_new_name = output_directory / cc_p.name
-        logger.info(f"Moving {unw_p} and {cc_p} into {output_directory}")
-        unw_p.rename(unw_new_name)
-        cc_p.rename(cc_new_name)

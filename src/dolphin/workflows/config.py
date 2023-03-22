@@ -1,13 +1,8 @@
-import json
 import re
-import sys
-import textwrap
 from datetime import date, datetime
-from io import StringIO
 from pathlib import Path
-from typing import Dict, List, Optional, TextIO, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
-from osgeo import gdal
 from pydantic import (
     BaseModel,
     BaseSettings,
@@ -17,18 +12,14 @@ from pydantic import (
     root_validator,
     validator,
 )
-from ruamel.yaml import YAML
-from ruamel.yaml.comments import CommentedMap
 
 from dolphin import __version__ as _dolphin_version
 from dolphin._log import get_log
 from dolphin.io import DEFAULT_HDF5_OPTIONS, DEFAULT_TIFF_OPTIONS, format_nc_filename
 from dolphin.utils import get_dates, sort_files_by_date
 
-from ._enums import InterferogramNetworkType, OutputFormat, UnwrapMethod, WorkflowName
-
-gdal.UseExceptions()
-PathOrStr = Union[Path, str]
+from ._enums import InterferogramNetworkType, UnwrapMethod, WorkflowName
+from ._yaml_model import YamlModel
 
 __all__ = [
     "Workflow",
@@ -44,38 +35,13 @@ OPERA_BURST_RE = re.compile(
 )
 
 
-def _move_file_in_dir(path: PathOrStr, values: dict) -> Path:
-    """Make sure the `path` is within `values['directory']`.
-
-    Used for validation in different workflow steps' outputs.
-    """
-    p = Path(path)
-    d = Path(values.get("directory", "."))
-    if p.parent != d:
-        return d / p.name
-    else:
-        return p
-
-
-class PsOptions(BaseModel):
+class PsOptions(BaseModel, extra=Extra.forbid):
     """Options for the PS pixel selection portion of the workflow."""
 
-    directory: Path = Field(
-        Path("PS"),
-        description="Sub-directory name to store PS pixel selection results.",
-    )
-    output_file: Path = Field(
-        Path("ps_pixels.tif"),
-        description="Output file name for PS pixel selection results.",
-    )
-    amp_dispersion_file: Path = Field(
-        Path("amp_dispersion.tif"),
-        description="Output file name for amplitude dispersion results.",
-    )
-    amp_mean_file: Path = Field(
-        Path("amp_mean.tif"),
-        description="Output file name for mean amplitude results.",
-    )
+    _directory: Path = PrivateAttr(Path("PS"))
+    _output_file: Path = PrivateAttr(Path("PS/ps_pixels.tif"))
+    _amp_dispersion_file: Path = PrivateAttr(Path("PS/amp_dispersion.tif"))
+    _amp_mean_file: Path = PrivateAttr(Path("PS/amp_mean.tif"))
 
     amp_dispersion_threshold: float = Field(
         0.25,
@@ -83,20 +49,8 @@ class PsOptions(BaseModel):
         gt=0.0,
     )
 
-    class Config:
-        extra = Extra.forbid  # raise error if extra fields passed in
 
-    # validators: Check directory exists, and that outputs are within directory
-    _move_in_dir = validator(
-        "output_file",
-        "amp_dispersion_file",
-        "amp_mean_file",
-        always=True,
-        allow_reuse=True,
-    )(_move_file_in_dir)
-
-
-class HalfWindow(BaseModel):
+class HalfWindow(BaseModel, extra=Extra.forbid):
     """Class to hold half-window size for multi-looking during phase linking."""
 
     x: int = Field(11, description="Half window size (in pixels) for x direction", gt=0)
@@ -112,13 +66,10 @@ class HalfWindow(BaseModel):
         return cls(x=col_looks // 2, y=row_looks // 2)
 
 
-class PhaseLinkingOptions(BaseModel):
+class PhaseLinkingOptions(BaseModel, extra=Extra.forbid):
     """Configurable options for wrapped phase estimation."""
 
-    directory: Path = Field(
-        Path("linked_phase"),
-        description="Sub-directory name to store wrapped phase estimation results.",
-    )
+    _directory: Path = PrivateAttr(Path("linked_phase"))
     ministack_size: int = Field(
         15, description="Size of the ministack for sequential estimator.", gt=1
     )
@@ -133,17 +84,11 @@ class PhaseLinkingOptions(BaseModel):
         lt=1.0,
     )
 
-    class Config:
-        extra = Extra.forbid  # raise error if extra fields passed in
 
-
-class InterferogramNetwork(BaseModel):
+class InterferogramNetwork(BaseModel, extra=Extra.forbid):
     """Options to determine the type of network for interferogram formation."""
 
-    directory: Path = Field(
-        Path("interferograms"),
-        description="Sub-directory name to store interferogram results.",
-    )
+    _directory: Path = PrivateAttr(Path("interferograms"))
 
     reference_idx: Optional[int] = Field(
         None,
@@ -169,9 +114,6 @@ class InterferogramNetwork(BaseModel):
         ),
     )
     network_type: InterferogramNetworkType = InterferogramNetworkType.SINGLE_REFERENCE
-
-    class Config:
-        extra = Extra.forbid  # raise error if extra fields passed in
 
     # validation
     @root_validator
@@ -210,10 +152,7 @@ class UnwrapOptions(BaseModel):
             "Whether to run the unwrapping step after wrapped phase estimation."
         ),
     )
-    directory: Path = Field(
-        Path("unwrap"),
-        description="Sub-directory name to store unwrapping results.",
-    )
+    _directory: Path = PrivateAttr(Path("unwrap"))
     unwrap_method: UnwrapMethod = UnwrapMethod.SNAPHU
     tiles: List[int] = Field(
         [1, 1],
@@ -257,24 +196,17 @@ class WorkerSettings(BaseSettings):
     class Config:
         """Pydantic class configuration for BaseSettings."""
 
+        extra = Extra.forbid
         # https://docs.pydantic.dev/usage/settings/#parsing-environment-variable-values
         env_prefix = "dolphin_"  # e.g. DOLPHIN_N_WORKERS=4 for n_workers
         fields = {
             "gpu_enabled": {"env": ["dolphin_gpu_enabled", "gpu"]},
         }
-        extra = Extra.forbid  # raise error if extra fields passed in
 
 
-class Inputs(BaseModel):
+class InputOptions(BaseModel, extra=Extra.forbid):
     """Options specifying input datasets for workflow."""
 
-    cslc_file_list: List[Path] = Field(
-        default_factory=list,
-        description=(
-            "List of CSLC files, or newline-delimited file "
-            "containing list of CSLC files."
-        ),
-    )
     subdataset: Optional[str] = Field(
         None,
         description=(
@@ -288,105 +220,10 @@ class Inputs(BaseModel):
         description="Format of dates contained in CSLC filenames",
     )
 
-    mask_files: List[Path] = Field(
-        default_factory=list,
-        description=(
-            "List of mask files to use, where convention is"
-            " 0 for no data/invalid, and 1 for data."
-        ),
-    )
 
-    class Config:
-        extra = Extra.forbid  # raise error if extra fields passed in
-        schema_extra = {"required": ["cslc_file_list"]}
+class OutputOptions(BaseModel, extra=Extra.forbid):
+    """Options for the output size/format/compressions."""
 
-    # validators
-    @validator("cslc_file_list", pre=True)
-    def _check_input_file_list(cls, v):
-        if v is None:
-            return []
-        if isinstance(v, (str, Path)):
-            v_path = Path(v)
-            # Check if it's a newline-delimited list of input files
-            if v_path.exists() and v_path.is_file():
-                filenames = [Path(f) for f in v_path.read_text().splitlines()]
-                # If given as relative paths, make them relative to the file
-                parent = v_path.parent
-                return [parent / f if not f.is_absolute() else f for f in filenames]
-            else:
-                raise ValueError(
-                    f"Input file list {v_path} does not exist or is not a file."
-                )
-
-        return [Path(f) for f in v]
-
-    @validator("subdataset", pre=True, always=True)
-    def _check_for_opera(cls, v, values):
-        cslc_file_list = values.get("cslc_file_list")
-        # if we're not dealing with all OPERA files, just return whatever they gave
-        if any(re.search(OPERA_BURST_RE, str(f)) is None for f in cslc_file_list):
-            return v
-        # Here we're dealing with all OPERA files, so we need to set the subdataset
-        if v is None:
-            # Assume that the user forgot to set the subdataset, and set it to the
-            # default OPERA dataset name
-            logger.info(
-                "CSLC files look like OPERA files, setting subdataset to"
-                f" {OPERA_DATASET_NAME}."
-            )
-            return OPERA_DATASET_NAME
-        return v
-
-    @validator("mask_files", pre=True)
-    def _check_mask_files(cls, v):
-        if isinstance(v, (str, Path)):
-            # If they have passed a single mask file, return it as a list
-            return [Path(v)]
-        elif v is None:
-            return []
-        return [Path(f) for f in v]
-
-    @root_validator
-    def _check_slc_files_exist(cls, values):
-        file_list = values.get("cslc_file_list")
-        date_fmt = values.get("cslc_date_fmt")
-        if not file_list:
-            raise ValueError("Must specify list of input SLC files.")
-
-        # Filter out files that don't have dates in the filename
-        file_matching_date = [Path(f) for f in file_list if get_dates(f, fmt=date_fmt)]
-        if len(file_matching_date) < len(file_list):
-            raise ValueError(
-                f"Found {len(file_matching_date)} files with dates in the filename"
-                f" out of {len(file_list)} files."
-            )
-
-        ext = file_list[0].suffix
-        # If they're HDF5/NetCDF files, we need to check that the subdataset exists
-        if ext in [".h5", ".nc"]:
-            subdataset = values.get("subdataset")
-            # gdal formatting function will raise an error if subdataset doesn't exist
-            for f in file_list:
-                format_nc_filename(f, subdataset)
-
-        # Coerce the file_list to a sorted list of absolute Path objects
-        file_list, _ = sort_files_by_date(file_list, file_date_fmt=date_fmt)
-        values["cslc_file_list"] = [Path(f).resolve() for f in file_list]
-        return values
-
-
-class Outputs(BaseModel):
-    """Options for the output format/compressions."""
-
-    output_format: OutputFormat = OutputFormat.NETCDF
-    scratch_directory: Path = Field(
-        Path("scratch"),
-        description="Name of sub-directory to use for scratch files",
-    )
-    output_directory: Path = Field(
-        Path("output"),
-        description="Name of sub-directory to use for output files",
-    )
     output_resolution: Optional[Dict[str, int]] = Field(
         # {"x": 20, "y": 20},
         None,
@@ -411,14 +248,7 @@ class Outputs(BaseModel):
         description="GDAL creation options for GeoTIFF files",
     )
 
-    class Config:
-        extra = Extra.forbid  # raise error if extra fields passed in
-
     # validators
-    @validator("output_directory", "scratch_directory", always=True)
-    def _dir_is_absolute(cls, v):
-        return v.absolute()
-
     @validator("output_resolution", "strides", pre=True, always=True)
     def _check_resolution(cls, v):
         """Allow the user to specify just one float, applying to both dimensions."""
@@ -455,16 +285,35 @@ class Outputs(BaseModel):
         return strides
 
 
-class Workflow(BaseModel):
-    """Configuration for the workflow.
-
-    Required fields are in `Inputs`, where you must specify `cslc_file_list`.
-    """
+class Workflow(YamlModel):
+    """Configuration for the workflow."""
 
     workflow_name: WorkflowName = WorkflowName.STACK
 
-    inputs: Inputs
-    outputs: Outputs = Field(default_factory=Outputs)
+    # Paths to input/output files
+    input_options: InputOptions = Field(default_factory=InputOptions)
+    cslc_file_list: List[Path] = Field(
+        default_factory=list,
+        description=(
+            "List of CSLC files, or newline-delimited file "
+            "containing list of CSLC files."
+        ),
+    )
+    mask_files: List[Path] = Field(
+        default_factory=list,
+        description=(
+            "List of mask files to use, where convention is"
+            " 0 for no data/invalid, and 1 for data."
+        ),
+    )
+    scratch_directory: Path = Field(
+        Path("scratch"),
+        description="Name of sub-directory to use for scratch files",
+    )
+    output_directory: Path = Field(
+        Path("output"),
+        description="Name of sub-directory to use for output files",
+    )
 
     # Options for each step in the workflow
     ps_options: PsOptions = Field(default_factory=PsOptions)
@@ -473,6 +322,7 @@ class Workflow(BaseModel):
         default_factory=InterferogramNetwork
     )
     unwrap_options: UnwrapOptions = Field(default_factory=UnwrapOptions)
+    output_options: OutputOptions = Field(default_factory=OutputOptions)
 
     # General workflow metadata
     worker_settings: WorkerSettings = Field(default_factory=WorkerSettings)
@@ -489,123 +339,124 @@ class Workflow(BaseModel):
     _date_list: List[Union[date, List[date]]] = PrivateAttr(default_factory=list)
 
     class Config:
-        extra = Extra.forbid  # raise error if extra fields passed in
+        extra = Extra.forbid
+        schema_extra = {"required": ["cslc_file_list"]}
+
+    @validator("output_directory", "scratch_directory", always=True)
+    def _dir_is_absolute(cls, v):
+        return v.resolve()
+
+    @validator("mask_files", pre=True)
+    def _check_mask_files(cls, v):
+        if v is None:
+            return []
+        if isinstance(v, (str, Path)):
+            # If they have passed a single mask file, return it as a list
+            v = [Path(v)]
+        return [Path(f).resolve() for f in v]
 
     # validators
+    @validator("cslc_file_list", pre=True)
+    def _check_input_file_list(cls, v):
+        if v is None:
+            return []
+        if isinstance(v, (str, Path)):
+            v_path = Path(v)
+            # Check if it's a newline-delimited list of input files
+            if v_path.exists() and v_path.is_file():
+                filenames = [Path(f) for f in v_path.read_text().splitlines()]
+                # If given as relative paths, make them relative to the file
+                parent = v_path.parent
+                return [parent / f if not f.is_absolute() else f for f in filenames]
+            else:
+                raise ValueError(
+                    f"Input file list {v_path} does not exist or is not a file."
+                )
+
+        return [Path(f) for f in v]
+
+    @staticmethod
+    def _is_opera_file_list(cslc_file_list):
+        return all(
+            re.search(OPERA_BURST_RE, str(f)) is not None for f in cslc_file_list
+        )
+
     @root_validator
-    def _move_dirs_inside_scratch(cls, values):
-        """Ensure outputs from workflow steps are within scratch directory."""
-        scratch_dir = values["outputs"].scratch_directory
+    def _check_slc_files_exist(cls, values):
+        file_list = values.get("cslc_file_list")
+        if not file_list:
+            raise ValueError("Must specify list of input SLC files.")
+
+        input_options = values.get("input_options")
+        date_fmt = input_options.cslc_date_fmt
+        # Filter out files that don't have dates in the filename
+        file_matching_date = [Path(f) for f in file_list if get_dates(f, fmt=date_fmt)]
+        if len(file_matching_date) < len(file_list):
+            raise ValueError(
+                f"Found {len(file_matching_date)} files with dates in the filename"
+                f" out of {len(file_list)} files."
+            )
+
+        ext = file_list[0].suffix
+        # If they're HDF5/NetCDF files, we need to check that the subdataset exists
+        if ext in [".h5", ".nc"]:
+            subdataset = input_options.subdataset
+            if subdataset is None and cls._is_opera_file_list(file_list):
+                # Assume that the user forgot to set the subdataset, and set it to the
+                # default OPERA dataset name
+                logger.info(
+                    "CSLC files look like OPERA files, setting subdataset to"
+                    f" {OPERA_DATASET_NAME}."
+                )
+                subdataset = input_options.subdataset = OPERA_DATASET_NAME
+
+            # gdal formatting function will raise an error if subdataset doesn't exist
+            for f in file_list:
+                format_nc_filename(f, subdataset)
+
+        # Coerce the file_list to a sorted list of absolute Path objects
+        file_list, _ = sort_files_by_date(file_list, file_date_fmt=date_fmt)
+        values["cslc_file_list"] = [Path(f).resolve() for f in file_list]
+        return values
+
+    def __init__(self, **data):
+        """After validation, set up properties for use during workflow run."""
+        super().__init__(**data)
+
+        # Ensure outputs from workflow steps are within scratch directory.
+        scratch_dir = self.scratch_directory
         # Save all directories as absolute paths
         scratch_dir = scratch_dir.resolve(strict=False)
 
         # For each workflow step that has an output folder, move it inside
         # the scratch directory (if it's not already inside).
         # They may already be inside if we're loading from a json/yaml file.
-        ps_opts = values["ps_options"]
-        if not ps_opts.directory.parent == scratch_dir:
-            ps_opts.directory = scratch_dir / ps_opts.directory
-        ps_opts.directory = ps_opts.directory.resolve(strict=False)
-
-        if not ps_opts.amp_dispersion_file.parent.parent == scratch_dir:
-            ps_opts.amp_dispersion_file = scratch_dir / ps_opts.amp_dispersion_file
-        if not ps_opts.amp_mean_file.parent.parent == scratch_dir:
-            ps_opts.amp_mean_file = scratch_dir / ps_opts.amp_mean_file
-        if not ps_opts.output_file.parent.parent == scratch_dir:
-            ps_opts.output_file = scratch_dir / ps_opts.output_file
-
-        pl_opts = values["phase_linking"]
-        if not pl_opts.directory.parent == scratch_dir:
-            pl_opts.directory = scratch_dir / pl_opts.directory
-        pl_opts.directory = pl_opts.directory.resolve(strict=False)
-
-        ifg_opts = values["interferogram_network"]
-        if not ifg_opts.directory.parent == scratch_dir:
-            ifg_opts.directory = scratch_dir / ifg_opts.directory
-        ifg_opts.directory = ifg_opts.directory.resolve(strict=False)
-
-        unw_opts = values["unwrap_options"]
-        if not unw_opts.directory.parent == scratch_dir:
-            unw_opts.directory = scratch_dir / unw_opts.directory
-        unw_opts.directory = unw_opts.directory.resolve(strict=False)
-
-        return values
-
-    # Extra model exporting options beyond .dict() or .json()
-    def to_yaml(self, output_path: Union[PathOrStr, TextIO], with_comments=True):
-        """Save workflow configuration as a yaml file.
-
-        Used to record the default-filled version of a supplied yaml.
-
-        Parameters
-        ----------
-        output_path : Pathlike
-            Path to the yaml file to save.
-        with_comments : bool, default = False.
-            Whether to add comments containing the type/descriptions to all fields.
-        """
-        yaml_obj = self._to_yaml_obj()
-
-        if with_comments:
-            _add_comments(yaml_obj, self.schema())
-
-        y = YAML()
-        if hasattr(output_path, "write"):
-            y.dump(yaml_obj, output_path)
-        else:
-            with open(output_path, "w") as f:
-                y.dump(yaml_obj, f)
-
-    @classmethod
-    def from_yaml(cls, yaml_path: PathOrStr):
-        """Load a workflow configuration from a yaml file.
-
-        Parameters
-        ----------
-        yaml_path : Pathlike
-            Path to the yaml file to load.
-
-        Returns
-        -------
-        Config
-            Workflow configuration
-        """
-        y = YAML(typ="safe")
-        with open(yaml_path, "r") as f:
-            data = y.load(f)
-
-        return cls(**data)
-
-    @classmethod
-    def print_yaml_schema(cls, output_path: Union[PathOrStr, TextIO] = sys.stdout):
-        """Print/save an empty configuration with defaults filled in.
-
-        Ignores the required `cslc_file_list` input, so a user can
-        inspect all fields.
-
-        Parameters
-        ----------
-        output_path : Pathlike
-            Path or stream to save to the yaml file to.
-            By default, prints to stdout.
-        """
-        # The .construct is a pydantic method to disable validation
-        # https://docs.pydantic.dev/usage/models/#creating-models-without-validation
-        cls(inputs=Inputs.construct()).to_yaml(output_path, with_comments=True)
-
-    def __init__(self, **data):
-        """After validation, set up properties for use during workflow run."""
-        super().__init__(**data)
+        for step in [
+            "ps_options",
+            "phase_linking",
+            "interferogram_network",
+            "unwrap_options",
+        ]:
+            opts = getattr(self, step)
+            if not opts._directory.parent == scratch_dir:
+                opts._directory = scratch_dir / opts._directory
+            opts._directory = opts._directory.resolve(strict=False)
 
         # Track the directories that need to be created at start of workflow
         self._directory_list = [
-            self.outputs.scratch_directory,
-            self.outputs.output_directory,
-            self.ps_options.directory,
-            self.phase_linking.directory,
-            self.interferogram_network.directory,
-            self.unwrap_options.directory,
+            scratch_dir,
+            self.output_directory,
+            self.ps_options._directory,
+            self.phase_linking._directory,
+            self.interferogram_network._directory,
+            self.unwrap_options._directory,
         ]
+        # Add the output PS files we'll create to the `PS` directory, making
+        # sure they're inside the scratch directory
+        ps_opts = self.ps_options
+        ps_opts._amp_dispersion_file = scratch_dir / ps_opts._amp_dispersion_file
+        ps_opts._amp_mean_file = scratch_dir / ps_opts._amp_mean_file
+        ps_opts._output_file = scratch_dir / ps_opts._output_file
 
     def create_dir_tree(self, debug=False):
         """Create the directory tree for the workflow."""
@@ -613,75 +464,3 @@ class Workflow(BaseModel):
         for d in self._directory_list:
             log.debug(f"Creating directory: {d}")
             d.mkdir(parents=True, exist_ok=True)
-
-    def _to_yaml_obj(self) -> CommentedMap:
-        # Make the YAML object to add comments to
-        # We can't just do `dumps` for some reason, need a stream
-        y = YAML()
-        ss = StringIO()
-        y.dump(json.loads(self.json()), ss)
-        yaml_obj = y.load(ss.getvalue())
-        return yaml_obj
-
-
-def _add_comments(
-    loaded_yaml: CommentedMap,
-    schema: dict,
-    indent: int = 0,
-    definitions: Optional[dict] = None,
-):
-    """Add comments above each YAML field using the pydantic model schema."""
-    # Definitions are in schemas that contain nested pydantic Models
-    if definitions is None:
-        definitions = schema.get("definitions")
-
-    for key, val in schema["properties"].items():
-        reference = ""
-        # Get sub-schema if it exists
-        if "$ref" in val.keys():
-            # At top level, example is 'outputs': {'$ref': '#/definitions/Outputs'}
-            reference = val["$ref"]
-        elif "allOf" in val.keys():
-            # within 'definitions', it looks like
-            #  'allOf': [{'$ref': '#/definitions/HalfWindow'}]
-            reference = val["allOf"][0]["$ref"]
-
-        ref_key = reference.split("/")[-1]
-        if ref_key:  # The current property is a reference to something else
-            if "enum" in definitions[ref_key]:  # type: ignore
-                # This is just an Enum, not a sub schema.
-                # Overwrite the value with the referenced value
-                val = definitions[ref_key]  # type: ignore
-            else:
-                # The reference is a sub schema, so we need to recurse
-                sub_schema = definitions[ref_key]  # type: ignore
-                # Get the sub-model
-                sub_loaded_yaml = loaded_yaml[key]
-                # recurse on the sub-model
-                _add_comments(
-                    sub_loaded_yaml,
-                    sub_schema,
-                    indent=indent + 2,
-                    definitions=definitions,
-                )
-                continue
-
-        # add each description along with the type information
-        desc = "\n".join(
-            textwrap.wrap(f"{val['description']}.", width=90, subsequent_indent="  ")
-        )
-        type_str = f"\n  Type: {val['type']}."
-        choices = f"\n  Options: {val['enum']}." if "enum" in val.keys() else ""
-
-        # Combine the description/type/choices as the YAML comment
-        comment = f"{desc}{type_str}{choices}"
-        comment = comment.replace("..", ".")  # Remove double periods
-
-        # Prepend the required label for fields that are required
-        is_required = key in schema.get("required", [])
-        if is_required:
-            comment = "REQUIRED: " + comment
-
-        # This method comes from here
-        # https://yaml.readthedocs.io/en/latest/detail.html#round-trip-including-comments
-        loaded_yaml.yaml_set_comment_before_after_key(key, comment, indent=indent)

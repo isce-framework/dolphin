@@ -6,7 +6,7 @@ from typing import Dict, List, Optional
 from dolphin._log import get_log, log_runtime
 from dolphin.interferogram import VRTInterferogram
 
-from . import OutputFormat, _product, stitch_and_unwrap, wrapped_phase
+from . import _product, stitch_and_unwrap, wrapped_phase
 from ._utils import group_by_burst
 from .config import Workflow
 
@@ -28,13 +28,13 @@ def run(cfg: Workflow, debug: bool = False, log_file: Optional[str] = None):
     logger.debug(pformat(cfg.dict()))
 
     try:
-        grouped_slc_files = group_by_burst(cfg.inputs.cslc_file_list)
+        grouped_slc_files = group_by_burst(cfg.cslc_file_list)
     except ValueError as e:
         # Make sure it's not some other ValueError
         if "Could not parse burst id" not in str(e):
             raise e
         # Otherwise, we have SLC files which are not OPERA burst files
-        grouped_slc_files = {"": cfg.inputs.cslc_file_list}
+        grouped_slc_files = {"": cfg.cslc_file_list}
 
     if len(grouped_slc_files) > 1:
         logger.info(f"Found SLC files from {len(grouped_slc_files)} bursts")
@@ -64,7 +64,7 @@ def run(cfg: Workflow, debug: bool = False, log_file: Optional[str] = None):
         tcorr_list.append(tcorr)
 
     # TODO: store the compressed SLCs somewhere
-    # if cfg.outputs.store_compressed_slcs:
+    # if cfg.store_compressed_slcs:
     #     pass
 
     # ###################################
@@ -79,50 +79,28 @@ def run(cfg: Workflow, debug: bool = False, log_file: Optional[str] = None):
     # ######################################
     logger.info(
         f"Creating {len(unwrapped_paths), len(conncomp_paths)} outputs in"
-        f" {cfg.outputs.output_directory}"
+        f" {cfg.output_directory}"
     )
-    if cfg.outputs.output_format == OutputFormat.NETCDF:
-        for unw_p, cc_p in zip(unwrapped_paths, conncomp_paths):
-            output_name = cfg.outputs.output_directory / unw_p.with_suffix(".nc").name
-            _product.create_output_product(
-                unw_filename=unw_p,
-                conncomp_filename=cc_p,
-                tcorr_filename=stitched_tcorr,
-                # TODO: How am i going to create the output name?
-                # output_name=cfg.outputs.output_name,
-                output_name=output_name,
-                corrections={},
-            )
-    else:
-        _product._move_files_to_output_folder(
-            unwrapped_paths,
-            conncomp_paths,
-            cfg.outputs.output_directory,
+    for unw_p, cc_p in zip(unwrapped_paths, conncomp_paths):
+        output_name = cfg.output_directory / unw_p.with_suffix(".nc").name
+        _product.create_output_product(
+            unw_filename=unw_p,
+            conncomp_filename=cc_p,
+            tcorr_filename=stitched_tcorr,
+            # TODO: How am i going to create the output name?
+            # output_name=cfg.outputs.output_name,
+            output_name=output_name,
+            corrections={},
         )
 
 
 def _create_burst_cfg(
     cfg: Workflow, burst_id: str, grouped_slc_files: Dict[str, List[Path]]
 ) -> Workflow:
-    excludes = {
-        "inputs": {"cslc_file_list"},
-        "ps_options": {
-            "directory",
-            "output_file",
-            "amp_dispersion_file",
-            "amp_mean_file",
-        },
-        "phase_linking": {"directory"},
-        "interferogram_network": {"directory"},
-    }
-    cfg_temp_dict = cfg.copy(deep=True, exclude=excludes).dict()
+    cfg_temp_dict = cfg.copy(deep=True, exclude={"cslc_file_list"}).dict()
 
-    top_level_scratch = cfg_temp_dict["outputs"]["scratch_directory"]
-    new_input_dict = dict(
-        inputs={"cslc_file_list": grouped_slc_files[burst_id]},
-        outputs={"scratch_directory": top_level_scratch / burst_id},
-    )
     # Just update the inputs and the scratch directory
-    cfg_temp_dict["inputs"].update(new_input_dict["inputs"])
-    cfg_temp_dict["outputs"].update(new_input_dict["outputs"])
+    top_level_scratch = cfg_temp_dict["outputs"]["scratch_directory"]
+    cfg_temp_dict["outputs"].update({"scratch_directory": top_level_scratch / burst_id})
+    cfg_temp_dict["cslc_file_list"] = grouped_slc_files[burst_id]
     return Workflow(**cfg_temp_dict)

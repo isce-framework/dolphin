@@ -36,39 +36,38 @@ def run(
         In the case of sequential phase linking, this is the average tcorr file.
     """
     logger = get_log(debug=debug)
-    scratch_dir = cfg.outputs.scratch_directory
 
-    input_file_list = cfg.inputs.cslc_file_list
+    input_file_list = cfg.cslc_file_list
     if not input_file_list:
         raise ValueError("No input files found")
 
     # #############################################
     # 1. Make a VRT pointing to the input SLC files
     # #############################################
-    subdataset = cfg.inputs.subdataset
-    vrt_path = scratch_dir / "slc_stack.vrt"
+    subdataset = cfg.input_options.subdataset
+    vrt_path = cfg.scratch_directory / "slc_stack.vrt"
     if vrt_path.exists():
         vrt_stack = stack.VRTStack.from_vrt_file(vrt_path)
     else:
         vrt_stack = stack.VRTStack(
             input_file_list,
             subdataset=subdataset,
-            outfile=scratch_dir / "slc_stack.vrt",
+            outfile=cfg.scratch_directory / "slc_stack.vrt",
         )
 
     # ###############
     # 2. PS selection
     # ###############
-    ps_output = cfg.ps_options.output_file
+    ps_output = cfg.ps_options._output_file
     if ps_output.exists():
         logger.info(f"Skipping making existing PS file {ps_output}")
     else:
         logger.info(f"Creating persistent scatterer file {ps_output}")
         ps.create_ps(
             slc_vrt_file=vrt_stack.outfile,
-            output_file=cfg.ps_options.output_file,
-            amp_mean_file=cfg.ps_options.amp_mean_file,
-            amp_dispersion_file=cfg.ps_options.amp_dispersion_file,
+            output_file=ps_output,
+            amp_mean_file=cfg.ps_options._amp_mean_file,
+            amp_dispersion_file=cfg.ps_options._amp_dispersion_file,
             amp_dispersion_threshold=cfg.ps_options.amp_dispersion_threshold,
             block_size_gb=cfg.worker_settings.block_size_gb,
         )
@@ -76,7 +75,7 @@ def run(
     # #########################
     # 3. phase linking/EVD step
     # #########################
-    pl_path = cfg.phase_linking.directory
+    pl_path = cfg.phase_linking._directory
 
     watcher = NvidiaMemoryWatcher() if gpu_is_available() else None
     phase_linked_slcs = list(pl_path.glob("2*.tif"))
@@ -91,10 +90,10 @@ def run(
                 slc_vrt_file=vrt_stack.outfile,
                 output_folder=pl_path,
                 half_window=cfg.phase_linking.half_window.dict(),
-                strides=cfg.outputs.strides,
+                strides=cfg.output_options.strides,
                 reference_idx=0,
-                # mask_file=cfg.inputs.mask_file,
-                ps_mask_file=cfg.ps_options.output_file,
+                # mask_file=cfg.mask_file,
+                ps_mask_file=ps_output,
                 max_bytes=cfg.worker_settings.block_size_gb * 1e9,
                 n_workers=cfg.worker_settings.n_workers,
                 gpu_enabled=cfg.worker_settings.gpu_enabled,
@@ -105,10 +104,10 @@ def run(
                 slc_vrt_file=vrt_stack.outfile,
                 output_folder=pl_path,
                 half_window=cfg.phase_linking.half_window.dict(),
-                strides=cfg.outputs.strides,
+                strides=cfg.output_options.strides,
                 ministack_size=cfg.phase_linking.ministack_size,
-                # mask_file=cfg.inputs.mask_file,
-                ps_mask_file=cfg.ps_options.output_file,
+                # mask_file=cfg.mask_file,
+                ps_mask_file=ps_output,
                 max_bytes=cfg.worker_settings.block_size_gb * 1e9,
                 n_workers=cfg.worker_settings.n_workers,
                 gpu_enabled=cfg.worker_settings.gpu_enabled,
@@ -122,7 +121,7 @@ def run(
     # ###################################################
     # 4. Form interferograms from estimated wrapped phase
     # ###################################################
-    ifg_dir = cfg.interferogram_network.directory
+    ifg_dir = cfg.interferogram_network._directory
     existing_ifgs = list(ifg_dir.glob("*.int.vrt"))
     if len(existing_ifgs) > 0:
         logger.info(f"Skipping interferogram step, {len(existing_ifgs)} exists")
