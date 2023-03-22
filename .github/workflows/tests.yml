@@ -28,7 +28,7 @@ jobs:
               python=3.8
               gdal=3.5
               h5py=3.6
-              h5netcdf=1.1
+              h5netcdf=1.0
               isce3=0.8.0
               numpy=1.20
               numba=0.54

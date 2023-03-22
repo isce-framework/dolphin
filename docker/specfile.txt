@@ -28,7 +28,7 @@ https://conda.anaconda.org/conda-forge/linux-64/h5py-3.8.0-nompi_py310h0311031_1
 https://conda.anaconda.org/conda-forge/linux-64/hdf4-4.2.15-h501b40f_6.conda#c3e9338e15d90106f467377017352b97
 https://conda.anaconda.org/conda-forge/linux-64/hdf5-1.12.2-nompi_h4df4325_101.conda#162a25904af6586b234b2dd52ee99c61
 https://conda.anaconda.org/conda-forge/linux-64/icu-70.1-h27087fc_0.tar.bz2#87473a15119779e021c314249d4b4aed
-https://conda.anaconda.org/conda-forge/linux-64/isce3-0.10.0-py310heefc3a2_0.conda#c65a1fad4422b3b31bd7fdad475f8339
+https://conda.anaconda.org/conda-forge/linux-64/isce3-0.11.0-py310h3c0aedd_1.conda#0bb37c1bf539bce945b9ad0813254500
 https://conda.anaconda.org/conda-forge/linux-64/json-c-0.16-hc379101_0.tar.bz2#0e2bca6857cb73acec30387fef7c3142
 https://conda.anaconda.org/conda-forge/linux-64/kealib-1.5.0-ha7026e8_0.conda#c948b920f45fd81a2dde8b1ab514cc84
 https://conda.anaconda.org/conda-forge/linux-64/keyutils-1.6.1-h166bdaf_0.tar.bz2#30186d27e2c9fa62b45fb1476b7200e3

@@ -1,0 +1,5 @@
+src/dolphin/__pycache__/
+.mypy_cache/
+docs/
+build/
+data/
