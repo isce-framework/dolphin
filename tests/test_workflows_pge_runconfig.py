@@ -49,7 +49,6 @@ def product_path_group(tmp_path):
 @pytest.fixture
 def runconfig_minimum(
     input_file_group,
-    algorithm_parameters_file,
     dynamic_ancillary_file_group,
     product_path_group,
 ):
@@ -68,3 +67,10 @@ def test_runconfig_to_yaml(runconfig_minimum):
 
 def test_runconfig_to_workflow(runconfig_minimum):
     print(runconfig_minimum.to_workflow())
+
+
+def test_runconfig_yaml_rountrip(tmp_path, runconfig_minimum):
+    f = tmp_path / "test.yaml"
+    runconfig_minimum.to_yaml(f)
+    c = RunConfig.from_yaml(f)
+    assert c == runconfig_minimum

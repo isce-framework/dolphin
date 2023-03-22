@@ -15,7 +15,12 @@ PathOrStr = Union[Path, str]
 class YamlModel(BaseModel):
     """Pydantic model that can be exported to yaml."""
 
-    def to_yaml(self, output_path: Union[PathOrStr, TextIO], with_comments=True):
+    def to_yaml(
+        self,
+        output_path: Union[PathOrStr, TextIO],
+        with_comments: bool = True,
+        by_alias: bool = True,
+    ):
         """Save configuration as a yaml file.
 
         Used to record the default-filled version of a supplied yaml.
@@ -26,8 +31,12 @@ class YamlModel(BaseModel):
             Path to the yaml file to save.
         with_comments : bool, default = False.
             Whether to add comments containing the type/descriptions to all fields.
+        by_alias : bool, default = False.
+            Whether to use the alias names for the fields.
+            Passed to pydantic's ``to_json`` method.
+            https://docs.pydantic.dev/usage/exporting_models/#modeljson
         """
-        yaml_obj = self._to_yaml_obj()
+        yaml_obj = self._to_yaml_obj(by_alias=by_alias)
 
         if with_comments:
             _add_comments(yaml_obj, self.schema())
@@ -76,12 +85,12 @@ class YamlModel(BaseModel):
         # https://docs.pydantic.dev/usage/models/#creating-models-without-validation
         cls.construct().to_yaml(output_path, with_comments=True)
 
-    def _to_yaml_obj(self) -> CommentedMap:
+    def _to_yaml_obj(self, by_alias: bool = True) -> CommentedMap:
         # Make the YAML object to add comments to
         # We can't just do `dumps` for some reason, need a stream
         y = YAML()
         ss = StringIO()
-        y.dump(json.loads(self.json()), ss)
+        y.dump(json.loads(self.json(by_alias=by_alias)), ss)
         yaml_obj = y.load(ss.getvalue())
         return yaml_obj
 

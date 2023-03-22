@@ -34,7 +34,7 @@ class InputFileGroup(BaseModel):
         """Pydantic config class."""
 
         extra = Extra.forbid
-        schema_extra = {"required": ["input_file_paths"]}
+        schema_extra = {"required": ["cslc_file_list"]}
 
 
 class DynamicAncillaryFileGroup(BaseModel):
