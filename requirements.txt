@@ -1,5 +1,5 @@
 # These are the packages easily-installable through pip
-h5netcdf>=1.1
+h5netcdf>=1.0
 h5py>=3.6
 numba>=0.54
 numpy>=1.20

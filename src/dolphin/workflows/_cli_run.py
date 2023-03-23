@@ -1,8 +1,13 @@
 #!/usr/bin/env python
 import argparse
-from typing import Optional
+from typing import TYPE_CHECKING, Any, Optional, Sequence
 
 from dolphin._log import get_log
+
+if TYPE_CHECKING:
+    _SubparserType = argparse._SubParsersAction[argparse.ArgumentParser]
+else:
+    _SubparserType = Any
 
 
 def run(config_file: str, debug: bool = False, log_file: Optional[str] = None):
@@ -30,7 +35,6 @@ def run(config_file: str, debug: bool = False, log_file: Optional[str] = None):
     # Set the environment variables for the workers
     # TODO: Is this the best place to do this?
     cfg = Workflow.from_yaml(config_file)
-    cfg.create_dir_tree(debug=debug)
 
     controller = ThreadpoolController()
     controller.limit(limits=cfg.worker_settings.threads_per_worker)
@@ -42,7 +46,9 @@ def run(config_file: str, debug: bool = False, log_file: Optional[str] = None):
     logger.info(f"Maximum memory usage: {max_mem:.2f} GB")
 
 
-def get_parser(subparser=None, subcommand_name="run"):
+def get_parser(
+    subparser: Optional[_SubparserType] = None, subcommand_name: str = "run"
+) -> argparse.ArgumentParser:
     """Set up the command line interface."""
     metadata = dict(
         description="Run a displacement workflow",
@@ -50,9 +56,9 @@ def get_parser(subparser=None, subcommand_name="run"):
     )
     if subparser:
         # Used by the subparser to make a nested command line interface
-        parser = subparser.add_parser(subcommand_name, **metadata)
+        parser = subparser.add_parser(subcommand_name, **metadata)  # type: ignore
     else:
-        parser = argparse.ArgumentParser(**metadata)
+        parser = argparse.ArgumentParser(**metadata)  # type: ignore
 
     parser.add_argument(
         "config_file",
@@ -71,7 +77,7 @@ def get_parser(subparser=None, subcommand_name="run"):
     return parser
 
 
-def main(args=None):
+def main(args: Optional[Sequence[str]] = None) -> None:
     """Get the command line arguments and run the workflow."""
     parser = get_parser()
     parsed_args = parser.parse_args(args)

@@ -1,7 +1,8 @@
 import re
 from datetime import date, datetime
+from multiprocessing import cpu_count
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 from pydantic import (
     BaseModel,
@@ -171,16 +172,16 @@ class WorkerSettings(BaseSettings):
         True,
         description="Whether to use GPU for processing (if available)",
     )
-    gpu_id: int = Field(
-        0,
-        description="Index of the GPU to use for processing (if GPU)",
-    )
-    # n_workers: int = PositiveInt(16)
     n_workers: int = Field(
-        16, ge=1, description="Number of cpu cores to use for processing (if CPU)"
+        default_factory=cpu_count,
+        ge=1,
+        description=(
+            "(For non-GPU) Number of cpu cores to use for processing. Uses"
+            " `multiprocessing.cpu_count()` if not set."
+        ),
     )
     threads_per_worker: int = Field(
-        4,
+        1,
         ge=1,
         description=(
             "Number of threads to use per worker. This sets the OMP_NUM_THREADS"
@@ -189,8 +190,8 @@ class WorkerSettings(BaseSettings):
     )
     block_size_gb: float = Field(
         1.0,
-        description="Size (in GB) of blocks of data to load at once time.",
-        gt=0.1,
+        description="Size (in GB) of blocks of data to load at a time.",
+        gt=0.001,
     )
 
     class Config:
@@ -419,9 +420,9 @@ class Workflow(YamlModel):
         values["cslc_file_list"] = [Path(f).resolve() for f in file_list]
         return values
 
-    def __init__(self, **data):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         """After validation, set up properties for use during workflow run."""
-        super().__init__(**data)
+        super().__init__(*args, **kwargs)
 
         # Ensure outputs from workflow steps are within scratch directory.
         scratch_dir = self.scratch_directory

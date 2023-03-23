@@ -2,6 +2,7 @@ import json
 import sys
 import textwrap
 from io import StringIO
+from itertools import repeat
 from pathlib import Path
 from typing import Optional, TextIO, Union
 
@@ -39,7 +40,7 @@ class YamlModel(BaseModel):
         yaml_obj = self._to_yaml_obj(by_alias=by_alias)
 
         if with_comments:
-            _add_comments(yaml_obj, self.schema())
+            _add_comments(yaml_obj, self.schema(by_alias=by_alias))
 
         y = YAML()
         if hasattr(output_path, "write"):
@@ -81,9 +82,24 @@ class YamlModel(BaseModel):
             Path or stream to save to the yaml file to.
             By default, prints to stdout.
         """
-        # The .construct is a pydantic method to disable validation
-        # https://docs.pydantic.dev/usage/models/#creating-models-without-validation
-        cls.construct().to_yaml(output_path, with_comments=True)
+        full_dict = cls._construct_empty()
+        cls.construct(**full_dict).to_yaml(output_path, with_comments=True)
+
+    @classmethod
+    def _construct_empty(cls):
+        """Construct a model with all fields filled in.
+
+        Uses defaults, or `None` for required fields.
+
+        The .construct is a pydantic method to disable validation
+        https://docs.pydantic.dev/usage/models/#creating-models-without-validation
+        But Fields without a default value don't get filled in
+        so first, we manually make a dict of all the fields with None values
+        then we update it with the default-filled values
+        """
+        all_none_vals = dict(zip(cls.schema()["properties"].keys(), repeat(None)))
+        all_none_vals.update(cls.construct().dict())
+        return all_none_vals
 
     def _to_yaml_obj(self, by_alias: bool = True) -> CommentedMap:
         # Make the YAML object to add comments to

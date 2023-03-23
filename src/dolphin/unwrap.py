@@ -211,8 +211,11 @@ def unwrap(
     if log_to_file:
         import journal
 
+        shape = (igram_raster.length, igram_raster.width)
         logfile = Path(unw_filename).with_suffix(".log")
-        logger.info(f"Unwrapping {unw_filename}: logging to {logfile}")
+        logger.info(
+            f"Unwrapping {shape} {igram_raster} to {unw_filename}: logging to {logfile}"
+        )
         journal.info("isce3.unwrap.snaphu").device = journal.logfile(
             fspath(logfile), "w"
         )

@@ -3,7 +3,7 @@
 from pathlib import Path
 from typing import ClassVar, List, Optional
 
-from pydantic import BaseModel, Extra, Field
+from pydantic import Extra, Field
 
 from ._yaml_model import YamlModel
 from .config import (
@@ -18,7 +18,7 @@ from .config import (
 )
 
 
-class InputFileGroup(BaseModel):
+class InputFileGroup(YamlModel):
     """A group of input files."""
 
     cslc_file_list: List[Path] = Field(
@@ -29,31 +29,37 @@ class InputFileGroup(BaseModel):
         default=OPERA_DATASET_NAME,
         description="Name of the subdataset to use in the input NetCDF files.",
     )
+    frame_id: int = Field(
+        ...,
+        description="Frame ID of the bursts contained in `cslc_file_list`.",
+    )
 
     class Config:
         """Pydantic config class."""
 
         extra = Extra.forbid
-        schema_extra = {"required": ["cslc_file_list"]}
+        schema_extra = {"required": ["cslc_file_list", "frame_id"]}
 
 
-class DynamicAncillaryFileGroup(BaseModel):
+class DynamicAncillaryFileGroup(YamlModel, extra=Extra.forbid):
     """A group of dynamic ancillary files."""
 
     algorithm_parameters_file: Path = Field(  # type: ignore
-        None,
+        default=...,
         description="Path to file containing SAS algorithm parameters.",
     )
-    amp_disp_file: Optional[Path] = Field(
-        default=None,
+    amp_disp_files: List[Path] = Field(
+        default_factory=list,
         description=(
-            "Path to an existing Amplitude Dispersion file for PS update calculation."
+            "Paths to existing Amplitude Dispersion file (1 per burst) for PS update"
+            " calculation."
         ),
     )
-    amp_mean_file: Optional[Path] = Field(
-        default=None,
+    amp_mean_files: List[Path] = Field(
+        default_factory=list,
         description=(
-            "Path to an existing Amplitude Mean file for PS update calculation."
+            "Paths to an existing Amplitude Mean files (1 per burst) for PS update"
+            " calculation."
         ),
     )
     mask_files: List[Path] = Field(
@@ -63,15 +69,22 @@ class DynamicAncillaryFileGroup(BaseModel):
             " 0 for no data/invalid, and 1 for data."
         ),
     )
+    # # TEC file in IONEX format for ionosphere correction
+    # tec_file: str(required=False)
+    tec_file: Optional[Path] = Field(
+        default=None,
+        description="Path to TEC file in IONEX format for ionosphere correction.",
+    )
 
-    class Config:
-        """Pydantic config class."""
+    # # Troposphere weather model
+    # weather_model_file: str(required=False)
+    weather_model_file: Optional[Path] = Field(
+        default=None,
+        description="Path to troposphere weather model file.",
+    )
 
-        extra = Extra.forbid
-        schema_extra = {"required": ["algorithm_parameters_file"]}
 
-
-class PrimaryExecutable(BaseModel, extra=Extra.forbid):
+class PrimaryExecutable(YamlModel, extra=Extra.forbid):
     """Group describing the primary executable."""
 
     product_type: str = Field(
@@ -80,11 +93,13 @@ class PrimaryExecutable(BaseModel, extra=Extra.forbid):
     )
 
 
-class ProductPathGroup(BaseModel):
+class ProductPathGroup(YamlModel, extra=Extra.forbid):
     """Group describing the product paths."""
 
     product_path: Path = Field(  # type: ignore
-        default=None, description="Directory where PGE will place results"
+        # default=None, description="Directory where PGE will place results"
+        default=...,
+        description="Directory where PGE will place results",
     )
     scratch_path: Path = Field(
         default=Path("./scratch"),
@@ -103,12 +118,6 @@ class ProductPathGroup(BaseModel):
         description="Version of the product.",
     )
 
-    class Config:
-        """Pydantic config class."""
-
-        extra = Extra.forbid
-        schema_extra = {"required": ["product_path"]}
-
 
 class AlgorithmParameters(YamlModel, extra=Extra.forbid):
     """Class containing all the other [`Workflow`][dolphin.workflows.config] classes."""
@@ -122,9 +131,6 @@ class AlgorithmParameters(YamlModel, extra=Extra.forbid):
     unwrap_options: UnwrapOptions = Field(default_factory=UnwrapOptions)
     output_options: OutputOptions = Field(default_factory=OutputOptions)
 
-    # General workflow metadata
-    worker_settings: WorkerSettings = Field(default_factory=WorkerSettings)
-
 
 class RunConfig(YamlModel, extra=Extra.forbid):
     """A PGE run configuration."""
@@ -132,10 +138,13 @@ class RunConfig(YamlModel, extra=Extra.forbid):
     # Used for the top-level key
     name: ClassVar[str] = "disp_s1_workflow"
 
-    input_file_group: InputFileGroup = Field(default_factory=InputFileGroup)
+    input_file_group: InputFileGroup
     dynamic_ancillary_file_group: DynamicAncillaryFileGroup
     primary_executable: PrimaryExecutable = Field(default_factory=PrimaryExecutable)
     product_path_group: ProductPathGroup
+
+    # General workflow metadata
+    worker_settings: WorkerSettings = Field(default_factory=WorkerSettings)
 
     log_file: Path = Field(
         default=Path("disp_s1_workflow.log"), description="Path to the output log file."
@@ -144,10 +153,16 @@ class RunConfig(YamlModel, extra=Extra.forbid):
     # Override the constructor to allow recursively construct without validation
     @classmethod
     def construct(cls, **kwargs):
-        dg = DynamicAncillaryFileGroup.construct()
-        ppg = ProductPathGroup.construct()
+        if "input_file_group" not in kwargs:
+            kwargs["input_file_group"] = InputFileGroup._construct_empty()
+        if "dynamic_ancillary_file_group" not in kwargs:
+            kwargs["dynamic_ancillary_file_group"] = (
+                DynamicAncillaryFileGroup._construct_empty()
+            )
+        if "product_path_group" not in kwargs:
+            kwargs["product_path_group"] = ProductPathGroup._construct_empty()
         return super().construct(
-            dynamic_ancillary_file_group=dg, product_path_group=ppg, **kwargs
+            **kwargs,
         )
 
     def to_workflow(self):
@@ -165,6 +180,7 @@ class RunConfig(YamlModel, extra=Extra.forbid):
         output_directory = self.product_path_group.output_directory
         scratch_directory = self.product_path_group.scratch_path
         mask_files = self.dynamic_ancillary_file_group.mask_files
+        worker_settings = self.worker_settings
         input_options = dict(subdataset=self.input_file_group.subdataset)
 
         # Load the algorithm parameters from the file
@@ -179,5 +195,6 @@ class RunConfig(YamlModel, extra=Extra.forbid):
             mask_files=mask_files,
             output_directory=output_directory,
             scratch_directory=scratch_directory,
+            worker_settings=worker_settings,
             **algorithm_parameters.dict(),
         )
