@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 import argparse
 import sys
+from multiprocessing import cpu_count
 from pathlib import Path
 from typing import List, Optional, Tuple, Union
 
@@ -160,8 +161,8 @@ def get_parser(subparser=None, subcommand_name="run"):
     worker_group.add_argument(
         "--n-workers",
         type=int,
-        default=16,
-        help="Number of workers to use.",
+        default=cpu_count(),
+        help="Number of CPU workers to use (for CPU processing).",
     )
     worker_group.add_argument(
         "--threads-per-worker",

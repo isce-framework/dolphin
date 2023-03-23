@@ -1,5 +1,6 @@
 import shutil
 from datetime import datetime
+from multiprocessing import cpu_count
 from pathlib import Path
 
 import pydantic
@@ -89,8 +90,8 @@ def test_outputs_defaults(tmpdir):
 def test_worker_settings_defaults():
     ws = config.WorkerSettings()
     assert ws.gpu_enabled is True
-    assert ws.gpu_id == 0
-    assert ws.n_workers == 16
+    assert ws.n_workers == cpu_count()
+    assert ws.threads_per_worker == 1
     assert ws.block_size_gb == 1.0
 
 
@@ -108,14 +109,14 @@ def test_worker_env_defaults(monkeypatch):
     assert ws.gpu_enabled is False
 
     # Case shouldn't matter (since i'm not specifying that it does)
-    monkeypatch.setenv("DOLPHIN_Gpu_Id", "1")
+    monkeypatch.setenv("Gpu", "False")
     ws = config.WorkerSettings()
-    assert ws.gpu_id == 1
+    assert ws.gpu_enabled is False
 
     # Check that we need the dolphin_ prefix
     monkeypatch.setenv("N_WORKERS", "8")
     ws = config.WorkerSettings()
-    assert ws.n_workers == 16  # should still be old default
+    assert ws.n_workers == cpu_count()  # should still be old default
 
     monkeypatch.setenv("DOLPHIN_N_WORKERS", "8")
     ws = config.WorkerSettings()

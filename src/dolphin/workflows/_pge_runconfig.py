@@ -131,9 +131,6 @@ class AlgorithmParameters(YamlModel, extra=Extra.forbid):
     unwrap_options: UnwrapOptions = Field(default_factory=UnwrapOptions)
     output_options: OutputOptions = Field(default_factory=OutputOptions)
 
-    # General workflow metadata
-    worker_settings: WorkerSettings = Field(default_factory=WorkerSettings)
-
 
 class RunConfig(YamlModel, extra=Extra.forbid):
     """A PGE run configuration."""
@@ -145,6 +142,9 @@ class RunConfig(YamlModel, extra=Extra.forbid):
     dynamic_ancillary_file_group: DynamicAncillaryFileGroup
     primary_executable: PrimaryExecutable = Field(default_factory=PrimaryExecutable)
     product_path_group: ProductPathGroup
+
+    # General workflow metadata
+    worker_settings: WorkerSettings = Field(default_factory=WorkerSettings)
 
     log_file: Path = Field(
         default=Path("disp_s1_workflow.log"), description="Path to the output log file."
@@ -180,6 +180,7 @@ class RunConfig(YamlModel, extra=Extra.forbid):
         output_directory = self.product_path_group.output_directory
         scratch_directory = self.product_path_group.scratch_path
         mask_files = self.dynamic_ancillary_file_group.mask_files
+        worker_settings = self.worker_settings
         input_options = dict(subdataset=self.input_file_group.subdataset)
 
         # Load the algorithm parameters from the file
@@ -194,5 +195,6 @@ class RunConfig(YamlModel, extra=Extra.forbid):
             mask_files=mask_files,
             output_directory=output_directory,
             scratch_directory=scratch_directory,
+            worker_settings=worker_settings,
             **algorithm_parameters.dict(),
         )
