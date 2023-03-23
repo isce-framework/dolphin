@@ -147,7 +147,7 @@ def merge_images(
     )
 
     out_shape = _get_output_shape(bounds, res)
-    out_dtype = out_dtype or io.get_dtype(warped_file_list[0])
+    out_dtype = out_dtype or io.get_raster_dtype(warped_file_list[0])
 
     io.write_arr(
         arr=None,

@@ -3,7 +3,6 @@ import re
 import resource
 import sys
 import warnings
-from os import fspath
 from pathlib import Path
 from typing import Iterable, List, Optional, Tuple, Union
 
@@ -224,76 +223,6 @@ def sort_files_by_date(
     # Unpack the sorted pairs with new sorted values
     file_list, dates = zip(*file_dates)  # type: ignore
     return list(file_list), list(dates)
-
-
-def combine_mask_files(
-    mask_files: List[Filename],
-    scratch_dir: Filename,
-    output_file_name: str = "combined_mask.tif",
-    dtype: str = "uint8",
-    zero_is_valid: bool = False,
-) -> Path:
-    """Combine multiple mask files into a single mask file.
-
-    Parameters
-    ----------
-    mask_files : list of Path or str
-        List of mask files to combine.
-    scratch_dir : Path or str
-        Directory to write output file.
-    output_file_name : str
-        Name of output file to write into `scratch_dir`
-    dtype : str, optional
-        Data type of output file. Default is uint8.
-    zero_is_valid : bool, optional
-        If True, zeros mark the valid pixels (like numpy's masking convention).
-        Default is False (matches ISCE convention).
-
-    Returns
-    -------
-    output_file : Path
-    """
-    output_file = Path(scratch_dir) / output_file_name
-
-    ds = gdal.Open(fspath(mask_files[0]))
-    projection = ds.GetProjection()
-    geotransform = ds.GetGeoTransform()
-
-    if projection is None and geotransform is None:
-        logger.warning("No projection or geotransform found on file %s", mask_files[0])
-
-    nodata = 1 if zero_is_valid else 0
-
-    # Create output file
-    driver = gdal.GetDriverByName("GTiff")
-    ds_out = driver.Create(
-        fspath(output_file),
-        ds.RasterXSize,
-        ds.RasterYSize,
-        1,
-        numpy_to_gdal_type(dtype),
-    )
-    ds_out.SetGeoTransform(geotransform)
-    ds_out.SetProjection(projection)
-    ds_out.GetRasterBand(1).SetNoDataValue(nodata)
-    ds = None
-
-    # Loop through mask files and update the total mask (starts with all valid)
-    mask_total = np.ones((ds.RasterYSize, ds.RasterXSize), dtype=bool)
-    for mask_file in mask_files:
-        ds_input = gdal.Open(fspath(mask_file))
-        mask = ds_input.GetRasterBand(1).ReadAsArray().astype(bool)
-        if zero_is_valid:
-            mask = ~mask
-        mask_total = np.logical_and(mask_total, mask)
-        ds_input = None
-
-    if zero_is_valid:
-        mask_total = ~mask_total
-    ds_out.GetRasterBand(1).WriteArray(mask_total.astype(dtype))
-    ds_out = None
-
-    return output_file
 
 
 def full_suffix(filename: Filename):
