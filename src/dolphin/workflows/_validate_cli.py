@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 import argparse
-from typing import Any, Optional, Sequence
+from typing import TYPE_CHECKING, Any, Optional
 
 import h5py
 import numpy as np
@@ -11,7 +11,12 @@ from dolphin._types import Filename
 
 logger = get_log()
 
-_SubparserType = argparse._SubParsersAction[Any]
+if TYPE_CHECKING:
+    _SubparserType = argparse._SubParsersAction[argparse.ArgumentParser]
+else:
+    _SubparserType = Any
+
+DSET_DEFAULT = "/science/SENTINEL1/DISP/unwrapped_phase"
 
 
 class ComparisonError(Exception):
@@ -95,7 +100,7 @@ def _compare_datasets_attr(
             )
 
 
-def check_raster_geometadata(golden_file: Filename, test_file: Filename) -> None:
+def _check_raster_geometadata(golden_file: Filename, test_file: Filename) -> None:
     """Check if the raster metadata (bounds, CRS, and GT) match.
 
     Parameters
@@ -118,25 +123,23 @@ def check_raster_geometadata(golden_file: Filename, test_file: Filename) -> None
             raise ComparisonError(f"{func} does not match: {val_golden} vs {val_test}")
 
 
-def main(inp_args: Optional[Sequence[str]] = None) -> None:
+def compare(golden: Filename, test: Filename, data_dset: str = DSET_DEFAULT) -> None:
     """Compare two HDF5 files for consistency."""
-    parser = get_parser()
-    args = parser.parse_args(inp_args)
-
     try:
-        logger.info("Comparing HDF5 files...")
-        with h5py.File(args.golden, "r") as golden, h5py.File(args.test, "r") as test:
-            compare_groups(golden, test)
-        check_raster_geometadata(
-            io.format_nc_filename(args.golden, args.data_dset),
-            io.format_nc_filename(args.test, args.data_dset),
-        )
-    except Exception as e:
-        raise ComparisonError(
-            f"Unexpected error comparing {args.golden} and {args.test}."
-        ) from e
+        logger.info("Comparing HDF5 contents...")
+        with h5py.File(golden, "r") as hf_g, h5py.File(test, "r") as hf_t:
+            compare_groups(hf_g, hf_t)
 
-    logger.info(f"Files {args.golden} and {args.test} match.")
+        logger.info("Cheaking geospatial metadata...")
+        _check_raster_geometadata(
+            io.format_nc_filename(golden, data_dset),
+            io.format_nc_filename(test, data_dset),
+        )
+
+    except Exception as e:
+        raise ComparisonError(f"Unexpected error comparing {golden} and {test}.") from e
+
+    logger.info(f"Files {golden} and {test} match.")
 
 
 def get_parser(
@@ -155,11 +158,12 @@ def get_parser(
 
     parser.add_argument("golden", help="The golden HDF5 file.")
     parser.add_argument("test", help="The test HDF5 file to be compared.")
-    parser.add_argument(
-        "--data-dset", default="/science/SENTINEL1/DISP/unwrapped_phase"
-    )
+    parser.add_argument("--data-dset", default=DSET_DEFAULT)
+    parser.set_defaults(run_func=compare)
     return parser
 
 
 if __name__ == "__main__":
-    main()
+    parser = get_parser()
+    args = parser.parse_args()
+    compare(args.golden, args.test, args.data_dset)

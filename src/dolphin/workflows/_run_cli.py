@@ -1,10 +1,13 @@
 #!/usr/bin/env python
 import argparse
-from typing import Any, Optional, Sequence
+from typing import TYPE_CHECKING, Any, Optional, Sequence
 
 from dolphin._log import get_log
 
-_SubparserType = argparse._SubParsersAction[Any]
+if TYPE_CHECKING:
+    _SubparserType = argparse._SubParsersAction[argparse.ArgumentParser]
+else:
+    _SubparserType = Any
 
 
 def run(config_file: str, debug: bool = False, log_file: Optional[str] = None):
