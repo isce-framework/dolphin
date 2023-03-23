@@ -28,8 +28,8 @@ def run(
     output_path: Filename,
     cor_file: Filename,
     nlooks: float = 5,
-    init_method: str = "mst",
     mask_file: Optional[Filename] = None,
+    init_method: str = "mst",
     ifg_suffix: str = ".int",
     unw_suffix: str = ".unw.tif",
     max_jobs: int = 1,
@@ -49,7 +49,10 @@ def run(
     nlooks : int, optional
         Effective number of spatial looks used to form the input correlation data.
     mask_file : Filename, optional
-        Path to mask file, by default None.
+        Path to binary byte mask file, by default None.
+        Assumes that 1s are valid pixels and 0s are invalid.
+    init_method : str, choices = {"mcf", "mst"}
+        SNAPHU initialization method, by default "mst".
     ifg_suffix : str, optional, default = ".int"
         interferogram suffix to search for in `ifg_path`.
     unw_suffix : str, optional, default = ".unw.tif"
@@ -58,8 +61,6 @@ def run(
         Maximum parallel processes.
     overwrite : bool, optional, default = False
         Overwrite existing unwrapped files.
-    init_method : str, choices = {"mcf", "mst"}
-        SNAPHU initialization method, by default "mst".
 
     Returns
     -------
@@ -96,7 +97,7 @@ def run(
         # TODO: include mask_file in snaphu
         # Make sure it's the right format with 1s and 0s for include/exclude
 
-    # Don't even bother with the executor if there's only one job
+    # This keeps it from spawning a new process for a single job.
     Executor = ProcessPoolExecutor if max_jobs > 1 else DummyProcessPoolExecutor
     with Executor(max_workers=max_jobs) as exc:
         futures = [
@@ -125,6 +126,7 @@ def unwrap(
     corr_filename: Filename,
     unw_filename: Filename,
     nlooks: float,
+    mask_file: Optional[Filename] = None,
     init_method: str = "mst",
     cost: str = "smooth",
     log_to_file: bool = True,
@@ -142,6 +144,9 @@ def unwrap(
         Path to output unwrapped phase file.
     nlooks : float
         Effective number of spatial looks used to form the input correlation data.
+    mask_file : Filename, optional
+        Path to binary byte mask file, by default None.
+        Assumes that 1s are valid pixels and 0s are invalid.
     init_method : str, choices = {"mcf", "mst"}
         SNAPHU initialization method, by default "mst"
     cost : str, choices = {"smooth", "defo", "p-norm",}
@@ -203,6 +208,7 @@ def unwrap(
     if use_snaphu:
         unw_raster = Raster(fspath(unw_filename), 1, "w")
         conncomp_raster = Raster(fspath(conncomp_filename), 1, "w")
+        mask_raster = Raster(fspath(mask_file), 1) if mask_file else None
     else:
         # The different raster classes have different APIs, so we need to
         # create the raster objects differently.
@@ -229,6 +235,7 @@ def unwrap(
             nlooks=nlooks,
             cost=cost,
             init_method=init_method,
+            mask=mask_raster,
         )
     else:
         # Snaphu will fail on Mac OS due to a MemoryMap bug. Use ICU instead.
