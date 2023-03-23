@@ -45,7 +45,7 @@ def compare_groups(golden_group: h5py.Group, test_group: h5py.Group) -> None:
         else:
             _compare_datasets_attr(golden_group[key], test_group[key])
             np.testing.assert_array_almost_equal(
-                golden_group[key][:], test_group[key][:], decimal=5
+                golden_group[key][()], test_group[key][()], decimal=5
             )
 
 
@@ -76,9 +76,19 @@ def _compare_datasets_attr(
         )
 
     for attr_key in golden_dataset.attrs.keys():
-        if not np.all(golden_dataset.attrs[attr_key] == test_dataset.attrs[attr_key]):
+        if attr_key in ("REFERENCE_LIST", "DIMENSION_LIST"):
+            continue
+        val1, val2 = golden_dataset.attrs[attr_key], test_dataset.attrs[attr_key]
+        if isinstance(val1, np.ndarray):
+            is_equal = np.allclose(val1, val2, equal_nan=True)
+        elif isinstance(val1, np.floating) and np.isnan(val1) and np.isnan(val2):
+            is_equal = True
+        else:
+            is_equal = val1 == val2
+        if not is_equal:
             raise ComparisonError(
-                f"Dataset attribute values for key '{attr_key}' do not match"
+                f"Dataset attribute values for key '{attr_key}' do not match: "
+                f"{golden_dataset.attrs[attr_key]} vs {test_dataset.attrs[attr_key]}"
             )
 
 
@@ -118,14 +128,18 @@ def main() -> None:
     args = parser.parse_args()
 
     try:
+        logger.info("Comparing HDF5 files...")
         with h5py.File(args.golden, "r") as golden, h5py.File(args.test, "r") as test:
             compare_groups(golden, test)
         check_raster_geometadata(
             io.format_nc_filename(args.golden, args.data_dset),
             io.format_nc_filename(args.test, args.data_dset),
         )
-    except ComparisonError as e:
-        logger.error(f"Files do not match. Reason: {str(e)}")
+    except Exception as e:
+        raise ComparisonError(
+            f"Unexpected error comparing {args.golden} and {args.test}."
+        ) from e
+
     logger.info(f"Files {args.golden} and {args.test} match.")
 
 
