@@ -144,7 +144,7 @@ class InterferogramNetwork(BaseModel, extra=Extra.forbid):
         return values
 
 
-class UnwrapOptions(BaseModel):
+class UnwrapOptions(BaseModel, extra=Extra.forbid):
     """Options for unwrapping after wrapped phase estimation."""
 
     run_unwrap: bool = Field(

@@ -30,6 +30,7 @@ def run(
     nlooks: float = 5,
     mask_file: Optional[Filename] = None,
     init_method: str = "mst",
+    use_icu: bool = False,
     ifg_suffix: str = ".int",
     unw_suffix: str = ".unw.tif",
     max_jobs: int = 1,
@@ -53,6 +54,8 @@ def run(
         Assumes that 1s are valid pixels and 0s are invalid.
     init_method : str, choices = {"mcf", "mst"}
         SNAPHU initialization method, by default "mst".
+    use_icu : bool, optional
+        Force the use of isce3's ICU instead of snaphu, by default False.
     ifg_suffix : str, optional, default = ".int"
         interferogram suffix to search for in `ifg_path`.
     unw_suffix : str, optional, default = ".unw.tif"
@@ -103,11 +106,12 @@ def run(
         futures = [
             exc.submit(
                 unwrap,
-                inf,
-                cor_file,
-                outf,
-                nlooks,
-                init_method,
+                ifg_filename=inf,
+                corr_filename=cor_file,
+                unw_filename=outf,
+                nlooks=nlooks,
+                init_method=init_method,
+                use_icu=use_icu,
             )
             for inf, outf in zip(in_files, out_files)
         ]
@@ -170,6 +174,7 @@ def unwrap(
     """
     # check not MacOS
     use_snaphu = sys.platform != "darwin" and not use_icu
+    logger.info("Using {} to unwrap".format("SNAPHU" if use_snaphu else "ICU"))
     Raster = isce3.io.gdal.Raster if use_snaphu else isce3.io.Raster
 
     igram_raster = Raster(fspath(ifg_filename))
@@ -220,7 +225,8 @@ def unwrap(
         shape = (igram_raster.length, igram_raster.width)
         logfile = Path(unw_filename).with_suffix(".log")
         logger.info(
-            f"Unwrapping {shape} {igram_raster} to {unw_filename}: logging to {logfile}"
+            f"Unwrapping size {shape} {ifg_filename} to {unw_filename}: logging to"
+            f" {logfile}"
         )
         journal.info("isce3.unwrap.snaphu").device = journal.logfile(
             fspath(logfile), "w"
@@ -239,6 +245,8 @@ def unwrap(
         )
     else:
         # Snaphu will fail on Mac OS due to a MemoryMap bug. Use ICU instead.
+        # TODO: Should we zero out the correlation data using the mask,
+        # since ICU doesn't support masking?
         icu = ICU()
         icu.unwrap(
             unw_raster,
