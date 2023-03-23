@@ -3,7 +3,8 @@ FROM mambaorg/micromamba:1.1.0@sha256:53697a4bae2d9a4407463b8f314d370e201c58f6b5
 
 # This is the image we are going add micromaba to:
 # See https://github.com/oracle/container-images or https://hub.docker.com/_/oraclelinux
-FROM oraclelinux:8-slim@sha256:5da605ca1fe5a75824cdca00b3a5f39907a2057c0cc0c34c48feb33b4915a3e6
+ARG base=oraclelinux:8-slim@sha256:5da605ca1fe5a75824cdca00b3a5f39907a2057c0cc0c34c48feb33b4915a3e6
+FROM base
 
 ARG MAMBA_USER=mamba
 ARG MAMBA_USER_ID=1000
