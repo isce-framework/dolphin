@@ -88,7 +88,7 @@ class PrimaryExecutable(YamlModel, extra=Extra.forbid):
     """Group describing the primary executable."""
 
     product_type: str = Field(
-        default="DISP_S1",
+        default="DISP_S1_SINGLE",
         description="Product type of the PGE.",
     )
 
@@ -176,6 +176,8 @@ class RunConfig(YamlModel, extra=Extra.forbid):
         # the output directory, and the scratch directory.
         # All the other things come from the AlgorithmParameters.
 
+        workflow_name = self.primary_executable.product_type
+        workflow_name = workflow_name.replace("DISP_S1_", "").lower()
         cslc_file_list = self.input_file_group.cslc_file_list
         output_directory = self.product_path_group.output_directory
         scratch_directory = self.product_path_group.scratch_path
@@ -188,8 +190,8 @@ class RunConfig(YamlModel, extra=Extra.forbid):
             self.dynamic_ancillary_file_group.algorithm_parameters_file
         )
         # This get's unpacked to load the rest of the parameters for the Workflow
-
         return Workflow(
+            workflow_name=workflow_name,
             cslc_file_list=cslc_file_list,
             input_options=input_options,
             mask_files=mask_files,
@@ -197,4 +199,46 @@ class RunConfig(YamlModel, extra=Extra.forbid):
             scratch_directory=scratch_directory,
             worker_settings=worker_settings,
             **algorithm_parameters.dict(),
+        )
+
+    @classmethod
+    def from_workflow(
+        cls, workflow: Workflow, frame_id: int, algorithm_parameters_file: Path
+    ):
+        """Convert from a [`Workflow`][dolphin.workflows.config.Workflow] object.
+
+        Since there's no `frame_id` or `algorithm_parameters_file` in the
+        [`Workflow`][dolphin.workflows.config.Workflow] object, we need to pass
+        those in as arguments.
+        """
+        # Load the algorithm parameters from the file
+        alg_param_dict = workflow.dict(include=AlgorithmParameters.__fields__.keys())
+        AlgorithmParameters(**alg_param_dict).to_yaml(algorithm_parameters_file)
+        # This get's unpacked to load the rest of the parameters for the Workflow
+
+        # This is the inverse of the to_workflow method
+        return cls(
+            input_file_group=InputFileGroup(
+                cslc_file_list=workflow.cslc_file_list,
+                subdataset=workflow.input_options.subdataset,
+                frame_id=frame_id,
+            ),
+            dynamic_ancillary_file_group=DynamicAncillaryFileGroup(
+                algorithm_parameters_file=algorithm_parameters_file,
+                # amp_disp_files=workflow.amp_disp_files,
+                # amp_mean_files=workflow.amp_mean_files,
+                mask_files=workflow.mask_files,
+                # tec_file=workflow.tec_file,
+                # weather_model_file=workflow.weather_model_file,
+            ),
+            primary_executable=PrimaryExecutable(
+                product_type=f"DISP_S1_{str(workflow.workflow_name.upper())}",
+            ),
+            product_path_group=ProductPathGroup(
+                product_path=workflow.output_directory,
+                scratch_path=workflow.scratch_directory,
+                sas_output_path=workflow.output_directory,
+            ),
+            worker_settings=workflow.worker_settings,
+            # log_file=workflow.log_file,
         )

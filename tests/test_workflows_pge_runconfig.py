@@ -69,6 +69,17 @@ def test_runconfig_to_workflow(runconfig_minimum):
     print(runconfig_minimum.to_workflow())
 
 
+def test_runconfig_from_workflow(tmp_path, runconfig_minimum):
+    w = runconfig_minimum.to_workflow()
+    frame_id = runconfig_minimum.input_file_group.frame_id
+    algo_file = tmp_path / "algo_params.yaml"
+    w2 = RunConfig.from_workflow(w, frame_id, algo_file).to_workflow()
+
+    # these will be slightly different
+    w2.creation_time_utc = w.creation_time_utc
+    assert w == w2
+
+
 def test_runconfig_yaml_rountrip(tmp_path, runconfig_minimum):
     f = tmp_path / "test.yaml"
     runconfig_minimum.to_yaml(f)
