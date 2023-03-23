@@ -177,9 +177,21 @@ def unwrap(
     logger.info("Using {} to unwrap".format("SNAPHU" if use_snaphu else "ICU"))
     Raster = isce3.io.gdal.Raster if use_snaphu else isce3.io.Raster
 
-    igram_raster = Raster(fspath(ifg_filename))
-    corr_raster = Raster(fspath(corr_filename))
+    shape = io.get_raster_xysize(ifg_filename)[::-1]
+    corr_shape = io.get_raster_xysize(corr_filename)[::-1]
+    if shape != corr_shape:
+        raise ValueError(
+            f"correlation {corr_shape} and interferogram {shape} shapes don't match"
+        )
+    mask_shape = io.get_raster_xysize(mask_file)[::-1] if mask_file else None
+    if mask_file and shape != mask_shape:
+        raise ValueError(
+            f"Mask {mask_shape} and interferogram {shape} shapes don't match"
+        )
 
+    ifg_raster = Raster(fspath(ifg_filename))
+    corr_raster = Raster(fspath(corr_filename))
+    mask_raster = Raster(fspath(mask_file)) if mask_file else None
     unw_suffix = full_suffix(unw_filename)
 
     # Get the driver based on the output file extension
@@ -214,7 +226,6 @@ def unwrap(
     if use_snaphu:
         unw_raster = Raster(fspath(unw_filename), 1, "w")
         conncomp_raster = Raster(fspath(conncomp_filename), 1, "w")
-        mask_raster = Raster(fspath(mask_file), 1) if mask_file else None
     else:
         # The different raster classes have different APIs, so we need to
         # create the raster objects differently.
@@ -222,7 +233,7 @@ def unwrap(
         conncomp_raster = Raster(fspath(conncomp_filename), True)
 
     logger.info(
-        f"Unwrapping size {(igram_raster.length, igram_raster.width)} {ifg_filename} to"
+        f"Unwrapping size {(ifg_raster.length, ifg_raster.width)} {ifg_filename} to"
         f" {unw_filename}"
     )
     if log_snaphu_to_file and use_snaphu:
@@ -238,7 +249,7 @@ def unwrap(
         snaphu.unwrap(
             unw_raster,
             conncomp_raster,
-            igram_raster,
+            ifg_raster,
             corr_raster,
             nlooks=nlooks,
             cost=cost,
@@ -249,12 +260,38 @@ def unwrap(
         # Snaphu will fail on Mac OS due to a MemoryMap bug. Use ICU instead.
         # TODO: Should we zero out the correlation data using the mask,
         # since ICU doesn't support masking?
+        if mask_file is not None:
+            zeroed_ifg_file, zeroed_corr_file = _zero_from_mask(
+                ifg_filename, corr_filename, mask_file
+            )
+            corr_raster = Raster(fspath(zeroed_corr_file))
+            ifg_raster = Raster(fspath(zeroed_ifg_file))
         icu = ICU()
         icu.unwrap(
             unw_raster,
             conncomp_raster,
-            igram_raster,
+            ifg_raster,
             corr_raster,
         )
     del unw_raster, conncomp_raster
     return Path(unw_filename), Path(conncomp_filename)
+
+
+def _zero_from_mask(
+    ifg_filename: Filename, corr_filename: Filename, mask_filename: Filename
+) -> Tuple[Path, Path]:
+    zeroed_ifg_file = Path(ifg_filename).with_suffix(".zeroed.tif")
+    zeroed_corr_file = Path(corr_filename).with_suffix(".zeroed.cor.tif")
+
+    mask = io.load_gdal(mask_filename)
+    for in_f, out_f in zip(
+        [ifg_filename, corr_filename], [zeroed_ifg_file, zeroed_corr_file]
+    ):
+        arr = io.load_gdal(in_f)
+        arr[mask == 0] = 0
+        io.write_arr(
+            arr=arr,
+            output_name=out_f,
+            like_filename=corr_filename,
+        )
+    return zeroed_ifg_file, zeroed_corr_file
