@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 import argparse
+from typing import Any, Optional, Sequence
 
 import h5py
 import numpy as np
@@ -9,6 +10,8 @@ from dolphin._log import get_log
 from dolphin._types import Filename
 
 logger = get_log()
+
+_SubparserType = argparse._SubParsersAction[Any]
 
 
 class ComparisonError(Exception):
@@ -109,23 +112,16 @@ def check_raster_geometadata(golden_file: Filename, test_file: Filename) -> None
     """
     funcs = [io.get_raster_bounds, io.get_raster_crs, io.get_raster_gt]
     for func in funcs:
-        val_golden = func(golden_file)
-        val_test = func(test_file)
+        val_golden = func(golden_file)  # type: ignore
+        val_test = func(test_file)  # type: ignore
         if val_golden != val_test:
             raise ComparisonError(f"{func} does not match: {val_golden} vs {val_test}")
 
 
-def main() -> None:
+def main(inp_args: Optional[Sequence[str]] = None) -> None:
     """Compare two HDF5 files for consistency."""
-    parser = argparse.ArgumentParser(
-        description="Compare two HDF5 files for consistency."
-    )
-    parser.add_argument("golden", help="The golden HDF5 file.")
-    parser.add_argument("test", help="The test HDF5 file to be compared.")
-    parser.add_argument(
-        "--data-dset", default="/science/SENTINEL1/DISP/unwrapped_phase"
-    )
-    args = parser.parse_args()
+    parser = get_parser()
+    args = parser.parse_args(inp_args)
 
     try:
         logger.info("Comparing HDF5 files...")
@@ -141,6 +137,28 @@ def main() -> None:
         ) from e
 
     logger.info(f"Files {args.golden} and {args.test} match.")
+
+
+def get_parser(
+    subparser: Optional[_SubparserType] = None, subcommand_name: str = "run"
+) -> argparse.ArgumentParser:
+    """Set up the command line interface."""
+    metadata = dict(
+        description="Compare two HDF5 files for consistency.",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    if subparser:
+        # Used by the subparser to make a nested command line interface
+        parser = subparser.add_parser(subcommand_name, **metadata)  # type: ignore
+    else:
+        parser = argparse.ArgumentParser(**metadata)  # type: ignore
+
+    parser.add_argument("golden", help="The golden HDF5 file.")
+    parser.add_argument("test", help="The test HDF5 file to be compared.")
+    parser.add_argument(
+        "--data-dset", default="/science/SENTINEL1/DISP/unwrapped_phase"
+    )
+    return parser
 
 
 if __name__ == "__main__":
