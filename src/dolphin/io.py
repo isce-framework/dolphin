@@ -121,7 +121,7 @@ def load_gdal(
         return out
     # Get the nodata value
     nd = get_raster_nodata(filename)
-    if np.isnan(nd):
+    if nd is not None and np.isnan(nd):
         return np.ma.masked_invalid(out)
     else:
         return np.ma.masked_equal(out, nd)
@@ -252,7 +252,7 @@ def get_raster_gt(filename: Filename) -> List[float]:
     return gt
 
 
-def get_dtype(filename: Filename) -> np.dtype:
+def get_raster_dtype(filename: Filename) -> np.dtype:
     """Get the data type from a file.
 
     Parameters
@@ -268,6 +268,24 @@ def get_dtype(filename: Filename) -> np.dtype:
     ds = gdal.Open(fspath(filename))
     dt = gdal_to_numpy_type(ds.GetRasterBand(1).DataType)
     return dt
+
+
+def get_raster_driver(filename: Filename) -> str:
+    """Get the GDAL driver `ShortName` from a file.
+
+    Parameters
+    ----------
+    filename : Filename
+        Path to the file to load.
+
+    Returns
+    -------
+    str
+        Driver name.
+    """
+    ds = gdal.Open(fspath(filename))
+    driver = ds.GetDriver().ShortName
+    return driver
 
 
 def get_raster_bounds(
