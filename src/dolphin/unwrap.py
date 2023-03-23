@@ -133,7 +133,7 @@ def unwrap(
     mask_file: Optional[Filename] = None,
     init_method: str = "mst",
     cost: str = "smooth",
-    log_to_file: bool = True,
+    log_snaphu_to_file: bool = True,
     use_icu: bool = False,
 ) -> Tuple[Path, Path]:
     """Unwrap a single interferogram using isce3's SNAPHU/ICU bindings.
@@ -155,8 +155,8 @@ def unwrap(
         SNAPHU initialization method, by default "mst"
     cost : str, choices = {"smooth", "defo", "p-norm",}
         SNAPHU cost function, by default "smooth"
-    log_to_file : bool, optional
-        Log to file, by default True
+    log_snaphu_to_file : bool, optional
+        Redirect SNAPHU's logging output to file, by default True
     use_icu : bool, optional, default = False
         Force the unwrapping to use ICU
 
@@ -210,6 +210,7 @@ def unwrap(
         like_filename=ifg_filename,
         options=io.DEFAULT_ENVI_OPTIONS,
     )
+
     if use_snaphu:
         unw_raster = Raster(fspath(unw_filename), 1, "w")
         conncomp_raster = Raster(fspath(conncomp_filename), 1, "w")
@@ -219,18 +220,19 @@ def unwrap(
         # create the raster objects differently.
         unw_raster = Raster(fspath(unw_filename), True)
         conncomp_raster = Raster(fspath(conncomp_filename), True)
-    if log_to_file:
+
+    logger.info(
+        f"Unwrapping size {(igram_raster.length, igram_raster.width)} {ifg_filename} to"
+        f" {unw_filename}"
+    )
+    if log_snaphu_to_file and use_snaphu:
         import journal
 
-        shape = (igram_raster.length, igram_raster.width)
         logfile = Path(unw_filename).with_suffix(".log")
-        logger.info(
-            f"Unwrapping size {shape} {ifg_filename} to {unw_filename}: logging to"
-            f" {logfile}"
-        )
         journal.info("isce3.unwrap.snaphu").device = journal.logfile(
             fspath(logfile), "w"
         )
+        logger.info(f"Logging snaphu output to {logfile}")
 
     if use_snaphu:
         snaphu.unwrap(
