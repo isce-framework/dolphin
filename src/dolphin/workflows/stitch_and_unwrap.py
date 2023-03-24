@@ -1,11 +1,11 @@
 from pathlib import Path
 from typing import List, Sequence, Tuple
 
-from dolphin import stitching, unwrap
+from dolphin import masking, stitching, unwrap
 from dolphin._log import get_log, log_runtime
 from dolphin.interferogram import VRTInterferogram
 
-from .config import Workflow
+from .config import UnwrapMethod, Workflow
 
 
 @log_runtime
@@ -64,6 +64,19 @@ def run(
         logger.info("Skipping unwrap step")
         return [], [], stitched_cor_file
 
+    use_icu = cfg.unwrap_options.unwrap_method == UnwrapMethod.ICU
+    # Note: ICU doesn't seem to support masks, but we'll zero the phase/cor
+    if cfg.mask_files:
+        combined_mask_file = cfg.scratch_directory / "combined_mask.tif"
+        logger.info(
+            f"Reprojecting and combining {len(cfg.mask_files)} mask files to match"
+            " stitched interferograms"
+        )
+        _prepare_combined_mask(cfg.mask_files, stitched_cor_file, combined_mask_file)
+        logger.info(f"Using {combined_mask_file} for unwrap")
+    else:
+        combined_mask_file = None
+
     logger.info(f"Unwrapping interferograms in {stitched_ifg_dir}")
     # Compute the looks for the unwrapping
     row_looks, col_looks = cfg.phase_linking.half_window.to_looks()
@@ -73,11 +86,13 @@ def run(
         output_path=cfg.unwrap_options._directory,
         cor_file=stitched_cor_file,
         nlooks=nlooks,
+        mask_file=combined_mask_file,
         # mask_file: Optional[Filename] = None,
-        # TODO: max jobs based on the CPUs and the available RAM?
+        # TODO: max jobs based on the CPUs and the available RAM? use dask?
         # max_jobs=20,
         # overwrite: bool = False,
         no_tile=True,
+        use_icu=use_icu,
     )
 
     # ####################
@@ -86,3 +101,15 @@ def run(
     # TODO: Determine format for the tropospheric/ionospheric phase correction
 
     return unwrapped_paths, conncomp_paths, stitched_cor_file
+
+
+def _prepare_combined_mask(
+    mask_files: Sequence[Path], stitched_cor_file: Path, combined_mask_file: Path
+) -> None:
+    reprojected_files = [
+        masking.warp_to_match(input_file=mf, match_file=stitched_cor_file)
+        for mf in mask_files
+    ]
+
+    # TODO: How to deal with the conventions of the mask files?
+    masking.combine_mask_files(reprojected_files, output_file=combined_mask_file)

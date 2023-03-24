@@ -428,12 +428,13 @@ class VRTStack:
         # TODO: Write the code to grab the pre-computed polygon, rather
         # than the loading data.
         else:
-            return io.get_stack_nodata_mask(
-                self.outfile,
-                output_file=self.nodata_mask_file,
-                nodata=nodata,
-                buffer_pixels=buffer_pixels,
-            )
+            raise NotImplementedError("_get_nodata_mask not implemented")
+            # return io.get_stack_nodata_mask(
+            #     self.outfile,
+            #     output_file=self.nodata_mask_file,
+            #     nodata=nodata,
+            #     buffer_pixels=buffer_pixels,
+            # )
 
     @property
     def shape(self):

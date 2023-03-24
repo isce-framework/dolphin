@@ -28,8 +28,9 @@ def run(
     output_path: Filename,
     cor_file: Filename,
     nlooks: float = 5,
-    init_method: str = "mst",
     mask_file: Optional[Filename] = None,
+    init_method: str = "mst",
+    use_icu: bool = False,
     ifg_suffix: str = ".int",
     unw_suffix: str = ".unw.tif",
     max_jobs: int = 1,
@@ -49,7 +50,12 @@ def run(
     nlooks : int, optional
         Effective number of spatial looks used to form the input correlation data.
     mask_file : Filename, optional
-        Path to mask file, by default None.
+        Path to binary byte mask file, by default None.
+        Assumes that 1s are valid pixels and 0s are invalid.
+    init_method : str, choices = {"mcf", "mst"}
+        SNAPHU initialization method, by default "mst".
+    use_icu : bool, optional
+        Force the use of isce3's ICU instead of snaphu, by default False.
     ifg_suffix : str, optional, default = ".int"
         interferogram suffix to search for in `ifg_path`.
     unw_suffix : str, optional, default = ".unw.tif"
@@ -58,8 +64,6 @@ def run(
         Maximum parallel processes.
     overwrite : bool, optional, default = False
         Overwrite existing unwrapped files.
-    init_method : str, choices = {"mcf", "mst"}
-        SNAPHU initialization method, by default "mst".
 
     Returns
     -------
@@ -96,17 +100,19 @@ def run(
         # TODO: include mask_file in snaphu
         # Make sure it's the right format with 1s and 0s for include/exclude
 
-    # Don't even bother with the executor if there's only one job
+    # This keeps it from spawning a new process for a single job.
     Executor = ProcessPoolExecutor if max_jobs > 1 else DummyProcessPoolExecutor
     with Executor(max_workers=max_jobs) as exc:
         futures = [
             exc.submit(
                 unwrap,
-                inf,
-                cor_file,
-                outf,
-                nlooks,
-                init_method,
+                ifg_filename=inf,
+                corr_filename=cor_file,
+                unw_filename=outf,
+                nlooks=nlooks,
+                init_method=init_method,
+                use_icu=use_icu,
+                mask_file=mask_file,
             )
             for inf, outf in zip(in_files, out_files)
         ]
@@ -125,9 +131,11 @@ def unwrap(
     corr_filename: Filename,
     unw_filename: Filename,
     nlooks: float,
+    mask_file: Optional[Filename] = None,
+    zero_where_masked: bool = True,
     init_method: str = "mst",
     cost: str = "smooth",
-    log_to_file: bool = True,
+    log_snaphu_to_file: bool = True,
     use_icu: bool = False,
 ) -> Tuple[Path, Path]:
     """Unwrap a single interferogram using isce3's SNAPHU/ICU bindings.
@@ -142,12 +150,19 @@ def unwrap(
         Path to output unwrapped phase file.
     nlooks : float
         Effective number of spatial looks used to form the input correlation data.
+    mask_file : Filename, optional
+        Path to binary byte mask file, by default None.
+        Assumes that 1s are valid pixels and 0s are invalid.
+    zero_where_masked : bool, optional
+        Set wrapped phase/correlation to 0 where mask is 0 before unwrapping.
+        If not mask is provided, this is ignored.
+        By default True.
     init_method : str, choices = {"mcf", "mst"}
         SNAPHU initialization method, by default "mst"
     cost : str, choices = {"smooth", "defo", "p-norm",}
         SNAPHU cost function, by default "smooth"
-    log_to_file : bool, optional
-        Log to file, by default True
+    log_snaphu_to_file : bool, optional
+        Redirect SNAPHU's logging output to file, by default True
     use_icu : bool, optional, default = False
         Force the unwrapping to use ICU
 
@@ -167,9 +182,21 @@ def unwrap(
     use_snaphu = sys.platform != "darwin" and not use_icu
     Raster = isce3.io.gdal.Raster if use_snaphu else isce3.io.Raster
 
-    igram_raster = Raster(fspath(ifg_filename))
-    corr_raster = Raster(fspath(corr_filename))
+    shape = io.get_raster_xysize(ifg_filename)[::-1]
+    corr_shape = io.get_raster_xysize(corr_filename)[::-1]
+    if shape != corr_shape:
+        raise ValueError(
+            f"correlation {corr_shape} and interferogram {shape} shapes don't match"
+        )
+    mask_shape = io.get_raster_xysize(mask_file)[::-1] if mask_file else None
+    if mask_file and shape != mask_shape:
+        raise ValueError(
+            f"Mask {mask_shape} and interferogram {shape} shapes don't match"
+        )
 
+    ifg_raster = Raster(fspath(ifg_filename))
+    corr_raster = Raster(fspath(corr_filename))
+    mask_raster = Raster(fspath(mask_file)) if mask_file else None
     unw_suffix = full_suffix(unw_filename)
 
     # Get the driver based on the output file extension
@@ -200,6 +227,7 @@ def unwrap(
         like_filename=ifg_filename,
         options=io.DEFAULT_ENVI_OPTIONS,
     )
+
     if use_snaphu:
         unw_raster = Raster(fspath(unw_filename), 1, "w")
         conncomp_raster = Raster(fspath(conncomp_filename), 1, "w")
@@ -208,36 +236,71 @@ def unwrap(
         # create the raster objects differently.
         unw_raster = Raster(fspath(unw_filename), True)
         conncomp_raster = Raster(fspath(conncomp_filename), True)
-    if log_to_file:
+
+    if log_snaphu_to_file and use_snaphu:
         import journal
 
-        shape = (igram_raster.length, igram_raster.width)
         logfile = Path(unw_filename).with_suffix(".log")
-        logger.info(
-            f"Unwrapping {shape} {igram_raster} to {unw_filename}: logging to {logfile}"
-        )
         journal.info("isce3.unwrap.snaphu").device = journal.logfile(
             fspath(logfile), "w"
         )
+        logger.info(f"Logging snaphu output to {logfile}")
 
+    if zero_where_masked and mask_file is not None:
+        logger.info(f"Zeroing phase/corr of pixels masked in {mask_file}")
+        zeroed_ifg_file, zeroed_corr_file = _zero_from_mask(
+            ifg_filename, corr_filename, mask_file
+        )
+        corr_raster = Raster(fspath(zeroed_corr_file))
+        ifg_raster = Raster(fspath(zeroed_ifg_file))
+
+    logger.info(
+        f"Unwrapping size {(ifg_raster.length, ifg_raster.width)} {ifg_filename} to"
+        f" {unw_filename} using {'SNAPHU' if use_snaphu else 'ICU'}"
+    )
     if use_snaphu:
         snaphu.unwrap(
             unw_raster,
             conncomp_raster,
-            igram_raster,
+            ifg_raster,
             corr_raster,
             nlooks=nlooks,
             cost=cost,
             init_method=init_method,
+            mask=mask_raster,
         )
     else:
         # Snaphu will fail on Mac OS due to a MemoryMap bug. Use ICU instead.
-        icu = ICU()
+        # TODO: Should we zero out the correlation data using the mask,
+        # since ICU doesn't support masking?
+
+        icu = ICU(buffer_lines=shape[0])
         icu.unwrap(
             unw_raster,
             conncomp_raster,
-            igram_raster,
+            ifg_raster,
             corr_raster,
         )
     del unw_raster, conncomp_raster
     return Path(unw_filename), Path(conncomp_filename)
+
+
+def _zero_from_mask(
+    ifg_filename: Filename, corr_filename: Filename, mask_filename: Filename
+) -> Tuple[Path, Path]:
+    zeroed_ifg_file = Path(ifg_filename).with_suffix(".zeroed.tif")
+    zeroed_corr_file = Path(corr_filename).with_suffix(".zeroed.cor.tif")
+
+    mask = io.load_gdal(mask_filename)
+    for in_f, out_f in zip(
+        [ifg_filename, corr_filename], [zeroed_ifg_file, zeroed_corr_file]
+    ):
+        arr = io.load_gdal(in_f)
+        arr[mask == 0] = 0
+        logger.debug(f"Size: {arr.size}, {(arr != 0).sum()} non-zero pixels")
+        io.write_arr(
+            arr=arr,
+            output_name=out_f,
+            like_filename=corr_filename,
+        )
+    return zeroed_ifg_file, zeroed_corr_file

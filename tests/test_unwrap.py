@@ -1,3 +1,4 @@
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -20,7 +21,7 @@ def corr_raster(raster_100_by_200):
     return corr_raster
 
 
-def test_unwrap(tmp_path, raster_100_by_200, corr_raster):
+def test_unwrap_snaphu(tmp_path, raster_100_by_200, corr_raster):
     unw_filename = tmp_path / "unwrapped.unw.tif"
     unw_path, conncomp_path = unwrap.unwrap(
         ifg_filename=raster_100_by_200,
@@ -43,7 +44,23 @@ def test_unwrap(tmp_path, raster_100_by_200, corr_raster):
     )
 
 
-def test_unwrap_logfile(tmp_path, raster_100_by_200, corr_raster):
+def test_unwrap_icu(tmp_path, raster_100_by_200, corr_raster):
+    unw_filename = tmp_path / "icu_unwrapped.unw.tif"
+    unwrap.unwrap(
+        ifg_filename=raster_100_by_200,
+        corr_filename=corr_raster,
+        unw_filename=unw_filename,
+        nlooks=1,
+        use_icu=True,
+    )
+
+
+# Skip this on mac, since snaphu doesn't run on mac
+@pytest.mark.skipif(
+    sys.platform == "darwin",
+    reason="snaphu doesn't run on mac",
+)
+def test_unwrap_snaphu_logfile(tmp_path, raster_100_by_200, corr_raster):
     unw_filename = tmp_path / "unwrapped.unw.tif"
     unwrap.unwrap(
         ifg_filename=raster_100_by_200,
@@ -51,7 +68,7 @@ def test_unwrap_logfile(tmp_path, raster_100_by_200, corr_raster):
         unw_filename=unw_filename,
         nlooks=1,
         init_method="mst",
-        log_to_file=True,
+        log_snaphu_to_file=True,
     )
     logfile_name = str(unw_filename).replace(".unw.tif", ".unw.log")
     assert Path(logfile_name).exists()

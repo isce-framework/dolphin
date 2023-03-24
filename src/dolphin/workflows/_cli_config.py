@@ -21,6 +21,7 @@ def create_config(
     n_workers: int = 16,
     threads_per_worker: int = 1,
     no_gpu: bool = False,
+    use_icu: bool = False,
     single_update: bool = False,
 ):
     """Create a config for a displacement workflow."""
@@ -53,6 +54,9 @@ def create_config(
         ),
         ps_options=dict(
             amp_dispersion_threshold=amp_dispersion_threshold,
+        ),
+        unwrap_options=dict(
+            unwrap_method=("icu" if use_icu else "snaphu"),
         ),
         worker_settings=dict(
             block_size_gb=block_size_gb,
@@ -124,6 +128,13 @@ def get_parser(subparser=None, subcommand_name="run"):
         type=float,
         default=0.25,
         help="Threshold for the amplitude dispersion.",
+    )
+    # Unwrap options
+    unwrap_group = parser.add_argument_group("Unwrap options")
+    unwrap_group.add_argument(
+        "--use-icu",
+        action="store_true",
+        help="Use the ICU algorithm instead of the default SNAPHU.",
     )
 
     # Get Outputs from the command line

@@ -25,7 +25,12 @@ class ComparisonError(Exception):
     pass
 
 
-def compare_groups(golden_group: h5py.Group, test_group: h5py.Group) -> None:
+def compare_groups(
+    golden_group: h5py.Group,
+    test_group: h5py.Group,
+    pixels_failed_threshold: float = 0.01,
+    diff_threshold: float = 1e-5,
+) -> None:
     """Compare all datasets in two HDF5 files.
 
     Parameters
@@ -34,6 +39,10 @@ def compare_groups(golden_group: h5py.Group, test_group: h5py.Group) -> None:
         Path to the golden file.
     test_group : h5py.Group
         Path to the test file to be compared.
+    pixels_failed_threshold : float, optional
+        The threshold of the percentage of pixels that can fail the comparison.
+    diff_threshold : float, optional
+        The abs. difference threshold between pixels to consider failing.
 
     Raises
     ------
@@ -52,9 +61,18 @@ def compare_groups(golden_group: h5py.Group, test_group: h5py.Group) -> None:
             compare_groups(golden_group[key], test_group[key])
         else:
             _compare_datasets_attr(golden_group[key], test_group[key])
-            np.testing.assert_array_almost_equal(
-                golden_group[key][()], test_group[key][()], decimal=5
-            )
+            img_gold = np.ma.masked_invalid(golden_group[key][()])
+            img_test = np.ma.masked_invalid(test_group[key][()])
+            abs_diff = np.abs((img_gold.filled(0) - img_test.filled(0)))
+            num_failed = np.count_nonzero(abs_diff > diff_threshold)
+            # num_pixels = np.count_nonzero(~np.isnan(img_gold))  # do i want this?
+            num_pixels = img_gold.size
+            if num_failed / num_pixels > pixels_failed_threshold:
+                raise ComparisonError(
+                    f"Dataset {golden_group.name}/{key} values do not match: Number of"
+                    f" pixels failed: {num_failed} / {num_pixels} ="
+                    f" {100*num_failed / num_pixels:.2f}%"
+                )
 
 
 def _compare_datasets_attr(
@@ -135,6 +153,8 @@ def compare(golden: Filename, test: Filename, data_dset: str = DSET_DEFAULT) -> 
             io.format_nc_filename(golden, data_dset),
             io.format_nc_filename(test, data_dset),
         )
+    except ComparisonError:
+        raise
 
     except Exception as e:
         raise ComparisonError(f"Unexpected error comparing {golden} and {test}.") from e

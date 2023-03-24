@@ -10,7 +10,12 @@ else:
     _SubparserType = Any
 
 
-def run(config_file: str, debug: bool = False, log_file: Optional[str] = None):
+def run(
+    config_file: str,
+    debug: bool = False,
+    log_file: Optional[str] = None,
+    pge_format: bool = False,
+) -> None:
     """Run the displacement workflow.
 
     Parameters
@@ -21,21 +26,30 @@ def run(config_file: str, debug: bool = False, log_file: Optional[str] = None):
         Enable debug logging, by default False.
     log_file : str, optional
         If provided, will log to this file in addition to stderr.
+    pge_format : bool, optional
+        If True, the config file is a runconfig in the PGE-expected format.
+        By default False.
     """
+    # rest of imports here so --help doesn't take forever
     from threadpoolctl import ThreadpoolController
 
     from dolphin.utils import get_max_memory_usage
 
     from . import s1_disp
+    from ._pge_runconfig import RunConfig
     from .config import Workflow
 
     # Set the logging level for all `dolphin.` modules
     logger = get_log("dolphin", debug=debug)
 
+    if pge_format:
+        rc = RunConfig.from_yaml(config_file)
+        cfg = rc.to_workflow()
+    else:
+        cfg = Workflow.from_yaml(config_file)
+
     # Set the environment variables for the workers
     # TODO: Is this the best place to do this?
-    cfg = Workflow.from_yaml(config_file)
-
     controller = ThreadpoolController()
     controller.limit(limits=cfg.worker_settings.threads_per_worker)
 
@@ -68,6 +82,11 @@ def get_parser(
         "--debug",
         action="store_true",
         help="Print debug messages to the log.",
+    )
+    parser.add_argument(
+        "--pge-format",
+        action="store_true",
+        help="Indicate that `config_file` is in the PGE `RunConfig` format.",
     )
     parser.add_argument(
         "--log-file",

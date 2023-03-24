@@ -3,3 +3,4 @@ src/dolphin/__pycache__/
 docs/
 build/
 data/
+dist/
