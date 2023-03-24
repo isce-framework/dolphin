@@ -41,10 +41,13 @@ else
 fi
 
 # To run the image and see the help message....
-# docker run --rm -it opera-adt/dolphin:latest --help
+echo "To run the image and see the help message:"
+echo "docker run --rm -it opera-adt/dolphin:$TAG --help"
 #
-# To run the workflow on a configuration in the current directory....
-# docker run --user $(id -u):$(id -g) -v $PWD:/app --rm -it opera-adt/dolphin:latest run dolphin_config.yaml
+echo "To run the workflow on a configuration in the current directory...."
+echo "docker run --user $(id -u):$(id -g) -v $PWD:/app --rm -it opera-adt/dolphin:$TAG run dolphin_config.yaml"
+echo "To run on a PGE runconfig:"
+echo "docker run --user $(id -u):$(id -g) -v $PWD:/app --rm -it opera-adt/dolphin:$TAG run --pge runconfig.yaml"
 # where...
 #     --user $(id -u):$(id -g)  # Needed to avoid permission issues when writing to the mounted volume.
 #     -v $PWD:/app  # Mounts the current directory to the /app directory in the container.
