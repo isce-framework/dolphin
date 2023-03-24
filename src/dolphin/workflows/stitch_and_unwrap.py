@@ -65,8 +65,8 @@ def run(
         return [], [], stitched_cor_file
 
     use_icu = cfg.unwrap_options.unwrap_method == UnwrapMethod.ICU
-    # Note: ICU doesn't seem to support masks right now?
-    if cfg.mask_files and not use_icu:
+    # Note: ICU doesn't seem to support masks, but we'll zero the phase/cor
+    if cfg.mask_files:
         combined_mask_file = cfg.scratch_directory / "combined_mask.tif"
         logger.info(
             f"Reprojecting and combining {len(cfg.mask_files)} mask files to match"
