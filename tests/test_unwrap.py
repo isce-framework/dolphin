@@ -1,3 +1,4 @@
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -54,6 +55,11 @@ def test_unwrap_icu(tmp_path, raster_100_by_200, corr_raster):
     )
 
 
+# Skip this on mac, since snaphu doesn't run on mac
+@pytest.mark.skipif(
+    sys.platform != "darwin",
+    reason="snaphu doesn't run on mac",
+)
 def test_unwrap_snaphu_logfile(tmp_path, raster_100_by_200, corr_raster):
     unw_filename = tmp_path / "unwrapped.unw.tif"
     unwrap.unwrap(

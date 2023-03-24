@@ -55,6 +55,9 @@ ARG MAMBA_DOCKERFILE_ACTIVATE=1
 # --no-deps because they are installed with conda
 RUN python -m pip install --no-deps .
 
+# Run the entrypoint from the /app directory
+# This means if they mount a volume to /app, we won't be mixing in the repository code
+WORKDIR /app
 
 ENTRYPOINT ["/usr/local/bin/_entrypoint.sh", "python", "-m", "dolphin"]
 CMD ["--help"]
