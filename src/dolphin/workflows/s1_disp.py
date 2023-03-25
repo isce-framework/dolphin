@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+import shutil
 from pathlib import Path
 from pprint import pformat
 from typing import Dict, List, Optional
@@ -64,6 +65,9 @@ def run(
     # ###########################
     ifg_list: List[VRTInterferogram] = []
     tcorr_list: List[Path] = []
+    # The comp_slc tracking object is a dict, since we'll need to organize
+    # multiple comp slcs by burst (they'll have the same filename)
+    comp_slc_dict: Dict[str, Path] = {}
     # Now for each burst, run the wrapped phase estimation
     for burst, burst_cfg in wrapped_phase_cfgs:
         msg = "Running wrapped phase estimation"
@@ -72,12 +76,10 @@ def run(
         logger.info(msg)
         logger.debug(pformat(burst_cfg.dict()))
         cur_ifg_list, comp_slc, tcorr = wrapped_phase.run(burst_cfg, debug=debug)
-        ifg_list.extend(cur_ifg_list)
-        tcorr_list.append(tcorr)
 
-    # TODO: store the compressed SLCs somewhere
-    # if cfg.store_compressed_slcs:
-    #     pass
+        ifg_list.extend(cur_ifg_list)
+        comp_slc_dict[burst] = comp_slc
+        tcorr_list.append(tcorr)
 
     # ###################################
     # 2. Stitch and unwrap interferograms
@@ -105,6 +107,15 @@ def run(
             corrections={},
             pge_runconfig=pge_runconfig,
         )
+
+    if cfg.output_options.save_compressed_slc:
+        # TODO: Do i need to make this into some kind of standard hdf5 product?
+        # TODO: What kind of metadata do I need to attach to this?
+        logger.info(f"Saving {len(comp_slc_dict.items())} compressed SLCs")
+        for burst, comp_slc_file in comp_slc_dict.items():
+            out_path = cfg.output_directory / "compressed_slcs" / burst
+            out_path.mkdir(parents=True, exist_ok=True)
+            shutil.copy(comp_slc_file, out_path)
 
 
 def _create_burst_cfg(

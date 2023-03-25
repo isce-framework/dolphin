@@ -239,6 +239,13 @@ class OutputOptions(BaseModel, extra=Extra.forbid):
             " output resolution of [20, 20]."
         ),
     )
+    save_compressed_slc: bool = Field(
+        default=False,
+        description=(
+            "Whether the SAS should output and save the Compressed SLCs in addition to"
+            " the standard product output."
+        ),
+    )
 
     hdf5_creation_options: Dict = Field(
         DEFAULT_HDF5_OPTIONS,
