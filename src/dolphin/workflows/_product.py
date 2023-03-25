@@ -1,4 +1,5 @@
 """Module for creating the OPERA output product in NetCDF format."""
+from io import StringIO
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import h5netcdf
@@ -10,12 +11,15 @@ from dolphin import io
 from dolphin._log import get_log
 from dolphin._types import Filename
 
+from ._pge_runconfig import RunConfig
+
 logger = get_log(__name__)
 
 
-BASE_GROUP = "/science/SENTINEL1"
-DISP_GROUP = f"{BASE_GROUP}/DISP"
-CORRECTIONS_GROUP = f"{DISP_GROUP}/corrections"
+BASE_GROUP_NAME = "/science/SENTINEL1"
+DISP_GROUP_NAME = f"{BASE_GROUP_NAME}/DISP"
+CORRECTIONS_GROUP_NAME = f"{DISP_GROUP_NAME}/corrections"
+IDENTIFICATION_GROUP_NAME = f"{DISP_GROUP_NAME}/identification"
 GLOBAL_ATTRS = dict(
     Conventions="CF-1.8",
     contact="operaops@jpl.nasa.gov",
@@ -39,64 +43,13 @@ HDF5_OPTS["chunks"] = tuple(HDF5_OPTS["chunks"])  # type: ignore
 GRID_MAPPING_DSET = "spatial_ref"
 
 
-def _create_dataset(
-    *,
-    group: h5netcdf.Group,
-    name: str,
-    dimensions: Optional[Sequence[str]],
-    data: np.ndarray,
-    description: str,
-    fillvalue: float,
-    attrs: Optional[Dict[str, Any]] = None,
-    dtype: Optional[DTypeLike] = None,
-) -> h5netcdf.Variable:
-    if attrs is None:
-        attrs = {}
-    attrs.update(long_name=description)
-
-    # Scalars don't need chunks/compression
-    options = HDF5_OPTS if np.array(data).size > 1 else {}
-    dset = group.create_variable(
-        name,
-        dimensions=dimensions,
-        data=data,
-        dtype=dtype,
-        fillvalue=fillvalue,
-        **options,
-    )
-    dset.attrs.update(attrs)
-    return dset
-
-
-def _create_geo_dataset(
-    *,
-    group: h5netcdf.Group,
-    name: str,
-    data: np.ndarray,
-    description: str,
-    fillvalue: float,
-    attrs: Optional[Dict[str, Any]],
-) -> h5netcdf.Variable:
-    dimensions = ["y_coordinate", "x_coordinate"]
-    dset = _create_dataset(
-        group=group,
-        name=name,
-        dimensions=dimensions,
-        data=data,
-        description=description,
-        fillvalue=fillvalue,
-        attrs=attrs,
-    )
-    dset.attrs["grid_mapping"] = GRID_MAPPING_DSET
-    return dset
-
-
 def create_output_product(
     unw_filename: Filename,
     conncomp_filename: Filename,
     tcorr_filename: Filename,
     output_name: Filename,
     corrections: Dict[str, ArrayLike] = {},
+    pge_runconfig: Optional[RunConfig] = None,
 ):
     """Create the OPERA output product in NetCDF format.
 
@@ -112,6 +65,9 @@ def create_output_product(
         The path to the output NetCDF file, by default "output.nc"
     corrections : Dict[str, ArrayLike], optional
         A dictionary of corrections to write to the output file, by default None
+    pge_runconfig : Optional[RunConfig], optional
+        The PGE run configuration, by default None
+        Used to add extra metadata to the output file.
     """
     # Read the Geotiff file and its metadata
     crs = io.get_raster_crs(unw_filename)
@@ -128,18 +84,18 @@ def create_output_product(
 
     assert unw_arr.shape == conncomp_arr.shape == tcorr_arr.shape
 
-    # with h5py.File(output_name, "w") as f:
     with h5netcdf.File(output_name, "w") as f:
         # Create the NetCDF file
         f.attrs.update(GLOBAL_ATTRS)
 
-        displacement_group = f.create_group(DISP_GROUP)
+        displacement_group = f.create_group(DISP_GROUP_NAME)
 
         # Set up the grid mapping variable for each group with rasters
         _create_grid_mapping(group=displacement_group, crs=crs, gt=gt)
 
         # Set up the X/Y variables for each group
         _create_yx_dsets(group=displacement_group, gt=gt, shape=unw_arr.shape)
+
         # Write the displacement array / conncomp arrays
         _create_geo_dataset(
             group=displacement_group,
@@ -149,8 +105,6 @@ def create_output_product(
             fillvalue=np.nan,
             attrs=dict(units="radians"),
         )
-
-        # scales2 = _create_yx_dsets(group=quality_group, gt=gt, shape=unw_arr.shape)
         _create_geo_dataset(
             group=displacement_group,
             name="connected_components",
@@ -169,7 +123,7 @@ def create_output_product(
         )
 
         # Create the group holding phase corrections that were used on the unwrapped phase
-        corrections_group = f.create_group(CORRECTIONS_GROUP)
+        corrections_group = f.create_group(CORRECTIONS_GROUP_NAME)
         f.attrs["description"] = "Phase corrections applied to the unwrapped_phase"
 
         # TODO: Are we going to downsample these for space?
@@ -231,8 +185,93 @@ def create_output_product(
             attrs=dict(units="radians", rows=[], cols=[], latitudes=[], longitudes=[]),
         )
 
+    # End of the product for non-PGE users
+    if pge_runconfig is None:
+        return
 
-def _create_yx(
+    # Add the PGE metadata to the file
+    with h5netcdf.File(output_name, "a") as f:
+        identification_group = f.create_group(IDENTIFICATION_GROUP_NAME)
+        _create_dataset(
+            group=identification_group,
+            name="frame_id",
+            dimensions=(),
+            data=pge_runconfig.input_file_group.frame_id,
+            fillvalue=None,
+            description="ID number of the processed frame.",
+            attrs=dict(units="unitless"),
+        )
+        # TODO: prob should just make a _to_string method?
+        ss = StringIO()
+        pge_runconfig.to_yaml(ss)
+        runconfig_str = ss.getvalue()
+        _create_dataset(
+            group=identification_group,
+            name="pge_runconfig",
+            dimensions=(),
+            data=runconfig_str,
+            fillvalue=None,
+            description="The full PGE runconfig YAML file.",
+            attrs=dict(units="unitless"),
+        )
+
+
+def _create_dataset(
+    *,
+    group: h5netcdf.Group,
+    name: str,
+    dimensions: Optional[Sequence[str]],
+    data: np.ndarray,
+    description: str,
+    fillvalue: Optional[float],
+    attrs: Optional[Dict[str, Any]] = None,
+    dtype: Optional[DTypeLike] = None,
+) -> h5netcdf.Variable:
+    if attrs is None:
+        attrs = {}
+    attrs.update(long_name=description)
+
+    # Scalars don't need chunks/compression
+    if not isinstance(data, str) and np.array(data).size > 1:
+        options = HDF5_OPTS
+    else:
+        options = {}
+    dset = group.create_variable(
+        name,
+        dimensions=dimensions,
+        data=data,
+        dtype=dtype,
+        fillvalue=fillvalue,
+        **options,
+    )
+    dset.attrs.update(attrs)
+    return dset
+
+
+def _create_geo_dataset(
+    *,
+    group: h5netcdf.Group,
+    name: str,
+    data: np.ndarray,
+    description: str,
+    fillvalue: float,
+    attrs: Optional[Dict[str, Any]],
+) -> h5netcdf.Variable:
+    dimensions = ["y", "x"]
+    dset = _create_dataset(
+        group=group,
+        name=name,
+        dimensions=dimensions,
+        data=data,
+        description=description,
+        fillvalue=fillvalue,
+        attrs=attrs,
+    )
+    dset.attrs["grid_mapping"] = GRID_MAPPING_DSET
+    return dset
+
+
+def _create_yx_arrays(
     gt: List[float], shape: Tuple[int, int]
 ) -> Tuple[np.ndarray, np.ndarray]:
     """Create the x and y coordinate datasets."""
@@ -254,17 +293,17 @@ def _create_yx_dsets(
     shape: Tuple[int, int],
 ) -> Tuple[h5netcdf.Variable, h5netcdf.Variable]:
     """Create the x and y coordinate datasets."""
-    y, x = _create_yx(gt, shape)
+    y, x = _create_yx_arrays(gt, shape)
 
     if not group.dimensions:
-        group.dimensions = dict(y_coordinate=y.size, x_coordinate=x.size)
+        group.dimensions = dict(y=y.size, x=x.size)
     # Create the datasets
-    y_ds = group.create_variable("y_coordinate", ("y_coordinate",), data=y, dtype=float)
-    x_ds = group.create_variable("x_coordinate", ("x_coordinate",), data=x, dtype=float)
+    y_ds = group.create_variable("y", ("y",), data=y, dtype=float)
+    x_ds = group.create_variable("x", ("x",), data=x, dtype=float)
 
-    for name, ds in zip(["y_coordinate", "x_coordinate"], [y_ds, x_ds]):
-        ds.attrs["standard_name"] = f"projection_{name}"
-        ds.attrs["long_name"] = f"{name.replace('_', ' ')} of projection"
+    for name, ds in zip(["y", "x"], [y_ds, x_ds]):
+        ds.attrs["standard_name"] = f"projection_{name}_coordinate"
+        ds.attrs["long_name"] = f"{name.replace('_', ' ')} coordinate of projection"
         ds.attrs["units"] = "m"
 
     return y_ds, x_ds

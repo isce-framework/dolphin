@@ -176,8 +176,9 @@ class RunConfig(YamlModel, extra=Extra.forbid):
         # the output directory, and the scratch directory.
         # All the other things come from the AlgorithmParameters.
 
-        workflow_name = self.primary_executable.product_type
-        workflow_name = workflow_name.replace("DISP_S1_", "").lower()
+        workflow_name = self.primary_executable.product_type.replace(
+            "DISP_S1_", ""
+        ).lower()
         cslc_file_list = self.input_file_group.cslc_file_list
         output_directory = self.product_path_group.output_directory
         scratch_directory = self.product_path_group.scratch_path

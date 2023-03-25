@@ -7,22 +7,32 @@ from dolphin._log import get_log, log_runtime
 from dolphin.interferogram import VRTInterferogram
 
 from . import _product, stitch_and_unwrap, wrapped_phase
+from ._pge_runconfig import RunConfig
 from ._utils import group_by_burst
 from .config import Workflow
 
 
 @log_runtime
-def run(cfg: Workflow, debug: bool = False, log_file: Optional[str] = None):
+def run(
+    cfg: Workflow,
+    debug: bool = False,
+    log_file: Optional[str] = None,
+    pge_runconfig: Optional[RunConfig] = None,
+):
     """Run the displacement workflow on a stack of SLCs.
 
     Parameters
     ----------
     cfg : Workflow
-        [Workflow][dolphin.workflows.config.Workflow] object with workflow parameters
+        [`Workflow`][dolphin.workflows.config.Workflow] object for controlling the
+        workflow.
     debug : bool, optional
         Enable debug logging, by default False.
     log_file : str, optional
         If provided, will log to this file in addition to stderr.
+    pge_runconfig : RunConfig, optional
+        If provided, adds PGE-specific metadata to the output product.
+        Not used by the workflow itself, only for extra metadata.
     """
     logger = get_log(debug=debug, filename=log_file)
     logger.debug(pformat(cfg.dict()))
@@ -96,6 +106,7 @@ def run(cfg: Workflow, debug: bool = False, log_file: Optional[str] = None):
             # output_name=cfg.outputs.output_name,
             output_name=output_name,
             corrections={},
+            pge_runconfig=pge_runconfig,
         )
 
 
