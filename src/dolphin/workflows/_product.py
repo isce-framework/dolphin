@@ -3,6 +3,7 @@ from io import StringIO
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import h5netcdf
+import h5py
 import numpy as np
 import pyproj
 from numpy.typing import ArrayLike, DTypeLike
@@ -319,3 +320,78 @@ def _create_grid_mapping(group, crs: pyproj.CRS, gt: List[float]) -> h5netcdf.Va
     gt_string = " ".join([str(x) for x in gt])
     dset.attrs["GeoTransform"] = gt_string
     return dset
+
+
+def _get_hdf5_attributes(hdf5_path: Filename):
+    table_data = []
+
+    def append_dset_to_table(name, item):
+        """Add all dataset's metadata using `visititems`."""
+        if not isinstance(item, h5py.Dataset):
+            return None
+        data_type = item.dtype
+        shape = item.shape
+        description = item.attrs.get("long_name", "")
+        units = item.attrs.get("units", "")
+        table_data.append(
+            dict(
+                Name=name,
+                Type=data_type,
+                Shape=shape,
+                Units=units,
+                Description=description,
+            )
+        )
+
+    with h5py.File(hdf5_path, "r") as hf:
+        hf.visititems(append_dset_to_table)
+    return table_data
+
+
+def _generate_docx_table(hdf5_path: Filename, output_path: Filename):
+    # https://python-docx.readthedocs.io/en/latest/user/quickstart.html#adding-a-table
+    from docx import Document
+    from docx.enum.table import WD_ROW_HEIGHT_RULE, WD_TABLE_ALIGNMENT
+    from docx.oxml import parse_xml
+    from docx.oxml.ns import nsdecls
+    from docx.shared import Pt
+
+    document = Document()
+    table = document.add_table(cols=1, rows=0)
+
+    def _add_row(text, height=15, shade=False, bold=False):
+        # _tc.get_or_add_tcPr().append(shading_elm)
+        row = table.add_row()
+        row.height_rule = WD_ROW_HEIGHT_RULE.AT_LEAST
+        row.height = Pt(height)
+        row.cells[0].text = text
+        # https://stackoverflow.com/questions/26752856/python-docx-set-table-cell-background-and-text-color  # noqa
+        if shade:
+            shading_elm = parse_xml(r'<w:shd {} w:fill="D9D9D9"/>'.format(nsdecls("w")))
+            row.cells[0]._tc.get_or_add_tcPr().append(shading_elm)
+        # Set the text color to black and remove bold
+        run = row.cells[0].paragraphs[0].runs[0]
+        run.font.color.rgb = None
+        if not bold:
+            run.font.bold = False
+
+    # Set the default document font to Arial
+    style = document.styles["Normal"]
+    font = style.font
+    font.name = "Arial"
+
+    table.style = "Table Grid"  # Use the "Table Grid" style to get borders
+    table.alignment = WD_TABLE_ALIGNMENT.LEFT
+
+    for d in _get_hdf5_attributes(hdf5_path=hdf5_path):
+        name = d.pop("Name")
+        desc = d.pop("Description")
+
+        _add_row(f"Name: {name}", shade=True)
+
+        row_text = "\t\t".join(f"{k}: {v}" for k, v in d.items())
+        row_text.replace("()", "scalar")
+        _add_row(row_text)
+        _add_row(f"Description: {desc}")
+
+    document.save(output_path)
