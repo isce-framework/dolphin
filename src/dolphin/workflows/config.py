@@ -327,6 +327,11 @@ class Workflow(YamlModel):
 
     # General workflow metadata
     worker_settings: WorkerSettings = Field(default_factory=WorkerSettings)
+    log_file: Optional[Path] = Field(
+        # TODO: Probably more work to make sure log_file is implemented okay
+        default=None,
+        description="Path to output log file (in addition to logging to `stderr`).",
+    )
     creation_time_utc: datetime = Field(
         default_factory=datetime.utcnow, description="Time the config file was created"
     )

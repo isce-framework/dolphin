@@ -62,6 +62,10 @@ class DynamicAncillaryFileGroup(YamlModel, extra=Extra.forbid):
             " calculation."
         ),
     )
+    geometry_files: List[Path] = Field(
+        default_factory=list,
+        description="Paths to the incidence/azimuth-angle files (1 per burst).",
+    )
     mask_files: List[Path] = Field(
         default_factory=list,
         description=(
@@ -116,6 +120,13 @@ class ProductPathGroup(YamlModel, extra=Extra.forbid):
     product_version: str = Field(
         default="0.1",
         description="Version of the product.",
+    )
+    save_compressed_slc: bool = Field(
+        default=False,
+        description=(
+            "Whether the SAS should output and save the Compressed SLCs in addition to"
+            " the standard product output."
+        ),
     )
 
 
@@ -208,16 +219,20 @@ class RunConfig(YamlModel, extra=Extra.forbid):
     ):
         """Convert from a [`Workflow`][dolphin.workflows.config.Workflow] object.
 
+        This is the inverse of the to_workflow method, although there are more
+        fields in the PGE version, so it's not a 1-1 mapping.
+
         Since there's no `frame_id` or `algorithm_parameters_file` in the
         [`Workflow`][dolphin.workflows.config.Workflow] object, we need to pass
         those in as arguments.
+
+        This is mostly used as preliminary setup to further edit the fields.
         """
         # Load the algorithm parameters from the file
         alg_param_dict = workflow.dict(include=AlgorithmParameters.__fields__.keys())
         AlgorithmParameters(**alg_param_dict).to_yaml(algorithm_parameters_file)
         # This get's unpacked to load the rest of the parameters for the Workflow
 
-        # This is the inverse of the to_workflow method
         return cls(
             input_file_group=InputFileGroup(
                 cslc_file_list=workflow.cslc_file_list,
@@ -241,5 +256,5 @@ class RunConfig(YamlModel, extra=Extra.forbid):
                 sas_output_path=workflow.output_directory,
             ),
             worker_settings=workflow.worker_settings,
-            # log_file=workflow.log_file,
+            log_file=workflow.log_file,
         )

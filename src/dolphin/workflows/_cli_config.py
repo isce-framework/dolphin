@@ -23,6 +23,7 @@ def create_config(
     no_gpu: bool = False,
     use_icu: bool = False,
     single_update: bool = False,
+    log_file: Optional[Path] = None,
 ):
     """Create a config for a displacement workflow."""
     if single_update:
@@ -64,6 +65,7 @@ def create_config(
             threads_per_worker=threads_per_worker,
             gpu_enabled=(not no_gpu),
         ),
+        log_file=log_file,
     )
 
     if outfile == "-":  # Write to stdout
@@ -111,6 +113,12 @@ def get_parser(subparser=None, subcommand_name="run"):
             f" None is passed, the default is {OPERA_DATASET_NAME}."
         ),
     )
+    parser.add_argument(
+        "--mask-files",
+        nargs=argparse.ZERO_OR_MORE,
+        help="Path/Paths to mask files (e.g. shadow/layover, water mask,...)",
+    )
+    parser.add_argument("--log-file", help="Path to log to, in addition to stderr")
 
     # Phase linking options
     pl_group = parser.add_argument_group("Phase Linking options")
@@ -181,11 +189,6 @@ def get_parser(subparser=None, subcommand_name="run"):
         default=1,
         help="Number of threads to use per worker.",
     )
-    # parser.add_argument(
-    #     "--mask-files",
-    #     nargs=argparse.ZERO_OR_MORE,
-    #     help="Path to a file containing a list of mask files.",
-    # )
     parser.set_defaults(run_func=create_config)
 
     return parser

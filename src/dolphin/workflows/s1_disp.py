@@ -16,7 +16,6 @@ from .config import Workflow
 def run(
     cfg: Workflow,
     debug: bool = False,
-    log_file: Optional[str] = None,
     pge_runconfig: Optional[RunConfig] = None,
 ):
     """Run the displacement workflow on a stack of SLCs.
@@ -28,13 +27,11 @@ def run(
         workflow.
     debug : bool, optional
         Enable debug logging, by default False.
-    log_file : str, optional
-        If provided, will log to this file in addition to stderr.
     pge_runconfig : RunConfig, optional
         If provided, adds PGE-specific metadata to the output product.
         Not used by the workflow itself, only for extra metadata.
     """
-    logger = get_log(debug=debug, filename=log_file)
+    logger = get_log(debug=debug, filename=cfg.log_file)
     logger.debug(pformat(cfg.dict()))
     cfg.create_dir_tree(debug=debug)
 
