@@ -199,7 +199,6 @@ class RunConfig(YamlModel, extra=Extra.forbid):
         output_directory = self.product_path_group.output_directory
         scratch_directory = self.product_path_group.scratch_path
         mask_files = self.dynamic_ancillary_file_group.mask_files
-        worker_settings = self.worker_settings
         input_options = dict(subdataset=self.input_file_group.subdataset)
 
         # Load the algorithm parameters from the file
@@ -214,7 +213,10 @@ class RunConfig(YamlModel, extra=Extra.forbid):
             mask_files=mask_files,
             output_directory=output_directory,
             scratch_directory=scratch_directory,
-            worker_settings=worker_settings,
+            # These ones directly translate
+            worker_settings=self.worker_settings,
+            log_file=self.log_file,
+            # Finally, the rest of the parameters are in the algorithm parameters
             **algorithm_parameters.dict(),
         )
 
