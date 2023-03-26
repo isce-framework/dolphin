@@ -1,7 +1,7 @@
 """Module for creating the OPERA output product in NetCDF format."""
 from io import StringIO
 from itertools import groupby
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 import h5netcdf
 import h5py
@@ -203,6 +203,17 @@ def create_output_product(
             description="ID number of the processed frame.",
             attrs=dict(units="unitless"),
         )
+        # product_version
+        _create_dataset(
+            group=identification_group,
+            name="product_version",
+            dimensions=(),
+            data=pge_runconfig.product_path_group.product_version,
+            fillvalue=None,
+            description="Version of the product.",
+            attrs=dict(units="unitless"),
+        )
+
         # TODO: prob should just make a _to_string method?
         ss = StringIO()
         pge_runconfig.to_yaml(ss)
@@ -213,7 +224,9 @@ def create_output_product(
             dimensions=(),
             data=runconfig_str,
             fillvalue=None,
-            description="The full PGE runconfig YAML file.",
+            description=(
+                "The full PGE runconfig YAML file used to generate the product."
+            ),
             attrs=dict(units="unitless"),
         )
 
@@ -223,7 +236,7 @@ def _create_dataset(
     group: h5netcdf.Group,
     name: str,
     dimensions: Optional[Sequence[str]],
-    data: np.ndarray,
+    data: Union[np.ndarray, str],
     description: str,
     fillvalue: Optional[float],
     attrs: Optional[Dict[str, Any]] = None,
@@ -233,10 +246,13 @@ def _create_dataset(
         attrs = {}
     attrs.update(long_name=description)
 
-    # Scalars don't need chunks/compression
-    if not isinstance(data, str) and np.array(data).size > 1:
-        options = HDF5_OPTS
-    else:
+    options = HDF5_OPTS
+    if isinstance(data, str):
+        options = {}
+        # This is a string, so we need to convert it to bytes or it will fail
+        data = np.string_(data)
+    elif np.array(data).size <= 1:
+        # Scalars don't need chunks/compression
         options = {}
     dset = group.create_variable(
         name,

@@ -40,8 +40,8 @@ def run(
     logger = get_log("dolphin", debug=debug)
 
     if pge_format:
-        rc = RunConfig.from_yaml(config_file)
-        cfg = rc.to_workflow()
+        pge_rc = RunConfig.from_yaml(config_file)
+        cfg = pge_rc.to_workflow()
     else:
         cfg = Workflow.from_yaml(config_file)
 
@@ -50,7 +50,7 @@ def run(
     controller = ThreadpoolController()
     controller.limit(limits=cfg.worker_settings.threads_per_worker)
 
-    s1_disp.run(cfg, debug=debug)
+    s1_disp.run(cfg, debug=debug, pge_runconfig=pge_rc)
 
     # Print the maximum memory usage for each worker
     max_mem = get_max_memory_usage(units="GB")
