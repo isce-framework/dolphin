@@ -323,7 +323,9 @@ def _create_grid_mapping(group, crs: pyproj.CRS, gt: List[float]) -> h5netcdf.Va
         dict(
             GeoTransform=gt_string,
             units="unitless",
-            long_name="Variable containing attributes for geo-referencing imagery",
+            long_name=(
+                "Dummy variable containing geo-referencing metadata in attributes"
+            ),
         )
     )
 

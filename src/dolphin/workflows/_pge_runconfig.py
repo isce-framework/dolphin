@@ -73,6 +73,10 @@ class DynamicAncillaryFileGroup(YamlModel, extra=Extra.forbid):
             " 0 for no data/invalid, and 1 for data."
         ),
     )
+    dem_file: Optional[Path] = Field(
+        default=None,
+        description="Path to the DEM file covering full frame.",
+    )
     # # TEC file in IONEX format for ionosphere correction
     # tec_file: str(required=False)
     tec_file: Optional[Path] = Field(
