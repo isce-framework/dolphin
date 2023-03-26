@@ -79,6 +79,7 @@ def merge_images(
     out_dtype: Optional[DTypeLike] = None,
     overwrite=False,
     options: Optional[Sequence[str]] = io.DEFAULT_ENVI_OPTIONS,
+    create_only: bool = False,
 ):
     """Combine multiple SLC images on the same date into one image.
 
@@ -106,6 +107,8 @@ def merge_images(
         Overwrite existing files. Default is False.
     options : Optional[Sequence[str]]
         Driver-specific creation options passed to GDAL. Default is ["SUFFIX=ADD"]
+    create_only : bool
+        If True, creates an empty output file, does not write data. Default is False.
     """
     if Path(outfile).exists():
         if not overwrite:
@@ -161,6 +164,9 @@ def merge_images(
         projection=projection,
         options=options,
     )
+    if create_only:
+        temp_dir.cleanup()
+        return
 
     out_left, out_bottom, out_right, out_top = bounds
     # Now loop through the files and write them to the output
