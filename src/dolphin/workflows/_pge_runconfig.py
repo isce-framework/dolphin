@@ -161,8 +161,9 @@ class RunConfig(YamlModel, extra=Extra.forbid):
     # General workflow metadata
     worker_settings: WorkerSettings = Field(default_factory=WorkerSettings)
 
-    log_file: Path = Field(
-        default=Path("disp_s1_workflow.log"), description="Path to the output log file."
+    log_file: Optional[Path] = Field(
+        default=Path("disp_s1_workflow.log"),
+        description="Path to the output log file in addition to logging to stderr.",
     )
 
     # Override the constructor to allow recursively construct without validation
