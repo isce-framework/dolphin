@@ -25,10 +25,7 @@ class InputFileGroup(YamlModel):
         default_factory=list,
         description="List of paths to CSLC files.",
     )
-    subdataset: str = Field(
-        default=OPERA_DATASET_NAME,
-        description="Name of the subdataset to use in the input NetCDF files.",
-    )
+
     frame_id: int = Field(
         ...,
         description="Frame ID of the bursts contained in `cslc_file_list`.",
@@ -48,14 +45,14 @@ class DynamicAncillaryFileGroup(YamlModel, extra=Extra.forbid):
         default=...,
         description="Path to file containing SAS algorithm parameters.",
     )
-    amp_disp_files: List[Path] = Field(
+    amplitude_dispersion_files: List[Path] = Field(
         default_factory=list,
         description=(
             "Paths to existing Amplitude Dispersion file (1 per burst) for PS update"
             " calculation."
         ),
     )
-    amp_mean_files: List[Path] = Field(
+    amplitude_mean_files: List[Path] = Field(
         default_factory=list,
         description=(
             "Paths to an existing Amplitude Mean files (1 per burst) for PS update"
@@ -145,6 +142,10 @@ class AlgorithmParameters(YamlModel, extra=Extra.forbid):
     )
     unwrap_options: UnwrapOptions = Field(default_factory=UnwrapOptions)
     output_options: OutputOptions = Field(default_factory=OutputOptions)
+    subdataset: str = Field(
+        default=OPERA_DATASET_NAME,
+        description="Name of the subdataset to use in the input NetCDF files.",
+    )
 
 
 class RunConfig(YamlModel, extra=Extra.forbid):
@@ -199,12 +200,14 @@ class RunConfig(YamlModel, extra=Extra.forbid):
         output_directory = self.product_path_group.output_directory
         scratch_directory = self.product_path_group.scratch_path
         mask_files = self.dynamic_ancillary_file_group.mask_files
-        input_options = dict(subdataset=self.input_file_group.subdataset)
 
         # Load the algorithm parameters from the file
         algorithm_parameters = AlgorithmParameters.from_yaml(
             self.dynamic_ancillary_file_group.algorithm_parameters_file
         )
+        param_dict = algorithm_parameters.dict()
+        input_options = dict(subdataset=param_dict.pop("subdataset"))
+
         # This get's unpacked to load the rest of the parameters for the Workflow
         return Workflow(
             workflow_name=workflow_name,
@@ -217,7 +220,7 @@ class RunConfig(YamlModel, extra=Extra.forbid):
             worker_settings=self.worker_settings,
             log_file=self.log_file,
             # Finally, the rest of the parameters are in the algorithm parameters
-            **algorithm_parameters.dict(),
+            **param_dict,
         )
 
     @classmethod
@@ -243,13 +246,12 @@ class RunConfig(YamlModel, extra=Extra.forbid):
         return cls(
             input_file_group=InputFileGroup(
                 cslc_file_list=workflow.cslc_file_list,
-                subdataset=workflow.input_options.subdataset,
                 frame_id=frame_id,
             ),
             dynamic_ancillary_file_group=DynamicAncillaryFileGroup(
                 algorithm_parameters_file=algorithm_parameters_file,
-                # amp_disp_files=workflow.amp_disp_files,
-                # amp_mean_files=workflow.amp_mean_files,
+                # amplitude_dispersion_files=workflow.amplitude_dispersion_files,
+                # amplitude_mean_files=workflow.amplitude_mean_files,
                 mask_files=workflow.mask_files,
                 # tec_file=workflow.tec_file,
                 # weather_model_file=workflow.weather_model_file,

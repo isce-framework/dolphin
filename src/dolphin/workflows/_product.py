@@ -9,6 +9,7 @@ import numpy as np
 import pyproj
 from numpy.typing import ArrayLike, DTypeLike
 
+from dolphin import __version__ as dolphin_version
 from dolphin import io
 from dolphin._log import get_log
 from dolphin._types import Filename
@@ -164,7 +165,7 @@ def create_output_product(
             group=corrections_group,
             name="plate_motion",
             data=plate_motion,
-            description="Phase ramp caused by plate",
+            description="Phase ramp caused by tectonic plate motion",
             fillvalue=np.nan,
             attrs=dict(units="radians"),
         )
@@ -211,6 +212,16 @@ def create_output_product(
             data=pge_runconfig.product_path_group.product_version,
             fillvalue=None,
             description="Version of the product.",
+            attrs=dict(units="unitless"),
+        )
+        # software_version
+        _create_dataset(
+            group=identification_group,
+            name="software_version",
+            dimensions=(),
+            data=dolphin_version,
+            fillvalue=None,
+            description="Version of the Dolphin software used to generate the product.",
             attrs=dict(units="unitless"),
         )
 
