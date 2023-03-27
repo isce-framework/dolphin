@@ -109,9 +109,9 @@ def create_output_product(
         )
         _create_geo_dataset(
             group=displacement_group,
-            name="connected_components",
+            name="connected_components_labels",
             data=conncomp_arr,
-            description="Connected components of the unwrapped phase",
+            description="Connected component labels of the unwrapped phase",
             fillvalue=0,
             attrs=dict(units="unitless"),
         )
