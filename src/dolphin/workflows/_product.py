@@ -79,6 +79,8 @@ def create_output_product(
 
     conncomp_arr = io.load_gdal(conncomp_filename)
     tcorr_arr = io.load_gdal(tcorr_filename)
+    # TODO: add spatial correlation, pass through to function
+    spatial_corr_arr = np.full_like(unw_arr, np.nan)
 
     # Get the nodata mask (which for snaphu is 0)
     mask = unw_arr == 0
@@ -121,6 +123,14 @@ def create_output_product(
             name="temporal_correlation",
             data=tcorr_arr,
             description="Temporal correlation of phase inversion",
+            fillvalue=np.nan,
+            attrs=dict(units="unitless"),
+        )
+        _create_geo_dataset(
+            group=displacement_group,
+            name="spatial_correlation",
+            data=spatial_corr_arr,
+            description="Estimate of spatial correlation of the wrapped interferogram",
             fillvalue=np.nan,
             attrs=dict(units="unitless"),
         )
