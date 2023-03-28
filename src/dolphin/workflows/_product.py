@@ -19,10 +19,8 @@ from ._pge_runconfig import RunConfig
 logger = get_log(__name__)
 
 
-BASE_GROUP_NAME = "/science/SENTINEL1"
-DISP_GROUP_NAME = f"{BASE_GROUP_NAME}/DISP"
-CORRECTIONS_GROUP_NAME = f"{DISP_GROUP_NAME}/corrections"
-IDENTIFICATION_GROUP_NAME = f"{DISP_GROUP_NAME}/identification"
+CORRECTIONS_GROUP_NAME = "corrections"
+IDENTIFICATION_GROUP_NAME = "identification"
 GLOBAL_ATTRS = dict(
     Conventions="CF-1.8",
     contact="operaops@jpl.nasa.gov",
@@ -93,17 +91,15 @@ def create_output_product(
         # Create the NetCDF file
         f.attrs.update(GLOBAL_ATTRS)
 
-        displacement_group = f.create_group(DISP_GROUP_NAME)
-
         # Set up the grid mapping variable for each group with rasters
-        _create_grid_mapping(group=displacement_group, crs=crs, gt=gt)
+        _create_grid_mapping(group=f, crs=crs, gt=gt)
 
         # Set up the X/Y variables for each group
-        _create_yx_dsets(group=displacement_group, gt=gt, shape=unw_arr.shape)
+        _create_yx_dsets(group=f, gt=gt, shape=unw_arr.shape)
 
         # Write the displacement array / conncomp arrays
         _create_geo_dataset(
-            group=displacement_group,
+            group=f,
             name="unwrapped_phase",
             data=unw_arr,
             description="Unwrapped phase",
@@ -111,7 +107,7 @@ def create_output_product(
             attrs=dict(units="radians"),
         )
         _create_geo_dataset(
-            group=displacement_group,
+            group=f,
             name="connected_components_labels",
             data=conncomp_arr,
             description="Connected component labels of the unwrapped phase",
@@ -119,7 +115,7 @@ def create_output_product(
             attrs=dict(units="unitless"),
         )
         _create_geo_dataset(
-            group=displacement_group,
+            group=f,
             name="temporal_correlation",
             data=tcorr_arr,
             description="Temporal correlation of phase inversion",
@@ -127,7 +123,7 @@ def create_output_product(
             attrs=dict(units="unitless"),
         )
         _create_geo_dataset(
-            group=displacement_group,
+            group=f,
             name="spatial_correlation",
             data=spatial_corr_arr,
             description="Estimate of spatial correlation of the wrapped interferogram",
