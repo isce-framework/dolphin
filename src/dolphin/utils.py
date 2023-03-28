@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Iterable, List, Optional, Tuple, Union
 
 import numpy as np
-from numpy.typing import DTypeLike
+from numpy.typing import ArrayLike, DTypeLike
 from osgeo import gdal, gdal_array, gdalconst
 from rich.progress import MofNCompleteColumn, Progress, SpinnerColumn, TimeElapsedColumn
 
@@ -509,3 +509,53 @@ def get_gpu_memory(pid: Optional[int] = None, gpu_id: int = 0) -> float:
     else:
         procs = [p for p in processes if p["pid"] == pid]
         return get_mem(procs[0]) if procs else 0.0
+
+
+def moving_window_mean(
+    image: ArrayLike, size: Union[int, Tuple[int, int]]
+) -> np.ndarray:
+    """Calculate the mean of a moving window of size `size`.
+
+    Parameters
+    ----------
+    image : ndarray
+        input image
+    size : int or tuple of int
+        Window size. If a single int, the window is square.
+        If a tuple of (row_size, col_size), the window can be rectangular.
+
+    Returns
+    -------
+    ndarray
+        image the same size as `image`, where each pixel is the mean
+        of the corresponding window.
+    """
+    if isinstance(size, int):
+        size = (size, size)
+    if len(size) != 2:
+        raise ValueError("size must be a single int or a tuple of 2 ints")
+    if size[0] % 2 == 0 or size[1] % 2 == 0:
+        raise ValueError("size must be odd in both dimensions")
+
+    row_size, col_size = size
+    row_pad = row_size // 2
+    col_pad = col_size // 2
+
+    # Pad the image with zeros
+    image_padded = np.pad(
+        image, ((row_pad + 1, row_pad), (col_pad + 1, col_pad)), mode="constant"
+    )
+
+    # Calculate the cumulative sum of the image
+    integral_img = np.cumsum(np.cumsum(image_padded, axis=0), axis=1).astype(float)
+
+    # Calculate the mean of the moving window
+    # Uses the algorithm from https://en.wikipedia.org/wiki/Summed-area_table
+    window_mean = (
+        integral_img[row_size:, col_size:]
+        - integral_img[:-row_size, col_size:]
+        - integral_img[row_size:, :-col_size]
+        + integral_img[:-row_size, :-col_size]
+    )
+    window_mean /= row_size * col_size
+    return window_mean

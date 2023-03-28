@@ -5,6 +5,8 @@ from os import fspath
 from pathlib import Path
 from typing import Iterable, List, Optional, Sequence, Tuple, Union
 
+import numpy as np
+from numpy.typing import ArrayLike
 from osgeo import gdal
 from pydantic import BaseModel, Extra, Field, root_validator, validator
 
@@ -489,3 +491,49 @@ class Network:
 
     def __eq__(self, other):
         return self.ifg_list == other.ifg_list
+
+
+def estimate_correlation_from_phase(
+    ifg: Union[VRTInterferogram, ArrayLike], window_size: Union[int, Tuple[int, int]]
+) -> np.ndarray:
+    """Estimate correlation from only an interferogram (no SLCs/magnitudes).
+
+    This is a simple correlation estimator that takes the (complex) average
+    in a moving window in an interferogram. Used to get some estimate of spatial
+    correlation on the result of phase-linking interferograms.
+
+    Parameters
+    ----------
+    ifg : Union[VRTInterferogram, ArrayLike]
+        Interferogram to estimate correlation from.
+        If a VRTInterferogram, will load and take the phase.
+        If `ifg` is complex, will normalize to unit magnitude before estimating.
+    window_size : Union[int, Tuple[int, int]]
+        Size of window to use for correlation estimation.
+        If int, will use a square window of that size.
+        If tuple, the rectangular window has shape  `size=(row_size, col_size)`.
+
+    Returns
+    -------
+    np.ndarray
+        Correlation array
+    """
+    if isinstance(ifg, VRTInterferogram):
+        ifg = ifg.load()
+    nan_mask = np.isnan(ifg)
+    zero_mask = ifg == 0
+    if not np.iscomplexobj(ifg):
+        # If they passed phase, convert to complex
+        inp = np.exp(1j * np.nan_to_num(ifg))
+    else:
+        # If they passed complex, normalize to unit magnitude
+        inp = np.exp(1j * np.nan_to_num(np.angle(ifg)))
+
+    # Note: the clipping is from possible partial windows producing correlation
+    # above 1
+    cor = np.clip(np.abs(utils.moving_window_mean(inp, window_size)), 0, 1)
+    # Return the input nans to nan
+    cor[nan_mask] = np.nan
+    # If the input was 0, the correlation is 0
+    cor[zero_mask] = 0
+    return cor
