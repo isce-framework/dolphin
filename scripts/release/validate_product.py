@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 else:
     _SubparserType = Any
 
-DSET_DEFAULT = "/science/SENTINEL1/DISP/unwrapped_phase"
+DSET_DEFAULT = "unwrapped_phase"
 
 
 class ComparisonError(Exception):
@@ -61,8 +61,17 @@ def compare_groups(
             compare_groups(golden_group[key], test_group[key])
         else:
             _compare_datasets_attr(golden_group[key], test_group[key])
-            img_gold = np.ma.masked_invalid(golden_group[key][()])
-            img_test = np.ma.masked_invalid(test_group[key][()])
+            golden = golden_group[key][()]
+            test = test_group[key][()]
+            if golden.dtype.kind == "S":
+                if not np.array_equal(golden, test):
+                    raise ComparisonError(
+                        f"Dataset {golden_group.name}/{key} values do not match"
+                    )
+                continue
+
+            img_gold = np.ma.masked_invalid(golden)
+            img_test = np.ma.masked_invalid(test)
             abs_diff = np.abs((img_gold.filled(0) - img_test.filled(0)))
             num_failed = np.count_nonzero(abs_diff > diff_threshold)
             # num_pixels = np.count_nonzero(~np.isnan(img_gold))  # do i want this?
@@ -143,21 +152,15 @@ def _check_raster_geometadata(golden_file: Filename, test_file: Filename) -> Non
 
 def compare(golden: Filename, test: Filename, data_dset: str = DSET_DEFAULT) -> None:
     """Compare two HDF5 files for consistency."""
-    try:
-        logger.info("Comparing HDF5 contents...")
-        with h5py.File(golden, "r") as hf_g, h5py.File(test, "r") as hf_t:
-            compare_groups(hf_g, hf_t)
+    logger.info("Comparing HDF5 contents...")
+    with h5py.File(golden, "r") as hf_g, h5py.File(test, "r") as hf_t:
+        compare_groups(hf_g, hf_t)
 
-        logger.info("Cheaking geospatial metadata...")
-        _check_raster_geometadata(
-            io.format_nc_filename(golden, data_dset),
-            io.format_nc_filename(test, data_dset),
-        )
-    except ComparisonError:
-        raise
-
-    except Exception as e:
-        raise ComparisonError(f"Unexpected error comparing {golden} and {test}.") from e
+    logger.info("Cheaking geospatial metadata...")
+    _check_raster_geometadata(
+        io.format_nc_filename(golden, data_dset),
+        io.format_nc_filename(test, data_dset),
+    )
 
     logger.info(f"Files {golden} and {test} match.")
 
