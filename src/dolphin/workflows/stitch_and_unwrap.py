@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 from typing import Dict, List, Sequence, Tuple
@@ -9,13 +10,23 @@ from dolphin.interferogram import VRTInterferogram, estimate_correlation_from_ph
 from .config import UnwrapMethod, Workflow
 
 
+@dataclass
+class OutputFiles:
+    """Container for the return files of the `run` function."""
+
+    unwrapped_paths: List[Path]
+    conncomp_paths: List[Path]
+    spatial_corr_paths: List[Path]
+    stitched_tcorr_file: Path
+
+
 @log_runtime
 def run(
     ifg_list: Sequence[VRTInterferogram],
     tcorr_file_list: Sequence[Path],
     cfg: Workflow,
     debug: bool = False,
-) -> Tuple[List[Path], List[Path], List[Path], Path]:
+) -> OutputFiles:
     """Run the displacement workflow on a stack of SLCs.
 
     Parameters
@@ -29,6 +40,11 @@ def run(
         [`Workflow`][dolphin.workflows.config.Workflow] object with workflow parameters
     debug : bool, optional
         Enable debug logging, by default False.
+
+    Returns
+    -------
+    OutputFiles
+        Container for the output files of the workflow
     """
     logger = get_log(debug=debug)
 
@@ -68,7 +84,7 @@ def run(
     # #####################################
     if not cfg.unwrap_options.run_unwrap:
         logger.info("Skipping unwrap step")
-        return [], [], [], stitched_tcorr_file
+        return OutputFiles([], [], [], stitched_tcorr_file)
 
     if cfg.mask_file is not None:
         logger.info(f"Warping {cfg.mask_file} to match interferograms")
@@ -113,7 +129,9 @@ def run(
     # ####################
     # TODO: Determine format for the tropospheric/ionospheric phase correction
 
-    return unwrapped_paths, conncomp_paths, spatial_corr_paths, stitched_tcorr_file
+    return OutputFiles(
+        unwrapped_paths, conncomp_paths, spatial_corr_paths, stitched_tcorr_file
+    )
 
 
 def _estimate_spatial_correlations(

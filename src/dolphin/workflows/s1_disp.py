@@ -84,11 +84,11 @@ def run(
     # ###################################
     # 2. Stitch and unwrap interferograms
     # ###################################
-    unwrapped_paths, conncomp_paths, spatial_corr_paths, stitched_tcorr = (
-        stitch_and_unwrap.run(
-            ifg_list=ifg_list, tcorr_file_list=tcorr_list, cfg=cfg, debug=debug
-        )
+    # unwrapped_paths, conncomp_paths, spatial_corr_paths, stitched_tcorr = (
+    unwrap_files = stitch_and_unwrap.run(
+        ifg_list=ifg_list, tcorr_file_list=tcorr_list, cfg=cfg, debug=debug
     )
+    unwrapped_paths, conncomp_paths, spatial_corr_paths, stitched_tcorr = unwrap_files
 
     # ######################################
     # 3. Finalize the output as an HDF5 product
