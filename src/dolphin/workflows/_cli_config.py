@@ -13,7 +13,7 @@ def create_config(
     outfile: Union[str, Path],
     slc_files: Optional[List[str]] = None,
     subdataset: Optional[str] = None,
-    mask_files: Optional[List[str]] = None,
+    mask_file: Optional[str] = None,
     ministack_size: Optional[int] = 15,
     amp_dispersion_threshold: float = 0.25,
     strides: Tuple[int, int],
@@ -42,7 +42,7 @@ def create_config(
     cfg = Workflow(
         workflow_name=workflow_name,
         cslc_file_list=slc_files,
-        mask_files=mask_files,
+        mask_file=mask_file,
         input_options=dict(
             subdataset=subdataset,
         ),
@@ -114,9 +114,11 @@ def get_parser(subparser=None, subcommand_name="run"):
         ),
     )
     parser.add_argument(
-        "--mask-files",
-        nargs=argparse.ZERO_OR_MORE,
-        help="Path/Paths to mask files (e.g. shadow/layover, water mask,...)",
+        "--mask-file",
+        help=(
+            "Path to Byte mask file used to ignore low correlation/bad data (e.g water"
+            " mask). Convention is 0 for no data/invalid, and 1 for good data."
+        ),
     )
     parser.add_argument("--log-file", help="Path to log to, in addition to stderr")
 

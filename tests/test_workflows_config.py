@@ -163,7 +163,7 @@ def test_inputs_defaults(dir_with_1_slc):
     assert len(opts.cslc_file_list) == 1
     assert isinstance(opts.cslc_file_list[0], Path)
 
-    assert opts.mask_files == []
+    assert opts.mask_file is None
 
     # check it's coerced to a list of Paths
     opts2 = config.Workflow(

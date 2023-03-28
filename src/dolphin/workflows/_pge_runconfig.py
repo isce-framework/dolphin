@@ -63,11 +63,12 @@ class DynamicAncillaryFileGroup(YamlModel, extra=Extra.forbid):
         default_factory=list,
         description="Paths to the incidence/azimuth-angle files (1 per burst).",
     )
-    mask_files: List[Path] = Field(
-        default_factory=list,
+    mask_file: Optional[Path] = Field(
+        None,
         description=(
-            "List of mask files (e.g water mask), where convention is"
-            " 0 for no data/invalid, and 1 for data."
+            "Byte mask file used to ignore low correlation/bad data (e.g water mask)."
+            " Convention is 0 for no data/invalid, and 1 for good data. Dtype must be"
+            " uint8."
         ),
     )
     dem_file: Optional[Path] = Field(
@@ -199,7 +200,7 @@ class RunConfig(YamlModel, extra=Extra.forbid):
         cslc_file_list = self.input_file_group.cslc_file_list
         output_directory = self.product_path_group.output_directory
         scratch_directory = self.product_path_group.scratch_path
-        mask_files = self.dynamic_ancillary_file_group.mask_files
+        mask_file = self.dynamic_ancillary_file_group.mask_file
 
         # Load the algorithm parameters from the file
         algorithm_parameters = AlgorithmParameters.from_yaml(
@@ -213,7 +214,7 @@ class RunConfig(YamlModel, extra=Extra.forbid):
             workflow_name=workflow_name,
             cslc_file_list=cslc_file_list,
             input_options=input_options,
-            mask_files=mask_files,
+            mask_file=mask_file,
             output_directory=output_directory,
             scratch_directory=scratch_directory,
             # These ones directly translate
@@ -252,7 +253,7 @@ class RunConfig(YamlModel, extra=Extra.forbid):
                 algorithm_parameters_file=algorithm_parameters_file,
                 # amplitude_dispersion_files=workflow.amplitude_dispersion_files,
                 # amplitude_mean_files=workflow.amplitude_mean_files,
-                mask_files=workflow.mask_files,
+                mask_file=workflow.mask_file,
                 # tec_file=workflow.tec_file,
                 # weather_model_file=workflow.weather_model_file,
             ),

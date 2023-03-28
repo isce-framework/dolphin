@@ -307,11 +307,12 @@ class Workflow(YamlModel):
             "containing list of CSLC files."
         ),
     )
-    mask_files: List[Path] = Field(
-        default_factory=list,
+    mask_file: Optional[Path] = Field(
+        None,
         description=(
-            "List of mask files to use, where convention is"
-            " 0 for no data/invalid, and 1 for data."
+            "Byte mask file used to ignore low correlation/bad data (e.g water mask)."
+            " Convention is 0 for no data/invalid, and 1 for good data. Dtype must be"
+            " uint8."
         ),
     )
     scratch_directory: Path = Field(
@@ -358,15 +359,6 @@ class Workflow(YamlModel):
     @validator("output_directory", "scratch_directory", always=True)
     def _dir_is_absolute(cls, v):
         return v.resolve()
-
-    @validator("mask_files", pre=True)
-    def _check_mask_files(cls, v):
-        if v is None:
-            return []
-        if isinstance(v, (str, Path)):
-            # If they have passed a single mask file, return it as a list
-            v = [Path(v)]
-        return [Path(f).resolve() for f in v]
 
     # validators
     @validator("cslc_file_list", pre=True)
