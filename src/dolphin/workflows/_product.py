@@ -79,7 +79,7 @@ def create_output_product(
     conncomp_arr = io.load_gdal(conncomp_filename)
     tcorr_arr = _zero_mantissa(io.load_gdal(tcorr_filename))
     # TODO: add spatial correlation, pass through to function
-    spatial_corr_arr = np.full_like(unw_arr, np.nan)
+    spatial_corr_arr = _zero_mantissa(io.load_gdal(spatial_corr_filename))
 
     # Get the nodata mask (which for snaphu is 0)
     mask = unw_arr == 0
@@ -127,7 +127,10 @@ def create_output_product(
             group=f,
             name="spatial_correlation",
             data=spatial_corr_arr,
-            description="Estimate of spatial correlation of the wrapped interferogram",
+            description=(
+                "Estimate of spatial correlation of the wrapped interferogram used"
+                " during unwrapping"
+            ),
             fillvalue=np.nan,
             attrs=dict(units="unitless"),
         )
@@ -183,16 +186,15 @@ def create_output_product(
             name="reference_point",
             dimensions=(),
             data=reference_point,
-            fillvalue=np.nan,
+            fillvalue=0,
             description=(
-                "The constant phase subtracted from the unwrapped phase to"
-                " zero-reference."
+                "Dummy dataset containing attributes with the locations where the"
+                " reference phase was taken."
             ),
-            dtype=np.float32,
-            # Note: the dataset is only a scalar, but it could have come from multiple
-            # points (e.g. some boxcar average of an area).
-            # So the attributes will be lists of those locations used
-            attrs=dict(units="radians", rows=[], cols=[], latitudes=[], longitudes=[]),
+            dtype=int,
+            # Note: the dataset contains attributes with lists, since the reference
+            # could have come from multiple points (e.g. some boxcar average of an area).
+            attrs=dict(units="unitless", rows=[], cols=[], latitudes=[], longitudes=[]),
         )
 
     # End of the product for non-PGE users

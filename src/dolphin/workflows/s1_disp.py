@@ -93,11 +93,10 @@ def run(
     # 3. Finalize the output as an HDF5 product
     # ######################################
     logger.info(
-        "Creating"
-        f" {len(unwrap_files.unwrapped_paths), len(unwrap_files.conncomp_paths)} outputs"
-        f" in {cfg.output_directory}"
+        f"Creating {len(unwrap_files.unwrapped_paths)} outputs in"
+        f" {cfg.output_directory}"
     )
-    for unw_p, cc_p, corr_p in zip(
+    for unw_p, cc_p, s_corr_p in zip(
         unwrap_files.unwrapped_paths,
         unwrap_files.conncomp_paths,
         unwrap_files.spatial_corr_paths,
@@ -107,7 +106,7 @@ def run(
             unw_filename=unw_p,
             conncomp_filename=cc_p,
             tcorr_filename=unwrap_files.stitched_tcorr_file,
-            spatial_corr_filename=corr_p,
+            spatial_corr_filename=s_corr_p,
             # TODO: How am i going to create the output name?
             # output_name=cfg.outputs.output_name,
             output_name=output_name,
