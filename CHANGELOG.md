@@ -8,6 +8,7 @@
 Added requirements:
 
 - h5netcdf>=1.1
+- Avoid HDF5 version 1.12.1 until NetCDF loading issue is fixed
 
 # v0.0.4
 

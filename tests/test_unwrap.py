@@ -96,9 +96,9 @@ def list_of_ifgs(tmp_path, raster_100_by_200):
 def test_run(list_of_ifgs, corr_raster, unw_suffix):
     ifg_path = list_of_ifgs[0].parent
     out_files, conncomp_files = unwrap.run(
-        ifg_path=ifg_path,
+        ifg_filenames=list_of_ifgs,
+        cor_filenames=[corr_raster] * len(list_of_ifgs),
         output_path=ifg_path,
-        cor_file=corr_raster,
         nlooks=1,
         init_method="mst",
         ifg_suffix=".int",
@@ -128,9 +128,9 @@ def list_of_gtiff_ifgs(tmp_path, raster_100_by_200):
 def test_run_gtiff(list_of_gtiff_ifgs, corr_raster, unw_suffix):
     ifg_path = list_of_gtiff_ifgs[0].parent
     out_files, conncomp_files = unwrap.run(
-        ifg_path=ifg_path,
+        ifg_filenames=list_of_gtiff_ifgs,
+        cor_filenames=[corr_raster] * len(list_of_gtiff_ifgs),
         output_path=ifg_path,
-        cor_file=corr_raster,
         nlooks=1,
         init_method="mst",
         ifg_suffix=".int.tif",

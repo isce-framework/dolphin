@@ -25,10 +25,7 @@ class InputFileGroup(YamlModel):
         default_factory=list,
         description="List of paths to CSLC files.",
     )
-    subdataset: str = Field(
-        default=OPERA_DATASET_NAME,
-        description="Name of the subdataset to use in the input NetCDF files.",
-    )
+
     frame_id: int = Field(
         ...,
         description="Frame ID of the bursts contained in `cslc_file_list`.",
@@ -48,26 +45,35 @@ class DynamicAncillaryFileGroup(YamlModel, extra=Extra.forbid):
         default=...,
         description="Path to file containing SAS algorithm parameters.",
     )
-    amp_disp_files: List[Path] = Field(
+    amplitude_dispersion_files: List[Path] = Field(
         default_factory=list,
         description=(
             "Paths to existing Amplitude Dispersion file (1 per burst) for PS update"
             " calculation."
         ),
     )
-    amp_mean_files: List[Path] = Field(
+    amplitude_mean_files: List[Path] = Field(
         default_factory=list,
         description=(
             "Paths to an existing Amplitude Mean files (1 per burst) for PS update"
             " calculation."
         ),
     )
-    mask_files: List[Path] = Field(
+    geometry_files: List[Path] = Field(
         default_factory=list,
+        description="Paths to the incidence/azimuth-angle files (1 per burst).",
+    )
+    mask_file: Optional[Path] = Field(
+        None,
         description=(
-            "List of mask files (e.g water mask), where convention is"
-            " 0 for no data/invalid, and 1 for data."
+            "Byte mask file used to ignore low correlation/bad data (e.g water mask)."
+            " Convention is 0 for no data/invalid, and 1 for good data. Dtype must be"
+            " uint8."
         ),
+    )
+    dem_file: Optional[Path] = Field(
+        default=None,
+        description="Path to the DEM file covering full frame.",
     )
     # # TEC file in IONEX format for ionosphere correction
     # tec_file: str(required=False)
@@ -117,6 +123,13 @@ class ProductPathGroup(YamlModel, extra=Extra.forbid):
         default="0.1",
         description="Version of the product.",
     )
+    save_compressed_slc: bool = Field(
+        default=False,
+        description=(
+            "Whether the SAS should output and save the Compressed SLCs in addition to"
+            " the standard product output."
+        ),
+    )
 
 
 class AlgorithmParameters(YamlModel, extra=Extra.forbid):
@@ -130,6 +143,10 @@ class AlgorithmParameters(YamlModel, extra=Extra.forbid):
     )
     unwrap_options: UnwrapOptions = Field(default_factory=UnwrapOptions)
     output_options: OutputOptions = Field(default_factory=OutputOptions)
+    subdataset: str = Field(
+        default=OPERA_DATASET_NAME,
+        description="Name of the subdataset to use in the input NetCDF files.",
+    )
 
 
 class RunConfig(YamlModel, extra=Extra.forbid):
@@ -146,8 +163,9 @@ class RunConfig(YamlModel, extra=Extra.forbid):
     # General workflow metadata
     worker_settings: WorkerSettings = Field(default_factory=WorkerSettings)
 
-    log_file: Path = Field(
-        default=Path("disp_s1_workflow.log"), description="Path to the output log file."
+    log_file: Optional[Path] = Field(
+        default=Path("disp_s1_workflow.log"),
+        description="Path to the output log file in addition to logging to stderr.",
     )
 
     # Override the constructor to allow recursively construct without validation
@@ -176,29 +194,34 @@ class RunConfig(YamlModel, extra=Extra.forbid):
         # the output directory, and the scratch directory.
         # All the other things come from the AlgorithmParameters.
 
-        workflow_name = self.primary_executable.product_type
-        workflow_name = workflow_name.replace("DISP_S1_", "").lower()
+        workflow_name = self.primary_executable.product_type.replace(
+            "DISP_S1_", ""
+        ).lower()
         cslc_file_list = self.input_file_group.cslc_file_list
         output_directory = self.product_path_group.output_directory
         scratch_directory = self.product_path_group.scratch_path
-        mask_files = self.dynamic_ancillary_file_group.mask_files
-        worker_settings = self.worker_settings
-        input_options = dict(subdataset=self.input_file_group.subdataset)
+        mask_file = self.dynamic_ancillary_file_group.mask_file
 
         # Load the algorithm parameters from the file
         algorithm_parameters = AlgorithmParameters.from_yaml(
             self.dynamic_ancillary_file_group.algorithm_parameters_file
         )
+        param_dict = algorithm_parameters.dict()
+        input_options = dict(subdataset=param_dict.pop("subdataset"))
+
         # This get's unpacked to load the rest of the parameters for the Workflow
         return Workflow(
             workflow_name=workflow_name,
             cslc_file_list=cslc_file_list,
             input_options=input_options,
-            mask_files=mask_files,
+            mask_file=mask_file,
             output_directory=output_directory,
             scratch_directory=scratch_directory,
-            worker_settings=worker_settings,
-            **algorithm_parameters.dict(),
+            # These ones directly translate
+            worker_settings=self.worker_settings,
+            log_file=self.log_file,
+            # Finally, the rest of the parameters are in the algorithm parameters
+            **param_dict,
         )
 
     @classmethod
@@ -207,27 +230,30 @@ class RunConfig(YamlModel, extra=Extra.forbid):
     ):
         """Convert from a [`Workflow`][dolphin.workflows.config.Workflow] object.
 
+        This is the inverse of the to_workflow method, although there are more
+        fields in the PGE version, so it's not a 1-1 mapping.
+
         Since there's no `frame_id` or `algorithm_parameters_file` in the
         [`Workflow`][dolphin.workflows.config.Workflow] object, we need to pass
         those in as arguments.
+
+        This is mostly used as preliminary setup to further edit the fields.
         """
         # Load the algorithm parameters from the file
         alg_param_dict = workflow.dict(include=AlgorithmParameters.__fields__.keys())
         AlgorithmParameters(**alg_param_dict).to_yaml(algorithm_parameters_file)
         # This get's unpacked to load the rest of the parameters for the Workflow
 
-        # This is the inverse of the to_workflow method
         return cls(
             input_file_group=InputFileGroup(
                 cslc_file_list=workflow.cslc_file_list,
-                subdataset=workflow.input_options.subdataset,
                 frame_id=frame_id,
             ),
             dynamic_ancillary_file_group=DynamicAncillaryFileGroup(
                 algorithm_parameters_file=algorithm_parameters_file,
-                # amp_disp_files=workflow.amp_disp_files,
-                # amp_mean_files=workflow.amp_mean_files,
-                mask_files=workflow.mask_files,
+                # amplitude_dispersion_files=workflow.amplitude_dispersion_files,
+                # amplitude_mean_files=workflow.amplitude_mean_files,
+                mask_file=workflow.mask_file,
                 # tec_file=workflow.tec_file,
                 # weather_model_file=workflow.weather_model_file,
             ),
@@ -240,5 +266,5 @@ class RunConfig(YamlModel, extra=Extra.forbid):
                 sas_output_path=workflow.output_directory,
             ),
             worker_settings=workflow.worker_settings,
-            # log_file=workflow.log_file,
+            log_file=workflow.log_file,
         )

@@ -21,6 +21,7 @@ class YamlModel(BaseModel):
         output_path: Union[PathOrStr, TextIO],
         with_comments: bool = True,
         by_alias: bool = True,
+        indent_per_level: int = 2,
     ):
         """Save configuration as a yaml file.
 
@@ -36,13 +37,20 @@ class YamlModel(BaseModel):
             Whether to use the alias names for the fields.
             Passed to pydantic's ``to_json`` method.
             https://docs.pydantic.dev/usage/exporting_models/#modeljson
+        indent_per_level : int, default = 2
+            Number of spaces to indent per level.
         """
         yaml_obj = self._to_yaml_obj(by_alias=by_alias)
 
         if with_comments:
-            _add_comments(yaml_obj, self.schema(by_alias=by_alias))
+            _add_comments(
+                yaml_obj,
+                self.schema(by_alias=by_alias),
+                indent_per_level=indent_per_level,
+            )
 
         y = YAML()
+        y.indent(offset=indent_per_level, mapping=indent_per_level)
         if hasattr(output_path, "write"):
             y.dump(yaml_obj, output_path)
         else:
@@ -70,7 +78,11 @@ class YamlModel(BaseModel):
         return cls(**data)
 
     @classmethod
-    def print_yaml_schema(cls, output_path: Union[PathOrStr, TextIO] = sys.stdout):
+    def print_yaml_schema(
+        cls,
+        output_path: Union[PathOrStr, TextIO] = sys.stdout,
+        indent_per_level: int = 2,
+    ):
         """Print/save an empty configuration with defaults filled in.
 
         Ignores the required `cslc_file_list` input, so a user can
@@ -81,9 +93,13 @@ class YamlModel(BaseModel):
         output_path : Pathlike
             Path or stream to save to the yaml file to.
             By default, prints to stdout.
+        indent_per_level : int, default = 2
+            Number of spaces to indent per level.
         """
         full_dict = cls._construct_empty()
-        cls.construct(**full_dict).to_yaml(output_path, with_comments=True)
+        cls.construct(**full_dict).to_yaml(
+            output_path, with_comments=True, indent_per_level=indent_per_level
+        )
 
     @classmethod
     def _construct_empty(cls):
@@ -116,6 +132,8 @@ def _add_comments(
     schema: dict,
     indent: int = 0,
     definitions: Optional[dict] = None,
+    # variable specifying how much to indent per level
+    indent_per_level: int = 2,
 ):
     """Add comments above each YAML field using the pydantic model schema."""
     # Definitions are in schemas that contain nested pydantic Models
@@ -148,14 +166,19 @@ def _add_comments(
                 _add_comments(
                     sub_loaded_yaml,
                     sub_schema,
-                    indent=indent + 2,
+                    indent=indent + indent_per_level,
                     definitions=definitions,
+                    indent_per_level=indent_per_level,
                 )
                 continue
 
         # add each description along with the type information
         desc = "\n".join(
-            textwrap.wrap(f"{val['description']}.", width=90, subsequent_indent="  ")
+            textwrap.wrap(
+                f"{val['description']}.",
+                width=90,
+                subsequent_indent=" " * indent_per_level,
+            )
         )
         type_str = f"\n  Type: {val['type']}."
         choices = f"\n  Options: {val['enum']}." if "enum" in val.keys() else ""

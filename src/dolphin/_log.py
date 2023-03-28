@@ -25,11 +25,13 @@ from typing import Optional
 
 from rich.logging import RichHandler
 
+from dolphin._types import Filename
+
 __all__ = ["get_log", "log_runtime"]
 
 
 def get_log(
-    name: str = "dolphin._log", debug: bool = False, filename: Optional[str] = None
+    name: str = "dolphin._log", debug: bool = False, filename: Optional[Filename] = None
 ) -> logging.Logger:
     """Create a nice log format for use across multiple files.
 

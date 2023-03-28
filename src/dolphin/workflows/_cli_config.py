@@ -13,7 +13,7 @@ def create_config(
     outfile: Union[str, Path],
     slc_files: Optional[List[str]] = None,
     subdataset: Optional[str] = None,
-    mask_files: Optional[List[str]] = None,
+    mask_file: Optional[str] = None,
     ministack_size: Optional[int] = 15,
     amp_dispersion_threshold: float = 0.25,
     strides: Tuple[int, int],
@@ -23,6 +23,7 @@ def create_config(
     no_gpu: bool = False,
     use_icu: bool = False,
     single_update: bool = False,
+    log_file: Optional[Path] = None,
 ):
     """Create a config for a displacement workflow."""
     if single_update:
@@ -41,7 +42,7 @@ def create_config(
     cfg = Workflow(
         workflow_name=workflow_name,
         cslc_file_list=slc_files,
-        mask_files=mask_files,
+        mask_file=mask_file,
         input_options=dict(
             subdataset=subdataset,
         ),
@@ -64,6 +65,7 @@ def create_config(
             threads_per_worker=threads_per_worker,
             gpu_enabled=(not no_gpu),
         ),
+        log_file=log_file,
     )
 
     if outfile == "-":  # Write to stdout
@@ -111,6 +113,14 @@ def get_parser(subparser=None, subcommand_name="run"):
             f" None is passed, the default is {OPERA_DATASET_NAME}."
         ),
     )
+    parser.add_argument(
+        "--mask-file",
+        help=(
+            "Path to Byte mask file used to ignore low correlation/bad data (e.g water"
+            " mask). Convention is 0 for no data/invalid, and 1 for good data."
+        ),
+    )
+    parser.add_argument("--log-file", help="Path to log to, in addition to stderr")
 
     # Phase linking options
     pl_group = parser.add_argument_group("Phase Linking options")
@@ -181,11 +191,6 @@ def get_parser(subparser=None, subcommand_name="run"):
         default=1,
         help="Number of threads to use per worker.",
     )
-    # parser.add_argument(
-    #     "--mask-files",
-    #     nargs=argparse.ZERO_OR_MORE,
-    #     help="Path to a file containing a list of mask files.",
-    # )
     parser.set_defaults(run_func=create_config)
 
     return parser

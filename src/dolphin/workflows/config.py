@@ -239,6 +239,13 @@ class OutputOptions(BaseModel, extra=Extra.forbid):
             " output resolution of [20, 20]."
         ),
     )
+    save_compressed_slc: bool = Field(
+        default=False,
+        description=(
+            "Whether the SAS should output and save the Compressed SLCs in addition to"
+            " the standard product output."
+        ),
+    )
 
     hdf5_creation_options: Dict = Field(
         DEFAULT_HDF5_OPTIONS,
@@ -300,11 +307,12 @@ class Workflow(YamlModel):
             "containing list of CSLC files."
         ),
     )
-    mask_files: List[Path] = Field(
-        default_factory=list,
+    mask_file: Optional[Path] = Field(
+        None,
         description=(
-            "List of mask files to use, where convention is"
-            " 0 for no data/invalid, and 1 for data."
+            "Byte mask file used to ignore low correlation/bad data (e.g water mask)."
+            " Convention is 0 for no data/invalid, and 1 for good data. Dtype must be"
+            " uint8."
         ),
     )
     scratch_directory: Path = Field(
@@ -327,6 +335,11 @@ class Workflow(YamlModel):
 
     # General workflow metadata
     worker_settings: WorkerSettings = Field(default_factory=WorkerSettings)
+    log_file: Optional[Path] = Field(
+        # TODO: Probably more work to make sure log_file is implemented okay
+        default=None,
+        description="Path to output log file (in addition to logging to `stderr`).",
+    )
     creation_time_utc: datetime = Field(
         default_factory=datetime.utcnow, description="Time the config file was created"
     )
@@ -346,15 +359,6 @@ class Workflow(YamlModel):
     @validator("output_directory", "scratch_directory", always=True)
     def _dir_is_absolute(cls, v):
         return v.resolve()
-
-    @validator("mask_files", pre=True)
-    def _check_mask_files(cls, v):
-        if v is None:
-            return []
-        if isinstance(v, (str, Path)):
-            # If they have passed a single mask file, return it as a list
-            v = [Path(v)]
-        return [Path(f).resolve() for f in v]
 
     # validators
     @validator("cslc_file_list", pre=True)

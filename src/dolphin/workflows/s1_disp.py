@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+import shutil
 from pathlib import Path
 from pprint import pformat
 from typing import Dict, List, Optional
@@ -7,24 +8,31 @@ from dolphin._log import get_log, log_runtime
 from dolphin.interferogram import VRTInterferogram
 
 from . import _product, stitch_and_unwrap, wrapped_phase
+from ._pge_runconfig import RunConfig
 from ._utils import group_by_burst
 from .config import Workflow
 
 
 @log_runtime
-def run(cfg: Workflow, debug: bool = False, log_file: Optional[str] = None):
+def run(
+    cfg: Workflow,
+    debug: bool = False,
+    pge_runconfig: Optional[RunConfig] = None,
+):
     """Run the displacement workflow on a stack of SLCs.
 
     Parameters
     ----------
     cfg : Workflow
-        [Workflow][dolphin.workflows.config.Workflow] object with workflow parameters
+        [`Workflow`][dolphin.workflows.config.Workflow] object for controlling the
+        workflow.
     debug : bool, optional
         Enable debug logging, by default False.
-    log_file : str, optional
-        If provided, will log to this file in addition to stderr.
+    pge_runconfig : RunConfig, optional
+        If provided, adds PGE-specific metadata to the output product.
+        Not used by the workflow itself, only for extra metadata.
     """
-    logger = get_log(debug=debug, filename=log_file)
+    logger = get_log(debug=debug, filename=cfg.log_file)
     logger.debug(pformat(cfg.dict()))
     cfg.create_dir_tree(debug=debug)
 
@@ -57,6 +65,9 @@ def run(cfg: Workflow, debug: bool = False, log_file: Optional[str] = None):
     # ###########################
     ifg_list: List[VRTInterferogram] = []
     tcorr_list: List[Path] = []
+    # The comp_slc tracking object is a dict, since we'll need to organize
+    # multiple comp slcs by burst (they'll have the same filename)
+    comp_slc_dict: Dict[str, Path] = {}
     # Now for each burst, run the wrapped phase estimation
     for burst, burst_cfg in wrapped_phase_cfgs:
         msg = "Running wrapped phase estimation"
@@ -65,17 +76,16 @@ def run(cfg: Workflow, debug: bool = False, log_file: Optional[str] = None):
         logger.info(msg)
         logger.debug(pformat(burst_cfg.dict()))
         cur_ifg_list, comp_slc, tcorr = wrapped_phase.run(burst_cfg, debug=debug)
-        ifg_list.extend(cur_ifg_list)
-        tcorr_list.append(tcorr)
 
-    # TODO: store the compressed SLCs somewhere
-    # if cfg.store_compressed_slcs:
-    #     pass
+        ifg_list.extend(cur_ifg_list)
+        comp_slc_dict[burst] = comp_slc
+        tcorr_list.append(tcorr)
 
     # ###################################
     # 2. Stitch and unwrap interferograms
     # ###################################
-    unwrapped_paths, conncomp_paths, stitched_tcorr = stitch_and_unwrap.run(
+    # unwrapped_paths, conncomp_paths, spatial_corr_paths, stitched_tcorr = (
+    unwrap_files = stitch_and_unwrap.run(
         ifg_list=ifg_list, tcorr_file_list=tcorr_list, cfg=cfg, debug=debug
     )
 
@@ -83,20 +93,35 @@ def run(cfg: Workflow, debug: bool = False, log_file: Optional[str] = None):
     # 3. Finalize the output as an HDF5 product
     # ######################################
     logger.info(
-        f"Creating {len(unwrapped_paths), len(conncomp_paths)} outputs in"
+        f"Creating {len(unwrap_files.unwrapped_paths)} outputs in"
         f" {cfg.output_directory}"
     )
-    for unw_p, cc_p in zip(unwrapped_paths, conncomp_paths):
+    for unw_p, cc_p, s_corr_p in zip(
+        unwrap_files.unwrapped_paths,
+        unwrap_files.conncomp_paths,
+        unwrap_files.spatial_corr_paths,
+    ):
         output_name = cfg.output_directory / unw_p.with_suffix(".nc").name
         _product.create_output_product(
             unw_filename=unw_p,
             conncomp_filename=cc_p,
-            tcorr_filename=stitched_tcorr,
+            tcorr_filename=unwrap_files.stitched_tcorr_file,
+            spatial_corr_filename=s_corr_p,
             # TODO: How am i going to create the output name?
             # output_name=cfg.outputs.output_name,
             output_name=output_name,
             corrections={},
+            pge_runconfig=pge_runconfig,
         )
+
+    if cfg.output_options.save_compressed_slc:
+        # TODO: Do i need to make this into some kind of standard hdf5 product?
+        # TODO: What kind of metadata do I need to attach to this?
+        logger.info(f"Saving {len(comp_slc_dict.items())} compressed SLCs")
+        for burst, comp_slc_file in comp_slc_dict.items():
+            out_path = cfg.output_directory / "compressed_slcs" / burst
+            out_path.mkdir(parents=True, exist_ok=True)
+            shutil.copy(comp_slc_file, out_path)
 
 
 def _create_burst_cfg(

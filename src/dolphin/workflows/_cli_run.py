@@ -13,7 +13,6 @@ else:
 def run(
     config_file: str,
     debug: bool = False,
-    log_file: Optional[str] = None,
     pge_format: bool = False,
 ) -> None:
     """Run the displacement workflow.
@@ -24,8 +23,6 @@ def run(
         YAML file containing the workflow options.
     debug : bool, optional
         Enable debug logging, by default False.
-    log_file : str, optional
-        If provided, will log to this file in addition to stderr.
     pge_format : bool, optional
         If True, the config file is a runconfig in the PGE-expected format.
         By default False.
@@ -43,17 +40,18 @@ def run(
     logger = get_log("dolphin", debug=debug)
 
     if pge_format:
-        rc = RunConfig.from_yaml(config_file)
-        cfg = rc.to_workflow()
+        pge_rc = RunConfig.from_yaml(config_file)
+        cfg = pge_rc.to_workflow()
     else:
         cfg = Workflow.from_yaml(config_file)
+        pge_rc = None
 
     # Set the environment variables for the workers
     # TODO: Is this the best place to do this?
     controller = ThreadpoolController()
     controller.limit(limits=cfg.worker_settings.threads_per_worker)
 
-    s1_disp.run(cfg, debug=debug, log_file=log_file)
+    s1_disp.run(cfg, debug=debug, pge_runconfig=pge_rc)
 
     # Print the maximum memory usage for each worker
     max_mem = get_max_memory_usage(units="GB")
@@ -87,10 +85,6 @@ def get_parser(
         "--pge-format",
         action="store_true",
         help="Indicate that `config_file` is in the PGE `RunConfig` format.",
-    )
-    parser.add_argument(
-        "--log-file",
-        help="If provided, will log to this file in addition to stderr.",
     )
     parser.set_defaults(run_func=run)
     return parser

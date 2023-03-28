@@ -2,9 +2,10 @@
 import itertools
 import math
 import tempfile
+from datetime import date
 from os import fspath
 from pathlib import Path
-from typing import Iterable, List, Optional, Sequence, Tuple
+from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 import numpy as np
 from numpy.typing import DTypeLike
@@ -22,8 +23,9 @@ def merge_by_date(
     file_date_fmt: str = io.DEFAULT_DATETIME_FORMAT,
     output_dir: Filename = ".",
     driver: str = "ENVI",
+    output_suffix: str = ".int",
     overwrite: bool = False,
-):
+) -> Dict[Tuple[date, ...], Path]:
     """Group images from the same date and merge into one image per date.
 
     Parameters
@@ -36,6 +38,8 @@ def merge_by_date(
         Path to output directory
     driver : str
         GDAL driver to use for output. Default is ENVI.
+    output_suffix : str
+        Suffix to use to output stitched filenames. Default is ".int"
     overwrite : bool
         Overwrite existing files. Default is False.
 
@@ -56,7 +60,7 @@ def merge_by_date(
     for dates, cur_images in grouped_images.items():
         logger.info(f"{dates}: Stitching {len(cur_images)} images.")
         Path(output_dir).mkdir(parents=True, exist_ok=True)
-        outfile = Path(output_dir) / (io._format_date_pair(*dates) + ".int")
+        outfile = Path(output_dir) / (io._format_date_pair(*dates) + output_suffix)
 
         merge_images(
             cur_images,
@@ -79,7 +83,8 @@ def merge_images(
     out_dtype: Optional[DTypeLike] = None,
     overwrite=False,
     options: Optional[Sequence[str]] = io.DEFAULT_ENVI_OPTIONS,
-):
+    create_only: bool = False,
+) -> None:
     """Combine multiple SLC images on the same date into one image.
 
     Parameters
@@ -106,6 +111,8 @@ def merge_images(
         Overwrite existing files. Default is False.
     options : Optional[Sequence[str]]
         Driver-specific creation options passed to GDAL. Default is ["SUFFIX=ADD"]
+    create_only : bool
+        If True, creates an empty output file, does not write data. Default is False.
     """
     if Path(outfile).exists():
         if not overwrite:
@@ -161,6 +168,9 @@ def merge_images(
         projection=projection,
         options=options,
     )
+    if create_only:
+        temp_dir.cleanup()
+        return
 
     out_left, out_bottom, out_right, out_top = bounds
     # Now loop through the files and write them to the output
