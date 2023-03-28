@@ -88,21 +88,25 @@ def run(
     unwrap_files = stitch_and_unwrap.run(
         ifg_list=ifg_list, tcorr_file_list=tcorr_list, cfg=cfg, debug=debug
     )
-    unwrapped_paths, conncomp_paths, spatial_corr_paths, stitched_tcorr = unwrap_files
 
     # ######################################
     # 3. Finalize the output as an HDF5 product
     # ######################################
     logger.info(
-        f"Creating {len(unwrapped_paths), len(conncomp_paths)} outputs in"
-        f" {cfg.output_directory}"
+        "Creating"
+        f" {len(unwrap_files.unwrapped_paths), len(unwrap_files.conncomp_paths)} outputs"
+        f" in {cfg.output_directory}"
     )
-    for unw_p, cc_p, corr_p in zip(unwrapped_paths, conncomp_paths, spatial_corr_paths):
+    for unw_p, cc_p, corr_p in zip(
+        unwrap_files.unwrapped_paths,
+        unwrap_files.conncomp_paths,
+        unwrap_files.spatial_corr_paths,
+    ):
         output_name = cfg.output_directory / unw_p.with_suffix(".nc").name
         _product.create_output_product(
             unw_filename=unw_p,
             conncomp_filename=cc_p,
-            tcorr_filename=stitched_tcorr,
+            tcorr_filename=unwrap_files.stitched_tcorr_file,
             spatial_corr_filename=corr_p,
             # TODO: How am i going to create the output name?
             # output_name=cfg.outputs.output_name,
