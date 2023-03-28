@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+import argparse
 from itertools import groupby
 from typing import Dict, List
 
@@ -98,3 +99,13 @@ def _get_hdf5_attributes_by_group(hdf5_path: Filename) -> Dict[str, List]:
         k: list(v)
         for k, v in groupby(group_sorted_rows, key=lambda row: get_group(row["Name"]))
     }
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("hdf5_path", type=str, help="Path to the HDF5 file")
+    parser.add_argument(
+        "output_path", type=str, help="Path to the output Word docx file"
+    )
+    args = parser.parse_args()
+    generate_docx_table(args.hdf5_path, args.output_path)
