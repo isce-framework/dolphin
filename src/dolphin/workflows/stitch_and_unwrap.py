@@ -1,9 +1,10 @@
+from datetime import date
 from pathlib import Path
-from typing import List, Sequence, Tuple
+from typing import Dict, List, Sequence, Tuple
 
-from dolphin import stitching, unwrap
+from dolphin import io, stitching, unwrap
 from dolphin._log import get_log, log_runtime
-from dolphin.interferogram import VRTInterferogram
+from dolphin.interferogram import VRTInterferogram, estimate_correlation_from_phase
 
 from .config import UnwrapMethod, Workflow
 
@@ -42,10 +43,15 @@ def run(
     # Also preps for snaphu, which needs binary format with no nans
     logger.info("Stitching interferograms by date.")
     ifg_filenames = [ifg.path for ifg in ifg_list]
-    stitching.merge_by_date(
+    date_to_ifg_path = stitching.merge_by_date(
         image_file_list=ifg_filenames,  # type: ignore
         file_date_fmt=cfg.input_options.cslc_date_fmt,
         output_dir=stitched_ifg_dir,
+    )
+
+    # Estimate the spatial correlation from the stitched interferogram
+    cor_paths = _estimate_spatial_correlations(
+        date_to_ifg_path, window_size=cfg.phase_linking.half_window.to_looks()
     )
 
     # Stitch the correlation files
@@ -70,10 +76,14 @@ def run(
     # Compute the looks for the unwrapping
     row_looks, col_looks = cfg.phase_linking.half_window.to_looks()
     nlooks = row_looks * col_looks
+
+    ifg_filenames = sorted(Path(stitched_ifg_dir).glob("*.int"))  # type: ignore
+    if not ifg_filenames:
+        raise FileNotFoundError(f"No interferograms found in {stitched_ifg_dir}")
     unwrapped_paths, conncomp_paths = unwrap.run(
-        ifg_path=stitched_ifg_dir,
+        ifg_filenames=ifg_filenames,
+        cor_filenames=cor_paths,
         output_path=cfg.unwrap_options._directory,
-        cor_file=stitched_cor_file,
         nlooks=nlooks,
         mask_file=cfg.mask_file,
         # mask_file: Optional[Filename] = None,
@@ -90,3 +100,29 @@ def run(
     # TODO: Determine format for the tropospheric/ionospheric phase correction
 
     return unwrapped_paths, conncomp_paths, stitched_cor_file
+
+
+def _estimate_spatial_correlations(
+    date_to_ifg_path: Dict[Tuple[date, ...], Path], window_size: Tuple[int, int]
+) -> List[Path]:
+    logger = get_log()
+
+    cor_paths: List[Path] = []
+    for dates, ifg_path in date_to_ifg_path.items():
+        ifg = io.load_gdal(ifg_path)
+        cor_path = ifg_path.with_suffix(".cor")
+        cor_paths.append(cor_path)
+        if cor_path.exists():
+            logger.info(f"Skipping existing spatial correlation for {ifg_path}")
+            continue
+        logger.info(f"Estimating spatial correlation for {dates}...")
+        cor = estimate_correlation_from_phase(ifg, window_size=window_size)
+        logger.info(f"Writing spatial correlation to {cor_path}")
+        io.write_arr(
+            arr=cor,
+            output_name=cor_path,
+            like_filename=ifg_path,
+            driver="ENVI",
+            options=io.DEFAULT_ENVI_OPTIONS,
+        )
+    return cor_paths

@@ -547,7 +547,9 @@ def moving_window_mean(
     )
 
     # Calculate the cumulative sum of the image
-    integral_img = np.cumsum(np.cumsum(image_padded, axis=0), axis=1).astype(float)
+    integral_img = np.cumsum(np.cumsum(image_padded, axis=0), axis=1)
+    if not np.iscomplexobj(integral_img):
+        integral_img = integral_img.astype(float)
 
     # Calculate the mean of the moving window
     # Uses the algorithm from https://en.wikipedia.org/wiki/Summed-area_table

@@ -44,6 +44,7 @@ def run(
         cfg = pge_rc.to_workflow()
     else:
         cfg = Workflow.from_yaml(config_file)
+        pge_rc = None
 
     # Set the environment variables for the workers
     # TODO: Is this the best place to do this?

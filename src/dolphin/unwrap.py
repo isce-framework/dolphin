@@ -24,14 +24,14 @@ CONNCOMP_SUFFIX = ".unw.conncomp"
 
 @log_runtime
 def run(
-    ifg_path: Filename,
+    ifg_filenames: List[Filename],
+    cor_filenames: List[Filename],
     output_path: Filename,
-    cor_file: Filename,
+    *,
     nlooks: float = 5,
     mask_file: Optional[Filename] = None,
     init_method: str = "mst",
     use_icu: bool = False,
-    ifg_suffix: str = ".int",
     unw_suffix: str = ".unw.tif",
     max_jobs: int = 1,
     overwrite: bool = False,
@@ -41,12 +41,12 @@ def run(
 
     Parameters
     ----------
-    ifg_path : Filename
-        Path to input interferograms.
+    ifg_filenames : list[Filename]
+        Paths to input interferograms.
+    cor_filenames : list[Filename]
+        Paths to input correlation files. Order must match `ifg_filenames`.
     output_path : Filename
         Path to output directory.
-    cor_file : str, optional
-        location of (temporal) correlation file.
     nlooks : int, optional
         Effective number of spatial looks used to form the input correlation data.
     mask_file : Filename, optional
@@ -56,8 +56,6 @@ def run(
         SNAPHU initialization method, by default "mst".
     use_icu : bool, optional
         Force the use of isce3's ICU instead of snaphu, by default False.
-    ifg_suffix : str, optional, default = ".int"
-        interferogram suffix to search for in `ifg_path`.
     unw_suffix : str, optional, default = ".unw.tif"
         unwrapped file suffix to use for creating/searching for existing files.
     max_jobs : int, optional, default = 4
@@ -73,10 +71,11 @@ def run(
         list of connected-component-label files names
 
     """
-    filenames = list(Path(ifg_path).glob("*" + ifg_suffix))
-    if len(filenames) == 0:
+    if len(cor_filenames) != len(ifg_filenames):
         raise ValueError(
-            f"No interferograms found in {ifg_path} with extension {ifg_suffix}"
+            "Number of correlation files does not match number of interferograms."
+            f" Found {len(cor_filenames)} correlation files and"
+            f" {len(ifg_filenames)} interferograms."
         )
 
     if init_method.lower() not in ("mcf", "mst"):
@@ -84,9 +83,11 @@ def run(
 
     output_path = Path(output_path)
 
-    all_out_files = [(output_path / f.name).with_suffix(unw_suffix) for f in filenames]
+    all_out_files = [
+        (output_path / Path(f).name).with_suffix(unw_suffix) for f in ifg_filenames
+    ]
     in_files, out_files = [], []
-    for inf, outf in zip(filenames, all_out_files):
+    for inf, outf in zip(ifg_filenames, all_out_files):
         if Path(outf).exists() and not overwrite:
             logger.info(f"{outf} exists. Skipping.")
             continue
@@ -106,15 +107,15 @@ def run(
         futures = [
             exc.submit(
                 unwrap,
-                ifg_filename=inf,
+                ifg_filename=ifg_file,
                 corr_filename=cor_file,
-                unw_filename=outf,
+                unw_filename=out_file,
                 nlooks=nlooks,
                 init_method=init_method,
                 use_icu=use_icu,
                 mask_file=mask_file,
             )
-            for inf, outf in zip(in_files, out_files)
+            for ifg_file, out_file, cor_file in zip(in_files, out_files, cor_filenames)
         ]
         with progress() as p:
             for fut in p.track(as_completed(futures), total=len(out_files)):
