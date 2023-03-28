@@ -1,10 +1,8 @@
 """Module for creating the OPERA output product in NetCDF format."""
 from io import StringIO
-from itertools import groupby
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 import h5netcdf
-import h5py
 import numpy as np
 import pyproj
 from numpy.typing import ArrayLike, DTypeLike
@@ -48,6 +46,7 @@ def create_output_product(
     unw_filename: Filename,
     conncomp_filename: Filename,
     tcorr_filename: Filename,
+    spatial_corr_filename: Filename,
     output_name: Filename,
     corrections: Dict[str, ArrayLike] = {},
     pge_runconfig: Optional[RunConfig] = None,
@@ -62,6 +61,8 @@ def create_output_product(
         The path to the input connected components image.
     tcorr_filename : Filename
         The path to the input temporal correlation image.
+    spatial_corr_filename : Filename
+        The path to the input spatial correlation image.
     output_name : Filename, optional
         The path to the output NetCDF file, by default "output.nc"
     corrections : Dict[str, ArrayLike], optional
@@ -76,7 +77,7 @@ def create_output_product(
     unw_arr = io.load_gdal(unw_filename)
 
     conncomp_arr = io.load_gdal(conncomp_filename)
-    tcorr_arr = io.load_gdal(tcorr_filename)
+    tcorr_arr = _zero_mantissa(io.load_gdal(tcorr_filename))
     # TODO: add spatial correlation, pass through to function
     spatial_corr_arr = np.full_like(unw_arr, np.nan)
 
@@ -365,93 +366,23 @@ def _create_grid_mapping(group, crs: pyproj.CRS, gt: List[float]) -> h5netcdf.Va
     return dset
 
 
-def _generate_docx_table(hdf5_path: Filename, output_path: Filename):
-    # https://python-docx.readthedocs.io/en/latest/user/quickstart.html#adding-a-table
-    from docx import Document
-    from docx.enum.table import WD_ROW_HEIGHT_RULE, WD_TABLE_ALIGNMENT
-    from docx.oxml import parse_xml
-    from docx.oxml.ns import nsdecls
-    from docx.shared import Pt
+def _zero_mantissa(data: np.ndarray, bits_to_keep: int = 10):
+    """Zero out 23-`bits_to_keep` bits of the mantissa of a float32 array.
 
-    def _add_row(table, text, height=15, shade=False, bold=False):
-        # _tc.get_or_add_tcPr().append(shading_elm)
-        row = table.add_row()
-        row.height_rule = WD_ROW_HEIGHT_RULE.AT_LEAST
-        row.height = Pt(height)
-        row.cells[0].text = text
-        # https://stackoverflow.com/questions/26752856/python-docx-set-table-cell-background-and-text-color  # noqa
-        if shade:
-            shading_elm = parse_xml(r'<w:shd {} w:fill="D9D9D9"/>'.format(nsdecls("w")))
-            row.cells[0]._tc.get_or_add_tcPr().append(shading_elm)
-        # Set the text color to black and remove bold
-        run = row.cells[0].paragraphs[0].runs[0]
-        run.font.color.rgb = None
-        if not bold:
-            run.font.bold = False
+    This is used to make the data more compressible when we don't need the
+    full precision (e.g. for correlation estimates).
 
-    document = Document()
-    # Set the default document font to Arial
-    style = document.styles["Normal"]
-    font = style.font
-    font.name = "Arial"
+    By default, this will zero out 13 bits, which (for data between 0 and 1)
+    is `1 / 2**13 ~= 0.0001` of precision.
+    """
+    float32_mantissa_bits = 23
+    nzero = float32_mantissa_bits - bits_to_keep
 
-    for group_name, rows in _get_hdf5_attributes_by_group(hdf5_path).items():
-        document.add_heading(f"Group: {group_name}", level=2)
-        table = document.add_table(cols=1, rows=0)
-        table.style = "Table Grid"  # Use the "Table Grid" style to get borders
-        table.alignment = WD_TABLE_ALIGNMENT.LEFT
-
-        for row in rows:
-            name = row.pop("Name")
-            desc = row.pop("Description")
-
-            _add_row(table, f"Name: {name}", shade=True)
-
-            row_text = "\t\t".join(f"{k}: {v or 'scalar'}" for k, v in row.items())
-            row_text.replace("()", "scalar")
-            _add_row(table, row_text)
-            _add_row(table, f"Description: {desc}")
-
-    logger.info(f"Saving to {output_path}")
-    document.save(output_path)
-
-
-def _get_hdf5_attributes(hdf5_path: Filename) -> List:
-    table_data = []
-
-    def append_dset_to_table(name, item):
-        """Add all dataset's metadata using `visititems`."""
-        if not isinstance(item, h5py.Dataset):
-            return None
-        data_type = item.dtype
-        shape = item.shape
-        description = item.attrs.get("long_name", "")
-        units = item.attrs.get("units", "")
-        table_data.append(
-            dict(
-                Name=name,
-                Type=data_type,
-                Shape=shape,
-                Units=units,
-                Description=description,
-            )
-        )
-
-    with h5py.File(hdf5_path, "r") as hf:
-        hf.visititems(append_dset_to_table)
-    return table_data
-
-
-def _get_hdf5_attributes_by_group(hdf5_path: Filename) -> Dict[str, List]:
-    def get_group(name):
-        return name.split("/")[-2]
-
-    table_data = _get_hdf5_attributes(hdf5_path)
-
-    group_sorted_rows = sorted(table_data, key=lambda row: get_group(row["Name"]))
-    # Make a dict, where keys are group name, value is the list of rows
-    # e.g.:  { 'DISP': [ {'Name': ,....], 'corrections': [{'Name':...}]
-    return {
-        k: list(v)
-        for k, v in groupby(group_sorted_rows, key=lambda row: get_group(row["Name"]))
-    }
+    # Start with 0b11111111111111111111111111111111
+    allbits = (1 << 32) - 1
+    # Shift it to the left by `nzero` bits
+    bitmask = (allbits << nzero) & allbits
+    # Mask out the least significant `nzero` bits
+    dr = data.view(np.uint32)
+    dr &= bitmask
+    return data

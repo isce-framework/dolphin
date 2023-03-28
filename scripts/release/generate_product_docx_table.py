@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 from itertools import groupby
 from typing import Dict, List
 
@@ -6,7 +7,8 @@ import h5py
 from dolphin._types import Filename
 
 
-def _generate_docx_table(hdf5_path: Filename, output_path: Filename):
+def generate_docx_table(hdf5_path: Filename, output_path: Filename):
+    """Create a Word document with a table of HDF5 datasets."""
     # https://python-docx.readthedocs.io/en/latest/user/quickstart.html#adding-a-table
     from docx import Document
     from docx.enum.table import WD_ROW_HEIGHT_RULE, WD_TABLE_ALIGNMENT

@@ -84,8 +84,10 @@ def run(
     # ###################################
     # 2. Stitch and unwrap interferograms
     # ###################################
-    unwrapped_paths, conncomp_paths, stitched_tcorr = stitch_and_unwrap.run(
-        ifg_list=ifg_list, tcorr_file_list=tcorr_list, cfg=cfg, debug=debug
+    unwrapped_paths, conncomp_paths, spatial_corr_paths, stitched_tcorr = (
+        stitch_and_unwrap.run(
+            ifg_list=ifg_list, tcorr_file_list=tcorr_list, cfg=cfg, debug=debug
+        )
     )
 
     # ######################################
@@ -95,12 +97,13 @@ def run(
         f"Creating {len(unwrapped_paths), len(conncomp_paths)} outputs in"
         f" {cfg.output_directory}"
     )
-    for unw_p, cc_p in zip(unwrapped_paths, conncomp_paths):
+    for unw_p, cc_p, corr_p in zip(unwrapped_paths, conncomp_paths, spatial_corr_paths):
         output_name = cfg.output_directory / unw_p.with_suffix(".nc").name
         _product.create_output_product(
             unw_filename=unw_p,
             conncomp_filename=cc_p,
             tcorr_filename=stitched_tcorr,
+            spatial_corr_filename=corr_p,
             # TODO: How am i going to create the output name?
             # output_name=cfg.outputs.output_name,
             output_name=output_name,
