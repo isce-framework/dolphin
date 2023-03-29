@@ -239,13 +239,6 @@ class OutputOptions(BaseModel, extra=Extra.forbid):
             " output resolution of [20, 20]."
         ),
     )
-    save_compressed_slc: bool = Field(
-        default=False,
-        description=(
-            "Whether the SAS should output and save the Compressed SLCs in addition to"
-            " the standard product output."
-        ),
-    )
 
     hdf5_creation_options: Dict = Field(
         DEFAULT_HDF5_OPTIONS,
@@ -332,6 +325,13 @@ class Workflow(YamlModel):
     )
     unwrap_options: UnwrapOptions = Field(default_factory=UnwrapOptions)
     output_options: OutputOptions = Field(default_factory=OutputOptions)
+    save_compressed_slc: bool = Field(
+        default=False,
+        description=(
+            "Whether the SAS should output and save the Compressed SLCs in addition to"
+            " the standard product output."
+        ),
+    )
 
     # General workflow metadata
     worker_settings: WorkerSettings = Field(default_factory=WorkerSettings)
