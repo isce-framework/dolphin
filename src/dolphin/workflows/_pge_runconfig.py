@@ -208,6 +208,9 @@ class RunConfig(YamlModel, extra=Extra.forbid):
         )
         param_dict = algorithm_parameters.dict()
         input_options = dict(subdataset=param_dict.pop("subdataset"))
+        param_dict["output_options"][
+            "save_compressed_slc"
+        ] = self.product_path_group.save_compressed_slc
 
         # This get's unpacked to load the rest of the parameters for the Workflow
         return Workflow(
