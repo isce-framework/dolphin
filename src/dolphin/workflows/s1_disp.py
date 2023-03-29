@@ -5,7 +5,6 @@ from pprint import pformat
 from typing import Dict, List, Optional
 
 from dolphin._log import get_log, log_runtime
-from dolphin.interferogram import VRTInterferogram
 
 from . import _product, stitch_and_unwrap, wrapped_phase
 from ._pge_runconfig import RunConfig
@@ -63,8 +62,8 @@ def run(
     # ###########################
     # 1. Wrapped phase estimation
     # ###########################
-    ifg_list: List[VRTInterferogram] = []
-    tcorr_list: List[Path] = []
+    ifg_file_list: List[Path] = []
+    tcorr_file_list: List[Path] = []
     # The comp_slc tracking object is a dict, since we'll need to organize
     # multiple comp slcs by burst (they'll have the same filename)
     comp_slc_dict: Dict[str, Path] = {}
@@ -77,16 +76,19 @@ def run(
         logger.debug(pformat(burst_cfg.dict()))
         cur_ifg_list, comp_slc, tcorr = wrapped_phase.run(burst_cfg, debug=debug)
 
-        ifg_list.extend(cur_ifg_list)
+        ifg_file_list.extend(cur_ifg_list)
         comp_slc_dict[burst] = comp_slc
-        tcorr_list.append(tcorr)
+        tcorr_file_list.append(tcorr)
 
     # ###################################
     # 2. Stitch and unwrap interferograms
     # ###################################
     # unwrapped_paths, conncomp_paths, spatial_corr_paths, stitched_tcorr = (
     unwrap_files = stitch_and_unwrap.run(
-        ifg_list=ifg_list, tcorr_file_list=tcorr_list, cfg=cfg, debug=debug
+        ifg_file_list=ifg_file_list,
+        tcorr_file_list=tcorr_file_list,
+        cfg=cfg,
+        debug=debug,
     )
 
     # ######################################

@@ -60,7 +60,13 @@ def merge_by_date(
     for dates, cur_images in grouped_images.items():
         logger.info(f"{dates}: Stitching {len(cur_images)} images.")
         Path(output_dir).mkdir(parents=True, exist_ok=True)
-        outfile = Path(output_dir) / (io._format_date_pair(*dates) + output_suffix)
+        if len(dates) == 2:
+            date_str = io._format_date_pair(*dates)
+        elif len(dates) == 1:
+            date_str = dates[0].strftime(file_date_fmt)
+        else:
+            raise ValueError(f"Expected 1 or 2 dates: {dates}.")
+        outfile = Path(output_dir) / (date_str + output_suffix)
 
         merge_images(
             cur_images,
