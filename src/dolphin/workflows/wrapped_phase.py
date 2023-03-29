@@ -5,6 +5,7 @@ from dolphin import ps, stack
 from dolphin._background import NvidiaMemoryWatcher
 from dolphin._log import get_log, log_runtime
 from dolphin.interferogram import Network, VRTInterferogram
+from dolphin.stitching import warp_to_match
 from dolphin.utils import gpu_is_available
 
 from . import sequential, single
@@ -132,8 +133,17 @@ def run(
         )
         if Path(vrt_stack.file_list[0]).name.startswith("compressed"):
             # The first file is a compressed SLC, so we want to use that as the reference
-            # TODO: will this fail with anything by single-reference/manual-index?
-            slc_list = [vrt_stack.file_list[0]] + phase_linked_slcs
+            # TODO: will this fail with anything but single-reference/manual-index?
+            # The compressed SLC will be a different size than the phase_linked_slcs
+            # if we're using strides > 1, so we need to warp SLC to match
+            comp_slc = vrt_stack.file_list[0]
+            comp_slc_warped = pl_path / ("warped_" + comp_slc.with_suffix(".vrt").name)
+            warp_to_match(
+                input_file=comp_slc,
+                match_file=phase_linked_slcs[0],
+                output_file=comp_slc_warped,
+            )
+            slc_list = [comp_slc_warped] + phase_linked_slcs
         else:
             slc_list = phase_linked_slcs
 

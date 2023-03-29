@@ -5,6 +5,7 @@ import numpy as np
 from numba import cuda
 
 from dolphin.io import compute_out_shape
+from dolphin.utils import decimate
 
 from . import covariance, metrics
 from .mle import mle_stack
@@ -97,13 +98,9 @@ def run_gpu(
         cp.get_default_pinned_memory_pool().free_all_blocks()
 
     if use_slc_amp:
-        # use the amplitude from the original SLCs, accounting for strides
-        xs, ys = strides["x"], strides["y"]
+        # use the amplitude from the original SLCs
+        # account for the strides when grabbing original data
         # we need to match `io.compute_out_shape` here
-        start_r = ys // 2
-        start_c = xs // 2
-        end_r = (rows // ys) * ys + 1
-        end_c = (cols // xs) * xs + 1
-        slcs_decimated = slc_stack[:, start_r:end_r:ys, start_c:end_c:xs]
+        slcs_decimated = decimate(slc_stack, strides)
         mle_est *= np.abs(slcs_decimated)
     return mle_est, temp_coh

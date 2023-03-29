@@ -3,7 +3,7 @@ from datetime import date
 from pathlib import Path
 from typing import Dict, List, Sequence, Tuple
 
-from dolphin import io, masking, stitching, unwrap
+from dolphin import io, stitching, unwrap
 from dolphin._log import get_log, log_runtime
 from dolphin.interferogram import VRTInterferogram, estimate_correlation_from_phase
 
@@ -92,7 +92,7 @@ def run(
         if output_mask.exists():
             logger.info(f"Mask already exists at {output_mask}")
         else:
-            masking.warp_to_match(
+            stitching.warp_to_match(
                 input_file=cfg.mask_file,
                 match_file=stitched_tcorr_file,
                 output_file=output_mask,

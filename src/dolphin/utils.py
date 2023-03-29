@@ -4,7 +4,7 @@ import resource
 import sys
 import warnings
 from pathlib import Path
-from typing import Iterable, List, Optional, Tuple, Union
+from typing import Dict, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 from numpy.typing import ArrayLike, DTypeLike
@@ -434,6 +434,33 @@ def upsample_nearest(
     arr_out = xp.zeros(shape=shape, dtype=arr.dtype)
     arr_out[..., :out_r, :out_c] = arr_up[..., :out_r, :out_c]
     return arr_out
+
+
+def decimate(arr: ArrayLike, strides: Dict[str, int]) -> ArrayLike:
+    """Decimate an array by strides in the x and y directions.
+
+    Output will match [`io.compute_out_shape`][dolphin.io.compute_out_shape]
+
+    Parameters
+    ----------
+    arr : ArrayLike
+        2D or 3D array to decimate.
+    strides : Dict[str, int]
+        The strides in the x and y directions.
+
+    Returns
+    -------
+    ArrayLike
+        The decimated array.
+
+    """
+    xs, ys = strides["x"], strides["y"]
+    rows, cols = arr.shape[-2:]
+    start_r = ys // 2
+    start_c = xs // 2
+    end_r = (rows // ys) * ys + 1
+    end_c = (cols // xs) * xs + 1
+    return arr[..., start_r:end_r:ys, start_c:end_c:xs]
 
 
 def get_max_memory_usage(units: str = "GB", children: bool = True) -> float:

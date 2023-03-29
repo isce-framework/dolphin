@@ -38,69 +38,6 @@ class MaskConvention(IntEnum):
         return int(not self.value)
 
 
-def warp_to_match(
-    input_file: Filename,
-    match_file: Filename,
-    output_file: Optional[Filename] = None,
-    resampling_alg: str = "near",
-    output_format: Optional[str] = None,
-) -> Path:
-    """Reproject a mask image to align with the input image.
-
-    Parameters
-    ----------
-    input_file: Filename
-        Path to the mask image to be reprojected.
-    match_file: Filename
-        Path to the input image to serve as a reference for the reprojected mask.
-        Uses the bounds, resolution, and CRS of this image.
-    output_file: Filename
-        Path to the output image which is the reprojected water mask image.
-        If None, creates an in-memory warped VRT.
-    resampling_alg: str, optional, default = "near"
-        Resampling algorithm to be used during reprojection.
-        See https://gdal.org/programs/gdalwarp.html#cmdoption-gdalwarp-r for choices.
-    output_format: str, optional, default = None
-        Output format to be used for the output image.
-        If None, gdal will try to infer the format from the output file extension, or
-        (if the extension of `output_file` matches `input_file`) use the input driver.
-
-    Returns
-    -------
-    Path
-        Path to the output image.
-        Same as `output_file` if provided, otherwise a path to the in-memory VRT.
-    """
-    bounds = io.get_raster_bounds(match_file)
-    crs_wkt = io.get_raster_crs(match_file).to_wkt()
-    gt = io.get_raster_gt(match_file)
-    resolution = (gt[1], gt[5])
-
-    if output_file is None:
-        output_file = f"/vsimem/warped_{Path(input_file).stem}.vrt"
-        logger.debug(f"Creating in-memory warped VRT: {output_file}")
-
-    if output_format is None and Path(input_file).suffix == Path(output_file).suffix:
-        output_format = io.get_raster_driver(input_file)
-
-    options = gdal.WarpOptions(
-        dstSRS=crs_wkt,
-        format=output_format,
-        xRes=resolution[0],
-        yRes=resolution[1],
-        outputBounds=bounds,
-        outputBoundsSRS=crs_wkt,
-        resampleAlg=resampling_alg,
-    )
-    gdal.Warp(
-        fspath(output_file),
-        fspath(input_file),
-        options=options,
-    )
-
-    return Path(output_file)
-
-
 def combine_mask_files(
     mask_files: Sequence[Filename],
     output_file: Filename,
