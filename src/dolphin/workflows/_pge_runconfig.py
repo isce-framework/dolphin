@@ -75,18 +75,19 @@ class DynamicAncillaryFileGroup(YamlModel, extra=Extra.forbid):
         default=None,
         description="Path to the DEM file covering full frame.",
     )
-    # # TEC file in IONEX format for ionosphere correction
-    # tec_file: str(required=False)
-    tec_file: Optional[Path] = Field(
+    # TEC file in IONEX format for ionosphere correction
+    tec_files: Optional[List[Path]] = Field(
         default=None,
-        description="Path to TEC file in IONEX format for ionosphere correction.",
+        description=(
+            "List of Paths to TEC files (1 per date) in IONEX format for ionosphere"
+            " correction."
+        ),
     )
 
-    # # Troposphere weather model
-    # weather_model_file: str(required=False)
-    weather_model_file: Optional[Path] = Field(
+    # Troposphere weather model
+    weather_model_files: Optional[List[Path]] = Field(
         default=None,
-        description="Path to troposphere weather model file.",
+        description="List of Paths to troposphere weather model files (1 per date).",
     )
 
 
@@ -103,7 +104,6 @@ class ProductPathGroup(YamlModel, extra=Extra.forbid):
     """Group describing the product paths."""
 
     product_path: Path = Field(  # type: ignore
-        # default=None, description="Directory where PGE will place results"
         default=...,
         description="Directory where PGE will place results",
     )
