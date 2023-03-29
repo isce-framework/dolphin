@@ -176,7 +176,7 @@ class WorkerSettings(BaseSettings):
         default_factory=cpu_count,
         ge=1,
         description=(
-            "(For non-GPU) Number of cpu cores to use for processing. Uses"
+            "(For non-GPU) Number of cpu cores to use for Python multiprocessing. Uses"
             " `multiprocessing.cpu_count()` if not set."
         ),
     )
@@ -185,7 +185,7 @@ class WorkerSettings(BaseSettings):
         ge=1,
         description=(
             "Number of threads to use per worker. This sets the OMP_NUM_THREADS"
-            " environment variable."
+            " environment variable in each python process."
         ),
     )
     block_size_gb: float = Field(
