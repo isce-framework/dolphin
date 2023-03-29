@@ -114,7 +114,7 @@ def run(
             pge_runconfig=pge_runconfig,
         )
 
-    if cfg.output_options.save_compressed_slc:
+    if cfg.save_compressed_slc:
         # TODO: Do i need to make this into some kind of standard hdf5 product?
         # TODO: What kind of metadata do I need to attach to this?
         logger.info(f"Saving {len(comp_slc_dict.items())} compressed SLCs")
