@@ -109,7 +109,7 @@ def create_output_product(
         )
         _create_geo_dataset(
             group=f,
-            name="connected_components_labels",
+            name="connected_component_labels",
             data=conncomp_arr,
             description="Connected component labels of the unwrapped phase",
             fillvalue=0,
