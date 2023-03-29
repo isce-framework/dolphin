@@ -1,9 +1,7 @@
 import logging
-from typing import Dict, Optional
+from typing import Dict
 
 import numpy as np
-
-from dolphin._types import Filename
 
 from . import covariance, metrics
 from .mle import mle_stack
@@ -18,7 +16,6 @@ def run_cpu(
     beta: float = 0.01,
     reference_idx: int = 0,
     use_slc_amp: bool = True,
-    output_cov_file: Optional[Filename] = None,
     n_workers: int = 1,
     **kwargs,
 ):
@@ -41,8 +38,6 @@ def run_cpu(
     use_slc_amp : bool, optional
         Whether to use the SLC amplitude when outputting the MLE estimate,
         or to set the SLC amplitude to 1.0. By default True.
-    output_cov_file : str, optional
-        HDF5 filename to save the estimated covariance at each pixel.
     n_workers : int, optional
         The number of workers to use for (CPU version) multiprocessing.
         If 1 (default), no multiprocessing is used.
@@ -60,8 +55,6 @@ def run_cpu(
         strides,
         n_workers=n_workers,
     )
-    if output_cov_file:
-        covariance._save_covariance(output_cov_file, C_arrays)
 
     output_phase = mle_stack(C_arrays, beta, reference_idx, n_workers=n_workers)
     cpx_phase = np.exp(1j * output_phase)

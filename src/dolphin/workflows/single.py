@@ -131,8 +131,6 @@ def run_evd_single(
 
     # Note: dividing by len(stack) since cov is shape (rows, cols, nslc, nslc)
     # so we need to load less to not overflow memory
-    # TODO: more robust way to do this... or change this to a "loading_size",
-    # then calculate the max_bytes somehow based on testing
     stack_max_bytes = max_bytes / len(vrt)
     overlaps = (yhalf, xhalf)
     block_gen = vrt.iter_blocks(
