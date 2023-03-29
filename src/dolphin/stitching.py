@@ -504,13 +504,13 @@ def warp_to_match(
     Parameters
     ----------
     input_file: Filename
-        Path to the mask image to be reprojected.
+        Path to the image to be reprojected.
     match_file: Filename
-        Path to the input image to serve as a reference for the reprojected mask.
+        Path to the input image to serve as a reference for the reprojected image.
         Uses the bounds, resolution, and CRS of this image.
     output_file: Filename
-        Path to the output image which is the reprojected water mask image.
-        If None, creates an in-memory warped VRT.
+        Path to the output, reprojected image.
+        If None, creates an in-memory warped VRT using the `/vsimem/` protocol.
     resampling_alg: str, optional, default = "near"
         Resampling algorithm to be used during reprojection.
         See https://gdal.org/programs/gdalwarp.html#cmdoption-gdalwarp-r for choices.
