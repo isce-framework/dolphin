@@ -59,5 +59,5 @@ RUN python -m pip install --no-deps .
 # This means if they mount a volume to /work, we won't be mixing in the repository code
 WORKDIR /work
 
-ENTRYPOINT ["/usr/local/bin/_entrypoint.sh", "python", "-m", "dolphin"]
-CMD ["--help"]
+ENTRYPOINT ["/usr/local/bin/_entrypoint.sh"]
+CMD ["dolphin", "--help"]
