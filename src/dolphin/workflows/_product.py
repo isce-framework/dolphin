@@ -137,7 +137,9 @@ def create_output_product(
 
         # Create the group holding phase corrections that were used on the unwrapped phase
         corrections_group = f.create_group(CORRECTIONS_GROUP_NAME)
-        f.attrs["description"] = "Phase corrections applied to the unwrapped_phase"
+        corrections_group.attrs["description"] = (
+            "Phase corrections applied to the unwrapped_phase"
+        )
 
         # TODO: Are we going to downsample these for space?
         # if so, they need they're own X/Y variables and GeoTransform
