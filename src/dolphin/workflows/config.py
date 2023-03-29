@@ -319,6 +319,21 @@ class Workflow(YamlModel):
 
     # Options for each step in the workflow
     ps_options: PsOptions = Field(default_factory=PsOptions)
+    amplitude_dispersion_files: List[Path] = Field(
+        default_factory=list,
+        description=(
+            "Paths to existing Amplitude Dispersion file (1 per SLC region) for PS"
+            " update calculation. If none provided, computed using the input SLC stack."
+        ),
+    )
+    amplitude_mean_files: List[Path] = Field(
+        default_factory=list,
+        description=(
+            "Paths to an existing Amplitude Mean files (1 per SLC region) for PS update"
+            " calculation. If none provided, computed using the input SLC stack."
+        ),
+    )
+
     phase_linking: PhaseLinkingOptions = Field(default_factory=PhaseLinkingOptions)
     interferogram_network: InterferogramNetwork = Field(
         default_factory=InterferogramNetwork

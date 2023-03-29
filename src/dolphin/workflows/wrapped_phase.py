@@ -1,6 +1,6 @@
 import shutil
 from pathlib import Path
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 from dolphin import io, ps, stack, utils
 from dolphin._background import NvidiaMemoryWatcher
@@ -61,12 +61,20 @@ def run(cfg: Workflow, debug: bool = False) -> Tuple[List[Path], Path, Path]:
         logger.info(f"Skipping making existing PS file {ps_output}")
     else:
         logger.info(f"Creating persistent scatterer file {ps_output}")
+        try:
+            existing_amp: Optional[Path] = cfg.amplitude_mean_files[0]
+            existing_disp: Optional[Path] = cfg.amplitude_dispersion_files[0]
+        except IndexError:
+            existing_amp = existing_disp = None
+
         ps.create_ps(
             slc_vrt_file=vrt_stack.outfile,
             output_file=ps_output,
-            amp_mean_file=cfg.ps_options._amp_mean_file,
-            amp_dispersion_file=cfg.ps_options._amp_dispersion_file,
+            output_amp_mean_file=cfg.ps_options._amp_mean_file,
+            output_amp_dispersion_file=cfg.ps_options._amp_dispersion_file,
             amp_dispersion_threshold=cfg.ps_options.amp_dispersion_threshold,
+            existing_amp_dispersion_file=existing_disp,
+            existing_amp_mean_file=existing_amp,
             block_size_gb=cfg.worker_settings.block_size_gb,
         )
 

@@ -210,6 +210,10 @@ class RunConfig(YamlModel, extra=Extra.forbid):
         output_directory = self.product_path_group.output_directory
         scratch_directory = self.product_path_group.scratch_path
         mask_file = self.dynamic_ancillary_file_group.mask_file
+        amplitude_mean_files = self.dynamic_ancillary_file_group.amplitude_mean_files
+        amplitude_dispersion_files = (
+            self.dynamic_ancillary_file_group.amplitude_dispersion_files
+        )
 
         # Load the algorithm parameters from the file
         algorithm_parameters = AlgorithmParameters.from_yaml(
@@ -227,6 +231,8 @@ class RunConfig(YamlModel, extra=Extra.forbid):
             output_directory=output_directory,
             scratch_directory=scratch_directory,
             save_compressed_slc=self.product_path_group.save_compressed_slc,
+            amplitude_mean_files=amplitude_mean_files,
+            amplitude_dispersion_files=amplitude_dispersion_files,
             # These ones directly translate
             worker_settings=self.worker_settings,
             log_file=self.log_file,
