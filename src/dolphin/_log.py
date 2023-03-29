@@ -21,6 +21,7 @@ import time
 from collections.abc import Callable
 from functools import wraps
 from logging import Formatter
+from pathlib import Path
 from typing import Optional
 
 from rich.logging import RichHandler
@@ -59,6 +60,7 @@ def get_log(
 
     # In addition to stderr, log to a file if requested
     if filename:
+        Path(filename).parent.mkdir(parents=True, exist_ok=True)
         file_handler = logging.FileHandler(filename)
         file_handler.setLevel(logging.DEBUG)
         formatter = Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")

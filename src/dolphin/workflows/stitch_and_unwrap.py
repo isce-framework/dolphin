@@ -3,9 +3,9 @@ from datetime import date
 from pathlib import Path
 from typing import Dict, List, Sequence, Tuple
 
-from dolphin import io, masking, stitching, unwrap
+from dolphin import io, stitching, unwrap
 from dolphin._log import get_log, log_runtime
-from dolphin.interferogram import VRTInterferogram, estimate_correlation_from_phase
+from dolphin.interferogram import estimate_correlation_from_phase
 
 from .config import UnwrapMethod, Workflow
 
@@ -22,7 +22,7 @@ class OutputFiles:
 
 @log_runtime
 def run(
-    ifg_list: Sequence[VRTInterferogram],
+    ifg_file_list: Sequence[Path],
     tcorr_file_list: Sequence[Path],
     cfg: Workflow,
     debug: bool = False,
@@ -31,7 +31,7 @@ def run(
 
     Parameters
     ----------
-    ifg_list : Sequence[VRTInterferogram]
+    ifg_file_list : Sequence[VRTInterferogram]
         Sequence of [`VRTInterferogram`][dolphin.interferogram.VRTInterferogram] objects
         to stitch together
     tcorr_file_list : Sequence[Path]
@@ -58,9 +58,8 @@ def run(
 
     # Also preps for snaphu, which needs binary format with no nans
     logger.info("Stitching interferograms by date.")
-    ifg_filenames = [ifg.path for ifg in ifg_list]
     date_to_ifg_path = stitching.merge_by_date(
-        image_file_list=ifg_filenames,  # type: ignore
+        image_file_list=ifg_file_list,  # type: ignore
         file_date_fmt=cfg.input_options.cslc_date_fmt,
         output_dir=stitched_ifg_dir,
     )
@@ -92,7 +91,7 @@ def run(
         if output_mask.exists():
             logger.info(f"Mask already exists at {output_mask}")
         else:
-            masking.warp_to_match(
+            stitching.warp_to_match(
                 input_file=cfg.mask_file,
                 match_file=stitched_tcorr_file,
                 output_file=output_mask,

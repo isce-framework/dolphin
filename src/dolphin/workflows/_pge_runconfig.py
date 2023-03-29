@@ -49,44 +49,54 @@ class DynamicAncillaryFileGroup(YamlModel, extra=Extra.forbid):
         default_factory=list,
         description=(
             "Paths to existing Amplitude Dispersion file (1 per burst) for PS update"
-            " calculation."
+            " calculation. If none provided, computed using the input SLC stack."
         ),
     )
     amplitude_mean_files: List[Path] = Field(
         default_factory=list,
         description=(
             "Paths to an existing Amplitude Mean files (1 per burst) for PS update"
-            " calculation."
+            " calculation. If none provided, computed using the input SLC stack."
         ),
     )
     geometry_files: List[Path] = Field(
         default_factory=list,
-        description="Paths to the incidence/azimuth-angle files (1 per burst).",
+        description=(
+            "Paths to the incidence/azimuth-angle files (1 per burst). If none"
+            " provided, corrections using incidence/azimuth-angle are skipped."
+        ),
     )
     mask_file: Optional[Path] = Field(
         None,
         description=(
-            "Byte mask file used to ignore low correlation/bad data (e.g water mask)."
-            " Convention is 0 for no data/invalid, and 1 for good data. Dtype must be"
-            " uint8."
+            "Optional Byte mask file used to ignore low correlation/bad data (e.g water"
+            " mask). Convention is 0 for no data/invalid, and 1 for good data. Dtype"
+            " must be uint8."
         ),
     )
     dem_file: Optional[Path] = Field(
         default=None,
-        description="Path to the DEM file covering full frame.",
+        description=(
+            "Path to the DEM file covering full frame. If none provided, corrections"
+            " using DEM are skipped."
+        ),
     )
-    # # TEC file in IONEX format for ionosphere correction
-    # tec_file: str(required=False)
-    tec_file: Optional[Path] = Field(
+    # TEC file in IONEX format for ionosphere correction
+    tec_files: Optional[List[Path]] = Field(
         default=None,
-        description="Path to TEC file in IONEX format for ionosphere correction.",
+        description=(
+            "List of Paths to TEC files (1 per date) in IONEX format for ionosphere"
+            " correction. If none provided, ionosphere corrections are skipped."
+        ),
     )
 
-    # # Troposphere weather model
-    # weather_model_file: str(required=False)
-    weather_model_file: Optional[Path] = Field(
+    # Troposphere weather model
+    weather_model_files: Optional[List[Path]] = Field(
         default=None,
-        description="Path to troposphere weather model file.",
+        description=(
+            "List of Paths to troposphere weather model files (1 per date). If none"
+            " provided, troposphere corrections are skipped."
+        ),
     )
 
 
@@ -103,7 +113,6 @@ class ProductPathGroup(YamlModel, extra=Extra.forbid):
     """Group describing the product paths."""
 
     product_path: Path = Field(  # type: ignore
-        # default=None, description="Directory where PGE will place results"
         default=...,
         description="Directory where PGE will place results",
     )
@@ -164,7 +173,7 @@ class RunConfig(YamlModel, extra=Extra.forbid):
     worker_settings: WorkerSettings = Field(default_factory=WorkerSettings)
 
     log_file: Optional[Path] = Field(
-        default=Path("disp_s1_workflow.log"),
+        default=Path("output/disp_s1_workflow.log"),
         description="Path to the output log file in addition to logging to stderr.",
     )
 
@@ -201,6 +210,10 @@ class RunConfig(YamlModel, extra=Extra.forbid):
         output_directory = self.product_path_group.output_directory
         scratch_directory = self.product_path_group.scratch_path
         mask_file = self.dynamic_ancillary_file_group.mask_file
+        amplitude_mean_files = self.dynamic_ancillary_file_group.amplitude_mean_files
+        amplitude_dispersion_files = (
+            self.dynamic_ancillary_file_group.amplitude_dispersion_files
+        )
 
         # Load the algorithm parameters from the file
         algorithm_parameters = AlgorithmParameters.from_yaml(
@@ -217,6 +230,9 @@ class RunConfig(YamlModel, extra=Extra.forbid):
             mask_file=mask_file,
             output_directory=output_directory,
             scratch_directory=scratch_directory,
+            save_compressed_slc=self.product_path_group.save_compressed_slc,
+            amplitude_mean_files=amplitude_mean_files,
+            amplitude_dispersion_files=amplitude_dispersion_files,
             # These ones directly translate
             worker_settings=self.worker_settings,
             log_file=self.log_file,

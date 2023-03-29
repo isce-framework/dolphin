@@ -60,7 +60,13 @@ def merge_by_date(
     for dates, cur_images in grouped_images.items():
         logger.info(f"{dates}: Stitching {len(cur_images)} images.")
         Path(output_dir).mkdir(parents=True, exist_ok=True)
-        outfile = Path(output_dir) / (io._format_date_pair(*dates) + output_suffix)
+        if len(dates) == 2:
+            date_str = io._format_date_pair(*dates)
+        elif len(dates) == 1:
+            date_str = dates[0].strftime(file_date_fmt)
+        else:
+            raise ValueError(f"Expected 1 or 2 dates: {dates}.")
+        outfile = Path(output_dir) / (date_str + output_suffix)
 
         merge_images(
             cur_images,
@@ -314,7 +320,11 @@ def _warp_to_projection(
     projection: str,
     res: Tuple[float, float],
 ) -> List[Path]:
-    """Warp a list of files to the most common projection.
+    """Warp a list of files to `projection`.
+
+    If the input file's projection matches `projection`, the same file is returned.
+    Otherwise, a new file is created in `dirname` with the same name as the input file,
+    but with '_warped' appended.
 
     Parameters
     ----------
@@ -478,3 +488,68 @@ def _nodata_to_zero(
     ds_out = None
 
     return outfile
+
+
+def warp_to_match(
+    input_file: Filename,
+    match_file: Filename,
+    output_file: Optional[Filename] = None,
+    resampling_alg: str = "near",
+    output_format: Optional[str] = None,
+) -> Path:
+    """Reproject `input_file` to align with the `match_file`.
+
+    Uses the bounds, resolution, and CRS of `match_file`.
+
+    Parameters
+    ----------
+    input_file: Filename
+        Path to the image to be reprojected.
+    match_file: Filename
+        Path to the input image to serve as a reference for the reprojected image.
+        Uses the bounds, resolution, and CRS of this image.
+    output_file: Filename
+        Path to the output, reprojected image.
+        If None, creates an in-memory warped VRT using the `/vsimem/` protocol.
+    resampling_alg: str, optional, default = "near"
+        Resampling algorithm to be used during reprojection.
+        See https://gdal.org/programs/gdalwarp.html#cmdoption-gdalwarp-r for choices.
+    output_format: str, optional, default = None
+        Output format to be used for the output image.
+        If None, gdal will try to infer the format from the output file extension, or
+        (if the extension of `output_file` matches `input_file`) use the input driver.
+
+    Returns
+    -------
+    Path
+        Path to the output image.
+        Same as `output_file` if provided, otherwise a path to the in-memory VRT.
+    """
+    bounds = io.get_raster_bounds(match_file)
+    crs_wkt = io.get_raster_crs(match_file).to_wkt()
+    gt = io.get_raster_gt(match_file)
+    resolution = (gt[1], gt[5])
+
+    if output_file is None:
+        output_file = f"/vsimem/warped_{Path(input_file).stem}.vrt"
+        logger.debug(f"Creating in-memory warped VRT: {output_file}")
+
+    if output_format is None and Path(input_file).suffix == Path(output_file).suffix:
+        output_format = io.get_raster_driver(input_file)
+
+    options = gdal.WarpOptions(
+        dstSRS=crs_wkt,
+        format=output_format,
+        xRes=resolution[0],
+        yRes=resolution[1],
+        outputBounds=bounds,
+        outputBoundsSRS=crs_wkt,
+        resampleAlg=resampling_alg,
+    )
+    gdal.Warp(
+        fspath(output_file),
+        fspath(input_file),
+        options=options,
+    )
+
+    return Path(output_file)

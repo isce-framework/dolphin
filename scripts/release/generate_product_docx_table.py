@@ -88,7 +88,10 @@ def _get_hdf5_attributes(hdf5_path: Filename) -> List:
 
 def _get_hdf5_attributes_by_group(hdf5_path: Filename) -> Dict[str, List]:
     def get_group(name):
-        return name.split("/")[-2]
+        try:
+            return name.split("/")[-2]
+        except IndexError:
+            return "root"
 
     table_data = _get_hdf5_attributes(hdf5_path)
 

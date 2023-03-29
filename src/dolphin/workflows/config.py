@@ -176,7 +176,7 @@ class WorkerSettings(BaseSettings):
         default_factory=cpu_count,
         ge=1,
         description=(
-            "(For non-GPU) Number of cpu cores to use for processing. Uses"
+            "(For non-GPU) Number of cpu cores to use for Python multiprocessing. Uses"
             " `multiprocessing.cpu_count()` if not set."
         ),
     )
@@ -185,7 +185,7 @@ class WorkerSettings(BaseSettings):
         ge=1,
         description=(
             "Number of threads to use per worker. This sets the OMP_NUM_THREADS"
-            " environment variable."
+            " environment variable in each python process."
         ),
     )
     block_size_gb: float = Field(
@@ -237,13 +237,6 @@ class OutputOptions(BaseModel, extra=Extra.forbid):
             " (decimation factor) to perform while processing input. For example,"
             " strides of [4, 2] would turn an input resolution of [5, 10] into an"
             " output resolution of [20, 20]."
-        ),
-    )
-    save_compressed_slc: bool = Field(
-        default=False,
-        description=(
-            "Whether the SAS should output and save the Compressed SLCs in addition to"
-            " the standard product output."
         ),
     )
 
@@ -326,12 +319,34 @@ class Workflow(YamlModel):
 
     # Options for each step in the workflow
     ps_options: PsOptions = Field(default_factory=PsOptions)
+    amplitude_dispersion_files: List[Path] = Field(
+        default_factory=list,
+        description=(
+            "Paths to existing Amplitude Dispersion file (1 per SLC region) for PS"
+            " update calculation. If none provided, computed using the input SLC stack."
+        ),
+    )
+    amplitude_mean_files: List[Path] = Field(
+        default_factory=list,
+        description=(
+            "Paths to an existing Amplitude Mean files (1 per SLC region) for PS update"
+            " calculation. If none provided, computed using the input SLC stack."
+        ),
+    )
+
     phase_linking: PhaseLinkingOptions = Field(default_factory=PhaseLinkingOptions)
     interferogram_network: InterferogramNetwork = Field(
         default_factory=InterferogramNetwork
     )
     unwrap_options: UnwrapOptions = Field(default_factory=UnwrapOptions)
     output_options: OutputOptions = Field(default_factory=OutputOptions)
+    save_compressed_slc: bool = Field(
+        default=False,
+        description=(
+            "Whether the SAS should output and save the Compressed SLCs in addition to"
+            " the standard product output."
+        ),
+    )
 
     # General workflow metadata
     worker_settings: WorkerSettings = Field(default_factory=WorkerSettings)
