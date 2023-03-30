@@ -58,7 +58,12 @@ def compare_groups(
 
     for key in golden_group.keys():
         if isinstance(golden_group[key], h5py.Group):
-            compare_groups(golden_group[key], test_group[key])
+            compare_groups(
+                golden_group[key],
+                test_group[key],
+                pixels_failed_threshold,
+                diff_threshold,
+            )
         else:
             _compare_datasets_attr(golden_group[key], test_group[key])
             golden = golden_group[key][()]
