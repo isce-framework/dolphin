@@ -116,8 +116,13 @@ def create_ps(
         else:
             # Fill the block with nodata
             ps = np.ones((cur_rows, cur_cols), dtype=FILE_DTYPES.ps) * NODATA_VALUES.ps
-            mean = amp_disp = np.zeros(
-                (cur_rows, cur_cols), dtype=FILE_DTYPES.amp_dispersion
+            mean = np.full(
+                (cur_rows, cur_cols), NODATA_VALUES.amp_mean, dtype=FILE_DTYPES.amp_mean
+            )
+            amp_disp = np.full(
+                (cur_rows, cur_cols),
+                NODATA_VALUES.amp_dispersion,
+                dtype=FILE_DTYPES.amp_dispersion,
             )
 
         # Write amp dispersion and the mean blocks
@@ -215,15 +220,16 @@ def _use_existing_files(
     output_amp_dispersion_file: Filename,
     amp_dispersion_threshold: float,
 ) -> None:
-    amp_disp = io.load_gdal(existing_amp_dispersion_file)
+    amp_disp = io.load_gdal(existing_amp_dispersion_file, masked=True)
     ps = amp_disp < amp_dispersion_threshold
-    ps[amp_disp == 0] = False
     ps = ps.astype(np.uint8)
-    ps[amp_disp == NODATA_VALUES.amp_dispersion] = NODATA_VALUES[0]
+    # Set the PS nodata value to the max uint8 value
+    ps[(amp_disp == 0) | amp_disp.mask] = NODATA_VALUES.ps
     io.write_arr(
         arr=ps,
         like_filename=existing_amp_dispersion_file,
         output_name=output_file,
+        nodata=NODATA_VALUES.ps,
     )
     # Copy the existing amp mean file/amp dispersion file
     shutil.copy(existing_amp_dispersion_file, output_amp_dispersion_file)
