@@ -99,26 +99,27 @@ def compare_groups(
 def _compare_datasets_attr(
     golden_dataset: h5py.Dataset, test_dataset: h5py.Dataset
 ) -> None:
+    if golden_dataset.name != test_dataset.name:
+        raise ComparisonError(
+            f"Dataset names do not match: {golden_dataset.name} vs {test_dataset.name}"
+        )
+    name = golden_dataset.name
+
     if golden_dataset.shape != test_dataset.shape:
         raise ComparisonError(
-            f"Dataset shapes do not match: {golden_dataset.shape} vs"
+            f"{name} shapes do not match: {golden_dataset.shape} vs"
             f" {test_dataset.shape}"
         )
 
     if golden_dataset.dtype != test_dataset.dtype:
         raise ComparisonError(
-            f"Dataset dtypes do not match: {golden_dataset.dtype} vs"
+            f"{name} dtypes do not match: {golden_dataset.dtype} vs"
             f" {test_dataset.dtype}"
-        )
-
-    if golden_dataset.name != test_dataset.name:
-        raise ComparisonError(
-            f"Dataset names do not match: {golden_dataset.name} vs {test_dataset.name}"
         )
 
     if golden_dataset.attrs.keys() != test_dataset.attrs.keys():
         raise ComparisonError(
-            f"Dataset attribute keys do not match: {golden_dataset.attrs.keys()} vs"
+            f"{name} attribute keys do not match: {golden_dataset.attrs.keys()} vs"
             f" {test_dataset.attrs.keys()}"
         )
 
@@ -134,7 +135,7 @@ def _compare_datasets_attr(
             is_equal = val1 == val2
         if not is_equal:
             raise ComparisonError(
-                f"Dataset attribute values for key '{attr_key}' do not match: "
+                f"{name} attribute values for key '{attr_key}' do not match: "
                 f"{golden_dataset.attrs[attr_key]} vs {test_dataset.attrs[attr_key]}"
             )
 
