@@ -374,7 +374,7 @@ def _create_grid_mapping(group, crs: pyproj.CRS, gt: List[float]) -> h5netcdf.Va
     return dset
 
 
-def _create_compressed_products(comp_slc_dict: Dict[str, Path], output_dir: Path):
+def create_compressed_products(comp_slc_dict: Dict[str, Path], output_dir: Path):
     """Make the compressed SLC output product."""
 
     def form_name(filename: Path, burst: str):
@@ -432,6 +432,12 @@ def _zero_mantissa(data: np.ndarray, bits_to_keep: int = 10):
     # Shift it to the left by `nzero` bits
     bitmask = (allbits << nzero) & allbits
     # Mask out the least significant `nzero` bits
-    dr = data.view(np.uint32)
-    dr &= bitmask
+    if np.iscomplexobj(data):
+        dr = data.real.view(np.uint32)
+        dr &= bitmask
+        di = data.imag.view(np.uint32)
+        di &= bitmask
+    else:
+        dr = data.view(np.uint32)
+        dr &= bitmask
     return data
