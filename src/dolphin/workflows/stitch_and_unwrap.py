@@ -1,4 +1,3 @@
-from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 from typing import Dict, List, Sequence, Tuple
@@ -10,23 +9,13 @@ from dolphin.interferogram import estimate_correlation_from_phase
 from .config import UnwrapMethod, Workflow
 
 
-@dataclass
-class OutputFiles:
-    """Container for the return files of the `run` function."""
-
-    unwrapped_paths: List[Path]
-    conncomp_paths: List[Path]
-    spatial_corr_paths: List[Path]
-    stitched_tcorr_file: Path
-
-
 @log_runtime
 def run(
     ifg_file_list: Sequence[Path],
     tcorr_file_list: Sequence[Path],
     cfg: Workflow,
     debug: bool = False,
-) -> OutputFiles:
+) -> Tuple[List[Path], List[Path], List[Path], Path]:
     """Run the displacement workflow on a stack of SLCs.
 
     Parameters
@@ -43,8 +32,14 @@ def run(
 
     Returns
     -------
-    OutputFiles
-        Container for the output files of the workflow
+    unwrapped_paths : List[Path]
+        List of Paths to unwrapped interferograms created.
+    conncomp_paths : List[Path]
+        List of Paths to connected component files created.
+    spatial_corr_paths : List[Path]
+        List of Paths to spatial correlation files created.
+    stitched_tcorr_file : Path
+        Path to temporal correlation file created.
     """
     logger = get_log(debug=debug)
 
@@ -83,7 +78,7 @@ def run(
     # #####################################
     if not cfg.unwrap_options.run_unwrap:
         logger.info("Skipping unwrap step")
-        return OutputFiles([], [], [], stitched_tcorr_file)
+        return [], [], [], stitched_tcorr_file
 
     if cfg.mask_file is not None:
         logger.info(f"Warping {cfg.mask_file} to match interferograms")
@@ -128,9 +123,7 @@ def run(
     # ####################
     # TODO: Determine format for the tropospheric/ionospheric phase correction
 
-    return OutputFiles(
-        unwrapped_paths, conncomp_paths, spatial_corr_paths, stitched_tcorr_file
-    )
+    return unwrapped_paths, conncomp_paths, spatial_corr_paths, stitched_tcorr_file
 
 
 def _estimate_spatial_correlations(

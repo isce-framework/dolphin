@@ -22,7 +22,13 @@ def generate_docx_table(hdf5_path: Filename, output_path: Filename):
         row = table.add_row()
         row.height_rule = WD_ROW_HEIGHT_RULE.AT_LEAST
         row.height = Pt(height)
-        row.cells[0].text = text
+        if isinstance(text, list):
+            for i in range(len(text)):
+                row.cells[i].text = text[i]
+        else:
+            row.cells[1].merge(row.cells[0])
+            row.cells[1].merge(row.cells[2])
+            row.cells[1].text = text
         # https://stackoverflow.com/questions/26752856/python-docx-set-table-cell-background-and-text-color  # noqa
         if shade:
             shading_elm = parse_xml(r'<w:shd {} w:fill="D9D9D9"/>'.format(nsdecls("w")))
@@ -41,7 +47,7 @@ def generate_docx_table(hdf5_path: Filename, output_path: Filename):
 
     for group_name, rows in _get_hdf5_attributes_by_group(hdf5_path).items():
         document.add_heading(f"Group: {group_name}", level=2)
-        table = document.add_table(cols=1, rows=0)
+        table = document.add_table(cols=3, rows=0)
         table.style = "Table Grid"  # Use the "Table Grid" style to get borders
         table.alignment = WD_TABLE_ALIGNMENT.LEFT
 
@@ -51,8 +57,7 @@ def generate_docx_table(hdf5_path: Filename, output_path: Filename):
 
             _add_row(table, f"Name: {name}", shade=True)
 
-            row_text = "\t\t".join(f"{k}: {v or 'scalar'}" for k, v in row.items())
-            row_text.replace("()", "scalar")
+            row_text = [f"{k}: {v or 'scalar'}" for k, v in row.items()]
             _add_row(table, row_text)
             _add_row(table, f"Description: {desc}")
 

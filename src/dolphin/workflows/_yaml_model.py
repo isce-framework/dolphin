@@ -50,7 +50,14 @@ class YamlModel(BaseModel):
             )
 
         y = YAML()
-        y.indent(offset=indent_per_level, mapping=indent_per_level)
+        # https://yaml.readthedocs.io/en/latest/detail.html#indentation-of-block-sequences
+        y.indent(
+            offset=indent_per_level,
+            mapping=indent_per_level,
+            # It is best to always have sequence >= offset + 2 but this is not enforced
+            # not following this advice might lead to invalid output.
+            sequence=indent_per_level + 2,
+        )
         if hasattr(output_path, "write"):
             y.dump(yaml_obj, output_path)
         else:

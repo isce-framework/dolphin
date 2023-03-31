@@ -1,8 +1,10 @@
 """Module for creating the OPERA output product in NetCDF format."""
 from io import StringIO
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 import h5netcdf
+import h5py
 import numpy as np
 import pyproj
 from numpy.typing import ArrayLike, DTypeLike
@@ -11,8 +13,10 @@ from dolphin import __version__ as dolphin_version
 from dolphin import io
 from dolphin._log import get_log
 from dolphin._types import Filename
+from dolphin.utils import get_dates
 
 from ._pge_runconfig import RunConfig
+from .config import OPERA_DATASET_NAME
 
 logger = get_log(__name__)
 
@@ -127,10 +131,7 @@ def create_output_product(
             group=f,
             name="spatial_correlation",
             data=spatial_corr_arr,
-            description=(
-                "Estimate of spatial correlation of the wrapped interferogram used"
-                " during unwrapping"
-            ),
+            description="Multilooked sample interferometric correlation",
             fillvalue=np.nan,
             attrs=dict(units="unitless"),
         )
@@ -370,6 +371,47 @@ def _create_grid_mapping(group, crs: pyproj.CRS, gt: List[float]) -> h5netcdf.Va
     return dset
 
 
+def create_compressed_products(comp_slc_dict: Dict[str, Path], output_dir: Filename):
+    """Make the compressed SLC output product."""
+
+    def form_name(filename: Path, burst: str):
+        # filename: compressed_20180222_20180716.tif
+        date_str = io._format_date_pair(*get_dates(filename.stem))
+        return f"compressed_slc_{burst}_{date_str}.h5"
+
+    attrs = GLOBAL_ATTRS.copy()
+    attrs["title"] = "Compressed SLC"
+    *parts, dset_name = OPERA_DATASET_NAME.split("/")
+    group_name = "/".join(parts)
+
+    for burst, comp_slc_file in comp_slc_dict.items():
+        crs = io.get_raster_crs(comp_slc_file)
+        gt = io.get_raster_gt(comp_slc_file)
+        data = _zero_mantissa(io.load_gdal(comp_slc_file))
+
+        outname = Path(output_dir) / form_name(comp_slc_file, burst)
+        logger.info(f"Writing {outname}")
+        with h5py.File(outname, "w") as hf:
+            # add type to root for GDAL recognition of complex datasets in NetCDF
+            ctype = h5py.h5t.py_create(np.complex64)
+            ctype.commit(hf["/"].id, np.string_("complex64"))
+
+        with h5netcdf.File(outname, mode="a", invalid_netcdf=True) as f:
+            f.attrs.update(attrs)
+
+            data_group = f.create_group(group_name)
+            _create_grid_mapping(group=data_group, crs=crs, gt=gt)
+            _create_yx_dsets(group=data_group, gt=gt, shape=data.shape)
+            _create_geo_dataset(
+                group=data_group,
+                name=dset_name,
+                data=data,
+                description="Compressed SLC product",
+                fillvalue=np.nan + 0j,
+                attrs=dict(units="unitless"),
+            )
+
+
 def _zero_mantissa(data: np.ndarray, bits_to_keep: int = 10):
     """Zero out 23-`bits_to_keep` bits of the mantissa of a float32 array.
 
@@ -387,6 +429,12 @@ def _zero_mantissa(data: np.ndarray, bits_to_keep: int = 10):
     # Shift it to the left by `nzero` bits
     bitmask = (allbits << nzero) & allbits
     # Mask out the least significant `nzero` bits
-    dr = data.view(np.uint32)
-    dr &= bitmask
+    if np.iscomplexobj(data):
+        dr = data.real.view(np.uint32)
+        dr &= bitmask
+        di = data.imag.view(np.uint32)
+        di &= bitmask
+    else:
+        dr = data.view(np.uint32)
+        dr &= bitmask
     return data
