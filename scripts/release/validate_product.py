@@ -442,7 +442,7 @@ def compare(golden: Filename, test: Filename, data_dset: str = DSET_DEFAULT) -> 
     with h5py.File(golden, "r") as hf_g, h5py.File(test, "r") as hf_t:
         compare_groups(hf_g, hf_t)
 
-    logger.info("Cheaking geospatial metadata...")
+    logger.info("Checking geospatial metadata...")
     _check_raster_geometadata(
         io.format_nc_filename(golden, data_dset),
         io.format_nc_filename(test, data_dset),
