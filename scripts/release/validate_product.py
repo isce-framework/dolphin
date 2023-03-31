@@ -290,7 +290,7 @@ def _validate_unwrapped_phase(
             "shape mismatch: unwrapped phase and connected component labels must have"
             " the same shape"
         )
-        raise ValueError(errmsg)
+        raise ValidationError(errmsg)
 
     if not (0.0 <= nan_threshold <= 1.0):
         errmsg = f"nan_threshold must be between 0 and 1, got {nan_threshold}"
