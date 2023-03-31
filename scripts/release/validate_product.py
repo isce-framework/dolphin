@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 import argparse
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
 
 import h5py
@@ -437,6 +438,45 @@ def _check_raster_geometadata(golden_file: Filename, test_file: Filename) -> Non
             raise ComparisonError(f"{func} does not match: {val_golden} vs {val_test}")
 
 
+def _check_compressed_slc_dirs(golden: Filename, test: Filename) -> None:
+    """Check if the compressed SLC directories match.
+
+    Assumes that the compressed SLC directories are in the same directory as the
+    `golden` and `test` product files, with the directory name `compressed_slcs`.
+
+    Parameters
+    ----------
+    golden : Filename
+        Path to the golden file.
+    test : Filename
+        Path to the test file to be compared.
+
+    Raises
+    ------
+    ComparisonError
+        If file names do not match in their compressed SLC directories
+    """
+    golden_slc_dir = Path(golden).parent / "compressed_slcs"
+    test_slc_dir = Path(test).parent / "compressed_slcs"
+
+    if not golden_slc_dir.exists():
+        logger.info("No compressed SLC directory found in golden product.")
+        return
+    if not test_slc_dir.exists():
+        raise ComparisonError(
+            f"{test_slc_dir} does not exist, but {golden_slc_dir} exists."
+        )
+
+    golden_slc_names = [p.name for p in golden_slc_dir.iterdir()]
+    test_slc_names = [p.name for p in test_slc_dir.iterdir()]
+
+    if set(golden_slc_names) != set(test_slc_names):
+        raise ComparisonError(
+            f"Compressed SLC directories do not match: {golden_slc_names} vs"
+            f" {test_slc_names}"
+        )
+
+
 def compare(golden: Filename, test: Filename, data_dset: str = DSET_DEFAULT) -> None:
     """Compare two HDF5 files for consistency."""
     logger.info("Comparing HDF5 contents...")
@@ -450,6 +490,7 @@ def compare(golden: Filename, test: Filename, data_dset: str = DSET_DEFAULT) -> 
     )
 
     logger.info(f"Files {golden} and {test} match.")
+    _check_compressed_slc_dirs(golden, test)
 
 
 def get_parser(

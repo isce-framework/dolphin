@@ -374,7 +374,7 @@ def _create_grid_mapping(group, crs: pyproj.CRS, gt: List[float]) -> h5netcdf.Va
     return dset
 
 
-def create_compressed_products(comp_slc_dict: Dict[str, Path], output_dir: Path):
+def create_compressed_products(comp_slc_dict: Dict[str, Path], output_dir: Filename):
     """Make the compressed SLC output product."""
 
     def form_name(filename: Path, burst: str):
@@ -392,7 +392,7 @@ def create_compressed_products(comp_slc_dict: Dict[str, Path], output_dir: Path)
         gt = io.get_raster_gt(comp_slc_file)
         data = _zero_mantissa(io.load_gdal(comp_slc_file))
 
-        outname = output_dir / form_name(comp_slc_file, burst)
+        outname = Path(output_dir) / form_name(comp_slc_file, burst)
         logger.info(f"Writing {outname}")
         with h5py.File(outname, "w") as hf:
             # add type to root for GDAL recognition of complex datasets in NetCDF

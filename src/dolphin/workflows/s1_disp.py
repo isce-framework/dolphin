@@ -139,7 +139,7 @@ def run(
         logger.info(f"Saving {len(comp_slc_dict.items())} compressed SLCs")
         output_dir = cfg.output_directory / "compressed_slcs"
         output_dir.mkdir(exist_ok=True)
-        _product._create_compressed_products(
+        _product.create_compressed_products(
             comp_slc_dict=comp_slc_dict,
             output_dir=output_dir,
         )
