@@ -1,14 +1,14 @@
-# v0.0.5
+# [0.1.0](https://github.com/opera-adt/dolphin/compare/v0.0.4...v0.1.0) - 2023-03-31
 
 **Added**
 
 - First version of the `_product.py` module to output the combined NetCDF product file.
-- `_pge_runconfig.py` module to handle the separate PGE-compatible configurion, which translates to-from the `Workflow` object.
+- `_pge_runconfig.py` module to handle the separate PGE-compatible configuration, which translates to-from the `Workflow` object.
 - `docker/build-docker-image.sh` script to build the docker image.
-- Release scripts for generating documentation and validating output data.
+- Release scripts for generating documentation, script for validating output data by @gmgunter .
 - Use of a spatial correlation estimate for unwrapping purposes, rather than temporal coherence.
   - This is much more useful when the stack size is small (high temporal coherence), and `snaphu` is used for unwrapping.
-- `masking.py` module for masking the interferogram/combinined multiple external masks of varying 1/0 conventions.
+- `masking.py` module for masking the interferogram/combined multiple external masks of varying 1/0 conventions.
 - Ability to use existing amplitude mean/dispersion files for the PS portion of the workflow, skipping the step where we compute it using the SLC stack. Useful for small stack sizes
 - Added a `create_only` option to `write_arr` to create an empty file without writing data (e.g. to check the boundary results of stitching)
 
@@ -31,7 +31,7 @@ Added requirements:
 - h5netcdf>=1.1
 - Avoid HDF5 version 1.12.1 until NetCDF loading issue is fixed
 
-# v0.0.4
+# [0.0.4](https://github.com/opera-adt/dolphin/compare/v0.0.3...v0.0.4) - 2023-03-17
 
 **Added**
 
@@ -81,7 +81,7 @@ Removed requirements:
 - tqdm
 
 
-# 0.0.3
+# [0.0.3](https://github.com/opera-adt/dolphin/compare/v0.0.2...v0.0.3) - 2023-01-26
 
 **Added**
 
@@ -97,7 +97,7 @@ Removed requirements:
 - Renamed module to `_log.py`
 - `workflows/wrapped_phase.py` absorbed much logic formerly in `s1_disp_stack.py`.
 
-# 0.0.2
+# [0.0.2](https://github.com/opera-adt/dolphin/compare/v0.0.1...v0.0.2) - 2023-01-24
 
 **Added**
 
@@ -120,7 +120,7 @@ Added requirements:
 - tqdm>=4.60
 
 
-# 0.0.1
+# [0.0.1] - 2022-12-09
 
 **Added**
 
