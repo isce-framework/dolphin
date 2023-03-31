@@ -131,10 +131,7 @@ def create_output_product(
             group=f,
             name="spatial_correlation",
             data=spatial_corr_arr,
-            description=(
-                "Estimate of spatial correlation of the wrapped interferogram used"
-                " during unwrapping"
-            ),
+            description="Multilooked sample interferometric correlation",
             fillvalue=np.nan,
             attrs=dict(units="unitless"),
         )

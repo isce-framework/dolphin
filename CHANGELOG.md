@@ -1,7 +1,28 @@
-# Unreleased
+# v0.0.5
+
+**Added**
+
+- First version of the `_product.py` module to output the combined NetCDF product file.
+- `_pge_runconfig.py` module to handle the separate PGE-compatible configurion, which translates to-from the `Workflow` object.
+- `docker/build-docker-image.sh` script to build the docker image.
+- Release scripts for generating documentation and validating output data.
+- Use of a spatial correlation estimate for unwrapping purposes, rather than temporal coherence.
+  - This is much more useful when the stack size is small (high temporal coherence), and `snaphu` is used for unwrapping.
+- `masking.py` module for masking the interferogram/combinined multiple external masks of varying 1/0 conventions.
+- Ability to use existing amplitude mean/dispersion files for the PS portion of the workflow, skipping the step where we compute it using the SLC stack. Useful for small stack sizes
+- Added a `create_only` option to `write_arr` to create an empty file without writing data (e.g. to check the boundary results of stitching)
+
 
 **Changed**
+- The YAML output/input functions are moved to a `YamlModel` class, which is a subclass of `pydantic.BaseModel`.
+  - This allows us to use it in both `config.py` and `_pge_runconfig.py`.
+- Refactoring of the `Workflow` layout to more easily extract the input/output files for the PGE run.
 
+**Fixed**
+
+- Compressed SLC outputs were getting corrupted upon writing when using strides > 1.
+- Single-update interferograms where the first SLC input is a compressed SLC was broken (using the wrong size raster).
+  - Now the result will simply copy over the phase-linking result, which is already referenced to the first raster.
 
 **Dependencies**
 
