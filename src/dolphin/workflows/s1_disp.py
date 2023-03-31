@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-import shutil
 from collections import defaultdict
 from pathlib import Path
 from pprint import pformat
@@ -137,13 +136,13 @@ def run(
         )
 
     if cfg.save_compressed_slc:
-        # TODO: Do i need to make this into some kind of standard hdf5 product?
-        # TODO: What kind of metadata do I need to attach to this?
         logger.info(f"Saving {len(comp_slc_dict.items())} compressed SLCs")
-        for burst, comp_slc_file in comp_slc_dict.items():
-            out_path = cfg.output_directory / "compressed_slcs" / burst
-            out_path.mkdir(parents=True, exist_ok=True)
-            shutil.copy(comp_slc_file, out_path)
+        output_dir = cfg.output_directory / "compressed_slcs"
+        output_dir.mkdir(exist_ok=True)
+        _product._create_compressed_products(
+            comp_slc_dict=comp_slc_dict,
+            output_dir=output_dir,
+        )
 
 
 def _create_burst_cfg(

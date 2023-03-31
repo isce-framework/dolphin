@@ -83,13 +83,13 @@ def run(cfg: Workflow, debug: bool = False) -> Tuple[List[Path], Path, Path]:
     # #########################
     pl_path = cfg.phase_linking._directory
 
-    watcher = NvidiaMemoryWatcher() if utils.gpu_is_available() else None
     phase_linked_slcs = list(pl_path.glob("2*.tif"))
     if len(phase_linked_slcs) > 0:
         logger.info(f"Skipping EVD step, {len(phase_linked_slcs)} files already exist")
         comp_slc_file = next(pl_path.glob("compressed*tif"))
         tcorr_file = next(pl_path.glob("tcorr*tif"))
     else:
+        watcher = NvidiaMemoryWatcher() if utils.gpu_is_available() else None
         logger.info(f"Running sequential EMI step in {pl_path}")
         if cfg.workflow_name == "single":
             phase_linked_slcs, comp_slc_file, tcorr_file = single.run_evd_single(
@@ -121,8 +121,8 @@ def run(cfg: Workflow, debug: bool = False) -> Tuple[List[Path], Path, Path]:
             )
             comp_slc_file = comp_slcs[-1]
 
-    if watcher:
-        watcher.notify_finished()
+        if watcher:
+            watcher.notify_finished()
 
     # ###################################################
     # 4. Form interferograms from estimated wrapped phase
