@@ -130,8 +130,11 @@ def run_evd_sequential(
         logger.info("Only one ministack, skipping offset calculation.")
         assert len(output_slc_files) == 1
         assert len(tcorr_files) == 1
+        outputs_renamed = []
         for slc_fname in output_slc_files[0]:
-            slc_fname.rename(output_folder / slc_fname.name)
+            n = output_folder / slc_fname.name
+            slc_fname.rename(n)
+            outputs_renamed.append(n)
 
         tcorr_files[0].rename(output_tcorr_file)
 
@@ -140,7 +143,7 @@ def run_evd_sequential(
 
         # return output_slc_files, comp_slc_file, tcorr_file
         # different here for sequential
-        return output_slc_files[0], [output_comp_slc_file], output_tcorr_file
+        return outputs_renamed, [output_comp_slc_file], output_tcorr_file
 
     # Compute the adjustments by running EVD on the compressed SLCs
     comp_output_folder = output_folder / "adjustments"
