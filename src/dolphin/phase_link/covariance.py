@@ -116,7 +116,7 @@ def estimate_stack_covariance_cpu(
     return C_arrays
 
 
-@njit(cache=True)
+@njit
 def coh_mat_single(slc_samples, cov_mat=None, neighbor_mask=None):
     """Given a (n_slc, n_samps) samples, estimate the coherence matrix."""
     nslc, nsamps = slc_samples.shape
@@ -242,29 +242,3 @@ def _coh_mat_gpu(samples_stack, neighbors_stack, do_shp, cov_mat):
                 cov_mat[i_slc, j_slc] = c
                 cov_mat[j_slc, i_slc] = c.conjugate()
         cov_mat[i_slc, i_slc] = 1.0
-
-
-def _save_covariance(output_cov_file, C_arrays):
-    import h5py
-
-    # TODO: accept slices for where to save in existing file
-    # TODO: convert to UInt8 to compress ussing fill/compress
-    # encoding_abs = dict(
-    #     scale_factor=1/255,
-    #     _FillValue=0,
-    #     dtype="uint8",
-    #     compression="gzip",
-    #     shuffle=True
-    # )
-    coh_mag = np.abs(C_arrays)
-    coh_mag_uint = (np.nan_to_num(coh_mag) * 255).astype(np.uint8)
-
-    print(f"Saving covariance matrix at each pixel to {output_cov_file}")
-    with h5py.File(output_cov_file, "w") as f:
-        f.create_dataset(
-            "correlation",
-            data=coh_mag_uint,
-            chunks=True,
-            compression="gzip",
-            shuffle=True,
-        )

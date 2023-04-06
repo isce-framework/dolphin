@@ -1,15 +1,15 @@
-import logging
 from typing import Dict, Optional
 
 import numpy as np
 
-from dolphin._types import Filename
+from dolphin._log import get_log
+from dolphin.utils import decimate
 from dolphin.workflows import ShpMethod
 
 from . import covariance, metrics, shp
 from .mle import mle_stack
 
-logger = logging.getLogger(__name__)
+logger = get_log(__name__)
 
 
 def run_cpu(
@@ -22,7 +22,6 @@ def run_cpu(
     shp_method: str = ShpMethod.KL,
     avg_mag: Optional[np.ndarray] = None,
     var_mag: Optional[np.ndarray] = None,
-    output_cov_file: Optional[Filename] = None,
     n_workers: int = 1,
     **kwargs,
 ):
@@ -57,8 +56,6 @@ def run_cpu(
     var_mag : np.ndarray, optional
         The variance of the magnitude of the SLC stack, used to find the
         SHP neighbors to fill within each look window if shp_
-    output_cov_file : str, optional
-        HDF5 filename to save the estimated covariance at each pixel.
     n_workers : int, optional
         The number of workers to use for (CPU version) multiprocessing.
         If 1 (default), no multiprocessing is used.
@@ -94,8 +91,6 @@ def run_cpu(
         neighbor_arrays=neighbor_arrays,
         n_workers=n_workers,
     )
-    if output_cov_file:
-        covariance._save_covariance(output_cov_file, C_arrays)
 
     output_phase = mle_stack(C_arrays, beta, reference_idx, n_workers=n_workers)
     cpx_phase = np.exp(1j * output_phase)
@@ -105,14 +100,8 @@ def run_cpu(
     if use_slc_amp:
         # use the amplitude from the original SLCs
         # account for the strides when grabbing original data
-        xs, ys = strides["x"], strides["y"]
-        _, rows, cols = slc_stack.shape
         # we need to match `io.compute_out_shape` here
-        start_r = ys // 2
-        start_c = xs // 2
-        end_r = (rows // ys) * ys + 1
-        end_c = (cols // xs) * xs + 1
-        slcs_decimated = slc_stack[:, start_r:end_r:ys, start_c:end_c:xs]
+        slcs_decimated = decimate(slc_stack, strides)
         mle_est *= np.abs(slcs_decimated)
 
     return mle_est, temp_coh

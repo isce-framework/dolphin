@@ -7,7 +7,7 @@ References
     Geosciences (2022): 105291.
 """
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional, Tuple
 
 import numpy as np
 
@@ -39,7 +39,7 @@ def run_evd_single(
     max_bytes: float = 32e6,
     n_workers: int = 1,
     gpu_enabled: bool = True,
-):
+) -> Tuple[List[Path], Path, Path]:
     """Estimate wrapped phase for one ministack."""
     # TODO: extract common stuff between here and sequential
     output_folder = Path(output_folder)
@@ -112,6 +112,7 @@ def run_evd_single(
         nbands=1,
         nodata=0,
         # Note that the compressed SLC is the same size as the original SLC
+        # so we skip the `strides` argument
     )
 
     # Create the empty compressed temporal coherence file
@@ -132,8 +133,6 @@ def run_evd_single(
 
     # Note: dividing by len(stack) since cov is shape (rows, cols, nslc, nslc)
     # so we need to load less to not overflow memory
-    # TODO: more robust way to do this... or change this to a "loading_size",
-    # then calculate the max_bytes somehow based on testing
     stack_max_bytes = max_bytes / len(vrt)
     overlaps = (yhalf, xhalf)
     block_gen = vrt.iter_blocks(
@@ -197,7 +196,7 @@ def run_evd_single(
         )
         # Save the compressed SLC block
         # TODO: make a flag? We don't always need to save the compressed SLCs
-        writer.queue_write(cur_comp_slc, comp_slc_file, out_row_start, out_col_start)
+        writer.queue_write(cur_comp_slc, comp_slc_file, rows.start, cols.start)
         # logger.debug(f"Saved compressed block SLC to {cur_comp_slc_file}")
 
     # Block until all the writers for this ministack have finished

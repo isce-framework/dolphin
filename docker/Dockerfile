@@ -1,9 +1,11 @@
+# This is the image we are going add micromaba to:
+# See https://github.com/oracle/container-images or https://hub.docker.com/_/oraclelinux
+ARG BASE=oraclelinux:8-slim@sha256:5da605ca1fe5a75824cdca00b3a5f39907a2057c0cc0c34c48feb33b4915a3e6
+
 # bring in the micromamba image so we can copy files from it
 FROM mambaorg/micromamba:1.1.0@sha256:53697a4bae2d9a4407463b8f314d370e201c58f6b5e5ff7c1f24699ed7e37a41 AS micromamba
 
-# This is the image we are going add micromaba to:
-# See https://github.com/oracle/container-images or https://hub.docker.com/_/oraclelinux
-FROM oraclelinux:8-slim@sha256:5da605ca1fe5a75824cdca00b3a5f39907a2057c0cc0c34c48feb33b4915a3e6
+FROM $BASE
 
 ARG MAMBA_USER=mamba
 ARG MAMBA_USER_ID=1000
@@ -53,6 +55,9 @@ ARG MAMBA_DOCKERFILE_ACTIVATE=1
 # --no-deps because they are installed with conda
 RUN python -m pip install --no-deps .
 
+# Run the entrypoint from the /work directory
+# This means if they mount a volume to /work, we won't be mixing in the repository code
+WORKDIR /work
 
-ENTRYPOINT ["/usr/local/bin/_entrypoint.sh", "python", "-m", "dolphin"]
-CMD ["--help"]
+ENTRYPOINT ["/usr/local/bin/_entrypoint.sh"]
+CMD ["dolphin", "--help"]

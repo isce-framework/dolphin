@@ -10,7 +10,7 @@ def test_help(capsys, option):
     except SystemExit:
         pass
     output = capsys.readouterr().out
-    assert "usage: dolphin [-h] {run,config}" in output
+    assert " dolphin [-h] [--version] {run,config}" in output
 
 
 @pytest.mark.parametrize("sub_cmd", ("run", "config"))

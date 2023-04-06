@@ -3,12 +3,11 @@ import re
 import resource
 import sys
 import warnings
-from os import fspath
 from pathlib import Path
-from typing import Iterable, List, Optional, Tuple, Union
+from typing import Dict, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
-from numpy.typing import DTypeLike
+from numpy.typing import ArrayLike, DTypeLike
 from osgeo import gdal, gdal_array, gdalconst
 from rich.progress import MofNCompleteColumn, Progress, SpinnerColumn, TimeElapsedColumn
 
@@ -226,76 +225,6 @@ def sort_files_by_date(
     return list(file_list), list(dates)
 
 
-def combine_mask_files(
-    mask_files: List[Filename],
-    scratch_dir: Filename,
-    output_file_name: str = "combined_mask.tif",
-    dtype: str = "uint8",
-    zero_is_valid: bool = False,
-) -> Path:
-    """Combine multiple mask files into a single mask file.
-
-    Parameters
-    ----------
-    mask_files : list of Path or str
-        List of mask files to combine.
-    scratch_dir : Path or str
-        Directory to write output file.
-    output_file_name : str
-        Name of output file to write into `scratch_dir`
-    dtype : str, optional
-        Data type of output file. Default is uint8.
-    zero_is_valid : bool, optional
-        If True, zeros mark the valid pixels (like numpy's masking convention).
-        Default is False (matches ISCE convention).
-
-    Returns
-    -------
-    output_file : Path
-    """
-    output_file = Path(scratch_dir) / output_file_name
-
-    ds = gdal.Open(fspath(mask_files[0]))
-    projection = ds.GetProjection()
-    geotransform = ds.GetGeoTransform()
-
-    if projection is None and geotransform is None:
-        logger.warning("No projection or geotransform found on file %s", mask_files[0])
-
-    nodata = 1 if zero_is_valid else 0
-
-    # Create output file
-    driver = gdal.GetDriverByName("GTiff")
-    ds_out = driver.Create(
-        fspath(output_file),
-        ds.RasterXSize,
-        ds.RasterYSize,
-        1,
-        numpy_to_gdal_type(dtype),
-    )
-    ds_out.SetGeoTransform(geotransform)
-    ds_out.SetProjection(projection)
-    ds_out.GetRasterBand(1).SetNoDataValue(nodata)
-    ds = None
-
-    # Loop through mask files and update the total mask (starts with all valid)
-    mask_total = np.ones((ds.RasterYSize, ds.RasterXSize), dtype=bool)
-    for mask_file in mask_files:
-        ds_input = gdal.Open(fspath(mask_file))
-        mask = ds_input.GetRasterBand(1).ReadAsArray().astype(bool)
-        if zero_is_valid:
-            mask = ~mask
-        mask_total = np.logical_and(mask_total, mask)
-        ds_input = None
-
-    if zero_is_valid:
-        mask_total = ~mask_total
-    ds_out.GetRasterBand(1).WriteArray(mask_total.astype(dtype))
-    ds_out = None
-
-    return output_file
-
-
 def full_suffix(filename: Filename):
     """Get the full suffix of a filename, including multiple dots.
 
@@ -507,6 +436,33 @@ def upsample_nearest(
     return arr_out
 
 
+def decimate(arr: ArrayLike, strides: Dict[str, int]) -> ArrayLike:
+    """Decimate an array by strides in the x and y directions.
+
+    Output will match [`io.compute_out_shape`][dolphin.io.compute_out_shape]
+
+    Parameters
+    ----------
+    arr : ArrayLike
+        2D or 3D array to decimate.
+    strides : Dict[str, int]
+        The strides in the x and y directions.
+
+    Returns
+    -------
+    ArrayLike
+        The decimated array.
+
+    """
+    xs, ys = strides["x"], strides["y"]
+    rows, cols = arr.shape[-2:]
+    start_r = ys // 2
+    start_c = xs // 2
+    end_r = (rows // ys) * ys + 1
+    end_c = (cols // xs) * xs + 1
+    return arr[..., start_r:end_r:ys, start_c:end_c:xs]
+
+
 def get_max_memory_usage(units: str = "GB", children: bool = True) -> float:
     """Get the maximum memory usage of the current process.
 
@@ -580,3 +536,55 @@ def get_gpu_memory(pid: Optional[int] = None, gpu_id: int = 0) -> float:
     else:
         procs = [p for p in processes if p["pid"] == pid]
         return get_mem(procs[0]) if procs else 0.0
+
+
+def moving_window_mean(
+    image: ArrayLike, size: Union[int, Tuple[int, int]]
+) -> np.ndarray:
+    """Calculate the mean of a moving window of size `size`.
+
+    Parameters
+    ----------
+    image : ndarray
+        input image
+    size : int or tuple of int
+        Window size. If a single int, the window is square.
+        If a tuple of (row_size, col_size), the window can be rectangular.
+
+    Returns
+    -------
+    ndarray
+        image the same size as `image`, where each pixel is the mean
+        of the corresponding window.
+    """
+    if isinstance(size, int):
+        size = (size, size)
+    if len(size) != 2:
+        raise ValueError("size must be a single int or a tuple of 2 ints")
+    if size[0] % 2 == 0 or size[1] % 2 == 0:
+        raise ValueError("size must be odd in both dimensions")
+
+    row_size, col_size = size
+    row_pad = row_size // 2
+    col_pad = col_size // 2
+
+    # Pad the image with zeros
+    image_padded = np.pad(
+        image, ((row_pad + 1, row_pad), (col_pad + 1, col_pad)), mode="constant"
+    )
+
+    # Calculate the cumulative sum of the image
+    integral_img = np.cumsum(np.cumsum(image_padded, axis=0), axis=1)
+    if not np.iscomplexobj(integral_img):
+        integral_img = integral_img.astype(float)
+
+    # Calculate the mean of the moving window
+    # Uses the algorithm from https://en.wikipedia.org/wiki/Summed-area_table
+    window_mean = (
+        integral_img[row_size:, col_size:]
+        - integral_img[:-row_size, col_size:]
+        - integral_img[row_size:, :-col_size]
+        + integral_img[:-row_size, :-col_size]
+    )
+    window_mean /= row_size * col_size
+    return window_mean

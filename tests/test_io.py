@@ -53,6 +53,12 @@ def test_load_masked(raster_with_nan_block):
     assert np.all(np.isnan(arr[:32, :32]))
 
 
+def test_load_masked_empty_nodata(raster_100_by_200):
+    arr = io.load_gdal(raster_100_by_200, masked=True)
+    assert isinstance(arr, np.ma.masked_array)
+    assert arr.mask == np.ma.nomask
+
+
 def test_load_band(tmp_path, slc_stack, slc_file_list):
     # Check on a VRT, which has multiple bands
     vrt_file = tmp_path / "test.vrt"
@@ -113,7 +119,7 @@ def test_write_empty_like(raster_100_by_200, tmpdir):
 def test_write_metadata(raster_100_by_200, tmpdir):
     save_name = tmpdir / "empty_nometa.tif"
     io.write_arr(arr=None, like_filename=raster_100_by_200, output_name=save_name)
-    assert io.get_dtype(save_name) == np.complex64
+    assert io.get_raster_dtype(save_name) == np.complex64
     assert io.get_raster_nodata(save_name) is None
 
     save_name = tmpdir / "empty_bool_255_nodata.tif"

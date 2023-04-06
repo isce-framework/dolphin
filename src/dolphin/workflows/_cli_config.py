@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 import argparse
 import sys
+from multiprocessing import cpu_count
 from pathlib import Path
 from typing import List, Optional, Tuple, Union
 
@@ -18,7 +19,7 @@ def create_config(
     outfile: Union[str, Path],
     slc_files: Optional[List[str]] = None,
     subdataset: Optional[str] = None,
-    mask_files: Optional[List[str]] = None,
+    mask_file: Optional[str] = None,
     ministack_size: Optional[int] = 15,
     half_window_size: Tuple[int, int] = (11, 5),
     shp_method: ShpMethod = ShpMethod.KL,
@@ -28,7 +29,9 @@ def create_config(
     n_workers: int = 16,
     threads_per_worker: int = 1,
     no_gpu: bool = False,
+    use_icu: bool = False,
     single_update: bool = False,
+    log_file: Optional[Path] = None,
 ):
     """Create a config for a displacement workflow."""
     if single_update:
@@ -46,13 +49,13 @@ def create_config(
 
     cfg = Workflow(
         workflow_name=workflow_name,
-        inputs=dict(
-            cslc_file_list=slc_files,
-            mask_files=mask_files,
+        cslc_file_list=slc_files,
+        mask_file=mask_file,
+        input_options=dict(
             subdataset=subdataset,
         ),
         interferogram_network=interferogram_network,
-        outputs=dict(
+        output_options=dict(
             strides={"x": strides[0], "y": strides[1]},
         ),
         phase_linking=dict(
@@ -63,12 +66,16 @@ def create_config(
         ps_options=dict(
             amp_dispersion_threshold=amp_dispersion_threshold,
         ),
+        unwrap_options=dict(
+            unwrap_method=("icu" if use_icu else "snaphu"),
+        ),
         worker_settings=dict(
             block_size_gb=block_size_gb,
             n_workers=n_workers,
             threads_per_worker=threads_per_worker,
             gpu_enabled=(not no_gpu),
         ),
+        log_file=log_file,
     )
 
     if outfile == "-":  # Write to stdout
@@ -116,6 +123,14 @@ def get_parser(subparser=None, subcommand_name="run"):
             f" None is passed, the default is {OPERA_DATASET_NAME}."
         ),
     )
+    parser.add_argument(
+        "--mask-file",
+        help=(
+            "Path to Byte mask file used to ignore low correlation/bad data (e.g water"
+            " mask). Convention is 0 for no data/invalid, and 1 for good data."
+        ),
+    )
+    parser.add_argument("--log-file", help="Path to log to, in addition to stderr")
 
     # Phase linking options
     pl_group = parser.add_argument_group("Phase Linking options")
@@ -150,6 +165,13 @@ def get_parser(subparser=None, subcommand_name="run"):
         type=float,
         default=0.25,
         help="Threshold for the amplitude dispersion.",
+    )
+    # Unwrap options
+    unwrap_group = parser.add_argument_group("Unwrap options")
+    unwrap_group.add_argument(
+        "--use-icu",
+        action="store_true",
+        help="Use the ICU algorithm instead of the default SNAPHU.",
     )
 
     # Get Outputs from the command line
@@ -187,8 +209,8 @@ def get_parser(subparser=None, subcommand_name="run"):
     worker_group.add_argument(
         "--n-workers",
         type=int,
-        default=16,
-        help="Number of workers to use.",
+        default=cpu_count(),
+        help="Number of CPU workers to use (for CPU processing).",
     )
     worker_group.add_argument(
         "--threads-per-worker",
@@ -196,11 +218,6 @@ def get_parser(subparser=None, subcommand_name="run"):
         default=1,
         help="Number of threads to use per worker.",
     )
-    # parser.add_argument(
-    #     "--mask-files",
-    #     nargs=argparse.ZERO_OR_MORE,
-    #     help="Path to a file containing a list of mask files.",
-    # )
     parser.set_defaults(run_func=create_config)
 
     return parser

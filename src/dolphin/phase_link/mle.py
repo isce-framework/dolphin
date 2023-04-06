@@ -6,7 +6,6 @@ import numpy as np
 import pymp
 from scipy.linalg import eigh
 
-from dolphin._types import Filename
 from dolphin.utils import get_array_module, gpu_is_available, take_looks
 
 logger = logging.getLogger(__name__)
@@ -30,7 +29,6 @@ def run_mle(
     avg_mag: Optional[np.ndarray] = None,
     var_mag: Optional[np.ndarray] = None,
     use_slc_amp: bool = True,
-    output_cov_file: Optional[Filename] = None,
     n_workers: int = 1,
     gpu_enabled: bool = False,
 ) -> Tuple[np.ndarray, np.ndarray]:
@@ -76,8 +74,6 @@ def run_mle(
     use_slc_amp : bool, optional
         Whether to use the SLC amplitude when outputting the MLE estimate,
         or to set the SLC amplitude to 1.0. By default True.
-    output_cov_file : str, optional
-        HDF5 filename to save the estimated covariance at each pixel.
     n_workers : int, optional
         The number of workers to use for (CPU version) multiprocessing.
         If 1 (default), no multiprocessing is used.
@@ -138,7 +134,6 @@ def run_mle(
             avg_mag=avg_mag,
             var_mag=var_mag,
             use_slc_amp=use_slc_amp,
-            output_cov_file=output_cov_file,
             n_workers=n_workers,
         )
     else:
@@ -150,7 +145,6 @@ def run_mle(
             reference_idx=reference_idx,
             shp_method=shp_method,
             use_slc_amp=use_slc_amp,
-            output_cov_file=output_cov_file,
             # is it worth passing the blocks-per-grid?
         )
 

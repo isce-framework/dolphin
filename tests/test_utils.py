@@ -3,6 +3,7 @@ from pathlib import Path
 
 import numpy as np
 import numpy.testing as npt
+import pytest
 
 from dolphin import utils
 
@@ -241,3 +242,42 @@ def test_upsample_nearest():
     assert upsampled3d.shape == (3, 4, 4)
     for img in upsampled3d:
         npt.assert_array_equal(img, upsampled)
+
+
+def test_moving_window_mean_basic():
+    image = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9]])
+    result = utils.moving_window_mean(image, 3)
+    expected = np.array(
+        [
+            [1.33333333, 2.33333333, 1.77777778],
+            [3.0, 5.0, 3.66666667],
+            [2.66666667, 4.33333333, 3.11111111],
+        ]
+    )
+    assert np.allclose(result, expected)
+
+
+def test_moving_window_mean_single_pixel():
+    image = np.array([[5]])
+    result = utils.moving_window_mean(image, 1)
+    expected = np.array([[5]])
+    assert np.allclose(result, expected)
+
+
+def test_moving_window_mean_even_size():
+    image = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9]])
+    with pytest.raises(ValueError):
+        utils.moving_window_mean(image, (2, 2))
+
+
+def test_moving_window_mean_invalid_size_type():
+    image = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9]])
+    with pytest.raises(ValueError):
+        utils.moving_window_mean(image, (1, 2, 3))
+
+
+def test_moving_window_mean_empty_image():
+    image = np.array([[]])
+    result = utils.moving_window_mean(image, 1)
+    expected = np.array([[]])
+    assert np.allclose(result, expected)
