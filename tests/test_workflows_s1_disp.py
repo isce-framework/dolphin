@@ -42,7 +42,7 @@ def opera_slc_files(tmp_path, slc_stack) -> List[Path]:
     return file_list
 
 
-def test_s1_disp_run(opera_slc_files: List[Path], tmpdir):
+def test_s1_disp_run_single(opera_slc_files: List[Path], tmpdir):
     with tmpdir.as_cwd():
         cfg = config.Workflow(
             workflow_name=config.WorkflowName.SINGLE,
@@ -51,6 +51,18 @@ def test_s1_disp_run(opera_slc_files: List[Path], tmpdir):
                 network_type=config.InterferogramNetworkType.MANUAL_INDEX,
                 indexes=[(0, -1)],
             ),
+            phase_linking=dict(
+                ministack_size=500,
+            ),
+        )
+        s1_disp.run(cfg)
+
+
+def test_s1_disp_run_stack(opera_slc_files: List[Path], tmpdir):
+    with tmpdir.as_cwd():
+        cfg = config.Workflow(
+            workflow_name=config.WorkflowName.STACK,
+            cslc_file_list=opera_slc_files,
             phase_linking=dict(
                 ministack_size=500,
             ),
