@@ -5,7 +5,7 @@ from typing import Tuple
 import numba
 import numpy as np
 from numba import cuda
-from numpy.typing import ArrayLike, NDArray
+from numpy.typing import ArrayLike
 
 from ._utils import _get_slices_gpu
 
@@ -341,7 +341,7 @@ def estimate_neighbors_kl_cpu(
     var: ArrayLike,
     halfwin_rowcol: Tuple[int, int],
     threshold: float = 0.5,
-) -> NDArray:
+) -> np.ndarray:
     """Get the SHPs using the KL distance for each pixel in a block.
 
     Parameters
