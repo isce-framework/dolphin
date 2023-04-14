@@ -1,7 +1,11 @@
 import itertools
 import re
+import subprocess
 from pathlib import Path
 from typing import Dict, List, Optional, Pattern, Sequence, Union
+
+import h5py
+from osgeo import ogr
 
 from dolphin import io
 from dolphin._log import get_log
@@ -159,3 +163,62 @@ def setup_output_folder(
 
         output_files.append(output_path)
     return output_files
+
+
+def get_union_polygon(opera_file_list: List[Filename]):
+    """Get the union of the bounding polygons of the given files.
+
+    Parameters
+    ----------
+    opera_file_list : List[Filename]
+        List of COMPASS SLC filenames.
+    """
+    polygons = []
+    dset_name = "science/SENTINEL1/identification/bounding_polygon"
+    for f in opera_file_list:
+        with h5py.File(f) as hf:
+            wkt_str = hf[dset_name][()].decode("utf-8")
+        geom = ogr.CreateGeometryFromWkt(wkt_str)
+        polygons.append(geom)
+
+    total_poly = polygons[0]
+    for geom in polygons[1:]:
+        total_poly = total_poly.Union(geom)
+    return total_poly
+
+
+def make_nodata_mask(opera_file_list: List[Filename], out_file: Filename):
+    """Make a dummy raster from the first file in the list.
+
+    Parameters
+    ----------
+    opera_file_list : List[Filename]
+        List of COMPASS SLC filenames.
+    out_file : Filename
+        Output filename.
+    """
+    from dolphin.workflows.config import OPERA_DATASET_NAME
+
+    # Get the union of all the polygons and convert to a temp geojson
+    union_poly = get_union_polygon(opera_file_list)
+    temp_vector = "temp.geojson"
+    with open(temp_vector, "w") as f:
+        f.write(union_poly.ExportToJson())
+
+    # Make a dummy raster from the first file
+    cmd = (
+        f"gdal_calc.py --quiet --outfile {out_file} --type Byte  -A"
+        f" NETCDF:{opera_file_list[0]}:{OPERA_DATASET_NAME} --calc 'numpy.nan_to_num(A)"
+        " * 0'"
+    )
+    # TODO: Log and then run
+    logger.info(cmd)
+    subprocess.check_call(cmd, shell=True)
+
+    # Now burn in the union of all polygons
+    cmd = f"gdal_rasterize -burn 1 poly.geojson {out_file}"
+    logger.info(cmd)
+    subprocess.check_call(cmd, shell=True)
+
+    # Clean up the temp file
+    Path(temp_vector).unlink()
