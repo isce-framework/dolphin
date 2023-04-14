@@ -3,7 +3,7 @@
 This module heavily relies on GDAL and provides many convenience/
 wrapper functions to write/iterate over blocks of large raster files.
 """
-import copy
+import math
 from datetime import date
 from os import fspath
 from pathlib import Path
@@ -13,12 +13,11 @@ import numpy as np
 from numpy.typing import ArrayLike, DTypeLike
 from osgeo import gdal
 from pyproj import CRS
-from tqdm.auto import tqdm
 
 from dolphin._background import _DEFAULT_TIMEOUT, BackgroundReader, BackgroundWriter
 from dolphin._log import get_log
 from dolphin._types import Filename
-from dolphin.utils import gdal_to_numpy_type, numpy_to_gdal_type
+from dolphin.utils import gdal_to_numpy_type, numpy_to_gdal_type, progress
 
 gdal.UseExceptions()
 
@@ -38,6 +37,7 @@ DEFAULT_TIFF_OPTIONS = (
     f"BLOCKXSIZE={DEFAULT_TILE_SIZE[1]}",
     f"BLOCKYSIZE={DEFAULT_TILE_SIZE[0]}",
 )
+DEFAULT_ENVI_OPTIONS = ("SUFFIX=ADD",)
 DEFAULT_HDF5_OPTIONS = dict(
     # https://docs.h5py.org/en/stable/high/dataset.html#filter-pipeline
     chunks=DEFAULT_TILE_SIZE,
@@ -47,7 +47,7 @@ DEFAULT_HDF5_OPTIONS = dict(
 )
 DEFAULT_DATETIME_FORMAT = "%Y%m%d"
 
-logger = get_log()
+logger = get_log(__name__)
 
 
 def load_gdal(
@@ -121,7 +121,7 @@ def load_gdal(
         return out
     # Get the nodata value
     nd = get_raster_nodata(filename)
-    if np.isnan(nd):
+    if nd is not None and np.isnan(nd):
         return np.ma.masked_invalid(out)
     else:
         return np.ma.masked_equal(out, nd)
@@ -216,7 +216,43 @@ def get_raster_nodata(filename: Filename, band: int = 1) -> Optional[float]:
     return nodata
 
 
-def get_dtype(filename: Filename) -> np.dtype:
+def get_raster_crs(filename: Filename) -> CRS:
+    """Get the CRS from a file.
+
+    Parameters
+    ----------
+    filename : Filename
+        Path to the file to load.
+
+    Returns
+    -------
+    CRS
+        CRS.
+    """
+    ds = gdal.Open(fspath(filename))
+    crs = CRS.from_wkt(ds.GetProjection())
+    return crs
+
+
+def get_raster_gt(filename: Filename) -> List[float]:
+    """Get the geotransform from a file.
+
+    Parameters
+    ----------
+    filename : Filename
+        Path to the file to load.
+
+    Returns
+    -------
+    Tuple[float, float, float, float, float, float]
+        Geotransform.
+    """
+    ds = gdal.Open(fspath(filename))
+    gt = ds.GetGeoTransform()
+    return gt
+
+
+def get_raster_dtype(filename: Filename) -> np.dtype:
     """Get the data type from a file.
 
     Parameters
@@ -232,6 +268,24 @@ def get_dtype(filename: Filename) -> np.dtype:
     ds = gdal.Open(fspath(filename))
     dt = gdal_to_numpy_type(ds.GetRasterBand(1).DataType)
     return dt
+
+
+def get_raster_driver(filename: Filename) -> str:
+    """Get the GDAL driver `ShortName` from a file.
+
+    Parameters
+    ----------
+    filename : Filename
+        Path to the file to load.
+
+    Returns
+    -------
+    str
+        Driver name.
+    """
+    ds = gdal.Open(fspath(filename))
+    driver = ds.GetDriver().ShortName
+    return driver
 
 
 def get_raster_bounds(
@@ -273,8 +327,9 @@ def xy_to_rowcol(
     col, row = _apply_gt(ds, filename, x, y, inverse=True)
     # Need to convert to int, otherwise we get a float
     if do_round:
-        row = round(row)
-        col = round(col)
+        # round up to the nearest pixel, instead of banker's rounding
+        row = int(math.floor(row + 0.5))
+        col = int(math.floor(col + 0.5))
     return int(row), int(col)
 
 
@@ -342,11 +397,12 @@ def write_arr(
     output_name: Filename,
     like_filename: Optional[Filename] = None,
     driver: Optional[str] = "GTiff",
-    options: Optional[List] = None,
+    options: Optional[Sequence] = None,
     nbands: Optional[int] = None,
     shape: Optional[Tuple[int, int]] = None,
     dtype: Optional[DTypeLike] = None,
     geotransform: Optional[Sequence[float]] = None,
+    strides: Optional[Dict[str, int]] = None,
     projection: Optional[Any] = None,
     nodata: Optional[Union[float, str]] = None,
 ):
@@ -379,6 +435,9 @@ def write_arr(
     geotransform : List, optional
         Geotransform to save. Default is the geotransform of like_filename.
         See https://gdal.org/tutorials/geotransforms_tut.html .
+    strides : dict, optional
+        If using `like_filename`, used to change the pixel size of the output file.
+        {"x": x strides, "y": y strides}
     projection : str or int, optional
         Projection to save. Default is the projection of like_filename.
         Possible values are anything parse-able by ``pyproj.CRS.from_user_input``
@@ -400,10 +459,15 @@ def write_arr(
         ysize, xsize = arr.shape[-2:]
         gdal_dtype = numpy_to_gdal_type(arr.dtype)
     else:
+        # If not passing an array to write, get shape/dtype from like_filename
         if shape is not None:
             ysize, xsize = shape
         else:
             xsize, ysize = ds_like.RasterXSize, ds_like.RasterYSize
+            # If using strides, adjust the output shape
+            if strides is not None:
+                ysize, xsize = compute_out_shape((ysize, xsize), strides)
+
         if dtype is not None:
             gdal_dtype = numpy_to_gdal_type(dtype)
         else:
@@ -449,6 +513,11 @@ def write_arr(
         projection = ds_like.GetProjection()
     if geotransform is None and ds_like is not None:
         geotransform = ds_like.GetGeoTransform()
+        # If we're using strides, adjust the geotransform
+        if strides is not None:
+            geotransform = list(geotransform)
+            geotransform[1] *= strides["x"]
+            geotransform[5] *= strides["y"]
 
     # Set the geo/proj information
     if projection:
@@ -456,6 +525,7 @@ def write_arr(
         # this still works if we're passed a WKT string
         projection = CRS.from_user_input(projection).to_wkt()
         ds_out.SetProjection(projection)
+
     if geotransform is not None:
         ds_out.SetGeoTransform(geotransform)
 
@@ -522,8 +592,8 @@ def write_block(
 class Writer(BackgroundWriter):
     """Class to write data to files in a background thread."""
 
-    def __init__(self, max_queue=0, **kw):
-        super().__init__(nq=max_queue, **kw)
+    def __init__(self, max_queue: int = 0, **kwargs):
+        super().__init__(nq=max_queue, name="Writer", **kwargs)
 
     def write(
         self, data: ArrayLike, filename: Filename, row_start: int, col_start: int
@@ -559,15 +629,15 @@ class EagerLoader(BackgroundReader):
 
     def __init__(
         self,
-        filename,
+        filename: Filename,
         block_shape: Tuple[int, int],
         overlaps: Tuple[int, int] = (0, 0),
         skip_empty: bool = True,
         nodata_mask: Optional[ArrayLike] = None,
-        queue_size=2,
-        timeout=_DEFAULT_TIMEOUT,
+        queue_size: int = 1,
+        timeout: float = _DEFAULT_TIMEOUT,
     ):
-        super().__init__(nq=queue_size, timeout=timeout)
+        super().__init__(nq=queue_size, timeout=timeout, name="EagerLoader")
         self.filename = filename
         # Set up the generator of ((row_start, row_end), (col_start, col_end))
         xsize, ysize = get_raster_xysize(filename)
@@ -582,6 +652,7 @@ class EagerLoader(BackgroundReader):
         self._queue_size = queue_size
         self._skip_empty = skip_empty
         self._nodata_mask = nodata_mask
+        self._block_shape = block_shape
         self._nodata = get_raster_nodata(filename)
         if self._nodata is None:
             self._nodata = np.nan
@@ -598,29 +669,32 @@ class EagerLoader(BackgroundReader):
         for rows, cols in self.slices:
             self.queue_read(rows, cols)
 
-        for _ in tqdm(range(len(self.slices))):
-            cur_block, (rows, cols) = self.get_data()
-            logger.debug(f"got data for {rows, cols}: {cur_block.shape}")
+        s_iter = range(len(self.slices))
+        desc = f"Processing {self._block_shape} sized blocks..."
+        with progress() as p:
+            for _ in p.track(s_iter, description=desc):
+                cur_block, (rows, cols) = self.get_data()
+                logger.debug(f"got data for {rows, cols}: {cur_block.shape}")
 
-            if self._skip_empty and self._nodata_mask is not None:
-                if self._nodata_mask[rows, cols].all():
-                    continue
+                if self._skip_empty and self._nodata_mask is not None:
+                    if self._nodata_mask[rows, cols].all():
+                        continue
 
-            if self._skip_empty:
-                # Otherwise look at the actual block we loaded
-                if np.isnan(self._nodata):
-                    block_nodata = np.isnan(cur_block)
-                else:
-                    block_nodata = cur_block == self._nodata
-                if np.all(block_nodata):
-                    continue
-            yield cur_block, (rows, cols)
+                if self._skip_empty:
+                    # Otherwise look at the actual block we loaded
+                    if np.isnan(self._nodata):
+                        block_nodata = np.isnan(cur_block)
+                    else:
+                        block_nodata = cur_block == self._nodata
+                    if np.all(block_nodata):
+                        continue
+                yield cur_block, (rows, cols)
 
         self.notify_finished()
 
 
 def _slice_iterator(
-    arr_shape,
+    arr_shape: Tuple[int, int],
     block_shape: Tuple[int, int],
     overlaps: Tuple[int, int] = (0, 0),
     start_offsets: Tuple[int, int] = (0, 0),
@@ -689,11 +763,12 @@ slice(90, 190, None)), (slice(90, 180, None), slice(180, 250, None))]
 
 
 def get_max_block_shape(
-    filename, nstack: int, max_bytes: float = 64e6
+    filename: Filename, nstack: int, max_bytes: float = 64e6
 ) -> Tuple[int, int]:
-    """Find shape to load from GDAL-readable `filename` with memory size < `max_bytes`.
+    """Find a block shape to load from `filename` with memory size < `max_bytes`.
 
-    Attempts to get an integer number of tiles from the file to avoid partial tiles.
+    Attempts to get an integer number of chunks ("tiles" for geotiffs) from the
+    file to avoid partial tiles.
 
     Parameters
     ----------
@@ -707,47 +782,33 @@ def get_max_block_shape(
 
     Returns
     -------
-    tuple[int]:
+    Tuple[int, int]:
         (num_rows, num_cols) shape of blocks to load from `vrt_file`
     """
-    blockX, blockY = get_raster_block_size(filename)
+    chunk_cols, chunk_rows = get_raster_chunk_size(filename)
     xsize, ysize = get_raster_xysize(filename)
     # If it's written by line, load at least 16 lines at a time
-    blockX = min(max(16, blockX), xsize)
-    blockY = min(max(16, blockY), ysize)
+    chunk_cols = min(max(16, chunk_cols), xsize)
+    chunk_rows = min(max(16, chunk_rows), ysize)
 
     ds = gdal.Open(fspath(filename))
     shape = (ds.RasterYSize, ds.RasterXSize)
-    # get the data type from the raster
-    dt = gdal_to_numpy_type(ds.GetRasterBand(1).DataType)
-    # get the size of the data type
-    nbytes = np.dtype(dt).itemsize
-
-    full_shape = [nstack, *shape]
-    chunk_size_3d = [nstack, blockY, blockX]
-
-    # Find size of 3D chunk to load while staying at ~`max_bytes` bytes of RAM
-    chunks_per_block = max_bytes / (np.prod(chunk_size_3d) * nbytes)
-    row_chunks, col_chunks = 1, 1
-    cur_block_shape = list(copy.copy(chunk_size_3d))
-    while chunks_per_block > 1:
-        # First keep incrementing the number of columns we grab at once time
-        if col_chunks * chunk_size_3d[2] < full_shape[2]:
-            col_chunks += 1
-            cur_block_shape[2] = min(col_chunks * chunk_size_3d[2], full_shape[2])
-        # Then increase the row size if still haven't hit `max_bytes`
-        elif row_chunks * chunk_size_3d[1] < full_shape[1]:
-            row_chunks += 1
-            cur_block_shape[1] = min(row_chunks * chunk_size_3d[1], full_shape[1])
-        else:
-            break
-        chunks_per_block = max_bytes / (np.prod(cur_block_shape) * nbytes)
-    rows, cols = cur_block_shape[1:]
-    return (rows, cols)
+    # get the size of the data type from the raster
+    nbytes = gdal_to_numpy_type(ds.GetRasterBand(1).DataType).itemsize
+    return _increment_until_max(
+        max_bytes=max_bytes,
+        file_chunk_size=[chunk_rows, chunk_cols],
+        shape=shape,
+        nstack=nstack,
+        bytes_per_pixel=nbytes,
+    )
 
 
-def get_raster_block_size(filename):
-    """Get the raster's (blockXsize, blockYsize) on disk."""
+def get_raster_chunk_size(filename: Filename) -> List[int]:
+    """Get size the raster's chunks on disk.
+
+    This is called blockXsize, blockYsize by GDAL.
+    """
     ds = gdal.Open(fspath(filename))
     block_size = ds.GetRasterBand(1).GetBlockSize()
     for i in range(2, ds.RasterCount + 1):
@@ -759,3 +820,37 @@ def get_raster_block_size(filename):
 
 def _format_date_pair(start: date, end: date, fmt=DEFAULT_DATETIME_FORMAT) -> str:
     return f"{start.strftime(fmt)}_{end.strftime(fmt)}"
+
+
+def _increment_until_max(
+    max_bytes: float,
+    file_chunk_size: Sequence[int],
+    shape: Tuple[int, int],
+    nstack: int,
+    bytes_per_pixel: int = 8,
+) -> Tuple[int, int]:
+    """Find size of 3D chunk to load while staying at ~`max_bytes` bytes of RAM."""
+    chunk_rows, chunk_cols = file_chunk_size
+
+    # How many chunks can we fit in max_bytes?
+    chunks_per_block = max_bytes / (
+        (nstack * chunk_rows * chunk_cols) * bytes_per_pixel
+    )
+    num_chunks = [1, 1]
+    cur_block_shape = [chunk_rows, chunk_cols]
+
+    idx = 1  # start incrementing cols
+    while chunks_per_block > 1 and tuple(cur_block_shape) != tuple(shape):
+        # Alternate between adding a row and column chunk by flipping the idx
+        chunk_idx = idx % 2
+        nc = num_chunks[chunk_idx]
+        chunk_size = file_chunk_size[chunk_idx]
+
+        cur_block_shape[chunk_idx] = min(nc * chunk_size, shape[chunk_idx])
+
+        chunks_per_block = max_bytes / (
+            nstack * np.prod(cur_block_shape) * bytes_per_pixel
+        )
+        num_chunks[chunk_idx] += 1
+        idx += 1
+    return cur_block_shape[0], cur_block_shape[1]

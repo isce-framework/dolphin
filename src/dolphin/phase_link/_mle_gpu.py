@@ -1,11 +1,11 @@
 from math import ceil
-from typing import Dict, Optional, Tuple
+from typing import Dict, Tuple
 
 import numpy as np
 from numba import cuda
 
-from dolphin._types import Filename
 from dolphin.io import compute_out_shape
+from dolphin.utils import decimate
 
 from . import covariance, metrics
 from .mle import mle_stack
@@ -15,11 +15,11 @@ def run_gpu(
     slc_stack: np.ndarray,
     half_window: Dict[str, int],
     strides: Dict[str, int] = {"x": 1, "y": 1},
-    beta: float = 0.0,
+    beta: float = 0.01,
     reference_idx: int = 0,
     use_slc_amp: bool = True,
-    output_cov_file: Optional[Filename] = None,
     threads_per_block: Tuple[int, int] = (16, 16),
+    free_mem: bool = False,
     **kwargs,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """Run the GPU version of the stack covariance estimator and MLE solver.
@@ -35,17 +35,18 @@ def run_gpu(
         The (x, y) strides (in pixels) to use for the sliding window.
         By default {"x": 1, "y": 1}
     beta : float, optional
-        The regularization parameter, by default 0.0.
+        The regularization parameter, by default 0.01.
     reference_idx : int, optional
         The index of the (non compressed) reference SLC, by default 0
     use_slc_amp : bool, optional
         Whether to use the SLC amplitude when outputting the MLE estimate,
         or to set the SLC amplitude to 1.0. By default True.
-    output_cov_file : str, optional
-        HDF5 filename to save the estimated covariance at each pixel.
     threads_per_block : Tuple[int, int], optional
         The number of threads per block to use for the GPU kernel.
         By default (16, 16)
+    free_mem : bool, optional
+        Whether to free the memory of the covariance matrix after the MLE
+        estimation. By default False.
 
     Returns
     -------
@@ -78,9 +79,6 @@ def run_gpu(
         d_slc_stack, halfwin_rowcol, strides_rowcol, d_C_arrays
     )
 
-    if output_cov_file:
-        covariance._save_covariance(output_cov_file, d_C_arrays.get())
-
     d_output_phase = mle_stack(d_C_arrays, beta=beta, reference_idx=reference_idx)
     d_cpx_phase = cp.exp(1j * d_output_phase)
 
@@ -91,16 +89,18 @@ def run_gpu(
     # # https://docs.cupy.dev/en/stable/user_guide/memory.html
     # may just be cached a lot of the huge memory available on aurora
     # But if we need to free GPU memory:
-    # cp.get_default_memory_pool().free_all_blocks()
+    if free_mem:
+        del d_slc_stack
+        del d_C_arrays
+        del d_output_phase
+        del d_cpx_phase
+        cp.get_default_memory_pool().free_all_blocks()
+        cp.get_default_pinned_memory_pool().free_all_blocks()
 
     if use_slc_amp:
-        # use the amplitude from the original SLCs, accounting for strides
-        xs, ys = strides["x"], strides["y"]
+        # use the amplitude from the original SLCs
+        # account for the strides when grabbing original data
         # we need to match `io.compute_out_shape` here
-        start_r = ys // 2
-        start_c = xs // 2
-        end_r = (rows // ys) * ys + 1
-        end_c = (cols // xs) * xs + 1
-        slcs_decimated = slc_stack[:, start_r:end_r:ys, start_c:end_c:xs]
+        slcs_decimated = decimate(slc_stack, strides)
         mle_est *= np.abs(slcs_decimated)
     return mle_est, temp_coh

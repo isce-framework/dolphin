@@ -2,9 +2,10 @@
 import itertools
 import math
 import tempfile
+from datetime import date
 from os import fspath
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 import numpy as np
 from numpy.typing import DTypeLike
@@ -14,7 +15,7 @@ from dolphin import io, utils
 from dolphin._log import get_log
 from dolphin._types import Filename
 
-logger = get_log()
+logger = get_log(__name__)
 
 
 def merge_by_date(
@@ -22,13 +23,14 @@ def merge_by_date(
     file_date_fmt: str = io.DEFAULT_DATETIME_FORMAT,
     output_dir: Filename = ".",
     driver: str = "ENVI",
+    output_suffix: str = ".int",
     overwrite: bool = False,
-):
+) -> Dict[Tuple[date, ...], Path]:
     """Group images from the same date and merge into one image per date.
 
     Parameters
     ----------
-    image_file_list : List[Filename]
+    image_file_list : Iterable[Filename]
         List of paths to images.
     file_date_fmt : Optional[str]
         Format of the date in the filename. Default is %Y%m%d
@@ -36,6 +38,8 @@ def merge_by_date(
         Path to output directory
     driver : str
         GDAL driver to use for output. Default is ENVI.
+    output_suffix : str
+        Suffix to use to output stitched filenames. Default is ".int"
     overwrite : bool
         Overwrite existing files. Default is False.
 
@@ -56,7 +60,13 @@ def merge_by_date(
     for dates, cur_images in grouped_images.items():
         logger.info(f"{dates}: Stitching {len(cur_images)} images.")
         Path(output_dir).mkdir(parents=True, exist_ok=True)
-        outfile = Path(output_dir) / (io._format_date_pair(*dates) + ".int")
+        if len(dates) == 2:
+            date_str = io._format_date_pair(*dates)
+        elif len(dates) == 1:
+            date_str = dates[0].strftime(file_date_fmt)
+        else:
+            raise ValueError(f"Expected 1 or 2 dates: {dates}.")
+        outfile = Path(output_dir) / (date_str + output_suffix)
 
         merge_images(
             cur_images,
@@ -71,14 +81,16 @@ def merge_by_date(
 
 
 def merge_images(
-    file_list: List[Filename],
+    file_list: Sequence[Filename],
     outfile: Filename,
     target_aligned_pixels: bool = True,
     driver: str = "ENVI",
     out_nodata: Optional[float] = 0,
     out_dtype: Optional[DTypeLike] = None,
     overwrite=False,
-):
+    options: Optional[Sequence[str]] = io.DEFAULT_ENVI_OPTIONS,
+    create_only: bool = False,
+) -> None:
     """Combine multiple SLC images on the same date into one image.
 
     Parameters
@@ -103,6 +115,10 @@ def merge_images(
         of the first image in the list.
     overwrite : bool
         Overwrite existing files. Default is False.
+    options : Optional[Sequence[str]]
+        Driver-specific creation options passed to GDAL. Default is ["SUFFIX=ADD"]
+    create_only : bool
+        If True, creates an empty output file, does not write data. Default is False.
     """
     if Path(outfile).exists():
         if not overwrite:
@@ -119,6 +135,7 @@ def merge_images(
             file_list[0],
             outfile=outfile,
             driver=driver,
+            creation_options=options,
         )
         return
 
@@ -143,7 +160,7 @@ def merge_images(
     )
 
     out_shape = _get_output_shape(bounds, res)
-    out_dtype = out_dtype or io.get_dtype(warped_file_list[0])
+    out_dtype = out_dtype or io.get_raster_dtype(warped_file_list[0])
 
     io.write_arr(
         arr=None,
@@ -155,12 +172,14 @@ def merge_images(
         nodata=out_nodata,
         geotransform=gt,
         projection=projection,
+        options=options,
     )
+    if create_only:
+        temp_dir.cleanup()
+        return
 
     out_left, out_bottom, out_right, out_top = bounds
     # Now loop through the files and write them to the output
-    writer = io.Writer()
-
     for f in warped_file_list:
         logger.info(f"Stitching {f} into {outfile}")
         ds_in = gdal.Open(fspath(f))
@@ -192,37 +211,39 @@ def merge_images(
             int_left, int_top, filename=outfile, do_round=False
         )
         row_bottom, col_right = io.xy_to_rowcol(int_right, int_bottom, filename=outfile)
+        # Cap the bottom and right to the same size as arr_in
+        row_bottom = min(row_bottom, row_top + arr_in.shape[0])
+        col_right = min(col_right, col_left + arr_in.shape[1])
+
         # Read it in so we can blend out the write for this block
         cur_out = io.load_gdal(
             outfile, rows=slice(row_top, row_bottom), cols=slice(col_left, col_right)
         )
-        in_nodata = io.get_raster_nodata(
-            f
-        )  # Assume all bands have same nodata as band 1
+        # Assume all bands have same nodata as band 1
+        in_nodata = io.get_raster_nodata(f)
         cur_out = _blend_new_arr(
-            cur_out, arr_in, nodata_vals=[in_nodata, out_nodata, np.nan]
+            cur_out, arr_in, nodata_vals=[in_nodata, out_nodata, math.nan, 0]
         )
         # Write the input data to the output in this window
-        writer.queue_write(
+        io.write_block(
             cur_out,
             filename=outfile,
             row_start=row_top,
             col_start=col_left,
         )
 
-    writer.notify_finished()
     # Remove the tempdir
     temp_dir.cleanup()
 
 
 def _group_by_date(
-    file_list: List[Filename], file_date_fmt: str = io.DEFAULT_DATETIME_FORMAT
+    file_list: Iterable[Filename], file_date_fmt: str = io.DEFAULT_DATETIME_FORMAT
 ):
     """Combine Sentinel objects by date.
 
     Parameters
     ----------
-    file_list: List[Filename]
+    file_list: Iterable[Filename]
         path to folder containing CSLC files
     file_date_fmt: str
         format of the date in the filename.
@@ -257,7 +278,7 @@ def _group_by_date(
 
 
 def _blend_new_arr(
-    cur_arr: np.ndarray, new_arr: np.ndarray, nodata_vals: List[Optional[float]]
+    cur_arr: np.ndarray, new_arr: np.ndarray, nodata_vals: Iterable[Optional[float]]
 ):
     """Blend two arrays together, replacing values in cur_arr with new_arr.
 
@@ -270,7 +291,7 @@ def _blend_new_arr(
         The array to blend into.
     new_arr : np.ndarray
         The new array to add/overwrite with.
-    nodata_vals : List[float]
+    nodata_vals : Iterable[float]
         The nodata values to replace in cur_arr.
 
     Returns
@@ -280,7 +301,7 @@ def _blend_new_arr(
     """
     # Replace nodata values in cur_arr with new_arr
     good_pixels = np.ones(cur_arr.shape, dtype=bool)
-    for nodata in nodata_vals:
+    for nodata in set(nodata_vals):
         if nodata is not None:
             if np.isnan(nodata):
                 nd_mask = np.isnan(new_arr)
@@ -294,16 +315,20 @@ def _blend_new_arr(
 
 
 def _warp_to_projection(
-    filenames: List[Filename],
+    filenames: Iterable[Filename],
     dirname: Filename,
     projection: str,
     res: Tuple[float, float],
 ) -> List[Path]:
-    """Warp a list of files to the most common projection.
+    """Warp a list of files to `projection`.
+
+    If the input file's projection matches `projection`, the same file is returned.
+    Otherwise, a new file is created in `dirname` with the same name as the input file,
+    but with '_warped' appended.
 
     Parameters
     ----------
-    filenames : List[Filename]
+    filenames : Iterable[Filename]
         List of filenames to warp.
     dirname : Filename
         The directory to write the warped files to.
@@ -318,14 +343,14 @@ def _warp_to_projection(
         The warped filenames.
     """
     warped_files = []
-    for fn in filenames:
+    for idx, fn in enumerate(filenames):
         fn = Path(fn)
         ds = gdal.Open(fspath(fn))
         proj_in = ds.GetProjection()
         if proj_in == projection:
             warped_files.append(fn)
             continue
-        warped_fn = Path(dirname) / f"{fn.name}.warped.tif"
+        warped_fn = Path(dirname) / f"{fn.stem}_{idx}_warped.tif"
         from_srs_name = ds.GetSpatialRef().GetName()
         to_srs_name = osr.SpatialReference(projection).GetName()
         logger.info(
@@ -347,13 +372,13 @@ def _warp_to_projection(
     return warped_files
 
 
-def _get_mode_projection(filenames: List[Filename]) -> str:
+def _get_mode_projection(filenames: Iterable[Filename]) -> str:
     """Get the most common projection in the list."""
     projs = [gdal.Open(fspath(fn)).GetProjection() for fn in filenames]
     return max(set(projs), key=projs.count)
 
 
-def _get_resolution(filenames: List[Filename]) -> Tuple[float, float]:
+def _get_resolution(filenames: Iterable[Filename]) -> Tuple[float, float]:
     """Get the most common resolution in the list."""
     gts = [gdal.Open(fspath(fn)).GetGeoTransform() for fn in filenames]
     res = [(gt[1], gt[5]) for gt in gts]
@@ -414,15 +439,16 @@ def _get_combined_bounds_gt(
     return bounds, gt_total
 
 
-def _get_output_shape(bounds, res):
+def _get_output_shape(bounds: Iterable[float], res: Tuple[float, float]):
     """Get the output shape of the combined image."""
     left, bottom, right, top = bounds
-    out_width = int(round((right - left) / abs(res[0])))
-    out_height = int(round((top - bottom) / abs(res[1])))
-    return (out_height, out_width)
+    # Always round up to the nearest pixel, instead of banker's rounding
+    out_width = math.floor(0.5 + (right - left) / abs(res[0]))
+    out_height = math.floor(0.5 + (top - bottom) / abs(res[1]))
+    return int(out_height), int(out_width)
 
 
-def _align_bounds(bounds, res):
+def _align_bounds(bounds: Iterable[float], res: Tuple[float, float]):
     left, bottom, right, top = bounds
     left = math.floor(left / res[0]) * res[0]
     right = math.ceil(right / res[0]) * res[0]
@@ -432,12 +458,12 @@ def _align_bounds(bounds, res):
 
 
 def _nodata_to_zero(
-    infile,
+    infile: Filename,
     outfile: Optional[Filename] = None,
     ext: Optional[str] = None,
     in_band: int = 1,
     driver="ENVI",
-    creation_options=["SUFFIX=ADD"],
+    creation_options=io.DEFAULT_ENVI_OPTIONS,
 ):
     """Make a copy of infile and replace NaNs with 0."""
     in_p = Path(infile)
@@ -462,3 +488,68 @@ def _nodata_to_zero(
     ds_out = None
 
     return outfile
+
+
+def warp_to_match(
+    input_file: Filename,
+    match_file: Filename,
+    output_file: Optional[Filename] = None,
+    resampling_alg: str = "near",
+    output_format: Optional[str] = None,
+) -> Path:
+    """Reproject `input_file` to align with the `match_file`.
+
+    Uses the bounds, resolution, and CRS of `match_file`.
+
+    Parameters
+    ----------
+    input_file: Filename
+        Path to the image to be reprojected.
+    match_file: Filename
+        Path to the input image to serve as a reference for the reprojected image.
+        Uses the bounds, resolution, and CRS of this image.
+    output_file: Filename
+        Path to the output, reprojected image.
+        If None, creates an in-memory warped VRT using the `/vsimem/` protocol.
+    resampling_alg: str, optional, default = "near"
+        Resampling algorithm to be used during reprojection.
+        See https://gdal.org/programs/gdalwarp.html#cmdoption-gdalwarp-r for choices.
+    output_format: str, optional, default = None
+        Output format to be used for the output image.
+        If None, gdal will try to infer the format from the output file extension, or
+        (if the extension of `output_file` matches `input_file`) use the input driver.
+
+    Returns
+    -------
+    Path
+        Path to the output image.
+        Same as `output_file` if provided, otherwise a path to the in-memory VRT.
+    """
+    bounds = io.get_raster_bounds(match_file)
+    crs_wkt = io.get_raster_crs(match_file).to_wkt()
+    gt = io.get_raster_gt(match_file)
+    resolution = (gt[1], gt[5])
+
+    if output_file is None:
+        output_file = f"/vsimem/warped_{Path(input_file).stem}.vrt"
+        logger.debug(f"Creating in-memory warped VRT: {output_file}")
+
+    if output_format is None and Path(input_file).suffix == Path(output_file).suffix:
+        output_format = io.get_raster_driver(input_file)
+
+    options = gdal.WarpOptions(
+        dstSRS=crs_wkt,
+        format=output_format,
+        xRes=resolution[0],
+        yRes=resolution[1],
+        outputBounds=bounds,
+        outputBoundsSRS=crs_wkt,
+        resampleAlg=resampling_alg,
+    )
+    gdal.Warp(
+        fspath(output_file),
+        fspath(input_file),
+        options=options,
+    )
+
+    return Path(output_file)

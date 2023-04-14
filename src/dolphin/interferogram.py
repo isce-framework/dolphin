@@ -5,6 +5,8 @@ from os import fspath
 from pathlib import Path
 from typing import Iterable, List, Optional, Sequence, Tuple, Union
 
+import numpy as np
+from numpy.typing import ArrayLike
 from osgeo import gdal
 from pydantic import BaseModel, Extra, Field, root_validator, validator
 
@@ -14,7 +16,7 @@ from dolphin._types import Filename
 
 gdal.UseExceptions()
 
-logger = get_log()
+logger = get_log(__name__)
 
 
 class VRTInterferogram(BaseModel):
@@ -195,6 +197,7 @@ class VRTInterferogram(BaseModel):
 
     def _write(self):
         xsize, ysize = io.get_raster_xysize(self.ref_slc)
+        self.path.parent.mkdir(parents=True, exist_ok=True)
         with open(self.path, "w") as f:
             f.write(
                 self._template.format(
@@ -215,6 +218,40 @@ class VRTInterferogram(BaseModel):
     def shape(self):
         xsize, ysize = io.get_raster_xysize(self.path)
         return (ysize, xsize)
+
+    @classmethod
+    def from_vrt_file(cls, path: Filename) -> "VRTInterferogram":
+        """Load a VRTInterferogram from an existing VRT file.
+
+        Parameters
+        ----------
+        path : Filename
+            Path to VRT file.
+
+        Returns
+        -------
+        VRTInterferogram
+            VRTInterferogram object.
+
+        """
+        from dolphin.stack import VRTStack
+
+        # Use the parsing function
+        (ref_slc, sec_slc), subdataset = VRTStack._parse_vrt_file(path)
+        if subdataset is not None:
+            ref_slc = io.format_nc_filename(ref_slc, subdataset)
+            sec_slc = io.format_nc_filename(sec_slc, subdataset)
+        # TODO: any good way/reason to store the date fmt?
+        date1 = utils.get_dates(ref_slc, fmt="%Y%m%d")[0]
+        date2 = utils.get_dates(sec_slc, fmt="%Y%m%d")[0]
+
+        return cls.construct(
+            ref_slc=ref_slc,
+            sec_slc=sec_slc,
+            path=Path(path).resolve(),
+            subdataset=subdataset,
+            dates=(date1, date2),
+        )
 
 
 class Network:
@@ -246,7 +283,7 @@ class Network:
         max_bandwidth: Optional[int] = None,
         max_temporal_baseline: Optional[float] = None,
         reference_idx: Optional[int] = None,
-        final_only: bool = False,
+        indexes: Optional[Sequence[Tuple[int, int]]] = None,
         subdataset: Optional[str] = None,
     ):
         """Create a network of interferograms from a list of SLCs.
@@ -267,9 +304,8 @@ class Network:
         reference_idx : Optional[int]
             Index of the SLC to use as the reference for all interferograms.
             Defaults to None.
-        final_only : bool, optional
-            If True, only form the final nearest-neighbor interferogram.
-            Defaults to False.
+        indexes : Optional[Sequence[Tuple[int, int]]]
+            List of (ref_idx, sec_idx) pairs to use to create interferograms.
         subdataset : Optional[str]
             If passing NetCDF files in `slc_list, the subdataset of the image data
             within the file.
@@ -281,7 +317,7 @@ class Network:
             max_bandwidth=max_bandwidth,
             max_temporal_baseline=max_temporal_baseline,
             reference_idx=reference_idx,
-            final_only=final_only,
+            indexes=indexes,
         )
         # Save the parameters used to create the network
         self.slc_dates = [dates[0] for dates in dates]
@@ -334,29 +370,32 @@ class Network:
             f"reference_idx={self.reference_idx}"
         )
 
+    @staticmethod
     def _make_ifg_pairs(
-        self,
         slc_list: Sequence[Filename],
         max_bandwidth: Optional[int] = None,
         max_temporal_baseline: Optional[float] = None,
         reference_idx: Optional[int] = None,
-        final_only: bool = False,
+        indexes: Optional[Sequence[Tuple[int, int]]] = None,
     ) -> List[Tuple]:
         """Form interferogram pairs from a list of SLC files sorted by date."""
-        if final_only:
-            # Just form the final nearest-neighbor ifg
-            return [tuple(slc_list[-2:])]
+        if indexes is not None:
+            # Give the option to select exactly which interferograms to create
+            return [
+                (slc_list[ref_idx], slc_list[sec_idx]) for ref_idx, sec_idx in indexes
+            ]
         elif max_bandwidth is not None:
-            return self._limit_by_bandwidth(slc_list, max_bandwidth)
+            return Network._limit_by_bandwidth(slc_list, max_bandwidth)
         elif max_temporal_baseline is not None:
-            return self._limit_by_temporal_baseline(slc_list, max_temporal_baseline)
+            return Network._limit_by_temporal_baseline(slc_list, max_temporal_baseline)
         elif reference_idx is not None:
-            return self._single_reference_network(slc_list, reference_idx)
+            return Network._single_reference_network(slc_list, reference_idx)
         else:
             raise ValueError("No valid ifg list generation method specified")
 
+    @staticmethod
     def _single_reference_network(
-        self, slc_file_list: Sequence[Filename], reference_idx=0
+        slc_file_list: Sequence[Filename], reference_idx=0
     ) -> List[Tuple]:
         """Form a list of single-reference interferograms."""
         if len(slc_file_list) < 2:
@@ -365,9 +404,8 @@ class Network:
         ifgs = [tuple(sorted([ref, date])) for date in slc_file_list if date != ref]
         return ifgs
 
-    def _limit_by_bandwidth(
-        self, slc_file_list: Iterable[Filename], max_bandwidth: int
-    ):
+    @staticmethod
+    def _limit_by_bandwidth(slc_file_list: Iterable[Filename], max_bandwidth: int):
         """Form a list of the "nearest-`max_bandwidth`" ifgs.
 
         Parameters
@@ -386,12 +424,12 @@ class Network:
         slc_to_idx = {s: idx for idx, s in enumerate(slc_file_list)}
         return [
             (a, b)
-            for (a, b) in self._all_pairs(slc_file_list)
+            for (a, b) in Network._all_pairs(slc_file_list)
             if slc_to_idx[b] - slc_to_idx[a] <= max_bandwidth
         ]
 
+    @staticmethod
     def _limit_by_temporal_baseline(
-        self,
         slc_file_list: Iterable[Filename],
         max_temporal_baseline: Optional[float] = None,
     ):
@@ -415,7 +453,7 @@ class Network:
         ValueError
             If any of the input files have more than one date.
         """
-        ifg_strs = self._all_pairs(slc_file_list)
+        ifg_strs = Network._all_pairs(slc_file_list)
         slc_date_lists = [utils.get_dates(f) for f in slc_file_list]
         # Check we've got all single-date files
         if any(len(d) != 1 for d in slc_date_lists):
@@ -424,8 +462,8 @@ class Network:
             )
         slc_dates = [d[0] for d in slc_date_lists]
 
-        ifg_dates = self._all_pairs(slc_dates)
-        baselines = [self._temp_baseline(ifg) for ifg in ifg_dates]
+        ifg_dates = Network._all_pairs(slc_dates)
+        baselines = [Network._temp_baseline(ifg) for ifg in ifg_dates]
         return [
             ifg for ifg, b in zip(ifg_strs, baselines) if b <= max_temporal_baseline
         ]
@@ -453,3 +491,49 @@ class Network:
 
     def __eq__(self, other):
         return self.ifg_list == other.ifg_list
+
+
+def estimate_correlation_from_phase(
+    ifg: Union[VRTInterferogram, ArrayLike], window_size: Union[int, Tuple[int, int]]
+) -> np.ndarray:
+    """Estimate correlation from only an interferogram (no SLCs/magnitudes).
+
+    This is a simple correlation estimator that takes the (complex) average
+    in a moving window in an interferogram. Used to get some estimate of spatial
+    correlation on the result of phase-linking interferograms.
+
+    Parameters
+    ----------
+    ifg : Union[VRTInterferogram, ArrayLike]
+        Interferogram to estimate correlation from.
+        If a VRTInterferogram, will load and take the phase.
+        If `ifg` is complex, will normalize to unit magnitude before estimating.
+    window_size : Union[int, Tuple[int, int]]
+        Size of window to use for correlation estimation.
+        If int, will use a square window of that size.
+        If tuple, the rectangular window has shape  `size=(row_size, col_size)`.
+
+    Returns
+    -------
+    np.ndarray
+        Correlation array
+    """
+    if isinstance(ifg, VRTInterferogram):
+        ifg = ifg.load()
+    nan_mask = np.isnan(ifg)
+    zero_mask = ifg == 0
+    if not np.iscomplexobj(ifg):
+        # If they passed phase, convert to complex
+        inp = np.exp(1j * np.nan_to_num(ifg))
+    else:
+        # If they passed complex, normalize to unit magnitude
+        inp = np.exp(1j * np.nan_to_num(np.angle(ifg)))
+
+    # Note: the clipping is from possible partial windows producing correlation
+    # above 1
+    cor = np.clip(np.abs(utils.moving_window_mean(inp, window_size)), 0, 1)
+    # Return the input nans to nan
+    cor[nan_mask] = np.nan
+    # If the input was 0, the correlation is 0
+    cor[zero_mask] = 0
+    return cor

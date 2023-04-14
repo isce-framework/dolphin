@@ -1,10 +1,11 @@
 #!/usr/bin/env python
 import argparse
 import sys
+from multiprocessing import cpu_count
 from pathlib import Path
 from typing import List, Optional, Tuple, Union
 
-from .config import OPERA_DATASET_NAME, Workflow
+from .config import OPERA_DATASET_NAME, InterferogramNetworkType, Workflow, WorkflowName
 
 
 def create_config(
@@ -12,31 +13,59 @@ def create_config(
     outfile: Union[str, Path],
     slc_files: Optional[List[str]] = None,
     subdataset: Optional[str] = None,
-    mask_files: Optional[List[str]] = None,
+    mask_file: Optional[str] = None,
     ministack_size: Optional[int] = 15,
+    amp_dispersion_threshold: float = 0.25,
     strides: Tuple[int, int],
-    max_ram_gb: float = 1,
+    block_size_gb: float = 1,
     n_workers: int = 16,
+    threads_per_worker: int = 1,
     no_gpu: bool = False,
+    use_icu: bool = False,
+    single_update: bool = False,
+    log_file: Optional[Path] = None,
 ):
     """Create a config for a displacement workflow."""
+    if single_update:
+        # create only one interferogram from the first and last SLC images
+        interferogram_network = dict(
+            network_type=InterferogramNetworkType.MANUAL_INDEX,
+            indexes=[(0, -1)],
+        )
+        workflow_name = WorkflowName.SINGLE
+        # Override the ministack size so that only one phase linking is run
+        ministack_size = 1000
+    else:
+        interferogram_network = {}  # Use default
+        workflow_name = WorkflowName.STACK
+
     cfg = Workflow(
-        inputs=dict(
-            cslc_file_list=slc_files,
-            mask_files=mask_files,
+        workflow_name=workflow_name,
+        cslc_file_list=slc_files,
+        mask_file=mask_file,
+        input_options=dict(
             subdataset=subdataset,
         ),
-        outputs=dict(
+        interferogram_network=interferogram_network,
+        output_options=dict(
             strides={"x": strides[0], "y": strides[1]},
         ),
         phase_linking=dict(
             ministack_size=ministack_size,
         ),
+        ps_options=dict(
+            amp_dispersion_threshold=amp_dispersion_threshold,
+        ),
+        unwrap_options=dict(
+            unwrap_method=("icu" if use_icu else "snaphu"),
+        ),
         worker_settings=dict(
-            max_ram_gb=max_ram_gb,
+            block_size_gb=block_size_gb,
             n_workers=n_workers,
+            threads_per_worker=threads_per_worker,
             gpu_enabled=(not no_gpu),
         ),
+        log_file=log_file,
     )
 
     if outfile == "-":  # Write to stdout
@@ -84,6 +113,14 @@ def get_parser(subparser=None, subcommand_name="run"):
             f" None is passed, the default is {OPERA_DATASET_NAME}."
         ),
     )
+    parser.add_argument(
+        "--mask-file",
+        help=(
+            "Path to Byte mask file used to ignore low correlation/bad data (e.g water"
+            " mask). Convention is 0 for no data/invalid, and 1 for good data."
+        ),
+    )
+    parser.add_argument("--log-file", help="Path to log to, in addition to stderr")
 
     # Phase linking options
     pl_group = parser.add_argument_group("Phase Linking options")
@@ -94,13 +131,35 @@ def get_parser(subparser=None, subcommand_name="run"):
         help="Strides/decimation factor (x, y) (in pixels) to use when determining",
     )
 
+    # PS options
+    ps_group = parser.add_argument_group("PS options")
+    ps_group.add_argument(
+        "--amp-dispersion-threshold",
+        type=float,
+        default=0.25,
+        help="Threshold for the amplitude dispersion.",
+    )
+    # Unwrap options
+    unwrap_group = parser.add_argument_group("Unwrap options")
+    unwrap_group.add_argument(
+        "--use-icu",
+        action="store_true",
+        help="Use the ICU algorithm instead of the default SNAPHU.",
+    )
+
     # Get Outputs from the command line
     out_group = parser.add_argument_group("Output options")
+    out_group.add_argument(
+        "--single-update",
+        action="store_true",
+        help="Create only one interferogram from the first and last SLC images.",
+    )
     out_group.add_argument(
         "-s",
         "--strides",
         nargs=2,
         type=int,
+        metavar=("X", "Y"),
         default=(1, 1),
         help=(
             "Strides/decimation factor (x, y) (in pixels) to use when determining"
@@ -115,22 +174,23 @@ def get_parser(subparser=None, subcommand_name="run"):
         help="Disable the GPU (if using a machine that has one available).",
     )
     worker_group.add_argument(
-        "--max-ram-gb",
+        "--block-size-gb",
         type=float,
         default=1,
-        help="Maximum amount of RAM to use per worker.",
+        help="Size (in GB) of blocks of data to load at once time.",
     )
     worker_group.add_argument(
         "--n-workers",
         type=int,
-        default=16,
-        help="Number of workers to use.",
+        default=cpu_count(),
+        help="Number of CPU workers to use (for CPU processing).",
     )
-    # parser.add_argument(
-    #     "--mask-files",
-    #     nargs=argparse.ZERO_OR_MORE,
-    #     help="Path to a file containing a list of mask files.",
-    # )
+    worker_group.add_argument(
+        "--threads-per-worker",
+        type=int,
+        default=1,
+        help="Number of threads to use per worker.",
+    )
     parser.set_defaults(run_func=create_config)
 
     return parser

@@ -3,7 +3,7 @@ from math import nan
 from os import fspath
 from pathlib import Path
 from pprint import pformat
-from typing import Generator, Optional, Sequence, Tuple
+from typing import Generator, List, Optional, Sequence, Tuple
 
 import numpy as np
 from osgeo import gdal
@@ -13,14 +13,14 @@ from dolphin._log import get_log
 from dolphin._types import Filename
 
 gdal.UseExceptions()
-logger = get_log()
+logger = get_log(__name__)
 
 
 DEFAULT_BLOCK_BYTES = 32e6
 
 
 class VRTStack:
-    """Class for creating a VRT for a stack of raster files.
+    """Class for creating a virtual stack of raster files.
 
     Attributes
     ----------
@@ -80,10 +80,10 @@ class VRTStack:
                 "To create from an existing VRT, use the `from_vrt_file` method."
             )
 
-        files = [Path(f) for f in file_list]
+        files: List[Filename] = [Path(f) for f in file_list]
         self._use_abs_path = use_abs_path
         if use_abs_path:
-            files = [p.resolve() for p in files]
+            files = [utils._resolve_gdal_path(p) for p in files]
         # Extract the date/datetimes from the filenames
         dates = [utils.get_dates(f, fmt=file_date_fmt) for f in files]
         if sort_files:
@@ -140,18 +140,18 @@ class VRTStack:
             )
 
             for idx, filename in enumerate(self._gdal_file_strings, start=1):
-                block_size = io.get_raster_block_size(filename)
-                # blocks in a vrt have a min of 16, max of 2**14=16384
+                chunk_size = io.get_raster_chunk_size(filename)
+                # chunks in a vrt have a min of 16, max of 2**14=16384
                 # https://github.com/OSGeo/gdal/blob/2530defa1e0052827bc98696e7806037a6fec86e/frmts/vrt/vrtrasterband.cpp#L339
-                if any([b < 16 for b in block_size]) or any(
-                    [b > 16384 for b in block_size]
+                if any([b < 16 for b in chunk_size]) or any(
+                    [b > 16384 for b in chunk_size]
                 ):
-                    block_str = ""
+                    chunk_str = ""
                 else:
-                    block_str = (
-                        f'blockXSize="{block_size[0]}" blockYSize="{block_size[1]}"'
+                    chunk_str = (
+                        f'blockXSize="{chunk_size[0]}" blockYSize="{chunk_size[1]}"'
                     )
-                outstr = f"""  <VRTRasterBand dataType="{self.dtype}" band="{idx}" {block_str}>
+                outstr = f"""  <VRTRasterBand dataType="{self.dtype}" band="{idx}" {chunk_str}>
     <SimpleSource>
       <SourceFilename>{filename}</SourceFilename>
       <SourceBand>1</SourceBand>
@@ -303,15 +303,7 @@ class VRTStack:
                 # Get the middle part of < >filename</ >
                 fn = line.split(">")[1].strip().split("<")[0]
                 file_strings.append(fn)
-        # double check we got the same count
-        ds = gdal.Open(fspath(vrt_file))
-        count = ds.RasterCount
-        ds = None
-        if count != len(file_strings):
-            raise ValueError(
-                f"Found {len(file_strings)} parsing {vrt_file}, but file has"
-                f" {count} bands."
-            )
+
         testname = file_strings[0].upper()
         if testname.startswith("HDF5:") or testname.startswith("NETCDF:"):
             name_triplets = [name.split(":") for name in file_strings]
@@ -403,8 +395,9 @@ class VRTStack:
 
         Yields
         ------
-        Tuple[Tuple[int, int], Tuple[int, int]]
-            Iterator of ((row_start, row_stop), (col_start, col_stop))
+        Tuple[np.ndarray, Tuple[slice, slice]]
+            Iterator of (data, (slice(row_start, row_stop), slice(col_start, col_stop))
+
         """
         if block_shape is None:
             block_shape = self._get_block_shape(max_bytes=max_bytes)
@@ -413,22 +406,18 @@ class VRTStack:
         if use_nodata_mask:
             logger.info("Nodata mask not implemented, skipping")
 
-        loader = io.EagerLoader(
+        self._loader = io.EagerLoader(
             self.outfile,
             block_shape=block_shape,
             overlaps=overlaps,
             skip_empty=skip_empty,
             nodata_mask=ndm,
         )
-        yield from loader.iter_blocks()
+        yield from self._loader.iter_blocks()
 
     def _get_block_shape(self, max_bytes=DEFAULT_BLOCK_BYTES):
-        test_file = self._get_non_vrt_file(self._gdal_file_strings[0])
-
         return io.get_max_block_shape(
-            # Note that we're using the actual first file, not the VRT
-            # since the VRT always has the same block size.
-            test_file,
+            self._gdal_file_strings[0],
             len(self),
             max_bytes=max_bytes,
         )
@@ -439,26 +428,13 @@ class VRTStack:
         # TODO: Write the code to grab the pre-computed polygon, rather
         # than the loading data.
         else:
-            return io.get_stack_nodata_mask(
-                self.outfile,
-                output_file=self.nodata_mask_file,
-                nodata=nodata,
-                buffer_pixels=buffer_pixels,
-            )
-
-    @staticmethod
-    def _get_non_vrt_file(filename: Filename):
-        """Get one of the files within a VRT.
-
-        If the file is not a VRT, return the file itself.
-        Will traverse nested VRTs.
-        """
-        if Path(filename).suffix == ".vrt":
-            file_list = gdal.Info(fspath(filename), format="json")["files"]
-            if len(file_list) <= 1:
-                raise ValueError(f"VRT file {filename} contains no files")
-            return VRTStack._get_non_vrt_file(file_list[1])
-        return filename
+            raise NotImplementedError("_get_nodata_mask not implemented")
+            # return io.get_stack_nodata_mask(
+            #     self.outfile,
+            #     output_file=self.nodata_mask_file,
+            #     nodata=nodata,
+            #     buffer_pixels=buffer_pixels,
+            # )
 
     @property
     def shape(self):

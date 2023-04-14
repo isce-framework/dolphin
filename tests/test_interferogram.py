@@ -1,11 +1,16 @@
 from datetime import date
 from pathlib import Path
 
+import numpy as np
 import numpy.testing as npt
 import pytest
 
 from dolphin import io, utils
-from dolphin.interferogram import Network, VRTInterferogram
+from dolphin.interferogram import (
+    Network,
+    VRTInterferogram,
+    estimate_correlation_from_phase,
+)
 
 
 def test_derived_vrt_interferogram(slc_file_list):
@@ -185,3 +190,66 @@ def test_limit_by_temporal_baseline(tmp_path, four_slc_files):
         ("20220102", "20220104"),
         ("20220103", "20220104"),
     ]
+
+
+def test_manual_indexes(tmp_path, four_slc_files):
+    n = Network(four_slc_files, indexes=[], outdir=tmp_path)
+    assert _get_pair_stems(n.slc_file_pairs) == []
+
+    n = Network(four_slc_files, indexes=[(0, 1)], outdir=tmp_path)
+    assert _get_pair_stems(n.slc_file_pairs) == [
+        ("20220101", "20220102"),
+    ]
+
+    n = Network(four_slc_files, indexes=[(0, -1), (0, 1)], outdir=tmp_path)
+    assert _get_pair_stems(n.slc_file_pairs) == [
+        ("20220101", "20220104"),
+        ("20220101", "20220102"),
+    ]
+
+
+@pytest.fixture
+def expected_3x3_cor():
+    # the edges will be less than 1 because of the windowing
+    return np.array(
+        [
+            [0.44444444, 0.66666667, 0.44444444],
+            [0.66666667, 1.0, 0.66666667],
+            [0.44444444, 0.66666667, 0.44444444],
+        ]
+    )
+
+
+@pytest.mark.parametrize("window_size", [3, (3, 3)])
+def test_correlation_from_phase_complex_input(expected_3x3_cor, window_size):
+    ifg = np.arange(1, 10).reshape(3, 3).astype(np.complex64)
+    result = estimate_correlation_from_phase(ifg, window_size)
+    npt.assert_allclose(result, expected_3x3_cor)
+
+
+@pytest.mark.parametrize("window_size", [3, (3, 3)])
+def test_correlation_from_phase_square_window_phase_input(
+    expected_3x3_cor, window_size
+):
+    phase = np.ones((3, 3))
+    result = estimate_correlation_from_phase(phase, window_size)
+    npt.assert_allclose(result, expected_3x3_cor)
+
+
+@pytest.mark.parametrize("window_size", [3, (3, 3)])
+def test_correlation_from_phase_nan_and_zero_input(expected_3x3_cor, window_size):
+    ifg = np.array([[0, np.nan, 0], [1.0 + 0.0j, 1.0, np.nan], [1.0, 1.0, 1.0]])
+    window_size = 3
+    result = estimate_correlation_from_phase(ifg, window_size)
+    expected2 = expected_3x3_cor.copy()
+    expected2[0, 0] = expected2[0, 2] = 0.0
+    expected2[0, 1] = expected2[1, 2] = np.nan
+
+    npt.assert_allclose(result, expected2, equal_nan=True)
+
+
+@pytest.mark.parametrize("window_size", [3, (3, 3)])
+def test_correlation_from_phase_vrtinterferogram_input(window_size, slc_file_list):
+    ifg = VRTInterferogram(ref_slc=slc_file_list[0], sec_slc=slc_file_list[1])
+    estimate_correlation_from_phase(ifg, window_size)
+    # just checking it loads and runs

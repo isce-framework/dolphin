@@ -135,7 +135,7 @@ def test_add_file(vrt_stack, slc_stack):
     slc = slc_stack[0]
 
     # Make the file in the past
-    new_path_past = (vrt_stack.outfile.parent / "20000101.slc").absolute()
+    new_path_past = (vrt_stack.outfile.parent / "20000101.slc").resolve()
     driver = gdal.GetDriverByName("ENVI")
     ds = driver.Create(
         str(new_path_past), slc.shape[1], slc.shape[0], 1, gdal.GDT_CFloat32
@@ -149,7 +149,7 @@ def test_add_file(vrt_stack, slc_stack):
     assert len(vrt_stack.dates) == slc_stack.shape[0] + 1
 
     # Make the file in the future
-    new_path_future = (vrt_stack.outfile.parent / "20250101.slc").absolute()
+    new_path_future = (vrt_stack.outfile.parent / "20250101.slc").resolve()
     ds = driver.Create(
         str(new_path_future), slc.shape[1], slc.shape[0], 1, gdal.GDT_CFloat32
     )

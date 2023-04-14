@@ -6,7 +6,7 @@ nice formatting out of the box across multiple files.
 Usage:
 
     from ._log import get_log
-    logger = get_log()
+    logger = get_log(__name__)
 
     logger.info("Something happened")
     logger.warning("Something concerning happened")
@@ -21,11 +21,19 @@ import time
 from collections.abc import Callable
 from functools import wraps
 from logging import Formatter
+from pathlib import Path
+from typing import Optional
+
+from rich.logging import RichHandler
+
+from dolphin._types import Filename
 
 __all__ = ["get_log", "log_runtime"]
 
 
-def get_log(debug: bool = False, name: str = "dolphin._log") -> logging.Logger:
+def get_log(
+    name: str = "dolphin._log", debug: bool = False, filename: Optional[Filename] = None
+) -> logging.Logger:
     """Create a nice log format for use across multiple files.
 
     Default logging level is INFO
@@ -37,43 +45,45 @@ def get_log(debug: bool = False, name: str = "dolphin._log") -> logging.Logger:
     name : str, optional
         The name the logger will use when printing statements
         (Default value = "dolphin._log")
+    filename : str, optional
+        If provided, will log to this file in addition to stderr.
 
     Returns
     -------
     logging.Logger
     """
     logger = logging.getLogger(name)
-    return format_log(logger, debug=debug)
+    if not logger.hasHandlers():
+        setup_logging(debug=debug)
+    if debug:
+        logger.setLevel(logging.DEBUG)
+
+    # In addition to stderr, log to a file if requested
+    if filename:
+        Path(filename).parent.mkdir(parents=True, exist_ok=True)
+        file_handler = logging.FileHandler(filename)
+        file_handler.setLevel(logging.DEBUG)
+        formatter = Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+        file_handler.setFormatter(formatter)
+        logger.addHandler(file_handler)
+    return logger
 
 
-def format_log(logger: logging.Logger, debug: bool = False) -> logging.Logger:
+def setup_logging(debug: bool = False) -> None:
     """Make the logging output pretty and colored with times.
 
     Parameters
     ----------
-    logger : logging.Logger
-        The logger to format
     debug : bool (Default value = False)
         If true, sets logging level to DEBUG
 
-    Returns
-    -------
-    logging.Logger
     """
+    # Set for all dolphin modules
+    logger = logging.getLogger("dolphin")
+    h = RichHandler(rich_tracebacks=True, log_time_format="[%Y-%m-%d %H:%M:%S]")
+    logger.addHandler(h)
     log_level = logging.DEBUG if debug else logging.INFO
-    format_ = "[%(asctime)s] [%(levelname)s %(filename)s] %(message)s"
-    formatter = Formatter(format_, datefmt="%m/%d %H:%M:%S")
-
-    handler = logging.StreamHandler()
-    handler.setFormatter(formatter)
-
-    if not logger.handlers:
-        logger.addHandler(handler)
-        logger.setLevel(log_level)
-    if debug:
-        logger.setLevel(debug)
-
-    return logger
+    logger.setLevel(log_level)
 
 
 def log_runtime(f: Callable) -> Callable:
@@ -85,7 +95,7 @@ def log_runtime(f: Callable) -> Callable:
     def test_func():
         return 2 + 4
     """
-    logger = get_log()
+    logger = get_log(__name__)
 
     @wraps(f)
     def wrapper(*args, **kwargs):
@@ -94,14 +104,15 @@ def log_runtime(f: Callable) -> Callable:
         result = f(*args, **kwargs)
 
         t2 = time.time()
-        elapsed_time = t2 - t1
-        time_string = "Total elapsed time for {} : {} minutes ({} seconds)".format(
-            f.__name__,
-            "{0:.2f}".format(elapsed_time / 60.0),
-            "{0:.2f}".format(elapsed_time),
+        elapsed_seconds = t2 - t1
+        elapsed_minutes = elapsed_seconds / 60.0
+        time_string = (
+            f"Total elapsed time for {f.__module__}.{f.__name__} : "
+            f"{elapsed_minutes:.2f} minutes ({elapsed_seconds:.2f} seconds)"
         )
 
         logger.info(time_string)
+
         return result
 
     return wrapper

@@ -155,7 +155,7 @@ def rmse(x, y):
 
 
 @njit(cache=True)
-def mle(cov_mat, beta=0.0):
+def mle(cov_mat, beta=0.01):
     """Estimate the linked phase using the MLE estimator.
 
     Parameters

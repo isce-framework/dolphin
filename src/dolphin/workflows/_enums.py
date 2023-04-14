@@ -2,37 +2,29 @@ from enum import Enum
 
 __all__ = [
     "WorkflowName",
-    "OutputFormat",
     "UnwrapMethod",
     "InterferogramNetworkType",
 ]
 
 
 class WorkflowName(str, Enum):
-    """Names of workflows."""
+    """Name of workflows."""
 
     STACK = "stack"
     SINGLE = "single"
 
 
-class OutputFormat(str, Enum):
-    """Possible output formats for the workflow."""
-
-    ENVI = "ENVI"
-    GTIFF = "GTiff"
-    NETCDF = "NetCDF"
-
-
 class UnwrapMethod(str, Enum):
-    """Methods passable to Tophu unwrapping functions."""
+    """Phase unwrapping method, passable to Tophu."""
 
     SNAPHU = "snaphu"
     ICU = "icu"
 
 
 class InterferogramNetworkType(str, Enum):
-    """Types of interferogram networks."""
+    """Type of interferogram network to create from phase-linking results."""
 
     SINGLE_REFERENCE = "single-reference"
+    MANUAL_INDEX = "manual-index"
     MAX_BANDWIDTH = "max-bandwidth"
     MAX_TEMPORAL_BASELINE = "max-temporal-baseline"

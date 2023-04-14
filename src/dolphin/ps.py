@@ -1,5 +1,7 @@
 """Find the persistent scatterers in a stack of SLCS."""
+import shutil
 import warnings
+from collections import namedtuple
 from os import fspath
 from pathlib import Path
 from typing import Optional
@@ -8,24 +10,31 @@ import numpy as np
 from numpy.typing import ArrayLike
 from osgeo import gdal
 
-gdal.UseExceptions()
-
 from dolphin import io
 from dolphin._log import get_log
 from dolphin._types import Filename
 from dolphin.stack import VRTStack
 
-logger = get_log()
+gdal.UseExceptions()
+
+logger = get_log(__name__)
+
+PsFileOptions = namedtuple("PsFileOptions", ["ps", "amp_dispersion", "amp_mean"])
+NODATA_VALUES = PsFileOptions(255, 0, 0)
+FILE_DTYPES = PsFileOptions(np.uint8, np.float32, np.float32)
 
 
 def create_ps(
     *,
     slc_vrt_file: Filename,
     output_file: Filename,
-    amp_mean_file: Filename,
-    amp_dispersion_file: Filename,
-    amp_dispersion_threshold: float = 0.35,
-    max_ram_gb: float = 1.0,
+    output_amp_mean_file: Filename,
+    output_amp_dispersion_file: Filename,
+    amp_dispersion_threshold: float = 0.25,
+    existing_amp_mean_file: Optional[Filename] = None,
+    existing_amp_dispersion_file: Optional[Filename] = None,
+    update_existing: bool = False,
+    block_size_gb: float = 1.0,
 ):
     """Create the amplitude dispersion, mean, and PS files.
 
@@ -35,21 +44,42 @@ def create_ps(
         The VRT file pointing to the stack of SLCs.
     output_file : Filename
         The output PS file (dtype: Byte)
-    amp_dispersion_file : Filename
+    output_amp_dispersion_file : Filename
         The output amplitude dispersion file.
-    amp_mean_file : Filename
+    output_amp_mean_file : Filename
         The output mean amplitude file.
     amp_dispersion_threshold : float, optional
-        The threshold for the amplitude dispersion. Default is 0.35.
-    max_ram_gb : int, optional
+        The threshold for the amplitude dispersion. Default is 0.25.
+    existing_amp_mean_file : Optional[Filename], optional
+        An existing amplitude mean file to use, by default None.
+    existing_amp_dispersion_file : Optional[Filename], optional
+        An existing amplitude dispersion file to use, by default None.
+    update_existing : bool, optional
+        If providing existing amp mean/dispersion files, combine them with the
+        data from the current SLC stack.
+        If False, simply uses the existing files to create as PS mask.
+        Default is False.
+    block_size_gb : int, optional
         The maximum amount of data to read at a time (in GB).
         Default is 1.0 GB.
     """
+    if existing_amp_dispersion_file and existing_amp_mean_file and not update_existing:
+        logger.info("Using existing amplitude dispersion file, skipping calculation.")
+        # Just use what's there, copy to the expected output locations
+        _use_existing_files(
+            existing_amp_mean_file=existing_amp_mean_file,
+            existing_amp_dispersion_file=existing_amp_dispersion_file,
+            output_file=output_file,
+            output_amp_mean_file=output_amp_mean_file,
+            output_amp_dispersion_file=output_amp_dispersion_file,
+            amp_dispersion_threshold=amp_dispersion_threshold,
+        )
+        return
+
+    # Otherwise, we need to calculate the PS files from the SLC stack
     # Initialize the output files with zeros
-    types = [np.uint8, np.float32, np.float32]
-    file_list = [output_file, amp_dispersion_file, amp_mean_file]
-    nodatas = [255, 0, 0]
-    for fn, dtype, nodata in zip(file_list, types, nodatas):
+    file_list = [output_file, output_amp_dispersion_file, output_amp_mean_file]
+    for fn, dtype, nodata in zip(file_list, FILE_DTYPES, NODATA_VALUES):
         io.write_arr(
             arr=None,
             like_filename=slc_vrt_file,
@@ -60,7 +90,7 @@ def create_ps(
         )
 
     vrt_stack = VRTStack.from_vrt_file(slc_vrt_file)
-    max_bytes = 1e9 * max_ram_gb
+    max_bytes = 1e9 * block_size_gb
     block_shape = vrt_stack._get_block_shape(max_bytes=max_bytes)
 
     # Initialize the intermediate arrays for the calculation
@@ -81,16 +111,23 @@ def create_ps(
 
             # Use the UInt8 type for the PS to save.
             # For invalid pixels, set to max Byte value
-            ps = ps.astype(np.uint8)
-            ps[amp_disp == 0] = nodatas[0]
+            ps = ps.astype(FILE_DTYPES.ps)
+            ps[amp_disp == 0] = NODATA_VALUES.ps
         else:
             # Fill the block with nodata
-            ps = np.ones((cur_rows, cur_cols), dtype=np.uint8) * nodatas[0]
-            mean = amp_disp = np.zeros((cur_rows, cur_cols), dtype=np.float32)
+            ps = np.ones((cur_rows, cur_cols), dtype=FILE_DTYPES.ps) * NODATA_VALUES.ps
+            mean = np.full(
+                (cur_rows, cur_cols), NODATA_VALUES.amp_mean, dtype=FILE_DTYPES.amp_mean
+            )
+            amp_disp = np.full(
+                (cur_rows, cur_cols),
+                NODATA_VALUES.amp_dispersion,
+                dtype=FILE_DTYPES.amp_dispersion,
+            )
 
         # Write amp dispersion and the mean blocks
-        writer.queue_write(mean, amp_mean_file, rows.start, cols.start)
-        writer.queue_write(amp_disp, amp_dispersion_file, rows.start, cols.start)
+        writer.queue_write(mean, output_amp_mean_file, rows.start, cols.start)
+        writer.queue_write(amp_disp, output_amp_dispersion_file, rows.start, cols.start)
         writer.queue_write(ps, output_file, rows.start, cols.start)
 
     logger.info(f"Waiting to write {writer.num_queued} blocks of data.")
@@ -100,7 +137,7 @@ def create_ps(
 
 def calc_ps_block(
     stack_mag: ArrayLike,
-    amp_dispersion_threshold: float = 0.35,
+    amp_dispersion_threshold: float = 0.25,
     min_count: Optional[int] = None,
 ):
     r"""Calculate the amplitude dispersion for a block of data.
@@ -121,7 +158,7 @@ def calc_ps_block(
     amp_dispersion_threshold : float, optional
         The threshold for the amplitude dispersion to label a pixel as a PS:
             ps = amp_disp < amp_dispersion_threshold
-        Default is 0.35.
+        Default is 0.25.
     min_count : int, optional
         The minimum number of valid pixels to calculate the mean and standard
         deviation. If the number of valid pixels is less than `min_count`,
@@ -159,7 +196,6 @@ def calc_ps_block(
         # ignore the warning about nansum/nanmean of empty slice
         warnings.simplefilter("ignore", category=RuntimeWarning)
 
-        # TODO: is it worth creating each ndarray in advance and use `out=`?
         mean = np.nanmean(stack_mag, axis=0)
         std_dev = np.nanstd(stack_mag, axis=0)
         count = np.count_nonzero(~np.isnan(stack_mag), axis=0)
@@ -173,6 +209,31 @@ def calc_ps_block(
     ps = amp_disp < amp_dispersion_threshold
     ps[amp_disp == 0] = False
     return mean, amp_disp, ps
+
+
+def _use_existing_files(
+    *,
+    existing_amp_mean_file: Filename,
+    existing_amp_dispersion_file: Filename,
+    output_file: Filename,
+    output_amp_mean_file: Filename,
+    output_amp_dispersion_file: Filename,
+    amp_dispersion_threshold: float,
+) -> None:
+    amp_disp = io.load_gdal(existing_amp_dispersion_file, masked=True)
+    ps = amp_disp < amp_dispersion_threshold
+    ps = ps.astype(np.uint8)
+    # Set the PS nodata value to the max uint8 value
+    ps[(amp_disp == 0) | amp_disp.mask] = NODATA_VALUES.ps
+    io.write_arr(
+        arr=ps,
+        like_filename=existing_amp_dispersion_file,
+        output_name=output_file,
+        nodata=NODATA_VALUES.ps,
+    )
+    # Copy the existing amp mean file/amp dispersion file
+    shutil.copy(existing_amp_dispersion_file, output_amp_dispersion_file)
+    shutil.copy(existing_amp_mean_file, output_amp_mean_file)
 
 
 def update_amp_disp(

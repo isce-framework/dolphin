@@ -25,17 +25,20 @@ jobs:
             spec: ""
           - label: Minimum
             spec: |
-              python=3.7
+              python=3.8
+              gdal=3.5
+              h5py=3.6
+              h5netcdf=1.0
+              isce3=0.8.0
               numpy=1.20
               numba=0.54
-              h5py=3.6
-              ruamel_yaml=0.15
               pydantic=1.10
               pymp-pypi=0.4.5
-              pyproj=3.2
-              gdal=3.3
+              pyproj=3.3
+              rich=12.0
+              ruamel_yaml=0.15
               scipy=1.5
-              tqdm=4.60
+              threadpoolctl>=3.0
 
       fail-fast: false
     name: ${{ matrix.os.label }} • ${{ matrix.deps.label }}
@@ -56,11 +59,9 @@ jobs:
       - name: Install
         run: |
           pip install --no-deps .
-      # Run once with normal JIT, once without
-      - name: Test
+      - name: Install test dependencies
         run: |
           micromamba install -f tests/requirements.txt -c conda-forge
-          pytest
       - name: Disable numba for codecov
         # https://community.codecov.com/t/numba-jitted-methods-are-not-captured-by-codecov/2649
         run: |
