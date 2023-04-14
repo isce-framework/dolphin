@@ -348,7 +348,7 @@ def _warp_to_projection(
         if proj_in == projection:
             warped_files.append(fn)
             continue
-        warped_fn = Path(dirname) / f"{fn.stem}_{idx}_warped.tif"
+        warped_fn = Path(dirname) / f"{fn.stem}_{idx}_warped.vrt"
         from_srs_name = ds.GetSpatialRef().GetName()
         to_srs_name = osr.SpatialReference(projection).GetName()
         logger.info(
