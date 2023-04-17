@@ -141,7 +141,7 @@ def raster_100_by_200(tmp_path):
     d = tmp_path / "raster_100_by_200"
     d.mkdir()
     filename = str(d / "test.bin")
-    ds = driver.Create(filename, xsize, ysize, 1, gdal.GDT_CFloat32)
+    ds = driver.Create(filename, xsize, ysize, 1, gdal.GDT_CFloat32)  # noqa
     ds.FlushCache()
     ds = None
     return filename

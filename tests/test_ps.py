@@ -59,8 +59,8 @@ def vrt_stack(tmp_path, slc_file_list):
 def test_create_ps(tmp_path, vrt_stack):
     dolphin.ps.create_ps(
         slc_vrt_file=vrt_stack.outfile,
-        amp_dispersion_file=tmp_path / "amp_disp.tif",
-        amp_mean_file=tmp_path / "amp_mean.tif",
+        output_amp_dispersion_file=tmp_path / "amp_disp.tif",
+        output_amp_mean_file=tmp_path / "amp_mean.tif",
         output_file=tmp_path / "ps_pixels.tif",
     )
     pass

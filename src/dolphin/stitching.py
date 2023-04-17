@@ -2,9 +2,10 @@
 import itertools
 import math
 import tempfile
+from datetime import date
 from os import fspath
 from pathlib import Path
-from typing import Iterable, List, Optional, Sequence, Tuple
+from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 import numpy as np
 from numpy.typing import DTypeLike
@@ -22,8 +23,9 @@ def merge_by_date(
     file_date_fmt: str = io.DEFAULT_DATETIME_FORMAT,
     output_dir: Filename = ".",
     driver: str = "ENVI",
+    output_suffix: str = ".int",
     overwrite: bool = False,
-):
+) -> Dict[Tuple[date, ...], Path]:
     """Group images from the same date and merge into one image per date.
 
     Parameters
@@ -36,6 +38,8 @@ def merge_by_date(
         Path to output directory
     driver : str
         GDAL driver to use for output. Default is ENVI.
+    output_suffix : str
+        Suffix to use to output stitched filenames. Default is ".int"
     overwrite : bool
         Overwrite existing files. Default is False.
 
@@ -56,7 +60,13 @@ def merge_by_date(
     for dates, cur_images in grouped_images.items():
         logger.info(f"{dates}: Stitching {len(cur_images)} images.")
         Path(output_dir).mkdir(parents=True, exist_ok=True)
-        outfile = Path(output_dir) / (io._format_date_pair(*dates) + ".int")
+        if len(dates) == 2:
+            date_str = io._format_date_pair(*dates)
+        elif len(dates) == 1:
+            date_str = dates[0].strftime(file_date_fmt)
+        else:
+            raise ValueError(f"Expected 1 or 2 dates: {dates}.")
+        outfile = Path(output_dir) / (date_str + output_suffix)
 
         merge_images(
             cur_images,
@@ -78,8 +88,9 @@ def merge_images(
     out_nodata: Optional[float] = 0,
     out_dtype: Optional[DTypeLike] = None,
     overwrite=False,
-    options: Optional[Sequence[str]] = ["SUFFIX=ADD"],
-):
+    options: Optional[Sequence[str]] = io.DEFAULT_ENVI_OPTIONS,
+    create_only: bool = False,
+) -> None:
     """Combine multiple SLC images on the same date into one image.
 
     Parameters
@@ -106,6 +117,8 @@ def merge_images(
         Overwrite existing files. Default is False.
     options : Optional[Sequence[str]]
         Driver-specific creation options passed to GDAL. Default is ["SUFFIX=ADD"]
+    create_only : bool
+        If True, creates an empty output file, does not write data. Default is False.
     """
     if Path(outfile).exists():
         if not overwrite:
@@ -147,7 +160,7 @@ def merge_images(
     )
 
     out_shape = _get_output_shape(bounds, res)
-    out_dtype = out_dtype or io.get_dtype(warped_file_list[0])
+    out_dtype = out_dtype or io.get_raster_dtype(warped_file_list[0])
 
     io.write_arr(
         arr=None,
@@ -161,6 +174,9 @@ def merge_images(
         projection=projection,
         options=options,
     )
+    if create_only:
+        temp_dir.cleanup()
+        return
 
     out_left, out_bottom, out_right, out_top = bounds
     # Now loop through the files and write them to the output
@@ -304,7 +320,11 @@ def _warp_to_projection(
     projection: str,
     res: Tuple[float, float],
 ) -> List[Path]:
-    """Warp a list of files to the most common projection.
+    """Warp a list of files to `projection`.
+
+    If the input file's projection matches `projection`, the same file is returned.
+    Otherwise, a new file is created in `dirname` with the same name as the input file,
+    but with '_warped' appended.
 
     Parameters
     ----------
@@ -443,7 +463,7 @@ def _nodata_to_zero(
     ext: Optional[str] = None,
     in_band: int = 1,
     driver="ENVI",
-    creation_options=["SUFFIX=ADD"],
+    creation_options=io.DEFAULT_ENVI_OPTIONS,
 ):
     """Make a copy of infile and replace NaNs with 0."""
     in_p = Path(infile)
@@ -468,3 +488,68 @@ def _nodata_to_zero(
     ds_out = None
 
     return outfile
+
+
+def warp_to_match(
+    input_file: Filename,
+    match_file: Filename,
+    output_file: Optional[Filename] = None,
+    resampling_alg: str = "near",
+    output_format: Optional[str] = None,
+) -> Path:
+    """Reproject `input_file` to align with the `match_file`.
+
+    Uses the bounds, resolution, and CRS of `match_file`.
+
+    Parameters
+    ----------
+    input_file: Filename
+        Path to the image to be reprojected.
+    match_file: Filename
+        Path to the input image to serve as a reference for the reprojected image.
+        Uses the bounds, resolution, and CRS of this image.
+    output_file: Filename
+        Path to the output, reprojected image.
+        If None, creates an in-memory warped VRT using the `/vsimem/` protocol.
+    resampling_alg: str, optional, default = "near"
+        Resampling algorithm to be used during reprojection.
+        See https://gdal.org/programs/gdalwarp.html#cmdoption-gdalwarp-r for choices.
+    output_format: str, optional, default = None
+        Output format to be used for the output image.
+        If None, gdal will try to infer the format from the output file extension, or
+        (if the extension of `output_file` matches `input_file`) use the input driver.
+
+    Returns
+    -------
+    Path
+        Path to the output image.
+        Same as `output_file` if provided, otherwise a path to the in-memory VRT.
+    """
+    bounds = io.get_raster_bounds(match_file)
+    crs_wkt = io.get_raster_crs(match_file).to_wkt()
+    gt = io.get_raster_gt(match_file)
+    resolution = (gt[1], gt[5])
+
+    if output_file is None:
+        output_file = f"/vsimem/warped_{Path(input_file).stem}.vrt"
+        logger.debug(f"Creating in-memory warped VRT: {output_file}")
+
+    if output_format is None and Path(input_file).suffix == Path(output_file).suffix:
+        output_format = io.get_raster_driver(input_file)
+
+    options = gdal.WarpOptions(
+        dstSRS=crs_wkt,
+        format=output_format,
+        xRes=resolution[0],
+        yRes=resolution[1],
+        outputBounds=bounds,
+        outputBoundsSRS=crs_wkt,
+        resampleAlg=resampling_alg,
+    )
+    gdal.Warp(
+        fspath(output_file),
+        fspath(input_file),
+        options=options,
+    )
+
+    return Path(output_file)

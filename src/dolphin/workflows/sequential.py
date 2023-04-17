@@ -7,10 +7,10 @@ References
     Remote Sensing, 55(10), 5637-5652.
 """
 from collections import defaultdict
-from math import nan
+from itertools import chain
 from os import fspath
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 from osgeo_utils import gdal_calc
@@ -44,7 +44,7 @@ def run_evd_sequential(
     max_bytes: float = 32e6,
     n_workers: int = 1,
     gpu_enabled: bool = True,
-):
+) -> Tuple[List[Path], List[Path], Path]:
     """Estimate wrapped phase using batches of ministacks."""
     output_folder = Path(output_folder)
     v_all = VRTStack.from_vrt_file(slc_vrt_file)
@@ -137,7 +137,10 @@ def run_evd_sequential(
 
         output_comp_slc_file = output_folder / comp_slc_files[0].name
         comp_slc_files[0].rename(output_comp_slc_file)
-        return
+
+        # return output_slc_files, comp_slc_file, tcorr_file
+        # different here for sequential
+        return output_slc_files[0], [output_comp_slc_file], output_tcorr_file
 
     # Compute the adjustments by running EVD on the compressed SLCs
     comp_output_folder = output_folder / "adjustments"
@@ -209,7 +212,7 @@ def run_evd_sequential(
     # as a multi-band file
     logger.info(f"Averaging temporal coherence files into: {output_tcorr_file}")
     gdal_calc.Calc(
-        NoDataValue=nan,
+        NoDataValue=0,
         format="GTiff",
         outfile=fspath(output_tcorr_file),
         type="Float32",
@@ -219,3 +222,7 @@ def run_evd_sequential(
         A=tcorr_files,
         calc="numpy.nanmean(A, axis=0)",
     )
+
+    # Combine the separate SLC output lists into a single list
+    all_slc_files = list(chain.from_iterable(output_slc_files.values()))
+    return all_slc_files, adjusted_comp_slc_files, output_tcorr_file

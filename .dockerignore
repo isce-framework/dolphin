@@ -1,1 +1,5 @@
-docs/
+**/__pycache__/*
+.mypy_cache
+build/
+data/
+dist/

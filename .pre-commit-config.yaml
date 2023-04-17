@@ -20,7 +20,7 @@ repos:
       - id: trailing-whitespace
 
   - repo: https://github.com/psf/black
-    rev: "23.1.0"
+    rev: "23.3.0"
     hooks:
       - id: black
       - id: black-jupyter
@@ -36,12 +36,13 @@ repos:
       - id: isort
 
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: "v1.0.1"
+    rev: "v1.1.1"
     hooks:
       - id: mypy
         additional_dependencies:
         - types-pkg_resources
         - types-requests
+        - "pydantic>=1.10.0"
 
   - repo: https://github.com/PyCQA/pydocstyle
     rev: "6.3.0"

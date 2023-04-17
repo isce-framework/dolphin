@@ -4,14 +4,44 @@
 
 - Sample test data for the `dolphin` package loaded onto Zenodo.
 
-
 **Dependencies**
 
 Added testing requirements:
 - pooch
 
 
-# v0.0.4
+# [0.1.0](https://github.com/opera-adt/dolphin/compare/v0.0.4...v0.1.0) - 2023-03-31
+
+- First version of the `_product.py` module to output the combined NetCDF product file.
+- `_pge_runconfig.py` module to handle the separate PGE-compatible configuration, which translates to-from the `Workflow` object.
+- `docker/build-docker-image.sh` script to build the docker image.
+- Release scripts for generating documentation, script for validating output data by @gmgunter .
+- Use of a spatial correlation estimate for unwrapping purposes, rather than temporal coherence.
+  - This is much more useful when the stack size is small (high temporal coherence), and `snaphu` is used for unwrapping.
+- `masking.py` module for masking the interferogram/combined multiple external masks of varying 1/0 conventions.
+- Ability to use existing amplitude mean/dispersion files for the PS portion of the workflow, skipping the step where we compute it using the SLC stack. Useful for small stack sizes
+- Added a `create_only` option to `write_arr` to create an empty file without writing data (e.g. to check the boundary results of stitching)
+
+
+**Changed**
+- The YAML output/input functions are moved to a `YamlModel` class, which is a subclass of `pydantic.BaseModel`.
+  - This allows us to use it in both `config.py` and `_pge_runconfig.py`.
+- Refactoring of the `Workflow` layout to more easily extract the input/output files for the PGE run.
+
+**Fixed**
+
+- Compressed SLC outputs were getting corrupted upon writing when using strides > 1.
+- Single-update interferograms where the first SLC input is a compressed SLC was broken (using the wrong size raster).
+  - Now the result will simply copy over the phase-linking result, which is already referenced to the first raster.
+
+**Dependencies**
+
+Added requirements:
+
+- h5netcdf>=1.1
+- Avoid HDF5 version 1.12.1 until NetCDF loading issue is fixed
+
+# [0.0.4](https://github.com/opera-adt/dolphin/compare/v0.0.3...v0.0.4) - 2023-03-17
 
 **Added**
 
@@ -31,6 +61,7 @@ Added testing requirements:
 - More uniform naming in `io.get_raster_<X>` functions.
 - The SLC compression is now done in `_compress.py` to declutter the `mle.py` module.
 - Replace `tqdm` with `rich` for progress bars.
+- The `unwrap.py` module now uses isce3 to unwrap the interferogram.
 
 - Docs are now using the mkdocs `material` theme.
 
@@ -47,6 +78,9 @@ Added requirements:
 - pyproj>=3.2
 - rich>=12.0
 - threadpoolctl>=3.0
+- isce3>=0.8.0
+- pyproj>=3.3
+- Dropped support for Python 3.7
 
 For docs:
 - mkdocs-material
@@ -57,7 +91,7 @@ Removed requirements:
 - tqdm
 
 
-# 0.0.3
+# [0.0.3](https://github.com/opera-adt/dolphin/compare/v0.0.2...v0.0.3) - 2023-01-26
 
 **Added**
 
@@ -73,7 +107,7 @@ Removed requirements:
 - Renamed module to `_log.py`
 - `workflows/wrapped_phase.py` absorbed much logic formerly in `s1_disp_stack.py`.
 
-# 0.0.2
+# [0.0.2](https://github.com/opera-adt/dolphin/compare/v0.0.1...v0.0.2) - 2023-01-24
 
 **Added**
 
@@ -96,7 +130,7 @@ Added requirements:
 - tqdm>=4.60
 
 
-# 0.0.1
+# [0.0.1] - 2022-12-09
 
 **Added**
 
