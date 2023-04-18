@@ -10,6 +10,15 @@ FROM $BASE
 # Needed to redefine the arg so we can use it later
 ARG BASE
 
+# Label image following opencontainers image-spec annotations recommendation:
+# https://github.com/opencontainers/image-spec/blob/main/annotations.md
+LABEL org.opencontainers.image.description="Container for InSAR PS/DS phrase analysis using dolphin"
+LABEL org.opencontainers.image.authors="Scott Staniewicz <scott.j.staniewicz@jpl.nasa.gov>"
+LABEL org.opencontainers.image.url="https://github.com/opera-adt/dolphin"
+LABEL org.opencontainers.image.source="https://github.com/opera-adt/dolphin"
+LABEL org.opencontainers.image.documentation="https://dolphin-insar.readthedocs.io/en/latest/"
+LABEL org.opencontainers.image.licenses="BSD-3-Clause OR Apache-2.0"
+
 # Install CA certificates if the base image is Ubuntu, otherwise we can't install conda packages
 RUN if [ "$(echo $BASE | awk -F: '{print $1}')" = "ubuntu" ]; then \
     apt-get update && \
