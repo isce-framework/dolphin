@@ -30,8 +30,8 @@ jobs:
         run: |
           # Save version number from CLI
           version=$(docker run --rm opera-adt/dolphin:latest dolphin --version)
-          sanitized_version=\${version//+/-} # Replace all '+' with '-'
-          echo "DOLPHIN_VERSION=\${sanitized_version}" >> $GITHUB_ENV
+          sanitized_version=${version//+/-} # Replace all '+' with '-'
+          echo "DOLPHIN_VERSION=${sanitized_version}" >> $GITHUB_ENV
 
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v2
