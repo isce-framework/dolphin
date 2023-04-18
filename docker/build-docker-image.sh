@@ -21,6 +21,12 @@ while [[ $# -gt 0 ]]; do
         shift
         shift
         ;;
+        # Add ability to specify base image
+    -b | --base)
+        BASE="$2"
+        shift
+        shift
+        ;;
     *)
         echo "Unknown option: $key"
         exit 1
@@ -34,11 +40,27 @@ if [ -z "$TAG" ]; then
 fi
 
 # Build the Docker image
-if [ -z "${MAMBA_USER_ID+x}" ]; then
-    docker build --network=host -t opera-adt/dolphin:"$TAG" --file docker/Dockerfile .
+CMD_BASE="docker build --network=host --tag opera-adt/dolphin:$TAG --file docker/Dockerfile"
+
+# append --build-arg if specified:
+if [ -z "${BASE+x}" ]; then
+    CMD_BASE="$CMD_BASE"
 else
-    docker build --network=host -t opera-adt/dolphin:"$TAG" --build-arg MAMBA_USER_ID="$MAMBA_USER_ID" --file docker/Dockerfile .
+    CMD_BASE="$CMD_BASE --build-arg BASE=$BASE"
 fi
+
+# append MAMBA_USER_ID if specified:
+if [ -z "${MAMBA_USER_ID+x}" ]; then
+    CMD_BASE="$CMD_BASE"
+else
+    CMD_BASE="$CMD_BASE --build-arg MAMBA_USER_ID=$MAMBA_USER_ID"
+fi
+
+# finish with ".":
+CMD_BASE="$CMD_BASE ."
+echo $CMD_BASE
+# Run the command
+eval $CMD_BASE
 
 # To run the image and see the help message....
 echo "To run the image and see the help message:"

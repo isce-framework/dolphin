@@ -41,6 +41,7 @@ repos:
       - id: mypy
         additional_dependencies:
         - types-pkg_resources
+        - types-requests
         - "pydantic>=1.10.0"
 
   - repo: https://github.com/PyCQA/pydocstyle
