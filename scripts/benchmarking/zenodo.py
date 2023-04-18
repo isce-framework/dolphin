@@ -1,5 +1,7 @@
+from __future__ import annotations
+
 from pathlib import Path
-from typing import Dict, Optional, Tuple, Union
+from typing import Optional, Union
 
 import pooch
 import requests
@@ -45,7 +47,7 @@ def make_pooch(
 
 def get_zenodo_links(
     record: Union[int, str], sandbox=True
-) -> Tuple[str, Dict[str, str]]:
+) -> tuple[str, dict[str, str]]:
     """Get the urls and MD5 checksums for the files in a Zenodo record."""
     # Get the record metadata
     if sandbox:
@@ -77,7 +79,9 @@ def get_zenodo_links(
 POOCH = make_pooch(RECORD_ID)
 
 
-def get_all_files(record: Union[int, str], sandbox: bool = True, path: Filename = None):
+def get_all_files(
+    record: Union[int, str], sandbox: bool = True, path: Optional[Filename] = None
+):
     """Download all the files in a Zenodo record."""
     dog = make_pooch(record, sandbox, path)
     # Fetch all the files
