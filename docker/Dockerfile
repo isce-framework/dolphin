@@ -12,7 +12,7 @@ ARG BASE
 
 # Label image following opencontainers image-spec annotations recommendation:
 # https://github.com/opencontainers/image-spec/blob/main/annotations.md
-LABEL org.opencontainers.image.description="Container for InSAR PS/DS phrase analysis using dolphin"
+LABEL org.opencontainers.image.description="Container for InSAR PS/DS phase analysis using dolphin"
 LABEL org.opencontainers.image.authors="Scott Staniewicz <scott.j.staniewicz@jpl.nasa.gov>"
 LABEL org.opencontainers.image.url="https://github.com/opera-adt/dolphin"
 LABEL org.opencontainers.image.source="https://github.com/opera-adt/dolphin"
