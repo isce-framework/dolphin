@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 import argparse
 import re
-import sys
 from pathlib import Path
 
 import pandas as pd
@@ -25,9 +24,7 @@ def get_df(dolphin_config_file: Filename):
     else:
         w = Workflow.from_yaml(dolphin_config_file)
 
-    log_file = Path(w.log_path)
-    if not log_file.is_absolute():
-        log_file = Path(dolphin_config_file).parent / log_file
+    log_file = Path(w.log_file)
 
     result = _get_memory(log_file)
     cfg_data = _parse_config(w)
@@ -71,7 +68,7 @@ def _get_cli_args():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--config-files",
-        nargs="?",
+        nargs="*",
         help="Path(s) to config file",
     )
     parser.add_argument(
@@ -92,14 +89,21 @@ def main():
 
     df = pd.concat(dfs)
 
+    from datetime import datetime
+
     if not args.outfile:
-        # Save as HTML file with same name as log_file
-        args.outfile = f"{sys.argv[1]}.html"
+        # Save as csv file with same directory as log_file
+        outfile = (
+            Path(args.config_files[0]).parent
+            / f"benchmarks_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+        )
+    else:
+        outfile = args.outfile
 
-    if not args.outfile.endswith(".html"):
-        raise ValueError("Output file must be HTML")
+    if not outfile.endswith(".html"):
+        raise ValueError("Output file must be csv")
 
-    df.to_html(args.outfile)
+    df.to_csv(outfile, index=False)
 
 
 if __name__ == "__main__":

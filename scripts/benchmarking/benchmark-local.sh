@@ -5,24 +5,35 @@ set -o errexit
 set -o nounset
 set -o pipefail
 
-# # Build the docker image.
-# BASE="ubuntu:20.04"
-# TAG="opera-adt/dolphin:ubuntu-latest"
-# docker build --network=host \
-#     --build-arg="BASE=$BASE" \
-#     --tag="$TAG" \
-#     --file docker/Dockerfile .
+# Parse input arguments
+while [[ $# -gt 0 ]]; do
+    key="$1"
+    case $key in
+    -t | --tag)
+        TAG="$2"
+        shift
+        shift
+        ;;
+    *)
+        echo "Unknown option: $key"
+        exit 1
+        ;;
+    esac
+done
 
-# Pull from ghcr.io
-# TODO!
+if [ -z "${TAG+x}" ]; then
+    TAG="opera-adt/dolphin:latest"
+    echo "Using default tag: $TAG"
+fi
 
 # Run the SAS workflow.
-DATA_DIR="/home/staniewi/dev/dolphin-benchmarks/data"
+BENCH_DIR="/u/aurora-r0/staniewi/dev/dolphin-benchmarks/"
+DATA_DIR="$BENCH_DIR/data"
 cd $DATA_DIR
 
-WORKDIR="/tmp"
-mkdir -p scratch
-mkdir -p output
+# WORKDIR="/tmp"
+mkdir -p scratch output
+rm -rf scratch/* output/*
 docker run --rm --user=$(id -u):$(id -g) \
     --volume="$(realpath input_slcs):$WORKDIR/input_slcs:ro" \
     --volume="$(realpath dynamic_ancillary):$WORKDIR/dynamic_ancillary:ro" \
@@ -32,19 +43,14 @@ docker run --rm --user=$(id -u):$(id -g) \
     --workdir="$WORKDIR" \
     "$TAG" dolphin run dolphin_config.yaml
 
-# dolphin_config_cpu_block1GB_strides2_tpw8_nslc27_nworkers4.log
+dolphin run config_files/dolphin_config.yaml
 
-cp output/dolphin.log
 eval "$(conda shell.bash hook)"
 source ~/anaconda3/etc/profile.d/conda.sh
 conda activate mapping
 
-python /u/aurora/staniewi/repos/dolphin/dolphin-benchmarks/scripts/plot.py
-
-# # Compare the output against a golden dataset.
-# docker run --rm --user=$(id -u):$(id -g) \
-#     --volume="$(realpath golden_output):$WORKDIR/golden_output:ro" \
-#     --volume="$(realpath output):$WORKDIR/output:ro" \
-#     --workdir="$WORKDIR" \
-#     "$TAG" \
-#     /dolphin/scripts/release/validate_product.py golden_output/20180101_20180716.unw.nc output/20180101_20180716.unw.nc
+LOG_DIR="$BENCH_DIR/logs"
+mkdir -p $LOG_DIR
+python /u/aurora-r0/staniewi/repos/dolphin/scripts/benchmarking/parse_benchmark_logs.py \
+    --config-files output/dolphin.log \
+    --outfile "$LOG_DIR/benchmark_results_$(date +%Y%m%d).csv"

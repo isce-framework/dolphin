@@ -7,6 +7,16 @@ FROM mambaorg/micromamba:1.1.0@sha256:53697a4bae2d9a4407463b8f314d370e201c58f6b5
 
 FROM $BASE
 
+# Needed to redefine the arg so we can use it later
+ARG BASE
+
+# Install CA certificates if the base image is Ubuntu, otherwise we can't install conda packages
+RUN if [ "$(echo $BASE | awk -F: '{print $1}')" = "ubuntu" ]; then \
+    apt-get update && \
+    apt-get install -y ca-certificates && \
+    rm -rf /var/lib/apt/lists/*; \
+    fi
+
 ARG MAMBA_USER=mamba
 ARG MAMBA_USER_ID=1000
 ARG MAMBA_USER_GID=1000
