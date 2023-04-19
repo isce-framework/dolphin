@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 import argparse
 import re
+import sys
+from collections import defaultdict
 from pathlib import Path
 
 import pandas as pd
@@ -26,28 +28,36 @@ def get_df(dolphin_config_file: Filename):
 
     log_file = Path(w.log_file)
 
-    result = _get_memory(log_file)
+    result = _get_memory_and_runtimes(log_file)
     cfg_data = _parse_config(w)
 
     result.update(cfg_data)
     return pd.DataFrame([result])
 
 
-def _get_memory(logfile):
-    out = {"file": str(Path(logfile).resolve())}
+def _get_memory_and_runtimes(logfile):
+    out = defaultdict(list)
+    out["file"] = str(Path(logfile).resolve())
     mempat = r"Maximum memory usage: (\d\.\d{2}) GB"
     timepat = (
         r"Total elapsed time for dolphin.workflows.s1_disp.run : (\d*\.\d{2}) minutes"
         r" \((\d*\.\d{2}) seconds\)"
     )
+    wrapped_phase_timepat = (
+        r"Total elapsed time for dolphin.workflows.wrapped_phase.run : (\d*\.\d{2})"
+        r" minutes"
+        r" \((\d*\.\d{2}) seconds\)"
+    )
     for line in open(logfile).readlines():
-        m = re.search(mempat, line)
-        if m:
+        if m := re.search(mempat, line):
             out["memory"] = float(m.groups()[0])
             continue
-        m = re.search(timepat, line)
-        if m:
+        if m := re.search(timepat, line):
             out["runtime"] = float(m.groups()[1])
+            continue
+        if m := re.search(wrapped_phase_timepat, line):
+            out["wrapped_phase_runtimes"].append(float(m.groups()[1]))
+            continue
     return out
 
 
@@ -100,8 +110,9 @@ def main():
     else:
         outfile = args.outfile
 
-    if not outfile.endswith(".html"):
-        raise ValueError("Output file must be csv")
+    if not outfile.endswith(".csv"):
+        outfile = outfile + ".csv"
+        print(f"Output file must be csv. Writing to {outfile}", file=sys.stderr)
 
     df.to_csv(outfile, index=False)
 
