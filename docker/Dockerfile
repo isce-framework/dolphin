@@ -7,6 +7,25 @@ FROM mambaorg/micromamba:1.1.0@sha256:53697a4bae2d9a4407463b8f314d370e201c58f6b5
 
 FROM $BASE
 
+# Needed to redefine the arg so we can use it later
+ARG BASE
+
+# Label image following opencontainers image-spec annotations recommendation:
+# https://github.com/opencontainers/image-spec/blob/main/annotations.md
+LABEL org.opencontainers.image.description="Container for InSAR PS/DS phase analysis using dolphin"
+LABEL org.opencontainers.image.authors="Scott Staniewicz <scott.j.staniewicz@jpl.nasa.gov>"
+LABEL org.opencontainers.image.url="https://github.com/opera-adt/dolphin"
+LABEL org.opencontainers.image.source="https://github.com/opera-adt/dolphin"
+LABEL org.opencontainers.image.documentation="https://dolphin-insar.readthedocs.io/en/latest/"
+LABEL org.opencontainers.image.licenses="BSD-3-Clause OR Apache-2.0"
+
+# Install CA certificates if the base image is Ubuntu, otherwise we can't install conda packages
+RUN if [ "$(echo $BASE | awk -F: '{print $1}')" = "ubuntu" ]; then \
+    apt-get update && \
+    apt-get install -y ca-certificates && \
+    rm -rf /var/lib/apt/lists/*; \
+    fi
+
 ARG MAMBA_USER=mamba
 ARG MAMBA_USER_ID=1000
 ARG MAMBA_USER_GID=1000

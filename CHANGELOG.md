@@ -1,6 +1,16 @@
-# [0.1.0](https://github.com/opera-adt/dolphin/compare/v0.0.4...v0.1.0) - 2023-03-31
+# Unreleased
 
 **Added**
+
+- Sample test data for the `dolphin` package loaded onto Zenodo.
+
+**Dependencies**
+
+Added testing requirements:
+- pooch
+
+
+# [0.1.0](https://github.com/opera-adt/dolphin/compare/v0.0.4...v0.1.0) - 2023-03-31
 
 - First version of the `_product.py` module to output the combined NetCDF product file.
 - `_pge_runconfig.py` module to handle the separate PGE-compatible configuration, which translates to-from the `Workflow` object.

@@ -3,14 +3,13 @@ import sys
 import textwrap
 from io import StringIO
 from itertools import repeat
-from pathlib import Path
 from typing import Optional, TextIO, Union
 
 from pydantic import BaseModel
 from ruamel.yaml import YAML
 from ruamel.yaml.comments import CommentedMap
 
-PathOrStr = Union[Path, str]
+from dolphin._types import Filename
 
 
 class YamlModel(BaseModel):
@@ -18,7 +17,7 @@ class YamlModel(BaseModel):
 
     def to_yaml(
         self,
-        output_path: Union[PathOrStr, TextIO],
+        output_path: Union[Filename, TextIO],
         with_comments: bool = True,
         by_alias: bool = True,
         indent_per_level: int = 2,
@@ -65,7 +64,7 @@ class YamlModel(BaseModel):
                 y.dump(yaml_obj, f)
 
     @classmethod
-    def from_yaml(cls, yaml_path: PathOrStr):
+    def from_yaml(cls, yaml_path: Filename):
         """Load a configuration from a yaml file.
 
         Parameters
@@ -87,7 +86,7 @@ class YamlModel(BaseModel):
     @classmethod
     def print_yaml_schema(
         cls,
-        output_path: Union[PathOrStr, TextIO] = sys.stdout,
+        output_path: Union[Filename, TextIO] = sys.stdout,
         indent_per_level: int = 2,
     ):
         """Print/save an empty configuration with defaults filled in.
