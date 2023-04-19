@@ -79,13 +79,13 @@ docker run --rm --user=$(id -u):$(id -g) \
     --workdir="$WORKDIR" \
     "$IMAGE" dolphin run dolphin_config.yaml
 
+LOG_DIR="$BENCH_DIR/logs"
+mkdir -p $LOG_DIR
+
+# TODO: run this in a docker container.
 eval "$(conda shell.bash hook)"
 source ~/anaconda3/etc/profile.d/conda.sh
 conda activate mapping
-
-LOG_DIR="$BENCH_DIR/logs"
-mkdir -p $LOG_DIR
-# TODO: run this in a docker container.
 python /u/aurora-r0/staniewi/repos/dolphin/scripts/benchmarking/parse_benchmark_logs.py \
-    --config-files output/dolphin.log \
+    --config-files config_files/dolphin_config.yaml \
     --outfile "$LOG_DIR/benchmark_results_$(date +%Y%m%d).csv"
