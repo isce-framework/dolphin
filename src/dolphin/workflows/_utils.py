@@ -184,17 +184,25 @@ def get_union_polygon(
     dset_name = "science/SENTINEL1/identification/bounding_polygon"
     for f in opera_file_list:
         with h5py.File(f) as hf:
+            if dset_name not in hf:
+                logger.debug(f"Could not find {dset_name} in {f}")
+                continue
             wkt_str = hf[dset_name][()].decode("utf-8")
         # geom = ogr.CreateGeometryFromWkt(wkt_str)
         geom = wkt.loads(wkt_str).buffer(buffer_degrees)
         polygons.append(geom)
 
+    if len(polygons) == 0:
+        raise ValueError(f"No polygons found in the given file list at {dset_name}.")
     # Union all the polygons
     return unary_union(polygons)
 
 
 def make_nodata_mask(
-    opera_file_list: List[Filename], out_file: Filename, buffer_pixels: int = 0
+    opera_file_list: List[Filename],
+    out_file: Filename,
+    buffer_pixels: int = 0,
+    overwrite: bool = False,
 ):
     """Make a dummy raster from the first file in the list.
 
@@ -208,8 +216,20 @@ def make_nodata_mask(
         Number of pixels to buffer the union polygon by, by default 0.
         Note that buffering will *decrease* the numba of pixels marked as nodata.
         This is to be more conservative to not mask possible valid pixels.
+    overwrite : bool, optional
+        Overwrite the output file if it already exists, by default False
     """
+    if Path(out_file).exists():
+        if not overwrite:
+            logger.debug(f"Skipping {out_file} since it already exists.")
+            return
+        else:
+            logger.info(f"Overwriting {out_file} since overwrite=True.")
+            Path(out_file).unlink()
+
     # convert pixels to degrees lat/lon
+    # TODO: more robust way to get the pixel size... this is a hack
+    # maybe just use pyproj to warp lat/lon to meters and back?
     gt = io.get_raster_gt(opera_file_list[0])
     dx_meters = gt[1]
     dx_degrees = dx_meters / 111000
@@ -227,15 +247,11 @@ def make_nodata_mask(
         " * 0' --creation-option COMPRESS=LZW --creation-option TILED=YES"
         " --creation-option BLOCKXSIZE=256 --creation-option BLOCKYSIZE=256"
     )
-    # TODO: Log and then run
     logger.info(cmd)
     subprocess.check_call(cmd, shell=True)
 
     with tempfile.TemporaryDirectory() as tmpdir:
         temp_vector_file = Path(tmpdir) / "temp.geojson"
-        # f.write(union_poly.ExportToJson())
-        # f.write(json.dumps(geometry.mapping(union_poly)))
-        # f.write(ogr.CreateGeometryFromWkt(union_poly.wkt).ExportToKML())
         with open(temp_vector_file, "w") as f:
             f.write(
                 json.dumps(
@@ -247,6 +263,6 @@ def make_nodata_mask(
             )
 
         # Now burn in the union of all polygons
-        cmd = f"gdal_rasterize -burn 1 {temp_vector_file} {out_file}"
+        cmd = f"gdal_rasterize -q -burn 1 {temp_vector_file} {out_file}"
         logger.info(cmd)
         subprocess.check_call(cmd, shell=True)

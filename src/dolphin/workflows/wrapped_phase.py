@@ -7,7 +7,7 @@ from dolphin._background import NvidiaMemoryWatcher
 from dolphin._log import get_log, log_runtime
 from dolphin.interferogram import Network
 
-from . import sequential, single
+from . import _utils, sequential, single
 from .config import Workflow
 
 
@@ -52,6 +52,14 @@ def run(cfg: Workflow, debug: bool = False) -> Tuple[List[Path], Path, Path]:
             subdataset=subdataset,
             outfile=cfg.scratch_directory / "slc_stack.vrt",
         )
+
+    # Make the nodata mask from the polygons, if we're using OPERA CSLCs
+    try:
+        nodata_mask_file = cfg.scratch_directory / "nodata_mask.tif"
+        _utils.make_nodata_mask(vrt_stack.file_list, out_file=nodata_mask_file)
+    except Exception as e:
+        logger.warning(f"Could not make nodata mask: {e}")
+        nodata_mask_file = None
 
     # ###############
     # 2. PS selection
@@ -99,6 +107,7 @@ def run(cfg: Workflow, debug: bool = False) -> Tuple[List[Path], Path, Path]:
                 strides=cfg.output_options.strides,
                 reference_idx=0,
                 # mask_file=cfg.mask_file,
+                mask_file=nodata_mask_file,
                 ps_mask_file=ps_output,
                 max_bytes=cfg.worker_settings.block_size_gb * 1e9,
                 n_workers=cfg.worker_settings.n_workers,
@@ -113,6 +122,7 @@ def run(cfg: Workflow, debug: bool = False) -> Tuple[List[Path], Path, Path]:
                 strides=cfg.output_options.strides,
                 ministack_size=cfg.phase_linking.ministack_size,
                 # mask_file=cfg.mask_file,
+                mask_file=nodata_mask_file,
                 ps_mask_file=ps_output,
                 max_bytes=cfg.worker_settings.block_size_gb * 1e9,
                 n_workers=cfg.worker_settings.n_workers,
