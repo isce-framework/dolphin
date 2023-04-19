@@ -105,7 +105,7 @@ jobs:
           file: ./docker/Dockerfile
           push: ${{ github.event_name != 'pull_request' }}
           tags: |
-            ghcr.io/${{ github.repository }}:v${{ env.DOLPHIN_VERSION }}
+            ghcr.io/${{ github.repository }}:${{ env.DOLPHIN_VERSION }}
           labels: |
             org.opencontainers.image.created=${{ env.CI_JOB_TIMESTAMP }}
             org.opencontainers.image.version=${{ env.DOLPHIN_VERSION }}
