@@ -80,14 +80,14 @@ jobs:
         uses: actions/checkout@v3
         with:
           fetch-depth: 0
-      - name: Build docker image
-        run: |
-          bash docker/build-docker-image.sh --tag latest
-
       - name: Set environment variables for docker build
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
         run: |
+          pip install setuptools_scm # Install setuptools_scm to get version number
           # Save version number from CLI
-          version=$(docker run --rm opera-adt/dolphin:latest dolphin --version)
+          version=$(python -m setuptools_scm)
           sanitized_version=${version//+/-} # Replace all '+' with '-'
           echo "DOLPHIN_VERSION=${sanitized_version}" >> $GITHUB_ENV
 
