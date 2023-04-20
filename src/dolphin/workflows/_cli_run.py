@@ -2,8 +2,6 @@
 import argparse
 from typing import TYPE_CHECKING, Any, Optional, Sequence
 
-from dolphin._log import get_log
-
 if TYPE_CHECKING:
     _SubparserType = argparse._SubParsersAction[argparse.ArgumentParser]
 else:
@@ -30,14 +28,9 @@ def run(
     # rest of imports here so --help doesn't take forever
     from threadpoolctl import ThreadpoolController
 
-    from dolphin.utils import get_max_memory_usage
-
     from . import s1_disp
     from ._pge_runconfig import RunConfig
     from .config import Workflow
-
-    # Set the logging level for all `dolphin.` modules
-    logger = get_log("dolphin", debug=debug)
 
     if pge_format:
         pge_rc = RunConfig.from_yaml(config_file)
@@ -52,10 +45,6 @@ def run(
     controller.limit(limits=cfg.worker_settings.threads_per_worker)
 
     s1_disp.run(cfg, debug=debug, pge_runconfig=pge_rc)
-
-    # Print the maximum memory usage for each worker
-    max_mem = get_max_memory_usage(units="GB")
-    logger.info(f"Maximum memory usage: {max_mem:.2f} GB")
 
 
 def get_parser(
