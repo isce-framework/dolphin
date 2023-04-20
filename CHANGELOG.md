@@ -2,9 +2,14 @@
 
 **Added**
 
+- For OPERA CSLC inputs, we now read the nodata polygon and skip loading regions of the SLC stack which are all nodata.
+  - This led to a reduction of 30-50% in wrapped phase estimation runtime for each burst stack.
 - Sample test data for the `dolphin` package loaded onto Zenodo.
 
+
 **Dependencies**
+
+- Numba now supports Python 3.11, so we can drop the Python<3.11 version restriction.
 
 Added testing requirements:
 - pooch
