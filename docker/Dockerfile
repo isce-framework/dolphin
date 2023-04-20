@@ -18,8 +18,8 @@ LABEL org.opencontainers.image.source="https://github.com/opera-adt/dolphin"
 LABEL org.opencontainers.image.documentation="https://dolphin-insar.readthedocs.io/en/latest/"
 LABEL org.opencontainers.image.licenses="BSD-3-Clause OR Apache-2.0"
 
-# Install CA certificates if the base image is Ubuntu, otherwise we can't install conda packages
-RUN if [ "$(echo $BASE | awk -F: '{print $1}')" = "ubuntu" ]; then \
+# Install CA certificates if the base image has apt-get, otherwise we can't install conda packages
+RUN if command -v apt-get > /dev/null; then \
     apt-get update && \
     apt-get install -y ca-certificates && \
     rm -rf /var/lib/apt/lists/*; \
