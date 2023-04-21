@@ -48,7 +48,7 @@ class DynamicAncillaryFileGroup(YamlModel, extra=Extra.forbid):
     amplitude_dispersion_files: List[Path] = Field(
         default_factory=list,
         description=(
-            "Paths to existing Amplitude Dispersion file (1 per burst) for PS update"
+            "Paths to existing Amplitude Dispersion files (1 per burst) for PS update"
             " calculation. If none provided, computed using the input SLC stack."
         ),
     )
@@ -85,7 +85,7 @@ class DynamicAncillaryFileGroup(YamlModel, extra=Extra.forbid):
     tec_files: Optional[List[Path]] = Field(
         default=None,
         description=(
-            "List of Paths to TEC files (1 per date) in IONEX format for ionosphere"
+            "List of paths to TEC files (1 per date) in IONEX format for ionosphere"
             " correction. If none provided, ionosphere corrections are skipped."
         ),
     )
@@ -94,7 +94,7 @@ class DynamicAncillaryFileGroup(YamlModel, extra=Extra.forbid):
     weather_model_files: Optional[List[Path]] = Field(
         default=None,
         description=(
-            "List of Paths to troposphere weather model files (1 per date). If none"
+            "List of paths to troposphere weather model files (1 per date). If none"
             " provided, troposphere corrections are skipped."
         ),
     )
@@ -130,7 +130,7 @@ class ProductPathGroup(YamlModel, extra=Extra.forbid):
     )
     product_version: str = Field(
         default="0.1",
-        description="Version of the product.",
+        description="Version of the product, in <major>.<minor> format.",
     )
     save_compressed_slc: bool = Field(
         default=False,

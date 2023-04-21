@@ -158,7 +158,9 @@ class UnwrapOptions(BaseModel, extra=Extra.forbid):
     unwrap_method: UnwrapMethod = UnwrapMethod.SNAPHU
     tiles: List[int] = Field(
         [1, 1],
-        description="Number of tiles to split the unwrapping into (for Tophu).",
+        description=(
+            "Number of tiles to split the unwrapping into (for multi-scale unwrapping)."
+        ),
     )
     init_method: str = Field(
         "mcf",
@@ -228,6 +230,7 @@ class OutputOptions(BaseModel, extra=Extra.forbid):
 
     output_resolution: Optional[Dict[str, int]] = Field(
         # {"x": 20, "y": 20},
+        # TODO: how to get a blank "x" and "y" in the schema printed instead of nothing?
         None,
         description="Output (x, y) resolution (in units of input data)",
     )

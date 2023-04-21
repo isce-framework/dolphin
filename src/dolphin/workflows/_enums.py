@@ -26,7 +26,7 @@ class ShpMethod(str, Enum):
 
 
 class UnwrapMethod(str, Enum):
-    """Phase unwrapping method, passable to Tophu."""
+    """Phase unwrapping method."""
 
     SNAPHU = "snaphu"
     ICU = "icu"
