@@ -51,7 +51,13 @@ def run_evd_single(
 
     nrows, ncols = vrt.shape[-2:]
     if mask_file is not None:
-        nodata_mask = io.load_gdal(mask_file).astype(bool)
+        # The mask file will by 0s at invalid data, 1s at good
+        nodata_mask = io.load_gdal(mask_file, masked=True).astype(bool).filled(False)
+        # invert the mask so 1s are the missing data pixels
+        nodata_mask = ~nodata_mask
+        # check middle pixel
+        assert nodata_mask.shape == (nrows, ncols)
+        assert not nodata_mask[nrows // 2, ncols // 2]
     else:
         nodata_mask = np.zeros((nrows, ncols), dtype=bool)
 
@@ -139,8 +145,7 @@ def run_evd_single(
         overlaps=overlaps,
         max_bytes=stack_max_bytes,
         skip_empty=True,
-        # TODO: get the nodata value from the vrt stack
-        # this involves verifying that COMPASS correctly sets the nodata value
+        nodata_mask=nodata_mask,
     )
     for cur_data, (rows, cols) in block_gen:
         if np.all(cur_data == 0):

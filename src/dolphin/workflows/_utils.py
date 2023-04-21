@@ -1,13 +1,20 @@
 import itertools
+import json
 import re
+import subprocess
+import tempfile
 from pathlib import Path
 from typing import Dict, List, Optional, Pattern, Sequence, Union
+
+import h5py
+from shapely import geometry, wkt
+from shapely.ops import unary_union
 
 from dolphin import io
 from dolphin._log import get_log
 from dolphin._types import Filename
 
-from .config import OPERA_BURST_RE
+from .config import OPERA_BURST_RE, OPERA_DATASET_NAME
 
 logger = get_log(__name__)
 
@@ -159,3 +166,103 @@ def setup_output_folder(
 
         output_files.append(output_path)
     return output_files
+
+
+def get_union_polygon(
+    opera_file_list: List[Filename], buffer_degrees: float = 0.0
+) -> geometry.Polygon:
+    """Get the union of the bounding polygons of the given files.
+
+    Parameters
+    ----------
+    opera_file_list : List[Filename]
+        List of COMPASS SLC filenames.
+    buffer_degrees : float, optional
+        Buffer the polygons by this many degrees, by default 0.0
+    """
+    polygons = []
+    dset_name = "science/SENTINEL1/identification/bounding_polygon"
+    for f in opera_file_list:
+        with h5py.File(f) as hf:
+            if dset_name not in hf:
+                logger.debug(f"Could not find {dset_name} in {f}")
+                continue
+            wkt_str = hf[dset_name][()].decode("utf-8")
+        # geom = ogr.CreateGeometryFromWkt(wkt_str)
+        geom = wkt.loads(wkt_str).buffer(buffer_degrees)
+        polygons.append(geom)
+
+    if len(polygons) == 0:
+        raise ValueError(f"No polygons found in the given file list at {dset_name}.")
+    # Union all the polygons
+    return unary_union(polygons)
+
+
+def make_nodata_mask(
+    opera_file_list: List[Filename],
+    out_file: Filename,
+    buffer_pixels: int = 0,
+    overwrite: bool = False,
+):
+    """Make a dummy raster from the first file in the list.
+
+    Parameters
+    ----------
+    opera_file_list : List[Filename]
+        List of COMPASS SLC filenames.
+    out_file : Filename
+        Output filename.
+    buffer_pixels : int, optional
+        Number of pixels to buffer the union polygon by, by default 0.
+        Note that buffering will *decrease* the numba of pixels marked as nodata.
+        This is to be more conservative to not mask possible valid pixels.
+    overwrite : bool, optional
+        Overwrite the output file if it already exists, by default False
+    """
+    if Path(out_file).exists():
+        if not overwrite:
+            logger.debug(f"Skipping {out_file} since it already exists.")
+            return
+        else:
+            logger.info(f"Overwriting {out_file} since overwrite=True.")
+            Path(out_file).unlink()
+
+    # convert pixels to degrees lat/lon
+    # TODO: more robust way to get the pixel size... this is a hack
+    # maybe just use pyproj to warp lat/lon to meters and back?
+    gt = io.get_raster_gt(opera_file_list[0])
+    dx_meters = gt[1]
+    dx_degrees = dx_meters / 111000
+    buffer_degrees = buffer_pixels * dx_degrees
+
+    # Get the union of all the polygons and convert to a temp geojson
+    union_poly = get_union_polygon(opera_file_list, buffer_degrees=buffer_degrees)
+    # convert shapely polygon to geojson
+
+    # Make a dummy raster from the first file with all 0s
+    # This will get filled in with the polygon rasterization
+    cmd = (
+        f"gdal_calc.py --quiet --outfile {out_file} --type Byte  -A"
+        f" NETCDF:{opera_file_list[0]}:{OPERA_DATASET_NAME} --calc 'numpy.nan_to_num(A)"
+        " * 0' --creation-option COMPRESS=LZW --creation-option TILED=YES"
+        " --creation-option BLOCKXSIZE=256 --creation-option BLOCKYSIZE=256"
+    )
+    logger.info(cmd)
+    subprocess.check_call(cmd, shell=True)
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        temp_vector_file = Path(tmpdir) / "temp.geojson"
+        with open(temp_vector_file, "w") as f:
+            f.write(
+                json.dumps(
+                    {
+                        "geometry": geometry.mapping(union_poly),
+                        "properties": {"id": 1},
+                    }
+                )
+            )
+
+        # Now burn in the union of all polygons
+        cmd = f"gdal_rasterize -q -burn 1 {temp_vector_file} {out_file}"
+        logger.info(cmd)
+        subprocess.check_call(cmd, shell=True)

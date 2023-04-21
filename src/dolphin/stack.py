@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-from math import nan
 from os import fspath
 from pathlib import Path
 from pprint import pformat
@@ -102,12 +101,6 @@ class VRTStack:
         self.subdataset = subdataset
 
         self._assert_images_same_size()
-
-        if nodata_value is None:
-            self.nodata_value = io.get_raster_nodata(self._gdal_file_strings[0]) or nan
-        self.nodata_mask_file = (
-            self.outfile.parent / f"{self.outfile.stem}_nodata_mask.tif"
-        )
 
         # Use the first file in the stack to get size, transform info
         ds = gdal.Open(fspath(self._gdal_file_strings[0]))
@@ -369,7 +362,7 @@ class VRTStack:
         block_shape: Optional[Tuple[int, int]] = None,
         max_bytes: Optional[float] = DEFAULT_BLOCK_BYTES,
         skip_empty: bool = True,
-        use_nodata_mask: bool = False,
+        nodata_mask: Optional[np.ndarray] = None,
     ) -> Generator[Tuple[np.ndarray, Tuple[slice, slice]], None, None]:
         """Iterate over blocks of the stack.
 
@@ -389,9 +382,10 @@ class VRTStack:
             RAM size (in Bytes) to attempt to stay under with each loaded block.
         skip_empty : bool, optional (default True)
             Skip blocks that are entirely empty (all NaNs)
-        use_nodata_mask : bool, optional (default True)
-            Use the nodata mask to determine if a block is empty.
-            Not used if `skip_empty` is False.
+        nodata_mask : bool, optional
+            Optional mask indicating nodata values. If provided, will skip
+            blocks that are entirely nodata.
+            1s are the nodata values, 0s are valid data.
 
         Yields
         ------
@@ -402,16 +396,12 @@ class VRTStack:
         if block_shape is None:
             block_shape = self._get_block_shape(max_bytes=max_bytes)
 
-        ndm = None  # TODO: get the polygon indicating nodata
-        if use_nodata_mask:
-            logger.info("Nodata mask not implemented, skipping")
-
         self._loader = io.EagerLoader(
             self.outfile,
             block_shape=block_shape,
             overlaps=overlaps,
+            nodata_mask=nodata_mask,
             skip_empty=skip_empty,
-            nodata_mask=ndm,
         )
         yield from self._loader.iter_blocks()
 
@@ -421,20 +411,6 @@ class VRTStack:
             len(self),
             max_bytes=max_bytes,
         )
-
-    def _get_nodata_mask(self, nodata=nan, buffer_pixels=100):
-        if self.nodata_mask_file.exists():
-            return io.load_gdal(self.nodata_mask_file).astype(bool)
-        # TODO: Write the code to grab the pre-computed polygon, rather
-        # than the loading data.
-        else:
-            raise NotImplementedError("_get_nodata_mask not implemented")
-            # return io.get_stack_nodata_mask(
-            #     self.outfile,
-            #     output_file=self.nodata_mask_file,
-            #     nodata=nodata,
-            #     buffer_pixels=buffer_pixels,
-            # )
 
     @property
     def shape(self):

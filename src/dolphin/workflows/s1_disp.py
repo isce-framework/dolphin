@@ -4,7 +4,9 @@ from pathlib import Path
 from pprint import pformat
 from typing import Dict, List, Optional
 
+from dolphin import __version__
 from dolphin._log import get_log, log_runtime
+from dolphin.utils import get_max_memory_usage
 
 from . import _product, stitch_and_unwrap, wrapped_phase
 from ._pge_runconfig import RunConfig
@@ -31,7 +33,8 @@ def run(
         If provided, adds PGE-specific metadata to the output product.
         Not used by the workflow itself, only for extra metadata.
     """
-    logger = get_log(debug=debug, filename=cfg.log_file)
+    # Set the logging level for all `dolphin.` modules
+    logger = get_log(name="dolphin", debug=debug, filename=cfg.log_file)
     logger.debug(pformat(cfg.dict()))
     cfg.create_dir_tree(debug=debug)
 
@@ -143,6 +146,12 @@ def run(
             comp_slc_dict=comp_slc_dict,
             output_dir=output_dir,
         )
+
+    # Print the maximum memory usage for each worker
+    max_mem = get_max_memory_usage(units="GB")
+    logger.info(f"Maximum memory usage: {max_mem:.2f} GB")
+    logger.info(f"Config file dolphin version: {cfg.dolphin_version}")
+    logger.info(f"Current running dolphin version: {__version__}")
 
 
 def _create_burst_cfg(

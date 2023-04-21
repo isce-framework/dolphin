@@ -1,6 +1,21 @@
-# [0.1.0](https://github.com/opera-adt/dolphin/compare/v0.0.4...v0.1.0) - 2023-03-31
+# Unreleased
 
 **Added**
+
+- For OPERA CSLC inputs, we now read the nodata polygon and skip loading regions of the SLC stack which are all nodata.
+  - This led to a reduction of 30-50% in wrapped phase estimation runtime for each burst stack.
+- Sample test data for the `dolphin` package loaded onto Zenodo.
+
+
+**Dependencies**
+
+- Numba now supports Python 3.11, so we can drop the Python<3.11 version restriction.
+
+Added testing requirements:
+- pooch
+
+
+# [0.1.0](https://github.com/opera-adt/dolphin/compare/v0.0.4...v0.1.0) - 2023-03-31
 
 - First version of the `_product.py` module to output the combined NetCDF product file.
 - `_pge_runconfig.py` module to handle the separate PGE-compatible configuration, which translates to-from the `Workflow` object.

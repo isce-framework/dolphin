@@ -666,28 +666,32 @@ class EagerLoader(BackgroundReader):
         self,
     ) -> Generator[Tuple[np.ndarray, Tuple[slice, slice]], None, None]:
         # Queue up all slices to the work queue
+        queued_slices = []
         for rows, cols in self.slices:
+            # Skip queueing a read if all nodata
+            if self._skip_empty and self._nodata_mask is not None:
+                logger.debug("Checking nodata mask")
+                if self._nodata_mask[rows, cols].all():
+                    logger.debug("Skipping!")
+                    continue
             self.queue_read(rows, cols)
+            queued_slices.append((rows, cols))
 
-        s_iter = range(len(self.slices))
+        s_iter = range(len(queued_slices))
         desc = f"Processing {self._block_shape} sized blocks..."
         with progress() as p:
             for _ in p.track(s_iter, description=desc):
                 cur_block, (rows, cols) = self.get_data()
                 logger.debug(f"got data for {rows, cols}: {cur_block.shape}")
 
-                if self._skip_empty and self._nodata_mask is not None:
-                    if self._nodata_mask[rows, cols].all():
-                        continue
-
-                if self._skip_empty:
-                    # Otherwise look at the actual block we loaded
-                    if np.isnan(self._nodata):
-                        block_nodata = np.isnan(cur_block)
-                    else:
-                        block_nodata = cur_block == self._nodata
-                    if np.all(block_nodata):
-                        continue
+                # Otherwise look at the actual block we loaded
+                if np.isnan(self._nodata):
+                    block_nodata = np.isnan(cur_block)
+                else:
+                    block_nodata = cur_block == self._nodata
+                if np.all(block_nodata):
+                    logger.debug("Skipping block since it was all nodata")
+                    continue
                 yield cur_block, (rows, cols)
 
         self.notify_finished()

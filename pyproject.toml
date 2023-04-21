@@ -51,7 +51,7 @@ version_scheme = "no-guess-dev"  # Will not guess the next version
 
 
 [tool.black]
-target-version = ["py38", "py39", "py310"]
+target-version = ["py38", "py39", "py310", "py311"]
 preview = true
 
 [tool.isort]
