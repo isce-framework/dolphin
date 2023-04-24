@@ -13,7 +13,7 @@ from numba import cuda, njit
 
 from dolphin.io import compute_out_shape
 
-from ._utils import _get_slices_cpu, _get_slices_gpu
+from ._utils import _get_slices
 
 # CPU version of the covariance matrix computation
 
@@ -91,7 +91,7 @@ def estimate_stack_covariance_cpu(
             in_r = r_start + out_r * row_strides
             in_c = c_start + out_c * col_strides
 
-            (r_start, r_end), (c_start, c_end) = _get_slices_cpu(
+            (r_start, r_end), (c_start, c_end) = _get_slices(
                 half_row, half_col, in_r, in_c, rows, cols
             )
             # Read the 3D current chunk
@@ -116,7 +116,7 @@ def estimate_stack_covariance_cpu(
     return C_arrays
 
 
-@njit
+@njit(njit=True, fastmath=True, parallel=True)
 def coh_mat_single(slc_samples, cov_mat=None, neighbor_mask=None):
     """Given a (n_slc, n_samps) samples, estimate the coherence matrix."""
     nslc, nsamps = slc_samples.shape
@@ -189,7 +189,7 @@ def estimate_stack_covariance_gpu(
 
     N, rows, cols = slc_stack.shape
     # Get the input slices, clamping the window to the image bounds
-    (r_start, r_end), (c_start, c_end) = _get_slices_gpu(
+    (r_start, r_end), (c_start, c_end) = _get_slices(
         half_row, half_col, in_r, in_c, rows, cols
     )
     samples_stack = slc_stack[:, r_start:r_end, c_start:c_end]
