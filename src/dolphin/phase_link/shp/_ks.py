@@ -75,18 +75,6 @@ def ks_2samp(data1, data2):
     return prob
 
 
-def _ks_2samp_block(data1, data_block):
-    """Compute the Kolmogorov-Smirnov statistic on a block."""
-    if data_block.ndim == 1:
-        return ks_2samp(data1, data_block)
-    elif data_block.ndim == 3:
-        # For 3D data, reshape to 2D where each col is a pixel
-        data_cols = data_block.reshape(data_block.shape[0], -1)
-    else:
-        data_cols = data_block
-    return np.apply_along_axis(lambda d: ks_2samp(d, data1), axis=0, arr=data_cols)
-
-
 @numba.njit
 def _compute_prob_outside_square(n, h):
     """Compute the proportion of paths that pass outside the two diagonal lines.
