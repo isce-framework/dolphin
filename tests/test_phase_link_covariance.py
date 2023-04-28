@@ -218,3 +218,44 @@ def test_estimate_stack_covariance_nans_gpu(slcs, looks=(5, 5)):
     assert np.abs(C_nonan[5, 5] - C_nan[5, 5]).max() < 1e-6
     # Should still be close to the non-nan version
     assert np.max(np.abs(C_nonan - C_nan)) < 0.10
+
+
+def test_estimate_stack_covariance_neighbors(slcs):
+    num_slc, rows, cols = slcs.shape
+
+    C = covariance.coh_mat_single(slcs.reshape(num_slc, -1))
+    # We're checking that setting the pixels to nan
+    # is the same as saying they are not neighbors
+
+    # Nans for one pixel in all SLCs
+    slc_stack_nan = slcs.copy()
+    nan_row, nan_col = (1, 1)
+    slc_stack_nan[:, nan_row, nan_col] = np.nan
+
+    slc_samples_nan = slc_stack_nan.reshape(num_slc, -1)
+    C_nan = covariance.coh_mat_single(slc_samples_nan)
+
+    slc_samples = slcs.reshape(num_slc, -1)
+    neighbor_mask = np.ones(slc_samples.shape[1], dtype=np.bool_)
+    idx = np.ravel_multi_index((nan_row, nan_col), (rows, cols))
+    neighbor_mask[idx] = False
+
+    C_neighbors = covariance.coh_mat_single(slc_samples, neighbor_mask=neighbor_mask)
+    npt.assert_allclose(C_nan, C_neighbors)
+
+    with pytest.raises(AssertionError):
+        # Make sure this is different than the original
+        npt.assert_allclose(C, C_neighbors)
+
+    # Now mask an entire row
+    slc_stack_nan = slcs.copy()
+    slc_stack_nan[:, 0, :] = np.nan
+    slc_samples_nan = slc_stack_nan.reshape(num_slc, -1)
+    C_nan = covariance.coh_mat_single(slc_samples_nan)
+
+    slc_samples = slcs.reshape(num_slc, -1)
+    neighbor_mask[:] = True
+    neighbor_mask[:cols] = False
+
+    C_neighbors = covariance.coh_mat_single(slc_samples, neighbor_mask=neighbor_mask)
+    npt.assert_allclose(C_nan, C_neighbors)
