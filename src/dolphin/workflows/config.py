@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import re
-from datetime import date, datetime
+from datetime import datetime
 from multiprocessing import cpu_count
 from pathlib import Path
-from typing import Any, Optional, Union
+from typing import Any, Dict, List, Optional, Tuple
 
 from pydantic import (
     BaseModel,
@@ -109,7 +109,7 @@ class InterferogramNetwork(BaseModel, extra=Extra.forbid):
         description="Maximum temporal baseline of interferograms.",
         gt=0,
     )
-    indexes: Optional[list[tuple[int, int]]] = Field(
+    indexes: Optional[List[Tuple[int, int]]] = Field(
         None,
         description=(
             "For manual-index network: list of (ref_idx, sec_idx) defining the"
@@ -157,7 +157,7 @@ class UnwrapOptions(BaseModel, extra=Extra.forbid):
     )
     _directory: Path = PrivateAttr(Path("unwrap"))
     unwrap_method: UnwrapMethod = UnwrapMethod.SNAPHU
-    tiles: list[int] = Field(
+    tiles: List[int] = Field(
         [1, 1],
         description="Number of tiles to split the unwrapping into (for Tophu).",
     )
@@ -227,12 +227,12 @@ class InputOptions(BaseModel, extra=Extra.forbid):
 class OutputOptions(BaseModel, extra=Extra.forbid):
     """Options for the output size/format/compressions."""
 
-    output_resolution: Optional[dict[str, int]] = Field(
+    output_resolution: Optional[Dict[str, int]] = Field(
         # {"x": 20, "y": 20},
         None,
         description="Output (x, y) resolution (in units of input data)",
     )
-    strides: dict[str, int] = Field(
+    strides: Dict[str, int] = Field(
         {"x": 1, "y": 1},
         description=(
             "Alternative to specifying output resolution: Specify the (x, y) strides"
@@ -246,7 +246,7 @@ class OutputOptions(BaseModel, extra=Extra.forbid):
         DEFAULT_HDF5_OPTIONS,
         description="Options for `create_dataset` with h5py.",
     )
-    gtiff_creation_options: list[str] = Field(
+    gtiff_creation_options: List[str] = Field(
         list(DEFAULT_TIFF_OPTIONS),
         description="GDAL creation options for GeoTIFF files",
     )
@@ -295,7 +295,7 @@ class Workflow(YamlModel):
 
     # Paths to input/output files
     input_options: InputOptions = Field(default_factory=InputOptions)
-    cslc_file_list: list[Path] = Field(
+    cslc_file_list: List[Path] = Field(
         default_factory=list,
         description=(
             "list of CSLC files, or newline-delimited file "
@@ -321,14 +321,14 @@ class Workflow(YamlModel):
 
     # Options for each step in the workflow
     ps_options: PsOptions = Field(default_factory=PsOptions)
-    amplitude_dispersion_files: list[Path] = Field(
+    amplitude_dispersion_files: List[Path] = Field(
         default_factory=list,
         description=(
             "Paths to existing Amplitude Dispersion file (1 per SLC region) for PS"
             " update calculation. If none provided, computed using the input SLC stack."
         ),
     )
-    amplitude_mean_files: list[Path] = Field(
+    amplitude_mean_files: List[Path] = Field(
         default_factory=list,
         description=(
             "Paths to an existing Amplitude Mean files (1 per SLC region) for PS update"
@@ -366,8 +366,7 @@ class Workflow(YamlModel):
 
     # internal helpers
     # Stores the list of directories to be created by the workflow
-    _directory_list: list[Path] = PrivateAttr(default_factory=list)
-    _date_list: list[Union[date, list[date]]] = PrivateAttr(default_factory=list)
+    _directory_list: List[Path] = PrivateAttr(default_factory=list)
 
     class Config:
         extra = Extra.forbid
