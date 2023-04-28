@@ -7,7 +7,84 @@ import numpy as np
 from numba import cuda
 from numpy.typing import ArrayLike
 
-from .._utils import _get_slices
+from dolphin.utils import _get_slices
+
+
+def estimate_neighbors(
+    amp_stack,
+    half_rowcol: tuple[int, int],
+    strides_rowcol: tuple[int, int],
+    alpha: float,
+    is_sorted: bool = False,
+):
+    """Estimate the  at all pixels of `slc_stack` on the GPU."""
+    # if is_sorted:
+    #     sorted_amp_stack = amp_stack
+    # else:
+    #     sorted_amp_stack = np.sort(amp_stack, axis=0)
+
+
+# GPU version of the SHP finding algorithm using KS test
+@cuda.jit
+def estimate_neighbors_gpu(
+    sorted_amp_stack,
+    half_rowcol: tuple[int, int],
+    strides_rowcol: tuple[int, int],
+    alpha: float,
+    neighbor_arrays: ArrayLike,
+):
+    """Estimate the SHPs of each pixel of `amp_stack` on the GPU."""
+    # Get the global position within the 2D GPU grid
+    out_x, out_y = cuda.grid(2)
+    out_rows, out_cols = neighbor_arrays.shape[:2]
+    # Check if we are within the bounds of the array
+    if out_y >= out_rows or out_x >= out_cols:
+        return
+
+    num_slc, rows, cols = sorted_amp_stack.shape
+    ecdf_dist_cutoff = _get_ecdf_critical_distance_gpu(num_slc, alpha)
+    half_row, half_col = half_rowcol
+
+    row_strides, col_strides = strides_rowcol
+    r_start = row_strides // 2
+    c_start = col_strides // 2
+    in_r = r_start + out_y * row_strides
+    in_c = c_start + out_x * col_strides
+
+    # Get the input slices, clamping the window to the image bounds
+    (r_start, r_end), (c_start, c_end) = _get_slices(
+        half_row, half_col, in_r, in_c, rows, cols
+    )
+
+    amp_block = sorted_amp_stack[:, r_start:r_end, c_start:c_end]
+    # TODO: if this is a bottleneck, we can do something smarter
+    # by computing only the bottom right corner, then mirroring
+    # also, we can use strides to only compute the output
+    # pixels that are actually needed
+    neighbors_pixel = neighbor_arrays[out_y, out_x, :, :]
+    _get_neighbors(amp_block, half_rowcol, ecdf_dist_cutoff, neighbors_pixel)
+
+
+@cuda.jit(device=True)
+def _get_neighbors(amp_block, half_rowcol, ecdf_dist_cutoff, neighbors):
+    _, rows, cols = amp_block.shape
+
+    r_c, c_c = rows // 2, cols // 2
+    if rows < 2 * half_rowcol[0] + 1 or cols < 2 * half_rowcol[1] + 1:
+        neighbors[:] = True
+        return
+
+    x1 = amp_block[:, r_c, c_c]
+    for i in range(rows):
+        for j in range(cols):
+            if i == r_c and j == c_c:
+                neighbors[i, j] = True
+                continue
+            x2 = amp_block[:, i, j]
+
+            ecdf_max_dist = _get_max_cdf_dist(x1, x2)
+
+            neighbors[i, j] = ecdf_max_dist < ecdf_dist_cutoff
 
 
 @numba.njit
@@ -112,69 +189,7 @@ def _compute_prob_outside_square(n, h):
     return 2 * P
 
 
-# GPU version of the SHP finding algorithm using KS test
-@cuda.jit
-def estimate_neighbors(
-    sorted_amp_stack,
-    half_rowcol: tuple[int, int],
-    strides_rowcol: tuple[int, int],
-    alpha: float,
-    neighbor_arrays: ArrayLike,
-):
-    """Estimate the linked phase at all pixels of `slc_stack` on the GPU."""
-    # Get the global position within the 2D GPU grid
-    out_x, out_y = cuda.grid(2)
-    out_rows, out_cols = neighbor_arrays.shape[:2]
-    # Check if we are within the bounds of the array
-    if out_y >= out_rows or out_x >= out_cols:
-        return
-
-    num_slc, rows, cols = sorted_amp_stack.shape
-    ecdf_dist_cutoff = _get_ecdf_critical_distance_gpu(num_slc, alpha)
-    half_row, half_col = half_rowcol
-
-    row_strides, col_strides = strides_rowcol
-    r_start = row_strides // 2
-    c_start = col_strides // 2
-    in_r = r_start + out_y * row_strides
-    in_c = c_start + out_x * col_strides
-
-    # Get the input slices, clamping the window to the image bounds
-    (r_start, r_end), (c_start, c_end) = _get_slices(
-        half_row, half_col, in_r, in_c, rows, cols
-    )
-
-    amp_block = sorted_amp_stack[:, r_start:r_end, c_start:c_end]
-    # TODO: if this is a bottleneck, we can do something smarter
-    # by computing only the bottom right corner, then mirroring
-    # also, we can use strides to only compute the output
-    # pixels that are actually needed
-    neighbors_pixel = neighbor_arrays[out_y, out_x, :, :]
-    _get_neighbors(amp_block, half_rowcol, ecdf_dist_cutoff, neighbors_pixel)
-
-
-@cuda.jit(device=True)
-def _get_neighbors(amp_block, half_rowcol, ecdf_dist_cutoff, neighbors):
-    _, rows, cols = amp_block.shape
-
-    r_c, c_c = rows // 2, cols // 2
-    if rows < 2 * half_rowcol[0] + 1 or cols < 2 * half_rowcol[1] + 1:
-        neighbors[:] = True
-        return
-
-    x1 = amp_block[:, r_c, c_c]
-    for i in range(rows):
-        for j in range(cols):
-            if i == r_c and j == c_c:
-                neighbors[i, j] = True
-                continue
-            x2 = amp_block[:, i, j]
-
-            ecdf_max_dist = _get_max_cdf_dist_gpu(x1, x2)
-
-            neighbors[i, j] = ecdf_max_dist < ecdf_dist_cutoff
-
-
+@numba.njit(nogil=True)
 def _get_max_cdf_dist(x1, x2):
     """Get the maximum CDF distance between two arrays.
 
@@ -232,10 +247,6 @@ def _get_max_cdf_dist(x1, x2):
         i_out += 1
         max_dist = max(max_dist, abs(cdf1 - cdf2))
     return max_dist
-
-
-_get_max_cdf_dist_gpu = cuda.jit(device=True)(_get_max_cdf_dist)
-_get_max_cdf_dist_cpu = numba.njit(_get_max_cdf_dist, nogil=True)
 
 
 def _get_ecdf_critical_distance(nslc, alpha):

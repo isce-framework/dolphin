@@ -14,8 +14,7 @@ import pymp
 from numba import cuda, njit
 
 from dolphin.io import compute_out_shape
-
-from ._utils import _get_slices
+from dolphin.utils import _get_slices
 
 # CPU version of the covariance matrix computation
 
@@ -132,30 +131,28 @@ def coh_mat_single(slc_samples, cov_mat=None, neighbor_mask=None):
         cov_mat[ti, ti] = 1.0
         for tj in range(ti + 1, nslc):
             c1, c2 = slc_samples[ti, :], slc_samples[tj, :]
-            a1 = np.nansum(np.abs(c1) ** 2)
-            a2 = np.nansum(np.abs(c2) ** 2)
-            # # Manually sum to skip based on the neighbor mask
-            # a1 = a2 = 0.0
-            # for sidx in range(nsamps):
-            #     # if neighbor_mask[sidx]:
-            #     # if not np.isnan(c1[sidx]) and not np.isnan(c2[sidx]):
-            #     if not np.isnan(c1[sidx]):
-            #         a1 += np.abs(c1[sidx]) ** 2
-            #     if not np.isnan(c2[sidx]):
-            #         a2 += np.abs(c2[sidx]) ** 2
+            # a1 = np.nansum(np.abs(c1) ** 2)
+            # a2 = np.nansum(np.abs(c2) ** 2)
+            # Manually sum to skip based on the neighbor mask
+            numer = a1 = a2 = 0.0
+            for sidx in range(nsamps):
+                if not neighbor_mask[sidx]:
+                    continue
+                s1 = c1[sidx]
+                s2 = c2[sidx]
+                if np.isnan(s1) or np.isnan(s2):
+                    continue
+                numer += s1 * s2.conjugate()
+                a1 += s1 * s1.conjugate()
+                a2 += s2 * s2.conjugate()
 
             # check if either had 0 good pixels
             a_prod = a1 * a2
             if abs(a_prod) < 1e-6:
                 cov = 0.0 + 0.0j
             else:
-                cov = np.nansum(c1 * np.conjugate(c2)) / np.sqrt(a_prod)
-                # for sidx in range(nsamps):
-                #     # if neighbor_mask[sidx]:
-                #     # # if not np.isnan(c1[sidx]) and not np.isnan(c2[sidx]):
-                #     if np.isnan(c1[sidx]):
-                #         continue
-                #     cov += c1[sidx] * np.conjugate(c2[sidx])
+                # cov = np.nansum(c1 * np.conjugate(c2)) / np.sqrt(a_prod)
+                cov = numer / csqrt(a_prod)
 
             cov_mat[ti, tj] = cov
             cov_mat[tj, ti] = np.conjugate(cov)
@@ -164,6 +161,7 @@ def coh_mat_single(slc_samples, cov_mat=None, neighbor_mask=None):
 
 
 # GPU version of the covariance matrix computation
+# Note that we can't do keyword args with numba.cuda.jit
 @cuda.jit
 def estimate_stack_covariance_gpu(
     slc_stack,
@@ -171,7 +169,7 @@ def estimate_stack_covariance_gpu(
     strides_rowcol: tuple[int, int],
     neighbor_arrays,
     C_out,
-    do_shp,  # =True,
+    do_shp,
 ):
     """Estimate the linked phase at all pixels of `slc_stack` on the GPU."""
     # Get the global position within the 2D GPU grid
@@ -195,7 +193,6 @@ def estimate_stack_covariance_gpu(
         half_row, half_col, in_r, in_c, rows, cols
     )
     samples_stack = slc_stack[:, r_start:r_end, c_start:c_end]
-    # TODO: make it a method instead of do/dont do
     if do_shp:
         # neighbors_stack = neighbor_arrays[in_r, in_c, :, :]
         neighbors_stack = neighbor_arrays[out_y, out_x, :, :]

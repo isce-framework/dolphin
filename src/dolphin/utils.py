@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Iterable, Optional, Union
 
 import numpy as np
+from numba import njit
 from numpy.typing import ArrayLike, DTypeLike
 from osgeo import gdal, gdal_array, gdalconst
 from rich.progress import MofNCompleteColumn, Progress, SpinnerColumn, TimeElapsedColumn
@@ -227,6 +228,18 @@ def sort_files_by_date(
     # Unpack the sorted pairs with new sorted values
     file_list, dates = zip(*file_dates)  # type: ignore
     return list(file_list), list(dates)
+
+
+@njit
+def _get_slices(half_r: int, half_c: int, r: int, c: int, rows: int, cols: int):
+    """Get the slices for the given pixel and half window size."""
+    # Clamp min indexes to 0
+    r_start = max(r - half_r, 0)
+    c_start = max(c - half_c, 0)
+    # Clamp max indexes to the array size
+    r_end = min(r + half_r + 1, rows)
+    c_end = min(c + half_c + 1, cols)
+    return (r_start, r_end), (c_start, c_end)
 
 
 def full_suffix(filename: Filename):

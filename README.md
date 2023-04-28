@@ -9,7 +9,13 @@ High resolution wrapped phase estimation for InSAR using combined PS/DS processi
 
 ## Install
 
-The following will install `dolphin` into a conda environment.
+`dolphin` is available on conda:
+
+```bash
+conda install -c conda-forge dolphin
+```
+
+To install locally:
 
 1. Download source code:
 ```bash
