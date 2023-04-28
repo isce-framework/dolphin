@@ -116,7 +116,7 @@ def estimate_stack_covariance_cpu(
     return C_arrays
 
 
-@njit(njit=True, fastmath=True, parallel=True)
+@njit(nogil=True)
 def coh_mat_single(slc_samples, cov_mat=None, neighbor_mask=None):
     """Given a (n_slc, n_samps) samples, estimate the coherence matrix."""
     nslc, nsamps = slc_samples.shape
