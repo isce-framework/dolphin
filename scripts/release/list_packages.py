@@ -1,8 +1,10 @@
 #!/usr/bin/env python
-"""List packages installed with conda & yum in CSV format.
+"""list packages installed with conda & yum in CSV format.
 
 Optionally list packages installed inside a container image instead.
 """
+from __future__ import annotations
+
 import argparse
 import csv
 import functools
@@ -13,7 +15,7 @@ import sys
 from dataclasses import astuple, dataclass
 from itertools import dropwhile
 from pathlib import Path
-from typing import Any, Dict, Iterator, List, Optional, TextIO
+from typing import Any, Iterator, Optional, TextIO
 
 DESCRIPTION = __doc__
 
@@ -76,7 +78,7 @@ def conda_command() -> str:
         raise CommandNotFoundError(errmsg)
 
 
-def list_conda_packages(env: str = "base") -> List[Package]:
+def list_conda_packages(env: str = "base") -> list[Package]:
     """List conda packages installed in the specified environment."""
     # Get the list of conda packages as a JSON-formatted string.
     args = [conda_command(), "list", "--name", env, "--json"]
@@ -98,7 +100,7 @@ def list_conda_packages(env: str = "base") -> List[Package]:
     return sorted(packages, key=lambda package: package.name)
 
 
-def list_yum_packages() -> List[Package]:
+def list_yum_packages() -> list[Package]:
     """List system packages installed with yum."""
     # Check if 'yum' is available.
     if not check_command("yum"):
@@ -154,7 +156,7 @@ def list_yum_packages() -> List[Package]:
     return sorted(packages, key=lambda package: package.name)
 
 
-def list_packages() -> List[Package]:
+def list_packages() -> list[Package]:
     """List installed packages."""
     return list_conda_packages() + list_yum_packages()
 
@@ -185,7 +187,7 @@ def setup_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def parse_args(args: Optional[List[str]] = None) -> Dict[str, Any]:
+def parse_args(args: Optional[list[str]] = None) -> dict[str, Any]:
     """Parse command-line arguments."""
     parser = setup_parser()
     params = parser.parse_args(args)
@@ -226,7 +228,7 @@ def run_in_container(image: str, entrypoint: Optional[str] = None) -> None:
     subprocess.run(args, check=True)
 
 
-def main(args: Optional[List[str]] = None) -> None:  # noqa: D103
+def main(args: Optional[list[str]] = None) -> None:  # noqa: D103
     kwargs = parse_args(args)
     if kwargs.get("image") is None:
         write_package_csv()

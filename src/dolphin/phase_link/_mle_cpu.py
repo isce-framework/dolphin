@@ -1,4 +1,6 @@
-from typing import Dict, Optional
+from __future__ import annotations
+
+from typing import Optional
 
 import numpy as np
 
@@ -14,8 +16,8 @@ logger = get_log(__name__)
 
 def run_cpu(
     slc_stack: np.ndarray,
-    half_window: Dict[str, int],
-    strides: Dict[str, int] = {"x": 1, "y": 1},
+    half_window: dict[str, int],
+    strides: dict[str, int] = {"x": 1, "y": 1},
     beta: float = 0.01,
     reference_idx: int = 0,
     use_slc_amp: bool = True,
@@ -31,10 +33,10 @@ def run_cpu(
     ----------
     slc_stack : np.ndarray
         The SLC stack, with shape (n_slc, n_rows, n_cols)
-    half_window : Dict[str, int]
+    half_window : dict[str, int]
         The half window size as {"x": half_win_x, "y": half_win_y}
         The full window size is 2 * half_window + 1 for x, y.
-    strides : Dict[str, int], optional
+    strides : dict[str, int], optional
         The (x, y) strides (in pixels) to use for the sliding window.
         By default {"x": 1, "y": 1}
     beta : float, optional

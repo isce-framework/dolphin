@@ -1,8 +1,10 @@
+from __future__ import annotations
+
 import sys
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from os import fspath
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Optional
 
 import isce3
 import numpy as np
@@ -24,8 +26,8 @@ CONNCOMP_SUFFIX = ".unw.conncomp"
 
 @log_runtime
 def run(
-    ifg_filenames: List[Filename],
-    cor_filenames: List[Filename],
+    ifg_filenames: list[Filename],
+    cor_filenames: list[Filename],
     output_path: Filename,
     *,
     nlooks: float = 5,
@@ -36,7 +38,7 @@ def run(
     max_jobs: int = 1,
     overwrite: bool = False,
     **kwargs,
-) -> Tuple[List[Path], List[Path]]:
+) -> tuple[list[Path], list[Path]]:
     """Run snaphu on all interferograms in a directory.
 
     Parameters
@@ -138,7 +140,7 @@ def unwrap(
     cost: str = "smooth",
     log_snaphu_to_file: bool = True,
     use_icu: bool = False,
-) -> Tuple[Path, Path]:
+) -> tuple[Path, Path]:
     """Unwrap a single interferogram using isce3's SNAPHU/ICU bindings.
 
     Parameters
@@ -288,7 +290,7 @@ def unwrap(
 
 def _zero_from_mask(
     ifg_filename: Filename, corr_filename: Filename, mask_filename: Filename
-) -> Tuple[Path, Path]:
+) -> tuple[Path, Path]:
     zeroed_ifg_file = Path(ifg_filename).with_suffix(".zeroed.tif")
     zeroed_corr_file = Path(corr_filename).with_suffix(".zeroed.cor.tif")
 

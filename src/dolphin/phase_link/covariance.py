@@ -2,9 +2,11 @@
 
 Contains for CPU and GPU versions (which will not be available if no GPU).
 """
+from __future__ import annotations
+
 from cmath import isnan
 from cmath import sqrt as csqrt
-from typing import Dict, Optional, Tuple
+from typing import Optional
 
 import numba
 import numpy as np
@@ -20,8 +22,8 @@ from ._utils import _get_slices
 
 def estimate_stack_covariance_cpu(
     slc_stack: np.ndarray,
-    half_window: Dict[str, int],
-    strides: Dict[str, int] = {"x": 1, "y": 1},
+    half_window: dict[str, int],
+    strides: dict[str, int] = {"x": 1, "y": 1},
     neighbor_arrays: Optional[np.ndarray] = None,
     n_workers=1,
 ):
@@ -31,10 +33,10 @@ def estimate_stack_covariance_cpu(
     ----------
     slc_stack : np.ndarray
         The SLC stack, with shape (n_slc, n_rows, n_cols).
-    half_window : Dict[str, int]
+    half_window : dict[str, int]
         The half window size as {"x": half_win_x, "y": half_win_y}
         The full window size is 2 * half_window + 1 for x, y.
-    strides : Dict[str, int], optional
+    strides : dict[str, int], optional
         The (x, y) strides (in pixels) to use for the sliding window.
         By default {"x": 1, "y": 1}
     neighbor_arrays : np.ndarray, optional
@@ -165,8 +167,8 @@ def coh_mat_single(slc_samples, cov_mat=None, neighbor_mask=None):
 @cuda.jit
 def estimate_stack_covariance_gpu(
     slc_stack,
-    half_rowcol: Tuple[int, int],
-    strides_rowcol: Tuple[int, int],
+    half_rowcol: tuple[int, int],
+    strides_rowcol: tuple[int, int],
     neighbor_arrays,
     C_out,
     do_shp,  # =True,

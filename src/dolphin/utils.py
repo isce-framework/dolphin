@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import datetime
 import math
 import re
@@ -6,7 +8,7 @@ import sys
 import warnings
 from multiprocessing import cpu_count
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Tuple, Union
+from typing import Iterable, Optional, Union
 
 import numpy as np
 from numpy.typing import ArrayLike, DTypeLike
@@ -74,7 +76,7 @@ def gdal_to_numpy_type(gdal_type: Union[str, int]) -> np.dtype:
     return np.dtype(gdal_array.GDALTypeCodeToNumericTypeCode(gdal_type))
 
 
-def get_dates(filename: Filename, fmt: str = "%Y%m%d") -> List[datetime.date]:
+def get_dates(filename: Filename, fmt: str = "%Y%m%d") -> list[datetime.date]:
     """Search for dates in the stem of `filename` matching `fmt`.
 
     Excludes dates that are not in the stem of `filename` (in the directories).
@@ -89,7 +91,7 @@ def get_dates(filename: Filename, fmt: str = "%Y%m%d") -> List[datetime.date]:
     Returns
     -------
     list[datetime.date]
-        List of dates found in the stem of `filename` matching `fmt`.
+        list of dates found in the stem of `filename` matching `fmt`.
 
     Examples
     --------
@@ -183,7 +185,7 @@ def _date_format_to_regex(date_format):
 
 def sort_files_by_date(
     files: Iterable[Filename], file_date_fmt: str = "%Y%m%d"
-) -> Tuple[List[Filename], List[List[datetime.date]]]:
+) -> tuple[list[Filename], list[list[datetime.date]]]:
     """Sort a list of files by date.
 
     If some files have multiple dates, the files with the most dates are sorted
@@ -196,15 +198,15 @@ def sort_files_by_date(
     Parameters
     ----------
     files : Iterable[Filename]
-        List of files to sort.
+        list of files to sort.
     file_date_fmt : str, optional
         Datetime format passed to `strptime`, by default "%Y%m%d"
 
     Returns
     -------
-    file_list : List[Filename]
-        List of files sorted by date.
-    dates : List[List[datetime.date,...]]
+    file_list : list[Filename]
+        list of files sorted by date.
+    dates : list[list[datetime.date,...]]
         Sorted list, where each entry has all the dates from the corresponding file.
     """
 
@@ -251,7 +253,7 @@ def full_suffix(filename: Filename):
     return "".join(fpath.suffixes)
 
 
-def half_window_to_full(half_window: Union[List, Tuple]) -> Tuple[int, int]:
+def half_window_to_full(half_window: Union[list, tuple]) -> tuple[int, int]:
     """Convert a half window size to a full window size."""
     return (2 * half_window[0] + 1, 2 * half_window[1] + 1)
 
@@ -390,8 +392,8 @@ def _make_dims_multiples(arr, row_looks, col_looks, how="cutoff"):
 
 def upsample_nearest(
     arr: np.ndarray,
-    output_shape: Tuple[int, int],
-    looks: Optional[Tuple[int, int]] = None,
+    output_shape: tuple[int, int],
+    looks: Optional[tuple[int, int]] = None,
 ) -> np.ndarray:
     """Upsample a numpy matrix by repeating blocks of (row_looks, col_looks).
 
@@ -399,9 +401,9 @@ def upsample_nearest(
     ----------
     arr : np.array
         2D or 3D downsampled array.
-    output_shape : Tuple[int, int]
+    output_shape : tuple[int, int]
         The desired output shape.
-    looks : Tuple[int, int]
+    looks : tuple[int, int]
         The number of looks in the row and column directions.
         If not provided, will be calculated from `output_shape`.
 
@@ -438,7 +440,7 @@ def upsample_nearest(
     return arr_out
 
 
-def decimate(arr: ArrayLike, strides: Dict[str, int]) -> ArrayLike:
+def decimate(arr: ArrayLike, strides: dict[str, int]) -> ArrayLike:
     """Decimate an array by strides in the x and y directions.
 
     Output will match [`io.compute_out_shape`][dolphin.io.compute_out_shape]
@@ -447,7 +449,7 @@ def decimate(arr: ArrayLike, strides: Dict[str, int]) -> ArrayLike:
     ----------
     arr : ArrayLike
         2D or 3D array to decimate.
-    strides : Dict[str, int]
+    strides : dict[str, int]
         The strides in the x and y directions.
 
     Returns
@@ -541,7 +543,7 @@ def get_gpu_memory(pid: Optional[int] = None, gpu_id: int = 0) -> float:
 
 
 def moving_window_mean(
-    image: ArrayLike, size: Union[int, Tuple[int, int]]
+    image: ArrayLike, size: Union[int, tuple[int, int]]
 ) -> np.ndarray:
     """Calculate the mean of a moving window of size `size`.
 

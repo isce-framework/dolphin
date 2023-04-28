@@ -1,5 +1,6 @@
+from __future__ import annotations
+
 from pathlib import Path
-from typing import List
 
 import numpy as np
 import pytest
@@ -9,7 +10,7 @@ from dolphin.workflows import config, s1_disp
 
 
 @pytest.fixture()
-def opera_slc_files(tmp_path, slc_stack) -> List[Path]:
+def opera_slc_files(tmp_path, slc_stack) -> list[Path]:
     """Save the slc stack as a series of NetCDF files."""
     start_date = 20220101
     shape = (4, 256, 256)
@@ -42,7 +43,7 @@ def opera_slc_files(tmp_path, slc_stack) -> List[Path]:
     return file_list
 
 
-def test_s1_disp_run_single(opera_slc_files: List[Path], tmpdir):
+def test_s1_disp_run_single(opera_slc_files: list[Path], tmpdir):
     with tmpdir.as_cwd():
         cfg = config.Workflow(
             workflow_name=config.WorkflowName.SINGLE,
@@ -58,7 +59,7 @@ def test_s1_disp_run_single(opera_slc_files: List[Path], tmpdir):
         s1_disp.run(cfg)
 
 
-def test_s1_disp_run_stack(opera_slc_files: List[Path], tmpdir):
+def test_s1_disp_run_stack(opera_slc_files: list[Path], tmpdir):
     with tmpdir.as_cwd():
         cfg = config.Workflow(
             workflow_name=config.WorkflowName.STACK,

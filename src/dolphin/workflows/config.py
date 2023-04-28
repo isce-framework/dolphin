@@ -1,7 +1,9 @@
+from __future__ import annotations
+
 import re
-from datetime import date, datetime
+from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple
 
 from pydantic import (
     BaseModel,
@@ -110,7 +112,7 @@ class InterferogramNetwork(BaseModel, extra=Extra.forbid):
     indexes: Optional[List[Tuple[int, int]]] = Field(
         None,
         description=(
-            "For manual-index network: List of (ref_idx, sec_idx) defining the"
+            "For manual-index network: list of (ref_idx, sec_idx) defining the"
             " interferograms to form."
         ),
     )
@@ -243,7 +245,7 @@ class OutputOptions(BaseModel, extra=Extra.forbid):
         ),
     )
 
-    hdf5_creation_options: Dict = Field(
+    hdf5_creation_options: dict = Field(
         DEFAULT_HDF5_OPTIONS,
         description="Options for `create_dataset` with h5py.",
     )
@@ -299,7 +301,7 @@ class Workflow(YamlModel):
     cslc_file_list: List[Path] = Field(
         default_factory=list,
         description=(
-            "List of CSLC files, or newline-delimited file "
+            "list of CSLC files, or newline-delimited file "
             "containing list of CSLC files."
         ),
     )
@@ -368,7 +370,6 @@ class Workflow(YamlModel):
     # internal helpers
     # Stores the list of directories to be created by the workflow
     _directory_list: List[Path] = PrivateAttr(default_factory=list)
-    _date_list: List[Union[date, List[date]]] = PrivateAttr(default_factory=list)
 
     class Config:
         extra = Extra.forbid

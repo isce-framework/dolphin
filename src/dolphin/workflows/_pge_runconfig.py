@@ -1,4 +1,5 @@
 """Module for creating PGE-compatible run configuration files."""
+from __future__ import annotations
 
 from pathlib import Path
 from typing import ClassVar, List, Optional
@@ -23,7 +24,7 @@ class InputFileGroup(YamlModel):
 
     cslc_file_list: List[Path] = Field(
         default_factory=list,
-        description="List of paths to CSLC files.",
+        description="list of paths to CSLC files.",
     )
 
     frame_id: int = Field(

@@ -1,8 +1,10 @@
 #!/usr/bin/env python
+from __future__ import annotations
+
 from os import fspath
 from pathlib import Path
 from pprint import pformat
-from typing import Generator, List, Optional, Sequence, Tuple
+from typing import Generator, Optional, Sequence
 
 import numpy as np
 from osgeo import gdal
@@ -23,12 +25,12 @@ class VRTStack:
 
     Attributes
     ----------
-    file_list : List[pathlib.Path]
+    file_list : list[pathlib.Path]
         Names of files to stack
     outfile : pathlib.Path, optional (default = Path("slc_stack.vrt"))
         Name of output file to write
-    dates : List[List[datetime.date]]
-        List, where each entry is all dates matched from the corresponding file
+    dates : list[list[datetime.date]]
+        list, where each entry is all dates matched from the corresponding file
         in `file_list`. This is used to sort the files by date.
         Each entry is a list because some files (compressed SLCs) may have
         multiple dates in the filename.
@@ -63,9 +65,9 @@ class VRTStack:
         outfile: Filename = "slc_stack.vrt",
         use_abs_path: bool = True,
         subdataset: Optional[str] = None,
-        pixel_bbox: Optional[Tuple[int, int, int, int]] = None,
-        target_extent: Optional[Tuple[float, float, float, float]] = None,
-        latlon_bbox: Optional[Tuple[float, float, float, float]] = None,
+        pixel_bbox: Optional[tuple[int, int, int, int]] = None,
+        target_extent: Optional[tuple[float, float, float, float]] = None,
+        latlon_bbox: Optional[tuple[float, float, float, float]] = None,
         sort_files: bool = True,
         nodata_value: Optional[float] = None,
         file_date_fmt: str = "%Y%m%d",
@@ -79,7 +81,7 @@ class VRTStack:
                 "To create from an existing VRT, use the `from_vrt_file` method."
             )
 
-        files: List[Filename] = [Path(f) for f in file_list]
+        files: list[Filename] = [Path(f) for f in file_list]
         self._use_abs_path = use_abs_path
         if use_abs_path:
             files = [utils._resolve_gdal_path(p) for p in files]
@@ -272,12 +274,12 @@ class VRTStack:
     def _parse_vrt_file(vrt_file):
         """Extract the filenames, and possible subdatasets, from a .vrt file.
 
-        Note that we are parsing the XML, not using `GetFileList`, because the
+        Note that we are parsing the XML, not using `GetFilelist`, because the
         function does not seem to work when using HDF5 files. E.g.
 
             <SourceFilename ="1">NETCDF:20220111.nc:SLC/VV</SourceFilename>
 
-        This would not get added to the result of `GetFileList`
+        This would not get added to the result of `GetFilelist`
 
         Parameters
         ----------
@@ -358,22 +360,22 @@ class VRTStack:
 
     def iter_blocks(
         self,
-        overlaps: Tuple[int, int] = (0, 0),
-        block_shape: Optional[Tuple[int, int]] = None,
+        overlaps: tuple[int, int] = (0, 0),
+        block_shape: Optional[tuple[int, int]] = None,
         max_bytes: Optional[float] = DEFAULT_BLOCK_BYTES,
         skip_empty: bool = True,
         nodata_mask: Optional[np.ndarray] = None,
-    ) -> Generator[Tuple[np.ndarray, Tuple[slice, slice]], None, None]:
+    ) -> Generator[tuple[np.ndarray, tuple[slice, slice]], None, None]:
         """Iterate over blocks of the stack.
 
         Loads all images for one window at a time into memory.
 
         Parameters
         ----------
-        overlaps : Tuple[int, int], optional
+        overlaps : tuple[int, int], optional
             Pixels to overlap each block by (rows, cols)
             By default (0, 0)
-        block_shape : Optional[Tuple[int, int]], optional
+        block_shape : Optional[tuple[int, int]], optional
             If provided, force the blocks to load in the given shape.
             Otherwise, calculates how much blocks are possible to load
             while staying under `max_bytes` that align wit the data's
@@ -389,7 +391,7 @@ class VRTStack:
 
         Yields
         ------
-        Tuple[np.ndarray, Tuple[slice, slice]]
+        tuple[np.ndarray, tuple[slice, slice]]
             Iterator of (data, (slice(row_start, row_stop), slice(col_start, col_stop))
 
         """

@@ -1,6 +1,8 @@
+from __future__ import annotations
+
 import shutil
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Optional
 
 from dolphin import io, ps, stack, utils
 from dolphin._background import NvidiaMemoryWatcher
@@ -12,7 +14,7 @@ from .config import Workflow
 
 
 @log_runtime
-def run(cfg: Workflow, debug: bool = False) -> Tuple[List[Path], Path, Path]:
+def run(cfg: Workflow, debug: bool = False) -> tuple[list[Path], Path, Path]:
     """Run the displacement workflow on a stack of SLCs.
 
     Parameters
@@ -24,8 +26,8 @@ def run(cfg: Workflow, debug: bool = False) -> Tuple[List[Path], Path, Path]:
 
     Returns
     -------
-    List[Path]
-        List of Paths to virtual interferograms created.
+    list[Path]
+        list of Paths to virtual interferograms created.
     Path
         Path the final compressed SLC file created.
     Path

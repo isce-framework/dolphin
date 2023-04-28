@@ -6,11 +6,13 @@ References
     efficient InSAR time series analysis. IEEE Transactions on Geoscience and
     Remote Sensing, 55(10), 5637-5652.
 """
+from __future__ import annotations
+
 from collections import defaultdict
 from itertools import chain
 from os import fspath
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Optional
 
 import numpy as np
 from osgeo_utils import gdal_calc
@@ -46,7 +48,7 @@ def run_evd_sequential(
     max_bytes: float = 32e6,
     n_workers: int = 1,
     gpu_enabled: bool = True,
-) -> Tuple[List[Path], List[Path], Path]:
+) -> tuple[list[Path], list[Path], Path]:
     """Estimate wrapped phase using batches of ministacks."""
     output_folder = Path(output_folder)
     v_all = VRTStack.from_vrt_file(slc_vrt_file)
@@ -56,9 +58,9 @@ def run_evd_sequential(
     logger.info(f"{v_all}: from {v_all.file_list[0]} to {v_all.file_list[-1]}")
 
     # Map of {ministack_index: [output_slc_files]}
-    output_slc_files: Dict[int, List] = defaultdict(list)
-    comp_slc_files: List[Path] = []
-    tcorr_files: List[Path] = []
+    output_slc_files: dict[int, list] = defaultdict(list)
+    comp_slc_files: list[Path] = []
+    tcorr_files: list[Path] = []
 
     nrows, ncols = v_all.shape[-2:]
     if mask_file is not None:

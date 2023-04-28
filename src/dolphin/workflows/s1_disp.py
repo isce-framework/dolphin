@@ -1,8 +1,10 @@
 #!/usr/bin/env python
+from __future__ import annotations
+
 from collections import defaultdict
 from pathlib import Path
 from pprint import pformat
-from typing import Dict, List, Optional
+from typing import Optional
 
 from dolphin import __version__
 from dolphin._log import get_log, log_runtime
@@ -86,11 +88,11 @@ def run(
     # ###########################
     # 1. Wrapped phase estimation
     # ###########################
-    ifg_file_list: List[Path] = []
-    tcorr_file_list: List[Path] = []
+    ifg_file_list: list[Path] = []
+    tcorr_file_list: list[Path] = []
     # The comp_slc tracking object is a dict, since we'll need to organize
     # multiple comp slcs by burst (they'll have the same filename)
-    comp_slc_dict: Dict[str, Path] = {}
+    comp_slc_dict: dict[str, Path] = {}
     # Now for each burst, run the wrapped phase estimation
     for burst, burst_cfg in wrapped_phase_cfgs:
         msg = "Running wrapped phase estimation"
@@ -157,9 +159,9 @@ def run(
 def _create_burst_cfg(
     cfg: Workflow,
     burst_id: str,
-    grouped_slc_files: Dict[str, List[Path]],
-    grouped_amp_mean_files: Dict[str, List[Path]],
-    grouped_amp_dispersion_files: Dict[str, List[Path]],
+    grouped_slc_files: dict[str, list[Path]],
+    grouped_amp_mean_files: dict[str, list[Path]],
+    grouped_amp_dispersion_files: dict[str, list[Path]],
 ) -> Workflow:
     cfg_temp_dict = cfg.copy(deep=True, exclude={"cslc_file_list"}).dict()
 
