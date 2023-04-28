@@ -1,11 +1,13 @@
 """stitching.py: utilities for combining interferograms into larger images."""
+from __future__ import annotations
+
 import itertools
 import math
 import tempfile
 from datetime import date
 from os import fspath
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Iterable, Optional, Sequence
 
 import numpy as np
 from numpy.typing import DTypeLike
@@ -19,19 +21,19 @@ logger = get_log(__name__)
 
 
 def merge_by_date(
-    image_file_list: List[Filename],
+    image_file_list: list[Filename],
     file_date_fmt: str = io.DEFAULT_DATETIME_FORMAT,
     output_dir: Filename = ".",
     driver: str = "ENVI",
     output_suffix: str = ".int",
     overwrite: bool = False,
-) -> Dict[Tuple[date, ...], Path]:
+) -> dict[tuple[date, ...], Path]:
     """Group images from the same date and merge into one image per date.
 
     Parameters
     ----------
     image_file_list : Iterable[Filename]
-        List of paths to images.
+        list of paths to images.
     file_date_fmt : Optional[str]
         Format of the date in the filename. Default is %Y%m%d
     output_dir : Filename
@@ -95,8 +97,8 @@ def merge_images(
 
     Parameters
     ----------
-    file_list : List[Filename]
-        List of raster filenames
+    file_list : list[Filename]
+        list of raster filenames
     outfile : Filename
         Path to output file
     output_dir : Filename
@@ -318,8 +320,8 @@ def _warp_to_projection(
     filenames: Iterable[Filename],
     dirname: Filename,
     projection: str,
-    res: Tuple[float, float],
-) -> List[Path]:
+    res: tuple[float, float],
+) -> list[Path]:
     """Warp a list of files to `projection`.
 
     If the input file's projection matches `projection`, the same file is returned.
@@ -329,17 +331,17 @@ def _warp_to_projection(
     Parameters
     ----------
     filenames : Iterable[Filename]
-        List of filenames to warp.
+        list of filenames to warp.
     dirname : Filename
         The directory to write the warped files to.
     projection : str
         The desired projection, as a WKT string or 'EPSG:XXXX' string.
-    res : Tuple[float, float]
+    res : tuple[float, float]
         The desired [x, y] resolution.
 
     Returns
     -------
-    List[Filename]
+    list[Filename]
         The warped filenames.
     """
     warped_files = []
@@ -378,7 +380,7 @@ def _get_mode_projection(filenames: Iterable[Filename]) -> str:
     return max(set(projs), key=projs.count)
 
 
-def _get_resolution(filenames: Iterable[Filename]) -> Tuple[float, float]:
+def _get_resolution(filenames: Iterable[Filename]) -> tuple[float, float]:
     """Get the most common resolution in the list."""
     gts = [gdal.Open(fspath(fn)).GetGeoTransform() for fn in filenames]
     res = [(gt[1], gt[5]) for gt in gts]
@@ -390,12 +392,12 @@ def _get_resolution(filenames: Iterable[Filename]) -> Tuple[float, float]:
 def _get_combined_bounds_gt(
     *filenames: Filename,
     target_aligned_pixels: bool = False,
-) -> Tuple[Tuple[float, float, float, float], List]:
+) -> tuple[tuple[float, float, float, float], list]:
     """Get the bounds and geotransform of the combined image.
 
     Parameters
     ----------
-    filenames : List[Filename]
+    filenames : list[Filename]
         list of filenames to combine
     target_aligned_pixels : bool
         if True, adjust output image bounds so that pixel coordinates
@@ -403,9 +405,9 @@ def _get_combined_bounds_gt(
 
     Returns
     -------
-    bounds : Tuple[float]
+    bounds : tuple[float]
         (min_x, min_y, max_x, max_y)
-    gt : List[float]
+    gt : list[float]
         geotransform of the combined image.
     """
     # scan input files
@@ -439,7 +441,7 @@ def _get_combined_bounds_gt(
     return bounds, gt_total
 
 
-def _get_output_shape(bounds: Iterable[float], res: Tuple[float, float]):
+def _get_output_shape(bounds: Iterable[float], res: tuple[float, float]):
     """Get the output shape of the combined image."""
     left, bottom, right, top = bounds
     # Always round up to the nearest pixel, instead of banker's rounding
@@ -448,7 +450,7 @@ def _get_output_shape(bounds: Iterable[float], res: Tuple[float, float]):
     return int(out_height), int(out_width)
 
 
-def _align_bounds(bounds: Iterable[float], res: Tuple[float, float]):
+def _align_bounds(bounds: Iterable[float], res: tuple[float, float]):
     left, bottom, right, top = bounds
     left = math.floor(left / res[0]) * res[0]
     right = math.ceil(right / res[0]) * res[0]

@@ -1,7 +1,8 @@
 #!/usr/bin/env python
+from __future__ import annotations
+
 import argparse
 from itertools import groupby
-from typing import Dict, List
 
 import h5py
 
@@ -65,7 +66,7 @@ def generate_docx_table(hdf5_path: Filename, output_path: Filename):
     document.save(output_path)
 
 
-def _get_hdf5_attributes(hdf5_path: Filename) -> List:
+def _get_hdf5_attributes(hdf5_path: Filename) -> list:
     table_data = []
 
     def append_dset_to_table(name, item):
@@ -91,7 +92,7 @@ def _get_hdf5_attributes(hdf5_path: Filename) -> List:
     return table_data
 
 
-def _get_hdf5_attributes_by_group(hdf5_path: Filename) -> Dict[str, List]:
+def _get_hdf5_attributes_by_group(hdf5_path: Filename) -> dict[str, list]:
     def get_group(name):
         try:
             return name.split("/")[-2]

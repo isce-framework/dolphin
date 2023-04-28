@@ -1,7 +1,9 @@
 """Module for creating the OPERA output product in NetCDF format."""
+from __future__ import annotations
+
 from io import StringIO
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
+from typing import Any, Optional, Sequence, Union
 
 import h5netcdf
 import h5py
@@ -52,7 +54,7 @@ def create_output_product(
     tcorr_filename: Filename,
     spatial_corr_filename: Filename,
     output_name: Filename,
-    corrections: Dict[str, ArrayLike] = {},
+    corrections: dict[str, ArrayLike] = {},
     pge_runconfig: Optional[RunConfig] = None,
 ):
     """Create the OPERA output product in NetCDF format.
@@ -69,7 +71,7 @@ def create_output_product(
         The path to the input spatial correlation image.
     output_name : Filename, optional
         The path to the output NetCDF file, by default "output.nc"
-    corrections : Dict[str, ArrayLike], optional
+    corrections : dict[str, ArrayLike], optional
         A dictionary of corrections to write to the output file, by default None
     pge_runconfig : Optional[RunConfig], optional
         The PGE run configuration, by default None
@@ -262,7 +264,7 @@ def _create_dataset(
     data: Union[np.ndarray, str],
     description: str,
     fillvalue: Optional[float],
-    attrs: Optional[Dict[str, Any]] = None,
+    attrs: Optional[dict[str, Any]] = None,
     dtype: Optional[DTypeLike] = None,
 ) -> h5netcdf.Variable:
     if attrs is None:
@@ -296,7 +298,7 @@ def _create_geo_dataset(
     data: np.ndarray,
     description: str,
     fillvalue: float,
-    attrs: Optional[Dict[str, Any]],
+    attrs: Optional[dict[str, Any]],
 ) -> h5netcdf.Variable:
     dimensions = ["y", "x"]
     dset = _create_dataset(
@@ -313,8 +315,8 @@ def _create_geo_dataset(
 
 
 def _create_yx_arrays(
-    gt: List[float], shape: Tuple[int, int]
-) -> Tuple[np.ndarray, np.ndarray]:
+    gt: list[float], shape: tuple[int, int]
+) -> tuple[np.ndarray, np.ndarray]:
     """Create the x and y coordinate datasets."""
     ysize, xsize = shape
     # Parse the geotransform
@@ -330,9 +332,9 @@ def _create_yx_arrays(
 
 def _create_yx_dsets(
     group: h5netcdf.Group,
-    gt: List[float],
-    shape: Tuple[int, int],
-) -> Tuple[h5netcdf.Variable, h5netcdf.Variable]:
+    gt: list[float],
+    shape: tuple[int, int],
+) -> tuple[h5netcdf.Variable, h5netcdf.Variable]:
     """Create the x and y coordinate datasets."""
     y, x = _create_yx_arrays(gt, shape)
 
@@ -350,7 +352,7 @@ def _create_yx_dsets(
     return y_ds, x_ds
 
 
-def _create_grid_mapping(group, crs: pyproj.CRS, gt: List[float]) -> h5netcdf.Variable:
+def _create_grid_mapping(group, crs: pyproj.CRS, gt: list[float]) -> h5netcdf.Variable:
     """Set up the grid mapping variable."""
     # https://github.com/corteva/rioxarray/blob/21284f67db536d9c104aa872ab0bbc261259e59e/rioxarray/rioxarray.py#L34
     dset = group.create_variable(GRID_MAPPING_DSET, (), data=0, dtype=int)
@@ -371,7 +373,7 @@ def _create_grid_mapping(group, crs: pyproj.CRS, gt: List[float]) -> h5netcdf.Va
     return dset
 
 
-def create_compressed_products(comp_slc_dict: Dict[str, Path], output_dir: Filename):
+def create_compressed_products(comp_slc_dict: dict[str, Path], output_dir: Filename):
     """Make the compressed SLC output product."""
 
     def form_name(filename: Path, burst: str):

@@ -1,5 +1,6 @@
+from __future__ import annotations
+
 from math import ceil
-from typing import Dict, Tuple
 
 import numpy as np
 from numba import cuda
@@ -13,25 +14,25 @@ from .mle import mle_stack
 
 def run_gpu(
     slc_stack: np.ndarray,
-    half_window: Dict[str, int],
-    strides: Dict[str, int] = {"x": 1, "y": 1},
+    half_window: dict[str, int],
+    strides: dict[str, int] = {"x": 1, "y": 1},
     beta: float = 0.01,
     reference_idx: int = 0,
     use_slc_amp: bool = True,
-    threads_per_block: Tuple[int, int] = (16, 16),
+    threads_per_block: tuple[int, int] = (16, 16),
     free_mem: bool = False,
     **kwargs,
-) -> Tuple[np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray]:
     """Run the GPU version of the stack covariance estimator and MLE solver.
 
     Parameters
     ----------
     slc_stack : np.ndarray
         The SLC stack, with shape (n_slc, n_rows, n_cols)
-    half_window : Dict[str, int]
+    half_window : dict[str, int]
         The half window size as {"x": half_win_x, "y": half_win_y}
         The full window size is 2 * half_window + 1 for x, y.
-    strides : Dict[str, int], optional
+    strides : dict[str, int], optional
         The (x, y) strides (in pixels) to use for the sliding window.
         By default {"x": 1, "y": 1}
     beta : float, optional
@@ -41,7 +42,7 @@ def run_gpu(
     use_slc_amp : bool, optional
         Whether to use the SLC amplitude when outputting the MLE estimate,
         or to set the SLC amplitude to 1.0. By default True.
-    threads_per_block : Tuple[int, int], optional
+    threads_per_block : tuple[int, int], optional
         The number of threads per block to use for the GPU kernel.
         By default (16, 16)
     free_mem : bool, optional

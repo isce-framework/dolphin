@@ -1,9 +1,11 @@
 """Combine estimated DS phases with PS phases to form interferograms."""
+from __future__ import annotations
+
 import datetime
 import itertools
 from os import fspath
 from pathlib import Path
-from typing import Iterable, List, Optional, Sequence, Tuple, Union
+from typing import Iterable, Optional, Sequence, Union
 
 import numpy as np
 from numpy.typing import ArrayLike
@@ -47,7 +49,7 @@ class VRTInterferogram(BaseModel):
         GDAL Pixel function to use, choices={'cmul', 'mul'}.
         Defaults to 'cmul', which performs `ref_slc * sec_slc.conj()`.
         See https://gdal.org/drivers/raster/vrt.html#default-pixel-functions
-    dates : Tuple[datetime.date, datetime.date]
+    dates : tuple[datetime.date, datetime.date]
         Date of the interferogram (parsed from the input files).
 
     """
@@ -91,7 +93,7 @@ class VRTInterferogram(BaseModel):
     </VRTRasterBand>
 </VRTDataset>
     """
-    dates: Optional[Tuple[datetime.date, datetime.date]] = None
+    dates: Optional[tuple[datetime.date, datetime.date]] = None
 
     class Config:
         extra = Extra.forbid  # raise error if extra fields passed in
@@ -260,11 +262,11 @@ class Network:
     Attributes
     ----------
     slc_list : list[Filename]
-        List of SLCs to use to form interferograms.
+        list of SLCs to use to form interferograms.
     slc_dates : list[datetime.date]
-        List of dates corresponding to the SLCs.
-    ifg_list : list[Tuple[Filename, Filename]]
-        List of `VRTInterferogram`s created from the SLCs.
+        list of dates corresponding to the SLCs.
+    ifg_list : list[tuple[Filename, Filename]]
+        list of `VRTInterferogram`s created from the SLCs.
     max_bandwidth : Optional[int], optional
         Maximum number of SLCs to include in an interferogram, by index distance.
         Defaults to None.
@@ -283,7 +285,7 @@ class Network:
         max_bandwidth: Optional[int] = None,
         max_temporal_baseline: Optional[float] = None,
         reference_idx: Optional[int] = None,
-        indexes: Optional[Sequence[Tuple[int, int]]] = None,
+        indexes: Optional[Sequence[tuple[int, int]]] = None,
         subdataset: Optional[str] = None,
     ):
         """Create a network of interferograms from a list of SLCs.
@@ -291,7 +293,7 @@ class Network:
         Parameters
         ----------
         slc_list : list
-            List of SLCs to use to form interferograms
+            list of SLCs to use to form interferograms
         outdir : Optional[Filename], optional
             Directory to write the VRT files to.
             If not set, defaults to the directory of the reference SLC.
@@ -304,8 +306,8 @@ class Network:
         reference_idx : Optional[int]
             Index of the SLC to use as the reference for all interferograms.
             Defaults to None.
-        indexes : Optional[Sequence[Tuple[int, int]]]
-            List of (ref_idx, sec_idx) pairs to use to create interferograms.
+        indexes : Optional[Sequence[tuple[int, int]]]
+            list of (ref_idx, sec_idx) pairs to use to create interferograms.
         subdataset : Optional[str]
             If passing NetCDF files in `slc_list, the subdataset of the image data
             within the file.
@@ -327,9 +329,9 @@ class Network:
         self._subdataset = subdataset
 
         # Create each VRT file
-        self.ifg_list: List[VRTInterferogram] = self._write(outdir=outdir)
+        self.ifg_list: list[VRTInterferogram] = self._write(outdir=outdir)
 
-    def _write(self, outdir: Optional[Filename] = Path.cwd()) -> List[VRTInterferogram]:
+    def _write(self, outdir: Optional[Filename] = Path.cwd()) -> list[VRTInterferogram]:
         """Write out a VRTInterferogram for each ifg.
 
         Parameters
@@ -340,7 +342,7 @@ class Network:
         """
         if outdir is None:
             outdir = Path(self.slc_list[0]).parent
-        ifg_list: List[VRTInterferogram] = []
+        ifg_list: list[VRTInterferogram] = []
         for ref, sec in self._gdal_file_strings:
             v = VRTInterferogram(ref_slc=ref, sec_slc=sec, outdir=outdir)
             ifg_list.append(v)
@@ -376,8 +378,8 @@ class Network:
         max_bandwidth: Optional[int] = None,
         max_temporal_baseline: Optional[float] = None,
         reference_idx: Optional[int] = None,
-        indexes: Optional[Sequence[Tuple[int, int]]] = None,
-    ) -> List[Tuple]:
+        indexes: Optional[Sequence[tuple[int, int]]] = None,
+    ) -> list[tuple]:
         """Form interferogram pairs from a list of SLC files sorted by date."""
         if indexes is not None:
             # Give the option to select exactly which interferograms to create
@@ -396,7 +398,7 @@ class Network:
     @staticmethod
     def _single_reference_network(
         slc_file_list: Sequence[Filename], reference_idx=0
-    ) -> List[Tuple]:
+    ) -> list[tuple]:
         """Form a list of single-reference interferograms."""
         if len(slc_file_list) < 2:
             raise ValueError("Need at least two dates to make an interferogram list")
@@ -411,7 +413,7 @@ class Network:
         Parameters
         ----------
         slc_file_list : Iterable[Filename]
-            List of dates of SLCs
+            list of dates of SLCs
         max_bandwidth : int
             Largest allowed span of ifgs, by index distance, to include.
             max_bandwidth=1 will only include nearest-neighbor ifgs.
@@ -494,7 +496,7 @@ class Network:
 
 
 def estimate_correlation_from_phase(
-    ifg: Union[VRTInterferogram, ArrayLike], window_size: Union[int, Tuple[int, int]]
+    ifg: Union[VRTInterferogram, ArrayLike], window_size: Union[int, tuple[int, int]]
 ) -> np.ndarray:
     """Estimate correlation from only an interferogram (no SLCs/magnitudes).
 
@@ -508,7 +510,7 @@ def estimate_correlation_from_phase(
         Interferogram to estimate correlation from.
         If a VRTInterferogram, will load and take the phase.
         If `ifg` is complex, will normalize to unit magnitude before estimating.
-    window_size : Union[int, Tuple[int, int]]
+    window_size : Union[int, tuple[int, int]]
         Size of window to use for correlation estimation.
         If int, will use a square window of that size.
         If tuple, the rectangular window has shape  `size=(row_size, col_size)`.

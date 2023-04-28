@@ -1,7 +1,8 @@
 """Module for creating PGE-compatible run configuration files."""
+from __future__ import annotations
 
 from pathlib import Path
-from typing import ClassVar, List, Optional
+from typing import ClassVar, Optional
 
 from pydantic import Extra, Field
 
@@ -21,9 +22,9 @@ from .config import (
 class InputFileGroup(YamlModel):
     """A group of input files."""
 
-    cslc_file_list: List[Path] = Field(
+    cslc_file_list: list[Path] = Field(
         default_factory=list,
-        description="List of paths to CSLC files.",
+        description="list of paths to CSLC files.",
     )
 
     frame_id: int = Field(
@@ -45,21 +46,21 @@ class DynamicAncillaryFileGroup(YamlModel, extra=Extra.forbid):
         default=...,
         description="Path to file containing SAS algorithm parameters.",
     )
-    amplitude_dispersion_files: List[Path] = Field(
+    amplitude_dispersion_files: list[Path] = Field(
         default_factory=list,
         description=(
             "Paths to existing Amplitude Dispersion file (1 per burst) for PS update"
             " calculation. If none provided, computed using the input SLC stack."
         ),
     )
-    amplitude_mean_files: List[Path] = Field(
+    amplitude_mean_files: list[Path] = Field(
         default_factory=list,
         description=(
             "Paths to an existing Amplitude Mean files (1 per burst) for PS update"
             " calculation. If none provided, computed using the input SLC stack."
         ),
     )
-    geometry_files: List[Path] = Field(
+    geometry_files: list[Path] = Field(
         default_factory=list,
         description=(
             "Paths to the incidence/azimuth-angle files (1 per burst). If none"
@@ -82,19 +83,19 @@ class DynamicAncillaryFileGroup(YamlModel, extra=Extra.forbid):
         ),
     )
     # TEC file in IONEX format for ionosphere correction
-    tec_files: Optional[List[Path]] = Field(
+    tec_files: Optional[list[Path]] = Field(
         default=None,
         description=(
-            "List of Paths to TEC files (1 per date) in IONEX format for ionosphere"
+            "list of Paths to TEC files (1 per date) in IONEX format for ionosphere"
             " correction. If none provided, ionosphere corrections are skipped."
         ),
     )
 
     # Troposphere weather model
-    weather_model_files: Optional[List[Path]] = Field(
+    weather_model_files: Optional[list[Path]] = Field(
         default=None,
         description=(
-            "List of Paths to troposphere weather model files (1 per date). If none"
+            "list of Paths to troposphere weather model files (1 per date). If none"
             " provided, troposphere corrections are skipped."
         ),
     )

@@ -4,17 +4,19 @@ Adapted from `rasterio.show_versions`,
 which was adapted from `sklearn.utils._show_versions`
 which was adapted from `pandas.show_versions`
 """
+from __future__ import annotations
+
 import importlib
 import platform
 import sys
-from typing import Dict, Optional
+from typing import Optional
 
 import dolphin
 
 __all__ = ["show_versions"]
 
 
-def _get_sys_info() -> Dict[str, str]:
+def _get_sys_info() -> dict[str, str]:
     """System information.
 
     Returns
@@ -29,7 +31,7 @@ def _get_sys_info() -> Dict[str, str]:
     }
 
 
-def _get_opera_info() -> Dict[str, Optional[str]]:
+def _get_opera_info() -> dict[str, Optional[str]]:
     """Information on system on core modules.
 
     Returns
@@ -60,7 +62,7 @@ def _get_version(module_name: str) -> Optional[str]:
         return mod.version
 
 
-def _get_deps_info() -> Dict[str, Optional[str]]:
+def _get_deps_info() -> dict[str, Optional[str]]:
     """Overview of the installed version of main dependencies.
 
     Returns
@@ -80,7 +82,7 @@ def _get_deps_info() -> Dict[str, Optional[str]]:
     return {name: _get_version(name) for name in deps}
 
 
-def _print_info_dict(info_dict: Dict) -> None:
+def _print_info_dict(info_dict: dict) -> None:
     """Print the information dictionary."""
     for key, stat in info_dict.items():
         print(f"{key:>12}: {stat}")
