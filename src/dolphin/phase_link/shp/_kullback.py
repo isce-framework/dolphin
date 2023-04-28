@@ -7,7 +7,7 @@ import numpy as np
 from numba import cuda
 from numpy.typing import ArrayLike
 
-from ._utils import _get_slices
+from .._utils import _get_slices
 
 
 def kl_dist(mu1, mu2, v1, v2):

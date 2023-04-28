@@ -10,6 +10,7 @@ from dolphin.workflows import ShpMethod
 
 from . import covariance, metrics
 from .mle import mle_stack
+from .shp import _kullback, _tf_test
 
 logger = get_log(__name__)
 
@@ -78,10 +79,8 @@ def run_cpu(
             var_mag = np.var(np.abs(slc_stack), axis=0)
 
     if shp_method.lower() == ShpMethod.TF:
-        from . import _shp_tf_test
-
         logger.info("Estimating SHP neighbors using KL distance")
-        neighbor_arrays = _shp_tf_test.estimate_neighbors(
+        neighbor_arrays = _tf_test.estimate_neighbors(
             avg_mag,
             var_mag,
             halfwin_rowcol=halfwin_rowcol,
@@ -89,10 +88,8 @@ def run_cpu(
             alpha=0.05,  # TODO: make this a parameter
         )
     elif shp_method.lower() == ShpMethod.KL:
-        from . import _shp_kullback
-
         logger.info("Estimating SHP neighbors using KL distance")
-        neighbor_arrays = _shp_kullback.estimate_neighbors_cpu(
+        neighbor_arrays = _kullback.estimate_neighbors_cpu(
             avg_mag, var_mag, halfwin_rowcol=halfwin_rowcol, threshold=0.5
         )
     elif shp_method == ShpMethod.RECT:
