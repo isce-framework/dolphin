@@ -11,7 +11,7 @@ simulate._seed(1234)
 
 @pytest.fixture(scope="module")
 def slcs(shape=(30, 11, 11)):
-    return np.random.rand(*shape) + 1j * np.random.rand(*shape)
+    return 10 * (np.random.rand(*shape) + 1j * np.random.rand(*shape))
 
 
 def test_shp_tf(slcs):
@@ -47,7 +47,7 @@ def test_shp_tf_half_mean_different(slcs):
 
     half_rowcol = (5, 5)
     mean2 = mean.copy()
-    mean2[:5, :] += 200  # make the top half different amplitude
+    mean2[:5, :] += 500  # make the top half different amplitude
 
     # Even at a small alpha, it should identify the top half as different
     neighbors = shp.estimate_neighbors_tf(mean2, var, half_rowcol, n, alpha=0.01)
@@ -76,22 +76,26 @@ def test_shp_tf_half_var_different(slcs):
     assert not shps_center[:5, :].any()
 
 
-def test_shp_tf_statistics():
+@pytest.mark.parametrize("alpha", [0.01, 0.05])
+def test_shp_tf_statistics(alpha):
     """Check that with repeated tries, the alpha is correct."""
 
-    nsim = 100
+    nsim = 500
     shape = (30, 11, 11)
-    num_shps = np.zeros(nsim)
+    half_rowcol = (5, 5)
+    frac_shps = np.zeros(nsim)
+    slc_rows = np.random.rand(nsim, *shape) + 1j * np.random.rand(nsim, *shape)
     for i in range(nsim):
-        slcs = np.random.rand(*shape) + 1j * np.random.rand(*shape)
+        slcs = slc_rows[i]
         amp = np.abs(slcs)
         mean = np.mean(amp, axis=0)
         var = np.var(amp, axis=0)
         n = slcs.shape[0]
 
-        half_rowcol = (5, 5)
-        neighbors = shp.estimate_neighbors_tf(mean, var, half_rowcol, n, alpha=0.05)
-        num_shps[i] = neighbors[5, 5].sum()
+        neighbors = shp.estimate_neighbors_tf(mean, var, half_rowcol, n, alpha=alpha)
+        shps_center = neighbors[5, 5]
+        frac_shps[i] = shps_center.sum() / (shps_center.size - 1)  # don't count center
 
     # Check that the mean number of SHPs is close to 5%
-    assert np.abs(100 * (num_shps.mean() / 11 * 11) - 5) < 1
+    tol_pct = 2
+    assert 100 * np.abs((frac_shps.mean() - (1 - alpha))) < tol_pct

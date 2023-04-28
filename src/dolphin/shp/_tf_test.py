@@ -80,16 +80,24 @@ def _loop_over_pixels(
             var1 = variance[r, c]
             for i in range(-half_row, half_row + 1):
                 for j in range(-half_col, half_col + 1):
+                    # itself is always a neighbor
+                    if i == 0 and j == 0:
+                        is_shp[r, c, i + half_row, j + half_col] = True
+                        continue
+
+                    # t-test: test for difference of means
                     mu2 = mean[r + i, c + j]
                     var2 = variance[r + i, c + j]
                     # welch_t_statistic(mu1, mu2, var1, var2, n)
                     t_stat = (mu1 - mu2) / np.sqrt((var1 + var2) / n)
-                    # F-test: ratio of variances
+
+                    # F-test: test for difference of variances
                     f_stat = var1 / var2
 
-                    # 2-sided tests for t- and f-test
+                    # critical values: use 2-sided tests for t- and f-test
                     passes_t = cv_t_low < t_stat < cv_t_high
                     passes_f = cv_f_low < f_stat < cv_f_high
+                    # Needs to pass both tests to be a SHP
                     is_shp[r, c, i + half_row, j + half_col] = passes_t and passes_f
 
 
