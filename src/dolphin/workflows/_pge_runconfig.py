@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import ClassVar, Optional
+from typing import ClassVar, List, Optional
 
 from pydantic import Extra, Field
 
@@ -22,7 +22,7 @@ from .config import (
 class InputFileGroup(YamlModel):
     """A group of input files."""
 
-    cslc_file_list: list[Path] = Field(
+    cslc_file_list: List[Path] = Field(
         default_factory=list,
         description="list of paths to CSLC files.",
     )
@@ -46,21 +46,21 @@ class DynamicAncillaryFileGroup(YamlModel, extra=Extra.forbid):
         default=...,
         description="Path to file containing SAS algorithm parameters.",
     )
-    amplitude_dispersion_files: list[Path] = Field(
+    amplitude_dispersion_files: List[Path] = Field(
         default_factory=list,
         description=(
             "Paths to existing Amplitude Dispersion file (1 per burst) for PS update"
             " calculation. If none provided, computed using the input SLC stack."
         ),
     )
-    amplitude_mean_files: list[Path] = Field(
+    amplitude_mean_files: List[Path] = Field(
         default_factory=list,
         description=(
             "Paths to an existing Amplitude Mean files (1 per burst) for PS update"
             " calculation. If none provided, computed using the input SLC stack."
         ),
     )
-    geometry_files: list[Path] = Field(
+    geometry_files: List[Path] = Field(
         default_factory=list,
         description=(
             "Paths to the incidence/azimuth-angle files (1 per burst). If none"
@@ -83,7 +83,7 @@ class DynamicAncillaryFileGroup(YamlModel, extra=Extra.forbid):
         ),
     )
     # TEC file in IONEX format for ionosphere correction
-    tec_files: Optional[list[Path]] = Field(
+    tec_files: Optional[List[Path]] = Field(
         default=None,
         description=(
             "list of Paths to TEC files (1 per date) in IONEX format for ionosphere"
@@ -92,7 +92,7 @@ class DynamicAncillaryFileGroup(YamlModel, extra=Extra.forbid):
     )
 
     # Troposphere weather model
-    weather_model_files: Optional[list[Path]] = Field(
+    weather_model_files: Optional[List[Path]] = Field(
         default=None,
         description=(
             "list of Paths to troposphere weather model files (1 per date). If none"

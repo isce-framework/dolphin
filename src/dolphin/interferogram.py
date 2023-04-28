@@ -5,7 +5,7 @@ import datetime
 import itertools
 from os import fspath
 from pathlib import Path
-from typing import Iterable, Optional, Sequence, Union
+from typing import Iterable, Optional, Sequence, Tuple, Union
 
 import numpy as np
 from numpy.typing import ArrayLike
@@ -93,7 +93,7 @@ class VRTInterferogram(BaseModel):
     </VRTRasterBand>
 </VRTDataset>
     """
-    dates: Optional[tuple[datetime.date, datetime.date]] = None
+    dates: Optional[Tuple[datetime.date, datetime.date]] = None
 
     class Config:
         extra = Extra.forbid  # raise error if extra fields passed in
