@@ -1,6 +1,8 @@
+from __future__ import annotations
+
 from datetime import date
 from pathlib import Path
-from typing import Dict, List, Sequence, Tuple
+from typing import Sequence
 
 from dolphin import io, stitching, unwrap
 from dolphin._log import get_log, log_runtime
@@ -15,7 +17,7 @@ def run(
     tcorr_file_list: Sequence[Path],
     cfg: Workflow,
     debug: bool = False,
-) -> Tuple[List[Path], List[Path], List[Path], Path]:
+) -> tuple[list[Path], list[Path], list[Path], Path]:
     """Run the displacement workflow on a stack of SLCs.
 
     Parameters
@@ -32,12 +34,12 @@ def run(
 
     Returns
     -------
-    unwrapped_paths : List[Path]
-        List of Paths to unwrapped interferograms created.
-    conncomp_paths : List[Path]
-        List of Paths to connected component files created.
-    spatial_corr_paths : List[Path]
-        List of Paths to spatial correlation files created.
+    unwrapped_paths : list[Path]
+        list of Paths to unwrapped interferograms created.
+    conncomp_paths : list[Path]
+        list of Paths to connected component files created.
+    spatial_corr_paths : list[Path]
+        list of Paths to spatial correlation files created.
     stitched_tcorr_file : Path
         Path to temporal correlation file created.
     """
@@ -127,11 +129,11 @@ def run(
 
 
 def _estimate_spatial_correlations(
-    date_to_ifg_path: Dict[Tuple[date, ...], Path], window_size: Tuple[int, int]
-) -> List[Path]:
+    date_to_ifg_path: dict[tuple[date, ...], Path], window_size: tuple[int, int]
+) -> list[Path]:
     logger = get_log()
 
-    corr_paths: List[Path] = []
+    corr_paths: list[Path] = []
     for dates, ifg_path in date_to_ifg_path.items():
         ifg = io.load_gdal(ifg_path)
         cor_path = ifg_path.with_suffix(".cor")

@@ -3,11 +3,13 @@
 This module heavily relies on GDAL and provides many convenience/
 wrapper functions to write/iterate over blocks of large raster files.
 """
+from __future__ import annotations
+
 import math
 from datetime import date
 from os import fspath
 from pathlib import Path
-from typing import Any, Dict, Generator, List, Optional, Sequence, Tuple, Union
+from typing import Any, Generator, Optional, Sequence, Union
 
 import numpy as np
 from numpy.typing import ArrayLike, DTypeLike
@@ -188,7 +190,7 @@ def copy_projection(src_file: Filename, dst_file: Filename) -> None:
     ds_src = ds_dst = None
 
 
-def get_raster_xysize(filename: Filename) -> Tuple[int, int]:
+def get_raster_xysize(filename: Filename) -> tuple[int, int]:
     """Get the xsize/ysize of a GDAL-readable raster."""
     ds = gdal.Open(fspath(filename))
     xsize, ysize = ds.RasterXSize, ds.RasterYSize
@@ -234,7 +236,7 @@ def get_raster_crs(filename: Filename) -> CRS:
     return crs
 
 
-def get_raster_gt(filename: Filename) -> List[float]:
+def get_raster_gt(filename: Filename) -> list[float]:
     """Get the geotransform from a file.
 
     Parameters
@@ -244,7 +246,7 @@ def get_raster_gt(filename: Filename) -> List[float]:
 
     Returns
     -------
-    Tuple[float, float, float, float, float, float]
+    tuple[float, float, float, float, float, float]
         Geotransform.
     """
     ds = gdal.Open(fspath(filename))
@@ -290,7 +292,7 @@ def get_raster_driver(filename: Filename) -> str:
 
 def get_raster_bounds(
     filename: Optional[Filename] = None, ds: Optional[gdal.Dataset] = None
-) -> Tuple[float, float, float, float]:
+) -> tuple[float, float, float, float]:
     """Get the (left, bottom, right, top) bounds of the image."""
     if ds is None:
         if filename is None:
@@ -311,7 +313,7 @@ def rowcol_to_xy(
     col: int,
     ds: Optional[gdal.Dataset] = None,
     filename: Optional[Filename] = None,
-) -> Tuple[float, float]:
+) -> tuple[float, float]:
     """Convert indexes in the image space to georeferenced coordinates."""
     return _apply_gt(ds, filename, col, row)
 
@@ -322,7 +324,7 @@ def xy_to_rowcol(
     ds: Optional[gdal.Dataset] = None,
     filename: Optional[Filename] = None,
     do_round=True,
-) -> Tuple[int, int]:
+) -> tuple[int, int]:
     """Convert coordinates in the georeferenced space to a row and column index."""
     col, row = _apply_gt(ds, filename, x, y, inverse=True)
     # Need to convert to int, otherwise we get a float
@@ -335,7 +337,7 @@ def xy_to_rowcol(
 
 def _apply_gt(
     ds=None, filename=None, x=None, y=None, inverse=False, gt=None
-) -> Tuple[float, float]:
+) -> tuple[float, float]:
     """Read the (possibly inverse) geotransform, apply to the x/y coordinates."""
     if gt is None:
         if ds is None:
@@ -354,20 +356,20 @@ def _apply_gt(
 
 
 def compute_out_shape(
-    shape: Tuple[int, int], strides: Dict[str, int]
-) -> Tuple[int, int]:
+    shape: tuple[int, int], strides: dict[str, int]
+) -> tuple[int, int]:
     """Calculate the output size for an input `shape` and row/col `strides`.
 
     Parameters
     ----------
-    shape : Tuple[int, int]
+    shape : tuple[int, int]
         Input size: (rows, cols)
-    strides : Dict[str, int]
+    strides : dict[str, int]
         {"x": x strides, "y": y strides}
 
     Returns
     -------
-    out_shape : Tuple[int, int]
+    out_shape : tuple[int, int]
         Size of output after striding
 
     Notes
@@ -399,10 +401,10 @@ def write_arr(
     driver: Optional[str] = "GTiff",
     options: Optional[Sequence] = None,
     nbands: Optional[int] = None,
-    shape: Optional[Tuple[int, int]] = None,
+    shape: Optional[tuple[int, int]] = None,
     dtype: Optional[DTypeLike] = None,
     geotransform: Optional[Sequence[float]] = None,
-    strides: Optional[Dict[str, int]] = None,
+    strides: Optional[dict[str, int]] = None,
     projection: Optional[Any] = None,
     nodata: Optional[Union[float, str]] = None,
 ):
@@ -424,7 +426,7 @@ def write_arr(
     driver : str, optional
         GDAL driver to use. Default is "GTiff".
     options : list, optional
-        List of options to pass to the driver. Default is DEFAULT_TIFF_OPTIONS.
+        list of options to pass to the driver. Default is DEFAULT_TIFF_OPTIONS.
     nbands : int, optional
         Number of bands to save. Default is 1.
     shape : tuple, optional
@@ -432,7 +434,7 @@ def write_arr(
         Overrides the shape of the output file, if using `like_filename`.
     dtype : DTypeLike, optional
         Data type to save. Default is `arr.dtype` or the datatype of like_filename.
-    geotransform : List, optional
+    geotransform : list, optional
         Geotransform to save. Default is the geotransform of like_filename.
         See https://gdal.org/tutorials/geotransforms_tut.html .
     strides : dict, optional
@@ -560,7 +562,7 @@ def write_block(
     cur_block : ArrayLike
         2D or 3D data array
     filename : Filename
-        List of output files to save to, or (if cur_block is 2D) a single file.
+        list of output files to save to, or (if cur_block is 2D) a single file.
     row_start : int
         Row index to start writing at.
     col_start : int
@@ -605,7 +607,7 @@ class Writer(BackgroundWriter):
         data : ArrayLike
             2D or 3D data array to save.
         filename : Filename
-            List of output files to save to, or (if cur_block is 2D) a single file.
+            list of output files to save to, or (if cur_block is 2D) a single file.
         row_start : int
             Row index to start writing at.
         col_start : int
@@ -630,8 +632,8 @@ class EagerLoader(BackgroundReader):
     def __init__(
         self,
         filename: Filename,
-        block_shape: Tuple[int, int],
-        overlaps: Tuple[int, int] = (0, 0),
+        block_shape: tuple[int, int],
+        overlaps: tuple[int, int] = (0, 0),
         skip_empty: bool = True,
         nodata_mask: Optional[ArrayLike] = None,
         queue_size: int = 1,
@@ -657,14 +659,14 @@ class EagerLoader(BackgroundReader):
         if self._nodata is None:
             self._nodata = np.nan
 
-    def read(self, rows: slice, cols: slice) -> Tuple[np.ndarray, Tuple[slice, slice]]:
+    def read(self, rows: slice, cols: slice) -> tuple[np.ndarray, tuple[slice, slice]]:
         logger.debug(f"EagerLoader reading {rows}, {cols}")
         cur_block = load_gdal(self.filename, rows=rows, cols=cols)
         return cur_block, (rows, cols)
 
     def iter_blocks(
         self,
-    ) -> Generator[Tuple[np.ndarray, Tuple[slice, slice]], None, None]:
+    ) -> Generator[tuple[np.ndarray, tuple[slice, slice]], None, None]:
         # Queue up all slices to the work queue
         queued_slices = []
         for rows, cols in self.slices:
@@ -698,28 +700,28 @@ class EagerLoader(BackgroundReader):
 
 
 def _slice_iterator(
-    arr_shape: Tuple[int, int],
-    block_shape: Tuple[int, int],
-    overlaps: Tuple[int, int] = (0, 0),
-    start_offsets: Tuple[int, int] = (0, 0),
+    arr_shape: tuple[int, int],
+    block_shape: tuple[int, int],
+    overlaps: tuple[int, int] = (0, 0),
+    start_offsets: tuple[int, int] = (0, 0),
 ):
     """Create a generator to get indexes for accessing blocks of a raster.
 
     Parameters
     ----------
-    arr_shape : Tuple[int, int]
+    arr_shape : tuple[int, int]
         (num_rows, num_cols), full size of array to access
-    block_shape : Tuple[int, int]
+    block_shape : tuple[int, int]
         (height, width), size of accessing blocks
-    overlaps : Tuple[int, int]
+    overlaps : tuple[int, int]
         (row_overlap, col_overlap), number of pixels to re-include
         after sliding the block (default (0, 0))
-    start_offsets : Tuple[int, int]
+    start_offsets : tuple[int, int]
         Offsets to start reading from (default (0, 0))
 
     Yields
     ------
-    Tuple[slice, slice]
+    tuple[slice, slice]
         Iterator of (slice(row_start, row_stop), slice(col_start, col_stop))
 
     Examples
@@ -768,7 +770,7 @@ slice(90, 190, None)), (slice(90, 180, None), slice(180, 250, None))]
 
 def get_max_block_shape(
     filename: Filename, nstack: int, max_bytes: float = 64e6
-) -> Tuple[int, int]:
+) -> tuple[int, int]:
     """Find a block shape to load from `filename` with memory size < `max_bytes`.
 
     Attempts to get an integer number of chunks ("tiles" for geotiffs) from the
@@ -786,7 +788,7 @@ def get_max_block_shape(
 
     Returns
     -------
-    Tuple[int, int]:
+    tuple[int, int]:
         (num_rows, num_cols) shape of blocks to load from `vrt_file`
     """
     chunk_cols, chunk_rows = get_raster_chunk_size(filename)
@@ -808,7 +810,7 @@ def get_max_block_shape(
     )
 
 
-def get_raster_chunk_size(filename: Filename) -> List[int]:
+def get_raster_chunk_size(filename: Filename) -> list[int]:
     """Get size the raster's chunks on disk.
 
     This is called blockXsize, blockYsize by GDAL.
@@ -829,10 +831,10 @@ def _format_date_pair(start: date, end: date, fmt=DEFAULT_DATETIME_FORMAT) -> st
 def _increment_until_max(
     max_bytes: float,
     file_chunk_size: Sequence[int],
-    shape: Tuple[int, int],
+    shape: tuple[int, int],
     nstack: int,
     bytes_per_pixel: int = 8,
-) -> Tuple[int, int]:
+) -> tuple[int, int]:
     """Find size of 3D chunk to load while staying at ~`max_bytes` bytes of RAM."""
     chunk_rows, chunk_cols = file_chunk_size
 

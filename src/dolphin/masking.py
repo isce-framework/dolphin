@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from enum import IntEnum
 from os import fspath
 from pathlib import Path
@@ -52,7 +54,7 @@ def combine_mask_files(
     Parameters
     ----------
     mask_files : list of Path or str
-        List of mask files to combine.
+        list of mask files to combine.
     output_file : Filename
         Path to the combined output file.
     dtype : str, optional

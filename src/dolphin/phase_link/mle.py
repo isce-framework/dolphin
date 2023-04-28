@@ -1,6 +1,8 @@
+from __future__ import annotations
+
 import logging
 import warnings
-from typing import Dict, Optional, Tuple
+from typing import Optional
 
 import numpy as np
 import pymp
@@ -19,8 +21,8 @@ class PhaseLinkRuntimeError(Exception):
 
 def run_mle(
     slc_stack: np.ndarray,
-    half_window: Dict[str, int],
-    strides: Dict[str, int] = {"x": 1, "y": 1},
+    half_window: dict[str, int],
+    strides: dict[str, int] = {"x": 1, "y": 1},
     beta: float = 0.01,
     reference_idx: int = 0,
     nodata_mask: np.ndarray = None,
@@ -29,17 +31,17 @@ def run_mle(
     use_slc_amp: bool = True,
     n_workers: int = 1,
     gpu_enabled: bool = False,
-) -> Tuple[np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray]:
     """Estimate the linked phase for a stack using the MLE estimator.
 
     Parameters
     ----------
     slc_stack : np.ndarray
         The SLC stack, with shape (n_images, n_rows, n_cols)
-    half_window : Dict[str, int]
+    half_window : dict[str, int]
         The half window size as {"x": half_win_x, "y": half_win_y}
         The full window size is 2 * half_window + 1 for x, y.
-    strides : Dict[str, int], optional
+    strides : dict[str, int], optional
         The (x, y) strides (in pixels) to use for the sliding window.
         By default {"x": 1, "y": 1}
     beta : float, optional

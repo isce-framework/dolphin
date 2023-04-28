@@ -2,9 +2,10 @@
 
 Contains for CPU and GPU versions (which will not be available if no GPU).
 """
+from __future__ import annotations
+
 from cmath import isnan
 from cmath import sqrt as csqrt
-from typing import Dict, Tuple
 
 import numpy as np
 import pymp
@@ -17,8 +18,8 @@ from dolphin.io import compute_out_shape
 
 def estimate_stack_covariance_cpu(
     slc_stack: np.ndarray,
-    half_window: Dict[str, int],
-    strides: Dict[str, int] = {"x": 1, "y": 1},
+    half_window: dict[str, int],
+    strides: dict[str, int] = {"x": 1, "y": 1},
     n_workers=1,
 ):
     """Estimate the linked phase at all pixels of `slc_stack` on the CPU.
@@ -27,10 +28,10 @@ def estimate_stack_covariance_cpu(
     ----------
     slc_stack : np.ndarray
         The SLC stack, with shape (n_slc, n_rows, n_cols).
-    half_window : Dict[str, int]
+    half_window : dict[str, int]
         The half window size as {"x": half_win_x, "y": half_win_y}
         The full window size is 2 * half_window + 1 for x, y.
-    strides : Dict[str, int], optional
+    strides : dict[str, int], optional
         The (x, y) strides (in pixels) to use for the sliding window.
         By default {"x": 1, "y": 1}
     n_workers : int, optional
@@ -120,7 +121,7 @@ def coh_mat_single(neighbor_stack, cov_mat=None):
 # GPU version of the covariance matrix computation
 @cuda.jit
 def estimate_stack_covariance_gpu(
-    slc_stack, half_rowcol: Tuple[int, int], strides_rowcol: Tuple[int, int], C_out
+    slc_stack, half_rowcol: tuple[int, int], strides_rowcol: tuple[int, int], C_out
 ):
     """Estimate the linked phase at all pixels of `slc_stack` on the GPU."""
     # Get the global position within the 2D GPU grid

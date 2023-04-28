@@ -1,10 +1,12 @@
+from __future__ import annotations
+
 import itertools
 import json
 import re
 import subprocess
 import tempfile
 from pathlib import Path
-from typing import Dict, List, Optional, Pattern, Sequence, Union
+from typing import Optional, Pattern, Sequence, Union
 
 import h5py
 from shapely import geometry, wkt
@@ -25,13 +27,13 @@ def group_by_burst(
     file_list: Sequence[Filename],
     burst_id_fmt: Union[str, Pattern[str]] = OPERA_BURST_RE,
     minimum_slcs: int = 2,
-) -> Dict[str, List[Path]]:
+) -> dict[str, list[Path]]:
     """Group Sentinel CSLC files by burst.
 
     Parameters
     ----------
-    file_list: List[Filename]
-        List of paths of CSLC files
+    file_list: list[Filename]
+        list of paths of CSLC files
     burst_id_fmt: str
         format of the burst id in the filename.
         Default is [`OPERA_BURST_RE`][dolphin.workflows.config.OPERA_BURST_RE]
@@ -95,11 +97,11 @@ def setup_output_folder(
     driver: str = "GTiff",
     dtype="complex64",
     start_idx: int = 0,
-    strides: Dict[str, int] = {"y": 1, "x": 1},
-    creation_options: Optional[List] = None,
+    strides: dict[str, int] = {"y": 1, "x": 1},
+    creation_options: Optional[list] = None,
     nodata: Optional[float] = 0,
     output_folder: Optional[Path] = None,
-) -> List[Path]:
+) -> list[Path]:
     """Create empty output files for each band after `start_idx` in `vrt_stack`.
 
     Also creates an empty file for the compressed SLC.
@@ -117,12 +119,12 @@ def setup_output_folder(
         Index of vrt_stack to begin making output files.
         This should match the ministack index to avoid re-creating the
         past compressed SLCs.
-    strides : Dict[str, int], optional
+    strides : dict[str, int], optional
         Strides to use when creating the empty files, by default {"y": 1, "x": 1}
         Larger strides will create smaller output files, computed using
         [dolphin.io.compute_out_shape][]
     creation_options : list, optional
-        List of options to pass to the GDAL driver, by default None
+        list of options to pass to the GDAL driver, by default None
     nodata : float, optional
         Nodata value to use for the output files, by default 0.
     output_folder : Path, optional
@@ -131,13 +133,13 @@ def setup_output_folder(
 
     Returns
     -------
-    List[Path]
-        List of saved empty files.
+    list[Path]
+        list of saved empty files.
     """
     if output_folder is None:
         output_folder = vrt_stack.outfile.parent
 
-    date_strs: List[str] = []
+    date_strs: list[str] = []
     for d in vrt_stack.dates[start_idx:]:
         if len(d) == 1:
             # normal SLC files will have a single date
@@ -169,14 +171,14 @@ def setup_output_folder(
 
 
 def get_union_polygon(
-    opera_file_list: List[Filename], buffer_degrees: float = 0.0
+    opera_file_list: list[Filename], buffer_degrees: float = 0.0
 ) -> geometry.Polygon:
     """Get the union of the bounding polygons of the given files.
 
     Parameters
     ----------
-    opera_file_list : List[Filename]
-        List of COMPASS SLC filenames.
+    opera_file_list : list[Filename]
+        list of COMPASS SLC filenames.
     buffer_degrees : float, optional
         Buffer the polygons by this many degrees, by default 0.0
     """
@@ -199,7 +201,7 @@ def get_union_polygon(
 
 
 def make_nodata_mask(
-    opera_file_list: List[Filename],
+    opera_file_list: list[Filename],
     out_file: Filename,
     buffer_pixels: int = 0,
     overwrite: bool = False,
@@ -208,8 +210,8 @@ def make_nodata_mask(
 
     Parameters
     ----------
-    opera_file_list : List[Filename]
-        List of COMPASS SLC filenames.
+    opera_file_list : list[Filename]
+        list of COMPASS SLC filenames.
     out_file : Filename
         Output filename.
     buffer_pixels : int, optional

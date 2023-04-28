@@ -1,4 +1,5 @@
 """Module for creating PGE-compatible run configuration files."""
+from __future__ import annotations
 
 from pathlib import Path
 from typing import ClassVar, List, Optional
@@ -23,7 +24,7 @@ class InputFileGroup(YamlModel):
 
     cslc_file_list: List[Path] = Field(
         default_factory=list,
-        description="List of paths to CSLC files.",
+        description="list of paths to CSLC files.",
     )
 
     frame_id: int = Field(
@@ -85,7 +86,7 @@ class DynamicAncillaryFileGroup(YamlModel, extra=Extra.forbid):
     tec_files: Optional[List[Path]] = Field(
         default=None,
         description=(
-            "List of Paths to TEC files (1 per date) in IONEX format for ionosphere"
+            "list of Paths to TEC files (1 per date) in IONEX format for ionosphere"
             " correction. If none provided, ionosphere corrections are skipped."
         ),
     )
@@ -94,7 +95,7 @@ class DynamicAncillaryFileGroup(YamlModel, extra=Extra.forbid):
     weather_model_files: Optional[List[Path]] = Field(
         default=None,
         description=(
-            "List of Paths to troposphere weather model files (1 per date). If none"
+            "list of Paths to troposphere weather model files (1 per date). If none"
             " provided, troposphere corrections are skipped."
         ),
     )

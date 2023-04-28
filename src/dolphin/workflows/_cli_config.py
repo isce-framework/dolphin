@@ -1,9 +1,11 @@
 #!/usr/bin/env python
+from __future__ import annotations
+
 import argparse
 import sys
 from multiprocessing import cpu_count
 from pathlib import Path
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 from .config import OPERA_DATASET_NAME, InterferogramNetworkType, Workflow, WorkflowName
 
@@ -11,12 +13,12 @@ from .config import OPERA_DATASET_NAME, InterferogramNetworkType, Workflow, Work
 def create_config(
     *,
     outfile: Union[str, Path],
-    slc_files: Optional[List[str]] = None,
+    slc_files: Optional[list[str]] = None,
     subdataset: Optional[str] = None,
     mask_file: Optional[str] = None,
     ministack_size: Optional[int] = 15,
     amp_dispersion_threshold: float = 0.25,
-    strides: Tuple[int, int],
+    strides: tuple[int, int],
     block_size_gb: float = 1,
     n_workers: int = 16,
     threads_per_worker: int = 1,
