@@ -1,6 +1,5 @@
 import re
 from datetime import date, datetime
-from multiprocessing import cpu_count
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 
@@ -17,7 +16,7 @@ from pydantic import (
 from dolphin import __version__ as _dolphin_version
 from dolphin._log import get_log
 from dolphin.io import DEFAULT_HDF5_OPTIONS, DEFAULT_TIFF_OPTIONS, format_nc_filename
-from dolphin.utils import get_dates, sort_files_by_date
+from dolphin.utils import get_cpu_count, get_dates, sort_files_by_date
 
 from ._enums import InterferogramNetworkType, ShpMethod, UnwrapMethod, WorkflowName
 from ._yaml_model import YamlModel
@@ -176,7 +175,7 @@ class WorkerSettings(BaseSettings):
         description="Whether to use GPU for processing (if available)",
     )
     n_workers: int = Field(
-        default_factory=cpu_count,
+        default_factory=get_cpu_count,
         ge=1,
         description=(
             "(For non-GPU) Number of cpu cores to use for Python multiprocessing. Uses"

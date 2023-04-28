@@ -1,8 +1,10 @@
 import datetime
+import math
 import re
 import resource
 import sys
 import warnings
+from multiprocessing import cpu_count
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple, Union
 
@@ -588,3 +590,37 @@ def moving_window_mean(
     )
     window_mean /= row_size * col_size
     return window_mean
+
+
+def get_cpu_count():
+    """Get the number of CPUs available to the current process.
+
+    This function accounts for the possibility of a Docker container with
+    limited CPU resources on a larger machine (which is ignored by
+    `multiprocessing.cpu_count()`).
+
+    Returns
+    -------
+    int
+        The number of CPUs available to the current process.
+
+    References
+    ----------
+    1. https://github.com/joblib/loky/issues/111
+    2. https://github.com/conan-io/conan/blob/982a97041e1ece715d157523e27a14318408b925/conans/client/tools/oss.py#L27 # noqa
+    """
+
+    def get_cpu_quota():
+        return int(Path("/sys/fs/cgroup/cpu/cpu.cfs_quota_us").read_text())
+
+    def get_cpu_period():
+        return int(Path("/sys/fs/cgroup/cpu/cpu.cfs_period_us").read_text())
+
+    try:
+        cfs_quota_us = get_cpu_quota()
+        cfs_period_us = get_cpu_period()
+        if cfs_quota_us > 0 and cfs_period_us > 0:
+            return int(math.ceil(cfs_quota_us / cfs_period_us))
+    except:
+        pass
+    return cpu_count()
