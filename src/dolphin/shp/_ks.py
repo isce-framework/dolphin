@@ -15,6 +15,7 @@ def estimate_neighbors(
     half_rowcol: tuple[int, int],
     strides_rowcol: tuple[int, int],
     alpha: float,
+    strides: dict[str, int] = {"x": 1, "y": 1},
     is_sorted: bool = False,
 ):
     """Estimate the  at all pixels of `slc_stack` on the GPU."""
@@ -22,6 +23,8 @@ def estimate_neighbors(
     #     sorted_amp_stack = amp_stack
     # else:
     #     sorted_amp_stack = np.sort(amp_stack, axis=0)
+    # num_slc, rows, cols = sorted_amp_stack.shape
+    # ecdf_dist_cutoff = _get_ecdf_critical_distance_gpu(num_slc, alpha)
 
 
 # GPU version of the SHP finding algorithm using KS test
@@ -65,7 +68,7 @@ def estimate_neighbors_gpu(
     _get_neighbors(amp_block, half_rowcol, ecdf_dist_cutoff, neighbors_pixel)
 
 
-@cuda.jit(device=True)
+@numba.njit(device=True)
 def _get_neighbors(amp_block, half_rowcol, ecdf_dist_cutoff, neighbors):
     _, rows, cols = amp_block.shape
 

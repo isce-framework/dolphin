@@ -6,11 +6,9 @@ import numpy as np
 
 from dolphin._log import get_log
 from dolphin.utils import decimate
-from dolphin.workflows import ShpMethod
 
 from . import covariance, metrics
 from .mle import mle_stack
-from .shp import _kullback, _tf_test
 
 logger = get_log(__name__)
 
@@ -22,9 +20,7 @@ def run_cpu(
     beta: float = 0.01,
     reference_idx: int = 0,
     use_slc_amp: bool = True,
-    shp_method: str = ShpMethod.TF,
-    avg_mag: Optional[np.ndarray] = None,
-    var_mag: Optional[np.ndarray] = None,
+    neighbor_arrays: Optional[np.ndarray] = None,
     n_workers: int = 1,
     **kwargs,
 ):
@@ -47,18 +43,9 @@ def run_cpu(
     use_slc_amp : bool, optional
         Whether to use the SLC amplitude when outputting the MLE estimate,
         or to set the SLC amplitude to 1.0. By default True.
-    shp_method : Optional[str]
-        The SHP estimator to use.
-        By default "TF", uses a combination t-test/f-test
-        If None, turns of the SHP search and uses a rectangular window.
-    avg_mag : np.ndarray, optional
-        The average magnitude of the SLC stack, used to find the SHP
-        neighbors to fill within each look window if shp_method is "KL".
-        If None, the average magnitude is estimated from the SLC stack.
-        By default None.
-    var_mag : np.ndarray, optional
-        The variance of the magnitude of the SLC stack, used to find the
-        SHP neighbors to fill within each look window if shp_
+    neighbor_arrays : np.ndarray, optional
+        The neighbor arrays to use for SHP, shape = (n_rows, n_cols, *window_shape).
+        If None, a rectangular window is used. By default None.
     n_workers : int, optional
         The number of workers to use for (CPU version) multiprocessing.
         If 1 (default), no multiprocessing is used.
@@ -70,34 +57,6 @@ def run_cpu(
     temp_coh : np.ndarray[np.float32]
         The temporal coherence at each pixel, shape (n_rows, n_cols)
     """
-    halfwin_rowcol = (half_window["y"], half_window["x"])
-    # these two just use mean/var
-    if shp_method.lower() in (ShpMethod.KL, ShpMethod.TF):
-        if avg_mag is None:
-            avg_mag = np.mean(np.abs(slc_stack), axis=0)
-        if var_mag is None:
-            var_mag = np.var(np.abs(slc_stack), axis=0)
-
-    if shp_method.lower() == ShpMethod.TF:
-        logger.info("Estimating SHP neighbors using KL distance")
-        neighbor_arrays = _tf_test.estimate_neighbors(
-            avg_mag,
-            var_mag,
-            halfwin_rowcol=halfwin_rowcol,
-            n=slc_stack.shape[0],
-            alpha=0.05,  # TODO: make this a parameter
-        )
-    elif shp_method.lower() == ShpMethod.KL:
-        logger.info("Estimating SHP neighbors using KL distance")
-        neighbor_arrays = _kullback.estimate_neighbors_cpu(
-            avg_mag, var_mag, halfwin_rowcol=halfwin_rowcol, threshold=0.5
-        )
-    elif shp_method == ShpMethod.RECT:
-        neighbor_arrays = None
-    else:
-        logger.warning(f"SHP method {shp_method} is not implemented for CPU yet")
-        neighbor_arrays = None
-
     C_arrays = covariance.estimate_stack_covariance_cpu(
         slc_stack,
         half_window,

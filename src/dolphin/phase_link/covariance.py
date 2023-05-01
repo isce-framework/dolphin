@@ -101,8 +101,8 @@ def estimate_stack_covariance_cpu(
             if do_shp:
                 cur_neighbors = neighbor_arrays_shared[
                     # TODO: these in_r/c will change when incorporating strides
-                    in_r,
-                    in_c,
+                    out_r,
+                    out_c,
                     r_start:r_end,
                     c_start:c_end,
                 ]

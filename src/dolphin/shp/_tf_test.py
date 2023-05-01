@@ -7,12 +7,16 @@ from numba import prange
 from numpy.typing import ArrayLike
 from scipy.stats import f, t
 
+from dolphin.io import compute_out_shape
+from dolphin.utils import _get_slices
+
 
 def estimate_neighbors(
     mean: ArrayLike,
     var: ArrayLike,
     halfwin_rowcol: tuple[int, int],
-    n: int,
+    nslc: int,
+    strides: dict = {"x": 1, "y": 1},
     alpha: float = 0.05,
 ):
     """Estimate the number of neighbors based on a combined t- and F-test.
@@ -25,71 +29,97 @@ def estimate_neighbors(
         Variance of each pixel's amplitude.
     halfwin_rowcol : tuple[int, int]
         Half the size of the block in (row, col) dimensions
-    n : int
+    nslc : int
         Number of images in the stack used to compute `mean` and `var`.
         Used to compute the degrees of freedom for the t- and F-tests to
         determine the critical values.
+    strides: dict, optional
+        The (x, y) strides (in pixels) to use for the sliding window.
+        By default {"x": 1, "y": 1}
     alpha : float, default=0.05
         Significance level at which to reject the null hypothesis.
         Rejecting means declaring a neighbor is not a SHP.
+
+
+    Notes
+    -----
+    When `strides` is not (1, 1), the output first two dimensions
+    are smaller than `mean` and `var` by a factor of `strides`. This
+    will match the downstream shape of the strided phase linking results.
 
     Returns
     -------
     is_shp : np.ndarray, 4D
         Boolean array marking which neighbors are SHPs for each pixel in the block.
-        Shape is (rows, cols, window_rows, window_cols), where
-            window_rows = 2 * halfwin_rowcol[0] + 1
-            window_cols = 2 * halfwin_rowcol[1] + 1
+        Shape is (out_rows, out_cols, window_rows, window_cols), where
+            `out_rows` and `out_cols` are computed by
+            `[dolphin.io.compute_out_shape][]`
+            `window_rows = 2 * halfwin_rowcol[0] + 1`
+            `window_cols = 2 * halfwin_rowcol[1] + 1`
     """
     half_row, half_col = halfwin_rowcol
     rows, cols = mean.shape
 
     # we're doing two checks with the same alpha, so we need to adjust
     # the significance level for each test so P_FA(t-test) & P_FA(f-test) = alpha
+    # e.g. for alpha = 0.05, a = 0.0253
     a = 1 - (1 - alpha) ** (1 / 2)
-    # for a = 0.05, this is 0.0253
+    cv_t = get_t_critical_values(a, nslc)
+    cv_f = get_f_critical_values(a, nslc)
 
-    cv_t = get_t_critical_values(a, n)
-    cv_f = get_f_critical_values(a, n)
+    out_rows, out_cols = compute_out_shape((rows, cols), strides)
     is_shp = np.zeros(
-        (rows, cols, 2 * half_row + 1, 2 * half_col + 1), dtype=mean.dtype
+        (out_rows, out_cols, 2 * half_row + 1, 2 * half_col + 1), dtype=mean.dtype
     )
+    strides_rowcol = (strides["y"], strides["x"])
     _loop_over_pixels(
-        mean, var, half_row, half_col, n, cv_t[0], cv_t[1], cv_f[0], cv_f[1], is_shp
+        mean, var, half_row, half_col, nslc, *cv_t, *cv_f, strides_rowcol, is_shp
     )
     return is_shp
 
 
 @numba.njit(nogil=True, parallel=True, fastmath=True)
 def _loop_over_pixels(
-    mean,
-    variance,
-    half_row,
-    half_col,
-    n,
-    cv_t_low,
-    cv_t_high,
-    cv_f_low,
-    cv_f_high,
-    is_shp,
+    mean: ArrayLike,
+    variance: ArrayLike,
+    half_row: int,
+    half_col: int,
+    nslc: int,
+    cv_t_low: float,
+    cv_t_high: float,
+    cv_f_low: float,
+    cv_f_high: float,
+    strides_rowcol: tuple[int, int],
+    is_shp: ArrayLike,
 ) -> None:
-    rows, cols = mean.shape
-    for r in prange(half_row, rows - half_row):
-        for c in range(half_col, cols - half_col):
-            mu1 = mean[r, c]
-            var1 = variance[r, c]
-            for i in range(-half_row, half_row + 1):
-                for j in range(-half_col, half_col + 1):
+    in_rows, in_cols = mean.shape
+    out_rows, out_cols = is_shp.shape[:2]
+    row_strides, col_strides = strides_rowcol
+    # location to start counting from in the larger input
+    r0, c0 = row_strides // 2, col_strides // 2
+
+    for out_r in prange(out_rows):
+        for out_c in range(out_cols):
+            in_r = r0 + out_r * row_strides
+            in_c = c0 + out_c * col_strides
+            mu1 = mean[in_r, in_c]
+            var1 = variance[in_r, in_c]
+            # Clamp the window to the image bounds
+            (r_start, r_end), (c_start, c_end) = _get_slices(
+                half_row, half_col, in_r, in_c, in_rows, in_cols
+            )
+            for i in range(r_start, r_end):
+                for j in range(c_start, c_end):
                     # itself is always a neighbor
-                    if i == 0 and j == 0:
-                        is_shp[r, c, i + half_row, j + half_col] = True
+                    if i == in_r and j == in_c:
+                        is_shp[out_r, out_c, i, j] = True
                         continue
 
                     # t-test: test for difference of means
-                    mu2 = mean[r + i, c + j]
-                    var2 = variance[r + i, c + j]
-                    # welch_t_statistic(mu1, mu2, var1, var2, n)
-                    t_stat = (mu1 - mu2) / np.sqrt((var1 + var2) / n)
+                    mu2 = mean[i, j]
+                    var2 = variance[i, j]
+                    # welch_t_statistic(mu1, mu2, var1, var2, nslc)
+                    t_stat = (mu1 - mu2) / np.sqrt((var1 + var2) / nslc)
 
                     # F-test: test for difference of variances
                     f_stat = var1 / var2
@@ -98,7 +128,7 @@ def _loop_over_pixels(
                     passes_t = cv_t_low < t_stat < cv_t_high
                     passes_f = cv_f_low < f_stat < cv_f_high
                     # Needs to pass both tests to be a SHP
-                    is_shp[r, c, i + half_row, j + half_col] = passes_t and passes_f
+                    is_shp[out_r, out_c, i, j] = passes_t and passes_f
 
 
 def get_t_critical_values(alpha: float, n: int) -> tuple[float, float]:
