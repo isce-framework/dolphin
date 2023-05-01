@@ -163,7 +163,7 @@ def _get_max_cdf_dist(x1, x2):
     >>> x1 = np.array([1, 2, 3, 4, 5])
     >>> x2 = np.array([1, 2, 3, 4, 5])
     >>> _get_max_cdf_dist(x1, x2)
-    0
+    0.0
     >>> x2 = np.array([2, 3, 4, 5, 6])
     >>> round(_get_max_cdf_dist(x1, x2), 2)
     0.2

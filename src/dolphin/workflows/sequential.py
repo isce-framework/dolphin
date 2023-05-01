@@ -24,7 +24,6 @@ from dolphin.interferogram import VRTInterferogram
 from dolphin.phase_link import run_mle
 from dolphin.stack import VRTStack
 
-from ._enums import ShpMethod
 from ._utils import setup_output_folder
 from .single import run_evd_single
 
@@ -43,8 +42,8 @@ def run_evd_sequential(
     ministack_size: int = 10,
     mask_file: Optional[Filename] = None,
     ps_mask_file: Optional[Filename] = None,
+    neighbor_arrays: Optional[np.ndarray] = None,
     beta: float = 0.01,
-    shp_method: ShpMethod = ShpMethod.KL,
     max_bytes: float = 32e6,
     n_workers: int = 1,
     gpu_enabled: bool = True,
@@ -110,7 +109,7 @@ def run_evd_sequential(
             strides=strides,
             reference_idx=mini_idx,
             beta=beta,
-            shp_method=shp_method,
+            neighbor_arrays=neighbor_arrays,
             mask_file=mask_file,
             ps_mask_file=ps_mask_file,
             max_bytes=max_bytes,
@@ -188,7 +187,7 @@ def run_evd_sequential(
             nodata_mask=nodata_mask[rows, cols],
             ps_mask=None,  # PS mask doesn't matter for the adjustments
             use_slc_amp=False,  # Make adjustments unit-amplitude
-            shp_method="rect",  # No SHP for the adjustments
+            neighbor_arrays=None,  # No SHP for the adjustments
             n_workers=n_workers,
             gpu_enabled=gpu_enabled,
         )

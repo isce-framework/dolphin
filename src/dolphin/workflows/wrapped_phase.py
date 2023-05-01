@@ -42,7 +42,7 @@ def run(cfg: Workflow, debug: bool = False) -> tuple[list[Path], Path, Path]:
         raise ValueError("No input files found")
 
     # #############################################
-    # 1. Make a VRT pointing to the input SLC files
+    # Make a VRT pointing to the input SLC files
     # #############################################
     subdataset = cfg.input_options.subdataset
     vrt_path = cfg.scratch_directory / "slc_stack.vrt"
@@ -64,7 +64,7 @@ def run(cfg: Workflow, debug: bool = False) -> tuple[list[Path], Path, Path]:
         nodata_mask_file = None
 
     # ###############
-    # 2. PS selection
+    # PS selection
     # ###############
     ps_output = cfg.ps_options._output_file
     if ps_output.exists():
@@ -89,7 +89,12 @@ def run(cfg: Workflow, debug: bool = False) -> tuple[list[Path], Path, Path]:
         )
 
     # #########################
-    # 3. phase linking/EVD step
+    # SHP mapping step
+    # #########################
+    # TODO: Do i wanna save this to a file?
+
+    # #########################
+    # phase linking/EVD step
     # #########################
     pl_path = cfg.phase_linking._directory
 
@@ -123,7 +128,6 @@ def run(cfg: Workflow, debug: bool = False) -> tuple[list[Path], Path, Path]:
                 half_window=cfg.phase_linking.half_window.dict(),
                 strides=cfg.output_options.strides,
                 beta=cfg.phase_linking.beta,
-                shp_method=cfg.phase_linking.shp_method,
                 ministack_size=cfg.phase_linking.ministack_size,
                 # mask_file=cfg.mask_file,
                 mask_file=nodata_mask_file,
@@ -138,7 +142,7 @@ def run(cfg: Workflow, debug: bool = False) -> tuple[list[Path], Path, Path]:
             watcher.notify_finished()
 
     # ###################################################
-    # 4. Form interferograms from estimated wrapped phase
+    # Form interferograms from estimated wrapped phase
     # ###################################################
     ifg_dir = cfg.interferogram_network._directory
     existing_ifgs = list(ifg_dir.glob("*.int.*"))

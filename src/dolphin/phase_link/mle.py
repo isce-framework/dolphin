@@ -25,11 +25,10 @@ def run_mle(
     strides: dict[str, int] = {"x": 1, "y": 1},
     beta: float = 0.01,
     reference_idx: int = 0,
-    shp_method: str = "KL",
     nodata_mask: np.ndarray = None,
     ps_mask: Optional[np.ndarray] = None,
+    neighbor_arrays: Optional[np.ndarray] = None,
     avg_mag: Optional[np.ndarray] = None,
-    var_mag: Optional[np.ndarray] = None,
     use_slc_amp: bool = True,
     n_workers: int = 1,
     gpu_enabled: bool = False,
@@ -50,10 +49,6 @@ def run_mle(
         The regularization parameter, by default 0.01.
     reference_idx : int, optional
         The index of the (non compressed) reference SLC, by default 0
-    shp_method : Optional[str]
-        The SHP estimator to use. Either None, "KL" or "KS".
-        By default "KL", uses the KL distance estimator.
-        If None, turns of the SHP search and uses a rectangular window.
     nodata_mask : np.ndarray, optional
         A mask of bad/nodata pixels to ignore when estimating the covariance.
         Pixels with `True` (or 1) are ignored, by default None
@@ -65,14 +60,13 @@ def run_mle(
         (combined with `nodata_mask`).
         The phase from these pixels will be inserted back
         into the final estimate directly from `slc_stack`.
+    neighbor_arrays : np.ndarray, optional
+        The neighbor arrays to use for SHP, shape = (n_rows, n_cols, *window_shape).
+        If None, a rectangular window is used. By default None.
     avg_mag : np.ndarray, optional
-        The average magnitude of the SLC stack, used to find the brightest
+        The average magnitude of the SLC stack, used to to find the brightest
         PS pixels to fill within each look window.
-        If None, the average magnitude is estimated from the SLC stack.
-        By default None.
-    var_mag : np.ndarray, optional
-        The variance of the magnitude of the SLC stack, used to find the
-        SHP neighbors to fill within each look window if shp_
+        If None, the average magnitude will be computed from `slc_stack`.
     use_slc_amp : bool, optional
         Whether to use the SLC amplitude when outputting the MLE estimate,
         or to set the SLC amplitude to 1.0. By default True.
@@ -132,9 +126,7 @@ def run_mle(
             strides=strides,
             beta=beta,
             reference_idx=reference_idx,
-            shp_method=shp_method,
-            avg_mag=avg_mag,
-            var_mag=var_mag,
+            neighbor_arrays=neighbor_arrays,
             use_slc_amp=use_slc_amp,
             n_workers=n_workers,
         )
@@ -145,7 +137,7 @@ def run_mle(
             strides=strides,
             beta=beta,
             reference_idx=reference_idx,
-            shp_method=shp_method,
+            neighbor_arrays=neighbor_arrays,
             use_slc_amp=use_slc_amp,
             # is it worth passing the blocks-per-grid?
         )

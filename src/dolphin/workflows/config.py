@@ -85,7 +85,13 @@ class PhaseLinkingOptions(BaseModel, extra=Extra.forbid):
         gt=0.0,
         lt=1.0,
     )
-    shp_method: ShpMethod = ShpMethod.KS
+    shp_method: ShpMethod = ShpMethod.TF
+    shp_alpha: float = Field(
+        0.05,
+        description="Significance level (probability of false alarm) for SHP tests.",
+        gt=0.0,
+        lt=1.0,
+    )
 
 
 class InterferogramNetwork(BaseModel, extra=Extra.forbid):
