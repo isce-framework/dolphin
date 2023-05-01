@@ -38,7 +38,7 @@ def estimate_neighbors(
         if var is None:
             var = np.var(amp_stack, axis=0)
 
-        logger.debug("Estimating SHP neighbors using KL distance")
+        logger.debug("Estimating SHP neighbors using T- and F-test")
         neighbor_arrays = _tf_test.estimate_neighbors(
             mean,
             var,
