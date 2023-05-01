@@ -25,7 +25,7 @@ def test_sequential_gtiff(tmp_path, slc_file_list, gpu_enabled):
     half_window = {"x": cols // 2, "y": rows // 2}
     strides = {"x": 1, "y": 1}
     output_folder = tmp_path / "sequential"
-    sequential.run_evd_sequential(
+    sequential.run_wrapped_phase_sequential(
         slc_vrt_file=vrt_file,
         output_folder=output_folder,
         half_window=half_window,
@@ -68,7 +68,7 @@ def test_sequential_nc(tmp_path, slc_file_list_nc, half_window, strides):
     _ = stack.VRTStack(slc_file_list_nc, outfile=vrt_file, subdataset="data")
 
     output_folder = tmp_path / "sequential"
-    sequential.run_evd_sequential(
+    sequential.run_wrapped_phase_sequential(
         slc_vrt_file=vrt_file,
         output_folder=output_folder,
         half_window=half_window,
@@ -92,7 +92,7 @@ def test_sequential_ministack_sizes(tmp_path, slc_file_list_nc, ministack_size):
     _, rows, cols = vrt_stack.shape
 
     output_folder = tmp_path / "sequential"
-    sequential.run_evd_sequential(
+    sequential.run_wrapped_phase_sequential(
         slc_vrt_file=vrt_file,
         output_folder=output_folder,
         half_window={"x": cols // 2, "y": rows // 2},

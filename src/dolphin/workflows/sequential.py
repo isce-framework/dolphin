@@ -25,14 +25,14 @@ from dolphin.phase_link import run_mle
 from dolphin.stack import VRTStack
 
 from ._utils import setup_output_folder
-from .single import run_evd_single
+from .single import run_wrapped_phase_single
 
 logger = get_log(__name__)
 
-__all__ = ["run_evd_sequential"]
+__all__ = ["run_wrapped_phase_sequential"]
 
 
-def run_evd_sequential(
+def run_wrapped_phase_sequential(
     *,
     slc_vrt_file: Filename,
     # weight_file: Filename,
@@ -102,7 +102,7 @@ def run_evd_sequential(
             sort_files=False,
             subdataset=v_all.subdataset,
         )
-        cur_output_files, cur_comp_slc_file, tcorr_file = run_evd_single(
+        cur_output_files, cur_comp_slc_file, tcorr_file = run_wrapped_phase_single(
             slc_vrt_file=cur_vrt,
             output_folder=cur_output_folder,
             half_window=half_window,

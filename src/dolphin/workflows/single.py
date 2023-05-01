@@ -23,10 +23,10 @@ from ._utils import setup_output_folder
 
 logger = get_log(__name__)
 
-__all__ = ["run_evd_single"]
+__all__ = ["run_wrapped_phase_single"]
 
 
-def run_evd_single(
+def run_wrapped_phase_single(
     *,
     slc_vrt_file: Filename,
     # weight_file: Filename,

@@ -107,34 +107,38 @@ def run(cfg: Workflow, debug: bool = False) -> tuple[list[Path], Path, Path]:
         watcher = NvidiaMemoryWatcher() if utils.gpu_is_available() else None
         logger.info(f"Running sequential EMI step in {pl_path}")
         if cfg.workflow_name == "single":
-            phase_linked_slcs, comp_slc_file, tcorr_file = single.run_evd_single(
-                slc_vrt_file=vrt_stack.outfile,
-                output_folder=pl_path,
-                half_window=cfg.phase_linking.half_window.dict(),
-                strides=cfg.output_options.strides,
-                reference_idx=0,
-                beta=cfg.phase_linking.beta,
-                # mask_file=cfg.mask_file,
-                mask_file=nodata_mask_file,
-                ps_mask_file=ps_output,
-                max_bytes=cfg.worker_settings.block_size_gb * 1e9,
-                n_workers=cfg.worker_settings.n_workers,
-                gpu_enabled=cfg.worker_settings.gpu_enabled,
+            phase_linked_slcs, comp_slc_file, tcorr_file = (
+                single.run_wrapped_phase_single(
+                    slc_vrt_file=vrt_stack.outfile,
+                    output_folder=pl_path,
+                    half_window=cfg.phase_linking.half_window.dict(),
+                    strides=cfg.output_options.strides,
+                    reference_idx=0,
+                    beta=cfg.phase_linking.beta,
+                    # mask_file=cfg.mask_file,
+                    mask_file=nodata_mask_file,
+                    ps_mask_file=ps_output,
+                    max_bytes=cfg.worker_settings.block_size_gb * 1e9,
+                    n_workers=cfg.worker_settings.n_workers,
+                    gpu_enabled=cfg.worker_settings.gpu_enabled,
+                )
             )
         else:
-            phase_linked_slcs, comp_slcs, tcorr_file = sequential.run_evd_sequential(
-                slc_vrt_file=vrt_stack.outfile,
-                output_folder=pl_path,
-                half_window=cfg.phase_linking.half_window.dict(),
-                strides=cfg.output_options.strides,
-                beta=cfg.phase_linking.beta,
-                ministack_size=cfg.phase_linking.ministack_size,
-                # mask_file=cfg.mask_file,
-                mask_file=nodata_mask_file,
-                ps_mask_file=ps_output,
-                max_bytes=cfg.worker_settings.block_size_gb * 1e9,
-                n_workers=cfg.worker_settings.n_workers,
-                gpu_enabled=cfg.worker_settings.gpu_enabled,
+            phase_linked_slcs, comp_slcs, tcorr_file = (
+                sequential.run_wrapped_phase_sequential(
+                    slc_vrt_file=vrt_stack.outfile,
+                    output_folder=pl_path,
+                    half_window=cfg.phase_linking.half_window.dict(),
+                    strides=cfg.output_options.strides,
+                    beta=cfg.phase_linking.beta,
+                    ministack_size=cfg.phase_linking.ministack_size,
+                    # mask_file=cfg.mask_file,
+                    mask_file=nodata_mask_file,
+                    ps_mask_file=ps_output,
+                    max_bytes=cfg.worker_settings.block_size_gb * 1e9,
+                    n_workers=cfg.worker_settings.n_workers,
+                    gpu_enabled=cfg.worker_settings.gpu_enabled,
+                )
             )
             comp_slc_file = comp_slcs[-1]
 
