@@ -69,7 +69,7 @@ def estimate_neighbors(
 
     out_rows, out_cols = compute_out_shape((rows, cols), strides)
     is_shp = np.zeros(
-        (out_rows, out_cols, 2 * half_row + 1, 2 * half_col + 1), dtype=mean.dtype
+        (out_rows, out_cols, 2 * half_row + 1, 2 * half_col + 1), dtype=np.bool_
     )
     strides_rowcol = (strides["y"], strides["x"])
     _loop_over_pixels(
@@ -78,7 +78,7 @@ def estimate_neighbors(
     return is_shp
 
 
-@numba.njit(nogil=True, parallel=True, fastmath=True)
+@numba.njit(nogil=True, parallel=True)
 def _loop_over_pixels(
     mean: ArrayLike,
     variance: ArrayLike,
