@@ -102,13 +102,13 @@ def test_estimate_stack_covariance_gpu(slcs, expected_cov, looks=(5, 5)):
     blocks_y = ceil(slcs.shape[2] / threads_per_block[1])
     blocks = (blocks_x, blocks_y)
 
-    half_rowcol = (looks[0] // 2, looks[1] // 2)
+    halfwin_rowcol = (looks[0] // 2, looks[1] // 2)
     strides_rowcol = (strides["y"], strides["x"])
 
     d_neighbor_arrays = cp.zeros((1, 1, 1, 1), dtype=np.bool_)
     do_shp = False
     covariance.estimate_stack_covariance_gpu[blocks, threads_per_block](
-        d_slcs, half_rowcol, strides_rowcol, d_neighbor_arrays, d_C3, do_shp
+        d_slcs, halfwin_rowcol, strides_rowcol, d_neighbor_arrays, d_C3, do_shp
     )
     C3 = d_C3.get()
     # assert C3.shape == (out_rows, out_cols, num_slc, num_slc)
@@ -140,10 +140,10 @@ def test_estimate_stack_covariance_gpu_strides(slcs, expected_cov, looks=(5, 5))
     blocks_y = ceil(slcs.shape[2] / threads_per_block[1])
     blocks = (blocks_x, blocks_y)
 
-    half_rowcol = (looks[0] // 2, looks[1] // 2)
+    halfwin_rowcol = (looks[0] // 2, looks[1] // 2)
     strides_rowcol = (strides["y"], strides["x"])
     covariance.estimate_stack_covariance_gpu[blocks, threads_per_block](
-        d_slcs, half_rowcol, strides_rowcol, d_neighbor_arrays, d_C3, do_shp
+        d_slcs, halfwin_rowcol, strides_rowcol, d_neighbor_arrays, d_C3, do_shp
     )
     # Now this should be the same size as the multi-looked version
     C3 = d_C3.get()
@@ -193,10 +193,10 @@ def test_estimate_stack_covariance_nans_gpu(slcs, looks=(5, 5)):
     d_neighbor_arrays = cp.zeros((1, 1, 1, 1), dtype=np.bool_)
     do_shp = False
 
-    half_rowcol = (looks[0] // 2, looks[1] // 2)
+    halfwin_rowcol = (looks[0] // 2, looks[1] // 2)
     strides_rowcol = (1, 1)
     covariance.estimate_stack_covariance_gpu[blocks, threads_per_block](
-        d_slcs, half_rowcol, strides_rowcol, d_neighbor_arrays, d_C, do_shp
+        d_slcs, halfwin_rowcol, strides_rowcol, d_neighbor_arrays, d_C, do_shp
     )
     C_nonan = d_C.get()
 
@@ -206,7 +206,7 @@ def test_estimate_stack_covariance_nans_gpu(slcs, looks=(5, 5)):
     d_C_nan = cp.zeros((rows, cols, num_slc, num_slc), dtype=np.complex64)
     covariance.estimate_stack_covariance_gpu[blocks, threads_per_block](
         d_slcs_nan,
-        half_rowcol,
+        halfwin_rowcol,
         strides_rowcol,
         d_neighbor_arrays,
         d_C_nan,

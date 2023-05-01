@@ -165,7 +165,7 @@ def coh_mat_single(slc_samples, cov_mat=None, neighbor_mask=None):
 @cuda.jit
 def estimate_stack_covariance_gpu(
     slc_stack,
-    half_rowcol: tuple[int, int],
+    halfwin_rowcol: tuple[int, int],
     strides_rowcol: tuple[int, int],
     neighbor_arrays,
     C_out,
@@ -185,7 +185,7 @@ def estimate_stack_covariance_gpu(
     in_r = r1 + out_y * row_strides
     in_c = c1 + out_x * col_strides
 
-    half_row, half_col = half_rowcol
+    half_row, half_col = halfwin_rowcol
 
     N, rows, cols = slc_stack.shape
     # Get the input slices, clamping the window to the image bounds

@@ -1,37 +1,90 @@
 from __future__ import annotations
 
-from math import exp, gcd, sqrt
+from math import exp, sqrt
 
 import numba
 import numpy as np
 from numba import cuda
 from numpy.typing import ArrayLike
 
+from dolphin.io import compute_out_shape
 from dolphin.utils import _get_slices
 
 
 def estimate_neighbors(
     amp_stack,
-    half_rowcol: tuple[int, int],
-    strides_rowcol: tuple[int, int],
+    halfwin_rowcol: tuple[int, int],
     alpha: float,
     strides: dict[str, int] = {"x": 1, "y": 1},
     is_sorted: bool = False,
 ):
     """Estimate the  at all pixels of `slc_stack` on the GPU."""
-    # if is_sorted:
-    #     sorted_amp_stack = amp_stack
-    # else:
-    #     sorted_amp_stack = np.sort(amp_stack, axis=0)
-    # num_slc, rows, cols = sorted_amp_stack.shape
-    # ecdf_dist_cutoff = _get_ecdf_critical_distance_gpu(num_slc, alpha)
+    if is_sorted:
+        sorted_amp_stack = amp_stack
+    else:
+        sorted_amp_stack = np.sort(amp_stack, axis=0)
+    num_slc, rows, cols = sorted_amp_stack.shape
+    ecdf_dist_cutoff = _get_ecdf_critical_distance(num_slc, alpha)
+    print(f"ecdf_dist_cutoff: {ecdf_dist_cutoff}")
+
+    strides_rowcol = strides["y"], strides["x"]
+    out_rows, out_cols = compute_out_shape((rows, cols), strides)
+    half_row, half_col = halfwin_rowcol
+    is_shp = np.zeros(
+        (out_rows, out_cols, 2 * half_row + 1, 2 * half_col + 1), dtype=np.bool_
+    )
+
+    _loop_over_neighbors(
+        sorted_amp_stack,
+        halfwin_rowcol,
+        strides_rowcol,
+        ecdf_dist_cutoff,
+        is_shp,
+    )
+
+    return is_shp
+
+
+@numba.njit(parallel=True, nogil=True)
+def _loop_over_neighbors(
+    sorted_amp_stack,
+    halfwin_rowcol: tuple[int, int],
+    strides_rowcol: tuple[int, int],
+    ecdf_dist_cutoff: float,
+    is_shp: ArrayLike,
+):
+    """Estimate the SHPs of each pixel of `amp_stack` on the CPU."""
+    num_slc, in_rows, in_cols = sorted_amp_stack.shape
+    out_rows, out_cols = is_shp.shape[:2]
+
+    half_row, half_col = halfwin_rowcol
+    row_strides, col_strides = strides_rowcol
+    r_start = row_strides // 2
+    c_start = col_strides // 2
+    # location to start counting from in the larger input
+    r0, c0 = row_strides // 2, col_strides // 2
+
+    for out_r in numba.prange(out_rows):
+        for out_c in range(out_cols):
+            in_r = r0 + out_r * row_strides
+            in_c = c0 + out_c * col_strides
+            # Clamp the window to the image bounds
+            (r_start, r_end), (c_start, c_end) = _get_slices(
+                half_row, half_col, in_r, in_c, in_rows, in_cols
+            )
+
+            amp_block = sorted_amp_stack[:, r_start:r_end, c_start:c_end]
+            neighbors = is_shp[out_r, out_c, :, :]
+            _set_neighbors(amp_block, halfwin_rowcol, ecdf_dist_cutoff, neighbors)
+
+    return is_shp
 
 
 # GPU version of the SHP finding algorithm using KS test
 @cuda.jit
 def estimate_neighbors_gpu(
     sorted_amp_stack,
-    half_rowcol: tuple[int, int],
+    halfwin_rowcol: tuple[int, int],
     strides_rowcol: tuple[int, int],
     alpha: float,
     neighbor_arrays: ArrayLike,
@@ -45,8 +98,8 @@ def estimate_neighbors_gpu(
         return
 
     num_slc, rows, cols = sorted_amp_stack.shape
-    ecdf_dist_cutoff = _get_ecdf_critical_distance_gpu(num_slc, alpha)
-    half_row, half_col = half_rowcol
+    ecdf_dist_cutoff = _get_ecdf_critical_distance(num_slc, alpha)
+    half_row, half_col = halfwin_rowcol
 
     row_strides, col_strides = strides_rowcol
     r_start = row_strides // 2
@@ -60,24 +113,23 @@ def estimate_neighbors_gpu(
     )
 
     amp_block = sorted_amp_stack[:, r_start:r_end, c_start:c_end]
-    # TODO: if this is a bottleneck, we can do something smarter
-    # by computing only the bottom right corner, then mirroring
-    # also, we can use strides to only compute the output
-    # pixels that are actually needed
     neighbors_pixel = neighbor_arrays[out_y, out_x, :, :]
-    _get_neighbors(amp_block, half_rowcol, ecdf_dist_cutoff, neighbors_pixel)
+    _set_neighbors(amp_block, halfwin_rowcol, ecdf_dist_cutoff, neighbors_pixel)
 
 
-@numba.njit(device=True)
-def _get_neighbors(amp_block, half_rowcol, ecdf_dist_cutoff, neighbors):
+@numba.njit
+def _set_neighbors(amp_block, halfwin_rowcol, ecdf_dist_cutoff, neighbors):
     _, rows, cols = amp_block.shape
 
-    r_c, c_c = rows // 2, cols // 2
-    if rows < 2 * half_rowcol[0] + 1 or cols < 2 * half_rowcol[1] + 1:
-        neighbors[:] = True
+    if rows < 2 * halfwin_rowcol[0] + 1 or cols < 2 * halfwin_rowcol[1] + 1:
+        # not enough neighbors to test, make all false
         return
 
+    # get the center pixel
+    r_c, c_c = rows // 2, cols // 2
     x1 = amp_block[:, r_c, c_c]
+    # TODO: if this is a bottleneck, we can do something smarter
+    # by computing only the bottom right corner, then mirroring
     for i in range(rows):
         for j in range(cols):
             if i == r_c and j == c_c:
@@ -88,108 +140,6 @@ def _get_neighbors(amp_block, half_rowcol, ecdf_dist_cutoff, neighbors):
             ecdf_max_dist = _get_max_cdf_dist(x1, x2)
 
             neighbors[i, j] = ecdf_max_dist < ecdf_dist_cutoff
-
-
-@numba.njit
-def ks_2samp(data1, data2):
-    """Compute the Kolmogorov-Smirnov statistic on 2 samples.
-
-    This is a two-sided test for the null hypothesis that 2 independent samples
-    are drawn from the same continuous distribution.
-
-    Parameters
-    ----------
-    data1, data2 : array_like, 1-Dimensional
-        Two arrays of sample observations assumed to be drawn from a continuous
-        distribution, sample sizes must be equal.
-
-    Returns
-    -------
-    statistic : float
-        KS statistic.
-    pvalue : float
-        Two-tailed p-value.
-
-    Notes
-    -----
-    This is a simplified version of the scipy.stats.ks_2samp function.
-    https://github.com/scipy/scipy/blob/v1.10.0/scipy/stats/_stats_py.py#L7948-L8179
-    """
-    n1 = data1.shape[0]
-    n2 = data2.shape[0]
-    if n1 != n2:
-        raise ValueError("Data passed to ks_2samp must be of the same size")
-    if min(n1, n2) == 0:
-        raise ValueError("Data passed to ks_2samp must not be empty")
-    if np.iscomplexobj(data1) or np.iscomplexobj(data2):
-        raise ValueError("ks_2samp only accepts real input data")
-
-    data1 = np.sort(data1)
-    data2 = np.sort(data2)
-    data_all = np.concatenate((data1, data2))
-    # using searchsorted solves equal data problem
-    cdf1 = np.searchsorted(data1, data_all, side="right") / n1
-    cdf2 = np.searchsorted(data2, data_all, side="right") / n2
-    cdf_diffs = cdf1 - cdf2
-    # Ensure sign of minS is not negative.
-    # np.clip not yet implemented in earlier numba, at least up to 0.53
-    minS = np.maximum(0.0, np.minimum(1.0, -np.min(cdf_diffs)))
-
-    maxS = np.max(cdf_diffs)
-    d = max(minS, maxS)
-    g = gcd(n1, n2)
-    prob = -np.inf
-
-    # n1, n2 are the sample sizes
-    lcm = (n1 // g) * n2
-    h = int(np.round(d * lcm))
-    # d is the computed max difference in ECDFs
-    d = h * 1.0 / lcm
-    if h == 0:
-        prob = 1.0
-    else:
-        prob = _compute_prob_outside_square(n1, h)
-
-    prob = np.maximum(0, np.minimum(1, prob))
-    # return (d, prob)
-    return prob
-
-
-@numba.njit
-def _compute_prob_outside_square(n, h):
-    """Compute the proportion of paths that pass outside the two diagonal lines.
-
-    Taken from https://github.com/scipy/scipy/blob/v1.10.0/scipy/stats/_stats_py.py#L7788
-
-    Parameters
-    ----------
-    n : integer
-        n > 0
-    h : integer
-        0 <= h <= n
-
-    Returns
-    -------
-    p : float
-        The proportion of paths that pass outside the lines x-y = +/-h.
-    """
-    # Compute Pr(D_{n,n} >= h/n)
-    # Prob = 2*( binom(2n, n-h) - binom(2n, n-2a)+binom(2n, n-3a) - ... ) / binom(2n, n)
-    # This formulation exhibits subtractive cancellation.
-    # Instead divide each term by binom(2n, n), then factor common terms
-    # and use a Horner-like algorithm
-    # P = 2 * A0 * (1 - A1*(1 - A2*(1 - A3*(1 - A4*(...)))))
-
-    P = 0.0
-    k = int(np.floor(n / h))
-    while k >= 0:
-        p1 = 1.0
-        # Each of the Ai terms has numerator and denominator with h simple terms.
-        for j in range(h):
-            p1 = (n - k * h - j) * p1 / (n + k * h + j + 1)
-        P = p1 * (1.0 - P)
-        k -= 1
-    return 2 * P
 
 
 @numba.njit(nogil=True)
@@ -252,6 +202,7 @@ def _get_max_cdf_dist(x1, x2):
     return max_dist
 
 
+@numba.njit(nogil=True, fastmath=True)
 def _get_ecdf_critical_distance(nslc, alpha):
     N = nslc / 2.0
     cur_dist = 0.01
@@ -270,7 +221,3 @@ def _get_ecdf_critical_distance(nslc, alpha):
 
         cur_dist += 0.001
     return critical_distance
-
-
-_get_ecdf_critical_distance_gpu = cuda.jit(device=True)(_get_ecdf_critical_distance)
-_get_ecdf_critical_distance_cpu = numba.njit(_get_ecdf_critical_distance)
