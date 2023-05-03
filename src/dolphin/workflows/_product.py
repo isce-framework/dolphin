@@ -8,6 +8,7 @@ import h5py
 import numpy as np
 import pyproj
 from numpy.typing import ArrayLike, DTypeLike
+from PIL import Image
 
 from dolphin import __version__ as dolphin_version
 from dolphin import io
@@ -16,7 +17,6 @@ from dolphin._types import Filename
 from dolphin.utils import get_dates
 
 from ._pge_runconfig import RunConfig
-from ._utils import save_as_png
 from .config import OPERA_DATASET_NAME
 
 logger = get_log(__name__)
@@ -471,10 +471,6 @@ def make_browse_image(
     scaled_shape = [int(np.ceil(s / scaling_ratio)) for s in orig_shape]
 
     # TODO: Make actual browse image
-    # img = Image.fromarray(arr, mode="L")
-    # gdal_translate   -scale [src_min src_max [dst_min dst_max]]
     dummy = np.zeros(scaled_shape, dtype="uint8")
-    save_as_png(dummy, output_filename, mask_value=0)
-    # from PIL import Image
-    # img = Image.fromarray(dummy, mode="L")
-    # img.save(output_filename, transparency=0)
+    img = Image.fromarray(dummy, mode="L")
+    img.save(output_filename, transparency=0)
