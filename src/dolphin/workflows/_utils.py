@@ -1,7 +1,14 @@
+from __future__ import annotations
+
 import itertools
 import re
+import struct
+import zlib
 from pathlib import Path
 from typing import Dict, List, Optional, Pattern, Sequence, Union
+
+import numpy as np
+from numpy.typing import ArrayLike
 
 from dolphin import io
 from dolphin._log import get_log
@@ -159,3 +166,68 @@ def setup_output_folder(
 
         output_files.append(output_path)
     return output_files
+
+
+def save_as_png(array: ArrayLike, filename: Filename, mask_value: int = 0):
+    """Save a numpy array as a grayscale+alpha (LA) PNG file.
+
+    Array must be UInt8 datatype.
+    Modified from RGBA version https://stackoverflow.com/a/21034111/4174466
+
+
+    Parameters
+    ----------
+    array : ArrayLike
+        Input 2D image array
+    filename : Filename
+        Name of output file
+    mask_value : int, optional
+        Value to set to transparent, by default 0
+    """
+    if array.dtype != np.dtype("uint8"):
+        raise ValueError("Input `array` must be UInt8")
+
+    # Flatten the input array and interleave grayscale and alpha values
+    reversed_flat = array[::-1].ravel()
+    flat = np.zeros(2 * array.size, dtype="uint8")
+    flat[::2] = reversed_flat
+
+    alphas = np.full(array.size, 255, dtype="uint8")
+    alphas[reversed_flat == mask_value] = 0
+    flat[1::2] = alphas
+
+    # Convert flat list to bytes
+    buf = bytearray(flat.tolist())
+
+    data = _write_png(buf, *array.shape)
+    with open(filename, "wb") as f:
+        f.write(data)
+
+
+def _write_png(buf, height, width):
+    """Write out bytearray to PNG format.
+
+    Modified https://stackoverflow.com/a/19174800/4174466 for 'LA' format.
+    """
+    width_byte_2 = width * 2
+    raw_data = b"".join(
+        b"\x00" + buf[span : span + width_byte_2]
+        for span in range((height - 1) * width_byte_2, -1, -width_byte_2)
+    )
+
+    def png_pack(png_tag, data):
+        chunk_head = png_tag + data
+        return (
+            struct.pack("!I", len(data))
+            + chunk_head
+            + struct.pack("!I", 0xFFFFFFFF & zlib.crc32(chunk_head))
+        )
+
+    return b"".join(
+        [
+            b"\x89PNG\r\n\x1a\n",
+            png_pack(b"IHDR", struct.pack("!2I5B", width, height, 8, 4, 0, 0, 0)),
+            png_pack(b"IDAT", zlib.compress(raw_data, 9)),
+            png_pack(b"IEND", b""),
+        ]
+    )

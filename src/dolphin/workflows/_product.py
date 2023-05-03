@@ -16,6 +16,7 @@ from dolphin._types import Filename
 from dolphin.utils import get_dates
 
 from ._pge_runconfig import RunConfig
+from ._utils import save_as_png
 from .config import OPERA_DATASET_NAME
 
 logger = get_log(__name__)
@@ -54,6 +55,7 @@ def create_output_product(
     output_name: Filename,
     corrections: Dict[str, ArrayLike] = {},
     pge_runconfig: Optional[RunConfig] = None,
+    create_browse_image: bool = True,
 ):
     """Create the OPERA output product in NetCDF format.
 
@@ -74,6 +76,9 @@ def create_output_product(
     pge_runconfig : Optional[RunConfig], optional
         The PGE run configuration, by default None
         Used to add extra metadata to the output file.
+    create_browse_image : bool
+        If true, creates a PNG browse image of the unwrapped phase
+        with filename as `output_name`.png
     """
     # Read the Geotiff file and its metadata
     crs = io.get_raster_crs(unw_filename)
@@ -91,6 +96,9 @@ def create_output_product(
     unw_arr[mask] = np.nan
 
     assert unw_arr.shape == conncomp_arr.shape == tcorr_arr.shape
+
+    if create_browse_image:
+        make_browse_image(Path(output_name).with_suffix(".png"), unw_arr)
 
     with h5netcdf.File(output_name, "w") as f:
         # Create the NetCDF file
@@ -438,3 +446,35 @@ def _zero_mantissa(data: np.ndarray, bits_to_keep: int = 10):
         dr = data.view(np.uint32)
         dr &= bitmask
     return data
+
+
+def make_browse_image(
+    output_filename: Filename,
+    arr: ArrayLike,
+    max_dim_allowed: int = 2048,
+) -> None:
+    """Create a PNG browse image for the output product.
+
+    Parameters
+    ----------
+    output_filename : Filename
+        Name of output PNG
+    arr : ArrayLike
+        input 2D image array
+    max_dim_allowed : int, default = 2048
+        Size (in pixels) of the maximum allowed dimension of output image.
+        Image gets rescaled with same aspect ratio.
+    """
+    orig_shape = arr.shape
+    scaling_ratio = max([s / max_dim_allowed for s in orig_shape])
+    # scale original shape by scaling ratio
+    scaled_shape = [int(np.ceil(s / scaling_ratio)) for s in orig_shape]
+
+    # TODO: Make actual browse image
+    # img = Image.fromarray(arr, mode="L")
+    # gdal_translate   -scale [src_min src_max [dst_min dst_max]]
+    dummy = np.zeros(scaled_shape, dtype="uint8")
+    save_as_png(dummy, output_filename, mask_value=0)
+    # from PIL import Image
+    # img = Image.fromarray(dummy, mode="L")
+    # img.save(output_filename, transparency=0)
