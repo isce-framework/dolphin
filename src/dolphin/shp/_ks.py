@@ -19,10 +19,19 @@ def estimate_neighbors(
     is_sorted: bool = False,
 ):
     """Estimate the  at all pixels of `slc_stack` on the GPU."""
+    # estimate_neighbors_gpu(
+    #     sorted_amp_stack,
+    #     halfwin_rowcol,
+    #     strides_rowcol,
+    #     alpha,
+    #     neighbor_arrays,
+    # )
+
     if is_sorted:
         sorted_amp_stack = amp_stack
     else:
         sorted_amp_stack = np.sort(amp_stack, axis=0)
+
     num_slc, rows, cols = sorted_amp_stack.shape
     ecdf_dist_cutoff = _get_ecdf_critical_distance(num_slc, alpha)
     print(f"ecdf_dist_cutoff: {ecdf_dist_cutoff}")
@@ -162,15 +171,15 @@ def _get_max_cdf_dist(x1, x2):
     --------
     >>> x1 = np.array([1, 2, 3, 4, 5])
     >>> x2 = np.array([1, 2, 3, 4, 5])
-    >>> _get_max_cdf_dist(x1, x2)
+    >>> _get_max_cdf_dist(x1, x2)  # doctest: +NUMBER
     0.0
     >>> x2 = np.array([2, 3, 4, 5, 6])
-    >>> round(_get_max_cdf_dist(x1, x2), 2)
+    >>> round(_get_max_cdf_dist(x1, x2), 2)  # doctest: +NUMBER
     0.2
-    >>> round(_get_max_cdf_dist(x2, x1), 2)
+    >>> round(_get_max_cdf_dist(x2, x1), 2)  # doctest: +NUMBER
     0.2
     >>> x2 = np.array([6, 7, 8, 9, 10])
-    >>> _get_max_cdf_dist(x1, x2)
+    >>> _get_max_cdf_dist(x1, x2)  # doctest: +NUMBER
     1.0
     """
     n = x1.shape[0]

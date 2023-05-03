@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-# import cupy as cp
+from math import log
+
 import numba
 import numpy as np
-from numba import prange
 from numpy.typing import ArrayLike
-from scipy.stats import f, t
+from scipy.stats import chi2
 
 from dolphin.io import compute_out_shape
 from dolphin.utils import _get_slices
@@ -19,7 +19,9 @@ def estimate_neighbors(
     strides: dict = {"x": 1, "y": 1},
     alpha: float = 0.05,
 ):
-    """Estimate the number of neighbors based on a combined t- and F-test.
+    """Estimate the number of neighbors based on the GLRT.
+
+    Assumes Rayleigh distributed amplitudes, based on the method described [1]_.
 
     Parameters
     ----------
@@ -40,7 +42,6 @@ def estimate_neighbors(
         Significance level at which to reject the null hypothesis.
         Rejecting means declaring a neighbor is not a SHP.
 
-
     Notes
     -----
     When `strides` is not (1, 1), the output first two dimensions
@@ -56,16 +57,16 @@ def estimate_neighbors(
             `[dolphin.io.compute_out_shape][]`
             `window_rows = 2 * halfwin_rowcol[0] + 1`
             `window_cols = 2 * halfwin_rowcol[1] + 1`
+
+    References
+    ----------
+        [1] Parizzi and Brcic, 2011, "Adaptive InSAR Stack Multilooking Exploiting
+        Amplitude Statistics"
     """
     half_row, half_col = halfwin_rowcol
     rows, cols = mean.shape
 
-    # we're doing two checks with the same alpha, so we need to adjust
-    # the significance level for each test so P_FA(t-test) & P_FA(f-test) = alpha
-    # e.g. for alpha = 0.05, a = 0.0253
-    a = 1 - (1 - alpha) ** (1 / 2)
-    cv_t = get_t_critical_values(a, nslc)
-    cv_f = get_f_critical_values(a, nslc)
+    threshold = get_glrt_cutoff(alpha=alpha, N=nslc)
 
     out_rows, out_cols = compute_out_shape((rows, cols), strides)
     is_shp = np.zeros(
@@ -73,101 +74,78 @@ def estimate_neighbors(
     )
     strides_rowcol = (strides["y"], strides["x"])
     return _loop_over_pixels(
-        mean, var, half_row, half_col, nslc, *cv_t, *cv_f, strides_rowcol, is_shp
+        mean, var, half_row, half_col, nslc, threshold, strides_rowcol, is_shp
     )
 
 
 @numba.njit(nogil=True, parallel=True)
 def _loop_over_pixels(
-    mean: ArrayLike,
-    variance: ArrayLike,
+    mean: np.ndarray,
+    var: np.ndarray,
     halfwin_rowcol: tuple[int, int],
     strides_rowcol: tuple[int, int],
-    nslc: int,
-    cv_t_low: float,
-    cv_t_high: float,
-    cv_f_low: float,
-    cv_f_high: float,
+    N: int,
+    threshold: float,
     is_shp: np.ndarray,
 ) -> np.ndarray:
-    in_rows, in_cols = mean.shape
-    out_rows, out_cols = is_shp.shape[:2]
+    """Compare the GLRT test statistic for each pixel to the pre-computed threshold."""
     half_row, half_col = halfwin_rowcol
     row_strides, col_strides = strides_rowcol
     # location to start counting from in the larger input
     r0, c0 = row_strides // 2, col_strides // 2
+    in_rows, in_cols = mean.shape
+    out_rows, out_cols = is_shp.shape[:2]
 
-    for out_r in prange(out_rows):
+    sigma_hat_squared = var + mean**2
+
+    for out_r in numba.prange(out_rows):
         for out_c in range(out_cols):
             in_r = r0 + out_r * row_strides
             in_c = c0 + out_c * col_strides
-            mu1 = mean[in_r, in_c]
-            var1 = variance[in_r, in_c]
+
             # Clamp the window to the image bounds
             (r_start, r_end), (c_start, c_end) = _get_slices(
                 half_row, half_col, in_r, in_c, in_rows, in_cols
             )
+            # for i in range(-half_row, half_row + 1):
+            # for j in range(-half_col, half_col + 1):
             for i in range(r_start, r_end):
                 for j in range(c_start, c_end):
-                    # itself is always a neighbor
                     if i == in_r and j == in_c:
                         is_shp[out_r, out_c, i, j] = True
                         continue
-
-                    # t-test: test for difference of means
-                    mu2 = mean[i, j]
-                    var2 = variance[i, j]
-                    # welch_t_statistic(mu1, mu2, var1, var2, nslc)
-                    t_stat = (mu1 - mu2) / np.sqrt((var1 + var2) / nslc)
-
-                    # F-test: test for difference of variances
-                    f_stat = var1 / var2
-
-                    # critical values: use 2-sided tests for t- and f-test
-                    passes_t = cv_t_low < t_stat < cv_t_high
-                    passes_f = cv_f_low < f_stat < cv_f_high
-                    # Needs to pass both tests to be a SHP
-                    is_shp[out_r, out_c, i, j] = passes_t and passes_f
+                    sigma_hat_1 = sigma_hat_squared[in_r, in_c]
+                    sigma_hat_2 = sigma_hat_squared[i, j]
+                    sigma_hat_pooled = (sigma_hat_1 + sigma_hat_2) / 2
+                    T = (
+                        2 * N * log(sigma_hat_pooled)
+                        - N * log(sigma_hat_1)
+                        - N * log(sigma_hat_2)
+                    )
+                    is_shp[out_r, out_c, i + half_row, j + half_col] = T < threshold
     return is_shp
 
 
-def get_t_critical_values(alpha: float, n: int) -> tuple[float, float]:
-    """Get the critical values for the two-tailed t-distribution.
+def get_glrt_cutoff(alpha: float, N: int) -> float:
+    """Compute the cutoff for the GLRT test statistic.
 
     Parameters
     ----------
-    alpha : float
-        The significance level.
-    n : int
-        The number of samples in each group.
+    alpha: float
+        Significance level (0 < alpha < 1).
+    N: int
+        Number of samples.
 
     Returns
     -------
-    float, float
-        The lower and upper critical values.
+    float
+        Cutoff value for the GLRT test statistic.
     """
-    dof = 2 * (n - 1)
-    crit_value_t_lower = t.ppf(alpha / 2, dof)
-    crit_value_t_upper = t.ppf(1 - alpha / 2, dof)
-    return crit_value_t_lower, crit_value_t_upper
+    # Degrees of freedom for the chi-squared distribution
+    df = 1
 
+    # Inverse of the chi-squared cumulative distribution function (CDF) at alpha
+    cutoff = chi2.ppf(1 - alpha, df)
+    # cutoff = chi2.ppf(1 - alpha, N)
 
-def get_f_critical_values(alpha: float, n: int) -> tuple[float, float]:
-    """Get the critical values for the two-tailed F-distribution.
-
-    Parameters
-    ----------
-    alpha : float
-        The significance level.
-    n : int
-        The number of samples in each group.
-
-    Returns
-    -------
-    float, float
-        The lower and upper critical values.
-    """
-    dfn = dfd = n - 1  # degrees of freedom, same for numerator and denominator
-    crit_value_f_lower = f.ppf(alpha / 2, dfn, dfd)
-    crit_value_f_upper = f.ppf(1 - alpha / 2, dfn, dfd)
-    return crit_value_f_lower, crit_value_f_upper
+    return cutoff
