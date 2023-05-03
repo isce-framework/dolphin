@@ -103,6 +103,7 @@ def _loop_over_pixels(
             in_r = r0 + out_r * row_strides
             in_c = c0 + out_c * col_strides
 
+            sigma_hat_1 = sigma_hat_squared[in_r, in_c]
             # Clamp the window to the image bounds
             (r_start, r_end), (c_start, c_end) = _get_slices(
                 half_row, half_col, in_r, in_c, in_rows, in_cols
@@ -114,7 +115,6 @@ def _loop_over_pixels(
                     if i == in_r and j == in_c:
                         is_shp[out_r, out_c, i, j] = True
                         continue
-                    sigma_hat_1 = sigma_hat_squared[in_r, in_c]
                     sigma_hat_2 = sigma_hat_squared[i, j]
                     sigma_hat_pooled = (sigma_hat_1 + sigma_hat_2) / 2
                     T = (

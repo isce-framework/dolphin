@@ -3,7 +3,6 @@ from __future__ import annotations
 # import cupy as cp
 import numba
 import numpy as np
-from numba import prange
 from numpy.typing import ArrayLike
 from scipy.stats import f, t
 
@@ -73,7 +72,7 @@ def estimate_neighbors(
     )
     strides_rowcol = (strides["y"], strides["x"])
     return _loop_over_pixels(
-        mean, var, half_row, half_col, nslc, *cv_t, *cv_f, strides_rowcol, is_shp
+        mean, var, halfwin_rowcol, strides_rowcol, nslc, *cv_t, *cv_f, is_shp
     )
 
 
@@ -90,14 +89,14 @@ def _loop_over_pixels(
     cv_f_high: float,
     is_shp: np.ndarray,
 ) -> np.ndarray:
-    in_rows, in_cols = mean.shape
-    out_rows, out_cols = is_shp.shape[:2]
     half_row, half_col = halfwin_rowcol
     row_strides, col_strides = strides_rowcol
     # location to start counting from in the larger input
     r0, c0 = row_strides // 2, col_strides // 2
+    in_rows, in_cols = mean.shape
+    out_rows, out_cols = is_shp.shape[:2]
 
-    for out_r in prange(out_rows):
+    for out_r in numba.prange(out_rows):
         for out_c in range(out_cols):
             in_r = r0 + out_r * row_strides
             in_c = c0 + out_c * col_strides
