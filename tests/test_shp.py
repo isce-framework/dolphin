@@ -1,5 +1,6 @@
 import numpy as np
 import pytest
+from scipy.stats import rayleigh
 
 from dolphin import shp
 from dolphin.phase_link import simulate
@@ -14,7 +15,9 @@ def slcs(shape=(30, 11, 11)):
     return 20 * (np.random.rand(*shape) + 1j * np.random.rand(*shape))
 
 
-def test_shp_tf(slcs):
+# the TF and GLRT methods have same API for estimate_neighbors
+@pytest.mark.parametrize("method", ["tf", "glrt"])
+def test_shp_glrt_tf(slcs, method):
     amp_stack = np.abs(slcs)
     mean = np.mean(amp_stack, axis=0)
     var = np.var(amp_stack, axis=0)
@@ -29,7 +32,7 @@ def test_shp_tf(slcs):
         halfwin_rowcol=halfwin_rowcol,
         nslc=nslc,
         alpha=1e-6,
-        method="tf",
+        method=method,
     )
     shps_center = neighbors[5, 5]
     # Check that everything is counted as a neighbor
@@ -138,16 +141,18 @@ def test_shp_tf_half_var_different(slcs):
     assert not shps_center[:5, :].any()
 
 
+@pytest.mark.parametrize("method", ["tf", "glrt"])
 @pytest.mark.parametrize("alpha", [0.01, 0.05])
 @pytest.mark.parametrize("strides", [{"x": 1, "y": 1}, {"x": 2, "y": 2}])
-def test_shp_tf_statistics(alpha, strides):
+def test_shp_tf_statistics(method, alpha, strides):
     """Check that with repeated tries, the alpha is correct."""
 
     nsim = 500
     shape = (30, 11, 11)
     halfwin_rowcol = (5, 5)
     frac_shps = np.zeros(nsim)
-    slc_rows = np.random.rand(nsim, *shape) + 1j * np.random.rand(nsim, *shape)
+    # slc_rows = np.random.rand(nsim, *shape) + 1j * np.random.rand(nsim, *shape)
+    slc_rows = rayleigh.rvs(scale=10, size=(nsim, *shape))
     for i in range(nsim):
         slcs = slc_rows[i]
         amp_stack = np.abs(slcs)
@@ -159,17 +164,44 @@ def test_shp_tf_statistics(alpha, strides):
             mean=mean,
             var=var,
             halfwin_rowcol=halfwin_rowcol,
-            # amp_stack=amp_stack,
             nslc=nslc,
             strides=strides,
             alpha=alpha,
-            method="tf",
+            method=method,
         )
 
         out_rows, out_cols = neighbors.shape[:2]
         shps_center = neighbors[out_rows // 2, out_cols // 2]
-        frac_shps[i] = shps_center.sum() / (shps_center.size - 1)  # don't count center
+        frac_shps[i] = (shps_center.sum() - 1) / (
+            shps_center.size - 1
+        )  # don't count center
 
     # Check that the mean number of SHPs is close to 5%
     tol_pct = 3
     assert 100 * np.abs((frac_shps.mean() - (1 - alpha))) < tol_pct
+
+
+# def test_glrt_same_distribution():
+#     nslc = 100
+#     num_tests = 500
+#     alpha = 0.05
+#     data = rayleigh.rvs(scale=1, size=(nslc, num_tests))
+
+#     mean= np.mean(data, axis=0)
+#     var= np.var(data, axis=0)
+#     half_window = (0, 0)
+
+#     neighbors = shp.estimate_neighbors(
+#             mean=mean,
+#             var=var,
+#             halfwin_rowcol=halfwin_rowcol,
+#             # amp_stack=amp_stack,
+#             nslc=nslc,
+#             strides=strides,
+#             alpha=alpha,
+#             method=method,
+#         )
+
+#     rejected = np.sum(~neighbors[5, 5]) - 1  # skip counting the self pixel
+
+#     assert np.abs(rejected / num_tests - alpha) < 0.01

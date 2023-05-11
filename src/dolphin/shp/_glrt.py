@@ -74,7 +74,7 @@ def estimate_neighbors(
     )
     strides_rowcol = (strides["y"], strides["x"])
     return _loop_over_pixels(
-        mean, var, half_row, half_col, nslc, threshold, strides_rowcol, is_shp
+        mean, var, halfwin_rowcol, strides_rowcol, nslc, threshold, is_shp
     )
 
 
@@ -96,7 +96,7 @@ def _loop_over_pixels(
     in_rows, in_cols = mean.shape
     out_rows, out_cols = is_shp.shape[:2]
 
-    sigma_hat_squared = var + mean**2
+    sigma_hat_squared = (var + mean**2) / 2
 
     for out_r in numba.prange(out_rows):
         for out_c in range(out_cols):
@@ -108,8 +108,7 @@ def _loop_over_pixels(
             (r_start, r_end), (c_start, c_end) = _get_slices(
                 half_row, half_col, in_r, in_c, in_rows, in_cols
             )
-            # for i in range(-half_row, half_row + 1):
-            # for j in range(-half_col, half_col + 1):
+
             for i in range(r_start, r_end):
                 for j in range(c_start, c_end):
                     if i == in_r and j == in_c:
@@ -117,12 +116,11 @@ def _loop_over_pixels(
                         continue
                     sigma_hat_2 = sigma_hat_squared[i, j]
                     sigma_hat_pooled = (sigma_hat_1 + sigma_hat_2) / 2
-                    T = (
-                        2 * N * log(sigma_hat_pooled)
-                        - N * log(sigma_hat_1)
-                        - N * log(sigma_hat_2)
+                    T = 2 * N * log(sigma_hat_pooled) - N * (
+                        log(sigma_hat_1) + log(sigma_hat_2)
                     )
-                    is_shp[out_r, out_c, i + half_row, j + half_col] = T < threshold
+                    is_shp[out_r, out_c, i, j] = T < threshold
+
     return is_shp
 
 

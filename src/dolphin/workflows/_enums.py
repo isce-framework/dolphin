@@ -18,6 +18,7 @@ class WorkflowName(str, Enum):
 class ShpMethod(str, Enum):
     """Method for finding SHPs during phase linking."""
 
+    GLRT = "glrt"
     TF = "tf"
     KS = "ks"
     RECT = "rect"
