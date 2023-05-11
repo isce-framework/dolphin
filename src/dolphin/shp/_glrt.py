@@ -1,11 +1,9 @@
 from __future__ import annotations
 
-from math import log
-
 import numba
 import numpy as np
 from numpy.typing import ArrayLike
-from scipy.stats import chi2
+from scipy.stats import f
 
 from dolphin.io import compute_out_shape
 from dolphin.utils import _get_slices
@@ -62,6 +60,7 @@ def estimate_neighbors(
     ----------
         [1] Parizzi and Brcic, 2011, "Adaptive InSAR Stack Multilooking Exploiting
         Amplitude Statistics"
+        [2] Siddiqui, M. M. (1962). Some problems connected with Rayleigh distributions.
     """
     half_row, half_col = halfwin_rowcol
     rows, cols = mean.shape
@@ -74,7 +73,7 @@ def estimate_neighbors(
     )
     strides_rowcol = (strides["y"], strides["x"])
     return _loop_over_pixels(
-        mean, var, halfwin_rowcol, strides_rowcol, nslc, threshold, is_shp
+        mean, var, halfwin_rowcol, strides_rowcol, threshold, is_shp
     )
 
 
@@ -84,7 +83,6 @@ def _loop_over_pixels(
     var: np.ndarray,
     halfwin_rowcol: tuple[int, int],
     strides_rowcol: tuple[int, int],
-    N: int,
     threshold: float,
     is_shp: np.ndarray,
 ) -> np.ndarray:
@@ -96,14 +94,15 @@ def _loop_over_pixels(
     in_rows, in_cols = mean.shape
     out_rows, out_cols = is_shp.shape[:2]
 
-    sigma_hat_squared = (var + mean**2) / 2
+    # Convert mean/var to the Rayleigh scale parameter
+    scale_squared = (var + mean**2) / 2
 
     for out_r in numba.prange(out_rows):
         for out_c in range(out_cols):
             in_r = r0 + out_r * row_strides
             in_c = c0 + out_c * col_strides
 
-            sigma_hat_1 = sigma_hat_squared[in_r, in_c]
+            scale_p = scale_squared[in_r, in_c]
             # Clamp the window to the image bounds
             (r_start, r_end), (c_start, c_end) = _get_slices(
                 half_row, half_col, in_r, in_c, in_rows, in_cols
@@ -114,18 +113,19 @@ def _loop_over_pixels(
                     if i == in_r and j == in_c:
                         is_shp[out_r, out_c, i, j] = True
                         continue
-                    sigma_hat_2 = sigma_hat_squared[i, j]
-                    sigma_hat_pooled = (sigma_hat_1 + sigma_hat_2) / 2
-                    T = 2 * N * log(sigma_hat_pooled) - N * (
-                        log(sigma_hat_1) + log(sigma_hat_2)
-                    )
-                    is_shp[out_r, out_c, i, j] = T < threshold
+                    scale_q = scale_squared[i, j]
+                    f_ratio = scale_p / scale_q
+                    # make sure we did (bigger scale / smaller scale)
+                    if f_ratio < 1:
+                        f_ratio = 1 / f_ratio
+
+                    is_shp[out_r, out_c, i, j] = f_ratio < threshold
 
     return is_shp
 
 
 def get_glrt_cutoff(alpha: float, N: int) -> float:
-    """Compute the cutoff for the GLRT test statistic.
+    """Compute the upper cutoff for the GLRT test statistic.
 
     Parameters
     ----------
@@ -139,11 +139,9 @@ def get_glrt_cutoff(alpha: float, N: int) -> float:
     float
         Cutoff value for the GLRT test statistic.
     """
-    # Degrees of freedom for the chi-squared distribution
-    df = 1
-
-    # Inverse of the chi-squared cumulative distribution function (CDF) at alpha
-    cutoff = chi2.ppf(1 - alpha, df)
-    # cutoff = chi2.ppf(1 - alpha, N)
-
-    return cutoff
+    # Degrees of freedom is 2*N, since each x_i**2 is a chi-squared RV with dof=2
+    dof = 2 * N
+    # Inverse of the chi-squared cumulative distribution function (CDF) at alpha/2
+    # Not using alpha since we'll always compare to the upper limit, ensuring that
+    #  sigma1/sigma2 > 1
+    return f.ppf(1 - alpha / 2, dof, dof)

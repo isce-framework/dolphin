@@ -34,9 +34,9 @@ def test_shp_glrt_tf(slcs, method):
         alpha=1e-6,
         method=method,
     )
-    shps_center = neighbors[5, 5]
+    shps_mid_pixel = neighbors[5, 5]
     # Check that everything is counted as a neighbor
-    assert shps_center.all()
+    assert shps_mid_pixel.all()
 
     # Check the edges are cut off
     top_left = neighbors[0, 0]
@@ -52,9 +52,9 @@ def test_shp_glrt_tf(slcs, method):
         alpha=1.0,
         method="tf",
     )
-    shps_center = neighbors[5, 5]
-    assert shps_center.sum() == 1  # only itself
-    assert shps_center[5, 5] == 1
+    shps_mid_pixel = neighbors[5, 5]
+    assert shps_mid_pixel.sum() == 1  # only itself
+    assert shps_mid_pixel[5, 5] == 1
 
 
 def test_shp_ks(slcs):
@@ -70,9 +70,9 @@ def test_shp_ks(slcs):
         alpha=1e-6,
         method="ks",
     )
-    shps_center = neighbors[5, 5]
+    shps_mid_pixel = neighbors[5, 5]
     # Check that everything is counted as a neighbor
-    assert shps_center.all()
+    assert shps_mid_pixel.all()
 
     # Check the edges are cut off and all zeros
     # NOTE: this is different than TF test since KS is slower
@@ -88,9 +88,9 @@ def test_shp_ks(slcs):
         alpha=1.0,
         method="ks",
     )
-    shps_center = neighbors[5, 5]
-    assert shps_center.sum() == 1  # only itself
-    assert shps_center[5, 5] == 1
+    shps_mid_pixel = neighbors[5, 5]
+    assert shps_mid_pixel.sum() == 1  # only itself
+    assert shps_mid_pixel[5, 5] == 1
 
 
 def test_shp_tf_half_mean_different(slcs):
@@ -111,10 +111,10 @@ def test_shp_tf_half_mean_different(slcs):
     neighbors = shp.estimate_neighbors(
         mean=mean2, var=var, halfwin_rowcol=halfwin_rowcol, nslc=nslc, alpha=0.01
     )
-    shps_center = neighbors[5, 5]
+    shps_mid_pixel = neighbors[5, 5]
     # Check that everything is counted as a neighbor
-    assert shps_center[5:, :].all()
-    assert not shps_center[:5, :].any()
+    assert shps_mid_pixel[5:, :].all()
+    assert not shps_mid_pixel[:5, :].any()
 
 
 def test_shp_tf_half_var_different(slcs):
@@ -135,14 +135,14 @@ def test_shp_tf_half_var_different(slcs):
     neighbors = shp.estimate_neighbors(
         mean=mean, var=var2, halfwin_rowcol=halfwin_rowcol, nslc=nslc, alpha=0.01
     )
-    shps_center = neighbors[5, 5]
+    shps_mid_pixel = neighbors[5, 5]
     # Check that everything is counted as a neighbor
-    assert shps_center[5:, :].all()
-    assert not shps_center[:5, :].any()
+    assert shps_mid_pixel[5:, :].all()
+    assert not shps_mid_pixel[:5, :].any()
 
 
 @pytest.mark.parametrize("method", ["tf", "glrt"])
-@pytest.mark.parametrize("alpha", [0.01, 0.05])
+@pytest.mark.parametrize("alpha", [0.1, 0.05])
 @pytest.mark.parametrize("strides", [{"x": 1, "y": 1}, {"x": 2, "y": 2}])
 def test_shp_tf_statistics(method, alpha, strides):
     """Check that with repeated tries, the alpha is correct."""
@@ -150,8 +150,9 @@ def test_shp_tf_statistics(method, alpha, strides):
     nsim = 500
     shape = (30, 11, 11)
     halfwin_rowcol = (5, 5)
-    frac_shps = np.zeros(nsim)
+    shp_counts = np.zeros(nsim)
     # slc_rows = np.random.rand(nsim, *shape) + 1j * np.random.rand(nsim, *shape)
+
     slc_rows = rayleigh.rvs(scale=10, size=(nsim, *shape))
     for i in range(nsim):
         slcs = slc_rows[i]
@@ -171,14 +172,15 @@ def test_shp_tf_statistics(method, alpha, strides):
         )
 
         out_rows, out_cols = neighbors.shape[:2]
-        shps_center = neighbors[out_rows // 2, out_cols // 2]
-        frac_shps[i] = (shps_center.sum() - 1) / (
-            shps_center.size - 1
-        )  # don't count center
+        shps_mid_pixel = neighbors[out_rows // 2, out_cols // 2]
+        # dont count center (self) as one
+        shp_counts[i] = shps_mid_pixel.sum() - 1
 
     # Check that the mean number of SHPs is close to 5%
+    nbox = shape[1] * shape[2] - 1
+    shp_frac = shp_counts.mean() / nbox
     tol_pct = 3
-    assert 100 * np.abs((frac_shps.mean() - (1 - alpha))) < tol_pct
+    assert 100 * np.abs((shp_frac - (1 - alpha))) < tol_pct
 
 
 # def test_glrt_same_distribution():
