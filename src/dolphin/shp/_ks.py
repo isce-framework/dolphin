@@ -7,8 +7,11 @@ import numpy as np
 from numba import cuda
 from numpy.typing import ArrayLike
 
+from dolphin._log import get_log
 from dolphin.io import compute_out_shape
 from dolphin.utils import _get_slices
+
+logger = get_log(__name__)
 
 
 def estimate_neighbors(
@@ -34,7 +37,7 @@ def estimate_neighbors(
 
     num_slc, rows, cols = sorted_amp_stack.shape
     ecdf_dist_cutoff = _get_ecdf_critical_distance(num_slc, alpha)
-    print(f"ecdf_dist_cutoff: {ecdf_dist_cutoff}")
+    logger.debug(f"ecdf_dist_cutoff: {ecdf_dist_cutoff}")
 
     strides_rowcol = strides["y"], strides["x"]
     out_rows, out_cols = compute_out_shape((rows, cols), strides)

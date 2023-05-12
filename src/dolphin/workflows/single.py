@@ -197,7 +197,7 @@ def run_wrapped_phase_single(
                 nodata_mask=nodata_mask[rows, cols],
                 ps_mask=ps_mask[rows, cols],
                 neighbor_arrays=neighbor_arrays[rows, cols],
-                avg_mag=amp_mean[rows, cols],
+                avg_mag=amp_mean[rows, cols] if amp_mean is not None else None,
                 n_workers=n_workers,
                 gpu_enabled=gpu_enabled,
             )
