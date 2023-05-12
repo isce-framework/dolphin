@@ -71,7 +71,7 @@ def estimate_stack_covariance_cpu(
     half_col, half_row = half_window["x"], half_window["y"]
 
     cur_neighbors = np.ones((2 * half_row + 1, 2 * half_col + 1), dtype=bool)
-    if neighbor_arrays is not None:
+    if neighbor_arrays is not None and neighbor_arrays.size > 0:
         do_shp = True
         neighbor_arrays_shared = pymp.shared.array(neighbor_arrays.shape, dtype=bool)
         neighbor_arrays_shared[:] = neighbor_arrays[:]

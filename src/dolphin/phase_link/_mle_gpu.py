@@ -83,13 +83,14 @@ def run_gpu(
     # d_ means "device_", i.e. on the GPU
     d_C_arrays = cp.zeros((out_rows, out_cols, num_slc, num_slc), dtype=np.complex64)
 
-    if neighbor_arrays is None:
+    if neighbor_arrays is not None and neighbor_arrays.size > 1:
+        # contiguous needed for cupy, or slicing can make it error
+        d_neighbor_arrays = cuda.to_device(np.ascontiguousarray(neighbor_arrays))
+        do_shp = True
+    else:
         # Dummy array to pass in for the same type
         d_neighbor_arrays = cp.zeros((1, 1, 1, 1), dtype=np.bool_)
         do_shp = False
-    else:
-        d_neighbor_arrays = cuda.to_device(neighbor_arrays)
-        do_shp = True
 
     covariance.estimate_stack_covariance_gpu[blocks, threads_per_block](
         d_slc_stack,

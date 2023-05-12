@@ -72,14 +72,18 @@ class VRTStack:
         nodata_value: Optional[float] = None,
         file_date_fmt: str = "%Y%m%d",
         write_file: bool = True,
+        fail_on_overwrite: bool = False,
     ):
         """Initialize a VRTStack object for a list of files, optionally subsetting."""
         if Path(outfile).exists() and write_file:
-            raise FileExistsError(
-                f"Output file {outfile} already exists. "
-                "Please delete or specify a different output file. "
-                "To create from an existing VRT, use the `from_vrt_file` method."
-            )
+            if fail_on_overwrite:
+                raise FileExistsError(
+                    f"Output file {outfile} already exists. "
+                    "Please delete or specify a different output file. "
+                    "To create from an existing VRT, use the `from_vrt_file` method."
+                )
+            else:
+                logger.info(f"Overwriting {outfile}")
 
         files: list[Filename] = [Path(f) for f in file_list]
         self._use_abs_path = use_abs_path

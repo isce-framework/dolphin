@@ -24,6 +24,7 @@ from dolphin.interferogram import VRTInterferogram
 from dolphin.phase_link import run_mle
 from dolphin.stack import VRTStack
 
+from ._enums import ShpMethod
 from ._utils import setup_output_folder
 from .single import run_wrapped_phase_single
 
@@ -35,14 +36,17 @@ __all__ = ["run_wrapped_phase_sequential"]
 def run_wrapped_phase_sequential(
     *,
     slc_vrt_file: Filename,
-    # weight_file: Filename,
     output_folder: Filename,
     half_window: dict,
     strides: dict = {"x": 1, "y": 1},
     ministack_size: int = 10,
     mask_file: Optional[Filename] = None,
     ps_mask_file: Optional[Filename] = None,
-    neighbor_arrays: Optional[np.ndarray] = None,
+    amp_mean_file: Optional[Filename] = None,
+    amp_dispersion_file: Optional[Filename] = None,
+    shp_method: ShpMethod = ShpMethod.NONE,
+    shp_alpha: float = 0.05,
+    shp_nslc: Optional[int],
     beta: float = 0.01,
     max_bytes: float = 32e6,
     n_workers: int = 1,
@@ -54,6 +58,9 @@ def run_wrapped_phase_sequential(
     file_list_all = v_all.file_list
     date_list_all = v_all.dates
 
+    if shp_nslc is None:
+        shp_nslc = len(file_list_all)
+
     logger.info(f"{v_all}: from {v_all.file_list[0]} to {v_all.file_list[-1]}")
 
     # Map of {ministack_index: [output_slc_files]}
@@ -62,18 +69,6 @@ def run_wrapped_phase_sequential(
     tcorr_files: list[Path] = []
 
     nrows, ncols = v_all.shape[-2:]
-    if mask_file is not None:
-        nodata_mask = io.load_gdal(mask_file).astype(bool)
-    else:
-        nodata_mask = np.zeros((nrows, ncols), dtype=bool)
-
-    if ps_mask_file is not None:
-        ps_mask = io.load_gdal(ps_mask_file, masked=True)
-        # Fill the nodata values with false
-        ps_mask = ps_mask.astype(bool).filled(False)
-    else:
-        ps_mask = np.zeros_like(nodata_mask)
-
     xhalf, yhalf = half_window["x"], half_window["y"]
     xs, ys = strides["x"], strides["y"]
 
@@ -109,9 +104,13 @@ def run_wrapped_phase_sequential(
             strides=strides,
             reference_idx=mini_idx,
             beta=beta,
-            neighbor_arrays=neighbor_arrays,
             mask_file=mask_file,
             ps_mask_file=ps_mask_file,
+            amp_mean_file=amp_mean_file,
+            amp_dispersion_file=amp_dispersion_file,
+            shp_method=shp_method,
+            shp_alpha=shp_alpha,
+            shp_nslc=shp_nslc,
             max_bytes=max_bytes,
             n_workers=n_workers,
             gpu_enabled=gpu_enabled,
@@ -163,6 +162,10 @@ def run_wrapped_phase_sequential(
         strides=strides,
         nodata=0,
     )
+    if mask_file is not None:
+        nodata_mask = io.load_gdal(mask_file).astype(bool)
+    else:
+        nodata_mask = np.zeros((nrows, ncols), dtype=bool)
 
     writer = io.Writer()
     # Iterate over the ministack in blocks

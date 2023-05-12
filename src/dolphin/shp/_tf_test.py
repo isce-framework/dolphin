@@ -106,16 +106,20 @@ def _loop_over_pixels(
             (r_start, r_end), (c_start, c_end) = _get_slices(
                 half_row, half_col, in_r, in_c, in_rows, in_cols
             )
-            for i in range(r_start, r_end):
-                for j in range(c_start, c_end):
+            for in_r2 in range(r_start, r_end):
+                for in_c2 in range(c_start, c_end):
+                    # window offsets for dims 3,4 of `is_shp`
+                    r_off = in_r2 - r_start
+                    c_off = in_c2 - c_start
+
                     # itself is always a neighbor
-                    if i == in_r and j == in_c:
-                        is_shp[out_r, out_c, i, j] = True
+                    if in_r2 == in_r and in_c2 == in_c:
+                        is_shp[out_r, out_c, r_off, c_off] = True
                         continue
 
                     # t-test: test for difference of means
-                    mu2 = mean[i, j]
-                    var2 = variance[i, j]
+                    mu2 = mean[in_r2, in_c2]
+                    var2 = variance[in_r2, in_c2]
                     # welch_t_statistic(mu1, mu2, var1, var2, nslc)
                     t_stat = (mu1 - mu2) / np.sqrt((var1 + var2) / nslc)
 
@@ -126,7 +130,7 @@ def _loop_over_pixels(
                     passes_t = cv_t_low < t_stat < cv_t_high
                     passes_f = cv_f_low < f_stat < cv_f_high
                     # Needs to pass both tests to be a SHP
-                    is_shp[out_r, out_c, i, j] = passes_t and passes_f
+                    is_shp[out_r, out_c, r_off, c_off] = passes_t and passes_f
     return is_shp
 
 

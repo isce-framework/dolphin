@@ -88,10 +88,9 @@ def run(cfg: Workflow, debug: bool = False) -> tuple[list[Path], Path, Path]:
             block_size_gb=cfg.worker_settings.block_size_gb,
         )
 
-    # #########################
-    # SHP mapping step
-    # #########################
-    # TODO: Do i wanna save this to a file?
+    # TODO: Need a good way to store the nslc attribute in the PS file...
+    # If we pre-compute it from some big stack, we need to use that for SHP
+    # finding, not use the size of `slc_vrt_file`
 
     # #########################
     # phase linking/EVD step
@@ -115,9 +114,13 @@ def run(cfg: Workflow, debug: bool = False) -> tuple[list[Path], Path, Path]:
                     strides=cfg.output_options.strides,
                     reference_idx=0,
                     beta=cfg.phase_linking.beta,
-                    # mask_file=cfg.mask_file,
                     mask_file=nodata_mask_file,
                     ps_mask_file=ps_output,
+                    amp_mean_file=cfg.ps_options._amp_mean_file,
+                    amp_dispersion_file=cfg.ps_options._amp_dispersion_file,
+                    shp_method=cfg.phase_linking.shp_method,
+                    shp_alpha=cfg.phase_linking.shp_alpha,
+                    shp_nslc=None,
                     max_bytes=cfg.worker_settings.block_size_gb * 1e9,
                     n_workers=cfg.worker_settings.n_workers,
                     gpu_enabled=cfg.worker_settings.gpu_enabled,
@@ -132,9 +135,13 @@ def run(cfg: Workflow, debug: bool = False) -> tuple[list[Path], Path, Path]:
                     strides=cfg.output_options.strides,
                     beta=cfg.phase_linking.beta,
                     ministack_size=cfg.phase_linking.ministack_size,
-                    # mask_file=cfg.mask_file,
                     mask_file=nodata_mask_file,
                     ps_mask_file=ps_output,
+                    amp_mean_file=cfg.ps_options._amp_mean_file,
+                    amp_dispersion_file=cfg.ps_options._amp_dispersion_file,
+                    shp_method=cfg.phase_linking.shp_method,
+                    shp_alpha=cfg.phase_linking.shp_alpha,
+                    shp_nslc=None,
                     max_bytes=cfg.worker_settings.block_size_gb * 1e9,
                     n_workers=cfg.worker_settings.n_workers,
                     gpu_enabled=cfg.worker_settings.gpu_enabled,

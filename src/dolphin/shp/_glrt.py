@@ -102,24 +102,30 @@ def _loop_over_pixels(
             in_r = r0 + out_r * row_strides
             in_c = c0 + out_c * col_strides
 
-            scale_p = scale_squared[in_r, in_c]
+            scale_1 = scale_squared[in_r, in_c]
             # Clamp the window to the image bounds
             (r_start, r_end), (c_start, c_end) = _get_slices(
                 half_row, half_col, in_r, in_c, in_rows, in_cols
             )
 
-            for i in range(r_start, r_end):
-                for j in range(c_start, c_end):
-                    if i == in_r and j == in_c:
-                        is_shp[out_r, out_c, i, j] = True
+            for in_r2 in range(r_start, r_end):
+                for in_c2 in range(c_start, c_end):
+                    # window offsets for dims 3,4 of `is_shp`
+                    r_off = in_r2 - r_start
+                    c_off = in_c2 - c_start
+
+                    # itself is always a neighbor
+                    if in_r2 == in_r and in_c2 == in_c:
+                        is_shp[out_r, out_c, r_off, c_off] = True
                         continue
-                    scale_q = scale_squared[i, j]
-                    f_ratio = scale_p / scale_q
+                    scale_2 = scale_squared[in_r2, in_c2]
+
+                    f_ratio = scale_1 / scale_2
                     # make sure we did (bigger scale / smaller scale)
                     if f_ratio < 1:
                         f_ratio = 1 / f_ratio
 
-                    is_shp[out_r, out_c, i, j] = f_ratio < threshold
+                    is_shp[out_r, out_c, r_off, c_off] = f_ratio < threshold
 
     return is_shp
 

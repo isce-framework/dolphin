@@ -26,7 +26,7 @@ def estimate_neighbors(
     amp_stack: Optional[ArrayLike] = None,
     is_sorted: bool = False,
     method: ShpMethod = ShpMethod.GLRT,
-) -> Optional[np.ndarray]:
+) -> np.ndarray:
     """Estimate the statistically similar neighbors of each pixel.
 
     Parameters
@@ -58,8 +58,9 @@ def estimate_neighbors(
     Raises
     ------
     ValueError
-        If nslc is not provided for TF/GLRT methods or
-        amp_stack is not provided for the KS method.
+        - nslc is not provided for TF/GLRT methods
+        - amp_stack is not provided for the KS method.
+        - `method` not a valid `ShpMethod`
     """
     if method.lower() in (ShpMethod.TF, ShpMethod.GLRT):
         if mean is None:
@@ -68,7 +69,7 @@ def estimate_neighbors(
             var = np.var(amp_stack, axis=0)
 
     if method == ShpMethod.RECT:
-        neighbor_arrays = None
+        neighbor_arrays = np.empty((0, 0, 0, 0), dtype=bool)
     elif method.lower() == ShpMethod.GLRT:
         logger.debug("Estimating SHP neighbors using GLRT")
         if nslc is None:
@@ -105,7 +106,6 @@ def estimate_neighbors(
             is_sorted=is_sorted,
         )
     else:
-        logger.warning(f"SHP method {method} is not implemented for CPU yet")
-        neighbor_arrays = None
+        raise ValueError(f"SHP method {method} is not implemented")
 
     return neighbor_arrays

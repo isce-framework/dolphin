@@ -10,6 +10,26 @@ GPU_AVAILABLE = gpu_is_available()
 simulate._seed(1234)
 
 
+@pytest.mark.parametrize("method", ["tf", "glrt", "ks"])
+def test_shp_glrt_tf_smoketest(method):
+    shape = (5, 50, 50)
+    slcs = 20 * (np.random.rand(*shape) + 1j * np.random.rand(*shape))
+    amp_stack = np.abs(slcs)
+    mean = np.mean(amp_stack, axis=0)
+    var = np.var(amp_stack, axis=0)
+
+    # Make sure no errors
+    shp.estimate_neighbors(
+        mean=mean,
+        var=var,
+        halfwin_rowcol=(3, 5),
+        nslc=slcs.shape[0],
+        amp_stack=amp_stack,
+        alpha=0.05,
+        method=method,
+    )
+
+
 @pytest.fixture(scope="module")
 def slcs(shape=(30, 11, 11)):
     return 20 * (np.random.rand(*shape) + 1j * np.random.rand(*shape))

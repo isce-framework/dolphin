@@ -13,12 +13,13 @@ from typing import Optional
 
 import numpy as np
 
-from dolphin import io
+from dolphin import io, shp
 from dolphin._log import get_log
 from dolphin._types import Filename
 from dolphin.phase_link import PhaseLinkRuntimeError, compress, run_mle
 from dolphin.stack import VRTStack
 
+from ._enums import ShpMethod
 from ._utils import setup_output_folder
 
 logger = get_log(__name__)
@@ -29,15 +30,18 @@ __all__ = ["run_wrapped_phase_single"]
 def run_wrapped_phase_single(
     *,
     slc_vrt_file: Filename,
-    # weight_file: Filename,
     output_folder: Filename,
     half_window: dict,
     strides: dict = {"x": 1, "y": 1},
     reference_idx: int = 0,
     beta: float = 0.01,
-    neighbor_arrays: Optional[np.ndarray] = None,
     mask_file: Optional[Filename] = None,
     ps_mask_file: Optional[Filename] = None,
+    amp_mean_file: Optional[Filename] = None,
+    amp_dispersion_file: Optional[Filename] = None,
+    shp_method: ShpMethod = ShpMethod.NONE,
+    shp_alpha: float = 0.05,
+    shp_nslc: Optional[int],
     max_bytes: float = 32e6,
     n_workers: int = 1,
     gpu_enabled: bool = True,
@@ -48,6 +52,9 @@ def run_wrapped_phase_single(
     vrt = VRTStack.from_vrt_file(slc_vrt_file)
     file_list_all = vrt.file_list
     date_list_all = vrt.dates
+
+    if shp_nslc is None:
+        shp_nslc = len(file_list_all)
 
     logger.info(f"{vrt}: from {vrt.file_list[0]} to {vrt.file_list[-1]}")
 
@@ -69,6 +76,15 @@ def run_wrapped_phase_single(
         ps_mask = ps_mask.astype(bool).filled(False)
     else:
         ps_mask = np.zeros_like(nodata_mask)
+
+    if amp_mean_file is not None and amp_dispersion_file is not None:
+        amp_mean = io.load_gdal(amp_mean_file, masked=True)
+        amp_dispersion = io.load_gdal(amp_dispersion_file, masked=True)
+        # convert back to variance from dispersion: amp_disp = std_dev / mean
+        amp_variance = (amp_dispersion * amp_mean) ** 2
+    else:
+        amp_mean = amp_variance = None
+    amp_stack = None
 
     xhalf, yhalf = half_window["x"], half_window["y"]
     xs, ys = strides["x"], strides["y"]
@@ -154,17 +170,34 @@ def run_wrapped_phase_single(
             continue
         cur_data = cur_data.astype(np.complex64)
 
+        if shp_method == "ks":
+            # Only actually compute if we need this one
+            amp_stack = np.abs(cur_data)
+
+        # Compute the neighbor_arrays for this block
+        neighbor_arrays = shp.estimate_neighbors(
+            halfwin_rowcol=(yhalf, xhalf),
+            alpha=shp_alpha,
+            strides=strides,
+            mean=amp_mean,
+            var=amp_variance,
+            nslc=shp_nslc,
+            amp_stack=amp_stack,
+            method=shp_method,
+        )
+
         # Run the phase linking process on the current ministack
         try:
             cur_mle_stack, tcorr = run_mle(
                 cur_data,
                 half_window=half_window,
                 strides=strides,
-                neighbor_arrays=neighbor_arrays,
                 beta=beta,
                 reference_idx=reference_idx,
                 nodata_mask=nodata_mask[rows, cols],
                 ps_mask=ps_mask[rows, cols],
+                neighbor_arrays=neighbor_arrays[rows, cols],
+                avg_mag=amp_mean[rows, cols],
                 n_workers=n_workers,
                 gpu_enabled=gpu_enabled,
             )
