@@ -151,6 +151,18 @@ def run_wrapped_phase_single(
         nodata=0,
     )
 
+    # Create the empty compressed temporal coherence file
+    shp_counts_file = output_folder / f"shp_counts_{start_end}.tif"
+    io.write_arr(
+        arr=None,
+        like_filename=vrt.outfile,
+        output_name=shp_counts_file,
+        nbands=1,
+        dtype=np.uint16,
+        strides=strides,
+        nodata=0,
+    )
+
     # Iterate over the stack in blocks
     # Note the overlap to redo the edge effects
     # TODO: adjust the writing to avoid the overlap
@@ -179,12 +191,14 @@ def run_wrapped_phase_single(
             halfwin_rowcol=(yhalf, xhalf),
             alpha=shp_alpha,
             strides=strides,
-            mean=amp_mean,
-            var=amp_variance,
+            mean=amp_mean[rows, cols] if amp_mean is not None else None,
+            var=amp_variance[rows, cols] if amp_variance is not None else None,
             nslc=shp_nslc,
             amp_stack=amp_stack,
             method=shp_method,
         )
+        # Save the count for each pixel
+        shp_counts = np.sum(neighbor_arrays, axis=(-2, -1))
 
         # Run the phase linking process on the current ministack
         try:
@@ -196,7 +210,7 @@ def run_wrapped_phase_single(
                 reference_idx=reference_idx,
                 nodata_mask=nodata_mask[rows, cols],
                 ps_mask=ps_mask[rows, cols],
-                neighbor_arrays=neighbor_arrays[rows, cols],
+                neighbor_arrays=neighbor_arrays,
                 avg_mag=amp_mean[rows, cols] if amp_mean is not None else None,
                 n_workers=n_workers,
                 gpu_enabled=gpu_enabled,
@@ -228,6 +242,9 @@ def run_wrapped_phase_single(
 
         # Save the temporal coherence blocks
         writer.queue_write(tcorr, tcorr_file, out_row_start, out_col_start)
+
+        # Save the SHP counts (if not using Rect window)
+        writer.queue_write(shp_counts, shp_counts_file, out_row_start, out_col_start)
 
         # Compress the ministack using only the non-compressed SLCs
         cur_comp_slc = compress(
