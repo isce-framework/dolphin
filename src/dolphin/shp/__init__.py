@@ -8,7 +8,7 @@ from numpy.typing import ArrayLike
 from dolphin._log import get_log
 from dolphin.workflows import ShpMethod
 
-from . import _glrt, _kld, _ks, _tf_test
+from . import _glrt, _kld, _ks
 
 logger = get_log(__name__)
 
@@ -58,35 +58,24 @@ def estimate_neighbors(
     Raises
     ------
     ValueError
-        - nslc is not provided for TF/GLRT methods
+        - nslc is not provided for GLRT/KLD methods
         - amp_stack is not provided for the KS method.
         - `method` not a valid `ShpMethod`
     """
-    if method.lower() in (ShpMethod.TF, ShpMethod.GLRT):
+    if method.lower() in (ShpMethod.KLD, ShpMethod.GLRT):
         if mean is None:
             mean = np.mean(amp_stack, axis=0)
         if var is None:
             var = np.var(amp_stack, axis=0)
 
     if method == ShpMethod.RECT:
+        # No estimation needed
         neighbor_arrays = np.empty((0, 0, 0, 0), dtype=bool)
     elif method.lower() == ShpMethod.GLRT:
         logger.debug("Estimating SHP neighbors using GLRT")
         if nslc is None:
             raise ValueError("`nslc` must be provided for GLRT method")
         neighbor_arrays = _glrt.estimate_neighbors(
-            mean=mean,
-            var=var,
-            halfwin_rowcol=halfwin_rowcol,
-            strides=strides,
-            nslc=nslc,
-            alpha=alpha,
-        )
-    elif method.lower() == ShpMethod.TF:
-        logger.debug("Estimating SHP neighbors using T- and F-test")
-        if nslc is None:
-            raise ValueError("`nslc` must be provided for TF method")
-        neighbor_arrays = _tf_test.estimate_neighbors(
             mean=mean,
             var=var,
             halfwin_rowcol=halfwin_rowcol,
