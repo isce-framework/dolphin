@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from math import log
-
 import numba
 import numpy as np
 from numpy.typing import ArrayLike
@@ -12,13 +10,18 @@ from ._common import _make_loop_function, _read_cutoff_csv
 
 
 @numba.njit(nogil=True)
-def _compute_glrt_test_stat(scale_1, scale_2):
-    """Compute the GLRT test statistic."""
-    scale_pooled = (scale_1 + scale_2) / 2
-    return 2 * log(scale_pooled) - log(scale_1) - log(scale_2)
+def _kld(sigma2_p, sigma2_q):
+    """Compute KL divergence of two Rayleigh PDFs given their scale parameters."""
+    return np.log(sigma2_q / sigma2_p) + (sigma2_p / sigma2_q) - 1
 
 
-_loop_over_pixels = _make_loop_function(_compute_glrt_test_stat)
+@numba.njit(nogil=True)
+def _compute_test_stat_js(sigma2_p, sigma2_q):
+    """Compute the Jensen-Shannon divergence."""
+    return (_kld(sigma2_p, sigma2_q) + _kld(sigma2_q, sigma2_p)) / 2
+
+
+_loop_over_pixels = _make_loop_function(_compute_test_stat_js)
 
 
 def estimate_neighbors(
@@ -29,9 +32,7 @@ def estimate_neighbors(
     strides: dict = {"x": 1, "y": 1},
     alpha: float = 0.05,
 ):
-    """Estimate the number of neighbors based on the GLRT.
-
-    Assumes Rayleigh distributed amplitudes, based on the method described [1]_.
+    """Estimate the number of neighbors using the Jensen-Shannon.
 
     Parameters
     ----------
@@ -52,6 +53,7 @@ def estimate_neighbors(
         Significance level at which to reject the null hypothesis.
         Rejecting means declaring a neighbor is not a SHP.
 
+
     Notes
     -----
     When `strides` is not (1, 1), the output first two dimensions
@@ -67,17 +69,11 @@ def estimate_neighbors(
             `[dolphin.io.compute_out_shape][]`
             `window_rows = 2 * halfwin_rowcol[0] + 1`
             `window_cols = 2 * halfwin_rowcol[1] + 1`
-
-    References
-    ----------
-        [1] Parizzi and Brcic, 2011, "Adaptive InSAR Stack Multilooking Exploiting
-        Amplitude Statistics"
-        [2] Siddiqui, M. M. (1962). Some problems connected with Rayleigh distributions.
     """
     half_row, half_col = halfwin_rowcol
     rows, cols = mean.shape
 
-    threshold = get_cutoff(alpha=alpha, N=nslc)
+    threshold = get_cutoff(nslc, alpha)
 
     out_rows, out_cols = compute_out_shape((rows, cols), strides)
     is_shp = np.zeros(
@@ -94,59 +90,28 @@ def estimate_neighbors(
     )
 
 
-def get_cutoff(alpha: float, N: int) -> float:
-    r"""Compute the upper cutoff for the GLRT test statistic.
-
-    Statistic is
-
-    \[
-    2\log(\sigma_{pooled}) - \log(\sigma_{p}) -\log(\sigma_{q})
-    \]
+def get_cutoff(N: int, alpha: float) -> float:
+    """Get the pre-computed test statistic cutoff.
 
     Parameters
     ----------
-    alpha: float
-        Significance level (0 < alpha < 1).
-    N: int
-        Number of samples.
+    N : int
+        number of SLCs used for mean/variance.
+    alpha : float
+        Significance level
 
     Returns
     -------
     float
-        Cutoff value for the GLRT test statistic.
+        Threshold, above which to reject the null hypothesis.
+
+    Raises
+    ------
+    ValueError
+        If a (N, alpha) combination is passed which hasn't been precomputed.
     """
-    n_alpha_to_cutoff = _read_cutoff_csv("glrt")
+    n_alpha_to_cutoff = _read_cutoff_csv("kld")
     try:
         return n_alpha_to_cutoff[(N, alpha)]
     except KeyError:
         raise ValueError(f"Not implemented for {N = }, {alpha = }")
-
-
-# # Note: the results were computed using the following:
-# from numpy import log as ln
-# from scipy.stats import rayleigh
-# from joblib import Parallel, delayed
-# import pandas as pd
-# from itertools import product
-# def get_test_stat_glrt(N, nsim=500, alpha=0.05, scale=10):
-#     x = rayleigh.rvs(scale=scale, size=(nsim, 2 * N))
-
-#     scale2_p = (x[:, :N] ** 2).mean(axis=1) / 2
-#     scale2_q = (x[:, N:] ** 2).mean(axis=1) / 2
-#     scale2_pooled = (scale2_p + scale2_q) / 2
-#     return 2 * ln(scale2_pooled) - ln(scale2_p) - ln(scale2_q)  # leave off the *N
-# def get_alpha_cutoff2(alpha, N, nsim=50_000, scale=10):
-#     return np.percentile(
-#         get_test_stat_glrt(N, nsim=nsim, alpha=alpha, scale=scale), 100 * (1 - alpha)
-#     )
-# def _run(N, alpha, scale):
-#     return (N, alpha, scale, get_alpha_cutoff2(alpha=alpha, N=N, scale=scale))
-# Narr = list(range(1, 301))
-# scales = (1, 10, 50)
-# alphas = [0.05, 0.01, 0.005]
-# results = Parallel(n_jobs=30)(
-#     delayed(_run)(*row) for row in product(Narr, alphas, scales)
-# )
-# df = pd.DataFrame(data=results, columns=['N', 'alpha', 'scale', 'cutoff'])
-# d2 = df.groupby(['N', 'alpha']).mean().round(4)[['cutoff']]
-# d2.to_csv("dolphin/shp/glrt_cutoffs.csv", index=True)

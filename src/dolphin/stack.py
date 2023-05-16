@@ -113,7 +113,7 @@ class VRTStack:
         self.xsize = ds.RasterXSize
         self.ysize = ds.RasterYSize
         # Should be CFloat32
-        self.dtype = gdal.GetDataTypeName(ds.GetRasterBand(1).DataType)
+        self.gdal_dtype = gdal.GetDataTypeName(ds.GetRasterBand(1).DataType)
         # Save these for setting at the end
         self.gt = ds.GetGeoTransform()
         self.proj = ds.GetProjection()
@@ -150,7 +150,7 @@ class VRTStack:
                     chunk_str = (
                         f'blockXSize="{chunk_size[0]}" blockYSize="{chunk_size[1]}"'
                     )
-                outstr = f"""  <VRTRasterBand dataType="{self.dtype}" band="{idx}" {chunk_str}>
+                outstr = f"""  <VRTRasterBand dataType="{self.gdal_dtype}" band="{idx}" {chunk_str}>
     <SimpleSource>
       <SourceFilename>{filename}</SourceFilename>
       <SourceBand>1</SourceBand>
@@ -189,9 +189,23 @@ class VRTStack:
         """
         return [io.format_nc_filename(f, self.subdataset) for f in self.file_list]
 
-    def read_stack(self, band: Optional[int] = None, subsample_factor: int = 1):
+    def read_stack(
+        self,
+        band: Optional[int] = None,
+        subsample_factor: int = 1,
+        rows: Optional[slice] = None,
+        cols: Optional[slice] = None,
+        masked: bool = False,
+    ):
         """Read in the SLC stack."""
-        return io.load_gdal(self.outfile, band=band, subsample_factor=subsample_factor)
+        return io.load_gdal(
+            self.outfile,
+            band=band,
+            subsample_factor=subsample_factor,
+            rows=rows,
+            cols=cols,
+            masked=masked,
+        )
 
     def __fspath__(self):
         # Allows os.fspath() to work on the object, enabling rasterio.open()
@@ -438,3 +452,37 @@ class VRTStack:
             self._gdal_file_strings == other._gdal_file_strings
             and self.outfile == other.outfile
         )
+
+    # To allow VRTStack to be passed to `dask.array.from_array`, we need:
+    # .shape, .ndim, .dtype and support numpy-style slicing.
+    @property
+    def ndim(self):
+        return 3
+
+    def __getitem__(self, index):
+        if isinstance(index, int):
+            if index < 0:
+                index = len(self) + index
+            return self.read_stack(band=index + 1)
+
+        n, rows, cols = index
+        if isinstance(rows, int):
+            rows = slice(rows, rows + 1)
+        if isinstance(cols, int):
+            cols = slice(cols, cols + 1)
+        if isinstance(n, int):
+            if n < 0:
+                n = len(self) + n
+            return self.read_stack(band=n + 1, rows=rows, cols=cols)
+
+        bands = list(range(1, 1 + len(self)))[n]
+        data = [self.read_stack(band=i, rows=rows, cols=cols) for i in bands]
+        # TODO: should multithread this read?
+        # data = Parallel(n_jobs=min(len(bands), 10), prefer="threads")(
+        #     delayed(self.read_stack)(band=i, rows=rows, cols=cols) for i in bands
+        # )
+        return np.stack(data, axis=0).squeeze()
+
+    @property
+    def dtype(self):
+        return io.get_raster_dtype(self._gdal_file_strings[0])

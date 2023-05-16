@@ -66,6 +66,9 @@ def estimate_neighbors(
     cv_t = get_t_critical_values(a, nslc)
     cv_f = get_f_critical_values(a, nslc)
 
+    # CHECK
+    cv_t = get_t_critical_values(alpha, nslc)
+
     out_rows, out_cols = compute_out_shape((rows, cols), strides)
     is_shp = np.zeros(
         (out_rows, out_cols, 2 * half_row + 1, 2 * half_col + 1), dtype=np.bool_
@@ -130,6 +133,8 @@ def _loop_over_pixels(
                     passes_t = cv_t_low < t_stat < cv_t_high
                     passes_f = cv_f_low < f_stat < cv_f_high
                     # Needs to pass both tests to be a SHP
+                    # is_shp[out_r, out_c, r_off, c_off] = passes_t and passes_f
+
                     is_shp[out_r, out_c, r_off, c_off] = passes_t and passes_f
     return is_shp
 

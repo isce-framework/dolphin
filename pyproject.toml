@@ -68,7 +68,7 @@ plugins = ["pydantic.mypy"]
 ignore = "D100,D102,D104,D105,D106,D107,D203,D204,D213,D413"
 
 [tool.pytest.ini_options]
-doctest_optionflags = "NORMALIZE_WHITESPACE"
+doctest_optionflags = "NORMALIZE_WHITESPACE NUMBER"
 addopts = "  --cov=dolphin  -n auto --maxprocesses=8 --doctest-modules --ignore=scripts --ignore=docs --ignore=data"
 filterwarnings = [
   "error",

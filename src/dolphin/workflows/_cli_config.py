@@ -24,7 +24,7 @@ def create_config(
     mask_file: Optional[str] = None,
     ministack_size: Optional[int] = 15,
     half_window_size: tuple[int, int] = (11, 5),
-    shp_method: ShpMethod = ShpMethod.TF,
+    shp_method: ShpMethod = ShpMethod.GLRT,
     amp_dispersion_threshold: float = 0.25,
     strides: tuple[int, int],
     block_size_gb: float = 1,
@@ -156,7 +156,7 @@ def get_parser(subparser=None, subcommand_name="run"):
         "--shp-method",
         type=ShpMethod,
         choices=[s.value for s in ShpMethod],
-        default=ShpMethod.TF,
+        default=ShpMethod.GLRT,
         help="Method used to calculate the SHP.",
     )
 

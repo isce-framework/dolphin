@@ -129,7 +129,7 @@ def estimate_neighbors_gpu(
     _set_neighbors(amp_block, halfwin_rowcol, ecdf_dist_cutoff, neighbors_pixel)
 
 
-@numba.njit
+@numba.njit(nogil=True)
 def _set_neighbors(amp_block, halfwin_rowcol, ecdf_dist_cutoff, neighbors):
     _, rows, cols = amp_block.shape
 
@@ -175,7 +175,7 @@ def _get_max_cdf_dist(x1, x2):
     >>> x1 = np.array([1, 2, 3, 4, 5])
     >>> x2 = np.array([1, 2, 3, 4, 5])
     >>> _get_max_cdf_dist(x1, x2)  # doctest: +NUMBER
-    0
+    0.0
     >>> x2 = np.array([2, 3, 4, 5, 6])
     >>> round(_get_max_cdf_dist(x1, x2), 2)  # doctest: +NUMBER
     0.2
@@ -214,7 +214,7 @@ def _get_max_cdf_dist(x1, x2):
     return max_dist
 
 
-@numba.njit(nogil=True, fastmath=True)
+@numba.njit(nogil=True)
 def _get_ecdf_critical_distance(nslc, alpha):
     N = nslc / 2.0
     cur_dist = 0.01

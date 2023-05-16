@@ -19,8 +19,9 @@ class ShpMethod(str, Enum):
     """Method for finding SHPs during phase linking."""
 
     GLRT = "glrt"
-    TF = "tf"
     KS = "ks"
+    KLD = "kld"
+    TF = "tf"
     RECT = "rect"
     # Alias for no SHP search
     NONE = "rect"

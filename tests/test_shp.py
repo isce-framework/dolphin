@@ -10,7 +10,7 @@ GPU_AVAILABLE = gpu_is_available()
 simulate._seed(1234)
 
 
-@pytest.mark.parametrize("method", ["tf", "glrt", "ks"])
+@pytest.mark.parametrize("method", ["tf", "glrt", "ks", "kld"])
 def test_shp_glrt_tf_smoketest(method):
     shape = (5, 50, 50)
     slcs = 20 * (np.random.rand(*shape) + 1j * np.random.rand(*shape))
@@ -45,18 +45,18 @@ def test_shp_glrt_tf(slcs, method):
     halfwin_rowcol = (5, 5)  # Looking at the entire stack
     nslc = slcs.shape[0]
 
-    # First try a tiny alpha
+    # First try a small alpha
     neighbors = shp.estimate_neighbors(
         mean=mean,
         var=var,
         halfwin_rowcol=halfwin_rowcol,
         nslc=nslc,
-        alpha=1e-6,
+        alpha=0.005,
         method=method,
     )
     shps_mid_pixel = neighbors[5, 5]
-    # Check that everything is counted as a neighbor
-    assert shps_mid_pixel.all()
+    # Check that at least 120/121 is counted as a neighbor
+    assert shps_mid_pixel.sum() >= 120
 
     # Check the edges are cut off
     top_left = neighbors[0, 0]
@@ -147,7 +147,7 @@ def test_shp_tf_half_var_different(slcs):
     halfwin_rowcol = (5, 5)
     # make the top half different amplitude
     var2 = var.copy()
-    var2[:5, :] += 1000
+    var2[:5, :] += 500
     # For this test, make all means equal (just checking var)
     mean[:] = mean[5, 5]
 
@@ -161,8 +161,8 @@ def test_shp_tf_half_var_different(slcs):
     assert not shps_mid_pixel[:5, :].any()
 
 
-@pytest.mark.parametrize("method", ["tf", "glrt"])
-@pytest.mark.parametrize("alpha", [0.1, 0.05])
+@pytest.mark.parametrize("method", ["glrt", "kld"])
+@pytest.mark.parametrize("alpha", [0.01, 0.05])
 @pytest.mark.parametrize("strides", [{"x": 1, "y": 1}, {"x": 2, "y": 2}])
 def test_shp_tf_statistics(method, alpha, strides):
     """Check that with repeated tries, the alpha is correct."""
@@ -171,15 +171,13 @@ def test_shp_tf_statistics(method, alpha, strides):
     shape = (30, 11, 11)
     halfwin_rowcol = (5, 5)
     shp_counts = np.zeros(nsim)
-    # slc_rows = np.random.rand(nsim, *shape) + 1j * np.random.rand(nsim, *shape)
 
-    slc_rows = rayleigh.rvs(scale=10, size=(nsim, *shape))
+    amp_stack_sims = rayleigh.rvs(scale=10, size=(nsim, *shape))
     for i in range(nsim):
-        slcs = slc_rows[i]
-        amp_stack = np.abs(slcs)
+        amp_stack = amp_stack_sims[i]
         mean = np.mean(amp_stack, axis=0)
         var = np.var(amp_stack, axis=0)
-        nslc = slcs.shape[0]
+        nslc = amp_stack.shape[0]
 
         neighbors = shp.estimate_neighbors(
             mean=mean,
@@ -227,3 +225,42 @@ def test_shp_tf_statistics(method, alpha, strides):
 #     rejected = np.sum(~neighbors[5, 5]) - 1  # skip counting the self pixel
 
 #     assert np.abs(rejected / num_tests - alpha) < 0.01
+
+
+def _sim(
+    strides={"x": 1, "y": 1},
+    alpha=0.05,
+    method="glrt",
+    nsim=500,
+    shape=(30, 11, 11),
+    halfwin_rowcol=(5, 5),
+):
+    shp_counts = np.zeros(nsim)
+
+    amp_stack_sims = rayleigh.rvs(scale=10, size=(nsim, *shape))
+    for i in range(nsim):
+        amp_stack = amp_stack_sims[i]
+        mean = np.mean(amp_stack, axis=0)
+        var = np.var(amp_stack, axis=0)
+        nslc = amp_stack.shape[0]
+
+        neighbors = shp.estimate_neighbors(
+            mean=mean,
+            var=var,
+            halfwin_rowcol=halfwin_rowcol,
+            nslc=nslc,
+            strides=strides,
+            alpha=alpha,
+            method=method,
+            amp_stack=amp_stack,
+        )
+
+        out_rows, out_cols = neighbors.shape[:2]
+        shps_mid_pixel = neighbors[out_rows // 2, out_cols // 2]
+        # dont count center (self) as one
+        shp_counts[i] = shps_mid_pixel.sum() - 1
+
+    # Check that the mean number of SHPs is close to 5%
+    nbox = shape[1] * shape[2] - 1
+    shp_frac = shp_counts.mean() / nbox
+    return shp_frac

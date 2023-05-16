@@ -85,9 +85,9 @@ class PhaseLinkingOptions(BaseModel, extra=Extra.forbid):
         gt=0.0,
         lt=1.0,
     )
-    shp_method: ShpMethod = ShpMethod.TF
+    shp_method: ShpMethod = ShpMethod.GLRT
     shp_alpha: float = Field(
-        0.05,
+        0.005,
         description="Significance level (probability of false alarm) for SHP tests.",
         gt=0.0,
         lt=1.0,
