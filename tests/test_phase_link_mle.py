@@ -1,3 +1,5 @@
+import os
+
 import numpy as np
 import numpy.testing as npt
 import pytest
@@ -6,7 +8,7 @@ from dolphin.phase_link import covariance, mle, simulate
 from dolphin.phase_link._mle_gpu import run_gpu
 from dolphin.utils import gpu_is_available
 
-GPU_AVAILABLE = gpu_is_available()
+GPU_AVAILABLE = gpu_is_available() and not (os.environ.get("NUMBA_DISABLE_JIT") == "1")
 NUM_ACQ = 30
 simulate._seed(1234)
 

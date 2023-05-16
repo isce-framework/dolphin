@@ -68,12 +68,14 @@ def remove_unconnected(data: ArrayLike, inplace: bool = True) -> np.ndarray:
 
         for dx, dy in connected_idxs:
             x2, y2 = x + dx, y + dy
-            if (
-                0 <= x2 < rows
-                and 0 <= y2 < cols
-                and not visited[x2, y2]
-                and data[x2, y2]
-            ):
+            # Skip OOB pixels
+            if x2 < 0 or x2 >= rows or y2 < 0 or y2 >= cols:
+                continue
+            # Check we haven't visited:
+            if visited[x2, y2]:
+                continue
+            # Now push to stack if this pixel is True
+            if data[x2, y2]:
                 visited[x2, y2] = True
                 stack[stack_ptr] = x2, y2
                 stack_ptr += 1

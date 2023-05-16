@@ -143,7 +143,7 @@ def get_cutoff(alpha: float, N: int) -> float:
 #     return (N, alpha, scale, get_alpha_cutoff2(alpha=alpha, N=N, scale=scale))
 # Narr = list(range(1, 301))
 # scales = (1, 10, 50)
-# alphas = [0.05, 0.01, 0.005]
+# alphas = [0.05, 0.01, 0.005, 0.001]
 # results = Parallel(n_jobs=30)(
 #     delayed(_run)(*row) for row in product(Narr, alphas, scales)
 # )

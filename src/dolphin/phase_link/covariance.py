@@ -70,7 +70,7 @@ def estimate_stack_covariance_cpu(
     row_strides, col_strides = strides["y"], strides["x"]
     half_col, half_row = half_window["x"], half_window["y"]
 
-    cur_neighbors = np.ones((2 * half_row + 1, 2 * half_col + 1), dtype=bool)
+    cur_neighbors = np.empty((0, 0, 0, 0), dtype=bool)
     if neighbor_arrays is not None and neighbor_arrays.size > 0:
         do_shp = True
         neighbor_arrays_shared = pymp.shared.array(neighbor_arrays.shape, dtype=bool)
@@ -99,18 +99,15 @@ def estimate_stack_covariance_cpu(
             samples_stack = slcs_shared[:, r_start:r_end, c_start:c_end]
             # Read the current neighbor mask
             if do_shp:
-                cur_neighbors = neighbor_arrays_shared[
-                    # TODO: these in_r/c will change when incorporating strides
-                    out_r,
-                    out_c,
-                    r_start:r_end,
-                    c_start:c_end,
-                ]
+                # TODO: this will be different shape than samples_stack at edges
+                # does this matter? prob just clipping by the overlapping half window
+                cur_neighbors = neighbor_arrays_shared[out_r, out_c, :, :]
             # Compute one covariance matrix for the output pixel
             coh_mat_single(
                 samples_stack.reshape(nslc, -1),
                 C_arrays[out_r, out_c, :, :],
                 cur_neighbors.ravel(),
+                do_shp,
             )
 
     del slcs_shared
@@ -118,13 +115,13 @@ def estimate_stack_covariance_cpu(
 
 
 @njit(nogil=True)
-def coh_mat_single(slc_samples, cov_mat=None, neighbor_mask=None):
+def coh_mat_single(slc_samples, cov_mat=None, neighbor_mask=None, do_shp: bool = True):
     """Given a (n_slc, n_samps) samples, estimate the coherence matrix."""
     nslc, nsamps = slc_samples.shape
     if cov_mat is None:
         cov_mat = np.zeros((nslc, nslc), dtype=slc_samples.dtype)
-    if neighbor_mask is None:
-        neighbor_mask = np.ones((nsamps), dtype=np.bool_)
+    if neighbor_mask is None or neighbor_mask.size <= 1:
+        do_shp = False
 
     for ti in range(nslc):
         # Start with the diagonal equal to 1
@@ -136,7 +133,7 @@ def coh_mat_single(slc_samples, cov_mat=None, neighbor_mask=None):
             # Manually sum to skip based on the neighbor mask
             numer = a1 = a2 = 0.0
             for sidx in range(nsamps):
-                if not neighbor_mask[sidx]:
+                if do_shp and not neighbor_mask[sidx]:
                     continue
                 s1 = c1[sidx]
                 s2 = c2[sidx]
@@ -194,7 +191,6 @@ def estimate_stack_covariance_gpu(
     )
     samples_stack = slc_stack[:, r_start:r_end, c_start:c_end]
     if do_shp:
-        # neighbors_stack = neighbor_arrays[in_r, in_c, :, :]
         neighbors_stack = neighbor_arrays[out_y, out_x, :, :]
     else:
         neighbors_stack = cuda.local.array((2, 2), dtype=numba.bool_)
