@@ -26,6 +26,8 @@ def run(
         By default False.
     """
     # rest of imports here so --help doesn't take forever
+    import os
+
     from threadpoolctl import ThreadpoolController
 
     from . import s1_disp
@@ -43,6 +45,8 @@ def run(
     # TODO: Is this the best place to do this?
     controller = ThreadpoolController()
     controller.limit(limits=cfg.worker_settings.threads_per_worker)
+    # https://numba.readthedocs.io/en/stable/user/threading-layer.html#example-of-limiting-the-number-of-threads
+    os.environ["NUMBA_NUM_THREADS"] = str(cfg.worker_settings.threads_per_worker)
 
     s1_disp.run(cfg, debug=debug, pge_runconfig=pge_rc)
 

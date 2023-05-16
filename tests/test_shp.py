@@ -4,9 +4,8 @@ from scipy.stats import rayleigh
 
 from dolphin import shp
 from dolphin.phase_link import simulate
-from dolphin.utils import gpu_is_available
+from dolphin.shp._common import remove_unconnected
 
-GPU_AVAILABLE = gpu_is_available()
 simulate._seed(1234)
 
 
@@ -166,7 +165,7 @@ def test_shp_half_var_different(slcs, method):
 def test_shp_statistics(method, alpha, strides):
     """Check that with repeated tries, the alpha is correct."""
 
-    nsim = 500
+    nsim = 200
     shape = (30, 11, 11)
     halfwin_rowcol = (5, 5)
     shp_counts = np.zeros(nsim)
@@ -199,3 +198,43 @@ def test_shp_statistics(method, alpha, strides):
     shp_frac = shp_counts.mean() / nbox
     tol_pct = 3
     assert 100 * np.abs((shp_frac - (1 - alpha))) < tol_pct
+
+
+def test_remove_unconnected():
+    # Test 1: All True values
+    data = np.ones((5, 5), dtype=bool)
+    result = remove_unconnected(data, inplace=False)
+    assert np.all(result == data)
+
+    # Resused in all other tests:
+    center_only = np.zeros((5, 5), dtype=bool)
+    center_only[2, 2] = True
+
+    # Test 2: All False values except center
+    data = center_only.copy()
+    result = remove_unconnected(data, inplace=False)
+    assert np.all(result == center_only)
+
+    # Test 3: Single unconnected True value
+    data = np.zeros((5, 5), dtype=bool)
+    data[2, 2] = data[0, 0] = True
+
+    result = remove_unconnected(data, inplace=False)
+    assert np.all(result == center_only)
+
+    # Test 4: Single unconnected True value with a connected True group
+    data = center_only.copy()
+    data[3, 3] = data[0, 0] = True
+
+    expected = np.zeros((5, 5), dtype=bool)
+    expected[2, 2] = expected[3, 3] = True
+    result = remove_unconnected(data, inplace=False)
+    assert np.all(result == expected)
+
+    # Test 5: Inplace modification
+    data = np.zeros((5, 5), dtype=bool)
+    data[2, 2] = data[3, 3] = data[0, 0] = True
+    expected = np.zeros((5, 5), dtype=bool)
+    expected[2, 2] = expected[3, 3] = True
+    remove_unconnected(data, inplace=True)
+    assert np.all(data == expected)

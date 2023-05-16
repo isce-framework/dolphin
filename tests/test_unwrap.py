@@ -1,3 +1,4 @@
+import os
 import sys
 from pathlib import Path
 
@@ -139,6 +140,7 @@ def test_run_gtiff(list_of_gtiff_ifgs, corr_raster, unw_suffix):
     )
 
 
+@pytest.mark.skipif(os.environ.get("NUMBA_DISABLE_JIT") == "1", reason="JIT disabled")
 def test_compute_phase_diffs():
     # test on a 2D array with no phase jumps > pi
     phase1 = np.array([[0, 1], [1, 2]], dtype=float)
