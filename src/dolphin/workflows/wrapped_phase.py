@@ -42,7 +42,7 @@ def run(cfg: Workflow, debug: bool = False) -> tuple[list[Path], Path, Path]:
         raise ValueError("No input files found")
 
     # #############################################
-    # 1. Make a VRT pointing to the input SLC files
+    # Make a VRT pointing to the input SLC files
     # #############################################
     subdataset = cfg.input_options.subdataset
     vrt_path = cfg.scratch_directory / "slc_stack.vrt"
@@ -64,7 +64,7 @@ def run(cfg: Workflow, debug: bool = False) -> tuple[list[Path], Path, Path]:
         nodata_mask_file = None
 
     # ###############
-    # 2. PS selection
+    # PS selection
     # ###############
     ps_output = cfg.ps_options._output_file
     if ps_output.exists():
@@ -88,8 +88,12 @@ def run(cfg: Workflow, debug: bool = False) -> tuple[list[Path], Path, Path]:
             block_size_gb=cfg.worker_settings.block_size_gb,
         )
 
+    # TODO: Need a good way to store the nslc attribute in the PS file...
+    # If we pre-compute it from some big stack, we need to use that for SHP
+    # finding, not use the size of `slc_vrt_file`
+
     # #########################
-    # 3. phase linking/EVD step
+    # phase linking/EVD step
     # #########################
     pl_path = cfg.phase_linking._directory
 
@@ -102,34 +106,46 @@ def run(cfg: Workflow, debug: bool = False) -> tuple[list[Path], Path, Path]:
         watcher = NvidiaMemoryWatcher() if utils.gpu_is_available() else None
         logger.info(f"Running sequential EMI step in {pl_path}")
         if cfg.workflow_name == "single":
-            phase_linked_slcs, comp_slc_file, tcorr_file = single.run_evd_single(
-                slc_vrt_file=vrt_stack.outfile,
-                output_folder=pl_path,
-                half_window=cfg.phase_linking.half_window.dict(),
-                strides=cfg.output_options.strides,
-                reference_idx=0,
-                # mask_file=cfg.mask_file,
-                mask_file=nodata_mask_file,
-                ps_mask_file=ps_output,
-                max_bytes=cfg.worker_settings.block_size_gb * 1e9,
-                n_workers=cfg.worker_settings.n_workers,
-                gpu_enabled=cfg.worker_settings.gpu_enabled,
-                beta=cfg.phase_linking.beta,
+            phase_linked_slcs, comp_slc_file, tcorr_file = (
+                single.run_wrapped_phase_single(
+                    slc_vrt_file=vrt_stack.outfile,
+                    output_folder=pl_path,
+                    half_window=cfg.phase_linking.half_window.dict(),
+                    strides=cfg.output_options.strides,
+                    reference_idx=0,
+                    beta=cfg.phase_linking.beta,
+                    mask_file=nodata_mask_file,
+                    ps_mask_file=ps_output,
+                    amp_mean_file=cfg.ps_options._amp_mean_file,
+                    amp_dispersion_file=cfg.ps_options._amp_dispersion_file,
+                    shp_method=cfg.phase_linking.shp_method,
+                    shp_alpha=cfg.phase_linking.shp_alpha,
+                    shp_nslc=None,
+                    max_bytes=cfg.worker_settings.block_size_gb * 1e9,
+                    n_workers=cfg.worker_settings.n_workers,
+                    gpu_enabled=cfg.worker_settings.gpu_enabled,
+                )
             )
         else:
-            phase_linked_slcs, comp_slcs, tcorr_file = sequential.run_evd_sequential(
-                slc_vrt_file=vrt_stack.outfile,
-                output_folder=pl_path,
-                half_window=cfg.phase_linking.half_window.dict(),
-                strides=cfg.output_options.strides,
-                ministack_size=cfg.phase_linking.ministack_size,
-                # mask_file=cfg.mask_file,
-                mask_file=nodata_mask_file,
-                ps_mask_file=ps_output,
-                max_bytes=cfg.worker_settings.block_size_gb * 1e9,
-                n_workers=cfg.worker_settings.n_workers,
-                gpu_enabled=cfg.worker_settings.gpu_enabled,
-                beta=cfg.phase_linking.beta,
+            phase_linked_slcs, comp_slcs, tcorr_file = (
+                sequential.run_wrapped_phase_sequential(
+                    slc_vrt_file=vrt_stack.outfile,
+                    output_folder=pl_path,
+                    half_window=cfg.phase_linking.half_window.dict(),
+                    strides=cfg.output_options.strides,
+                    beta=cfg.phase_linking.beta,
+                    ministack_size=cfg.phase_linking.ministack_size,
+                    mask_file=nodata_mask_file,
+                    ps_mask_file=ps_output,
+                    amp_mean_file=cfg.ps_options._amp_mean_file,
+                    amp_dispersion_file=cfg.ps_options._amp_dispersion_file,
+                    shp_method=cfg.phase_linking.shp_method,
+                    shp_alpha=cfg.phase_linking.shp_alpha,
+                    shp_nslc=None,
+                    max_bytes=cfg.worker_settings.block_size_gb * 1e9,
+                    n_workers=cfg.worker_settings.n_workers,
+                    gpu_enabled=cfg.worker_settings.gpu_enabled,
+                )
             )
             comp_slc_file = comp_slcs[-1]
 
@@ -137,7 +153,7 @@ def run(cfg: Workflow, debug: bool = False) -> tuple[list[Path], Path, Path]:
             watcher.notify_finished()
 
     # ###################################################
-    # 4. Form interferograms from estimated wrapped phase
+    # Form interferograms from estimated wrapped phase
     # ###################################################
     ifg_dir = cfg.interferogram_network._directory
     existing_ifgs = list(ifg_dir.glob("*.int.*"))

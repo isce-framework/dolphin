@@ -1,15 +1,16 @@
 from __future__ import annotations
 
-import logging
+from typing import Optional
 
 import numpy as np
 
+from dolphin._log import get_log
 from dolphin.utils import decimate
 
 from . import covariance, metrics
 from .mle import mle_stack
 
-logger = logging.getLogger(__name__)
+logger = get_log(__name__)
 
 
 def run_cpu(
@@ -19,6 +20,7 @@ def run_cpu(
     beta: float = 0.01,
     reference_idx: int = 0,
     use_slc_amp: bool = True,
+    neighbor_arrays: Optional[np.ndarray] = None,
     n_workers: int = 1,
     **kwargs,
 ):
@@ -41,6 +43,9 @@ def run_cpu(
     use_slc_amp : bool, optional
         Whether to use the SLC amplitude when outputting the MLE estimate,
         or to set the SLC amplitude to 1.0. By default True.
+    neighbor_arrays : np.ndarray, optional
+        The neighbor arrays to use for SHP, shape = (n_rows, n_cols, *window_shape).
+        If None, a rectangular window is used. By default None.
     n_workers : int, optional
         The number of workers to use for (CPU version) multiprocessing.
         If 1 (default), no multiprocessing is used.
@@ -56,6 +61,7 @@ def run_cpu(
         slc_stack,
         half_window,
         strides,
+        neighbor_arrays=neighbor_arrays,
         n_workers=n_workers,
     )
 

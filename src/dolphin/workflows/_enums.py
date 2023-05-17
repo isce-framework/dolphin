@@ -2,6 +2,7 @@ from enum import Enum
 
 __all__ = [
     "WorkflowName",
+    "ShpMethod",
     "UnwrapMethod",
     "InterferogramNetworkType",
 ]
@@ -14,8 +15,19 @@ class WorkflowName(str, Enum):
     SINGLE = "single"
 
 
+class ShpMethod(str, Enum):
+    """Method for finding SHPs during phase linking."""
+
+    GLRT = "glrt"
+    KS = "ks"
+    KLD = "kld"
+    RECT = "rect"
+    # Alias for no SHP search
+    NONE = "rect"
+
+
 class UnwrapMethod(str, Enum):
-    """Phase unwrapping method, passable to Tophu."""
+    """Phase unwrapping method."""
 
     SNAPHU = "snaphu"
     ICU = "icu"

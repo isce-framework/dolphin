@@ -78,6 +78,7 @@ class VRTInterferogram(BaseModel):
         ),
     )
     date_format: str = "%Y%m%d"
+    write: bool = Field(True, description="Write the VRT file to disk")
 
     pixel_function: str = "cmul"
     _template = """\
@@ -134,7 +135,7 @@ class VRTInterferogram(BaseModel):
         return utils._get_path_from_gdal_str(ref_slc).parent
 
     @validator("path", always=True)
-    def _check_output_cant_exist(cls, v, values):
+    def _remove_existing_file(cls, v, values):
         if not v:
             # No path was passed: try and make one.
             # Form the output file name from the dates within input files
@@ -145,9 +146,9 @@ class VRTInterferogram(BaseModel):
 
             outdir = values.get("outdir")
             v = outdir / (io._format_date_pair(date1, date2, fmt) + ".vrt")
-        elif Path(v).exists():
-            # If they passed one and it's there, raise an error
-            raise ValueError(f"Output file {v} already exists")
+
+        if Path(v).exists():
+            v.unlink()
         return v
 
     @validator("dates")
@@ -195,9 +196,10 @@ class VRTInterferogram(BaseModel):
         date1 = utils.get_dates(self.ref_slc, fmt=self.date_format)[0]
         date2 = utils.get_dates(self.sec_slc, fmt=self.date_format)[0]
         self.dates = (date1, date2)
-        self._write()
+        if self.write:
+            self._write_vrt()
 
-    def _write(self):
+    def _write_vrt(self):
         xsize, ysize = io.get_raster_xysize(self.ref_slc)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with open(self.path, "w") as f:
@@ -287,6 +289,7 @@ class Network:
         reference_idx: Optional[int] = None,
         indexes: Optional[Sequence[tuple[int, int]]] = None,
         subdataset: Optional[str] = None,
+        write: bool = True,
     ):
         """Create a network of interferograms from a list of SLCs.
 
@@ -312,6 +315,8 @@ class Network:
             If passing NetCDF files in `slc_list, the subdataset of the image data
             within the file.
             Defaults to None.
+        write : bool
+            Whether to write the VRT files to disk. Defaults to True.
         """
         self.slc_list, dates = utils.sort_files_by_date(slc_list)
         self.slc_file_pairs = self._make_ifg_pairs(
@@ -329,9 +334,13 @@ class Network:
         self._subdataset = subdataset
 
         # Create each VRT file
-        self.ifg_list: list[VRTInterferogram] = self._write(outdir=outdir)
+        self.ifg_list: list[VRTInterferogram] = self._create_vrt_ifgs(
+            outdir=outdir, write=write
+        )
 
-    def _write(self, outdir: Optional[Filename] = Path.cwd()) -> list[VRTInterferogram]:
+    def _create_vrt_ifgs(
+        self, outdir: Optional[Filename] = Path.cwd(), write: bool = True
+    ) -> list[VRTInterferogram]:
         """Write out a VRTInterferogram for each ifg.
 
         Parameters
@@ -339,12 +348,14 @@ class Network:
         outdir : Path, optional
             Directory to write the VRT files to.
             By default, the directory of the first SLC.
+        write : bool, optional
+            Whether to write the VRT files to disk.
         """
         if outdir is None:
             outdir = Path(self.slc_list[0]).parent
         ifg_list: list[VRTInterferogram] = []
         for ref, sec in self._gdal_file_strings:
-            v = VRTInterferogram(ref_slc=ref, sec_slc=sec, outdir=outdir)
+            v = VRTInterferogram(ref_slc=ref, sec_slc=sec, outdir=outdir, write=write)
             ifg_list.append(v)
         return ifg_list
 

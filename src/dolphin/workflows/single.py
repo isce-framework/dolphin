@@ -2,7 +2,7 @@
 
 References
 ----------
-    [1] Mirzaee, Sara, Falk Amelung, and Heresh Fattahi. "Non-linear phase
+    .. [1] Mirzaee, Sara, Falk Amelung, and Heresh Fattahi. "Non-linear phase
     linking using joined distributed and persistent scatterers." Computers &
     Geosciences (2022): 105291.
 """
@@ -13,30 +13,35 @@ from typing import Optional
 
 import numpy as np
 
-from dolphin import io
+from dolphin import io, shp
 from dolphin._log import get_log
 from dolphin._types import Filename
 from dolphin.phase_link import PhaseLinkRuntimeError, compress, run_mle
 from dolphin.stack import VRTStack
 
+from ._enums import ShpMethod
 from ._utils import setup_output_folder
 
 logger = get_log(__name__)
 
-__all__ = ["run_evd_single"]
+__all__ = ["run_wrapped_phase_single"]
 
 
-def run_evd_single(
+def run_wrapped_phase_single(
     *,
     slc_vrt_file: Filename,
-    # weight_file: Filename,
     output_folder: Filename,
     half_window: dict,
     strides: dict = {"x": 1, "y": 1},
     reference_idx: int = 0,
+    beta: float = 0.01,
     mask_file: Optional[Filename] = None,
     ps_mask_file: Optional[Filename] = None,
-    beta: float = 0.01,
+    amp_mean_file: Optional[Filename] = None,
+    amp_dispersion_file: Optional[Filename] = None,
+    shp_method: ShpMethod = ShpMethod.NONE,
+    shp_alpha: float = 0.05,
+    shp_nslc: Optional[int],
     max_bytes: float = 32e6,
     n_workers: int = 1,
     gpu_enabled: bool = True,
@@ -47,6 +52,9 @@ def run_evd_single(
     vrt = VRTStack.from_vrt_file(slc_vrt_file)
     file_list_all = vrt.file_list
     date_list_all = vrt.dates
+
+    if shp_nslc is None:
+        shp_nslc = len(file_list_all)
 
     logger.info(f"{vrt}: from {vrt.file_list[0]} to {vrt.file_list[-1]}")
 
@@ -68,6 +76,15 @@ def run_evd_single(
         ps_mask = ps_mask.astype(bool).filled(False)
     else:
         ps_mask = np.zeros_like(nodata_mask)
+
+    if amp_mean_file is not None and amp_dispersion_file is not None:
+        amp_mean = io.load_gdal(amp_mean_file, masked=True)
+        amp_dispersion = io.load_gdal(amp_dispersion_file, masked=True)
+        # convert back to variance from dispersion: amp_disp = std_dev / mean
+        amp_variance = (amp_dispersion * amp_mean) ** 2
+    else:
+        amp_mean = amp_variance = None
+    amp_stack = None
 
     xhalf, yhalf = half_window["x"], half_window["y"]
     xs, ys = strides["x"], strides["y"]
@@ -134,6 +151,18 @@ def run_evd_single(
         nodata=0,
     )
 
+    # Create the empty compressed temporal coherence file
+    shp_counts_file = output_folder / f"shp_counts_{start_end}.tif"
+    io.write_arr(
+        arr=None,
+        like_filename=vrt.outfile,
+        output_name=shp_counts_file,
+        nbands=1,
+        dtype=np.uint16,
+        strides=strides,
+        nodata=0,
+    )
+
     # Iterate over the stack in blocks
     # Note the overlap to redo the edge effects
     # TODO: adjust the writing to avoid the overlap
@@ -153,6 +182,24 @@ def run_evd_single(
             continue
         cur_data = cur_data.astype(np.complex64)
 
+        if shp_method == "ks":
+            # Only actually compute if we need this one
+            amp_stack = np.abs(cur_data)
+
+        # Compute the neighbor_arrays for this block
+        neighbor_arrays = shp.estimate_neighbors(
+            halfwin_rowcol=(yhalf, xhalf),
+            alpha=shp_alpha,
+            strides=strides,
+            mean=amp_mean[rows, cols] if amp_mean is not None else None,
+            var=amp_variance[rows, cols] if amp_variance is not None else None,
+            nslc=shp_nslc,
+            amp_stack=amp_stack,
+            method=shp_method,
+        )
+        # Save the count for each pixel
+        shp_counts = np.sum(neighbor_arrays, axis=(-2, -1))
+
         # Run the phase linking process on the current ministack
         try:
             cur_mle_stack, tcorr = run_mle(
@@ -163,6 +210,8 @@ def run_evd_single(
                 reference_idx=reference_idx,
                 nodata_mask=nodata_mask[rows, cols],
                 ps_mask=ps_mask[rows, cols],
+                neighbor_arrays=neighbor_arrays,
+                avg_mag=amp_mean[rows, cols] if amp_mean is not None else None,
                 n_workers=n_workers,
                 gpu_enabled=gpu_enabled,
             )
@@ -193,6 +242,9 @@ def run_evd_single(
 
         # Save the temporal coherence blocks
         writer.queue_write(tcorr, tcorr_file, out_row_start, out_col_start)
+
+        # Save the SHP counts (if not using Rect window)
+        writer.queue_write(shp_counts, shp_counts_file, out_row_start, out_col_start)
 
         # Compress the ministack using only the non-compressed SLCs
         cur_comp_slc = compress(

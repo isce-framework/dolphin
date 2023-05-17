@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import re
 from datetime import datetime
-from multiprocessing import cpu_count
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -19,9 +18,9 @@ from pydantic import (
 from dolphin import __version__ as _dolphin_version
 from dolphin._log import get_log
 from dolphin.io import DEFAULT_HDF5_OPTIONS, DEFAULT_TIFF_OPTIONS, format_nc_filename
-from dolphin.utils import get_dates, sort_files_by_date
+from dolphin.utils import get_cpu_count, get_dates, sort_files_by_date
 
-from ._enums import InterferogramNetworkType, UnwrapMethod, WorkflowName
+from ._enums import InterferogramNetworkType, ShpMethod, UnwrapMethod, WorkflowName
 from ._yaml_model import YamlModel
 
 __all__ = [
@@ -83,6 +82,13 @@ class PhaseLinkingOptions(BaseModel, extra=Extra.forbid):
             "Beta regularization parameter for correlation matrix inversion. 0 is no"
             " regularization."
         ),
+        gt=0.0,
+        lt=1.0,
+    )
+    shp_method: ShpMethod = ShpMethod.GLRT
+    shp_alpha: float = Field(
+        0.005,
+        description="Significance level (probability of false alarm) for SHP tests.",
         gt=0.0,
         lt=1.0,
     )
@@ -159,7 +165,9 @@ class UnwrapOptions(BaseModel, extra=Extra.forbid):
     unwrap_method: UnwrapMethod = UnwrapMethod.SNAPHU
     tiles: List[int] = Field(
         [1, 1],
-        description="Number of tiles to split the unwrapping into (for Tophu).",
+        description=(
+            "Number of tiles to split the unwrapping into (for multi-scale unwrapping)."
+        ),
     )
     init_method: str = Field(
         "mcf",
@@ -175,7 +183,7 @@ class WorkerSettings(BaseSettings):
         description="Whether to use GPU for processing (if available)",
     )
     n_workers: int = Field(
-        default_factory=cpu_count,
+        default_factory=get_cpu_count,
         ge=1,
         description=(
             "(For non-GPU) Number of cpu cores to use for Python multiprocessing. Uses"
@@ -229,6 +237,7 @@ class OutputOptions(BaseModel, extra=Extra.forbid):
 
     output_resolution: Optional[Dict[str, int]] = Field(
         # {"x": 20, "y": 20},
+        # TODO: how to get a blank "x" and "y" in the schema printed instead of nothing?
         None,
         description="Output (x, y) resolution (in units of input data)",
     )

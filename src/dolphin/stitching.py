@@ -101,8 +101,6 @@ def merge_images(
         list of raster filenames
     outfile : Filename
         Path to output file
-    output_dir : Filename
-        Path to output directory
     target_aligned_pixels: bool
         If True, adjust output image bounds so that pixel coordinates
         are integer multiples of pixel size, matching the ``-tap``
@@ -352,7 +350,7 @@ def _warp_to_projection(
         if proj_in == projection:
             warped_files.append(fn)
             continue
-        warped_fn = Path(dirname) / f"{fn.stem}_{idx}_warped.tif"
+        warped_fn = Path(dirname) / f"{fn.stem}_{idx}_warped.vrt"
         from_srs_name = ds.GetSpatialRef().GetName()
         to_srs_name = osr.SpatialReference(projection).GetName()
         logger.info(

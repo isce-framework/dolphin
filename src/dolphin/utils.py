@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 import datetime
+import math
 import re
 import resource
 import sys
 import warnings
+from multiprocessing import cpu_count
 from pathlib import Path
 from typing import Iterable, Optional, Union
 
 import numpy as np
+from numba import njit
 from numpy.typing import ArrayLike, DTypeLike
 from osgeo import gdal, gdal_array, gdalconst
 from rich.progress import MofNCompleteColumn, Progress, SpinnerColumn, TimeElapsedColumn
@@ -225,6 +228,18 @@ def sort_files_by_date(
     # Unpack the sorted pairs with new sorted values
     file_list, dates = zip(*file_dates)  # type: ignore
     return list(file_list), list(dates)
+
+
+@njit
+def _get_slices(half_r: int, half_c: int, r: int, c: int, rows: int, cols: int):
+    """Get the slices for the given pixel and half window size."""
+    # Clamp min indexes to 0
+    r_start = max(r - half_r, 0)
+    c_start = max(c - half_c, 0)
+    # Clamp max indexes to the array size
+    r_end = min(r + half_r + 1, rows)
+    c_end = min(c + half_c + 1, cols)
+    return (r_start, r_end), (c_start, c_end)
 
 
 def full_suffix(filename: Filename):
@@ -590,3 +605,37 @@ def moving_window_mean(
     )
     window_mean /= row_size * col_size
     return window_mean
+
+
+def get_cpu_count():
+    """Get the number of CPUs available to the current process.
+
+    This function accounts for the possibility of a Docker container with
+    limited CPU resources on a larger machine (which is ignored by
+    `multiprocessing.cpu_count()`).
+
+    Returns
+    -------
+    int
+        The number of CPUs available to the current process.
+
+    References
+    ----------
+    1. https://github.com/joblib/loky/issues/111
+    2. https://github.com/conan-io/conan/blob/982a97041e1ece715d157523e27a14318408b925/conans/client/tools/oss.py#L27 # noqa
+    """
+
+    def get_cpu_quota():
+        return int(Path("/sys/fs/cgroup/cpu/cpu.cfs_quota_us").read_text())
+
+    def get_cpu_period():
+        return int(Path("/sys/fs/cgroup/cpu/cpu.cfs_period_us").read_text())
+
+    try:
+        cfs_quota_us = get_cpu_quota()
+        cfs_period_us = get_cpu_period()
+        if cfs_quota_us > 0 and cfs_period_us > 0:
+            return int(math.ceil(cfs_quota_us / cfs_period_us))
+    except:
+        pass
+    return cpu_count()

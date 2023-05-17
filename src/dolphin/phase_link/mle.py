@@ -27,6 +27,7 @@ def run_mle(
     reference_idx: int = 0,
     nodata_mask: np.ndarray = None,
     ps_mask: Optional[np.ndarray] = None,
+    neighbor_arrays: Optional[np.ndarray] = None,
     avg_mag: Optional[np.ndarray] = None,
     use_slc_amp: bool = True,
     n_workers: int = 1,
@@ -59,11 +60,13 @@ def run_mle(
         (combined with `nodata_mask`).
         The phase from these pixels will be inserted back
         into the final estimate directly from `slc_stack`.
+    neighbor_arrays : np.ndarray, optional
+        The neighbor arrays to use for SHP, shape = (n_rows, n_cols, *window_shape).
+        If None, a rectangular window is used. By default None.
     avg_mag : np.ndarray, optional
         The average magnitude of the SLC stack, used to to find the brightest
         PS pixels to fill within each look window.
-        If None, the average magnitude is estimated from the SLC stack.
-        By default None.
+        If None, the average magnitude will be computed from `slc_stack`.
     use_slc_amp : bool, optional
         Whether to use the SLC amplitude when outputting the MLE estimate,
         or to set the SLC amplitude to 1.0. By default True.
@@ -118,22 +121,24 @@ def run_mle(
     #######################################
     if not gpu_enabled or not gpu_is_available():
         mle_est, temp_coh = _run_cpu(
-            slc_stack_masked,
-            half_window,
-            strides,
-            beta,
-            reference_idx,
-            use_slc_amp,
+            slc_stack=slc_stack_masked,
+            half_window=half_window,
+            strides=strides,
+            beta=beta,
+            reference_idx=reference_idx,
+            neighbor_arrays=neighbor_arrays,
+            use_slc_amp=use_slc_amp,
             n_workers=n_workers,
         )
     else:
         mle_est, temp_coh = _run_gpu(
-            slc_stack_masked,
-            half_window,
-            strides,
-            beta,
-            reference_idx,
-            use_slc_amp,
+            slc_stack=slc_stack_masked,
+            half_window=half_window,
+            strides=strides,
+            beta=beta,
+            reference_idx=reference_idx,
+            neighbor_arrays=neighbor_arrays,
+            use_slc_amp=use_slc_amp,
             # is it worth passing the blocks-per-grid?
         )
 

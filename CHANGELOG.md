@@ -5,7 +5,19 @@
 - For OPERA CSLC inputs, we now read the nodata polygon and skip loading regions of the SLC stack which are all nodata.
   - This led to a reduction of 30-50% in wrapped phase estimation runtime for each burst stack.
 - Sample test data for the `dolphin` package loaded onto Zenodo.
+- Adds 3 methods of computing a variable statistically homogeneous pixel (SHP) window when estimating the covariance matrix:
+  - Kolmogorov-Smirnov test (KS-test)
+  - Generalized likelihood ratio test (GLRT)
+  - Kullback-Leibler divergence/distance test (KLD)
+  - `"rect"` is also an option for skipping any statistical test and using the full rectangular multilook window
+- Also included a script to view the window in an interactive matplotlib figure (matplotlib must be installed separately)
+- Added a simple method to check for adjacent-pixel unwrapping errors in `unwrap.compute_phase_diffs`
+- Adds a method `utils.get_cpu_count` which returns either `os.cpu_count`, or (if running in a Docker container) the number of CPUs allocated by Docker
 
+**Changes**
+
+- Passing an existing file to `VRTStack` will no longer error unless `fail_on_overwrite=True`. The default just prints out the overwrite is happening. This prevents multiple runs in the same folder from errorings just for creating a reference to the SLC files.
+- The environment variable `NUMBA_NUM_THREADS` is set using the passed in config to prevent numba from using all CPUs during `prange` calls
 
 **Dependencies**
 
@@ -13,6 +25,7 @@
 
 Added testing requirements:
 - pooch
+- pillow>=7.0
 
 
 # [0.1.0](https://github.com/opera-adt/dolphin/compare/v0.0.4...v0.1.0) - 2023-03-31

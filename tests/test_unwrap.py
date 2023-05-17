@@ -1,3 +1,4 @@
+import os
 import sys
 from pathlib import Path
 
@@ -137,3 +138,21 @@ def test_run_gtiff(list_of_gtiff_ifgs, corr_raster, unw_suffix):
         unw_suffix=unw_suffix,
         max_jobs=1,
     )
+
+
+@pytest.mark.skipif(os.environ.get("NUMBA_DISABLE_JIT") == "1", reason="JIT disabled")
+def test_compute_phase_diffs():
+    # test on a 2D array with no phase jumps > pi
+    phase1 = np.array([[0, 1], [1, 2]], dtype=float)
+    expected1 = np.array([[0, 0], [0, 0]], dtype=float)
+    assert np.allclose(unwrap.compute_phase_diffs(phase1), expected1)
+
+    # test on a 2D array with some phase jumps > pi at the top-left pixel
+    phase2 = np.array([[0, 3.15], [3.15, 0]], dtype=float)
+    expected2 = np.array([[2, 0], [0, 0]], dtype=float)
+    assert np.allclose(unwrap.compute_phase_diffs(phase2), expected2)
+
+    # test on a larger 2D array
+    phase3 = np.full((10, 10), np.pi, dtype=float)
+    expected3 = np.zeros((10, 10), dtype=float)
+    assert np.allclose(unwrap.compute_phase_diffs(phase3), expected3)

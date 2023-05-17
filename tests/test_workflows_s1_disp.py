@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import numpy as np
@@ -8,12 +9,17 @@ from make_netcdf import create_test_nc
 
 from dolphin.workflows import config, s1_disp
 
+# 'Grid size 49 will likely result in GPU under-utilization due to low occupancy.'
+pytestmark = pytest.mark.filterwarnings(
+    "ignore::numba.core.errors.NumbaPerformanceWarning"
+)
+
 
 @pytest.fixture()
 def opera_slc_files(tmp_path, slc_stack) -> list[Path]:
     """Save the slc stack as a series of NetCDF files."""
     start_date = 20220101
-    shape = (4, 256, 256)
+    shape = (4, 128, 128)
     slc_stack = (np.random.rand(*shape) + 1j * np.random.rand(*shape)).astype(
         np.complex64
     )
@@ -43,7 +49,7 @@ def opera_slc_files(tmp_path, slc_stack) -> list[Path]:
     return file_list
 
 
-def test_s1_disp_run(opera_slc_files: list[Path], tmpdir):
+def test_s1_disp_run_single(opera_slc_files: list[Path], tmpdir):
     with tmpdir.as_cwd():
         cfg = config.Workflow(
             workflow_name=config.WorkflowName.SINGLE,
@@ -54,6 +60,24 @@ def test_s1_disp_run(opera_slc_files: list[Path], tmpdir):
             ),
             phase_linking=dict(
                 ministack_size=500,
+            ),
+            worker_settings=dict(
+                gpu_enabled=(os.environ.get("NUMBA_DISABLE_JIT") != "1")
+            ),
+        )
+        s1_disp.run(cfg)
+
+
+def test_s1_disp_run_stack(opera_slc_files: list[Path], tmpdir):
+    with tmpdir.as_cwd():
+        cfg = config.Workflow(
+            workflow_name=config.WorkflowName.STACK,
+            cslc_file_list=opera_slc_files,
+            phase_linking=dict(
+                ministack_size=500,
+            ),
+            worker_settings=dict(
+                gpu_enabled=(os.environ.get("NUMBA_DISABLE_JIT") != "1")
             ),
         )
         s1_disp.run(cfg)

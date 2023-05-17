@@ -24,24 +24,29 @@ from dolphin.interferogram import VRTInterferogram
 from dolphin.phase_link import run_mle
 from dolphin.stack import VRTStack
 
+from ._enums import ShpMethod
 from ._utils import setup_output_folder
-from .single import run_evd_single
+from .single import run_wrapped_phase_single
 
 logger = get_log(__name__)
 
-__all__ = ["run_evd_sequential"]
+__all__ = ["run_wrapped_phase_sequential"]
 
 
-def run_evd_sequential(
+def run_wrapped_phase_sequential(
     *,
     slc_vrt_file: Filename,
-    # weight_file: Filename,
     output_folder: Filename,
     half_window: dict,
     strides: dict = {"x": 1, "y": 1},
     ministack_size: int = 10,
     mask_file: Optional[Filename] = None,
     ps_mask_file: Optional[Filename] = None,
+    amp_mean_file: Optional[Filename] = None,
+    amp_dispersion_file: Optional[Filename] = None,
+    shp_method: ShpMethod = ShpMethod.NONE,
+    shp_alpha: float = 0.05,
+    shp_nslc: Optional[int],
     beta: float = 0.01,
     max_bytes: float = 32e6,
     n_workers: int = 1,
@@ -53,6 +58,9 @@ def run_evd_sequential(
     file_list_all = v_all.file_list
     date_list_all = v_all.dates
 
+    if shp_nslc is None:
+        shp_nslc = len(file_list_all)
+
     logger.info(f"{v_all}: from {v_all.file_list[0]} to {v_all.file_list[-1]}")
 
     # Map of {ministack_index: [output_slc_files]}
@@ -61,18 +69,6 @@ def run_evd_sequential(
     tcorr_files: list[Path] = []
 
     nrows, ncols = v_all.shape[-2:]
-    if mask_file is not None:
-        nodata_mask = io.load_gdal(mask_file).astype(bool)
-    else:
-        nodata_mask = np.zeros((nrows, ncols), dtype=bool)
-
-    if ps_mask_file is not None:
-        ps_mask = io.load_gdal(ps_mask_file, masked=True)
-        # Fill the nodata values with false
-        ps_mask = ps_mask.astype(bool).filled(False)
-    else:
-        ps_mask = np.zeros_like(nodata_mask)
-
     xhalf, yhalf = half_window["x"], half_window["y"]
     xs, ys = strides["x"], strides["y"]
 
@@ -101,15 +97,20 @@ def run_evd_sequential(
             sort_files=False,
             subdataset=v_all.subdataset,
         )
-        cur_output_files, cur_comp_slc_file, tcorr_file = run_evd_single(
+        cur_output_files, cur_comp_slc_file, tcorr_file = run_wrapped_phase_single(
             slc_vrt_file=cur_vrt,
             output_folder=cur_output_folder,
             half_window=half_window,
             strides=strides,
             reference_idx=mini_idx,
+            beta=beta,
             mask_file=mask_file,
             ps_mask_file=ps_mask_file,
-            beta=beta,
+            amp_mean_file=amp_mean_file,
+            amp_dispersion_file=amp_dispersion_file,
+            shp_method=shp_method,
+            shp_alpha=shp_alpha,
+            shp_nslc=shp_nslc,
             max_bytes=max_bytes,
             n_workers=n_workers,
             gpu_enabled=gpu_enabled,
@@ -132,8 +133,11 @@ def run_evd_sequential(
         logger.info("Only one ministack, skipping offset calculation.")
         assert len(output_slc_files) == 1
         assert len(tcorr_files) == 1
+        outputs_renamed = []
         for slc_fname in output_slc_files[0]:
-            slc_fname.rename(output_folder / slc_fname.name)
+            n = output_folder / slc_fname.name
+            slc_fname.rename(n)
+            outputs_renamed.append(n)
 
         tcorr_files[0].rename(output_tcorr_file)
 
@@ -142,7 +146,7 @@ def run_evd_sequential(
 
         # return output_slc_files, comp_slc_file, tcorr_file
         # different here for sequential
-        return output_slc_files[0], [output_comp_slc_file], output_tcorr_file
+        return outputs_renamed, [output_comp_slc_file], output_tcorr_file
 
     # Compute the adjustments by running EVD on the compressed SLCs
     comp_output_folder = output_folder / "adjustments"
@@ -158,6 +162,10 @@ def run_evd_sequential(
         strides=strides,
         nodata=0,
     )
+    if mask_file is not None:
+        nodata_mask = io.load_gdal(mask_file).astype(bool)
+    else:
+        nodata_mask = np.zeros((nrows, ncols), dtype=bool)
 
     writer = io.Writer()
     # Iterate over the ministack in blocks
@@ -182,6 +190,7 @@ def run_evd_sequential(
             nodata_mask=nodata_mask[rows, cols],
             ps_mask=None,  # PS mask doesn't matter for the adjustments
             use_slc_amp=False,  # Make adjustments unit-amplitude
+            neighbor_arrays=None,  # No SHP for the adjustments
             n_workers=n_workers,
             gpu_enabled=gpu_enabled,
         )

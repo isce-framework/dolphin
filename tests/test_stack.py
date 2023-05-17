@@ -65,8 +65,9 @@ def test_create(vrt_stack, vrt_stack_nc):
 def test_create_over_existing(tmp_path, slc_file_list):
     vrt_file = tmp_path / "test.vrt"
     VRTStack(slc_file_list, outfile=vrt_file)
+    VRTStack(slc_file_list, outfile=vrt_file, fail_on_overwrite=False)
     with pytest.raises(FileExistsError):
-        VRTStack(slc_file_list, outfile=vrt_file)
+        VRTStack(slc_file_list, outfile=vrt_file, fail_on_overwrite=True)
 
 
 def test_from_vrt_file(tmp_path, slc_file_list):

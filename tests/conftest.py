@@ -1,9 +1,14 @@
+import os
 from pathlib import Path
 
 import numpy as np
 import pytest
 from make_netcdf import create_test_nc
 from osgeo import gdal
+
+# https://numba.readthedocs.io/en/stable/user/threading-layer.html#example-of-limiting-the-number-of-threads
+if not os.environ.get("NUMBA_NUM_THREADS"):
+    os.environ["NUMBA_NUM_THREADS"] = str(min(os.cpu_count(), 16))  # type: ignore
 
 from dolphin.io import load_gdal, write_arr
 from dolphin.phase_link import simulate

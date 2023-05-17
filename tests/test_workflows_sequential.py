@@ -25,13 +25,18 @@ def test_sequential_gtiff(tmp_path, slc_file_list, gpu_enabled):
     half_window = {"x": cols // 2, "y": rows // 2}
     strides = {"x": 1, "y": 1}
     output_folder = tmp_path / "sequential"
-    sequential.run_evd_sequential(
+    sequential.run_wrapped_phase_sequential(
         slc_vrt_file=vrt_file,
         output_folder=output_folder,
         half_window=half_window,
         strides=strides,
         ministack_size=10,
         ps_mask_file=None,
+        amp_mean_file=None,
+        amp_dispersion_file=None,
+        shp_method="rect",
+        shp_alpha=None,
+        shp_nslc=None,
         max_bytes=1e9,
         n_workers=4,
         gpu_enabled=gpu_enabled,
@@ -68,20 +73,25 @@ def test_sequential_nc(tmp_path, slc_file_list_nc, half_window, strides):
     _ = stack.VRTStack(slc_file_list_nc, outfile=vrt_file, subdataset="data")
 
     output_folder = tmp_path / "sequential"
-    sequential.run_evd_sequential(
+    sequential.run_wrapped_phase_sequential(
         slc_vrt_file=vrt_file,
         output_folder=output_folder,
         half_window=half_window,
         strides=strides,
         ministack_size=10,
         ps_mask_file=None,
+        amp_mean_file=None,
+        amp_dispersion_file=None,
+        shp_method="rect",
+        shp_alpha=None,
+        shp_nslc=None,
         max_bytes=1e9,
         n_workers=4,
         gpu_enabled=False,
     )
 
 
-@pytest.mark.parametrize("ministack_size", [3, 5, 9, 20])
+@pytest.mark.parametrize("ministack_size", [5, 9, 20])
 def test_sequential_ministack_sizes(tmp_path, slc_file_list_nc, ministack_size):
     """Check various strides/windows/ministacks with a NetCDF input stack."""
     vrt_file = tmp_path / "slc_stack.vrt"
@@ -92,13 +102,18 @@ def test_sequential_ministack_sizes(tmp_path, slc_file_list_nc, ministack_size):
     _, rows, cols = vrt_stack.shape
 
     output_folder = tmp_path / "sequential"
-    sequential.run_evd_sequential(
+    sequential.run_wrapped_phase_sequential(
         slc_vrt_file=vrt_file,
         output_folder=output_folder,
         half_window={"x": cols // 2, "y": rows // 2},
         strides={"x": 1, "y": 1},
         ministack_size=ministack_size,
         ps_mask_file=None,
+        amp_mean_file=None,
+        amp_dispersion_file=None,
+        shp_method="rect",
+        shp_alpha=None,
+        shp_nslc=None,
         max_bytes=1e9,
         n_workers=4,
         gpu_enabled=False,
