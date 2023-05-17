@@ -11,15 +11,18 @@ from dolphin._log import get_log
 from dolphin.io import compute_out_shape
 from dolphin.utils import _get_slices
 
+from ._common import remove_unconnected
+
 logger = get_log(__name__)
 
 
 def estimate_neighbors(
-    amp_stack,
+    amp_stack: ArrayLike,
     halfwin_rowcol: tuple[int, int],
     alpha: float,
     strides: dict[str, int] = {"x": 1, "y": 1},
     is_sorted: bool = False,
+    prune_disconnected: bool = False,
 ):
     """Estimate the  at all pixels of `slc_stack` on the GPU."""
     # estimate_neighbors_gpu(
@@ -51,6 +54,7 @@ def estimate_neighbors(
         halfwin_rowcol,
         strides_rowcol,
         ecdf_dist_cutoff,
+        prune_disconnected,
         is_shp,
     )
 
@@ -63,6 +67,7 @@ def _loop_over_neighbors(
     halfwin_rowcol: tuple[int, int],
     strides_rowcol: tuple[int, int],
     ecdf_dist_cutoff: float,
+    prune_disconnected: bool,
     is_shp: ArrayLike,
 ):
     """Estimate the SHPs of each pixel of `amp_stack` on the CPU."""
@@ -88,6 +93,7 @@ def _loop_over_neighbors(
             amp_block = sorted_amp_stack[:, r_start:r_end, c_start:c_end]
             neighbors = is_shp[out_r, out_c, :, :]
             _set_neighbors(amp_block, halfwin_rowcol, ecdf_dist_cutoff, neighbors)
+            remove_unconnected(is_shp[out_r, out_c], inplace=True)
 
     return is_shp
 
@@ -99,12 +105,12 @@ def estimate_neighbors_gpu(
     halfwin_rowcol: tuple[int, int],
     strides_rowcol: tuple[int, int],
     alpha: float,
-    neighbor_arrays: ArrayLike,
+    is_shp: ArrayLike,
 ):
     """Estimate the SHPs of each pixel of `amp_stack` on the GPU."""
     # Get the global position within the 2D GPU grid
     out_x, out_y = cuda.grid(2)
-    out_rows, out_cols = neighbor_arrays.shape[:2]
+    out_rows, out_cols = is_shp.shape[:2]
     # Check if we are within the bounds of the array
     if out_y >= out_rows or out_x >= out_cols:
         return
@@ -125,8 +131,9 @@ def estimate_neighbors_gpu(
     )
 
     amp_block = sorted_amp_stack[:, r_start:r_end, c_start:c_end]
-    neighbors_pixel = neighbor_arrays[out_y, out_x, :, :]
+    neighbors_pixel = is_shp[out_y, out_x, :, :]
     _set_neighbors(amp_block, halfwin_rowcol, ecdf_dist_cutoff, neighbors_pixel)
+    remove_unconnected(is_shp[out_y, out_x], inplace=True)
 
 
 @numba.njit(nogil=True)

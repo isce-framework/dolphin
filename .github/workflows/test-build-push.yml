@@ -62,15 +62,15 @@ jobs:
       - name: Install test dependencies
         run: |
           micromamba install -f tests/requirements.txt -c conda-forge
-      - name: Disable numba for codecov
-        # https://community.codecov.com/t/numba-jitted-methods-are-not-captured-by-codecov/2649
+      - name: Disable numba boundscheck for better error catching
         run: |
-          echo "NUMBA_DISABLE_JIT=1" >> $GITHUB_ENV
-      - name: Test (no numba for codecov)
+          echo "NUMBA_BOUNDSCHECK=1" >> $GITHUB_ENV
+      - name: Test (with numba boundscheck on)
         run: |
-          pytest --cov-report=xml
-      - name: Coverage report
-        uses: codecov/codecov-action@v2
+          pytest
+      # https://community.codecov.com/t/numba-jitted-methods-are-not-captured-by-codecov/2649
+      # - name: Coverage report
+      #   uses: codecov/codecov-action@v2
 
   dockerize: # Based on Mintpy: https://github.com/insarlab/MintPy/blob/5ca554fef324b816f9130feec567e2cf463e41d2/.github/workflows/build-n-publish-to-pypi.yml
     name: Build Docker image and push to GitHub Container Registry

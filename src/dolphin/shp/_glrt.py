@@ -28,6 +28,7 @@ def estimate_neighbors(
     nslc: int,
     strides: dict = {"x": 1, "y": 1},
     alpha: float = 0.05,
+    prune_disconnected: bool = False,
 ):
     """Estimate the number of neighbors based on the GLRT.
 
@@ -51,6 +52,11 @@ def estimate_neighbors(
     alpha : float, default=0.05
         Significance level at which to reject the null hypothesis.
         Rejecting means declaring a neighbor is not a SHP.
+    prune_disconnected : bool, default=False
+        If True, keeps only SHPs that are 8-connected to the current pixel.
+        Otherwise, any pixel within the window may be considered an SHP, even
+        if it is not directly connected.
+
 
     Notes
     -----
@@ -90,6 +96,7 @@ def estimate_neighbors(
         halfwin_rowcol,
         strides_rowcol,
         threshold,
+        prune_disconnected,
         is_shp,
     )
 

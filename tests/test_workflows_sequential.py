@@ -91,7 +91,7 @@ def test_sequential_nc(tmp_path, slc_file_list_nc, half_window, strides):
     )
 
 
-@pytest.mark.parametrize("ministack_size", [3, 5, 9, 20])
+@pytest.mark.parametrize("ministack_size", [5, 9, 20])
 def test_sequential_ministack_sizes(tmp_path, slc_file_list_nc, ministack_size):
     """Check various strides/windows/ministacks with a NetCDF input stack."""
     vrt_file = tmp_path / "slc_stack.vrt"

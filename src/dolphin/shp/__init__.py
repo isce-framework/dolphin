@@ -26,6 +26,7 @@ def estimate_neighbors(
     amp_stack: Optional[ArrayLike] = None,
     is_sorted: bool = False,
     method: ShpMethod = ShpMethod.GLRT,
+    prune_disconnected: bool = False,
 ) -> np.ndarray:
     """Estimate the statistically similar neighbors of each pixel.
 
@@ -49,6 +50,10 @@ def estimate_neighbors(
         Whether the amplitude stack is sorted (if passed), by default False.
     method : ShpMethod, optional
         Method used for estimation, by default ShpMethod.GLRT.
+    prune_disconnected : bool, default=False
+        If True, keeps only SHPs that are 8-connected to the current pixel.
+        Otherwise, any pixel within the window may be considered an SHP, even
+        if it is not directly connected.
 
     Returns
     -------
@@ -82,6 +87,7 @@ def estimate_neighbors(
             strides=strides,
             nslc=nslc,
             alpha=alpha,
+            prune_disconnected=prune_disconnected,
         )
     elif method.lower() == ShpMethod.KLD:
         logger.debug("Estimating SHP neighbors using KLD")
@@ -94,6 +100,7 @@ def estimate_neighbors(
             strides=strides,
             nslc=nslc,
             alpha=alpha,
+            prune_disconnected=prune_disconnected,
         )
     elif method.lower() == ShpMethod.KS:
         if amp_stack is None:

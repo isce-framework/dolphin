@@ -106,6 +106,7 @@ def _make_loop_function(
         halfwin_rowcol: tuple[int, int],
         strides_rowcol: tuple[int, int],
         threshold: float,
+        prune_disconnected: bool,
         is_shp: np.ndarray,
     ) -> np.ndarray:
         """Loop common to SHP tests using only mean and variance."""
@@ -145,8 +146,9 @@ def _make_loop_function(
                         T = compute_test_stat(scale_1, scale_2)
 
                         is_shp[out_r, out_c, r_off, c_off] = T < threshold
-                # For this pixel, prune the groups not connected to the center
-                remove_unconnected(is_shp[out_r, out_c], inplace=True)
+                if prune_disconnected:
+                    # For this pixel, prune the groups not connected to the center
+                    remove_unconnected(is_shp[out_r, out_c], inplace=True)
 
         return is_shp
 
