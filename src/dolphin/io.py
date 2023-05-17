@@ -56,7 +56,7 @@ def load_gdal(
     filename: Filename,
     *,
     band: Optional[int] = None,
-    subsample_factor: int = 1,
+    subsample_factor: Union[int, tuple[int, int]] = 1,
     rows: Optional[slice] = None,
     cols: Optional[slice] = None,
     masked: bool = False,
@@ -69,7 +69,7 @@ def load_gdal(
         Path to the file to load.
     band : int, optional
         Band to load. If None, load all bands as 3D array.
-    subsample_factor : int, optional
+    subsample_factor : int or tuple[int, int], optional
         Subsample the data by this factor. Default is 1 (no subsampling).
         Uses nearest neighbor resampling.
     rows : slice, optional
@@ -91,6 +91,9 @@ def load_gdal(
     # Make an output object of the right size
     dt = gdal_to_numpy_type(ds.GetRasterBand(1).DataType)
 
+    if isinstance(subsample_factor, int):
+        subsample_factor = (subsample_factor, subsample_factor)
+
     if rows is not None and cols is not None:
         xoff, yoff = cols.start, rows.start
         row_stop = min(rows.stop, nrows)
@@ -101,11 +104,17 @@ def load_gdal(
                 f"Invalid row/col slices: {rows}, {cols} for file {filename} of size"
                 f" {nrows}x{ncols}"
             )
-        nrows_out, ncols_out = ysize // subsample_factor, xsize // subsample_factor
+        nrows_out, ncols_out = (
+            ysize // subsample_factor[0],
+            xsize // subsample_factor[1],
+        )
     else:
         xoff, yoff = 0, 0
         xsize, ysize = ncols, nrows
-        nrows_out, ncols_out = nrows // subsample_factor, ncols // subsample_factor
+        nrows_out, ncols_out = (
+            nrows // subsample_factor[0],
+            ncols // subsample_factor[1],
+        )
     # Read the data, and decimate if specified
     resamp = gdal.GRA_NearestNeighbour
     if band is None:
