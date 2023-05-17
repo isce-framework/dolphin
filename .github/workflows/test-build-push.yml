@@ -32,6 +32,7 @@ jobs:
               isce3=0.8.0
               numpy=1.20
               numba=0.54
+              pillow==7.0
               pydantic=1.10
               pymp-pypi=0.4.5
               pyproj=3.3
