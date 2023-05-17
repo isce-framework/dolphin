@@ -120,7 +120,10 @@ def coh_mat_single(slc_samples, cov_mat=None, neighbor_mask=None, do_shp: bool =
     nslc, nsamps = slc_samples.shape
     if cov_mat is None:
         cov_mat = np.zeros((nslc, nslc), dtype=slc_samples.dtype)
-    if neighbor_mask is None or neighbor_mask.size <= 1:
+    if neighbor_mask is None:
+        do_shp = False
+        neighbor_mask = np.zeros((0,), dtype=np.bool_)
+    if neighbor_mask.size <= 1:
         do_shp = False
 
     for ti in range(nslc):

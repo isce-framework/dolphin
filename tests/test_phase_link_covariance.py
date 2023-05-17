@@ -63,7 +63,9 @@ def test_coh_mat_single(slcs, expected_cov, looks=(5, 5)):
             r_slice = slice(r * r_looks, (r + 1) * r_looks)
             c_slice = slice(c * c_looks, (c + 1) * c_looks)
             cur_samples = slcs[:, r_slice, c_slice].reshape(num_slc, -1)
-            cur_C = covariance.coh_mat_single(cur_samples)
+            cur_C = covariance.coh_mat_single(
+                cur_samples, neighbor_mask=np.empty((0,), dtype=bool)
+            )
             npt.assert_array_almost_equal(expected_cov[r, c, :, :], cur_C)
 
 

@@ -10,7 +10,7 @@ from matplotlib import patches
 from dolphin import shp, stack
 
 
-def plot(
+def plot_shps(
     slc_stack,
     mean,
     var,
@@ -196,7 +196,7 @@ def get_cli_args():
 def run_cli():
     """Run the command line interface."""
     args = get_cli_args()
-    plot(
+    plot_shps(
         nmap_filename=args.nmap_file,
         slc_stack_filename=args.slc_stack_file,
         slc_stack_bands=args.slc_stack_bands,

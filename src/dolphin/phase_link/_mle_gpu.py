@@ -20,7 +20,7 @@ def run_gpu(
     beta: float = 0.01,
     reference_idx: int = 0,
     use_slc_amp: bool = True,
-    threads_per_block: tuple[int, int] = (16, 16),
+    threads_per_block: tuple[int, int] = (8, 8),
     neighbor_arrays: Optional[np.ndarray] = None,
     free_mem: bool = False,
     **kwargs,
@@ -46,7 +46,7 @@ def run_gpu(
         or to set the SLC amplitude to 1.0. By default True.
     threads_per_block : tuple[int, int], optional
         The number of threads per block to use for the GPU kernel.
-        By default (16, 16)
+        By default (8, 8)
     neighbor_arrays : np.ndarray, optional
         The neighbor arrays to use for SHP, shape = (n_rows, n_cols, *window_shape).
         If None, a rectangular window is used. By default None.
