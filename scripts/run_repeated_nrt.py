@@ -2,7 +2,8 @@
 from __future__ import annotations
 
 import argparse
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import os
+from concurrent.futures import ThreadPoolExecutor  # , as_completed
 from pathlib import Path
 from typing import Optional, Sequence
 
@@ -28,33 +29,34 @@ def _create_cfg(
     half_window_size: tuple[int, int] = (11, 5),
     first_ministack: bool = False,
     shp_method: ShpMethod = ShpMethod.GLRT,
+    amplitude_mean_files=[],
+    amplitude_dispersion_files=[],
 ):
     strides = {"x": 6, "y": 3}
     if first_ministack:
         interferogram_network = dict(
             network_type=InterferogramNetworkType.SINGLE_REFERENCE
         )
+        workflow_name = WorkflowName.STACK
     else:
         interferogram_network = dict(
             network_type=InterferogramNetworkType.MANUAL_INDEX,
             indexes=[(0, -1)],
         )
+        workflow_name = WorkflowName.SINGLE
 
     cfg = Workflow(
         # Things that change with each workflow run
         cslc_file_list=slc_files,
         interferogram_network=interferogram_network,
-        amplitude_mean_files=[],
-        amplitude_dispersion_files=[],
+        amplitude_mean_files=amplitude_mean_files,
+        amplitude_dispersion_files=amplitude_dispersion_files,
         # Configurable from CLI inputs:
         output_options=dict(
             strides=strides,
         ),
-        unwrap_options=dict(
-            unwrap_method="snaphu",
-        ),
         phase_linking=dict(
-            ministack_size=500,  # for single update, process in one ministack
+            ministack_size=1000,  # for single update, process in one ministack
             half_window={"x": half_window_size[0], "y": half_window_size[1]},
             shp_method=shp_method,
         ),
@@ -69,7 +71,13 @@ def _create_cfg(
         #     log_file=log_file,
         # )
         # Definite hard coded things
-        workflow_name=WorkflowName.SINGLE,
+        unwrap_options=dict(
+            unwrap_method="snaphu",
+            run_unwrap=False,
+            # CHANGEME: or else run in backgroun somehow?
+        ),
+        save_compressed_slc=True,  # always save, and only sometimes will we grab it
+        workflow_name=workflow_name,
     )
     return cfg
 
@@ -91,6 +99,7 @@ def get_cli_args() -> argparse.Namespace:
     parser.add_argument(
         "-ms",
         "--ministack-size",
+        type=int,
         default=15,
         help="Strides/decimation factor (x, y) (in pixels) to use when determining",
     )
@@ -115,6 +124,14 @@ def get_cli_args() -> argparse.Namespace:
         default=ShpMethod.GLRT,
         help="Method used to calculate the SHP.",
     )
+    parser.add_argument(
+        "--pre-compute",
+        action="store_true",
+        help=(
+            "Run the amplitude mean/dispersion pre-compute step (not the main"
+            " workflow)."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -122,34 +139,35 @@ def get_cli_args() -> argparse.Namespace:
 def compute_ps_files(
     burst_grouped_slc_files: dict[str, list[Filename]],
     burst_to_nodata_mask: dict[str, Filename],
-    max_workers: int = 3,
+    # max_workers: int = 3,
     ps_stack_size: int = 60,
     output_folder: Path = Path("precomputed_ps"),
 ):
     """Compute the mean/DA/PS files for each burst group."""
     all_amp_files, all_disp_files, all_ps_files = [], [], []
-    future_burst_dict = {}
-    with ThreadPoolExecutor(max_workers=max_workers) as exc:
-        for burst, file_list in burst_grouped_slc_files.items():
-            nodata_mask_file = burst_to_nodata_mask[burst]
-            fut = exc.submit(
-                _compute_burst_ps_files,
-                # amp_files, disp_files, ps_files = compute_burst_ps_files(
-                burst,
-                file_list,
-                nodata_mask_file=nodata_mask_file,
-                ps_stack_size=ps_stack_size,
-                output_folder=output_folder,
-            )
-            future_burst_dict[fut] = burst
+    # future_burst_dict = {}
+    # with ThreadPoolExecutor(max_workers=max_workers) as exc:
+    for burst, file_list in burst_grouped_slc_files.items():
+        nodata_mask_file = burst_to_nodata_mask[burst]
+        # fut = exc.submit(
+        # _compute_burst_ps_files,
+        amp_files, disp_files, ps_files = _compute_burst_ps_files(
+            burst,
+            file_list,
+            nodata_mask_file=nodata_mask_file,
+            ps_stack_size=ps_stack_size,
+            output_folder=output_folder,
+            # show_progress=False,
+        )
+        # future_burst_dict[fut] = burst
 
-        for future in as_completed(future_burst_dict.keys()):
-            burst = future_burst_dict[future]
-            amp_files, disp_files, ps_files = future.result()
+        # for future in as_completed(future_burst_dict.keys()):
+        # burst = future_burst_dict[future]
+        # amp_files, disp_files, ps_files = future.result()
 
-            all_amp_files.extend(amp_files)
-            all_disp_files.extend(disp_files)
-            all_ps_files.extend(ps_files)
+        all_amp_files.extend(amp_files)
+        all_disp_files.extend(disp_files)
+        all_ps_files.extend(ps_files)
 
         logger.info(f"Done with {burst}")
 
@@ -173,6 +191,8 @@ def _compute_burst_ps_files(
     date_list_all = vrt_all.dates
 
     nodata_mask = io.load_gdal(nodata_mask_file, masked=True).astype(bool).filled(False)
+    # invert the mask so 1s are the missing data pixels
+    nodata_mask = ~nodata_mask
 
     # TODO: fixed number of PS files? fixed time window?
     amp_files, disp_files, ps_files = [], [], []
@@ -194,9 +214,11 @@ def _compute_burst_ps_files(
             outfile=output_folder / f"{basename}.vrt",
             subdataset=OPERA_DATASET_NAME,
         )
-        cur_ps_file = output_folder / f"{basename}_ps_pixels.tif"
-        cur_amp_mean = output_folder / f"{basename}_amp_mean.tif"
-        cur_amp_dispersion = output_folder / f"{basename}_amp_dispersion.tif"
+        cur_ps_file = (output_folder / f"{basename}_ps_pixels.tif").resolve()
+        cur_amp_mean = (output_folder / f"{basename}_amp_mean.tif").resolve()
+        cur_amp_dispersion = (
+            output_folder / f"{basename}_amp_dispersion.tif"
+        ).resolve()
         if not all(f.exists() for f in [cur_ps_file, cur_amp_mean, cur_amp_dispersion]):
             ps.create_ps(
                 slc_vrt_file=cur_vrt,
@@ -204,6 +226,7 @@ def _compute_burst_ps_files(
                 output_amp_dispersion_file=cur_amp_dispersion,
                 output_file=cur_ps_file,
                 nodata_mask=nodata_mask,
+                block_size_gb=0.2,
             )
         else:
             logger.info(f"Skipping existing {basename} files in {output_folder}")
@@ -222,6 +245,7 @@ def create_nodata_masks(
     output_folder: Path = Path("nodata_masks"),
 ):
     """Create the nodata binary masks for each burst."""
+    output_folder.mkdir(exist_ok=True, parents=True)
     futures = []
     out_burst_to_file = {}
     with ThreadPoolExecutor(max_workers=max_workers) as exc:
@@ -240,11 +264,17 @@ def create_nodata_masks(
     return out_burst_to_file
 
 
-def main() -> None:
-    """Get the command line arguments and run the workflow."""
-    args = get_cli_args()
-    arg_dict = vars(args)
-    ministack_size = arg_dict.pop("ministack_size")
+def _verify_slcs(burst_grouped_slc_files: dict[str, list[Filename]]):
+    logger.info("Verifying each burst stack by creating a VRTStack...")
+    # Each burst needs to be the same size
+    for b, file_list in burst_grouped_slc_files.items():
+        stack.VRTStack(file_list, subdataset=OPERA_DATASET_NAME, write_file=False)
+    logger.info("Done.")
+
+
+@log_runtime
+def precompute_ps_files(arg_dict) -> None:
+    """Run the pre-compute step to get means/amp. dispersion for each burst."""
     all_slc_files = arg_dict.pop("slc_files")
 
     burst_grouped_slc_files = group_by_burst(all_slc_files)
@@ -257,28 +287,104 @@ def main() -> None:
 
     burst_to_nodata_mask = create_nodata_masks(burst_grouped_slc_files)
 
-    if not args.skip_verify:
-        logger.info(
-            f"Verifying all {len(all_slc_files)} total SLC files by creating a VRT"
-            " stack..."
-        )
-        stack.VRTStack(all_slc_files, subdataset=OPERA_DATASET_NAME, write_file=False)
-        logger.info("Done.")
+    if not arg_dict.pop("skip_verify"):
+        _verify_slcs(burst_grouped_slc_files=burst_grouped_slc_files)
 
-    compute_ps_files(burst_grouped_slc_files, burst_to_nodata_mask)
+    all_amp_files, all_disp_files, all_ps_files = compute_ps_files(
+        burst_grouped_slc_files, burst_to_nodata_mask
+    )
 
+
+@log_runtime
+def main(arg_dict: dict) -> None:
+    """Get the command line arguments and run the workflow."""
+    arg_dict = vars(args)
+    ministack_size = arg_dict.pop("ministack_size")
+    all_slc_files = arg_dict.pop("slc_files")
+
+    burst_grouped_slc_files = group_by_burst(all_slc_files)
+    #  {'t173_370312_iw2': [PosixPath('t173_370312_iw2_20170203.h5'),... ] }
+    date_grouped_slc_files = utils.group_by_date(all_slc_files)
+    #  { (datetime.date(2017, 5, 22),) : [PosixPath('t173_370311_iw1_20170522.h5'), ] }
+    logger.info(f"Found {len(all_slc_files)} total SLC files")
+    logger.info(f"  {len(date_grouped_slc_files)} unique dates,")
+    logger.info(f"  {len(burst_grouped_slc_files)} unique bursts.")
+    if not arg_dict.pop("skip_verify"):
+        _verify_slcs(burst_grouped_slc_files=burst_grouped_slc_files)
+
+    # Get the pre-compted PS files (assuming --pre-compute has been run)
+    all_amp_files = sorted(Path("precomputed_ps/").resolve().glob("*_amp_mean.tif"))
+    all_disp_files = sorted(
+        Path("precomputed_ps/").resolve().glob("*_amp_dispersion.tif")
+    )
+    # TODO: how to make it shift when the year changes for PS files
+
+    slc_idx_start = 0
+    slc_idx_end = ministack_size
+    cur_path = Path(f"stack_{slc_idx_start}_{slc_idx_end}")
+    cur_path.mkdir(exist_ok=True)
+    # TODO: use the context-manager change-then-back
+    os.chdir(cur_path)
+
+    # TODO: do i wanna somehow provide the burst nodata file?
     # Make the first ministack
-    cur_slc_files = all_slc_files[:ministack_size]
+    cur_slc_files = all_slc_files[:slc_idx_end]
     cfg = _create_cfg(
         slc_files=cur_slc_files,
         first_ministack=True,
+        amplitude_mean_files=all_amp_files,
+        amplitude_dispersion_files=all_disp_files,
         **arg_dict,
     )
 
-    # logger.info(f"Saving configuration to {str(outfile)}")
-    # cfg.to_yaml(outfile)
+    cfg.to_yaml("dolphin_config.yaml")
     s1_disp.run(cfg)
+    os.chdir("..")
+
+    # Rest of mini stacks in incremental-mode
+    comp_slc_files: list[Path] = []
+    slc_idx_end = ministack_size + 1
+    while slc_idx_end <= len(all_slc_files):
+        cur_path = Path(f"stack_{slc_idx_start}_{slc_idx_end}")
+        cur_path.mkdir(exist_ok=True)
+        os.chdir(cur_path)
+
+        logger.info(f"***** START: {cur_path} *****")
+        # Get the nearest amplitude mean/dispersion files
+        cur_slc_files = all_slc_files[slc_idx_start:slc_idx_end].copy()
+        cfg = _create_cfg(
+            slc_files=comp_slc_files + cur_slc_files,
+            amplitude_mean_files=all_amp_files,
+            amplitude_dispersion_files=all_disp_files,
+            **arg_dict,
+        )
+        cfg.to_yaml("dolphin_config.yaml")
+        s1_disp.run(cfg)
+
+        slc_idx_end += 1
+
+        # On the step before we hit double `ministack_size`,
+        # archive, shrink, and pull another compressed SLC to replace.
+        if len(cur_slc_files) == 2 * ministack_size - 1:
+            # time to shrink!
+            # Get the compressed SLC that was output
+            comp_slc_path = Path("output/compressed_slcs/")
+            new_comp_slcs = list(comp_slc_path.glob("*.h5"))
+            assert len(new_comp_slcs) == 1
+            comp_slc_files.append(new_comp_slcs[0].resolve())
+
+            # Move the front forward one ministack
+            slc_idx_start += ministack_size
+
+        logger.info(f"***** END: {cur_path} *****")
+
+        os.chdir("..")
 
 
 if __name__ == "__main__":
-    main()
+    args = get_cli_args()
+    arg_dict = vars(args)
+    if arg_dict.pop("pre_compute"):
+        precompute_ps_files(arg_dict)
+    else:
+        main(arg_dict)
