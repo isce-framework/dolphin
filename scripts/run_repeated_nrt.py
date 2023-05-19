@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import os
 from concurrent.futures import ThreadPoolExecutor  # , as_completed
+from itertools import chain
 from pathlib import Path
 from typing import Optional, Sequence
 
@@ -102,11 +103,6 @@ def get_cli_args() -> argparse.Namespace:
         type=int,
         default=15,
         help="Strides/decimation factor (x, y) (in pixels) to use when determining",
-    )
-    parser.add_argument(
-        "--skip-verify",
-        action="store_true",
-        help="Dont open all GSLCs to verify they are valid.",
     )
     parser.add_argument(
         "-hw",
@@ -264,12 +260,24 @@ def create_nodata_masks(
     return out_burst_to_file
 
 
-def _verify_slcs(burst_grouped_slc_files: dict[str, list[Filename]]):
-    logger.info("Verifying each burst stack by creating a VRTStack...")
+def _form_burst_vrt_stacks(
+    burst_grouped_slc_files: dict[str, list[Filename]]
+) -> dict[str, stack.VRTStack]:
+    logger.info("For each burst, creating a VRTStack...")
     # Each burst needs to be the same size
+    burst_to_vrt_stack = {}
     for b, file_list in burst_grouped_slc_files.items():
-        stack.VRTStack(file_list, subdataset=OPERA_DATASET_NAME, write_file=False)
+        logger.info(f"Checking {len(file_list)} files for {b}")
+        outfile = Path(f"slc_stack_{b}.vrt")
+        if not outfile.exists():
+            vrt = stack.VRTStack(
+                file_list, subdataset=OPERA_DATASET_NAME, outfile=outfile
+            )
+        else:
+            vrt = stack.VRTStack.from_vrt_file(outfile)
+        burst_to_vrt_stack[b] = vrt
     logger.info("Done.")
+    return burst_to_vrt_stack
 
 
 @log_runtime
@@ -287,11 +295,16 @@ def precompute_ps_files(arg_dict) -> None:
 
     burst_to_nodata_mask = create_nodata_masks(burst_grouped_slc_files)
 
-    if not arg_dict.pop("skip_verify"):
-        _verify_slcs(burst_grouped_slc_files=burst_grouped_slc_files)
-
     all_amp_files, all_disp_files, all_ps_files = compute_ps_files(
         burst_grouped_slc_files, burst_to_nodata_mask
+    )
+
+
+def _get_all_slc_files(burst_to_vrt_stack, start_idx, end_idx):
+    return list(
+        chain.from_iterable(
+            [v.file_list[start_idx:end_idx] for v in burst_to_vrt_stack.values()]
+        )
     )
 
 
@@ -300,7 +313,8 @@ def main(arg_dict: dict) -> None:
     """Get the command line arguments and run the workflow."""
     arg_dict = vars(args)
     ministack_size = arg_dict.pop("ministack_size")
-    all_slc_files = arg_dict.pop("slc_files")
+    # TODO: verify this is fine to sort them by date?
+    all_slc_files = sorted(arg_dict.pop("slc_files"))
 
     burst_grouped_slc_files = group_by_burst(all_slc_files)
     #  {'t173_370312_iw2': [PosixPath('t173_370312_iw2_20170203.h5'),... ] }
@@ -309,8 +323,10 @@ def main(arg_dict: dict) -> None:
     logger.info(f"Found {len(all_slc_files)} total SLC files")
     logger.info(f"  {len(date_grouped_slc_files)} unique dates,")
     logger.info(f"  {len(burst_grouped_slc_files)} unique bursts.")
-    if not arg_dict.pop("skip_verify"):
-        _verify_slcs(burst_grouped_slc_files=burst_grouped_slc_files)
+
+    burst_to_vrt_stack = _form_burst_vrt_stacks(
+        burst_grouped_slc_files=burst_grouped_slc_files
+    )
 
     # Get the pre-compted PS files (assuming --pre-compute has been run)
     all_amp_files = sorted(Path("precomputed_ps/").resolve().glob("*_amp_mean.tif"))
@@ -327,8 +343,9 @@ def main(arg_dict: dict) -> None:
     os.chdir(cur_path)
 
     # TODO: do i wanna somehow provide the burst nodata file?
+
     # Make the first ministack
-    cur_slc_files = all_slc_files[:slc_idx_end]
+    cur_slc_files = _get_all_slc_files(burst_to_vrt_stack, slc_idx_start, slc_idx_end)
     cfg = _create_cfg(
         slc_files=cur_slc_files,
         first_ministack=True,
@@ -351,7 +368,9 @@ def main(arg_dict: dict) -> None:
 
         logger.info(f"***** START: {cur_path} *****")
         # Get the nearest amplitude mean/dispersion files
-        cur_slc_files = all_slc_files[slc_idx_start:slc_idx_end].copy()
+        cur_slc_files = _get_all_slc_files(
+            burst_to_vrt_stack, slc_idx_start, slc_idx_end
+        )
         cfg = _create_cfg(
             slc_files=comp_slc_files + cur_slc_files,
             amplitude_mean_files=all_amp_files,
@@ -368,10 +387,11 @@ def main(arg_dict: dict) -> None:
         if len(cur_slc_files) == 2 * ministack_size - 1:
             # time to shrink!
             # Get the compressed SLC that was output
-            comp_slc_path = Path("output/compressed_slcs/")
+            comp_slc_path = Path("output/compressed_slcs/").resolve()
             new_comp_slcs = list(comp_slc_path.glob("*.h5"))
-            assert len(new_comp_slcs) == 1
-            comp_slc_files.append(new_comp_slcs[0].resolve())
+            # assert len(new_comp_slcs) == 1
+            # comp_slc_files.append(new_comp_slcs[0].resolve())
+            comp_slc_files.extend(new_comp_slcs)
 
             # Move the front forward one ministack
             slc_idx_start += ministack_size
