@@ -29,6 +29,7 @@ def _create_cfg(
     slc_files: Sequence[Filename],
     half_window_size: tuple[int, int] = (11, 5),
     first_ministack: bool = False,
+    run_unwrap: bool = False,
     shp_method: ShpMethod = ShpMethod.GLRT,
     amplitude_mean_files=[],
     amplitude_dispersion_files=[],
@@ -74,7 +75,7 @@ def _create_cfg(
         # Definite hard coded things
         unwrap_options=dict(
             unwrap_method="snaphu",
-            run_unwrap=False,
+            run_unwrap=run_unwrap,
             # CHANGEME: or else run in backgroun somehow?
         ),
         save_compressed_slc=True,  # always save, and only sometimes will we grab it
@@ -119,6 +120,11 @@ def get_cli_args() -> argparse.Namespace:
         choices=[s.value for s in ShpMethod],
         default=ShpMethod.GLRT,
         help="Method used to calculate the SHP.",
+    )
+    parser.add_argument(
+        "--run-unwrap",
+        action="store_true",
+        help="Run the unwrapping stack after phase linking.",
     )
     parser.add_argument(
         "--pre-compute",
@@ -315,14 +321,18 @@ def main(arg_dict: dict) -> None:
     ministack_size = arg_dict.pop("ministack_size")
     # TODO: verify this is fine to sort them by date?
     all_slc_files = sorted(arg_dict.pop("slc_files"))
-
-    burst_grouped_slc_files = group_by_burst(all_slc_files)
-    #  {'t173_370312_iw2': [PosixPath('t173_370312_iw2_20170203.h5'),... ] }
-    date_grouped_slc_files = utils.group_by_date(all_slc_files)
-    #  { (datetime.date(2017, 5, 22),) : [PosixPath('t173_370311_iw1_20170522.h5'), ] }
     logger.info(f"Found {len(all_slc_files)} total SLC files")
-    logger.info(f"  {len(date_grouped_slc_files)} unique dates,")
-    logger.info(f"  {len(burst_grouped_slc_files)} unique bursts.")
+
+    # format of `group_by_burst`:
+    #   {'t173_370312_iw2': [PosixPath('t173_370312_iw2_20170203.h5'),... ] }
+    burst_grouped_slc_files = group_by_burst(all_slc_files)
+    num_bursts = len(burst_grouped_slc_files)
+    logger.info(f"  {num_bursts} unique bursts.")
+    # format of `group_by_date`:
+    #  { (datetime.date(2017, 5, 22),) : [PosixPath('t173_370311_iw1_20170522.h5'), ] }
+    date_grouped_slc_files = utils.group_by_date(all_slc_files)
+    num_dates = len(date_grouped_slc_files)
+    logger.info(f"  {num_dates} unique dates,")
 
     burst_to_vrt_stack = _form_burst_vrt_stacks(
         burst_grouped_slc_files=burst_grouped_slc_files
@@ -337,6 +347,7 @@ def main(arg_dict: dict) -> None:
 
     slc_idx_start = 0
     slc_idx_end = ministack_size
+    max_stack_size = 2 * ministack_size - 1  # Size at which we archive/shrink
     cur_path = Path(f"stack_{slc_idx_start}_{slc_idx_end}")
     cur_path.mkdir(exist_ok=True)
     # TODO: use the context-manager change-then-back
@@ -361,7 +372,7 @@ def main(arg_dict: dict) -> None:
     # Rest of mini stacks in incremental-mode
     comp_slc_files: list[Path] = []
     slc_idx_end = ministack_size + 1
-    while slc_idx_end <= len(all_slc_files):
+    while slc_idx_end <= num_dates:
         cur_path = Path(f"stack_{slc_idx_start}_{slc_idx_end}")
         cur_path.mkdir(exist_ok=True)
         os.chdir(cur_path)
@@ -380,11 +391,10 @@ def main(arg_dict: dict) -> None:
         cfg.to_yaml("dolphin_config.yaml")
         s1_disp.run(cfg)
 
-        slc_idx_end += 1
-
         # On the step before we hit double `ministack_size`,
         # archive, shrink, and pull another compressed SLC to replace.
-        if len(cur_slc_files) == 2 * ministack_size - 1:
+        stack_size = slc_idx_end - slc_idx_start
+        if stack_size == max_stack_size:
             # time to shrink!
             # Get the compressed SLC that was output
             comp_slc_path = Path("output/compressed_slcs/").resolve()
@@ -396,6 +406,7 @@ def main(arg_dict: dict) -> None:
             # Move the front forward one ministack
             slc_idx_start += ministack_size
 
+        slc_idx_end += 1
         logger.info(f"***** END: {cur_path} *****")
 
         os.chdir("..")
