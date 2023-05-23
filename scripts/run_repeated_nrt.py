@@ -6,7 +6,7 @@ import os
 from concurrent.futures import ThreadPoolExecutor  # , as_completed
 from itertools import chain
 from pathlib import Path
-from typing import Optional, Sequence
+from typing import Sequence
 
 from dolphin import io, ps, stack, utils
 from dolphin._log import get_log, log_runtime
@@ -180,7 +180,7 @@ def compute_ps_files(
 def _compute_burst_ps_files(
     burst: str,
     file_list_all: list[Filename],
-    nodata_mask_file: Optional[Filename] = None,
+    nodata_mask_file: Filename,
     ps_stack_size: int = 60,
     output_folder: Path = Path("precomputed_ps"),
 ) -> tuple[list[Path], list[Path], list[Path]]:
