@@ -366,7 +366,7 @@ def _get_resolution(filenames: Iterable[Filename]) -> tuple[float, float]:
 def get_combined_bounds_gt(
     *filenames: Filename,
     target_aligned_pixels: bool = False,
-    out_bounds: Optional[Bbox],
+    out_bounds: Optional[Bbox] = None,
     out_bounds_epsg: Optional[int] = None,
 ) -> tuple[Bbox, list[float]]:
     """Get the bounds and geotransform of the combined image.
