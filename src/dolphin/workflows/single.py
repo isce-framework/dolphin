@@ -78,8 +78,9 @@ def run_wrapped_phase_single(
         ps_mask = np.zeros_like(nodata_mask)
 
     if amp_mean_file is not None and amp_dispersion_file is not None:
-        amp_mean = io.load_gdal(amp_mean_file, masked=True)
-        amp_dispersion = io.load_gdal(amp_dispersion_file, masked=True)
+        # Note: have to fill, since numba (as of 0.57) can't do masked arrays
+        amp_mean = io.load_gdal(amp_mean_file, masked=True).filled(np.nan)
+        amp_dispersion = io.load_gdal(amp_dispersion_file, masked=True).filled(np.nan)
         # convert back to variance from dispersion: amp_disp = std_dev / mean
         amp_variance = (amp_dispersion * amp_mean) ** 2
     else:
@@ -197,9 +198,6 @@ def run_wrapped_phase_single(
             amp_stack=amp_stack,
             method=shp_method,
         )
-        # Save the count for each pixel
-        shp_counts = np.sum(neighbor_arrays, axis=(-2, -1))
-
         # Run the phase linking process on the current ministack
         try:
             cur_mle_stack, tcorr = run_mle(
@@ -243,7 +241,8 @@ def run_wrapped_phase_single(
         # Save the temporal coherence blocks
         writer.queue_write(tcorr, tcorr_file, out_row_start, out_col_start)
 
-        # Save the SHP counts (if not using Rect window)
+        # Save the SHP counts for each pixel (if not using Rect window)
+        shp_counts = np.sum(neighbor_arrays[rows, cols], axis=(-2, -1))
         writer.queue_write(shp_counts, shp_counts_file, out_row_start, out_col_start)
 
         # Compress the ministack using only the non-compressed SLCs

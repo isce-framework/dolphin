@@ -105,7 +105,6 @@ def simulate_C(
 
     C = _sim_coherence_mat(t, gamma0, gamma_inf, Tau0, signal_phase)
     return C, truth
-    # return C
 
 
 @njit(cache=True)
@@ -142,11 +141,11 @@ def _sim_signal(
     # we divided std by 2 since we're subtracting the first value
     signal_phase = signal_phase - signal_phase[0]
 
-    # wrap the phase to -pi to p
-    signal_phase = np.angle(np.exp(1j * signal_phase))
-    truth = np.angle(np.exp(1j * (truth - truth[0])))
+    # wrap the signal_phase to -pi to pi
+    signal_phase = np.mod(signal_phase + np.pi, 2 * np.pi) - np.pi
+    truth = np.mod((truth - truth[0]) + np.pi, 2 * np.pi) - np.pi
 
-    return signal_phase, truth
+    return signal_phase.astype(np.float64), truth.astype(np.float64)
 
 
 def rmse(x, y):

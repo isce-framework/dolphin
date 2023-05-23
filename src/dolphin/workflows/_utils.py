@@ -71,6 +71,9 @@ def group_by_burst(
         file_list, burst_ids = zip(*file_burst_tups)  # type: ignore
         return file_list
 
+    if not file_list:
+        return {}
+
     sorted_file_list = sort_by_burst_id(file_list)
     # Now collapse into groups, sorted by the burst_id
     grouped_images = {
@@ -228,6 +231,13 @@ def make_nodata_mask(
         else:
             logger.info(f"Overwriting {out_file} since overwrite=True.")
             Path(out_file).unlink()
+
+    # Check these are the right format to get nodata polygons
+    try:
+        test_f = f"NETCDF:{opera_file_list[0]}:{OPERA_DATASET_NAME}"
+        io.get_raster_xysize(test_f)
+    except RuntimeError:
+        raise ValueError(f"Unable to open {test_f}")
 
     # convert pixels to degrees lat/lon
     # TODO: more robust way to get the pixel size... this is a hack

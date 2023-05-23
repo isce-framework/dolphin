@@ -1,7 +1,6 @@
 """stitching.py: utilities for combining interferograms into larger images."""
 from __future__ import annotations
 
-import itertools
 import math
 import tempfile
 from datetime import date
@@ -12,10 +11,11 @@ from typing import Iterable, Optional, Sequence
 import numpy as np
 from numpy.typing import DTypeLike
 from osgeo import gdal, osr
+from pyproj import Transformer
 
 from dolphin import io, utils
 from dolphin._log import get_log
-from dolphin._types import Filename
+from dolphin._types import Bbox, Filename
 
 logger = get_log(__name__)
 
@@ -56,7 +56,7 @@ def merge_by_date(
     This function is intended to be used with filenames that contain date pairs
     (from interferograms).
     """
-    grouped_images = _group_by_date(image_file_list, file_date_fmt=file_date_fmt)
+    grouped_images = utils.group_by_date(image_file_list, file_date_fmt=file_date_fmt)
     stitched_acq_times = {}
 
     for dates, cur_images in grouped_images.items():
@@ -86,6 +86,8 @@ def merge_images(
     file_list: Sequence[Filename],
     outfile: Filename,
     target_aligned_pixels: bool = True,
+    out_bounds: Optional[Bbox] = None,
+    out_bounds_epsg: Optional[int] = None,
     driver: str = "ENVI",
     out_nodata: Optional[float] = 0,
     out_dtype: Optional[DTypeLike] = None,
@@ -106,6 +108,13 @@ def merge_images(
         are integer multiples of pixel size, matching the ``-tap``
         options of GDAL utilities.
         Default is True.
+    out_bounds: Optional[tuple[float]]
+        if provided, forces the output image bounds to
+            (left, bottom, right, top).
+        Otherwise, computes from the outside of all input images.
+    out_bounds_epsg: Optional[int]
+        EPSG code for the `out_bounds`.
+        If not provided, assumed to match the projections of `file_list`.
     driver : str
         GDAL driver to use for output file. Default is ENVI.
     out_nodata : Optional[float]
@@ -146,7 +155,7 @@ def merge_images(
     temp_dir = tempfile.TemporaryDirectory()
     # temp_dir = Path("test_ifgs")
 
-    warped_file_list = _warp_to_projection(
+    warped_file_list = warp_to_projection(
         file_list,
         # temp_dir,
         Path(temp_dir.name),
@@ -155,8 +164,11 @@ def merge_images(
     )
     # Compute output array shape. We guarantee it will cover the output
     # bounds completely
-    bounds, gt = _get_combined_bounds_gt(  # type: ignore
-        *warped_file_list, target_aligned_pixels=target_aligned_pixels
+    bounds, gt = get_combined_bounds_gt(  # type: ignore
+        *warped_file_list,
+        target_aligned_pixels=target_aligned_pixels,
+        out_bounds=out_bounds,
+        out_bounds_epsg=out_bounds_epsg,
     )
 
     out_shape = _get_output_shape(bounds, res)
@@ -236,47 +248,6 @@ def merge_images(
     temp_dir.cleanup()
 
 
-def _group_by_date(
-    file_list: Iterable[Filename], file_date_fmt: str = io.DEFAULT_DATETIME_FORMAT
-):
-    """Combine Sentinel objects by date.
-
-    Parameters
-    ----------
-    file_list: Iterable[Filename]
-        path to folder containing CSLC files
-    file_date_fmt: str
-        format of the date in the filename.
-        Default is [dolphin.io.DEFAULT_DATETIME_FORMAT][]
-
-    Returns
-    -------
-    dict
-        key is the date of the SLC acquisition
-        Value is a list of Paths on that date:
-        [(datetime.date(2017, 10, 13),
-          [Path(...)
-            Path(...),
-            ...]),
-         (datetime.date(2017, 10, 25),
-          [Path(...)
-            Path(...),
-            ...]),
-    """
-    sorted_file_list, _ = utils.sort_files_by_date(
-        file_list, file_date_fmt=file_date_fmt
-    )
-
-    # Now collapse into groups, sorted by the date
-    grouped_images = {
-        dates: list(g)
-        for dates, g in itertools.groupby(
-            sorted_file_list, key=lambda x: tuple(utils.get_dates(x))
-        )
-    }
-    return grouped_images
-
-
 def _blend_new_arr(
     cur_arr: np.ndarray, new_arr: np.ndarray, nodata_vals: Iterable[Optional[float]]
 ):
@@ -314,8 +285,8 @@ def _blend_new_arr(
     return cur_arr
 
 
-def _warp_to_projection(
-    filenames: Iterable[Filename],
+def warp_to_projection(
+    filenames: Sequence[Filename],
     dirname: Filename,
     projection: str,
     res: tuple[float, float],
@@ -328,7 +299,7 @@ def _warp_to_projection(
 
     Parameters
     ----------
-    filenames : Iterable[Filename]
+    filenames : Sequence[Filename]
         list of filenames to warp.
     dirname : Filename
         The directory to write the warped files to.
@@ -342,6 +313,11 @@ def _warp_to_projection(
     list[Filename]
         The warped filenames.
     """
+    if projection is None:
+        projection = _get_mode_projection(filenames)
+    if res is None:
+        res = _get_resolution(filenames)
+
     warped_files = []
     for idx, fn in enumerate(filenames):
         fn = Path(fn)
@@ -387,10 +363,12 @@ def _get_resolution(filenames: Iterable[Filename]) -> tuple[float, float]:
     return res[0]
 
 
-def _get_combined_bounds_gt(
+def get_combined_bounds_gt(
     *filenames: Filename,
     target_aligned_pixels: bool = False,
-) -> tuple[tuple[float, float, float, float], list]:
+    out_bounds: Optional[Bbox] = None,
+    out_bounds_epsg: Optional[int] = None,
+) -> tuple[Bbox, list[float]]:
     """Get the bounds and geotransform of the combined image.
 
     Parameters
@@ -399,11 +377,18 @@ def _get_combined_bounds_gt(
         list of filenames to combine
     target_aligned_pixels : bool
         if True, adjust output image bounds so that pixel coordinates
-        are integer multiples of pixel size, matching the ``-tap``.
+        are integer multiples of pixel size, matching the `-tap` GDAL option.
+    out_bounds: Optional[Bbox]
+        if provided, forces the output image bounds to
+            (left, bottom, right, top).
+        Otherwise, computes from the outside of all input images.
+    out_bounds_epsg: Optional[int]
+        The EPSG of `out_bounds`. If not provided, assumed to be the same
+        as the EPSG of all `filenames`.
 
     Returns
     -------
-    bounds : tuple[float]
+    bounds : Bbox
         (min_x, min_y, max_x, max_y)
     gt : list[float]
         geotransform of the combined image.
@@ -413,6 +398,8 @@ def _get_combined_bounds_gt(
     ys = []
     resolutions = set()
     projs = set()
+
+    # Check all files match in resolution/projection
     for fn in filenames:
         ds = gdal.Open(fspath(fn))
         left, bottom, right, top = io.get_raster_bounds(fn)
@@ -429,9 +416,17 @@ def _get_combined_bounds_gt(
         raise ValueError(f"The input files have different resolutions: {resolutions}. ")
     if len(projs) > 1:
         raise ValueError(f"The input files have different projections: {projs}. ")
-
     res = (abs(dx), abs(dy))
-    bounds = min(xs), min(ys), max(xs), max(ys)
+
+    if out_bounds is not None:
+        if out_bounds_epsg is not None:
+            dst_epsg = io.get_raster_crs(filenames[0]).to_epsg()
+            bounds = _reproject_bounds(out_bounds, out_bounds_epsg, dst_epsg)
+        else:
+            bounds = out_bounds  # type: ignore
+    else:
+        bounds = min(xs), min(ys), max(xs), max(ys)
+
     if target_aligned_pixels:
         bounds = _align_bounds(bounds, res)
 
@@ -455,6 +450,13 @@ def _align_bounds(bounds: Iterable[float], res: tuple[float, float]):
     bottom = math.floor(bottom / res[1]) * res[1]
     top = math.ceil(top / res[1]) * res[1]
     return (left, bottom, right, top)
+
+
+def _reproject_bounds(bounds: Bbox, src_epsg: int, dst_epsg: int) -> Bbox:
+    t = Transformer.from_crs(src_epsg, dst_epsg, always_xy=True)
+    left, bottom, right, top = bounds
+    bbox: Bbox = (*t.transform(left, bottom), *t.transform(right, top))  # type: ignore
+    return bbox
 
 
 def _nodata_to_zero(

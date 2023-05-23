@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import datetime
+import itertools
 import math
 import re
 import resource
 import sys
 import warnings
+from contextlib import nullcontext
 from multiprocessing import cpu_count
 from pathlib import Path
 from typing import Iterable, Optional, Union
@@ -23,8 +25,13 @@ gdal.UseExceptions()
 logger = get_log(__name__)
 
 
-def progress():
+def progress(dummy=False):
     """Create a Progress bar context manager.
+
+    Parameters
+    ----------
+    dummy : bool, default = False
+        If True, skips showing and calls `contextlib.nullcontext`
 
     Usage
     -----
@@ -33,6 +40,9 @@ def progress():
     ...         pass
     10/10 Working... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 100% 0:00:00
     """
+    if dummy:
+        return nullcontext()
+
     return Progress(
         SpinnerColumn(),
         MofNCompleteColumn(),
@@ -228,6 +238,51 @@ def sort_files_by_date(
     # Unpack the sorted pairs with new sorted values
     file_list, dates = zip(*file_dates)  # type: ignore
     return list(file_list), list(dates)
+
+
+def group_by_date(
+    file_list: Iterable[Filename], file_date_fmt: Optional[str] = None
+) -> dict[tuple[datetime.date, ...], list[Filename]]:
+    """Combine files by date into a dict.
+
+    Parameters
+    ----------
+    file_list: Iterable[Filename]
+        Path to folder containing files with dates in the filename.
+    file_date_fmt: str
+        Format of the date in the filename.
+        Default is [dolphin.io.DEFAULT_DATETIME_FORMAT][]
+
+    Returns
+    -------
+    dict
+        key is a list of dates in the filenames.
+        Value is a list of Paths on that date.
+        E.g.:
+        {(datetime.date(2017, 10, 13),
+          [Path(...)
+            Path(...),
+            ...]),
+         (datetime.date(2017, 10, 25),
+          [Path(...)
+            Path(...),
+            ...]),
+        }
+    """
+    if file_date_fmt is None:
+        import dolphin.io
+
+        file_date_fmt = dolphin.io.DEFAULT_DATETIME_FORMAT
+    sorted_file_list, _ = sort_files_by_date(file_list, file_date_fmt=file_date_fmt)
+
+    # Now collapse into groups, sorted by the date
+    grouped_images = {
+        dates: list(g)
+        for dates, g in itertools.groupby(
+            sorted_file_list, key=lambda x: tuple(get_dates(x))
+        )
+    }
+    return grouped_images
 
 
 @njit

@@ -45,15 +45,11 @@ def run(cfg: Workflow, debug: bool = False) -> tuple[list[Path], Path, Path]:
     # Make a VRT pointing to the input SLC files
     # #############################################
     subdataset = cfg.input_options.subdataset
-    vrt_path = cfg.scratch_directory / "slc_stack.vrt"
-    if vrt_path.exists():
-        vrt_stack = stack.VRTStack.from_vrt_file(vrt_path)
-    else:
-        vrt_stack = stack.VRTStack(
-            input_file_list,
-            subdataset=subdataset,
-            outfile=cfg.scratch_directory / "slc_stack.vrt",
-        )
+    vrt_stack = stack.VRTStack(
+        input_file_list,
+        subdataset=subdataset,
+        outfile=cfg.scratch_directory / "slc_stack.vrt",
+    )
 
     # Make the nodata mask from the polygons, if we're using OPERA CSLCs
     try:
@@ -187,11 +183,12 @@ def run(cfg: Workflow, debug: bool = False) -> tuple[list[Path], Path, Path]:
             ref_idx, sec_idx = idxs[0]
             file1, file2 = vrt_stack.file_list[ref_idx], vrt_stack.file_list[sec_idx]
             date1, date2 = utils.get_dates(file1)[0], utils.get_dates(file2)[0]
-            suffix = utils.full_suffix(file2)
+            # We're just copying, so get the extension of the file to copy
+            to_copy = phase_linked_slcs[sec_idx]
+            suffix = utils.full_suffix(to_copy)
             ifg_name = ifg_dir / (io._format_date_pair(date1, date2) + suffix)
-            # We're just copying
-            shutil.copyfile(phase_linked_slcs[sec_idx], ifg_name)
-            ifg_file_list = [ifg_name]
+            shutil.copyfile(to_copy, ifg_name)
+            ifg_file_list = [ifg_name]  # return just the one as the "network"
         else:
             network = Network(
                 slc_list=phase_linked_slcs,

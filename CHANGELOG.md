@@ -13,11 +13,13 @@
 - Also included a script to view the window in an interactive matplotlib figure (matplotlib must be installed separately)
 - Added a simple method to check for adjacent-pixel unwrapping errors in `unwrap.compute_phase_diffs`
 - Adds a method `utils.get_cpu_count` which returns either `os.cpu_count`, or (if running in a Docker container) the number of CPUs allocated by Docker
+- Created a script to test the incremental/near-real-time version of phase linking
 
 **Changes**
 
 - Passing an existing file to `VRTStack` will no longer error unless `fail_on_overwrite=True`. The default just prints out the overwrite is happening. This prevents multiple runs in the same folder from errorings just for creating a reference to the SLC files.
 - The environment variable `NUMBA_NUM_THREADS` is set using the passed in config to prevent numba from using all CPUs during `prange` calls
+- The `sequential.py` module uses a different implementation of the sequential estimator to avoid the need for a datum adjustment.
 
 **Dependencies**
 
@@ -93,7 +95,6 @@ Added requirements:
 
 Added requirements:
 
-- pyproj>=3.2
 - rich>=12.0
 - threadpoolctl>=3.0
 - isce3>=0.8.0

@@ -102,7 +102,8 @@ def run_wrapped_phase_sequential(
             output_folder=cur_output_folder,
             half_window=half_window,
             strides=strides,
-            reference_idx=mini_idx,
+            # TODO: what situations do we need to set reference-idx != 0
+            reference_idx=0,
             beta=beta,
             mask_file=mask_file,
             ps_mask_file=ps_mask_file,

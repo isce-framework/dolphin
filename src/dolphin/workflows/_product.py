@@ -395,11 +395,15 @@ def create_compressed_products(comp_slc_dict: dict[str, Path], output_dir: Filen
     group_name = "/".join(parts)
 
     for burst, comp_slc_file in comp_slc_dict.items():
+        outname = Path(output_dir) / form_name(comp_slc_file, burst)
+        if outname.exists():
+            logger.info(f"Skipping existing {outname}")
+            continue
+
         crs = io.get_raster_crs(comp_slc_file)
         gt = io.get_raster_gt(comp_slc_file)
         data = _zero_mantissa(io.load_gdal(comp_slc_file))
 
-        outname = Path(output_dir) / form_name(comp_slc_file, burst)
         logger.info(f"Writing {outname}")
         with h5py.File(outname, "w") as hf:
             # add type to root for GDAL recognition of complex datasets in NetCDF
