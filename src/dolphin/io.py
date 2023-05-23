@@ -12,6 +12,7 @@ from os import fspath
 from pathlib import Path
 from typing import Any, Generator, Optional, Sequence, Union
 
+import h5py
 import numpy as np
 from numpy.typing import ArrayLike, DTypeLike
 from osgeo import gdal
@@ -495,6 +496,8 @@ def write_arr(
 
     # Write the actual data
     if arr is not None:
+        if arr.ndim == 2:
+            arr = arr[np.newaxis, ...]
         for i in range(fi.nbands):
             logger.debug(f"Writing band {i+1}/{fi.nbands}")
             bnd = ds_out.GetRasterBand(i + 1)
@@ -539,9 +542,22 @@ def write_block(
         # Make into 3D array shaped (1, rows, cols)
         cur_block = cur_block[np.newaxis, ...]
     # filename must be pre-made
-    if not Path(filename).exists():
+    filename = Path(filename)
+    if not filename.exists():
         raise ValueError(f"File {filename} does not exist")
 
+    if filename.suffix in (".h5", ".hdf5", ".nc"):
+        _write_hdf5(cur_block, filename, row_start, col_start)
+    else:
+        _write_gdal(cur_block, filename, row_start, col_start)
+
+
+def _write_gdal(
+    cur_block: ArrayLike,
+    filename: Filename,
+    row_start: int,
+    col_start: int,
+):
     ds = gdal.Open(fspath(filename), gdal.GA_Update)
     for b_idx, cur_image in enumerate(cur_block, start=1):
         bnd = ds.GetRasterBand(b_idx)
@@ -551,6 +567,19 @@ def write_block(
         bnd.FlushCache()
         bnd = None
     ds = None
+
+
+def _write_hdf5(
+    cur_block: ArrayLike,
+    filename: Filename,
+    row_start: int,
+    col_start: int,
+):
+    nrows, ncols = cur_block.shape[-2:]
+    row_slice = slice(row_start, row_start + nrows)
+    col_slice = slice(col_start, col_start + ncols)
+    with h5py.File(filename, "a") as hf:
+        hf[row_slice, col_slice] = cur_block
 
 
 @dataclass
