@@ -110,7 +110,11 @@ def run_mle(
             f"nodata_mask.shape={nodata_mask.shape}, ps_mask.shape={ps_mask.shape},"
             f" but != SLC (rows, cols) {rows, cols}"
         )
-    nodata_mask |= np.all(np.isnan(slc_stack), axis=0)
+    # for any area that has nans in the SLC stack, mark it as nodata
+    nodata_mask |= np.any(np.isnan(slc_stack), axis=0)
+    # Make sure the PS mask didn't have extra burst borders that are nodata here
+    ps_mask[nodata_mask] = False
+
     # TODO: Any other masks we need?
     ignore_mask = np.logical_or.reduce((nodata_mask, ps_mask))
 

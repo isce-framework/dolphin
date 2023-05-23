@@ -275,10 +275,10 @@ def _blend_new_arr(
     for nodata in set(nodata_vals):
         if nodata is not None:
             if np.isnan(nodata):
-                nd_mask = np.isnan(new_arr)
+                new_good_pixels = ~np.isnan(new_arr)
             else:
-                nd_mask = new_arr == nodata
-            good_pixels = good_pixels & ~nd_mask
+                new_good_pixels = new_arr != nodata
+            good_pixels &= new_good_pixels
 
     # Replace the values in cur_arr with new_arr, where new_arr is not nodata
     cur_arr[good_pixels] = new_arr[good_pixels]
