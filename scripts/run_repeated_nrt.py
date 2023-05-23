@@ -6,7 +6,7 @@ import os
 from concurrent.futures import ThreadPoolExecutor  # , as_completed
 from itertools import chain
 from pathlib import Path
-from typing import Sequence
+from typing import Any, Sequence
 
 from dolphin import io, ps, stack, utils
 from dolphin._log import get_log, log_runtime
@@ -35,6 +35,7 @@ def _create_cfg(
     amplitude_dispersion_files=[],
 ):
     strides = {"x": 6, "y": 3}
+    interferogram_network: dict[str, Any]
     if first_ministack:
         interferogram_network = dict(
             network_type=InterferogramNetworkType.SINGLE_REFERENCE
