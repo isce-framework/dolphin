@@ -18,7 +18,7 @@ from pyproj import CRS
 
 from dolphin._background import _DEFAULT_TIMEOUT, BackgroundReader, BackgroundWriter
 from dolphin._log import get_log
-from dolphin._types import Filename
+from dolphin._types import Bbox, Filename
 from dolphin.utils import gdal_to_numpy_type, numpy_to_gdal_type, progress
 
 gdal.UseExceptions()
@@ -255,8 +255,8 @@ def get_raster_gt(filename: Filename) -> list[float]:
 
     Returns
     -------
-    tuple[float, float, float, float, float, float]
-        Geotransform.
+    List[float]
+        6 floats representing a GDAL Geotransform.
     """
     ds = gdal.Open(fspath(filename))
     gt = ds.GetGeoTransform()
@@ -301,7 +301,7 @@ def get_raster_driver(filename: Filename) -> str:
 
 def get_raster_bounds(
     filename: Optional[Filename] = None, ds: Optional[gdal.Dataset] = None
-) -> tuple[float, float, float, float]:
+) -> Bbox:
     """Get the (left, bottom, right, top) bounds of the image."""
     if ds is None:
         if filename is None:
@@ -647,6 +647,7 @@ class EagerLoader(BackgroundReader):
         nodata_mask: Optional[ArrayLike] = None,
         queue_size: int = 1,
         timeout: float = _DEFAULT_TIMEOUT,
+        show_progress: bool = True,
     ):
         super().__init__(nq=queue_size, timeout=timeout, name="EagerLoader")
         self.filename = filename
@@ -665,6 +666,7 @@ class EagerLoader(BackgroundReader):
         self._nodata_mask = nodata_mask
         self._block_shape = block_shape
         self._nodata = get_raster_nodata(filename)
+        self._show_progress = show_progress
         if self._nodata is None:
             self._nodata = np.nan
 
@@ -690,7 +692,7 @@ class EagerLoader(BackgroundReader):
 
         s_iter = range(len(queued_slices))
         desc = f"Processing {self._block_shape} sized blocks..."
-        with progress() as p:
+        with progress(dummy=not self._show_progress) as p:
             for _ in p.track(s_iter, description=desc):
                 cur_block, (rows, cols) = self.get_data()
                 logger.debug(f"got data for {rows, cols}: {cur_block.shape}")

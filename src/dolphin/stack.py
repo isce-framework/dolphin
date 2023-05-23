@@ -11,7 +11,7 @@ from osgeo import gdal
 
 from dolphin import io, utils
 from dolphin._log import get_log
-from dolphin._types import Filename
+from dolphin._types import Bbox, Filename
 
 gdal.UseExceptions()
 logger = get_log(__name__)
@@ -57,6 +57,9 @@ class VRTStack:
     file_date_fmt : str, optional (default = "%Y%m%d")
         Format string for parsing the dates from the filenames.
         Passed to [dolphin.utils.get_dates][].
+    num_read_threads : int, optional
+        If provided and `num_read_threads > 1`, uses `threading` to read stack layers
+        in parallel. Default = 1, no threading.
     """
 
     def __init__(
@@ -67,7 +70,7 @@ class VRTStack:
         subdataset: Optional[str] = None,
         pixel_bbox: Optional[tuple[int, int, int, int]] = None,
         target_extent: Optional[tuple[float, float, float, float]] = None,
-        latlon_bbox: Optional[tuple[float, float, float, float]] = None,
+        latlon_bbox: Optional[Bbox] = None,
         sort_files: bool = True,
         nodata_value: Optional[float] = None,
         file_date_fmt: str = "%Y%m%d",
@@ -383,6 +386,7 @@ class VRTStack:
         max_bytes: Optional[float] = DEFAULT_BLOCK_BYTES,
         skip_empty: bool = True,
         nodata_mask: Optional[np.ndarray] = None,
+        show_progress: bool = True,
     ) -> Generator[tuple[np.ndarray, tuple[slice, slice]], None, None]:
         """Iterate over blocks of the stack.
 
@@ -406,6 +410,8 @@ class VRTStack:
             Optional mask indicating nodata values. If provided, will skip
             blocks that are entirely nodata.
             1s are the nodata values, 0s are valid data.
+        show_progress : bool, default=True
+            If true, displays a `rich` ProgressBar.
 
         Yields
         ------
@@ -422,6 +428,7 @@ class VRTStack:
             overlaps=overlaps,
             nodata_mask=nodata_mask,
             skip_empty=skip_empty,
+            show_progress=show_progress,
         )
         yield from self._loader.iter_blocks()
 
@@ -465,6 +472,8 @@ class VRTStack:
                 index = len(self) + index
             return self.read_stack(band=index + 1)
 
+        # TODO: raise an error if they try to skip like [::2, ::2]
+        # or pass it to read_stack... but I dont think I need to support it.
         n, rows, cols = index
         if isinstance(rows, int):
             rows = slice(rows, rows + 1)
@@ -476,12 +485,14 @@ class VRTStack:
             return self.read_stack(band=n + 1, rows=rows, cols=cols)
 
         bands = list(range(1, 1 + len(self)))[n]
-        data = [self.read_stack(band=i, rows=rows, cols=cols) for i in bands]
-        # TODO: should multithread this read?
-        # data = Parallel(n_jobs=min(len(bands), 10), prefer="threads")(
-        #     delayed(self.read_stack)(band=i, rows=rows, cols=cols) for i in bands
-        # )
-        return np.stack(data, axis=0).squeeze()
+        if len(bands) == len(self):
+            # This will use gdal's ds.ReadAsRaster, no iteration needed
+            data = self.read_stack(band=None, rows=rows, cols=cols)
+        else:
+            data = np.stack(
+                [self.read_stack(band=i, rows=rows, cols=cols) for i in bands], axis=0
+            )
+        return data.squeeze()
 
     @property
     def dtype(self):
