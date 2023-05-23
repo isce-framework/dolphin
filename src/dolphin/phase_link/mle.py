@@ -150,7 +150,9 @@ def run_mle(
 
     # Fill in the PS pixels from the original SLC stack, if it was given
     if np.any(ps_mask):
-        _fill_ps_pixels(mle_est, temp_coh, slc_stack, ps_mask, strides, avg_mag)
+        _fill_ps_pixels(
+            mle_est, temp_coh, slc_stack, ps_mask, strides, avg_mag, reference_idx
+        )
 
     return mle_est, temp_coh
 
@@ -286,7 +288,14 @@ def _check_all_nans(slc_stack):
 
 
 def _fill_ps_pixels(
-    mle_est, temp_coh, slc_stack, ps_mask, strides, avg_mag, use_max_ps: bool = False
+    mle_est: np.ndarray,
+    temp_coh: np.ndarray,
+    slc_stack: np.ndarray,
+    ps_mask: np.ndarray,
+    strides: dict[str, int],
+    avg_mag: np.ndarray,
+    reference_idx: int = 0,
+    use_max_ps: bool = False,
 ):
     """Fill in the PS locations in the MLE estimate with the original SLC data.
 
@@ -307,6 +316,9 @@ def _fill_ps_pixels(
     avg_mag : np.ndarray, optional
         The average magnitude of the SLC stack, used to to find the brightest
         PS pixels to fill within each look window.
+    reference_idx : int, default = 0
+        SLC to use as reference for PS pixels. All pixel values are multiplied
+        by the conjugate of
     use_max_ps : bool, optional
         If True, use the brightest PS pixel in each look window to fill in the
         MLE estimate. If False, use the average of all PS pixels in each look window.
@@ -334,7 +346,7 @@ def _fill_ps_pixels(
         # Get the indices of the brightest pixels within each look window
         slc_r_idxs, slc_c_idxs = _get_max_idxs(mag, strides["y"], strides["x"])
         # we're only filling where there are PS pixels
-        ref = np.conj(slc_stack[0][slc_r_idxs, slc_c_idxs])
+        ref = np.exp(-1j * np.angle(slc_stack[reference_idx][slc_r_idxs, slc_c_idxs]))
         for i in range(len(slc_stack)):
             mle_est[i][ps_mask_looked] = slc_stack[i][slc_r_idxs, slc_c_idxs] * ref
     else:
@@ -356,7 +368,9 @@ def _get_avg_ps(
     slc_stack_nanned = slc_stack.copy()
     slc_stack_nanned[:, ~ps_mask] = np.nan
     # Reference all ps pixels in the SLC stack to the first SLC
-    slc_stack_nanned[:, ps_mask] *= np.conj(slc_stack_nanned[0, ps_mask])[None]
+    slc_stack_nanned[:, ps_mask] *= np.exp(
+        -1j * np.angle(slc_stack_nanned[0, ps_mask])
+    )[None]
     # Then, take the average of all PS pixels within each look window
     return take_looks(
         slc_stack_nanned,
