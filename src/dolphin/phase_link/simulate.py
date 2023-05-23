@@ -137,16 +137,15 @@ def _sim_signal(
         truth += seasonal
 
     # adding random temporal signal (which simulates atmosphere + DEM error + ...)
-    phase = truth + std_random / 2 * np.random.randn(len(t))
+    signal_phase = truth + std_random / 2 * np.random.randn(len(t))
     # we divided std by 2 since we're subtracting the first value
-    phase = phase - phase[0]
+    signal_phase = signal_phase - signal_phase[0]
 
-    # wrap the phase to -pi to p
-    cpx_phase = np.angle(np.exp(1j * phase))
-    signal_phase = np.angle(cpx_phase).astype(np.float64)
-    truth = np.angle(np.exp(1j * (truth - truth[0]))).astype(np.float64)
+    # wrap the signal_phase to -pi to pi
+    signal_phase = np.mod(signal_phase + np.pi, 2 * np.pi) - np.pi
+    truth = np.mod((truth - truth[0]) + np.pi, 2 * np.pi) - np.pi
 
-    return signal_phase, truth
+    return signal_phase.astype(np.float64), truth.astype(np.float64)
 
 
 def rmse(x, y):
