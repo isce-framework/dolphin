@@ -84,7 +84,9 @@ def run(
         _remove_dir_if_empty(cfg.ps_options._directory)
 
     else:
-        wrapped_phase_cfgs = [("", cfg)]
+        # grab the only key (either a burst, or "") and use that
+        b = list(grouped_slc_files.keys())[0]
+        wrapped_phase_cfgs = [(b, cfg)]
     # ###########################
     # 1. Wrapped phase estimation
     # ###########################
