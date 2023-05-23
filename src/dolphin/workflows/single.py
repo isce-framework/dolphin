@@ -197,9 +197,6 @@ def run_wrapped_phase_single(
             amp_stack=amp_stack,
             method=shp_method,
         )
-        # Save the count for each pixel
-        shp_counts = np.sum(neighbor_arrays, axis=(-2, -1))
-
         # Run the phase linking process on the current ministack
         try:
             cur_mle_stack, tcorr = run_mle(
@@ -243,7 +240,8 @@ def run_wrapped_phase_single(
         # Save the temporal coherence blocks
         writer.queue_write(tcorr, tcorr_file, out_row_start, out_col_start)
 
-        # Save the SHP counts (if not using Rect window)
+        # Save the SHP counts for each pixel (if not using Rect window)
+        shp_counts = np.sum(neighbor_arrays[rows, cols], axis=(-2, -1))
         writer.queue_write(shp_counts, shp_counts_file, out_row_start, out_col_start)
 
         # Compress the ministack using only the non-compressed SLCs

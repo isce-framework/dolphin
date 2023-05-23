@@ -423,7 +423,7 @@ def get_combined_bounds_gt(
             dst_epsg = io.get_raster_crs(filenames[0]).to_epsg()
             bounds = _reproject_bounds(out_bounds, out_bounds_epsg, dst_epsg)
         else:
-            bounds = out_bounds
+            bounds = out_bounds  # type: ignore
     else:
         bounds = min(xs), min(ys), max(xs), max(ys)
 
