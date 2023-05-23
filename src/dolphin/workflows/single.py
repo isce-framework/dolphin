@@ -78,8 +78,9 @@ def run_wrapped_phase_single(
         ps_mask = np.zeros_like(nodata_mask)
 
     if amp_mean_file is not None and amp_dispersion_file is not None:
-        amp_mean = io.load_gdal(amp_mean_file, masked=True)
-        amp_dispersion = io.load_gdal(amp_dispersion_file, masked=True)
+        # Note: have to fill, since numba (as of 0.57) can't do masked arrays
+        amp_mean = io.load_gdal(amp_mean_file, masked=True).filled(np.nan)
+        amp_dispersion = io.load_gdal(amp_dispersion_file, masked=True).filled(np.nan)
         # convert back to variance from dispersion: amp_disp = std_dev / mean
         amp_variance = (amp_dispersion * amp_mean) ** 2
     else:
