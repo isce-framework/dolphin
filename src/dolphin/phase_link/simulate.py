@@ -105,7 +105,6 @@ def simulate_C(
 
     C = _sim_coherence_mat(t, gamma0, gamma_inf, Tau0, signal_phase)
     return C, truth
-    # return C
 
 
 @njit(cache=True)
@@ -143,8 +142,8 @@ def _sim_signal(
     signal_phase = signal_phase - signal_phase[0]
 
     # wrap the phase to -pi to p
-    signal_phase = np.angle(np.exp(1j * signal_phase))
-    truth = np.angle(np.exp(1j * (truth - truth[0])))
+    signal_phase = np.angle(np.exp(1j * signal_phase)).astype(np.float64)
+    truth = np.angle(np.exp(1j * (truth - truth[0]))).astype(np.float64)
 
     return signal_phase, truth
 
