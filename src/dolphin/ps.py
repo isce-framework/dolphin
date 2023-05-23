@@ -31,8 +31,10 @@ def create_ps(
     amp_dispersion_threshold: float = 0.25,
     existing_amp_mean_file: Optional[Filename] = None,
     existing_amp_dispersion_file: Optional[Filename] = None,
+    nodata_mask: Optional[np.ndarray] = None,
     update_existing: bool = False,
     block_size_gb: float = 1.0,
+    show_progress: bool = True,
 ):
     """Create the amplitude dispersion, mean, and PS files.
 
@@ -52,6 +54,9 @@ def create_ps(
         An existing amplitude mean file to use, by default None.
     existing_amp_dispersion_file : Optional[Filename], optional
         An existing amplitude dispersion file to use, by default None.
+    nodata_mask : Optional[np.ndarray]
+        If provided, skips computing PS over areas where the mask is False
+        Otherwise, loads input data from everywhere and calculates.
     update_existing : bool, optional
         If providing existing amp mean/dispersion files, combine them with the
         data from the current SLC stack.
@@ -60,6 +65,8 @@ def create_ps(
     block_size_gb : int, optional
         The maximum amount of data to read at a time (in GB).
         Default is 1.0 GB.
+    show_progress : bool, default=True
+        If true, displays a `rich` ProgressBar.
     """
     if existing_amp_dispersion_file and existing_amp_mean_file and not update_existing:
         logger.info("Using existing amplitude dispersion file, skipping calculation.")
@@ -94,18 +101,27 @@ def create_ps(
     # Initialize the intermediate arrays for the calculation
     magnitude = np.zeros((len(vrt_stack), *block_shape), dtype=np.float32)
 
+    skip_empty = nodata_mask is None
+
     writer = io.Writer()
     # Make the generator for the blocks
     block_gen = vrt_stack.iter_blocks(
         max_bytes=max_bytes,
-        skip_empty=False,
+        skip_empty=skip_empty,
+        nodata_mask=nodata_mask,
+        show_progress=show_progress,
     )
     for cur_data, (rows, cols) in block_gen:
         cur_rows, cur_cols = cur_data.shape[-2:]
 
         if not (np.all(cur_data == 0) or np.all(np.isnan(cur_data))):
             magnitude_cur = np.abs(cur_data, out=magnitude[:, :cur_rows, :cur_cols])
-            mean, amp_disp, ps = calc_ps_block(magnitude_cur, amp_dispersion_threshold)
+            mean, amp_disp, ps = calc_ps_block(
+                # use min_count == size of stack so that ALL need to be not Nan
+                magnitude_cur,
+                amp_dispersion_threshold,
+                min_count=len(magnitude_cur),
+            )
 
             # Use the UInt8 type for the PS to save.
             # For invalid pixels, set to max Byte value
