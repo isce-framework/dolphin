@@ -6,7 +6,7 @@ import os
 from concurrent.futures import ThreadPoolExecutor  # , as_completed
 from itertools import chain
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any, Mapping, Sequence
 
 from dolphin import io, ps, stack, utils
 from dolphin._log import get_log, log_runtime
@@ -33,8 +33,9 @@ def _create_cfg(
     shp_method: ShpMethod = ShpMethod.GLRT,
     amplitude_mean_files=[],
     amplitude_dispersion_files=[],
+    strides: Mapping[str, int] = {"x": 6, "y": 3},
 ):
-    strides = {"x": 6, "y": 3}
+    # strides = {"x": 1, "y": 1}
     interferogram_network: dict[str, Any]
     if first_ministack:
         interferogram_network = dict(
@@ -103,7 +104,7 @@ def get_cli_args() -> argparse.Namespace:
         "-ms",
         "--ministack-size",
         type=int,
-        default=15,
+        default=10,
         help="Strides/decimation factor (x, y) (in pixels) to use when determining",
     )
     parser.add_argument(
@@ -140,8 +141,8 @@ def get_cli_args() -> argparse.Namespace:
 
 @log_runtime
 def compute_ps_files(
-    burst_grouped_slc_files: dict[str, list[Filename]],
-    burst_to_nodata_mask: dict[str, Filename],
+    burst_grouped_slc_files: Mapping[str, Sequence[Filename]],
+    burst_to_nodata_mask: Mapping[str, Filename],
     # max_workers: int = 3,
     ps_stack_size: int = 60,
     output_folder: Path = Path("precomputed_ps"),
@@ -180,7 +181,7 @@ def compute_ps_files(
 @log_runtime
 def _compute_burst_ps_files(
     burst: str,
-    file_list_all: list[Filename],
+    file_list_all: Sequence[Filename],
     nodata_mask_file: Filename,
     ps_stack_size: int = 60,
     output_folder: Path = Path("precomputed_ps"),
@@ -242,7 +243,7 @@ def _compute_burst_ps_files(
 
 def create_nodata_masks(
     # date_grouped_slc_files: dict[tuple[datetime.date], list[Filename]],
-    burst_grouped_slc_files: dict[str, list[Filename]],
+    burst_grouped_slc_files: Mapping[str, Sequence[Filename]],
     buffer_pixels: int = 30,
     max_workers: int = 3,
     output_folder: Path = Path("nodata_masks"),
@@ -268,7 +269,7 @@ def create_nodata_masks(
 
 
 def _form_burst_vrt_stacks(
-    burst_grouped_slc_files: dict[str, list[Filename]]
+    burst_grouped_slc_files: Mapping[str, Sequence[Filename]]
 ) -> dict[str, stack.VRTStack]:
     logger.info("For each burst, creating a VRTStack...")
     # Each burst needs to be the same size
@@ -307,7 +308,9 @@ def precompute_ps_files(arg_dict) -> None:
     )
 
 
-def _get_all_slc_files(burst_to_vrt_stack, start_idx, end_idx):
+def _get_all_slc_files(
+    burst_to_vrt_stack: dict[str, stack.VRTStack], start_idx: int, end_idx: int
+):
     return list(
         chain.from_iterable(
             [v.file_list[start_idx:end_idx] for v in burst_to_vrt_stack.values()]

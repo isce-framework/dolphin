@@ -34,6 +34,8 @@ def create_config(
     use_icu: bool = False,
     single_update: bool = False,
     log_file: Optional[Path] = None,
+    amplitude_mean_files: list[str] = [],
+    amplitude_dispersion_files: list[str] = [],
 ):
     """Create a config for a displacement workflow."""
     if single_update:
@@ -78,6 +80,8 @@ def create_config(
             gpu_enabled=(not no_gpu),
         ),
         log_file=log_file,
+        amplitude_mean_files=amplitude_mean_files,
+        amplitude_dispersion_files=amplitude_dispersion_files,
     )
 
     if outfile == "-":  # Write to stdout
@@ -113,7 +117,7 @@ def get_parser(subparser=None, subcommand_name="run"):
     inputs.add_argument(
         "--slc-files",
         nargs=argparse.ZERO_OR_MORE,
-        help="Alternative: list the paths of all SLC files to include.",
+        help="List the paths of all SLC files to include.",
     )
 
     # Get the subdataset of the SLCs to use, if passing HDF5/NetCDF files
@@ -124,6 +128,16 @@ def get_parser(subparser=None, subcommand_name="run"):
             "Subdataset to use from HDF5/NetCDF files. For OPERA CSLC NetCDF files, if"
             f" None is passed, the default is {OPERA_DATASET_NAME}."
         ),
+    )
+    inputs.add_argument(
+        "--amplitude-mean-files",
+        nargs=argparse.ZERO_OR_MORE,
+        help="Optional: List the paths of existing amplitude mean files.",
+    )
+    inputs.add_argument(
+        "--amplitude-dispersion-files",
+        nargs=argparse.ZERO_OR_MORE,
+        help="Optional: List the paths of existing amplitude dispersion files.",
     )
     parser.add_argument(
         "--mask-file",

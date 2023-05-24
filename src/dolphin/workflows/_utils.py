@@ -174,7 +174,7 @@ def setup_output_folder(
 
 
 def get_union_polygon(
-    opera_file_list: list[Filename], buffer_degrees: float = 0.0
+    opera_file_list: Sequence[Filename], buffer_degrees: float = 0.0
 ) -> geometry.Polygon:
     """Get the union of the bounding polygons of the given files.
 
@@ -204,7 +204,7 @@ def get_union_polygon(
 
 
 def make_nodata_mask(
-    opera_file_list: list[Filename],
+    opera_file_list: Sequence[Filename],
     out_file: Filename,
     buffer_pixels: int = 0,
     overwrite: bool = False,
