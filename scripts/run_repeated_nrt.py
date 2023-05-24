@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import argparse
-import os
 from concurrent.futures import ThreadPoolExecutor  # , as_completed
 from itertools import chain
 from pathlib import Path
@@ -34,6 +33,7 @@ def _create_cfg(
     amplitude_mean_files=[],
     amplitude_dispersion_files=[],
     strides: Mapping[str, int] = {"x": 6, "y": 3},
+    work_dir: Path = Path("."),
 ):
     # strides = {"x": 1, "y": 1}
     interferogram_network: dict[str, Any]
@@ -64,6 +64,8 @@ def _create_cfg(
             half_window={"x": half_window_size[0], "y": half_window_size[1]},
             shp_method=shp_method,
         ),
+        scratch_directory=work_dir / "scratch",
+        output_directory=work_dir / "output",
         # worker_settings=dict(
         #     block_size_gb=block_size_gb,
         #     n_workers=n_workers,
@@ -318,6 +320,31 @@ def _get_all_slc_files(
     )
 
 
+def _run_one_stack(
+    slc_idx_start,
+    slc_idx_end,
+    burst_to_vrt_stack,
+    comp_slc_files,
+    all_amp_files,
+    all_disp_files,
+):
+    cur_path = Path(f"stack_{slc_idx_start}_{slc_idx_end}")
+    cur_path.mkdir(exist_ok=True)
+
+    logger.info(f"***** START: {cur_path} *****")
+    # Get the nearest amplitude mean/dispersion files
+    cur_slc_files = _get_all_slc_files(burst_to_vrt_stack, slc_idx_start, slc_idx_end)
+    cfg = _create_cfg(
+        slc_files=comp_slc_files + cur_slc_files,
+        amplitude_mean_files=all_amp_files,
+        amplitude_dispersion_files=all_disp_files,
+        work_dir=cur_path,
+        **arg_dict,
+    )
+    cfg.to_yaml(cur_path / "dolphin_config.yaml")
+    s1_disp.run(cfg)
+
+
 @log_runtime
 def main(arg_dict: dict) -> None:
     """Get the command line arguments and run the workflow."""
@@ -354,8 +381,6 @@ def main(arg_dict: dict) -> None:
     max_stack_size = 2 * ministack_size - 1  # Size at which we archive/shrink
     cur_path = Path(f"stack_{slc_idx_start}_{slc_idx_end}")
     cur_path.mkdir(exist_ok=True)
-    # TODO: use the context-manager change-then-back
-    os.chdir(cur_path)
 
     # TODO: do i wanna somehow provide the burst nodata file?
 
@@ -366,34 +391,26 @@ def main(arg_dict: dict) -> None:
         first_ministack=True,
         amplitude_mean_files=all_amp_files,
         amplitude_dispersion_files=all_disp_files,
+        work_dir=cur_path,
         **arg_dict,
     )
-
-    cfg.to_yaml("dolphin_config.yaml")
+    cfg.to_yaml(cur_path / "dolphin_config.yaml")
     s1_disp.run(cfg)
-    os.chdir("..")
 
     # Rest of mini stacks in incremental-mode
     comp_slc_files: list[Path] = []
     slc_idx_end = ministack_size + 1
     while slc_idx_end <= num_dates:
-        cur_path = Path(f"stack_{slc_idx_start}_{slc_idx_end}")
-        cur_path.mkdir(exist_ok=True)
-        os.chdir(cur_path)
-
-        logger.info(f"***** START: {cur_path} *****")
-        # Get the nearest amplitude mean/dispersion files
-        cur_slc_files = _get_all_slc_files(
-            burst_to_vrt_stack, slc_idx_start, slc_idx_end
+        # for size in range(1, ministack_size):
+        # cur_end = slc_idx_end + size
+        _run_one_stack(
+            slc_idx_start,
+            slc_idx_end,
+            burst_to_vrt_stack,
+            comp_slc_files,
+            all_amp_files,
+            all_disp_files,
         )
-        cfg = _create_cfg(
-            slc_files=comp_slc_files + cur_slc_files,
-            amplitude_mean_files=all_amp_files,
-            amplitude_dispersion_files=all_disp_files,
-            **arg_dict,
-        )
-        cfg.to_yaml("dolphin_config.yaml")
-        s1_disp.run(cfg)
 
         # On the step before we hit double `ministack_size`,
         # archive, shrink, and pull another compressed SLC to replace.
@@ -412,8 +429,6 @@ def main(arg_dict: dict) -> None:
 
         slc_idx_end += 1
         logger.info(f"***** END: {cur_path} *****")
-
-        os.chdir("..")
 
 
 if __name__ == "__main__":
