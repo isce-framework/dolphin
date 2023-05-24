@@ -61,7 +61,7 @@ def run(
         Force the use of isce3's ICU instead of snaphu, by default False.
     unw_suffix : str, optional, default = ".unw.tif"
         unwrapped file suffix to use for creating/searching for existing files.
-    max_jobs : int, optional, default = 4
+    max_jobs : int, optional, default = 1
         Maximum parallel processes.
     overwrite : bool, optional, default = False
         Overwrite existing unwrapped files.

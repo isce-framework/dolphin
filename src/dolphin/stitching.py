@@ -58,10 +58,10 @@ def merge_by_date(
     """
     grouped_images = utils.group_by_date(image_file_list, file_date_fmt=file_date_fmt)
     stitched_acq_times = {}
+    Path(output_dir).mkdir(parents=True, exist_ok=True)
 
     for dates, cur_images in grouped_images.items():
         logger.info(f"{dates}: Stitching {len(cur_images)} images.")
-        Path(output_dir).mkdir(parents=True, exist_ok=True)
         if len(dates) == 2:
             date_str = io._format_date_pair(*dates)
         elif len(dates) == 1:
