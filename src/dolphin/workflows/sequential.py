@@ -139,8 +139,6 @@ def run_wrapped_phase_sequential(
     # Combine the separate SLC output lists into a single list
     all_slc_files = list(chain.from_iterable(output_slc_files.values()))
 
-    # There was only one ministack, so we can skip this step
-    logger.info("skipping offset calculation.")
     pl_outputs = []
     for slc_fname in all_slc_files:
         slc_fname.rename(output_folder / slc_fname.name)

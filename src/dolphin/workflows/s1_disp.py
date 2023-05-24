@@ -2,11 +2,13 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 from pprint import pformat
 from typing import Optional
 
 from dolphin import __version__
+from dolphin._background import DummyProcessPoolExecutor
 from dolphin._log import get_log, log_runtime
 from dolphin.utils import get_max_memory_usage
 
@@ -14,6 +16,9 @@ from . import _product, stitch_and_unwrap, wrapped_phase
 from ._pge_runconfig import RunConfig
 from ._utils import group_by_burst
 from .config import Workflow
+
+# TODO: make a config param
+NUM_PARALLEL_BURSTS = 5
 
 
 @log_runtime
@@ -62,6 +67,9 @@ def run(
     else:
         grouped_amp_mean_files = defaultdict(list)
 
+    # ######################################
+    # 1. Burst-wise Wrapped phase estimation
+    # ######################################
     if len(grouped_slc_files) > 1:
         logger.info(f"Found SLC files from {len(grouped_slc_files)} bursts")
         wrapped_phase_cfgs = [
@@ -87,26 +95,37 @@ def run(
         # grab the only key (either a burst, or "") and use that
         b = list(grouped_slc_files.keys())[0]
         wrapped_phase_cfgs = [(b, cfg)]
-    # ###########################
-    # 1. Wrapped phase estimation
-    # ###########################
+
     ifg_file_list: list[Path] = []
     tcorr_file_list: list[Path] = []
     # The comp_slc tracking object is a dict, since we'll need to organize
     # multiple comp slcs by burst (they'll have the same filename)
     comp_slc_dict: dict[str, Path] = {}
     # Now for each burst, run the wrapped phase estimation
-    for burst, burst_cfg in wrapped_phase_cfgs:
-        msg = "Running wrapped phase estimation"
-        if burst:
-            msg += f" for burst {burst}"
-        logger.info(msg)
-        logger.debug(pformat(burst_cfg.dict()))
-        cur_ifg_list, comp_slc, tcorr = wrapped_phase.run(burst_cfg, debug=debug)
+    # Try running several bursts in parallel...
+    Executor = (
+        ProcessPoolExecutor if NUM_PARALLEL_BURSTS > 1 else DummyProcessPoolExecutor
+    )
+    with Executor(max_workers=NUM_PARALLEL_BURSTS) as exc:
+        fut_to_burst = {
+            exc.submit(
+                wrapped_phase.run,
+                burst_cfg,
+                debug=debug,
+            ): burst
+            for burst, burst_cfg in wrapped_phase_cfgs
+        }
+        for fut in fut_to_burst:
+            burst = fut_to_burst[fut]
+            msg = "Running wrapped phase estimation"
+            if burst:
+                msg += f" for burst {burst}"
+            logger.info(msg)
 
-        ifg_file_list.extend(cur_ifg_list)
-        comp_slc_dict[burst] = comp_slc
-        tcorr_file_list.append(tcorr)
+            cur_ifg_list, comp_slc, tcorr = fut.result()
+            ifg_file_list.extend(cur_ifg_list)
+            comp_slc_dict[burst] = comp_slc
+            tcorr_file_list.append(tcorr)
 
     # ###################################
     # 2. Stitch and unwrap interferograms
