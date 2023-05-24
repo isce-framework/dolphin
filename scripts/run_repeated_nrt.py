@@ -131,6 +131,13 @@ def get_cli_args() -> argparse.Namespace:
         help="Run the unwrapping stack after phase linking.",
     )
     parser.add_argument(
+        "-j",
+        "--max-jobs",
+        type=int,
+        default=1,
+        help="Number of parallel ministacks to process.",
+    )
+    parser.add_argument(
         "--pre-compute",
         action="store_true",
         help=(
@@ -323,6 +330,7 @@ def _get_all_slc_files(
 def _run_one_stack(
     slc_idx_start,
     slc_idx_end,
+    ministack_size,
     burst_to_vrt_stack,
     comp_slc_files,
     all_amp_files,
@@ -343,6 +351,21 @@ def _run_one_stack(
     )
     cfg.to_yaml(cur_path / "dolphin_config.yaml")
     s1_disp.run(cfg)
+
+    # On the step before we hit double `ministack_size`,
+    # archive, shrink, and pull another compressed SLC to replace.
+    stack_size = slc_idx_end - slc_idx_start
+    max_stack_size = 2 * ministack_size - 1  # Size at which we archive/shrink
+    if stack_size == max_stack_size:
+        # time to shrink!
+        # Get the compressed SLC that was output
+        comp_slc_path = (cur_path / "output/compressed_slcs/").resolve()
+        new_comp_slcs = list(comp_slc_path.glob("*.h5"))
+    else:
+        new_comp_slcs = []
+
+    logger.info(f"***** END: {cur_path} *****")
+    return new_comp_slcs
 
 
 @log_runtime
@@ -374,15 +397,17 @@ def main(arg_dict: dict) -> None:
     all_disp_files = sorted(
         Path("precomputed_ps/").resolve().glob("*_amp_dispersion.tif")
     )
-    # TODO: how to make it shift when the year changes for PS files
+
+    max_jobs = arg_dict.pop("max_jobs")
+    logger.info(f"Running {max_jobs} parallel ministack jobs")
 
     slc_idx_start = 0
     slc_idx_end = ministack_size
-    max_stack_size = 2 * ministack_size - 1  # Size at which we archive/shrink
+    # max_stack_size = 2 * ministack_size - 1  # Size at which we archive/shrink
     cur_path = Path(f"stack_{slc_idx_start}_{slc_idx_end}")
     cur_path.mkdir(exist_ok=True)
 
-    # TODO: do i wanna somehow provide the burst nodata file?
+    # TODO: how to make it shift when the year changes for PS files
 
     # Make the first ministack
     cur_slc_files = _get_all_slc_files(burst_to_vrt_stack, slc_idx_start, slc_idx_end)
@@ -399,36 +424,45 @@ def main(arg_dict: dict) -> None:
 
     # Rest of mini stacks in incremental-mode
     comp_slc_files: list[Path] = []
-    slc_idx_end = ministack_size + 1
+    slc_idx_end = ministack_size
+
+    start_increment = 1  # the first loop, we only run `(ministack - 1)`` jobs
     while slc_idx_end <= num_dates:
-        # for size in range(1, ministack_size):
-        # cur_end = slc_idx_end + size
-        _run_one_stack(
-            slc_idx_start,
-            slc_idx_end,
-            burst_to_vrt_stack,
-            comp_slc_files,
-            all_amp_files,
-            all_disp_files,
-        )
+        # submit all at once up to the archiving job
+        # we have to wait for the shrink-and-archive jobs before continuing
+        with ThreadPoolExecutor(max_workers=max_jobs) as executor:
+            futures = []
+            for i in range(start_increment, ministack_size):
+                cur_end_idx = slc_idx_end + i
+                if cur_end_idx > num_dates:
+                    # This is the end and we'll just skip submitting any more jobs
+                    continue
+                fut = executor.submit(
+                    _run_one_stack,
+                    slc_idx_start,
+                    cur_end_idx,
+                    ministack_size,
+                    burst_to_vrt_stack,
+                    comp_slc_files,
+                    all_amp_files,
+                    all_disp_files,
+                )
+                futures.append(fut)
 
-        # On the step before we hit double `ministack_size`,
-        # archive, shrink, and pull another compressed SLC to replace.
-        stack_size = slc_idx_end - slc_idx_start
-        if stack_size == max_stack_size:
-            # time to shrink!
-            # Get the compressed SLC that was output
-            comp_slc_path = Path("output/compressed_slcs/").resolve()
-            new_comp_slcs = list(comp_slc_path.glob("*.h5"))
-            # assert len(new_comp_slcs) == 1
-            # comp_slc_files.append(new_comp_slcs[0].resolve())
-            comp_slc_files.extend(new_comp_slcs)
+            for i, fut in enumerate(futures):
+                new_comp_slcs = fut.result()
+                logger.info(
+                    f"{len(new_comp_slcs)} comp slcs from ministack"
+                    f" {i+1}/{ministack_size}"
+                )
+                comp_slc_files.extend(new_comp_slcs)
 
-            # Move the front forward one ministack
-            slc_idx_start += ministack_size
+        # Move the front/back idx up by one ministack
+        slc_idx_start += ministack_size
+        slc_idx_end += ministack_size
 
-        slc_idx_end += 1
-        logger.info(f"***** END: {cur_path} *****")
+        # all others after the first, we do `ministack` number of loops
+        start_increment = 0
 
 
 if __name__ == "__main__":

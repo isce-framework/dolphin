@@ -7,7 +7,6 @@ import re
 import resource
 import sys
 import warnings
-from contextlib import nullcontext
 from multiprocessing import cpu_count
 from pathlib import Path
 from typing import Iterable, Optional, Union
@@ -40,8 +39,24 @@ def progress(dummy=False):
     ...         pass
     10/10 Working... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 100% 0:00:00
     """
+
+    class DummyProgress:
+        """Context manager that does no additional processing.
+
+        Needs a `track` method to match rich.Progress.
+        """
+
+        def track(self, iterable, **kwargs):
+            yield from iterable
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *excinfo):
+            pass
+
     if dummy:
-        return nullcontext()
+        return DummyProgress()
 
     return Progress(
         SpinnerColumn(),
