@@ -66,11 +66,11 @@ def _create_cfg(
         ),
         scratch_directory=work_dir / "scratch",
         output_directory=work_dir / "output",
-        # worker_settings=dict(
-        #     block_size_gb=block_size_gb,
-        #     n_workers=n_workers,
-        #     threads_per_worker=threads_per_worker,
-        # ),
+        worker_settings=dict(
+            #     block_size_gb=block_size_gb,
+            n_workers=4,
+            threads_per_worker=4,
+        ),
         #     ps_options=dict(
         #         amp_dispersion_threshold=amp_dispersion_threshold,
         #     ),
