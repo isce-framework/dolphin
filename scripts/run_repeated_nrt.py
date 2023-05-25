@@ -333,8 +333,8 @@ def _run_one_stack(
     slc_idx_start: int,
     slc_idx_end: int,
     ministack_size: int,
-    burst_to_file_list: dict[str, Sequence[Filename]],
-    comp_slc_files: list[Filename],
+    burst_to_file_list: Mapping[str, Sequence[Filename]],
+    comp_slc_files: Sequence[Filename],
     all_amp_files: Sequence[Filename],
     all_disp_files: Sequence[Filename],
 ):
@@ -345,7 +345,7 @@ def _run_one_stack(
     # Get the nearest amplitude mean/dispersion files
     cur_slc_files = _get_all_slc_files(burst_to_file_list, slc_idx_start, slc_idx_end)
     cfg = _create_cfg(
-        slc_files=comp_slc_files + cur_slc_files,
+        slc_files=list(comp_slc_files) + cur_slc_files,
         amplitude_mean_files=all_amp_files,
         amplitude_dispersion_files=all_disp_files,
         work_dir=cur_path,
