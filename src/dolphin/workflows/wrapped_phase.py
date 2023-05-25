@@ -101,8 +101,12 @@ def run(cfg: Workflow, debug: bool = False) -> tuple[list[Path], Path, Path]:
         comp_slc_file = next(pl_path.glob("compressed*tif"))
         tcorr_file = next(pl_path.glob("tcorr*tif"))
     else:
-        watcher = NvidiaMemoryWatcher() if utils.gpu_is_available() else None
         logger.info(f"Running sequential EMI step in {pl_path}")
+        if utils.gpu_is_available():  # Track the GPU mem usage if we're using it
+            watcher = NvidiaMemoryWatcher(log_file=pl_path / "nvidia_memory.log")
+        else:
+            watcher = None
+
         if cfg.workflow_name == "single":
             phase_linked_slcs, comp_slc_file, tcorr_file = (
                 single.run_wrapped_phase_single(

@@ -677,6 +677,21 @@ def moving_window_mean(
     return window_mean
 
 
+def set_num_threads(num_threads: int):
+    """Set the cap on threads spawned by numpy and numba.
+
+    Uses https://github.com/joblib/threadpoolctl for numpy.
+    """
+    import numba
+    from threadpoolctl import ThreadpoolController
+
+    # Set the environment variables for the workers
+    controller = ThreadpoolController()
+    controller.limit(limits=num_threads)
+    # https://numba.readthedocs.io/en/stable/user/threading-layer.html#example-of-limiting-the-number-of-threads
+    numba.set_num_threads(num_threads)
+
+
 def get_cpu_count():
     """Get the number of CPUs available to the current process.
 

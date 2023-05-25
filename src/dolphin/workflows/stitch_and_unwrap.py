@@ -138,12 +138,12 @@ def _estimate_spatial_correlations(
 
     corr_paths: list[Path] = []
     for dates, ifg_path in date_to_ifg_path.items():
-        ifg = io.load_gdal(ifg_path)
         cor_path = ifg_path.with_suffix(".cor")
         corr_paths.append(cor_path)
         if cor_path.exists():
             logger.info(f"Skipping existing spatial correlation for {ifg_path}")
             continue
+        ifg = io.load_gdal(ifg_path)
         logger.info(f"Estimating spatial correlation for {dates}...")
         cor = estimate_correlation_from_phase(ifg, window_size=window_size)
         logger.info(f"Writing spatial correlation to {cor_path}")

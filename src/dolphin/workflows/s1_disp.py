@@ -10,15 +10,12 @@ from typing import Optional
 from dolphin import __version__
 from dolphin._background import DummyProcessPoolExecutor
 from dolphin._log import get_log, log_runtime
-from dolphin.utils import get_max_memory_usage
+from dolphin.utils import get_max_memory_usage, set_num_threads
 
 from . import _product, stitch_and_unwrap, wrapped_phase
 from ._pge_runconfig import RunConfig
 from ._utils import group_by_burst
 from .config import Workflow
-
-# TODO: make a config param
-NUM_PARALLEL_BURSTS = 5
 
 
 @log_runtime
@@ -44,6 +41,8 @@ def run(
     logger = get_log(name="dolphin", debug=debug, filename=cfg.log_file)
     logger.debug(pformat(cfg.dict()))
     cfg.create_dir_tree(debug=debug)
+
+    set_num_threads(cfg.worker_settings.threads_per_worker)
 
     try:
         grouped_slc_files = group_by_burst(cfg.cslc_file_list)
@@ -104,9 +103,11 @@ def run(
     # Now for each burst, run the wrapped phase estimation
     # Try running several bursts in parallel...
     Executor = (
-        ProcessPoolExecutor if NUM_PARALLEL_BURSTS > 1 else DummyProcessPoolExecutor
+        ProcessPoolExecutor
+        if cfg.worker_settings.n_parallel_bursts > 1
+        else DummyProcessPoolExecutor
     )
-    with Executor(max_workers=NUM_PARALLEL_BURSTS) as exc:
+    with Executor(max_workers=cfg.worker_settings.n_parallel_bursts) as exc:
         fut_to_burst = {
             exc.submit(
                 wrapped_phase.run,

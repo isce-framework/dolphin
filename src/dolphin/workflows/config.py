@@ -198,6 +198,14 @@ class WorkerSettings(BaseSettings):
             " environment variable in each python process."
         ),
     )
+    n_parallel_bursts: int = Field(
+        default=1,
+        ge=1,
+        description=(
+            "If processing separate spatial bursts, number of bursts to run in parallel"
+            " for wrapped-phase-estimation."
+        ),
+    )
     block_size_gb: float = Field(
         1.0,
         description="Size (in GB) of blocks of data to load at a time.",
