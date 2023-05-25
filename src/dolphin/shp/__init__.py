@@ -67,6 +67,9 @@ def estimate_neighbors(
         - amp_stack is not provided for the KS method.
         - `method` not a valid `ShpMethod`
     """
+    import numba
+
+    logger.debug(f"NUMBA THREADS: {numba.get_num_threads()}")
     if method.lower() in (ShpMethod.KLD, ShpMethod.GLRT):
         if mean is None:
             mean = np.mean(amp_stack, axis=0)

@@ -58,10 +58,10 @@ def merge_by_date(
     """
     grouped_images = utils.group_by_date(image_file_list, file_date_fmt=file_date_fmt)
     stitched_acq_times = {}
+    Path(output_dir).mkdir(parents=True, exist_ok=True)
 
     for dates, cur_images in grouped_images.items():
         logger.info(f"{dates}: Stitching {len(cur_images)} images.")
-        Path(output_dir).mkdir(parents=True, exist_ok=True)
         if len(dates) == 2:
             date_str = io._format_date_pair(*dates)
         elif len(dates) == 1:
@@ -275,10 +275,10 @@ def _blend_new_arr(
     for nodata in set(nodata_vals):
         if nodata is not None:
             if np.isnan(nodata):
-                nd_mask = np.isnan(new_arr)
+                new_good_pixels = ~np.isnan(new_arr)
             else:
-                nd_mask = new_arr == nodata
-            good_pixels = good_pixels & ~nd_mask
+                new_good_pixels = new_arr != nodata
+            good_pixels &= new_good_pixels
 
     # Replace the values in cur_arr with new_arr, where new_arr is not nodata
     cur_arr[good_pixels] = new_arr[good_pixels]

@@ -14,18 +14,14 @@ from os import fspath
 from pathlib import Path
 from typing import Optional
 
-import numpy as np
 from osgeo_utils import gdal_calc
 
 from dolphin import io
 from dolphin._log import get_log
 from dolphin._types import Filename
-from dolphin.interferogram import VRTInterferogram
-from dolphin.phase_link import run_mle
 from dolphin.stack import VRTStack
 
 from ._enums import ShpMethod
-from ._utils import setup_output_folder
 from .single import run_wrapped_phase_single
 
 logger = get_log(__name__)
@@ -67,10 +63,6 @@ def run_wrapped_phase_sequential(
     output_slc_files: dict[int, list] = defaultdict(list)
     comp_slc_files: list[Path] = []
     tcorr_files: list[Path] = []
-
-    nrows, ncols = v_all.shape[-2:]
-    xhalf, yhalf = half_window["x"], half_window["y"]
-    xs, ys = strides["x"], strides["y"]
 
     # Solve each ministack using the current chunk (and the previous compressed SLCs)
     ministack_starts = range(0, len(file_list_all), ministack_size)
@@ -122,119 +114,39 @@ def run_wrapped_phase_sequential(
         tcorr_files.append(tcorr_file)
 
     ##############################################
-    # Set up the output folder with empty files to write into
 
     # Average the temporal coherence files in each ministack
     # TODO: do we want to include the date span in this filename?
     output_tcorr_file = output_folder / "tcorr_average.tif"
-    # Find the offsets between stacks by doing a phase linking only compressed SLCs
-    # (But only if we have >1 ministacks. If only one, just rename the outputs)
-    if len(comp_slc_files) == 1:
-        # There was only one ministack, so we can skip this step
-        logger.info("Only one ministack, skipping offset calculation.")
-        assert len(output_slc_files) == 1
-        assert len(tcorr_files) == 1
-        outputs_renamed = []
-        for slc_fname in output_slc_files[0]:
-            n = output_folder / slc_fname.name
-            slc_fname.rename(n)
-            outputs_renamed.append(n)
-
-        tcorr_files[0].rename(output_tcorr_file)
-
-        output_comp_slc_file = output_folder / comp_slc_files[0].name
-        comp_slc_files[0].rename(output_comp_slc_file)
-
-        # return output_slc_files, comp_slc_file, tcorr_file
-        # different here for sequential
-        return outputs_renamed, [output_comp_slc_file], output_tcorr_file
-
-    # Compute the adjustments by running EVD on the compressed SLCs
-    comp_output_folder = output_folder / "adjustments"
-    comp_output_folder.mkdir(parents=True, exist_ok=True)
-    adjustment_vrt_stack = VRTStack(
-        comp_slc_files, outfile=comp_output_folder / "compressed_stack.vrt"
-    )
-
-    logger.info(f"Running EVD on compressed files: {adjustment_vrt_stack}")
-    adjusted_comp_slc_files = setup_output_folder(
-        adjustment_vrt_stack,
-        driver="GTiff",
-        strides=strides,
-        nodata=0,
-    )
-    if mask_file is not None:
-        nodata_mask = io.load_gdal(mask_file).astype(bool)
-    else:
-        nodata_mask = np.zeros((nrows, ncols), dtype=bool)
-
-    writer = io.Writer()
-    # Iterate over the ministack in blocks
-    # Note the overlap to redo the edge effects
-    block_gen = adjustment_vrt_stack.iter_blocks(
-        overlaps=(yhalf, xhalf),
-        # Note: dividing by len of stack because cov is shape (rows, cols, nslc, nslc)
-        max_bytes=max_bytes / len(adjustment_vrt_stack),
-        skip_empty=True,
-    )
-    for cur_data, (rows, cols) in block_gen:
-        msg = f"Processing block {rows.start}:{rows.stop}, {cols.start}:{cols.stop}"
-        logger.debug(msg)
-
-        # Run the phase linking process on the current adjustment stack
-        cur_mle_stack, _ = run_mle(
-            cur_data,
-            half_window=half_window,
-            strides=strides,
-            beta=beta,
-            reference_idx=0,
-            nodata_mask=nodata_mask[rows, cols],
-            ps_mask=None,  # PS mask doesn't matter for the adjustments
-            use_slc_amp=False,  # Make adjustments unit-amplitude
-            neighbor_arrays=None,  # No SHP for the adjustments
-            n_workers=n_workers,
-            gpu_enabled=gpu_enabled,
-        )
-        np.nan_to_num(cur_mle_stack, copy=False)
-
-        # Get the location within the output file, shrinking down the slices
-        out_row_start = rows.start // ys
-        out_col_start = cols.start // xs
-        # Save each of the MLE estimates (ignoring the compressed SLCs)
-        for img, f in zip(cur_mle_stack, adjusted_comp_slc_files):
-            writer.queue_write(img, f, out_row_start, out_col_start)
-        # Don't think I care about the temporal coherence here
-
-    writer.notify_finished()
-    # Compensate for the offsets between ministacks (aka "datum adjustments")
-    for mini_idx, slc_files in output_slc_files.items():
-        adjustment_fname = adjusted_comp_slc_files[mini_idx]
-
-        for slc_fname in slc_files:
-            logger.info(f"Compensating {slc_fname} with {adjustment_fname}")
-            outfile = output_folder / f"{slc_fname.name}"
-            VRTInterferogram(
-                ref_slc=slc_fname,
-                sec_slc=adjustment_fname,
-                path=outfile,
-                pixel_function="mul",
-            )
-
-    # Can pass the list of files to gdal_calc, which interprets it
+    # we can pass the list of files to gdal_calc, which interprets it
     # as a multi-band file
-    logger.info(f"Averaging temporal coherence files into: {output_tcorr_file}")
-    gdal_calc.Calc(
-        NoDataValue=0,
-        format="GTiff",
-        outfile=fspath(output_tcorr_file),
-        type="Float32",
-        quiet=True,
-        overwrite=True,
-        creation_options=io.DEFAULT_TIFF_OPTIONS,
-        A=tcorr_files,
-        calc="numpy.nanmean(A, axis=0)",
-    )
+    if len(tcorr_files) > 1:
+        logger.info(f"Averaging temporal coherence files into: {output_tcorr_file}")
+        gdal_calc.Calc(
+            NoDataValue=0,
+            format="GTiff",
+            outfile=fspath(output_tcorr_file),
+            type="Float32",
+            quiet=True,
+            overwrite=True,
+            creation_options=io.DEFAULT_TIFF_OPTIONS,
+            A=tcorr_files,
+            calc="numpy.nanmean(A, axis=0)",
+        )
+    else:
+        tcorr_files[0].rename(output_tcorr_file)
 
     # Combine the separate SLC output lists into a single list
     all_slc_files = list(chain.from_iterable(output_slc_files.values()))
-    return all_slc_files, adjusted_comp_slc_files, output_tcorr_file
+
+    pl_outputs = []
+    for slc_fname in all_slc_files:
+        slc_fname.rename(output_folder / slc_fname.name)
+        pl_outputs.append(output_folder / slc_fname.name)
+
+    comp_outputs = []
+    for p in comp_slc_files:
+        p.rename(output_folder / p.name)
+        comp_outputs.append(output_folder / p.name)
+
+    return pl_outputs, comp_outputs, output_tcorr_file

@@ -2,11 +2,10 @@
 from __future__ import annotations
 
 import argparse
-import os
-from concurrent.futures import ThreadPoolExecutor  # , as_completed
+from concurrent.futures import ThreadPoolExecutor
 from itertools import chain
 from pathlib import Path
-from typing import Sequence
+from typing import Any, Mapping, Sequence
 
 from dolphin import io, ps, stack, utils
 from dolphin._log import get_log, log_runtime
@@ -31,10 +30,14 @@ def _create_cfg(
     first_ministack: bool = False,
     run_unwrap: bool = False,
     shp_method: ShpMethod = ShpMethod.GLRT,
-    amplitude_mean_files=[],
-    amplitude_dispersion_files=[],
+    amplitude_mean_files: Sequence[Filename] = [],
+    amplitude_dispersion_files: Sequence[Filename] = [],
+    strides: Mapping[str, int] = {"x": 6, "y": 3},
+    work_dir: Path = Path("."),
+    n_parallel_bursts: int = 1,
 ):
-    strides = {"x": 6, "y": 3}
+    # strides = {"x": 1, "y": 1}
+    interferogram_network: dict[str, Any]
     if first_ministack:
         interferogram_network = dict(
             network_type=InterferogramNetworkType.SINGLE_REFERENCE
@@ -62,11 +65,14 @@ def _create_cfg(
             half_window={"x": half_window_size[0], "y": half_window_size[1]},
             shp_method=shp_method,
         ),
-        # worker_settings=dict(
-        #     block_size_gb=block_size_gb,
-        #     n_workers=n_workers,
-        #     threads_per_worker=threads_per_worker,
-        # ),
+        scratch_directory=work_dir / "scratch",
+        output_directory=work_dir / "output",
+        worker_settings=dict(
+            #     block_size_gb=block_size_gb,
+            n_parallel_bursts=n_parallel_bursts,
+            n_workers=4,
+            threads_per_worker=8,
+        ),
         #     ps_options=dict(
         #         amp_dispersion_threshold=amp_dispersion_threshold,
         #     ),
@@ -76,7 +82,7 @@ def _create_cfg(
         unwrap_options=dict(
             unwrap_method="snaphu",
             run_unwrap=run_unwrap,
-            # CHANGEME: or else run in backgroun somehow?
+            # CHANGEME: or else run in background somehow?
         ),
         save_compressed_slc=True,  # always save, and only sometimes will we grab it
         workflow_name=workflow_name,
@@ -102,7 +108,7 @@ def get_cli_args() -> argparse.Namespace:
         "-ms",
         "--ministack-size",
         type=int,
-        default=15,
+        default=10,
         help="Strides/decimation factor (x, y) (in pixels) to use when determining",
     )
     parser.add_argument(
@@ -127,6 +133,13 @@ def get_cli_args() -> argparse.Namespace:
         help="Run the unwrapping stack after phase linking.",
     )
     parser.add_argument(
+        "-j",
+        "--n-parallel-bursts",
+        type=int,
+        default=1,
+        help="Number of parallel bursts to process.",
+    )
+    parser.add_argument(
         "--pre-compute",
         action="store_true",
         help=(
@@ -139,8 +152,8 @@ def get_cli_args() -> argparse.Namespace:
 
 @log_runtime
 def compute_ps_files(
-    burst_grouped_slc_files: dict[str, list[Filename]],
-    burst_to_nodata_mask: dict[str, Filename],
+    burst_grouped_slc_files: Mapping[str, Sequence[Filename]],
+    burst_to_nodata_mask: Mapping[str, Filename],
     # max_workers: int = 3,
     ps_stack_size: int = 60,
     output_folder: Path = Path("precomputed_ps"),
@@ -179,7 +192,7 @@ def compute_ps_files(
 @log_runtime
 def _compute_burst_ps_files(
     burst: str,
-    file_list_all: list[Filename],
+    file_list_all: Sequence[Filename],
     nodata_mask_file: Filename,
     ps_stack_size: int = 60,
     output_folder: Path = Path("precomputed_ps"),
@@ -241,7 +254,7 @@ def _compute_burst_ps_files(
 
 def create_nodata_masks(
     # date_grouped_slc_files: dict[tuple[datetime.date], list[Filename]],
-    burst_grouped_slc_files: dict[str, list[Filename]],
+    burst_grouped_slc_files: Mapping[str, Sequence[Filename]],
     buffer_pixels: int = 30,
     max_workers: int = 3,
     output_folder: Path = Path("nodata_masks"),
@@ -267,7 +280,7 @@ def create_nodata_masks(
 
 
 def _form_burst_vrt_stacks(
-    burst_grouped_slc_files: dict[str, list[Filename]]
+    burst_grouped_slc_files: Mapping[str, Sequence[Filename]]
 ) -> dict[str, stack.VRTStack]:
     logger.info("For each burst, creating a VRTStack...")
     # Each burst needs to be the same size
@@ -280,7 +293,7 @@ def _form_burst_vrt_stacks(
                 file_list, subdataset=OPERA_DATASET_NAME, outfile=outfile
             )
         else:
-            vrt = stack.VRTStack.from_vrt_file(outfile)
+            vrt = stack.VRTStack.from_vrt_file(outfile, skip_size_check=True)
         burst_to_vrt_stack[b] = vrt
     logger.info("Done.")
     return burst_to_vrt_stack
@@ -306,12 +319,55 @@ def precompute_ps_files(arg_dict) -> None:
     )
 
 
-def _get_all_slc_files(burst_to_vrt_stack, start_idx, end_idx):
+def _get_all_slc_files(
+    burst_to_file_list: Mapping[str, Sequence[Filename]], start_idx: int, end_idx: int
+) -> list[Filename]:
     return list(
         chain.from_iterable(
-            [v.file_list[start_idx:end_idx] for v in burst_to_vrt_stack.values()]
+            [file_list[start_idx:end_idx] for file_list in burst_to_file_list.values()]
         )
     )
+
+
+def _run_one_stack(
+    slc_idx_start: int,
+    slc_idx_end: int,
+    ministack_size: int,
+    burst_to_file_list: Mapping[str, Sequence[Filename]],
+    comp_slc_files: Sequence[Filename],
+    all_amp_files: Sequence[Filename],
+    all_disp_files: Sequence[Filename],
+):
+    cur_path = Path(f"stack_{slc_idx_start}_{slc_idx_end}")
+    cur_path.mkdir(exist_ok=True)
+
+    logger.info(f"***** START: {cur_path} *****")
+    # Get the nearest amplitude mean/dispersion files
+    cur_slc_files = _get_all_slc_files(burst_to_file_list, slc_idx_start, slc_idx_end)
+    cfg = _create_cfg(
+        slc_files=list(comp_slc_files) + cur_slc_files,
+        amplitude_mean_files=all_amp_files,
+        amplitude_dispersion_files=all_disp_files,
+        work_dir=cur_path,
+        **arg_dict,
+    )
+    cfg.to_yaml(cur_path / "dolphin_config.yaml")
+    s1_disp.run(cfg)
+
+    # On the step before we hit double `ministack_size`,
+    # archive, shrink, and pull another compressed SLC to replace.
+    stack_size = slc_idx_end - slc_idx_start
+    max_stack_size = 2 * ministack_size - 1  # Size at which we archive/shrink
+    if stack_size == max_stack_size:
+        # time to shrink!
+        # Get the compressed SLC that was output
+        comp_slc_path = (cur_path / "output/compressed_slcs/").resolve()
+        new_comp_slcs = list(comp_slc_path.glob("*.h5"))
+    else:
+        new_comp_slcs = []
+
+    logger.info(f"***** END: {cur_path} *****")
+    return new_comp_slcs
 
 
 @log_runtime
@@ -337,79 +393,59 @@ def main(arg_dict: dict) -> None:
     burst_to_vrt_stack = _form_burst_vrt_stacks(
         burst_grouped_slc_files=burst_grouped_slc_files
     )
+    burst_to_file_list = {b: v.file_list for b, v in burst_to_vrt_stack.items()}
 
     # Get the pre-compted PS files (assuming --pre-compute has been run)
     all_amp_files = sorted(Path("precomputed_ps/").resolve().glob("*_amp_mean.tif"))
     all_disp_files = sorted(
         Path("precomputed_ps/").resolve().glob("*_amp_dispersion.tif")
     )
-    # TODO: how to make it shift when the year changes for PS files
 
     slc_idx_start = 0
     slc_idx_end = ministack_size
-    max_stack_size = 2 * ministack_size - 1  # Size at which we archive/shrink
+    # max_stack_size = 2 * ministack_size - 1  # Size at which we archive/shrink
     cur_path = Path(f"stack_{slc_idx_start}_{slc_idx_end}")
     cur_path.mkdir(exist_ok=True)
-    # TODO: use the context-manager change-then-back
-    os.chdir(cur_path)
 
-    # TODO: do i wanna somehow provide the burst nodata file?
+    # TODO: how to make it shift when the year changes for PS files
 
     # Make the first ministack
-    cur_slc_files = _get_all_slc_files(burst_to_vrt_stack, slc_idx_start, slc_idx_end)
+    cur_slc_files = _get_all_slc_files(burst_to_file_list, slc_idx_start, slc_idx_end)
     cfg = _create_cfg(
         slc_files=cur_slc_files,
         first_ministack=True,
         amplitude_mean_files=all_amp_files,
         amplitude_dispersion_files=all_disp_files,
+        work_dir=cur_path,
         **arg_dict,
     )
-
-    cfg.to_yaml("dolphin_config.yaml")
+    cfg.to_yaml(cur_path / "dolphin_config.yaml")
     s1_disp.run(cfg)
-    os.chdir("..")
 
     # Rest of mini stacks in incremental-mode
     comp_slc_files: list[Path] = []
     slc_idx_end = ministack_size + 1
+
+    slc_idx_start, slc_idx_end = 10, 28
     while slc_idx_end <= num_dates:
-        cur_path = Path(f"stack_{slc_idx_start}_{slc_idx_end}")
-        cur_path.mkdir(exist_ok=True)
-        os.chdir(cur_path)
-
-        logger.info(f"***** START: {cur_path} *****")
-        # Get the nearest amplitude mean/dispersion files
-        cur_slc_files = _get_all_slc_files(
-            burst_to_vrt_stack, slc_idx_start, slc_idx_end
+        # we have to wait for the shrink-and-archive jobs before continuing
+        new_comp_slcs = _run_one_stack(
+            slc_idx_start,
+            slc_idx_end,
+            ministack_size,
+            burst_to_file_list,
+            comp_slc_files,
+            all_amp_files,
+            all_disp_files,
         )
-        cfg = _create_cfg(
-            slc_files=comp_slc_files + cur_slc_files,
-            amplitude_mean_files=all_amp_files,
-            amplitude_dispersion_files=all_disp_files,
-            **arg_dict,
+        logger.info(
+            f"{len(new_comp_slcs)} comp slcs from stack_{slc_idx_start}_{slc_idx_end}"
         )
-        cfg.to_yaml("dolphin_config.yaml")
-        s1_disp.run(cfg)
-
-        # On the step before we hit double `ministack_size`,
-        # archive, shrink, and pull another compressed SLC to replace.
-        stack_size = slc_idx_end - slc_idx_start
-        if stack_size == max_stack_size:
-            # time to shrink!
-            # Get the compressed SLC that was output
-            comp_slc_path = Path("output/compressed_slcs/").resolve()
-            new_comp_slcs = list(comp_slc_path.glob("*.h5"))
-            # assert len(new_comp_slcs) == 1
-            # comp_slc_files.append(new_comp_slcs[0].resolve())
-            comp_slc_files.extend(new_comp_slcs)
-
-            # Move the front forward one ministack
-            slc_idx_start += ministack_size
-
+        comp_slc_files.extend(new_comp_slcs)
         slc_idx_end += 1
-        logger.info(f"***** END: {cur_path} *****")
-
-        os.chdir("..")
+        if len(new_comp_slcs) > 0:
+            # Move the front idx up by one ministack
+            slc_idx_start += ministack_size
 
 
 if __name__ == "__main__":

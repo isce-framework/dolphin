@@ -6,11 +6,13 @@ wrapper functions to write/iterate over blocks of large raster files.
 from __future__ import annotations
 
 import math
+from dataclasses import dataclass
 from datetime import date
 from os import fspath
 from pathlib import Path
 from typing import Any, Generator, Optional, Sequence, Union
 
+import h5py
 import numpy as np
 from numpy.typing import ArrayLike, DTypeLike
 from osgeo import gdal
@@ -458,104 +460,58 @@ def write_arr(
         Default is the nodata of band 1 of `like_filename` (if provided), or None.
 
     """
-    if like_filename is not None:
-        ds_like = gdal.Open(fspath(like_filename))
-    else:
-        ds_like = None
-
-    xsize = ysize = gdal_dtype = None
-    if arr is not None:
-        if arr.ndim == 2:
-            arr = arr[np.newaxis, ...]
-        ysize, xsize = arr.shape[-2:]
-        gdal_dtype = numpy_to_gdal_type(arr.dtype)
-    else:
-        # If not passing an array to write, get shape/dtype from like_filename
-        if shape is not None:
-            ysize, xsize = shape
-        else:
-            xsize, ysize = ds_like.RasterXSize, ds_like.RasterYSize
-            # If using strides, adjust the output shape
-            if strides is not None:
-                ysize, xsize = compute_out_shape((ysize, xsize), strides)
-
-        if dtype is not None:
-            gdal_dtype = numpy_to_gdal_type(dtype)
-        else:
-            gdal_dtype = ds_like.GetRasterBand(1).DataType
-
-    if any(v is None for v in (xsize, ysize, gdal_dtype)):
-        raise ValueError("Must specify either `arr` or `like_filename`")
-
-    if nodata is None and ds_like is not None:
-        b = ds_like.GetRasterBand(1)
-        nodata = b.GetNoDataValue()
-
-    if nbands is None:
-        if arr is not None:
-            nbands = arr.shape[0]
-        elif ds_like is not None:
-            nbands = ds_like.RasterCount
-        else:
-            nbands = 1
-
-    if driver is None:
-        if str(output_name).endswith(".tif"):
-            driver = "GTiff"
-        else:
-            if not ds_like:
-                raise ValueError("Must specify `driver` if `like_filename` is None")
-            driver = ds_like.GetDriver().ShortName
-    if options is None and driver == "GTiff":
-        options = list(DEFAULT_TIFF_OPTIONS)
-
-    drv = gdal.GetDriverByName(driver)
+    fi = FileInfo.from_user_inputs(
+        arr=arr,
+        output_name=output_name,
+        like_filename=like_filename,
+        driver=driver,
+        options=options,
+        nbands=nbands,
+        shape=shape,
+        dtype=dtype,
+        geotransform=geotransform,
+        strides=strides,
+        projection=projection,
+        nodata=nodata,
+    )
+    drv = gdal.GetDriverByName(fi.driver)
     ds_out = drv.Create(
         fspath(output_name),
-        xsize,
-        ysize,
-        nbands,
-        gdal_dtype,
-        options=options or [],
+        fi.xsize,
+        fi.ysize,
+        fi.nbands,
+        fi.gdal_dtype,
+        options=fi.options,
     )
 
-    # If not provided, attempt to get projection/geotransform from like_filename
-    if projection is None and ds_like is not None:
-        projection = ds_like.GetProjection()
-    if geotransform is None and ds_like is not None:
-        geotransform = ds_like.GetGeoTransform()
-        # If we're using strides, adjust the geotransform
-        if strides is not None:
-            geotransform = list(geotransform)
-            geotransform[1] *= strides["x"]
-            geotransform[5] *= strides["y"]
-
     # Set the geo/proj information
-    if projection:
+    if fi.projection:
         # Make sure we're got a correct format for the projection
         # this still works if we're passed a WKT string
-        projection = CRS.from_user_input(projection).to_wkt()
-        ds_out.SetProjection(projection)
+        proj = CRS.from_user_input(fi.projection).to_wkt()
+        ds_out.SetProjection(proj)
 
-    if geotransform is not None:
-        ds_out.SetGeoTransform(geotransform)
+    if fi.geotransform is not None:
+        ds_out.SetGeoTransform(fi.geotransform)
 
     # Write the actual data
     if arr is not None:
-        for i in range(nbands):
-            logger.debug(f"Writing band {i+1}/{nbands}")
+        if arr.ndim == 2:
+            arr = arr[np.newaxis, ...]
+        for i in range(fi.nbands):
+            logger.debug(f"Writing band {i+1}/{fi.nbands}")
             bnd = ds_out.GetRasterBand(i + 1)
             bnd.WriteArray(arr[i])
 
     # Set the nodata value for each band
-    if nodata is not None:
-        for i in range(nbands):
-            logger.debug(f"Setting nodata for band {i+1}/{nbands}")
+    if fi.nodata is not None:
+        for i in range(fi.nbands):
+            logger.debug(f"Setting nodata for band {i+1}/{fi.nbands}")
             bnd = ds_out.GetRasterBand(i + 1)
-            bnd.SetNoDataValue(nodata)
+            bnd.SetNoDataValue(fi.nodata)
 
     ds_out.FlushCache()
-    ds_like = ds_out = None
+    ds_out = None
 
 
 def write_block(
@@ -586,9 +542,22 @@ def write_block(
         # Make into 3D array shaped (1, rows, cols)
         cur_block = cur_block[np.newaxis, ...]
     # filename must be pre-made
-    if not Path(filename).exists():
+    filename = Path(filename)
+    if not filename.exists():
         raise ValueError(f"File {filename} does not exist")
 
+    if filename.suffix in (".h5", ".hdf5", ".nc"):
+        _write_hdf5(cur_block, filename, row_start, col_start)
+    else:
+        _write_gdal(cur_block, filename, row_start, col_start)
+
+
+def _write_gdal(
+    cur_block: ArrayLike,
+    filename: Filename,
+    row_start: int,
+    col_start: int,
+):
     ds = gdal.Open(fspath(filename), gdal.GA_Update)
     for b_idx, cur_image in enumerate(cur_block, start=1):
         bnd = ds.GetRasterBand(b_idx)
@@ -598,6 +567,128 @@ def write_block(
         bnd.FlushCache()
         bnd = None
     ds = None
+
+
+def _write_hdf5(
+    cur_block: ArrayLike,
+    filename: Filename,
+    row_start: int,
+    col_start: int,
+):
+    nrows, ncols = cur_block.shape[-2:]
+    row_slice = slice(row_start, row_start + nrows)
+    col_slice = slice(col_start, col_start + ncols)
+    with h5py.File(filename, "a") as hf:
+        hf[row_slice, col_slice] = cur_block
+
+
+@dataclass
+class FileInfo:
+    nbands: int
+    ysize: int
+    xsize: int
+    dtype: DTypeLike
+    gdal_dtype: int
+    nodata: Optional[Union[str, float]]
+    driver: str
+    options: Optional[list]
+    projection: Optional[str]
+    geotransform: Optional[list[float]]
+
+    @classmethod
+    def from_user_inputs(
+        cls,
+        *,
+        arr: Optional[ArrayLike],
+        output_name: Filename,
+        like_filename: Optional[Filename] = None,
+        driver: Optional[str] = "GTiff",
+        options: Optional[Sequence[Any]] = [],
+        nbands: Optional[int] = None,
+        shape: Optional[tuple[int, int]] = None,
+        dtype: Optional[DTypeLike] = None,
+        geotransform: Optional[Sequence[float]] = None,
+        strides: Optional[dict[str, int]] = None,
+        projection: Optional[Any] = None,
+        nodata: Optional[Union[float, str]] = None,
+    ) -> FileInfo:
+        if like_filename is not None:
+            ds_like = gdal.Open(fspath(like_filename))
+        else:
+            ds_like = None
+
+        xsize = ysize = gdal_dtype = None
+        if arr is not None:
+            if arr.ndim == 2:
+                arr = arr[np.newaxis, ...]
+            ysize, xsize = arr.shape[-2:]
+            gdal_dtype = numpy_to_gdal_type(arr.dtype)
+        else:
+            # If not passing an array to write, get shape/dtype from like_filename
+            if shape is not None:
+                ysize, xsize = shape
+            else:
+                xsize, ysize = ds_like.RasterXSize, ds_like.RasterYSize
+                # If using strides, adjust the output shape
+                if strides is not None:
+                    ysize, xsize = compute_out_shape((ysize, xsize), strides)
+
+            if dtype is not None:
+                gdal_dtype = numpy_to_gdal_type(dtype)
+            else:
+                gdal_dtype = ds_like.GetRasterBand(1).DataType
+
+        if any(v is None for v in (xsize, ysize, gdal_dtype)):
+            raise ValueError("Must specify either `arr` or `like_filename`")
+        assert gdal_dtype is not None
+
+        if nodata is None and ds_like is not None:
+            b = ds_like.GetRasterBand(1)
+            nodata = b.GetNoDataValue()
+
+        if nbands is None:
+            if arr is not None:
+                nbands = arr.shape[0]
+            elif ds_like is not None:
+                nbands = ds_like.RasterCount
+            else:
+                nbands = 1
+
+        if driver is None:
+            if str(output_name).endswith(".tif"):
+                driver = "GTiff"
+            else:
+                if not ds_like:
+                    raise ValueError("Must specify `driver` if `like_filename` is None")
+                driver = ds_like.GetDriver().ShortName
+        if options is None and driver == "GTiff":
+            options = list(DEFAULT_TIFF_OPTIONS)
+        if not options:
+            options = []
+
+        # If not provided, attempt to get projection/geotransform from like_filename
+        if projection is None and ds_like is not None:
+            projection = ds_like.GetProjection()
+        if geotransform is None and ds_like is not None:
+            geotransform = ds_like.GetGeoTransform()
+            # If we're using strides, adjust the geotransform
+            if strides is not None:
+                geotransform = list(geotransform)
+                geotransform[1] *= strides["x"]
+                geotransform[5] *= strides["y"]
+
+        return cls(
+            nbands=nbands,
+            ysize=ysize,
+            xsize=xsize,
+            dtype=dtype,
+            gdal_dtype=gdal_dtype,
+            nodata=nodata,
+            driver=driver,
+            options=list(options),
+            projection=projection,
+            geotransform=list(geotransform) if geotransform else None,
+        )
 
 
 class Writer(BackgroundWriter):

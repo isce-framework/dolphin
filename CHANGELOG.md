@@ -13,6 +13,7 @@
 - Also included a script to view the window in an interactive matplotlib figure (matplotlib must be installed separately)
 - Added a simple method to check for adjacent-pixel unwrapping errors in `unwrap.compute_phase_diffs`
 - Adds a method `utils.get_cpu_count` which returns either `os.cpu_count`, or (if running in a Docker container) the number of CPUs allocated by Docker
+- If processing stacks from separate bursts, added option `n_parallel_bursts` to `Workflow` to run in parallel processes.
 - Created a script to test the incremental/near-real-time version of phase linking
 
 **Changes**

@@ -174,7 +174,7 @@ def setup_output_folder(
 
 
 def get_union_polygon(
-    opera_file_list: list[Filename], buffer_degrees: float = 0.0
+    opera_file_list: Sequence[Filename], buffer_degrees: float = 0.0
 ) -> geometry.Polygon:
     """Get the union of the bounding polygons of the given files.
 
@@ -204,7 +204,7 @@ def get_union_polygon(
 
 
 def make_nodata_mask(
-    opera_file_list: list[Filename],
+    opera_file_list: Sequence[Filename],
     out_file: Filename,
     buffer_pixels: int = 0,
     overwrite: bool = False,
@@ -242,10 +242,13 @@ def make_nodata_mask(
     # convert pixels to degrees lat/lon
     # TODO: more robust way to get the pixel size... this is a hack
     # maybe just use pyproj to warp lat/lon to meters and back?
-    gt = io.get_raster_gt(opera_file_list[0])
-    dx_meters = gt[1]
-    dx_degrees = dx_meters / 111000
-    buffer_degrees = buffer_pixels * dx_degrees
+    if buffer_pixels == 0:
+        buffer_degrees = 0.0
+    else:
+        gt = io.get_raster_gt(opera_file_list[0])
+        dx_meters = gt[1]
+        dx_degrees = dx_meters / 111000
+        buffer_degrees = buffer_pixels * dx_degrees
 
     # Get the union of all the polygons and convert to a temp geojson
     union_poly = get_union_polygon(opera_file_list, buffer_degrees=buffer_degrees)

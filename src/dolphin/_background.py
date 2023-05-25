@@ -9,6 +9,7 @@ from threading import enumerate as threading_enumerate
 from typing import Any, Optional
 
 from dolphin._log import get_log
+from dolphin._types import Filename
 
 logger = get_log(__name__)
 
@@ -279,7 +280,7 @@ class NvidiaMemoryWatcher(Thread):
 
     def __init__(
         self,
-        log_file: str = "nvidia_memory.log",
+        log_file: Filename = f"nvidia_memory_{os.getpid()}.log",
         refresh_rate: float = 1.0,
         gpu_id: int = 0,
     ):

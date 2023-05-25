@@ -17,6 +17,7 @@ def run(
     tcorr_file_list: Sequence[Path],
     cfg: Workflow,
     debug: bool = False,
+    unwrap_jobs: int = 1,
 ) -> tuple[list[Path], list[Path], list[Path], Path]:
     """Run the displacement workflow on a stack of SLCs.
 
@@ -31,6 +32,8 @@ def run(
         [`Workflow`][dolphin.workflows.config.Workflow] object with workflow parameters
     debug : bool, optional
         Enable debug logging, by default False.
+    unwrap_jobs : int, default = 1
+        Number of parallel unwrapping jobs to run at once.
 
     Returns
     -------
@@ -84,7 +87,7 @@ def run(
 
     if cfg.mask_file is not None:
         logger.info(f"Warping {cfg.mask_file} to match interferograms")
-        output_mask = stitched_tcorr_file.parent / "warped_mask.tif"
+        output_mask = stitched_ifg_dir / "warped_mask.tif"
         if output_mask.exists():
             logger.info(f"Mask already exists at {output_mask}")
         else:
@@ -114,7 +117,7 @@ def run(
         mask_file=output_mask,
         # mask_file: Optional[Filename] = None,
         # TODO: max jobs based on the CPUs and the available RAM? use dask?
-        # max_jobs=20,
+        max_jobs=unwrap_jobs,
         # overwrite: bool = False,
         no_tile=True,
         use_icu=use_icu,
@@ -135,12 +138,12 @@ def _estimate_spatial_correlations(
 
     corr_paths: list[Path] = []
     for dates, ifg_path in date_to_ifg_path.items():
-        ifg = io.load_gdal(ifg_path)
         cor_path = ifg_path.with_suffix(".cor")
         corr_paths.append(cor_path)
         if cor_path.exists():
             logger.info(f"Skipping existing spatial correlation for {ifg_path}")
             continue
+        ifg = io.load_gdal(ifg_path)
         logger.info(f"Estimating spatial correlation for {dates}...")
         cor = estimate_correlation_from_phase(ifg, window_size=window_size)
         logger.info(f"Writing spatial correlation to {cor_path}")

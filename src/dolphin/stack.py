@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from os import fspath
 from pathlib import Path
-from pprint import pformat
 from typing import Generator, Optional, Sequence
 
 import numpy as np
@@ -57,9 +57,6 @@ class VRTStack:
     file_date_fmt : str, optional (default = "%Y%m%d")
         Format string for parsing the dates from the filenames.
         Passed to [dolphin.utils.get_dates][].
-    num_read_threads : int, optional
-        If provided and `num_read_threads > 1`, uses `threading` to read stack layers
-        in parallel. Default = 1, no threading.
     """
 
     def __init__(
@@ -76,6 +73,7 @@ class VRTStack:
         file_date_fmt: str = "%Y%m%d",
         write_file: bool = True,
         fail_on_overwrite: bool = False,
+        skip_size_check: bool = False,
     ):
         """Initialize a VRTStack object for a list of files, optionally subsetting."""
         if Path(outfile).exists() and write_file:
@@ -109,7 +107,8 @@ class VRTStack:
         # Assumes that all files use the same subdataset (if NetCDF)
         self.subdataset = subdataset
 
-        self._assert_images_same_size()
+        if not skip_size_check:
+            self._assert_images_same_size()
 
         # Use the first file in the stack to get size, transform info
         ds = gdal.Open(fspath(self._gdal_file_strings[0]))
@@ -174,15 +173,10 @@ class VRTStack:
 
     def _assert_images_same_size(self):
         """Make sure all files in the stack are the same size."""
-        from collections import defaultdict
-
-        size_to_file = defaultdict(list)
-        for f in self._gdal_file_strings:
-            s = io.get_raster_xysize(f)
-            size_to_file[s].append(f)
-        if len(size_to_file) > 1:
-            size_str = pformat(dict(sorted(size_to_file.items())))
-            raise ValueError(f"Not files have same raster (x, y) size:\n{size_str}")
+        with ThreadPoolExecutor(5) as executor:
+            sizes = executor.map(io.get_raster_xysize, self._gdal_file_strings)
+        if len(set(sizes)) > 1:
+            raise ValueError(f"Not files have same raster (x, y) size:\n{set(sizes)}")
 
     @property
     def _gdal_file_strings(self):

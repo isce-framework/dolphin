@@ -53,6 +53,8 @@ def run_wrapped_phase_single(
     file_list_all = vrt.file_list
     date_list_all = vrt.dates
 
+    # If we are using a different number of SLCs for the amplitude data,
+    # we should note that for the SHP finding algorithms
     if shp_nslc is None:
         shp_nslc = len(file_list_all)
 
@@ -65,8 +67,10 @@ def run_wrapped_phase_single(
         # invert the mask so 1s are the missing data pixels
         nodata_mask = ~nodata_mask
         # check middle pixel
-        assert nodata_mask.shape == (nrows, ncols)
-        assert not nodata_mask[nrows // 2, ncols // 2]
+        if nodata_mask[nrows // 2, ncols // 2]:
+            logger.warning(f"{mask_file} is True at {nrows//2, ncols//2}")
+            logger.warning("Proceeding without the nodata mask.")
+            nodata_mask = np.zeros((nrows, ncols), dtype=bool)
     else:
         nodata_mask = np.zeros((nrows, ncols), dtype=bool)
 
@@ -177,6 +181,7 @@ def run_wrapped_phase_single(
         max_bytes=stack_max_bytes,
         skip_empty=True,
         nodata_mask=nodata_mask,
+        show_progress=False,
     )
     for cur_data, (rows, cols) in block_gen:
         if np.all(cur_data == 0):
