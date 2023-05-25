@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import argparse
-from concurrent.futures import ThreadPoolExecutor  # , as_completed
+from concurrent.futures import ThreadPoolExecutor
 from itertools import chain
 from pathlib import Path
 from typing import Any, Mapping, Sequence
@@ -30,10 +30,11 @@ def _create_cfg(
     first_ministack: bool = False,
     run_unwrap: bool = False,
     shp_method: ShpMethod = ShpMethod.GLRT,
-    amplitude_mean_files=[],
-    amplitude_dispersion_files=[],
+    amplitude_mean_files: Sequence[Filename] = [],
+    amplitude_dispersion_files: Sequence[Filename] = [],
     strides: Mapping[str, int] = {"x": 6, "y": 3},
     work_dir: Path = Path("."),
+    n_parallel_bursts: int = 1,
 ):
     # strides = {"x": 1, "y": 1}
     interferogram_network: dict[str, Any]
@@ -68,8 +69,9 @@ def _create_cfg(
         output_directory=work_dir / "output",
         worker_settings=dict(
             #     block_size_gb=block_size_gb,
+            n_parallel_bursts=n_parallel_bursts,
             n_workers=4,
-            threads_per_worker=4,
+            threads_per_worker=8,
         ),
         #     ps_options=dict(
         #         amp_dispersion_threshold=amp_dispersion_threshold,
@@ -80,7 +82,7 @@ def _create_cfg(
         unwrap_options=dict(
             unwrap_method="snaphu",
             run_unwrap=run_unwrap,
-            # CHANGEME: or else run in backgroun somehow?
+            # CHANGEME: or else run in background somehow?
         ),
         save_compressed_slc=True,  # always save, and only sometimes will we grab it
         workflow_name=workflow_name,
@@ -132,10 +134,10 @@ def get_cli_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "-j",
-        "--max-jobs",
+        "--n-parallel-bursts",
         type=int,
         default=1,
-        help="Number of parallel ministacks to process.",
+        help="Number of parallel bursts to process.",
     )
     parser.add_argument(
         "--pre-compute",
@@ -291,7 +293,7 @@ def _form_burst_vrt_stacks(
                 file_list, subdataset=OPERA_DATASET_NAME, outfile=outfile
             )
         else:
-            vrt = stack.VRTStack.from_vrt_file(outfile)
+            vrt = stack.VRTStack.from_vrt_file(outfile, skip_size_check=True)
         burst_to_vrt_stack[b] = vrt
     logger.info("Done.")
     return burst_to_vrt_stack
@@ -318,30 +320,30 @@ def precompute_ps_files(arg_dict) -> None:
 
 
 def _get_all_slc_files(
-    burst_to_vrt_stack: dict[str, stack.VRTStack], start_idx: int, end_idx: int
-):
+    burst_to_file_list: Mapping[str, Sequence[Filename]], start_idx: int, end_idx: int
+) -> list[Filename]:
     return list(
         chain.from_iterable(
-            [v.file_list[start_idx:end_idx] for v in burst_to_vrt_stack.values()]
+            [file_list[start_idx:end_idx] for file_list in burst_to_file_list.values()]
         )
     )
 
 
 def _run_one_stack(
-    slc_idx_start,
-    slc_idx_end,
-    ministack_size,
-    burst_to_vrt_stack,
-    comp_slc_files,
-    all_amp_files,
-    all_disp_files,
+    slc_idx_start: int,
+    slc_idx_end: int,
+    ministack_size: int,
+    burst_to_file_list: dict[str, Sequence[Filename]],
+    comp_slc_files: list[Filename],
+    all_amp_files: Sequence[Filename],
+    all_disp_files: Sequence[Filename],
 ):
     cur_path = Path(f"stack_{slc_idx_start}_{slc_idx_end}")
     cur_path.mkdir(exist_ok=True)
 
     logger.info(f"***** START: {cur_path} *****")
     # Get the nearest amplitude mean/dispersion files
-    cur_slc_files = _get_all_slc_files(burst_to_vrt_stack, slc_idx_start, slc_idx_end)
+    cur_slc_files = _get_all_slc_files(burst_to_file_list, slc_idx_start, slc_idx_end)
     cfg = _create_cfg(
         slc_files=comp_slc_files + cur_slc_files,
         amplitude_mean_files=all_amp_files,
@@ -391,15 +393,13 @@ def main(arg_dict: dict) -> None:
     burst_to_vrt_stack = _form_burst_vrt_stacks(
         burst_grouped_slc_files=burst_grouped_slc_files
     )
+    burst_to_file_list = {b: v.file_list for b, v in burst_to_vrt_stack.items()}
 
     # Get the pre-compted PS files (assuming --pre-compute has been run)
     all_amp_files = sorted(Path("precomputed_ps/").resolve().glob("*_amp_mean.tif"))
     all_disp_files = sorted(
         Path("precomputed_ps/").resolve().glob("*_amp_dispersion.tif")
     )
-
-    max_jobs = arg_dict.pop("max_jobs")
-    logger.info(f"Running {max_jobs} parallel ministack jobs")
 
     slc_idx_start = 0
     slc_idx_end = ministack_size
@@ -410,7 +410,7 @@ def main(arg_dict: dict) -> None:
     # TODO: how to make it shift when the year changes for PS files
 
     # Make the first ministack
-    cur_slc_files = _get_all_slc_files(burst_to_vrt_stack, slc_idx_start, slc_idx_end)
+    cur_slc_files = _get_all_slc_files(burst_to_file_list, slc_idx_start, slc_idx_end)
     cfg = _create_cfg(
         slc_files=cur_slc_files,
         first_ministack=True,
@@ -424,45 +424,28 @@ def main(arg_dict: dict) -> None:
 
     # Rest of mini stacks in incremental-mode
     comp_slc_files: list[Path] = []
-    slc_idx_end = ministack_size
+    slc_idx_end = ministack_size + 1
 
-    start_increment = 1  # the first loop, we only run `(ministack - 1)`` jobs
+    slc_idx_start, slc_idx_end = 10, 28
     while slc_idx_end <= num_dates:
-        # submit all at once up to the archiving job
         # we have to wait for the shrink-and-archive jobs before continuing
-        with ThreadPoolExecutor(max_workers=max_jobs) as executor:
-            futures = []
-            for i in range(start_increment, ministack_size):
-                cur_end_idx = slc_idx_end + i
-                if cur_end_idx > num_dates:
-                    # This is the end and we'll just skip submitting any more jobs
-                    continue
-                fut = executor.submit(
-                    _run_one_stack,
-                    slc_idx_start,
-                    cur_end_idx,
-                    ministack_size,
-                    burst_to_vrt_stack,
-                    comp_slc_files,
-                    all_amp_files,
-                    all_disp_files,
-                )
-                futures.append(fut)
-
-            for i, fut in enumerate(futures):
-                new_comp_slcs = fut.result()
-                logger.info(
-                    f"{len(new_comp_slcs)} comp slcs from ministack"
-                    f" {i+1}/{ministack_size}"
-                )
-                comp_slc_files.extend(new_comp_slcs)
-
-        # Move the front/back idx up by one ministack
-        slc_idx_start += ministack_size
-        slc_idx_end += ministack_size
-
-        # all others after the first, we do `ministack` number of loops
-        start_increment = 0
+        new_comp_slcs = _run_one_stack(
+            slc_idx_start,
+            slc_idx_end,
+            ministack_size,
+            burst_to_file_list,
+            comp_slc_files,
+            all_amp_files,
+            all_disp_files,
+        )
+        logger.info(
+            f"{len(new_comp_slcs)} comp slcs from stack_{slc_idx_start}_{slc_idx_end}"
+        )
+        comp_slc_files.extend(new_comp_slcs)
+        slc_idx_end += 1
+        if len(new_comp_slcs) > 0:
+            # Move the front idx up by one ministack
+            slc_idx_start += ministack_size
 
 
 if __name__ == "__main__":
