@@ -161,7 +161,7 @@ class UnwrapOptions(BaseModel, extra=Extra.forbid):
             "Whether to run the unwrapping step after wrapped phase estimation."
         ),
     )
-    _directory: Path = PrivateAttr(Path("unwrap"))
+    _directory: Path = PrivateAttr(Path("unwrapped"))
     unwrap_method: UnwrapMethod = UnwrapMethod.SNAPHU
     tiles: List[int] = Field(
         [1, 1],
