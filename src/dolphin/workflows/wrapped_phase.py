@@ -36,6 +36,7 @@ def run(cfg: Workflow, debug: bool = False) -> tuple[list[Path], Path, Path]:
         In the case of sequential phase linking, this is the average tcorr file.
     """
     logger = get_log(debug=debug)
+    logger.info(f"Running wrapped phase estimation in {cfg.scratch_directory}")
 
     input_file_list = cfg.cslc_file_list
     if not input_file_list:

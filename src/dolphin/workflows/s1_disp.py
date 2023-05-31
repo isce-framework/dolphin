@@ -118,10 +118,6 @@ def run(
         }
         for fut in fut_to_burst:
             burst = fut_to_burst[fut]
-            msg = "Running wrapped phase estimation"
-            if burst:
-                msg += f" for burst {burst}"
-            logger.info(msg)
 
             cur_ifg_list, comp_slc, tcorr = fut.result()
             ifg_file_list.extend(cur_ifg_list)

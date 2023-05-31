@@ -204,13 +204,15 @@ def run_wrapped_phase_single(
             method=shp_method,
         )
         # Run the phase linking process on the current ministack
+        # TESTING TODO
+        ref = max(0, first_non_comp_idx - 1)
         try:
             cur_mle_stack, tcorr = run_mle(
                 cur_data,
                 half_window=half_window,
                 strides=strides,
                 beta=beta,
-                reference_idx=reference_idx,
+                reference_idx=ref,
                 nodata_mask=nodata_mask[rows, cols],
                 ps_mask=ps_mask[rows, cols],
                 neighbor_arrays=neighbor_arrays,
@@ -226,7 +228,7 @@ def run_wrapped_phase_single(
                 # Some SLCs in the ministack are all NaNs
                 # This happens from a shifting burst window near the edges,
                 # and seems to cause no issues
-                logger.info(msg)
+                logger.debug(msg)
             else:
                 logger.warning(msg)
             continue
