@@ -1,5 +1,6 @@
 import argparse
 
+import dolphin._cli_unwrap
 import dolphin.workflows._cli_config
 import dolphin.workflows._cli_run
 from dolphin import __version__
@@ -17,6 +18,7 @@ def main(args=None):
     # Adds the subcommand to the top-level parser
     dolphin.workflows._cli_run.get_parser(subparser, "run")
     dolphin.workflows._cli_config.get_parser(subparser, "config")
+    dolphin._cli_unwrap.get_parser(subparser, "unwrap")
     parsed_args = parser.parse_args(args=args)
 
     arg_dict = vars(parsed_args)

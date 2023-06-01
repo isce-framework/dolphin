@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import argparse
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from os import fspath
@@ -345,75 +344,3 @@ def _compute_phase_diffs(phase):
     d2 = np.abs(phase[0, 0] - phase[1, 0]) / np.pi
     # Subtract 0.5 so that anything below 1 gets rounded to 0
     return round(d1 - 0.5) + round(d2 - 0.5)
-
-
-def _get_parser(subparser=None, subcommand_name="unwrap"):
-    """Set up the command line interface."""
-    metadata = dict(
-        description="Create a configuration file for a displacement workflow.",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-        # https://docs.python.org/3/library/argparse.html#fromfile-prefix-chars
-        fromfile_prefix_chars="@",
-    )
-    if subparser:
-        # Used by the subparser to make a nested command line interface
-        parser = subparser.add_parser(subcommand_name, **metadata)
-    else:
-        parser = argparse.ArgumentParser(**metadata)
-
-    # parser._action_groups.pop()
-    parser.add_argument(
-        "-o",
-        "--output-path",
-        help="Path to output directory to store results",
-    )
-    # Get Inputs from the command line
-    inputs = parser.add_argument_group("Input options")
-    inputs.add_argument(
-        "--ifg-filenames",
-        nargs=argparse.ZERO_OR_MORE,
-        help=(
-            "List the paths of all ifg files to include. Can pass a newline delimited"
-            " file with @ifg_filelist.txt"
-        ),
-    )
-    inputs.add_argument(
-        "--cor-filenames",
-        nargs=argparse.ZERO_OR_MORE,
-        help=(
-            "List the paths of all ifg files to include. Can pass a newline delimited"
-            " file with @cor_filelist.txt"
-        ),
-    )
-    inputs.add_argument(
-        "--mask-filename",
-        help=(
-            "Path to Byte mask file used to ignore low correlation/bad data (e.g water"
-            " mask). Convention is 0 for no data/invalid, and 1 for good data."
-        ),
-    )
-    parser.add_argument(
-        "--nlooks",
-        type=int,
-        help="Effective number of looks used to form correlation",
-    )
-
-    parser.add_argument(
-        "--max-jobs",
-        type=int,
-        help="Number of parallel files to unwrap",
-    )
-    parser.set_defaults(run_func=run_unwrap_cli)
-
-    return parser
-
-
-def run_unwrap_cli(args=None):
-    """Get the command line arguments and unwrap files."""
-    parser = _get_parser()
-    parsed_args = parser.parse_args(args)
-    run(**vars(parsed_args))
-
-
-if __name__ == "__main__":
-    run_unwrap_cli()
