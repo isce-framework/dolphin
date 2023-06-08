@@ -19,5 +19,5 @@ dependencies:
   - rich>=12.0
   - ruamel.yaml>=0.15
   - scipy>=1.5 # "scipy 0.16+ is required for linear algebra", numba. 1.5 is the oldest version that supports Python 3.7
-  - shapely>=1.7
+  - shapely>=1.8
   - threadpoolctl>=3.0
