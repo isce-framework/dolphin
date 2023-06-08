@@ -211,7 +211,7 @@ def get_union_polygon(
     if len(polygons) == 0:
         raise ValueError("No polygons found in the given file list.")
     # Union all the polygons
-    return ops.union_all(polygons)
+    return ops.unary_union(polygons)
 
 
 def make_nodata_mask(
