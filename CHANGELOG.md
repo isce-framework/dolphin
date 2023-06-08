@@ -15,12 +15,16 @@
 - Adds a method `utils.get_cpu_count` which returns either `os.cpu_count`, or (if running in a Docker container) the number of CPUs allocated by Docker
 - If processing stacks from separate bursts, added option `n_parallel_bursts` to `Workflow` to run in parallel processes.
 - Created a script to test the incremental/near-real-time version of phase linking
+- Added a new CLI command `dolphin unwrap` to unwrap a single interferogram/a directory of interferograms in parallel.
 
 **Changes**
 
 - Passing an existing file to `VRTStack` will no longer error unless `fail_on_overwrite=True`. The default just prints out the overwrite is happening. This prevents multiple runs in the same folder from errorings just for creating a reference to the SLC files.
 - The environment variable `NUMBA_NUM_THREADS` is set using the passed in config to prevent numba from using all CPUs during `prange` calls
 - The `sequential.py` module uses a different implementation of the sequential estimator to avoid the need for a datum adjustment.
+- The scratch directory holding unwrapped interferograms is named `unwrapped` instead of `unwrap`
+- Stitching files now can accept downsampled versions and product the correcet geo metadata
+
 
 **Dependencies**
 
