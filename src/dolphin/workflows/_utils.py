@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Optional, Pattern, Sequence, Union
 
 import h5py
-from shapely import geometry, intersection_all, union_all, wkt
+from shapely import geometry, union_all, wkt
 
 from dolphin import io
 from dolphin._log import get_log
@@ -212,23 +212,6 @@ def get_union_polygon(
         raise ValueError("No polygons found in the given file list.")
     # Union all the polygons
     return union_all(polygons)
-
-
-def _get_intersection_polygon(
-    opera_file_list: Sequence[Filename], buffer_degrees: float = 0.0
-) -> geometry.Polygon:
-    """Get the union of the bounding polygons of the given files.
-
-    Parameters
-    ----------
-    opera_file_list : list[Filename]
-        list of COMPASS SLC filenames.
-    buffer_degrees : float, optional
-        Buffer the polygons by this many degrees, by default 0.0
-    """
-    return intersection_all(
-        [get_cslc_polygon(f, buffer_degrees) for f in opera_file_list]
-    )
 
 
 def make_nodata_mask(
