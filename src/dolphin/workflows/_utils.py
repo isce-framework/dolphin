@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Optional, Pattern, Sequence, Union
 
 import h5py
-from shapely import geometry, union_all, wkt
+from shapely import geometry, ops, wkt
 
 from dolphin import io
 from dolphin._log import get_log
@@ -211,7 +211,7 @@ def get_union_polygon(
     if len(polygons) == 0:
         raise ValueError("No polygons found in the given file list.")
     # Union all the polygons
-    return union_all(polygons)
+    return ops.union_all(polygons)
 
 
 def make_nodata_mask(
