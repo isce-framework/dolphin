@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-import shutil
 from pathlib import Path
 from typing import Optional
 
-from dolphin import io, ps, stack, utils
+from dolphin import ps, stack, utils
 from dolphin._background import NvidiaMemoryWatcher
 from dolphin._log import get_log, log_runtime
 from dolphin.interferogram import Network
@@ -162,51 +161,22 @@ def run(cfg: Workflow, debug: bool = False) -> tuple[list[Path], Path, Path]:
     existing_ifgs = list(ifg_dir.glob("*.int.*"))
     if len(existing_ifgs) > 0:
         logger.info(f"Skipping interferogram step, {len(existing_ifgs)} exists")
+        ifg_file_list = existing_ifgs
     else:
         logger.info(
             f"Creating virtual interferograms from {len(phase_linked_slcs)} files"
         )
-        # if Path(vrt_stack.file_list[0]).name.startswith("compressed"):
-        if cfg.workflow_name == "single":
-            # With a single update, whether or not we have compressed SLCs,
-            # the phase linking results will be referenced to the first date.
-            # TODO: how to handle the multiple interferogram case? We'll still
-            # want to make a network.
-            if cfg.interferogram_network.indexes is None:
-                raise NotImplementedError(
-                    "Only currently supporting manual interferogram network indexes for"
-                    " single update."
-                )
-            idxs = cfg.interferogram_network.indexes
-            if len(idxs) > 1:
-                raise NotImplementedError(
-                    "Multiple interferograms are not supported with single update"
-                )
-            if idxs[0] != (0, -1):
-                raise NotImplementedError(
-                    "Only currently supporting Interferogram network indexes (0, -1)"
-                    " for single update"
-                )
-            ref_idx, sec_idx = idxs[0]
-            file1, file2 = vrt_stack.file_list[ref_idx], vrt_stack.file_list[sec_idx]
-            date1, date2 = utils.get_dates(file1)[0], utils.get_dates(file2)[0]
-            # We're just copying, so get the extension of the file to copy
-            to_copy = phase_linked_slcs[sec_idx]
-            suffix = utils.full_suffix(to_copy)
-            ifg_name = ifg_dir / (io._format_date_pair(date1, date2) + suffix)
-            shutil.copyfile(to_copy, ifg_name)
-            ifg_file_list = [ifg_name]  # return just the one as the "network"
+        network = Network(
+            slc_list=phase_linked_slcs,
+            reference_idx=cfg.interferogram_network.reference_idx,
+            max_bandwidth=cfg.interferogram_network.max_bandwidth,
+            max_temporal_baseline=cfg.interferogram_network.max_temporal_baseline,
+            indexes=cfg.interferogram_network.indexes,
+            outdir=ifg_dir,
+        )
+        if len(network.ifg_list) == 0:
+            raise ValueError("No interferograms were created")
         else:
-            network = Network(
-                slc_list=phase_linked_slcs,
-                reference_idx=cfg.interferogram_network.reference_idx,
-                max_bandwidth=cfg.interferogram_network.max_bandwidth,
-                max_temporal_baseline=cfg.interferogram_network.max_temporal_baseline,
-                indexes=cfg.interferogram_network.indexes,
-                outdir=ifg_dir,
-            )
-            if len(network) == 0:
-                raise ValueError("No interferograms were created")
-            ifg_file_list = [ifg.path for ifg in network.ifg_list]
+            ifg_file_list = [ifg.path for ifg in network.ifg_list]  # type: ignore
 
     return ifg_file_list, comp_slc_file, tcorr_file
