@@ -71,7 +71,7 @@ def test_unwrap_options_defaults(tmpdir):
         assert opts.unwrap_method == config.UnwrapMethod.SNAPHU
         assert opts.tiles == [1, 1]
         assert opts.init_method == "mcf"
-        assert opts._directory == Path("unwrap")
+        assert opts._directory == Path("unwrapped")
 
 
 def test_outputs_defaults(tmpdir):
@@ -320,7 +320,7 @@ def test_config_defaults(dir_with_1_slc):
     assert c.interferogram_network.max_bandwidth is None
     assert c.interferogram_network.max_temporal_baseline is None
 
-    assert c.unwrap_options._directory == Path("scratch/unwrap").resolve()
+    assert c.unwrap_options._directory == Path("scratch/unwrapped").resolve()
 
     now = datetime.utcnow()
     assert (now - c.creation_time_utc).seconds == 0

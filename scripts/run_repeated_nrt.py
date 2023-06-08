@@ -426,7 +426,6 @@ def main(arg_dict: dict) -> None:
     comp_slc_files: list[Path] = []
     slc_idx_end = ministack_size + 1
 
-    slc_idx_start, slc_idx_end = 10, 28
     while slc_idx_end <= num_dates:
         # we have to wait for the shrink-and-archive jobs before continuing
         new_comp_slcs = _run_one_stack(

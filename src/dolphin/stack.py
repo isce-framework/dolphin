@@ -48,9 +48,6 @@ class VRTStack:
     sort_files : bool, optional (default = True)
         Sort the files in `file_list`. Assumes that the naming convention
         will sort the files in increasing time order.
-    nodata_value : float, optional
-        Value to use for nodata. If not specified, will use the nodata value
-        from the first file in the stack, or nan if not specified in the raster.
     nodata_mask_file : pathlib.Path, optional
         Path to file containing a mask of pixels containing with nodata
         in every images. Used for skipping the loading of these pixels.
@@ -69,7 +66,6 @@ class VRTStack:
         target_extent: Optional[tuple[float, float, float, float]] = None,
         latlon_bbox: Optional[Bbox] = None,
         sort_files: bool = True,
-        nodata_value: Optional[float] = None,
         file_date_fmt: str = "%Y%m%d",
         write_file: bool = True,
         fail_on_overwrite: bool = False,

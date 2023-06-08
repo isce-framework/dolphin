@@ -120,6 +120,7 @@ def plot_shps(
             fig.canvas.draw()
 
     fig.canvas.mpl_connect("button_press_event", onclick)
+    fig.tight_layout()
 
     plt.show(block=block)
 

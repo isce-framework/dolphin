@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import sys
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from os import fspath
 from pathlib import Path
 from typing import Optional
@@ -105,7 +105,7 @@ def run(
         # Make sure it's the right format with 1s and 0s for include/exclude
 
     # This keeps it from spawning a new process for a single job.
-    Executor = ProcessPoolExecutor if max_jobs > 1 else DummyProcessPoolExecutor
+    Executor = ThreadPoolExecutor if max_jobs > 1 else DummyProcessPoolExecutor
     with Executor(max_workers=max_jobs) as exc:
         futures = [
             exc.submit(
@@ -121,7 +121,12 @@ def run(
             for ifg_file, out_file, cor_file in zip(in_files, out_files, cor_filenames)
         ]
         with progress() as p:
-            for fut in p.track(as_completed(futures), total=len(out_files)):
+            for fut in p.track(
+                as_completed(futures),
+                total=len(out_files),
+                description="Unwrapping...",
+                update_period=1,
+            ):
                 fut.result()
 
     conncomp_files = [

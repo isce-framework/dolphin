@@ -30,7 +30,13 @@ __all__ = [
 logger = get_log(__name__)
 
 # Specific to OPERA CSLC products:
-OPERA_DATASET_NAME = "science/SENTINEL1/CSLC/grids/VV"
+# TODO: this will become f"/" in upcoming OPERA release
+# We may want to keep ths old for compatibility for awhile?
+OPERA_DATASET_ROOT = "science/SENTINEL1"
+# TODO: this will become f"{OPERA_DATASET_ROOT}/data/VV"
+OPERA_DATASET_NAME = f"{OPERA_DATASET_ROOT}/CSLC/grids/VV"
+OPERA_IDENTIFICATION = f"{OPERA_DATASET_ROOT}/identification"
+
 # for example, t087_185684_iw2
 OPERA_BURST_RE = re.compile(
     r"t(?P<track>\d{3})_(?P<burst_id>\d{6})_(?P<subswath>iw[1-3])"
@@ -161,7 +167,7 @@ class UnwrapOptions(BaseModel, extra=Extra.forbid):
             "Whether to run the unwrapping step after wrapped phase estimation."
         ),
     )
-    _directory: Path = PrivateAttr(Path("unwrap"))
+    _directory: Path = PrivateAttr(Path("unwrapped"))
     unwrap_method: UnwrapMethod = UnwrapMethod.SNAPHU
     tiles: List[int] = Field(
         [1, 1],

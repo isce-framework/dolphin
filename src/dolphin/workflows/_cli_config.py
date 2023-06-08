@@ -30,6 +30,7 @@ def create_config(
     block_size_gb: float = 1,
     n_workers: int = 16,
     threads_per_worker: int = 1,
+    n_parallel_bursts: int = 1,
     no_gpu: bool = False,
     use_icu: bool = False,
     single_update: bool = False,
@@ -75,6 +76,7 @@ def create_config(
         ),
         worker_settings=dict(
             block_size_gb=block_size_gb,
+            n_parallel_bursts=n_parallel_bursts,
             n_workers=n_workers,
             threads_per_worker=threads_per_worker,
             gpu_enabled=(not no_gpu),
@@ -133,11 +135,13 @@ def get_parser(subparser=None, subcommand_name="run"):
         "--amplitude-mean-files",
         nargs=argparse.ZERO_OR_MORE,
         help="Optional: List the paths of existing amplitude mean files.",
+        default=[],
     )
     inputs.add_argument(
         "--amplitude-dispersion-files",
         nargs=argparse.ZERO_OR_MORE,
         help="Optional: List the paths of existing amplitude dispersion files.",
+        default=[],
     )
     parser.add_argument(
         "--mask-file",
@@ -227,6 +231,12 @@ def get_parser(subparser=None, subcommand_name="run"):
         type=int,
         default=cpu_count(),
         help="Number of CPU workers to use (for CPU processing).",
+    )
+    worker_group.add_argument(
+        "--n-parallel-bursts",
+        type=int,
+        default=1,
+        help="Number of bursts to process in parallel.",
     )
     worker_group.add_argument(
         "--threads-per-worker",

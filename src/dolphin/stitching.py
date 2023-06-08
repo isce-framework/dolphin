@@ -88,6 +88,7 @@ def merge_images(
     target_aligned_pixels: bool = True,
     out_bounds: Optional[Bbox] = None,
     out_bounds_epsg: Optional[int] = None,
+    strides: dict[str, int] = {"x": 1, "y": 1},
     driver: str = "ENVI",
     out_nodata: Optional[float] = 0,
     out_dtype: Optional[DTypeLike] = None,
@@ -115,6 +116,8 @@ def merge_images(
     out_bounds_epsg: Optional[int]
         EPSG code for the `out_bounds`.
         If not provided, assumed to match the projections of `file_list`.
+    strides : dict[str, int]
+        subsample factor: {"x": x strides, "y": y strides}
     driver : str
         GDAL driver to use for output file. Default is ENVI.
     out_nodata : Optional[float]
@@ -150,17 +153,21 @@ def merge_images(
 
     # Make sure all the files are in the same projection.
     projection = _get_mode_projection(file_list)
-    res = _get_resolution(file_list)
     # If not, warp them to the most common projection using VRT files in a tempdir
     temp_dir = tempfile.TemporaryDirectory()
-    # temp_dir = Path("test_ifgs")
+
+    if strides:
+        file_list = get_downsampled_vrts(
+            file_list,
+            strides=strides,
+            dirname=Path(temp_dir.name),
+        )
 
     warped_file_list = warp_to_projection(
         file_list,
         # temp_dir,
-        Path(temp_dir.name),
-        projection,
-        res,
+        dirname=Path(temp_dir.name),
+        projection=projection,
     )
     # Compute output array shape. We guarantee it will cover the output
     # bounds completely
@@ -169,8 +176,10 @@ def merge_images(
         target_aligned_pixels=target_aligned_pixels,
         out_bounds=out_bounds,
         out_bounds_epsg=out_bounds_epsg,
+        strides=strides,
     )
 
+    res = _get_resolution(warped_file_list)
     out_shape = _get_output_shape(bounds, res)
     out_dtype = out_dtype or io.get_raster_dtype(warped_file_list[0])
 
@@ -285,11 +294,56 @@ def _blend_new_arr(
     return cur_arr
 
 
+def get_downsampled_vrts(
+    filenames: Sequence[Filename],
+    strides: dict[str, int],
+    dirname: Filename,
+) -> list[Path]:
+    """Create downsampled VRTs from a list of files.
+
+    Does not reproject, only uses `gdal_translate`.
+
+
+    Parameters
+    ----------
+    filenames : Sequence[Filename]
+        list of filenames to warp.
+    strides : dict[str, int]
+        subsample factor: {"x": x strides, "y": y strides}
+    dirname : Filename
+        The directory to write the warped files to.
+
+    Returns
+    -------
+    list[Filename]
+        The warped filenames.
+    """
+    if not filenames:
+        return []
+    warped_files = []
+    res = _get_resolution(filenames)
+    for idx, fn in enumerate(filenames):
+        fn = Path(fn)
+        warped_fn = Path(dirname) / f"{fn.stem}_{idx}_downsampled.vrt"
+        logger.debug(f"Downsampling {fn} by {strides}")
+        warped_files.append(warped_fn)
+        gdal.Translate(
+            fspath(warped_fn),
+            fspath(fn),
+            format="VRT",  # Just creates a file that will warp on the fly
+            resampleAlg="nearest",  # nearest neighbor for resampling
+            xRes=res[0] * strides["x"],
+            yRes=res[1] * strides["y"],
+        )
+
+    return warped_files
+
+
 def warp_to_projection(
     filenames: Sequence[Filename],
     dirname: Filename,
     projection: str,
-    res: tuple[float, float],
+    res: Optional[tuple[float, float]] = None,
 ) -> list[Path]:
     """Warp a list of files to `projection`.
 
@@ -357,7 +411,7 @@ def _get_mode_projection(filenames: Iterable[Filename]) -> str:
 def _get_resolution(filenames: Iterable[Filename]) -> tuple[float, float]:
     """Get the most common resolution in the list."""
     gts = [gdal.Open(fspath(fn)).GetGeoTransform() for fn in filenames]
-    res = [(gt[1], gt[5]) for gt in gts]
+    res = [(dx, dy) for (_, dx, _, _, _, dy) in gts]
     if len(set(res)) > 1:
         raise ValueError(f"The input files have different resolutions: {res}. ")
     return res[0]
@@ -368,6 +422,7 @@ def get_combined_bounds_gt(
     target_aligned_pixels: bool = False,
     out_bounds: Optional[Bbox] = None,
     out_bounds_epsg: Optional[int] = None,
+    strides: dict[str, int] = {"x": 1, "y": 1},
 ) -> tuple[Bbox, list[float]]:
     """Get the bounds and geotransform of the combined image.
 
@@ -385,6 +440,8 @@ def get_combined_bounds_gt(
     out_bounds_epsg: Optional[int]
         The EPSG of `out_bounds`. If not provided, assumed to be the same
         as the EPSG of all `filenames`.
+    strides : dict[str, int]
+        subsample factor: {"x": x strides, "y": y strides}
 
     Returns
     -------
@@ -416,7 +473,7 @@ def get_combined_bounds_gt(
         raise ValueError(f"The input files have different resolutions: {resolutions}. ")
     if len(projs) > 1:
         raise ValueError(f"The input files have different projections: {projs}. ")
-    res = (abs(dx), abs(dy))
+    res = (abs(dx) * strides["x"], abs(dy) * strides["y"])
 
     if out_bounds is not None:
         if out_bounds_epsg is not None:
@@ -435,7 +492,7 @@ def get_combined_bounds_gt(
 
 
 def _get_output_shape(bounds: Iterable[float], res: tuple[float, float]):
-    """Get the output shape of the combined image."""
+    """Get the output shape (rows, cols) of the combined image."""
     left, bottom, right, top = bounds
     # Always round up to the nearest pixel, instead of banker's rounding
     out_width = math.floor(0.5 + (right - left) / abs(res[0]))
@@ -444,6 +501,7 @@ def _get_output_shape(bounds: Iterable[float], res: tuple[float, float]):
 
 
 def _align_bounds(bounds: Iterable[float], res: tuple[float, float]):
+    """Align boundary with an integer multiple of the resolution."""
     left, bottom, right, top = bounds
     left = math.floor(left / res[0]) * res[0]
     right = math.ceil(right / res[0]) * res[0]
