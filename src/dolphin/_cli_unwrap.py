@@ -64,6 +64,7 @@ def get_parser(subparser=None, subcommand_name="unwrap") -> argparse.ArgumentPar
     parser.add_argument(
         "--max-jobs",
         type=int,
+        default=1,
         help="Number of parallel files to unwrap",
     )
     # Add ability for downsampling/running only coarse_unwrap
