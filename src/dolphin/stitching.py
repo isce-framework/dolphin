@@ -2,11 +2,12 @@
 from __future__ import annotations
 
 import math
+import subprocess
 import tempfile
 from datetime import date
 from os import fspath
 from pathlib import Path
-from typing import Iterable, Optional, Sequence
+from typing import Iterable, Optional, Sequence, Union
 
 import numpy as np
 from numpy.typing import DTypeLike
@@ -92,6 +93,8 @@ def merge_images(
     driver: str = "ENVI",
     out_nodata: Optional[float] = 0,
     out_dtype: Optional[DTypeLike] = None,
+    in_nodata: Optional[Union[float, str]] = None,
+    resample_alg: str = "lanczos",
     overwrite=False,
     options: Optional[Sequence[str]] = io.DEFAULT_ENVI_OPTIONS,
     create_only: bool = False,
@@ -125,6 +128,11 @@ def merge_images(
     out_dtype : Optional[DTypeLike]
         Output data type. Default is None, which will use the data type
         of the first image in the list.
+    in_nodata : Optional[float]
+        Override the files' `nodata` and use `in_nodata` during merging.
+    resample_alg : str, default="lanczos"
+        Method for gdal to use for reprojection.
+        Default is lanczos (sinc-kernel)
     overwrite : bool
         Overwrite existing files. Default is False.
     options : Optional[Sequence[str]]
@@ -156,7 +164,7 @@ def merge_images(
     # If not, warp them to the most common projection using VRT files in a tempdir
     temp_dir = tempfile.TemporaryDirectory()
 
-    if strides:
+    if strides is not None and strides["x"] > 1 and strides["y"] > 1:
         file_list = get_downsampled_vrts(
             file_list,
             strides=strides,
@@ -168,10 +176,11 @@ def merge_images(
         # temp_dir,
         dirname=Path(temp_dir.name),
         projection=projection,
+        resample_alg=resample_alg,
     )
     # Compute output array shape. We guarantee it will cover the output
     # bounds completely
-    bounds, gt = get_combined_bounds_gt(  # type: ignore
+    (xmin, ymin, xmax, ymax), combined_nodata = get_combined_bounds_gt(  # type: ignore
         *warped_file_list,
         target_aligned_pixels=target_aligned_pixels,
         out_bounds=out_bounds,
@@ -179,119 +188,43 @@ def merge_images(
         strides=strides,
     )
 
-    res = _get_resolution(warped_file_list)
-    out_shape = _get_output_shape(bounds, res)
-    out_dtype = out_dtype or io.get_raster_dtype(warped_file_list[0])
-
-    io.write_arr(
-        arr=None,
-        output_name=outfile,
-        driver=driver,
-        nbands=1,
-        shape=out_shape,
-        dtype=out_dtype,
-        nodata=out_nodata,
-        geotransform=gt,
-        projection=projection,
-        options=options,
-    )
+    # Write out the files for gdal_merge using the --optfile flag
+    optfile = Path(temp_dir.name) / "file_list.txt"
+    optfile.write_text("\n".join(map(str, warped_file_list)))
+    args = [
+        "gdal_merge.py",
+        "-o",
+        outfile,
+        "--optfile",
+        optfile,
+        "-of",
+        driver,
+        "-ul_lr",
+        xmin,
+        ymax,
+        xmax,
+        ymin,
+        "-n",
+        str(in_nodata) if in_nodata is not None else combined_nodata,
+    ]
+    if out_nodata is not None:
+        args.extend(["-a_nodata", str(out_nodata)])
+    if out_dtype is not None:
+        out_gdal_dtype = gdal.GetDataTypeName(io.numpy_to_gdal_type(out_dtype))
+        args.extend(["-ot", out_gdal_dtype])
+    if target_aligned_pixels:
+        args.append("-tap")
     if create_only:
-        temp_dir.cleanup()
-        return
+        args.append("-create")
+    if options is not None:
+        for option in options:
+            args.extend(["-co", option])
 
-    out_left, out_bottom, out_right, out_top = bounds
-    # Now loop through the files and write them to the output
-    for f in warped_file_list:
-        logger.info(f"Stitching {f} into {outfile}")
-        ds_in = gdal.Open(fspath(f))
-        in_left, in_bottom, in_right, in_top = io.get_raster_bounds(ds=ds_in)
+    arg_list = [str(a) for a in args]
+    logger.info(f"Running {' '.join(arg_list)}")
+    subprocess.check_call(arg_list)
 
-        # Get the spatial intersection of input and output
-        int_right = min(in_right, out_right)
-        int_top = min(in_top, out_top)
-        int_left = max(in_left, out_left)
-        int_bottom = max(in_bottom, out_bottom)
-
-        # Get the pixel coordinates of the intersection in the input
-        # For the offset (top-left), do a "floor" instead of "round"
-        row_top, col_left = io.xy_to_rowcol(int_left, int_top, ds=ds_in, do_round=False)
-        row_bottom, col_right = io.xy_to_rowcol(int_right, int_bottom, ds=ds_in)
-        in_rows, in_cols = ds_in.RasterYSize, ds_in.RasterXSize
-        # Read the input data in this window
-        arr_in = ds_in.ReadAsArray(
-            col_left,
-            row_top,
-            # Clip the width/height to the raster size
-            min(col_right - col_left, in_cols),
-            min(row_bottom - row_top, in_rows),
-        )
-
-        # Get pixel coordinates of the intersection in the output
-        # For the offset (top-left), do a "floor" instead of "round"
-        row_top, col_left = io.xy_to_rowcol(
-            int_left, int_top, filename=outfile, do_round=False
-        )
-        row_bottom, col_right = io.xy_to_rowcol(int_right, int_bottom, filename=outfile)
-        # Cap the bottom and right to the same size as arr_in
-        row_bottom = min(row_bottom, row_top + arr_in.shape[0])
-        col_right = min(col_right, col_left + arr_in.shape[1])
-
-        # Read it in so we can blend out the write for this block
-        cur_out = io.load_gdal(
-            outfile, rows=slice(row_top, row_bottom), cols=slice(col_left, col_right)
-        )
-        # Assume all bands have same nodata as band 1
-        in_nodata = io.get_raster_nodata(f)
-        cur_out = _blend_new_arr(
-            cur_out, arr_in, nodata_vals=[in_nodata, out_nodata, math.nan, 0]
-        )
-        # Write the input data to the output in this window
-        io.write_block(
-            cur_out,
-            filename=outfile,
-            row_start=row_top,
-            col_start=col_left,
-        )
-
-    # Remove the tempdir
     temp_dir.cleanup()
-
-
-def _blend_new_arr(
-    cur_arr: np.ndarray, new_arr: np.ndarray, nodata_vals: Iterable[Optional[float]]
-):
-    """Blend two arrays together, replacing values in cur_arr with new_arr.
-
-    Currently, the only blending method is to overwrite `cur_arr` with `new_arr` where
-    `new_arr` has data.
-
-    Parameters
-    ----------
-    cur_arr : np.ndarray
-        The array to blend into.
-    new_arr : np.ndarray
-        The new array to add/overwrite with.
-    nodata_vals : Iterable[float]
-        The nodata values to replace in cur_arr.
-
-    Returns
-    -------
-    np.ndarray
-        The blended array.
-    """
-    # Replace nodata values in cur_arr with new_arr
-    good_pixels = np.ones(cur_arr.shape, dtype=bool)
-    for nodata in set(nodata_vals):
-        if nodata is not None:
-            if np.isnan(nodata):
-                new_good_pixels = ~np.isnan(new_arr)
-            else:
-                new_good_pixels = new_arr != nodata
-            good_pixels &= new_good_pixels
-
-    # Replace the values in cur_arr with new_arr, where new_arr is not nodata
-    cur_arr[good_pixels] = new_arr[good_pixels]
-    return cur_arr
 
 
 def get_downsampled_vrts(
@@ -324,7 +257,7 @@ def get_downsampled_vrts(
     res = _get_resolution(filenames)
     for idx, fn in enumerate(filenames):
         fn = Path(fn)
-        warped_fn = Path(dirname) / f"{fn.stem}_{idx}_downsampled.vrt"
+        warped_fn = Path(dirname) / _get_temp_filename(fn, idx, "_downsampled")
         logger.debug(f"Downsampling {fn} by {strides}")
         warped_files.append(warped_fn)
         gdal.Translate(
@@ -339,11 +272,22 @@ def get_downsampled_vrts(
     return warped_files
 
 
+def _get_temp_filename(fn: Path, idx: int, extra: str = ""):
+    if any(str(fn).startswith(pre) for pre in ["NETCDF:", "HDF5:"]):
+        base = Path(str(fn).split(":")[1]).stem
+    elif str(fn).startswith("DERIVED_SUBDATASET"):
+        base = Path(str(fn).split(":")[2]).stem
+    else:
+        base = fn.stem
+    return f"{base}_{idx}{extra}.vrt"
+
+
 def warp_to_projection(
     filenames: Sequence[Filename],
     dirname: Filename,
     projection: str,
     res: Optional[tuple[float, float]] = None,
+    resample_alg: str = "lanczos",
 ) -> list[Path]:
     """Warp a list of files to `projection`.
 
@@ -361,6 +305,9 @@ def warp_to_projection(
         The desired projection, as a WKT string or 'EPSG:XXXX' string.
     res : tuple[float, float]
         The desired [x, y] resolution.
+    resample_alg : str, default="lanczos"
+        Method for gdal to use for reprojection.
+        Default is lanczos (sinc-kernel)
 
     Returns
     -------
@@ -380,6 +327,7 @@ def warp_to_projection(
         if proj_in == projection:
             warped_files.append(fn)
             continue
+        warped_fn = Path(dirname) / _get_temp_filename(fn, idx, "_warped")
         warped_fn = Path(dirname) / f"{fn.stem}_{idx}_warped.vrt"
         from_srs_name = ds.GetSpatialRef().GetName()
         to_srs_name = osr.SpatialReference(projection).GetName()
@@ -393,7 +341,7 @@ def warp_to_projection(
             fspath(fn),
             format="VRT",  # Just creates a file that will warp on the fly
             dstSRS=projection,
-            resampleAlg="lanczos",  # sinc-kernel for resampling
+            resampleAlg=resample_alg,
             targetAlignedPixels=True,  # align in multiples of dx, dy
             xRes=res[0],
             yRes=res[1],
@@ -423,7 +371,7 @@ def get_combined_bounds_gt(
     out_bounds: Optional[Bbox] = None,
     out_bounds_epsg: Optional[int] = None,
     strides: dict[str, int] = {"x": 1, "y": 1},
-) -> tuple[Bbox, list[float]]:
+) -> tuple[Bbox, Union[str, float, None]]:
     """Get the bounds and geotransform of the combined image.
 
     Parameters
@@ -447,14 +395,20 @@ def get_combined_bounds_gt(
     -------
     bounds : Bbox
         (min_x, min_y, max_x, max_y)
-    gt : list[float]
-        geotransform of the combined image.
+    nodata : float
+        Nodata value of the input files
+
+    Raises
+    ------
+    ValueError:
+        If the inputs files have different resolutions/projections/nodata values
     """
     # scan input files
     xs = []
     ys = []
     resolutions = set()
     projs = set()
+    nodatas = set()
 
     # Check all files match in resolution/projection
     for fn in filenames:
@@ -469,10 +423,16 @@ def get_combined_bounds_gt(
         xs.extend([left, right])
         ys.extend([bottom, top])
 
+        nd = io.get_raster_nodata(fn)
+        # Need to stringify 'nan', or it is repeatedly added
+        nodatas.add(str(nd) if np.isnan(nd) else nd)
+
     if len(resolutions) > 1:
         raise ValueError(f"The input files have different resolutions: {resolutions}. ")
     if len(projs) > 1:
         raise ValueError(f"The input files have different projections: {projs}. ")
+    if len(nodatas) > 1:
+        raise ValueError(f"The input files have different nodata values: {nodatas}. ")
     res = (abs(dx) * strides["x"], abs(dy) * strides["y"])
 
     if out_bounds is not None:
@@ -487,17 +447,7 @@ def get_combined_bounds_gt(
     if target_aligned_pixels:
         bounds = _align_bounds(bounds, res)
 
-    gt_total = [bounds[0], dx, 0, bounds[3], 0, dy]
-    return bounds, gt_total
-
-
-def _get_output_shape(bounds: Iterable[float], res: tuple[float, float]):
-    """Get the output shape (rows, cols) of the combined image."""
-    left, bottom, right, top = bounds
-    # Always round up to the nearest pixel, instead of banker's rounding
-    out_width = math.floor(0.5 + (right - left) / abs(res[0]))
-    out_height = math.floor(0.5 + (top - bottom) / abs(res[1]))
-    return int(out_height), int(out_width)
+    return bounds, list(nodatas)[0]
 
 
 def _align_bounds(bounds: Iterable[float], res: tuple[float, float]):
