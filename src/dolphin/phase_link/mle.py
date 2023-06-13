@@ -25,13 +25,6 @@ MleOutput = namedtuple(
 )
 
 
-# @dataclass
-# class MleOutput:
-#     mle_est: np.ndarray
-#     temp_coh: np.ndarray
-#     avg_coh: Optional[np.ndarray]
-
-
 def run_mle(
     slc_stack: np.ndarray,
     half_window: dict[str, int],

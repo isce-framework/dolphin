@@ -82,10 +82,10 @@ def run_wrapped_phase_sequential(
         msg += f"Output folder: {cur_output_folder}"
         logger.info(msg)
         # Add the existing compressed SLC files to the start
+        cur_files = comp_slc_files + cur_files
         # TODO TESTING:
         # LIMIT THE NUM COMP SLCS TO 3!
-        # cur_files = comp_slc_files + cur_files
-        cur_files = comp_slc_files[-3:] + cur_files
+        # cur_files = comp_slc_files[-3:] + cur_files
         cur_vrt = VRTStack(
             cur_files,
             outfile=cur_output_folder / f"{start_end}.vrt",
