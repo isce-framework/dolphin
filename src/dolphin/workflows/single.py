@@ -163,7 +163,7 @@ def run_wrapped_phase_single(
         output_name=avg_coh_file,
         nbands=1,
         dtype=np.uint16,
-        strides=strides,  # output at SLC resolution
+        strides=strides,
         nodata=0,
     )
 
