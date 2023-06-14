@@ -156,6 +156,17 @@ def run_wrapped_phase_single(
         nodata=0,
     )
 
+    avg_coh_file = output_folder / f"avg_coh_{start_end}.tif"
+    io.write_arr(
+        arr=None,
+        like_filename=vrt.outfile,
+        output_name=avg_coh_file,
+        nbands=1,
+        dtype=np.uint16,
+        strides=strides,
+        nodata=0,
+    )
+
     # Create the empty compressed temporal coherence file
     shp_counts_file = output_folder / f"shp_counts_{start_end}.tif"
     io.write_arr(
@@ -203,16 +214,16 @@ def run_wrapped_phase_single(
             amp_stack=amp_stack,
             method=shp_method,
         )
-        # Run the phase linking process on the current ministack
-        # TESTING TODO
-        ref = max(0, first_non_comp_idx - 1)
+        # # Run the phase linking process on the current ministack
+        # # TESTING TODO
+        reference_idx = max(0, first_non_comp_idx - 1)
         try:
-            cur_mle_stack, tcorr = run_mle(
+            cur_mle_stack, tcorr, avg_coh = run_mle(
                 cur_data,
                 half_window=half_window,
                 strides=strides,
                 beta=beta,
-                reference_idx=ref,
+                reference_idx=reference_idx,
                 nodata_mask=nodata_mask[rows, cols],
                 ps_mask=ps_mask[rows, cols],
                 neighbor_arrays=neighbor_arrays,
@@ -248,6 +259,10 @@ def run_wrapped_phase_single(
         # Save the temporal coherence blocks
         writer.queue_write(tcorr, tcorr_file, out_row_start, out_col_start)
 
+        # Save avg coh index
+        if avg_coh is not None:
+            writer.queue_write(avg_coh, avg_coh_file, out_row_start, out_col_start)
+            writer.queue_write(avg_coh, avg_coh_file, out_row_start, out_col_start)
         # Save the SHP counts for each pixel (if not using Rect window)
         shp_counts = np.sum(neighbor_arrays[rows, cols], axis=(-2, -1))
         writer.queue_write(shp_counts, shp_counts_file, out_row_start, out_col_start)

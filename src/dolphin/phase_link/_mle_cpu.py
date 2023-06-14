@@ -8,7 +8,7 @@ from dolphin._log import get_log
 from dolphin.utils import decimate
 
 from . import covariance, metrics
-from .mle import mle_stack
+from .mle import MleOutput, mle_stack
 
 logger = get_log(__name__)
 
@@ -21,9 +21,10 @@ def run_cpu(
     reference_idx: int = 0,
     use_slc_amp: bool = True,
     neighbor_arrays: Optional[np.ndarray] = None,
+    calc_average_coh: bool = False,
     n_workers: int = 1,
     **kwargs,
-):
+) -> MleOutput:
     """Run the CPU version of the stack covariance estimator and MLE solver.
 
     Parameters
@@ -46,6 +47,9 @@ def run_cpu(
     neighbor_arrays : np.ndarray, optional
         The neighbor arrays to use for SHP, shape = (n_rows, n_cols, *window_shape).
         If None, a rectangular window is used. By default None.
+    calc_average_coh : bool, default=False
+        If requested, the average of each row of the covariance matrix is computed
+        for the purposes of finding the best reference (highest coherence) date
     n_workers : int, optional
         The number of workers to use for (CPU version) multiprocessing.
         If 1 (default), no multiprocessing is used.
@@ -70,6 +74,14 @@ def run_cpu(
     # Get the temporal coherence
     temp_coh = metrics.estimate_temp_coh(cpx_phase, C_arrays)
     mle_est = np.exp(1j * output_phase)
+
+    if calc_average_coh:
+        # If requested, average the Cov matrix at each row for reference selection
+        d_avg_coh_per_date = np.abs(C_arrays).mean(axis=3)
+        avg_coh = np.argmax(d_avg_coh_per_date, axis=2)
+    else:
+        avg_coh = None
+
     if use_slc_amp:
         # use the amplitude from the original SLCs
         # account for the strides when grabbing original data
@@ -77,4 +89,4 @@ def run_cpu(
         slcs_decimated = decimate(slc_stack, strides)
         mle_est *= np.abs(slcs_decimated)
 
-    return mle_est, temp_coh
+    return MleOutput(mle_est, temp_coh, avg_coh)

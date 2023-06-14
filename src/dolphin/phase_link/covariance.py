@@ -6,13 +6,14 @@ from __future__ import annotations
 
 from cmath import isnan
 from cmath import sqrt as csqrt
-from typing import Optional
+from typing import Optional, Union
 
 import numba
 import numpy as np
 import pymp
 from numba import cuda, njit
 
+from dolphin._types import Filename
 from dolphin.io import compute_out_shape
 from dolphin.utils import _get_slices
 
@@ -240,3 +241,46 @@ def _coh_mat_gpu(samples_stack, neighbors_stack, do_shp, cov_mat):
                 cov_mat[i_slc, j_slc] = c
                 cov_mat[j_slc, i_slc] = c.conjugate()
         cov_mat[i_slc, i_slc] = 1.0
+
+
+def _save_coherence_matrices(
+    filename: Filename,
+    C: np.ndarray,
+    chunks: Union[None, tuple[int, ...], str, bool] = None,
+    **compression_opts,
+):
+    import h5py
+
+    if chunks is None:
+        nslc = C.shape[-1]
+        chunks = (10, 10, nslc, nslc)
+
+    if not compression_opts:
+        compression_opts = dict(
+            compression="lzf",
+            shuffle=True,
+        )
+    compression_opts["chunks"] = chunks
+
+    with h5py.File(filename, "w") as f:
+        # Create datasets for dimensions
+        y_dim = f.create_dataset("y", data=np.arange(C.shape[0]))
+        x_dim = f.create_dataset("x", data=np.arange(C.shape[1]))
+        slc1_dim = f.create_dataset("slc1", data=np.arange(C.shape[2]))
+        slc2_dim = f.create_dataset("slc2", data=np.arange(C.shape[3]))
+
+        # Create the main dataset and set dimensions as attributes
+        # f.require_dataset(name="data", shape=shape)
+        data_dset = f.create_dataset(
+            "data",
+            # Save only the upper triangle
+            # Quantize as a uint8 so that coherence = DN / 255
+            data=(255 * np.triu(C)).astype("uint8"),
+            **compression_opts,
+        )
+        # Set dimension scales for each dimension in the main dataset
+        dims = [y_dim, x_dim, slc1_dim, slc2_dim]
+        labels = ["y", "x", "slc1", "slc2"]
+        for i, (dim, label) in enumerate(zip(dims, labels)):
+            data_dset.dims[i].attach_scale(dim)
+            data_dset.dims[i].label = label

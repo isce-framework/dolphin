@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import warnings
+from collections import namedtuple
 from typing import Optional
 
 import numpy as np
@@ -19,6 +20,11 @@ class PhaseLinkRuntimeError(Exception):
     pass
 
 
+MleOutput = namedtuple(
+    "MleOutput", ["mle_est", "temp_coh", "avg_coh"], defaults=[None, None, None]
+)
+
+
 def run_mle(
     slc_stack: np.ndarray,
     half_window: dict[str, int],
@@ -32,7 +38,8 @@ def run_mle(
     use_slc_amp: bool = True,
     n_workers: int = 1,
     gpu_enabled: bool = False,
-) -> tuple[np.ndarray, np.ndarray]:
+    # ) -> tuple[np.ndarray, np.ndarray]:
+) -> MleOutput:
     """Estimate the linked phase for a stack using the MLE estimator.
 
     Parameters
@@ -124,7 +131,8 @@ def run_mle(
 
     #######################################
     if not gpu_enabled or not gpu_is_available():
-        mle_est, temp_coh = _run_cpu(
+        # mle_est, temp_coh, avg_coh = _run_cpu(
+        mle_out = _run_cpu(
             slc_stack=slc_stack_masked,
             half_window=half_window,
             strides=strides,
@@ -135,7 +143,8 @@ def run_mle(
             n_workers=n_workers,
         )
     else:
-        mle_est, temp_coh = _run_gpu(
+        # mle_est, temp_coh, avg_coh = _run_gpu(
+        mle_out = _run_gpu(
             slc_stack=slc_stack_masked,
             half_window=half_window,
             strides=strides,
@@ -150,15 +159,21 @@ def run_mle(
     # We zero out nodata if all pixels within the window had nodata
     mask_looked = take_looks(nodata_mask, strides["y"], strides["x"], func_type="all")
     # Set no data pixels to np.nan
-    temp_coh[mask_looked] = np.nan
+    mle_out.temp_coh[mask_looked] = np.nan
 
     # Fill in the PS pixels from the original SLC stack, if it was given
     if np.any(ps_mask):
         _fill_ps_pixels(
-            mle_est, temp_coh, slc_stack, ps_mask, strides, avg_mag, reference_idx
+            mle_out.mle_est,
+            mle_out.temp_coh,
+            slc_stack,
+            ps_mask,
+            strides,
+            avg_mag,
+            reference_idx,
         )
 
-    return mle_est, temp_coh
+    return mle_out
 
 
 def mle_stack(

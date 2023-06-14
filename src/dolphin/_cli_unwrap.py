@@ -64,7 +64,18 @@ def get_parser(subparser=None, subcommand_name="unwrap") -> argparse.ArgumentPar
     parser.add_argument(
         "--max-jobs",
         type=int,
+        default=1,
         help="Number of parallel files to unwrap",
+    )
+    # Add ability for downsampling/running only coarse_unwrap
+    parser.add_argument(
+        "--downsample-factor",
+        type=int,
+        default=1,
+        help=(
+            "Running coarse_unwrap: Downsample the interferograms by this factor to"
+            " unwrap faster."
+        ),
     )
     parser.set_defaults(run_func=_run_unwrap)
 

@@ -44,7 +44,7 @@ def test_sequential_gtiff(tmp_path, slc_file_list, gpu_enabled):
 
     # Get the MLE estimates from the entire stack output.
     slc_stack = vrt_stack.read_stack()
-    mle_est, _ = mle.run_mle(
+    mle_est, _, _ = mle.run_mle(
         slc_stack,
         half_window=half_window,
         strides=strides,

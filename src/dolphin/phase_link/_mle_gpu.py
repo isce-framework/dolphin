@@ -10,7 +10,7 @@ from dolphin.io import compute_out_shape
 from dolphin.utils import decimate
 
 from . import covariance, metrics
-from .mle import mle_stack
+from .mle import MleOutput, mle_stack
 
 
 def run_gpu(
@@ -23,8 +23,9 @@ def run_gpu(
     threads_per_block: tuple[int, int] = (8, 8),
     neighbor_arrays: Optional[np.ndarray] = None,
     free_mem: bool = False,
+    calc_average_coh: bool = False,
     **kwargs,
-) -> tuple[np.ndarray, np.ndarray]:
+) -> MleOutput:
     """Run the GPU version of the stack covariance estimator and MLE solver.
 
     Parameters
@@ -50,9 +51,12 @@ def run_gpu(
     neighbor_arrays : np.ndarray, optional
         The neighbor arrays to use for SHP, shape = (n_rows, n_cols, *window_shape).
         If None, a rectangular window is used. By default None.
-    free_mem : bool, optional
+    free_mem : bool, default=False
         Whether to free the memory of the covariance matrix after the MLE
         estimation. By default False.
+    calc_average_coh : bool, default=False
+        If requested, the average of each row of the covariance matrix is computed
+        for the purposes of finding the best reference (highest coherence) date
 
     Returns
     -------
@@ -107,6 +111,13 @@ def run_gpu(
     # Get the temporal coherence
     temp_coh = metrics.estimate_temp_coh(d_cpx_phase, d_C_arrays).get()
 
+    if calc_average_coh:
+        # If requested, average the Cov matrix at each row for reference selection
+        d_avg_coh_per_date = cp.abs(d_C_arrays).mean(axis=3)
+        avg_coh = cp.argmax(d_avg_coh_per_date, axis=2).get()
+    else:
+        avg_coh = None
+
     mle_est = d_cpx_phase.get()
     # # https://docs.cupy.dev/en/stable/user_guide/memory.html
     # may just be cached a lot of the huge memory available on aurora
@@ -125,4 +136,5 @@ def run_gpu(
         # we need to match `io.compute_out_shape` here
         slcs_decimated = decimate(slc_stack, strides)
         mle_est *= np.abs(slcs_decimated)
-    return mle_est, temp_coh
+
+    return MleOutput(mle_est, temp_coh, avg_coh)

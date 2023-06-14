@@ -55,13 +55,13 @@ def run(
 
     if cfg.amplitude_dispersion_files:
         grouped_amp_dispersion_files = group_by_burst(
-            cfg.amplitude_dispersion_files, minimum_slcs=1
+            cfg.amplitude_dispersion_files, minimum_images=1
         )
     else:
         grouped_amp_dispersion_files = defaultdict(list)
     if cfg.amplitude_mean_files:
         grouped_amp_mean_files = group_by_burst(
-            cfg.amplitude_mean_files, minimum_slcs=1
+            cfg.amplitude_mean_files, minimum_images=1
         )
     else:
         grouped_amp_mean_files = defaultdict(list)

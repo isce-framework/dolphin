@@ -82,23 +82,25 @@ def run_wrapped_phase_sequential(
         msg += f"Output folder: {cur_output_folder}"
         logger.info(msg)
         # Add the existing compressed SLC files to the start
+        cur_files = comp_slc_files + cur_files
         # TODO TESTING:
         # LIMIT THE NUM COMP SLCS TO 3!
-        # cur_files = comp_slc_files + cur_files
-        cur_files = comp_slc_files[-3:] + cur_files
+        # cur_files = comp_slc_files[-3:] + cur_files
         cur_vrt = VRTStack(
             cur_files,
             outfile=cur_output_folder / f"{start_end}.vrt",
             sort_files=False,
             subdataset=v_all.subdataset,
         )
+        # TODO: what do we gain by choosing a different ref_idx here...
+        ref_idx = 0
         cur_output_files, cur_comp_slc_file, tcorr_file = run_wrapped_phase_single(
             slc_vrt_file=cur_vrt,
             output_folder=cur_output_folder,
             half_window=half_window,
             strides=strides,
             # TODO: what situations do we need to set reference-idx != 0
-            reference_idx=0,
+            reference_idx=ref_idx,
             beta=beta,
             mask_file=mask_file,
             ps_mask_file=ps_mask_file,

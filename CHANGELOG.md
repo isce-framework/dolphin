@@ -28,7 +28,7 @@
 
 **Dependencies**
 
-- shapely >= 2.0
+- shapely >= 1.8
 - Numba now supports Python 3.11, so we can drop the Python<3.11 version restriction.
 
 Added testing requirements:

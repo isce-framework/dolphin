@@ -28,8 +28,8 @@ def create_config(
     amp_dispersion_threshold: float = 0.25,
     strides: tuple[int, int],
     block_size_gb: float = 1,
-    n_workers: int = 16,
-    threads_per_worker: int = 1,
+    n_workers: int = 4,
+    threads_per_worker: int = 4,
     n_parallel_bursts: int = 1,
     no_gpu: bool = False,
     use_icu: bool = False,
@@ -229,7 +229,7 @@ def get_parser(subparser=None, subcommand_name="run"):
     worker_group.add_argument(
         "--n-workers",
         type=int,
-        default=cpu_count(),
+        default=cpu_count() // 4,
         help="Number of CPU workers to use (for CPU processing).",
     )
     worker_group.add_argument(
@@ -241,7 +241,7 @@ def get_parser(subparser=None, subcommand_name="run"):
     worker_group.add_argument(
         "--threads-per-worker",
         type=int,
-        default=1,
+        default=4,
         help="Number of threads to use per worker.",
     )
     parser.set_defaults(run_func=create_config)
