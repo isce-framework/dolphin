@@ -554,7 +554,7 @@ def warp_to_match(
     input_file: Filename,
     match_file: Filename,
     output_file: Optional[Filename] = None,
-    resampling_alg: str = "near",
+    resample_alg: str = "near",
     output_format: Optional[str] = None,
 ) -> Path:
     """Reproject `input_file` to align with the `match_file`.
@@ -571,7 +571,7 @@ def warp_to_match(
     output_file: Filename
         Path to the output, reprojected image.
         If None, creates an in-memory warped VRT using the `/vsimem/` protocol.
-    resampling_alg: str, optional, default = "near"
+    resample_alg: str, optional, default = "near"
         Resampling algorithm to be used during reprojection.
         See https://gdal.org/programs/gdalwarp.html#cmdoption-gdalwarp-r for choices.
     output_format: str, optional, default = None
@@ -604,7 +604,7 @@ def warp_to_match(
         yRes=resolution[1],
         outputBounds=bounds,
         outputBoundsSRS=crs_wkt,
-        resampleAlg=resampling_alg,
+        resampleAlg=resample_alg,
     )
     gdal.Warp(
         fspath(output_file),
