@@ -180,13 +180,14 @@ def merge_images(
     )
     # Compute output array shape. We guarantee it will cover the output
     # bounds completely
-    (xmin, ymin, xmax, ymax), combined_nodata = get_combined_bounds_gt(  # type: ignore
+    bounds, combined_nodata = get_combined_bounds_nodata(  # type: ignore
         *warped_file_list,
         target_aligned_pixels=target_aligned_pixels,
         out_bounds=out_bounds,
         out_bounds_epsg=out_bounds_epsg,
         strides=strides,
     )
+    (xmin, ymin, xmax, ymax) = bounds
 
     # Write out the files for gdal_merge using the --optfile flag
     optfile = Path(temp_dir.name) / "file_list.txt"
@@ -365,14 +366,14 @@ def _get_resolution(filenames: Iterable[Filename]) -> tuple[float, float]:
     return res[0]
 
 
-def get_combined_bounds_gt(
+def get_combined_bounds_nodata(
     *filenames: Filename,
     target_aligned_pixels: bool = False,
     out_bounds: Optional[Bbox] = None,
     out_bounds_epsg: Optional[int] = None,
     strides: dict[str, int] = {"x": 1, "y": 1},
 ) -> tuple[Bbox, Union[str, float, None]]:
-    """Get the bounds and geotransform of the combined image.
+    """Get the bounds and nodata of the combined image.
 
     Parameters
     ----------
@@ -425,7 +426,7 @@ def get_combined_bounds_gt(
 
         nd = io.get_raster_nodata(fn)
         # Need to stringify 'nan', or it is repeatedly added
-        nodatas.add(str(nd) if np.isnan(nd) else nd)
+        nodatas.add(str(nd) if (nd is not None and np.isnan(nd)) else nd)
 
     if len(resolutions) > 1:
         raise ValueError(f"The input files have different resolutions: {resolutions}. ")
