@@ -25,7 +25,7 @@ __all__ = ["group_by_burst", "setup_output_folder"]
 def group_by_burst(
     file_list: Sequence[Filename],
     burst_id_fmt: Union[str, Pattern[str]] = OPERA_BURST_RE,
-    minimum_slcs: int = 2,
+    minimum_images: int = 2,
 ) -> dict[str, list[Path]]:
     """Group Sentinel CSLC files by burst.
 
@@ -36,7 +36,7 @@ def group_by_burst(
     burst_id_fmt: str
         format of the burst id in the filename.
         Default is [`OPERA_BURST_RE`][dolphin.workflows.config.OPERA_BURST_RE]
-    minimum_slcs: int
+    minimum_images: int
         Minimum number of SLCs needed to run the workflow for each burst.
         If there are fewer SLCs in a burst, it will be skipped and
         a warning will be logged.
@@ -84,10 +84,10 @@ def group_by_burst(
     # Make sure that each burst has at least the minimum number of SLCs
     out = {}
     for burst_id, slc_list in grouped_images.items():
-        if len(slc_list) < minimum_slcs:
+        if len(slc_list) < minimum_images:
             logger.warning(
                 f"Skipping burst {burst_id} because it has only {len(slc_list)} SLCs."
-                f"Minimum number of SLCs is {minimum_slcs}"
+                f"Minimum number of SLCs is {minimum_images}"
             )
         else:
             out[burst_id] = slc_list

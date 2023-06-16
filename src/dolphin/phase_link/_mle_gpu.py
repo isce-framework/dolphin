@@ -23,9 +23,8 @@ def run_gpu(
     threads_per_block: tuple[int, int] = (8, 8),
     neighbor_arrays: Optional[np.ndarray] = None,
     free_mem: bool = False,
-    calc_average_coh: bool = True,
+    calc_average_coh: bool = False,
     **kwargs,
-    # ) -> tuple[np.ndarray, np.ndarray]:
 ) -> MleOutput:
     """Run the GPU version of the stack covariance estimator and MLE solver.
 
@@ -116,7 +115,6 @@ def run_gpu(
         # If requested, average the Cov matrix at each row for reference selection
         d_avg_coh_per_date = cp.abs(d_C_arrays).mean(axis=3)
         avg_coh = cp.argmax(d_avg_coh_per_date, axis=2).get()
-        # avg_coh = cp.abs(d_C_arrays).mean(axis=3).get()
     else:
         avg_coh = None
 
