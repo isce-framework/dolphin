@@ -205,11 +205,12 @@ def merge_images(
         ymax,
         xmax,
         ymin,
-        "-n",
-        str(in_nodata) if in_nodata is not None else combined_nodata,
     ]
     if out_nodata is not None:
         args.extend(["-a_nodata", str(out_nodata)])
+    if in_nodata is not None or combined_nodata is not None:
+        ndv = str(in_nodata) if in_nodata is not None else str(combined_nodata)
+        args.extend(["-n", ndv])  # type: ignore
     if out_dtype is not None:
         out_gdal_dtype = gdal.GetDataTypeName(io.numpy_to_gdal_type(out_dtype))
         args.extend(["-ot", out_gdal_dtype])
