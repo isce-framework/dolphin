@@ -6,6 +6,7 @@ wrapper functions to write/iterate over blocks of large raster files.
 from __future__ import annotations
 
 import math
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import date
 from os import fspath
@@ -175,6 +176,14 @@ def format_nc_filename(filename: Filename, ds_name: Optional[str] = None) -> str
         raise ValueError("Must provide dataset name for HDF5/NetCDF files")
 
     return f'NETCDF:"{filename}":"//{ds_name.lstrip("/")}"'
+
+
+def _assert_images_same_size(files):
+    """Ensure all files are the same size."""
+    with ThreadPoolExecutor(5) as executor:
+        sizes = executor.map(get_raster_xysize, files)
+    if len(set(sizes)) > 1:
+        raise ValueError(f"Not files have same raster (x, y) size:\n{set(sizes)}")
 
 
 def copy_projection(src_file: Filename, dst_file: Filename) -> None:

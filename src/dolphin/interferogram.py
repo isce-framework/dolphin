@@ -140,6 +140,9 @@ class VRTInterferogram(BaseModel):
             # No path was passed: try and make one.
             # Form the output file name from the dates within input files
             ref_slc, sec_slc = values.get("ref_slc"), values.get("sec_slc")
+            if not ref_slc or not sec_slc:
+                return v
+
             fmt = values.get("date_format", "%Y%m%d")
             date1 = utils.get_dates(ref_slc, fmt=fmt)[0]
             date2 = utils.get_dates(sec_slc, fmt=fmt)[0]

@@ -13,8 +13,14 @@ if not os.environ.get("NUMBA_NUM_THREADS"):
 from dolphin.io import load_gdal, write_arr
 from dolphin.phase_link import simulate
 
-simulate._seed(1234)
 NUM_ACQ = 30
+
+
+# https://github.com/pytest-dev/pytest/issues/667#issuecomment-112206152
+@pytest.fixture
+def random():
+    np.random.seed(1234)
+    simulate._seed(1234)
 
 
 @pytest.fixture(scope="session")
@@ -99,12 +105,15 @@ def slc_file_list_nc_with_sds(tmp_path, slc_stack):
     name_template = d / "{date}.nc"
     d.mkdir()
     file_list = []
-    subdirs = ["/slc", "/slc2"]
+    subdirs = ["/data", "/data2"]
+    ds_name = "VV"
     for i in range(len(slc_stack)):
         fname = str(name_template).format(date=str(start_date + i))
-        create_test_nc(fname, epsg=32615, subdir=subdirs, data=slc_stack[i])
+        create_test_nc(
+            fname, epsg=32615, subdir=subdirs, data_ds_name=ds_name, data=slc_stack[i]
+        )
         # just point to one of them
-        file_list.append(f"NETCDF:{fname}:/slc/data")
+        file_list.append(f"NETCDF:{fname}:{subdirs[0]}/{ds_name}")
 
     # Write the list of SLC files to a text file
     with open(d / "slclist.txt", "w") as f:

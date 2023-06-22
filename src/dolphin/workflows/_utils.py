@@ -246,20 +246,15 @@ def make_nodata_mask(
     # Check these are the right format to get nodata polygons
     try:
         test_f = f"NETCDF:{opera_file_list[0]}:{OPERA_DATASET_NAME}"
-        io.get_raster_xysize(test_f)
-    except RuntimeError:
-        raise ValueError(f"Unable to open {test_f}")
-
-    # convert pixels to degrees lat/lon
-    # TODO: more robust way to get the pixel size... this is a hack
-    # maybe just use pyproj to warp lat/lon to meters and back?
-    if buffer_pixels == 0:
-        buffer_degrees = 0.0
-    else:
-        gt = io.get_raster_gt(opera_file_list[0])
+        # convert pixels to degrees lat/lon
+        gt = io.get_raster_gt(test_f)
+        # TODO: more robust way to get the pixel size... this is a hack
+        # maybe just use pyproj to warp lat/lon to meters and back?
         dx_meters = gt[1]
         dx_degrees = dx_meters / 111000
         buffer_degrees = buffer_pixels * dx_degrees
+    except RuntimeError:
+        raise ValueError(f"Unable to open {test_f}")
 
     # Get the union of all the polygons and convert to a temp geojson
     union_poly = get_union_polygon(opera_file_list, buffer_degrees=buffer_degrees)

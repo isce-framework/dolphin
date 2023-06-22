@@ -55,7 +55,7 @@ def run(cfg: Workflow, debug: bool = False) -> tuple[list[Path], Path, Path]:
     try:
         nodata_mask_file = cfg.scratch_directory / "nodata_mask.tif"
         _utils.make_nodata_mask(
-            vrt_stack.file_list, out_file=nodata_mask_file, buffer_pixels=2000
+            vrt_stack.file_list, out_file=nodata_mask_file, buffer_pixels=200
         )
     except Exception as e:
         logger.warning(f"Could not make nodata mask: {e}")

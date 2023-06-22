@@ -143,28 +143,23 @@ def _parse_date(datestr: str, fmt: str = "%Y%m%d") -> datetime.date:
 def _get_path_from_gdal_str(name: Filename) -> Path:
     s = str(name)
     if s.upper().startswith("DERIVED_SUBDATASET"):
+        # like DERIVED_SUBDATASET:AMPLITUDE:slc_filepath.tif
         p = s.split(":")[-1].strip('"').strip("'")
     elif ":" in s and (s.upper().startswith("NETCDF") or s.upper().startswith("HDF")):
+        # like NETCDF:"slc_filepath.nc":subdataset
         p = s.split(":")[1].strip('"').strip("'")
     else:
-        return Path(name)
+        # Whole thing is the path
+        p = str(name)
     return Path(p)
 
 
 def _resolve_gdal_path(gdal_str: Filename) -> Filename:
     """Resolve the file portion of a gdal-openable string to an absolute path."""
     s = str(gdal_str)
-    if s.upper().startswith("DERIVED_SUBDATASET"):
-        # like DERIVED_SUBDATASET:AMPLITUDE:slc_filepath.tif
-        file_part = s.split(":")[-1]
-        is_gdal_str = True
-    elif ":" in s and (s.upper().startswith("NETCDF") or s.upper().startswith("HDF")):
-        # like NETCDF:"slc_filepath.nc":slc_var
-        file_part = s.split(":")[1]
-        is_gdal_str = True
-    else:
-        file_part = s
-        is_gdal_str = False
+    prefixes = ["DERIVED_SUBDATASET", "NETCDF", "HDF"]
+    is_gdal_str = any(s.upper().startswith(pre) for pre in prefixes)
+    file_part = str(_get_path_from_gdal_str(gdal_str))
 
     # strip quotes to add back in after
     file_part = file_part.strip('"').strip("'")

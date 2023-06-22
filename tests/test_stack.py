@@ -34,7 +34,7 @@ def vrt_stack_nc(tmp_path, slc_stack, slc_file_list_nc):
 def vrt_stack_nc_subdataset(tmp_path, slc_stack, slc_file_list_nc_with_sds):
     vrt_file = tmp_path / "test_nc.vrt"
     files_only = [_get_path_from_gdal_str(f) for f in slc_file_list_nc_with_sds]
-    s = VRTStack(files_only, outfile=vrt_file, subdataset="slc/data")
+    s = VRTStack(files_only, outfile=vrt_file, subdataset="data/VV")
 
     assert s.shape == slc_stack.shape
     return s

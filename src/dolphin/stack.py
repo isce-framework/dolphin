@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 from __future__ import annotations
 
-from concurrent.futures import ThreadPoolExecutor
 from os import fspath
 from pathlib import Path
 from typing import Generator, Optional, Sequence
@@ -104,7 +103,7 @@ class VRTStack:
         self.subdataset = subdataset
 
         if not skip_size_check:
-            self._assert_images_same_size()
+            io._assert_images_same_size(self._gdal_file_strings)
 
         # Use the first file in the stack to get size, transform info
         ds = gdal.Open(fspath(self._gdal_file_strings[0]))
@@ -166,13 +165,6 @@ class VRTStack:
         ds.SetProjection(self.proj)
         ds.SetSpatialRef(self.srs)
         ds = None
-
-    def _assert_images_same_size(self):
-        """Make sure all files in the stack are the same size."""
-        with ThreadPoolExecutor(5) as executor:
-            sizes = executor.map(io.get_raster_xysize, self._gdal_file_strings)
-        if len(set(sizes)) > 1:
-            raise ValueError(f"Not files have same raster (x, y) size:\n{set(sizes)}")
 
     @property
     def _gdal_file_strings(self):

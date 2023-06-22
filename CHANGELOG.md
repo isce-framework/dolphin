@@ -16,15 +16,20 @@
 - If processing stacks from separate bursts, added option `n_parallel_bursts` to `Workflow` to run in parallel processes.
 - Created a script to test the incremental/near-real-time version of phase linking
 - Added a new CLI command `dolphin unwrap` to unwrap a single interferogram/a directory of interferograms in parallel.
+- Added ability to specify a glob pattern for input CSLC files in the YAML config
 
 **Changes**
 
+- Default OPERA dataset is now within `/data`, reflecting the new COMPASS product spec since CalVal
 - Passing an existing file to `VRTStack` will no longer error unless `fail_on_overwrite=True`. The default just prints out the overwrite is happening. This prevents multiple runs in the same folder from errorings just for creating a reference to the SLC files.
 - The environment variable `NUMBA_NUM_THREADS` is set using the passed in config to prevent numba from using all CPUs during `prange` calls
 - The `sequential.py` module uses a different implementation of the sequential estimator to avoid the need for a datum adjustment.
 - The scratch directory holding unwrapped interferograms is named `unwrapped` instead of `unwrap`
-- Stitching files now can accept downsampled versions and product the correcet geo metadata
+- Stitching files now can accept downsampled versions and product the correct geo metadata
 
+**Fixed**
+
+- Calculating the nodata mask using the correct input geotransform
 
 **Dependencies**
 
