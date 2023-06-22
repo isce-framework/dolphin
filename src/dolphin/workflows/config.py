@@ -32,9 +32,9 @@ logger = get_log(__name__)
 # Specific to OPERA CSLC products:
 # TODO: this will become f"/" in upcoming OPERA release
 # We may want to keep ths old for compatibility for awhile?
-OPERA_DATASET_ROOT = "science/SENTINEL1"
+OPERA_DATASET_ROOT = "/"
 # TODO: this will become f"{OPERA_DATASET_ROOT}/data/VV"
-OPERA_DATASET_NAME = f"{OPERA_DATASET_ROOT}/CSLC/grids/VV"
+OPERA_DATASET_NAME = f"{OPERA_DATASET_ROOT}/data/VV"
 OPERA_IDENTIFICATION = f"{OPERA_DATASET_ROOT}/identification"
 
 # for example, t087_185684_iw2
