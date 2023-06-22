@@ -19,6 +19,7 @@
 
 **Changes**
 
+- Default OPERA dataset is now within `/data`, reflecting the new COMPASS product spec since CalVal
 - Passing an existing file to `VRTStack` will no longer error unless `fail_on_overwrite=True`. The default just prints out the overwrite is happening. This prevents multiple runs in the same folder from errorings just for creating a reference to the SLC files.
 - The environment variable `NUMBA_NUM_THREADS` is set using the passed in config to prevent numba from using all CPUs during `prange` calls
 - The `sequential.py` module uses a different implementation of the sequential estimator to avoid the need for a datum adjustment.
