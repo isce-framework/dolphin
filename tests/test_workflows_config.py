@@ -194,6 +194,16 @@ def test_input_find_slcs(slc_file_list_nc):
     opts2.dict() == opts.dict()
 
 
+def test_input_glob_pattern(slc_file_list_nc):
+    cslc_dir = Path(slc_file_list_nc[0]).parent
+    slc_glob = str(cslc_dir / "20*nc")
+
+    opts = config.Workflow(
+        cslc_file_list=slc_glob, input_options={"subdataset": "data"}
+    )
+    assert opts.cslc_file_list == slc_file_list_nc
+
+
 def test_input_nc_missing_subdataset(slc_file_list_nc):
     cslc_dir = Path(slc_file_list_nc[0]).parent
 
@@ -268,7 +278,7 @@ def test_input_opera_cslc(tmp_path, slc_stack):
         create_test_nc(
             fname,
             epsg=32615,
-            subdir="science/SENTINEL1/CSLC/grids",
+            subdir="data",
             data_ds_name="VV",
             data=slc_stack[i],
         )

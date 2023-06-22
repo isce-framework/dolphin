@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from datetime import datetime
+from glob import glob
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -16,8 +17,9 @@ from pydantic import (
 )
 
 from dolphin import __version__ as _dolphin_version
+from dolphin import io
 from dolphin._log import get_log
-from dolphin.io import DEFAULT_HDF5_OPTIONS, DEFAULT_TIFF_OPTIONS, format_nc_filename
+from dolphin.io import DEFAULT_HDF5_OPTIONS, DEFAULT_TIFF_OPTIONS
 from dolphin.utils import get_cpu_count, get_dates, sort_files_by_date
 
 from ._enums import InterferogramNetworkType, ShpMethod, UnwrapMethod, WorkflowName
@@ -406,8 +408,12 @@ class Workflow(YamlModel):
             return []
         if isinstance(v, (str, Path)):
             v_path = Path(v)
-            # Check if it's a newline-delimited list of input files
-            if v_path.exists() and v_path.is_file():
+
+            # Check if they've passed a glob pattern
+            if len(list(glob(str(v)))) > 1:
+                v = glob(str(v))
+            elif v_path.exists() and v_path.is_file():
+                # Check if it's a newline-delimited list of input files
                 filenames = [Path(f) for f in v_path.read_text().splitlines()]
                 # If given as relative paths, make them relative to the file
                 parent = v_path.parent
@@ -454,9 +460,10 @@ class Workflow(YamlModel):
                 )
                 subdataset = input_options.subdataset = OPERA_DATASET_NAME
 
-            # gdal formatting function will raise an error if subdataset doesn't exist
-            for f in file_list:
-                format_nc_filename(f, subdataset)
+            # Check that the files can be opened by gdal and all have the same size
+            io._assert_images_same_size(
+                [io.format_nc_filename(f, subdataset) for f in file_list]
+            )
 
         # Coerce the file_list to a sorted list of absolute Path objects
         file_list, _ = sort_files_by_date(file_list, file_date_fmt=date_fmt)
