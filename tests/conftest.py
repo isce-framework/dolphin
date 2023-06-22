@@ -13,8 +13,14 @@ if not os.environ.get("NUMBA_NUM_THREADS"):
 from dolphin.io import load_gdal, write_arr
 from dolphin.phase_link import simulate
 
-simulate._seed(1234)
 NUM_ACQ = 30
+
+
+# https://github.com/pytest-dev/pytest/issues/667#issuecomment-112206152
+@pytest.fixture
+def random():
+    np.random.seed(1234)
+    simulate._seed(1234)
 
 
 @pytest.fixture(scope="session")
