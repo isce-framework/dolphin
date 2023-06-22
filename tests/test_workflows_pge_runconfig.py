@@ -21,8 +21,8 @@ def test_run_config_schema():
 
 
 @pytest.fixture
-def input_file_group(slc_file_list_nc):
-    return InputFileGroup(cslc_file_list=slc_file_list_nc, frame_id=10)
+def input_file_group(slc_file_list_nc_with_sds):
+    return InputFileGroup(cslc_file_list=slc_file_list_nc_with_sds, frame_id=10)
 
 
 @pytest.fixture

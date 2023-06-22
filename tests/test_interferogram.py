@@ -72,7 +72,7 @@ def test_derived_vrt_interferogram_with_subdataset(slc_file_list_nc_with_sds):
         ref_slc=path1,
         sec_slc=path2,
         path=ifg.path.parent / "test2.vrt",
-        subdataset="slc/data",
+        subdataset="data/VV",
     )
     ifg_arr2 = ifg2.load()
     npt.assert_allclose(ifg_arr2, ifg_arr, rtol=1e-6)

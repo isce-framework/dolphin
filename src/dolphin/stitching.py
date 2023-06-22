@@ -275,12 +275,7 @@ def get_downsampled_vrts(
 
 
 def _get_temp_filename(fn: Path, idx: int, extra: str = ""):
-    if any(str(fn).startswith(pre) for pre in ["NETCDF:", "HDF5:"]):
-        base = Path(str(fn).split(":")[1]).stem
-    elif str(fn).startswith("DERIVED_SUBDATASET"):
-        base = Path(str(fn).split(":")[2]).stem
-    else:
-        base = fn.stem
+    base = utils._get_path_from_gdal_str(fn).stem
     return f"{base}_{idx}{extra}.vrt"
 
 

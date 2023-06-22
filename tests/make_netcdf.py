@@ -1,7 +1,9 @@
 #!/usr/bin/env python
+from __future__ import annotations
 
 import argparse
 import os
+from typing import Union
 
 import h5py
 import numpy as np
@@ -19,7 +21,7 @@ def _add_complex_type(h5_root_group):
 def create_test_nc(
     outfile,
     epsg=32615,
-    subdir="/",
+    subdir: Union[str, list[str]] = "/",
     data=None,
     data_ds_name="data",
     shape=(21, 15),

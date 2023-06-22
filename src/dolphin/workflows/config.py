@@ -412,10 +412,10 @@ class Workflow(YamlModel):
             # Check if they've passed a glob pattern
             if len(list(glob(str(v)))) > 1:
                 v = glob(str(v))
+            # Check if it's a newline-delimited list of input files
             elif v_path.exists() and v_path.is_file():
-                # Check if it's a newline-delimited list of input files
                 filenames = [Path(f) for f in v_path.read_text().splitlines()]
-                # If given as relative paths, make them relative to the file
+                # If given as relative paths, make them relative to the text file
                 parent = v_path.parent
                 return [parent / f if not f.is_absolute() else f for f in filenames]
             else:
@@ -423,7 +423,7 @@ class Workflow(YamlModel):
                     f"Input file list {v_path} does not exist or is not a file."
                 )
 
-        return [Path(f) for f in v]
+        return list(v)
 
     @staticmethod
     def _is_opera_file_list(cslc_file_list):
@@ -465,9 +465,9 @@ class Workflow(YamlModel):
                 [io.format_nc_filename(f, subdataset) for f in file_list]
             )
 
-        # Coerce the file_list to a sorted list of absolute Path objects
+        # Coerce the file_list to a sorted list of Path objects
         file_list, _ = sort_files_by_date(file_list, file_date_fmt=date_fmt)
-        values["cslc_file_list"] = [Path(f).resolve() for f in file_list]
+        values["cslc_file_list"] = [Path(f) for f in file_list]
         return values
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
