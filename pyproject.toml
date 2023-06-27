@@ -1,5 +1,5 @@
 [build-system]
-requires = [ "setuptools>=64.0", "setuptools_scm[toml]>=6.2" ]
+requires = ["setuptools>=64.0", "setuptools_scm[toml]>=6.2"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -9,22 +9,18 @@ readme = { file = "README.md", content-type = "text/markdown" }
 requires-python = ">=3.8"
 
 classifiers = [
-    "Development Status :: 2 - Pre-Alpha",
-    "Intended Audience :: Science/Research",
-    "Programming Language :: Python :: 3",
-    "Operating System :: OS Independent",
+  "Development Status :: 2 - Pre-Alpha",
+  "Intended Audience :: Science/Research",
+  "Programming Language :: Python :: 3",
+  "Operating System :: OS Independent",
 ]
-license = {file = "LICENSE.txt"}
+license = { file = "LICENSE.txt" }
 
 # The version will be written into a version.py upon install, auto-generated
 # see section: setuptools_scm
 # https://setuptools.pypa.io/en/latest/userguide/pyproject_config.html#dynamic-metadata
 # dependencies will be read from text files
-dynamic = [
-  "version",
-  "dependencies",
-  "optional-dependencies",
-]
+dynamic = ["version", "dependencies", "optional-dependencies"]
 
 [project.urls]
 Homepage = "https://github.com/opera-adt/dolphin"
@@ -35,7 +31,7 @@ Homepage = "https://github.com/opera-adt/dolphin"
 dolphin = "dolphin.cli:main"
 
 [tool.setuptools.dynamic]
-dependencies = {file = ["requirements.txt"]}
+dependencies = { file = ["requirements.txt"] }
 
 # extra requirements: `pip install dolphin[docs]` or `pip install .[docs]`
 [tool.setuptools.dynamic.optional-dependencies.docs]
@@ -47,7 +43,7 @@ file = ["tests/requirements.txt"]
 # https://github.com/pypa/setuptools_scm#configuration-parameters
 write_to = "src/dolphin/_version.py"
 # https://github.com/pypa/setuptools_scm#version-number-construction
-version_scheme = "no-guess-dev"  # Will not guess the next version
+version_scheme = "no-guess-dev" # Will not guess the next version
 
 
 [tool.black]
@@ -72,9 +68,6 @@ doctest_optionflags = "NORMALIZE_WHITESPACE NUMBER"
 addopts = "  --cov=dolphin  -n auto --maxprocesses=8 --doctest-modules --ignore=scripts --ignore=docs --ignore=data"
 filterwarnings = [
   "error",
-  # Warning thrown in pkg_resources/__init__.py:2297: in declare_namespace
-  #   DeprecationWarning: Implementing implicit namespace packages (as specified in PEP 420)
-  #     is preferred to `pkg_resources.declare_namespace`.
-  #     See https://setuptools.pypa.io/en/latest/references/keywords.html#keyword-namespace-packages
-  "ignore::DeprecationWarning:.*pkg_resources.*",
+  # DeprecationWarning thrown in pkg_resources for older numba verions and llvmlite
+  "ignore:.*pkg_resources.*",
 ]
