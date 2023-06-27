@@ -68,6 +68,6 @@ doctest_optionflags = "NORMALIZE_WHITESPACE NUMBER"
 addopts = "  --cov=dolphin  -n auto --maxprocesses=8 --doctest-modules --ignore=scripts --ignore=docs --ignore=data"
 filterwarnings = [
   "error",
-  # DeprecationWarning thrown in pkg_resources for older numba verions
-  "ignore::DeprecationWarning:pkg_resources.*",
+  # DeprecationWarning thrown in pkg_resources for older numba verions and llvmlite
+  "ignore:.*pkg_resources.*",
 ]
