@@ -6,18 +6,9 @@ from glob import glob
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from pydantic import (
-    BaseModel,
-    BaseSettings,
-    Extra,
-    Field,
-    PrivateAttr,
-    root_validator,
-    validator,
-)
+from pydantic import BaseModel, Extra, Field, PrivateAttr, root_validator, validator
 
 from dolphin import __version__ as _dolphin_version
-from dolphin import io
 from dolphin._log import get_log
 from dolphin.io import DEFAULT_HDF5_OPTIONS, DEFAULT_TIFF_OPTIONS
 from dolphin.utils import get_cpu_count, get_dates, sort_files_by_date
@@ -83,7 +74,7 @@ class PhaseLinkingOptions(BaseModel, extra=Extra.forbid):
     ministack_size: int = Field(
         15, description="Size of the ministack for sequential estimator.", gt=1
     )
-    half_window = HalfWindow()
+    half_window: HalfWindow = HalfWindow()
     beta: float = Field(
         0.01,
         description=(
@@ -133,7 +124,7 @@ class InterferogramNetwork(BaseModel, extra=Extra.forbid):
     network_type: InterferogramNetworkType = InterferogramNetworkType.SINGLE_REFERENCE
 
     # validation
-    @root_validator
+    @root_validator  # type: ignore
     def _check_network_type(cls, values):
         ref_idx = values.get("reference_idx")
         max_bw = values.get("max_bandwidth")
@@ -183,8 +174,8 @@ class UnwrapOptions(BaseModel, extra=Extra.forbid):
     )
 
 
-class WorkerSettings(BaseSettings):
-    """Settings configurable based on environment variables."""
+class WorkerSettings(BaseModel, extra=Extra.forbid):
+    """Settings for controlling CPU/GPU settings and parallelism."""
 
     gpu_enabled: bool = Field(
         True,
@@ -219,16 +210,6 @@ class WorkerSettings(BaseSettings):
         description="Size (in GB) of blocks of data to load at a time.",
         gt=0.001,
     )
-
-    class Config:
-        """Pydantic class configuration for BaseSettings."""
-
-        extra = Extra.forbid
-        # https://docs.pydantic.dev/usage/settings/#parsing-environment-variable-values
-        env_prefix = "dolphin_"  # e.g. DOLPHIN_N_WORKERS=4 for n_workers
-        fields = {
-            "gpu_enabled": {"env": ["dolphin_gpu_enabled", "gpu"]},
-        }
 
 
 class InputOptions(BaseModel, extra=Extra.forbid):
@@ -431,7 +412,7 @@ class Workflow(YamlModel):
             re.search(OPERA_BURST_RE, str(f)) is not None for f in cslc_file_list
         )
 
-    @root_validator
+    @root_validator  # type: ignore
     def _check_slc_files_exist(cls, values):
         file_list = values.get("cslc_file_list")
         if not file_list:
@@ -459,11 +440,6 @@ class Workflow(YamlModel):
                     f" {OPERA_DATASET_NAME}."
                 )
                 subdataset = input_options.subdataset = OPERA_DATASET_NAME
-
-            # Check that the files can be opened by gdal and all have the same size
-            io._assert_images_same_size(
-                [io.format_nc_filename(f, subdataset) for f in file_list]
-            )
 
         # Coerce the file_list to a sorted list of Path objects
         file_list, _ = sort_files_by_date(file_list, file_date_fmt=date_fmt)
