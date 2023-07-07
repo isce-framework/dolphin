@@ -31,7 +31,7 @@ def test_half_window_to_looks():
     assert hw == config.HalfWindow.from_looks(row_looks, col_looks)
 
 
-def test_ps_options_defaults(tmpdir):
+def test_ps_options_defaults():
     # Change directory so the creation of the default files doesn't fail
     pso = config.PsOptions()
     assert pso.amp_dispersion_threshold == 0.25
@@ -41,20 +41,20 @@ def test_ps_options_defaults(tmpdir):
     assert pso._amp_mean_file == Path("PS/amp_mean.tif")
 
 
-def test_phase_linking_options_defaults(tmpdir):
+def test_phase_linking_options_defaults():
     opts = config.PhaseLinkingOptions()
     assert opts.ministack_size == 15
     assert opts.half_window == config.HalfWindow()
     assert opts._directory == Path("linked_phase")
 
 
-def test_phase_linking_options_bad_size(tmpdir):
+def test_phase_linking_options_bad_size():
     with pytest.raises(pydantic.ValidationError):
         config.PhaseLinkingOptions(ministack_size=0)
         config.PhaseLinkingOptions(ministack_size=-1)
 
 
-def test_interferogram_network_defaults(tmpdir):
+def test_interferogram_network_defaults():
     opts = config.InterferogramNetwork()
     assert opts.reference_idx == 0
     assert opts.max_bandwidth is None
@@ -62,14 +62,19 @@ def test_interferogram_network_defaults(tmpdir):
     assert opts.network_type == InterferogramNetworkType.SINGLE_REFERENCE
 
 
-def test_interferogram_network_types(tmpdir):
+def test_interferogram_network_types():
     opts = config.InterferogramNetwork(max_bandwidth=2)
     assert opts.max_bandwidth == 2
     assert opts.network_type == InterferogramNetworkType.MAX_BANDWIDTH
     assert opts.max_temporal_baseline is None
 
+    opts = config.InterferogramNetwork(max_temporal_baseline=30)
+    assert opts.max_temporal_baseline == 30
+    assert opts.network_type == InterferogramNetworkType.MAX_TEMPORAL_BASELINE
+    assert opts.max_bandwidth is None
 
-def test_unwrap_options_defaults(tmpdir):
+
+def test_unwrap_options_defaults():
     opts = config.UnwrapOptions()
     assert opts.unwrap_method == config.UnwrapMethod.SNAPHU
     assert opts.tiles == [1, 1]
@@ -77,7 +82,7 @@ def test_unwrap_options_defaults(tmpdir):
     assert opts._directory == Path("unwrapped")
 
 
-def test_outputs_defaults(tmpdir):
+def test_outputs_defaults():
     opts = config.OutputOptions()
     assert opts.output_resolution is None
     assert opts.strides == {"x": 1, "y": 1}

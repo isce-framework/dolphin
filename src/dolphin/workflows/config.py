@@ -140,7 +140,7 @@ class InterferogramNetwork(BaseModel, extra=Extra.forbid):
             return values
 
         if max_bw is not None:
-            values["network_type"] = InterferogramNetworkType.BANDWIDTH
+            values["network_type"] = InterferogramNetworkType.MAX_BANDWIDTH
             return values
 
         # If nothing else specified, set to a single reference network
