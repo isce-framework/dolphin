@@ -136,7 +136,7 @@ class InterferogramNetwork(BaseModel, extra=Extra.forbid):
                 " `max_temporal_baseline` can be set."
             )
         if max_tb is not None:
-            values["network_type"] = InterferogramNetworkType.TEMPORAL_BASELINE
+            values["network_type"] = InterferogramNetworkType.MAX_TEMPORAL_BASELINE
             return values
 
         if max_bw is not None:
@@ -432,14 +432,19 @@ class Workflow(YamlModel):
         # If they're HDF5/NetCDF files, we need to check that the subdataset exists
         if ext in [".h5", ".nc"]:
             subdataset = input_options.subdataset
-            if subdataset is None and cls._is_opera_file_list(file_list):
-                # Assume that the user forgot to set the subdataset, and set it to the
-                # default OPERA dataset name
-                logger.info(
-                    "CSLC files look like OPERA files, setting subdataset to"
-                    f" {OPERA_DATASET_NAME}."
-                )
-                subdataset = input_options.subdataset = OPERA_DATASET_NAME
+            if subdataset is None:
+                if cls._is_opera_file_list(file_list):
+                    # Assume that the user forgot to set the subdataset, and set it to the
+                    # default OPERA dataset name
+                    logger.info(
+                        "CSLC files look like OPERA files, setting subdataset to"
+                        f" {OPERA_DATASET_NAME}."
+                    )
+                    subdataset = input_options.subdataset = OPERA_DATASET_NAME
+                else:
+                    raise ValueError(
+                        "Must provide subdataset name for input HDF5 files."
+                    )
 
         # Coerce the file_list to a sorted list of Path objects
         file_list, _ = sort_files_by_date(file_list, file_date_fmt=date_fmt)

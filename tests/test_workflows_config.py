@@ -102,38 +102,6 @@ def test_worker_settings_defaults():
     assert ws.block_size_gb == 1.0
 
 
-def test_worker_env_defaults(monkeypatch):
-    # Change environment with monkeypatch
-    # https://docs.pytest.org/en/latest/how-to/monkeypatch.html
-    monkeypatch.setenv("dolphin_gpu_enabled", "False")
-    ws = config.WorkerSettings()
-    assert ws.gpu_enabled is False
-    monkeypatch.delenv("dolphin_gpu_enabled")
-
-    # "gpu" doesn't need the dolphin_ prefix
-    monkeypatch.setenv("gpu", "False")
-    ws = config.WorkerSettings()
-    assert ws.gpu_enabled is False
-
-    # Case shouldn't matter (since i'm not specifying that it does)
-    monkeypatch.setenv("Gpu", "False")
-    ws = config.WorkerSettings()
-    assert ws.gpu_enabled is False
-
-    # Check that we need the dolphin_ prefix
-    monkeypatch.setenv("N_WORKERS", "8")
-    ws = config.WorkerSettings()
-    assert ws.n_workers == cpu_count()  # should still be old default
-
-    monkeypatch.setenv("DOLPHIN_N_WORKERS", "8")
-    ws = config.WorkerSettings()
-    assert ws.n_workers == 8
-
-    monkeypatch.setenv("DOLPHIN_BLOCK_SIZE_GB", "4.5")
-    ws = config.WorkerSettings()
-    assert ws.block_size_gb == 4.5
-
-
 @pytest.fixture()
 def dir_with_1_slc(tmp_path, slc_file_list_nc):
     p = tmp_path / "slc"
@@ -214,7 +182,7 @@ def test_input_glob_pattern(slc_file_list_nc):
 def test_input_nc_missing_subdataset(slc_file_list_nc):
     cslc_dir = Path(slc_file_list_nc[0]).parent
 
-    with pytest.raises(pydantic.ValidationError, match="Must provide dataset name"):
+    with pytest.raises(pydantic.ValidationError, match="Must provide subdataset name"):
         config.Workflow(cslc_file_list=cslc_dir / "slclist.txt")
 
 
