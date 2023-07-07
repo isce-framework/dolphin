@@ -65,6 +65,14 @@ def test_interferogram_network_defaults(tmpdir):
         assert opts.network_type == InterferogramNetworkType.SINGLE_REFERENCE
 
 
+def test_interferogram_network_types(tmpdir):
+    with tmpdir.as_cwd():
+        opts = config.InterferogramNetwork(max_bandwidth=2)
+        assert opts.max_bandwidth == 2
+        assert opts.network_type == InterferogramNetworkType.MAX_BANDWIDTH
+        assert opts.max_temporal_baseline is None
+
+
 def test_unwrap_options_defaults(tmpdir):
     with tmpdir.as_cwd():
         opts = config.UnwrapOptions()
