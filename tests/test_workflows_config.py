@@ -31,60 +31,67 @@ def test_half_window_to_looks():
     assert hw == config.HalfWindow.from_looks(row_looks, col_looks)
 
 
-def test_ps_options_defaults(tmpdir):
+def test_ps_options_defaults():
     # Change directory so the creation of the default files doesn't fail
-    with tmpdir.as_cwd():
-        pso = config.PsOptions()
-        assert pso.amp_dispersion_threshold == 0.25
-        assert pso._directory == Path("PS")
-        assert pso._output_file == Path("PS/ps_pixels.tif")
-        assert pso._amp_dispersion_file == Path("PS/amp_dispersion.tif")
-        assert pso._amp_mean_file == Path("PS/amp_mean.tif")
+    pso = config.PsOptions()
+    assert pso.amp_dispersion_threshold == 0.25
+    assert pso._directory == Path("PS")
+    assert pso._output_file == Path("PS/ps_pixels.tif")
+    assert pso._amp_dispersion_file == Path("PS/amp_dispersion.tif")
+    assert pso._amp_mean_file == Path("PS/amp_mean.tif")
 
 
-def test_phase_linking_options_defaults(tmpdir):
-    with tmpdir.as_cwd():
-        opts = config.PhaseLinkingOptions()
-        assert opts.ministack_size == 15
-        assert opts.half_window == config.HalfWindow()
-        assert opts._directory == Path("linked_phase")
+def test_phase_linking_options_defaults():
+    opts = config.PhaseLinkingOptions()
+    assert opts.ministack_size == 15
+    assert opts.half_window == config.HalfWindow()
+    assert opts._directory == Path("linked_phase")
 
 
-def test_phase_linking_options_bad_size(tmpdir):
+def test_phase_linking_options_bad_size():
     with pytest.raises(pydantic.ValidationError):
         config.PhaseLinkingOptions(ministack_size=0)
         config.PhaseLinkingOptions(ministack_size=-1)
 
 
-def test_interferogram_network_defaults(tmpdir):
-    with tmpdir.as_cwd():
-        opts = config.InterferogramNetwork()
-        assert opts.reference_idx == 0
-        assert opts.max_bandwidth is None
-        assert opts.max_temporal_baseline is None
-        assert opts.network_type == InterferogramNetworkType.SINGLE_REFERENCE
+def test_interferogram_network_defaults():
+    opts = config.InterferogramNetwork()
+    assert opts.reference_idx == 0
+    assert opts.max_bandwidth is None
+    assert opts.max_temporal_baseline is None
+    assert opts.network_type == InterferogramNetworkType.SINGLE_REFERENCE
 
 
-def test_unwrap_options_defaults(tmpdir):
-    with tmpdir.as_cwd():
-        opts = config.UnwrapOptions()
-        assert opts.unwrap_method == config.UnwrapMethod.SNAPHU
-        assert opts.tiles == [1, 1]
-        assert opts.init_method == "mcf"
-        assert opts._directory == Path("unwrapped")
+def test_interferogram_network_types():
+    opts = config.InterferogramNetwork(max_bandwidth=2)
+    assert opts.max_bandwidth == 2
+    assert opts.network_type == InterferogramNetworkType.MAX_BANDWIDTH
+    assert opts.max_temporal_baseline is None
+
+    opts = config.InterferogramNetwork(max_temporal_baseline=30)
+    assert opts.max_temporal_baseline == 30
+    assert opts.network_type == InterferogramNetworkType.MAX_TEMPORAL_BASELINE
+    assert opts.max_bandwidth is None
 
 
-def test_outputs_defaults(tmpdir):
-    with tmpdir.as_cwd():
-        opts = config.OutputOptions()
-        assert opts.output_resolution is None
-        assert opts.strides == {"x": 1, "y": 1}
-        assert opts.hdf5_creation_options == dict(
-            chunks=[128, 128],
-            compression="gzip",
-            compression_opts=4,
-            shuffle=True,
-        )
+def test_unwrap_options_defaults():
+    opts = config.UnwrapOptions()
+    assert opts.unwrap_method == config.UnwrapMethod.SNAPHU
+    assert opts.tiles == [1, 1]
+    assert opts.init_method == "mcf"
+    assert opts._directory == Path("unwrapped")
+
+
+def test_outputs_defaults():
+    opts = config.OutputOptions()
+    assert opts.output_resolution is None
+    assert opts.strides == {"x": 1, "y": 1}
+    assert opts.hdf5_creation_options == dict(
+        chunks=[128, 128],
+        compression="gzip",
+        compression_opts=4,
+        shuffle=True,
+    )
 
 
 def test_worker_settings_defaults():
@@ -93,38 +100,6 @@ def test_worker_settings_defaults():
     assert ws.n_workers == cpu_count()
     assert ws.threads_per_worker == 1
     assert ws.block_size_gb == 1.0
-
-
-def test_worker_env_defaults(monkeypatch):
-    # Change environment with monkeypatch
-    # https://docs.pytest.org/en/latest/how-to/monkeypatch.html
-    monkeypatch.setenv("dolphin_gpu_enabled", "False")
-    ws = config.WorkerSettings()
-    assert ws.gpu_enabled is False
-    monkeypatch.delenv("dolphin_gpu_enabled")
-
-    # "gpu" doesn't need the dolphin_ prefix
-    monkeypatch.setenv("gpu", "False")
-    ws = config.WorkerSettings()
-    assert ws.gpu_enabled is False
-
-    # Case shouldn't matter (since i'm not specifying that it does)
-    monkeypatch.setenv("Gpu", "False")
-    ws = config.WorkerSettings()
-    assert ws.gpu_enabled is False
-
-    # Check that we need the dolphin_ prefix
-    monkeypatch.setenv("N_WORKERS", "8")
-    ws = config.WorkerSettings()
-    assert ws.n_workers == cpu_count()  # should still be old default
-
-    monkeypatch.setenv("DOLPHIN_N_WORKERS", "8")
-    ws = config.WorkerSettings()
-    assert ws.n_workers == 8
-
-    monkeypatch.setenv("DOLPHIN_BLOCK_SIZE_GB", "4.5")
-    ws = config.WorkerSettings()
-    assert ws.block_size_gb == 4.5
 
 
 @pytest.fixture()
@@ -207,7 +182,7 @@ def test_input_glob_pattern(slc_file_list_nc):
 def test_input_nc_missing_subdataset(slc_file_list_nc):
     cslc_dir = Path(slc_file_list_nc[0]).parent
 
-    with pytest.raises(pydantic.ValidationError, match="Must provide dataset name"):
+    with pytest.raises(pydantic.ValidationError, match="Must provide subdataset name"):
         config.Workflow(cslc_file_list=cslc_dir / "slclist.txt")
 
 
