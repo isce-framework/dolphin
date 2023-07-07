@@ -124,7 +124,7 @@ class InterferogramNetwork(BaseModel, extra=Extra.forbid):
     network_type: InterferogramNetworkType = InterferogramNetworkType.SINGLE_REFERENCE
 
     # validation
-    @root_validator  # type: ignore
+    @root_validator
     def _check_network_type(cls, values):
         ref_idx = values.get("reference_idx")
         max_bw = values.get("max_bandwidth")
@@ -412,7 +412,7 @@ class Workflow(YamlModel):
             re.search(OPERA_BURST_RE, str(f)) is not None for f in cslc_file_list
         )
 
-    @root_validator  # type: ignore
+    @root_validator
     def _check_slc_files_exist(cls, values):
         file_list = values.get("cslc_file_list")
         if not file_list:
