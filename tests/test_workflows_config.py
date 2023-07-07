@@ -33,21 +33,19 @@ def test_half_window_to_looks():
 
 def test_ps_options_defaults(tmpdir):
     # Change directory so the creation of the default files doesn't fail
-    with tmpdir.as_cwd():
-        pso = config.PsOptions()
-        assert pso.amp_dispersion_threshold == 0.25
-        assert pso._directory == Path("PS")
-        assert pso._output_file == Path("PS/ps_pixels.tif")
-        assert pso._amp_dispersion_file == Path("PS/amp_dispersion.tif")
-        assert pso._amp_mean_file == Path("PS/amp_mean.tif")
+    pso = config.PsOptions()
+    assert pso.amp_dispersion_threshold == 0.25
+    assert pso._directory == Path("PS")
+    assert pso._output_file == Path("PS/ps_pixels.tif")
+    assert pso._amp_dispersion_file == Path("PS/amp_dispersion.tif")
+    assert pso._amp_mean_file == Path("PS/amp_mean.tif")
 
 
 def test_phase_linking_options_defaults(tmpdir):
-    with tmpdir.as_cwd():
-        opts = config.PhaseLinkingOptions()
-        assert opts.ministack_size == 15
-        assert opts.half_window == config.HalfWindow()
-        assert opts._directory == Path("linked_phase")
+    opts = config.PhaseLinkingOptions()
+    assert opts.ministack_size == 15
+    assert opts.half_window == config.HalfWindow()
+    assert opts._directory == Path("linked_phase")
 
 
 def test_phase_linking_options_bad_size(tmpdir):
@@ -57,42 +55,38 @@ def test_phase_linking_options_bad_size(tmpdir):
 
 
 def test_interferogram_network_defaults(tmpdir):
-    with tmpdir.as_cwd():
-        opts = config.InterferogramNetwork()
-        assert opts.reference_idx == 0
-        assert opts.max_bandwidth is None
-        assert opts.max_temporal_baseline is None
-        assert opts.network_type == InterferogramNetworkType.SINGLE_REFERENCE
+    opts = config.InterferogramNetwork()
+    assert opts.reference_idx == 0
+    assert opts.max_bandwidth is None
+    assert opts.max_temporal_baseline is None
+    assert opts.network_type == InterferogramNetworkType.SINGLE_REFERENCE
 
 
 def test_interferogram_network_types(tmpdir):
-    with tmpdir.as_cwd():
-        opts = config.InterferogramNetwork(max_bandwidth=2)
-        assert opts.max_bandwidth == 2
-        assert opts.network_type == InterferogramNetworkType.MAX_BANDWIDTH
-        assert opts.max_temporal_baseline is None
+    opts = config.InterferogramNetwork(max_bandwidth=2)
+    assert opts.max_bandwidth == 2
+    assert opts.network_type == InterferogramNetworkType.MAX_BANDWIDTH
+    assert opts.max_temporal_baseline is None
 
 
 def test_unwrap_options_defaults(tmpdir):
-    with tmpdir.as_cwd():
-        opts = config.UnwrapOptions()
-        assert opts.unwrap_method == config.UnwrapMethod.SNAPHU
-        assert opts.tiles == [1, 1]
-        assert opts.init_method == "mcf"
-        assert opts._directory == Path("unwrapped")
+    opts = config.UnwrapOptions()
+    assert opts.unwrap_method == config.UnwrapMethod.SNAPHU
+    assert opts.tiles == [1, 1]
+    assert opts.init_method == "mcf"
+    assert opts._directory == Path("unwrapped")
 
 
 def test_outputs_defaults(tmpdir):
-    with tmpdir.as_cwd():
-        opts = config.OutputOptions()
-        assert opts.output_resolution is None
-        assert opts.strides == {"x": 1, "y": 1}
-        assert opts.hdf5_creation_options == dict(
-            chunks=[128, 128],
-            compression="gzip",
-            compression_opts=4,
-            shuffle=True,
-        )
+    opts = config.OutputOptions()
+    assert opts.output_resolution is None
+    assert opts.strides == {"x": 1, "y": 1}
+    assert opts.hdf5_creation_options == dict(
+        chunks=[128, 128],
+        compression="gzip",
+        compression_opts=4,
+        shuffle=True,
+    )
 
 
 def test_worker_settings_defaults():
