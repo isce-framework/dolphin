@@ -91,33 +91,33 @@ def load_gdal(
     """
     ds = gdal.Open(fspath(filename))
     nrows, ncols = ds.RasterYSize, ds.RasterXSize
-    # Make an output object of the right size
+
+    # if rows or cols are not specified, load all rows/cols
+    rows = slice(0, nrows) if rows in (None, slice(None)) else rows
+    cols = slice(0, ncols) if cols in (None, slice(None)) else cols
+    # Help out mypy:
+    assert rows is not None
+    assert cols is not None
+
     dt = gdal_to_numpy_type(ds.GetRasterBand(1).DataType)
 
     if isinstance(subsample_factor, int):
         subsample_factor = (subsample_factor, subsample_factor)
 
-    if rows is not None and cols is not None:
-        xoff, yoff = cols.start, rows.start
-        row_stop = min(rows.stop, nrows)
-        col_stop = min(cols.stop, ncols)
-        xsize, ysize = col_stop - cols.start, row_stop - rows.start
-        if xsize <= 0 or ysize <= 0:
-            raise IndexError(
-                f"Invalid row/col slices: {rows}, {cols} for file {filename} of size"
-                f" {nrows}x{ncols}"
-            )
-        nrows_out, ncols_out = (
-            ysize // subsample_factor[0],
-            xsize // subsample_factor[1],
+    xoff, yoff = int(cols.start), int(rows.start)
+    row_stop = min(rows.stop, nrows)
+    col_stop = min(cols.stop, ncols)
+    xsize, ysize = int(col_stop - cols.start), int(row_stop - rows.start)
+    if xsize <= 0 or ysize <= 0:
+        raise IndexError(
+            f"Invalid row/col slices: {rows}, {cols} for file {filename} of size"
+            f" {nrows}x{ncols}"
         )
-    else:
-        xoff, yoff = 0, 0
-        xsize, ysize = ncols, nrows
-        nrows_out, ncols_out = (
-            nrows // subsample_factor[0],
-            ncols // subsample_factor[1],
-        )
+    nrows_out, ncols_out = (
+        ysize // subsample_factor[0],
+        xsize // subsample_factor[1],
+    )
+
     # Read the data, and decimate if specified
     resamp = gdal.GRA_NearestNeighbour
     if band is None:
@@ -181,7 +181,7 @@ def format_nc_filename(filename: Filename, ds_name: Optional[str] = None) -> str
 def _assert_images_same_size(files):
     """Ensure all files are the same size."""
     with ThreadPoolExecutor(5) as executor:
-        sizes = executor.map(get_raster_xysize, files)
+        sizes = list(executor.map(get_raster_xysize, files))
     if len(set(sizes)) > 1:
         raise ValueError(f"Not files have same raster (x, y) size:\n{set(sizes)}")
 

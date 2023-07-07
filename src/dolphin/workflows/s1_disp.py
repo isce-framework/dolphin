@@ -151,8 +151,6 @@ def run(
             conncomp_filename=cc_p,
             tcorr_filename=stitched_tcorr_file,
             spatial_corr_filename=s_corr_p,
-            # TODO: How am i going to create the output name?
-            # output_name=cfg.outputs.output_name,
             output_name=output_name,
             corrections={},
             pge_runconfig=pge_runconfig,

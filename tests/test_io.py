@@ -19,7 +19,18 @@ def test_get_raster_xysize(raster_100_by_200):
     assert (200, 100) == io.get_raster_xysize(raster_100_by_200)
 
 
-def test_load_slice(raster_100_by_200):
+def test_load_1_slice(raster_100_by_200):
+    arr = io.load_gdal(raster_100_by_200)
+    block = io.load_gdal(raster_100_by_200, rows=slice(0, 10))
+    assert block.shape == (10, 200)
+    npt.assert_allclose(block, arr[:10, :])
+
+    block = io.load_gdal(raster_100_by_200, cols=slice(10, 20))
+    assert block.shape == (100, 10)
+    npt.assert_allclose(block, arr[:, 10:20])
+
+
+def test_load_slices(raster_100_by_200):
     arr = io.load_gdal(raster_100_by_200)
     block = io.load_gdal(raster_100_by_200, rows=slice(0, 10), cols=slice(0, 10))
     assert block.shape == (10, 10)
@@ -28,6 +39,19 @@ def test_load_slice(raster_100_by_200):
     block = io.load_gdal(raster_100_by_200, rows=slice(10, 20), cols=slice(10, 20))
     assert block.shape == (10, 10)
     npt.assert_allclose(block, arr[10:20, 10:20])
+
+
+def test_load_none_slices(raster_100_by_200):
+    arr = io.load_gdal(raster_100_by_200)
+    block = io.load_gdal(raster_100_by_200, rows=slice(0, 10), cols=slice(None))
+    assert block.shape == (10, 200)
+    npt.assert_allclose(block, arr[:10, :])
+
+    block = io.load_gdal(
+        raster_100_by_200, rows=slice(None, None, None), cols=slice(10, 20)
+    )
+    assert block.shape == (100, 10)
+    npt.assert_allclose(block, arr[:, 10:20])
 
 
 def test_load_slice_oob(raster_100_by_200):

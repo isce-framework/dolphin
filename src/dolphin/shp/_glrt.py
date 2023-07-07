@@ -127,33 +127,3 @@ def get_cutoff(alpha: float, N: int) -> float:
         return n_alpha_to_cutoff[(N, alpha)]
     except KeyError:
         raise ValueError(f"Not implemented for {N = }, {alpha = }")
-
-
-# # Note: the results were computed using the following:
-# from numpy import log as ln
-# from scipy.stats import rayleigh
-# from joblib import Parallel, delayed
-# import pandas as pd
-# from itertools import product
-# def get_test_stat_glrt(N, nsim=500, alpha=0.05, scale=10):
-#     x = rayleigh.rvs(scale=scale, size=(nsim, 2 * N))
-
-#     scale2_p = (x[:, :N] ** 2).mean(axis=1) / 2
-#     scale2_q = (x[:, N:] ** 2).mean(axis=1) / 2
-#     scale2_pooled = (scale2_p + scale2_q) / 2
-#     return 2 * ln(scale2_pooled) - ln(scale2_p) - ln(scale2_q)  # leave off the *N
-# def get_alpha_cutoff2(alpha, N, nsim=50_000, scale=10):
-#     return np.percentile(
-#         get_test_stat_glrt(N, nsim=nsim, alpha=alpha, scale=scale), 100 * (1 - alpha)
-#     )
-# def _run(N, alpha, scale):
-#     return (N, alpha, scale, get_alpha_cutoff2(alpha=alpha, N=N, scale=scale))
-# Narr = list(range(1, 301))
-# scales = (1, 10, 50)
-# alphas = [0.05, 0.01, 0.005, 0.001]
-# results = Parallel(n_jobs=30)(
-#     delayed(_run)(*row) for row in product(Narr, alphas, scales)
-# )
-# df = pd.DataFrame(data=results, columns=['N', 'alpha', 'scale', 'cutoff'])
-# d2 = df.groupby(['N', 'alpha']).mean().round(4)[['cutoff']]
-# d2.to_csv("dolphin/shp/glrt_cutoffs.csv", index=True)
