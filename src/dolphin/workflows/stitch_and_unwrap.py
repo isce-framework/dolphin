@@ -86,16 +86,21 @@ def run(
         return [], [], [], stitched_tcorr_file
 
     if cfg.mask_file is not None:
-        logger.info(f"Warping {cfg.mask_file} to match interferograms")
-        output_mask = stitched_ifg_dir / "warped_mask.tif"
-        if output_mask.exists():
-            logger.info(f"Mask already exists at {output_mask}")
+        # Check that the input mask is the same size as the ifgs:
+        if io.get_raster_xysize(cfg.mask_file) == stitched_tcorr_file:
+            logger.info(f"Using {cfg.mask_file} to mask during unwrapping")
+            output_mask = cfg.mask_file
         else:
-            stitching.warp_to_match(
-                input_file=cfg.mask_file,
-                match_file=stitched_tcorr_file,
-                output_file=output_mask,
-            )
+            logger.info(f"Warping {cfg.mask_file} to match size of interferograms")
+            output_mask = stitched_ifg_dir / "warped_mask.tif"
+            if output_mask.exists():
+                logger.info(f"Mask already exists at {output_mask}")
+            else:
+                stitching.warp_to_match(
+                    input_file=cfg.mask_file,
+                    match_file=stitched_tcorr_file,
+                    output_file=output_mask,
+                )
     else:
         output_mask = None
 
