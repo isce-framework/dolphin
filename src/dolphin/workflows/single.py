@@ -167,7 +167,7 @@ def run_wrapped_phase_single(
         nodata=0,
     )
 
-    # Create the empty compressed temporal coherence file
+    # Create the empty compressed SHP count file
     shp_counts_file = output_folder / f"shp_counts_{start_end}.tif"
     io.write_arr(
         arr=None,
@@ -282,6 +282,7 @@ def run_wrapped_phase_single(
                 out_row_start,
                 out_col_start,
             )
+
         # Save the SHP counts for each pixel (if not using Rect window)
         shp_counts = np.sum(neighbor_arrays, axis=(-2, -1))
         writer.queue_write(

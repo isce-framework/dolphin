@@ -10,6 +10,7 @@ from pydantic import BaseModel, Extra, Field, PrivateAttr, root_validator, valid
 
 from dolphin import __version__ as _dolphin_version
 from dolphin._log import get_log
+from dolphin._types import Bbox
 from dolphin.io import DEFAULT_HDF5_OPTIONS, DEFAULT_TIFF_OPTIONS
 from dolphin.utils import get_cpu_count, get_dates, sort_files_by_date
 
@@ -246,6 +247,16 @@ class OutputOptions(BaseModel, extra=Extra.forbid):
             " strides of [4, 2] would turn an input resolution of [5, 10] into an"
             " output resolution of [20, 20]."
         ),
+    )
+    bounds: Optional[Bbox] = Field(
+        None,
+        description=(
+            "Area of interest: (left, bottom, right, top) longitude/latitude "
+            "e.g. `bbox=(-150.2,65.0,-150.1,65.5)`"
+        ),
+    )
+    bounds_epsg: int = Field(
+        4326, description="EPSG code for the `bounds`, if specified."
     )
 
     hdf5_creation_options: dict = Field(

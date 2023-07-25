@@ -17,6 +17,8 @@
 - Created a script to test the incremental/near-real-time version of phase linking
 - Added a new CLI command `dolphin unwrap` to unwrap a single interferogram/a directory of interferograms in parallel.
 - Added ability to specify a glob pattern for input CSLC files in the YAML config
+- Saves a multilooked PS mask for the default workflow output
+- Allows the user to specify a desired bounds for the final stitched result
 
 **Changes**
 
@@ -30,6 +32,7 @@
 **Fixed**
 
 - Calculating the nodata mask using the correct input geotransform
+- Trims the overlapped region of the phase linking step when iterating in blocks
 
 **Dependencies**
 

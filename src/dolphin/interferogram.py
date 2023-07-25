@@ -291,7 +291,7 @@ class Network:
         max_temporal_baseline: Optional[float] = None,
         reference_idx: Optional[int] = None,
         indexes: Optional[Sequence[tuple[int, int]]] = None,
-        subdataset: Optional[str] = None,
+        subdataset: Optional[Union[str, Sequence[str]]] = None,
         write: bool = True,
     ):
         """Create a network of interferograms from a list of SLCs.
@@ -317,6 +317,7 @@ class Network:
         subdataset : Optional[str]
             If passing NetCDF files in `slc_list, the subdataset of the image data
             within the file.
+            Can also pass a sequence of one subdataset per entry in `slc_list`
             Defaults to None.
         write : bool
             Whether to write the VRT files to disk. Defaults to True.
@@ -334,6 +335,12 @@ class Network:
         self.max_bandwidth = max_bandwidth
         self.max_temporal_baseline = max_temporal_baseline
         self.reference_idx = reference_idx
+        if subdataset is None or isinstance(subdataset, str):
+            self._slc_to_subdataset = {slc: subdataset for slc in slc_list}
+        else:
+            # We're passing a sequence
+            assert len(subdataset) == len(slc_list)
+            self._slc_to_subdataset = {slc: sd for slc, sd in zip(slc_list, subdataset)}
         self._subdataset = subdataset
 
         # Create each VRT file
@@ -365,10 +372,14 @@ class Network:
     @property
     def _gdal_file_strings(self):
         # format each file in each pair
-        return [
-            [io.format_nc_filename(f, self._subdataset) for f in slc_pair]
-            for slc_pair in self.slc_file_pairs
-        ]
+        out = []
+        for slc1, slc2 in self.slc_file_pairs:
+            sd1 = self._slc_to_subdataset[slc1]
+            sd2 = self._slc_to_subdataset[slc2]
+            out.append(
+                [io.format_nc_filename(slc1, sd1), io.format_nc_filename(slc2, sd2)]
+            )
+        return out
 
     def __repr__(self):
         return (

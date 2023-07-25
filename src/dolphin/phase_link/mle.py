@@ -337,10 +337,15 @@ def _fill_ps_pixels(
         PS pixels to fill within each look window.
     reference_idx : int, default = 0
         SLC to use as reference for PS pixels. All pixel values are multiplied
-        by the conjugate of
+        by the conjugate of this index
     use_max_ps : bool, optional
         If True, use the brightest PS pixel in each look window to fill in the
         MLE estimate. If False, use the average of all PS pixels in each look window.
+
+    Returns
+    -------
+    ps_masked_looked : ndarray
+        boolean array of PS, multilooked (using "any") to same size as `mle_est`
     """
     if avg_mag is None:
         # Get the average magnitude of the SLC stack

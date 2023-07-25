@@ -62,6 +62,8 @@ def run(
         image_file_list=ifg_file_list,  # type: ignore
         file_date_fmt=cfg.input_options.cslc_date_fmt,
         output_dir=stitched_ifg_dir,
+        out_bounds=cfg.output_options.bounds,
+        out_bounds_epsg=cfg.output_options.bounds_epsg,
     )
 
     # Estimate the spatial correlation from the stitched interferogram
@@ -76,6 +78,8 @@ def run(
         outfile=stitched_tcorr_file,
         driver="GTiff",
         overwrite=False,
+        out_bounds=cfg.output_options.bounds,
+        out_bounds_epsg=cfg.output_options.bounds_epsg,
     )
 
     # #####################################

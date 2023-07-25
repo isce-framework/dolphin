@@ -86,9 +86,9 @@ def run(cfg: Workflow, debug: bool = False) -> tuple[list[Path], Path, Path]:
             block_size_gb=cfg.worker_settings.block_size_gb,
         )
 
-    # TODO: Need a good way to store the nslc attribute in the PS file...
-    # If we pre-compute it from some big stack, we need to use that for SHP
-    # finding, not use the size of `slc_vrt_file`
+    # Save a looked version of the PS mask too
+    strides = cfg.output_options.strides
+    ps.multilook_ps_mask(strides=strides, ps_mask_file=cfg.ps_options._output_file)
 
     # #########################
     # phase linking/EVD step
@@ -107,13 +107,17 @@ def run(cfg: Workflow, debug: bool = False) -> tuple[list[Path], Path, Path]:
         else:
             watcher = None
 
+        # TODO: Need a good way to store the nslc attribute in the PS file...
+        # If we pre-compute it from some big stack, we need to use that for SHP
+        # finding, not use the size of `slc_vrt_file`
+        shp_nslc = None
         if cfg.workflow_name == "single":
             phase_linked_slcs, comp_slc_file, tcorr_file = (
                 single.run_wrapped_phase_single(
                     slc_vrt_file=vrt_stack.outfile,
                     output_folder=pl_path,
                     half_window=cfg.phase_linking.half_window.dict(),
-                    strides=cfg.output_options.strides,
+                    strides=strides,
                     reference_idx=0,
                     beta=cfg.phase_linking.beta,
                     mask_file=nodata_mask_file,
@@ -122,7 +126,7 @@ def run(cfg: Workflow, debug: bool = False) -> tuple[list[Path], Path, Path]:
                     amp_dispersion_file=cfg.ps_options._amp_dispersion_file,
                     shp_method=cfg.phase_linking.shp_method,
                     shp_alpha=cfg.phase_linking.shp_alpha,
-                    shp_nslc=None,
+                    shp_nslc=shp_nslc,
                     max_bytes=cfg.worker_settings.block_size_gb * 1e9,
                     n_workers=cfg.worker_settings.n_workers,
                     gpu_enabled=cfg.worker_settings.gpu_enabled,
@@ -134,7 +138,7 @@ def run(cfg: Workflow, debug: bool = False) -> tuple[list[Path], Path, Path]:
                     slc_vrt_file=vrt_stack.outfile,
                     output_folder=pl_path,
                     half_window=cfg.phase_linking.half_window.dict(),
-                    strides=cfg.output_options.strides,
+                    strides=strides,
                     beta=cfg.phase_linking.beta,
                     ministack_size=cfg.phase_linking.ministack_size,
                     mask_file=nodata_mask_file,
@@ -143,7 +147,7 @@ def run(cfg: Workflow, debug: bool = False) -> tuple[list[Path], Path, Path]:
                     amp_dispersion_file=cfg.ps_options._amp_dispersion_file,
                     shp_method=cfg.phase_linking.shp_method,
                     shp_alpha=cfg.phase_linking.shp_alpha,
-                    shp_nslc=None,
+                    shp_nslc=shp_nslc,
                     max_bytes=cfg.worker_settings.block_size_gb * 1e9,
                     n_workers=cfg.worker_settings.n_workers,
                     gpu_enabled=cfg.worker_settings.gpu_enabled,
