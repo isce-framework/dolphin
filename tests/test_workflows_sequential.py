@@ -62,10 +62,10 @@ def test_sequential_gtiff(tmp_path, slc_file_list, gpu_enabled):
 
 # Input is only (5, 10) so we can't use a larger window.
 @pytest.mark.parametrize(
-    "half_window", [{"x": 1, "y": 1}, {"x": 2, "y": 3}, {"x": 4, "y": 3}]
+    "half_window", [{"x": 1, "y": 1}, {"x": 2, "y": 2}, {"x": 4, "y": 2}]
 )
 @pytest.mark.parametrize(
-    "strides", [{"x": 1, "y": 1}, {"x": 1, "y": 2}, {"x": 2, "y": 3}, {"x": 4, "y": 2}]
+    "strides", [{"x": 1, "y": 1}, {"x": 1, "y": 2}, {"x": 2, "y": 2}, {"x": 4, "y": 2}]
 )
 def test_sequential_nc(tmp_path, slc_file_list_nc, half_window, strides):
     """Check various strides/windows/ministacks with a NetCDF input stack."""
