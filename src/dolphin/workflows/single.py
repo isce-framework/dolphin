@@ -186,7 +186,7 @@ def run_wrapped_phase_single(
     # Note: dividing by len(stack) since cov is shape (rows, cols, nslc, nslc)
     # so we need to load less to not overflow memory
     stack_max_bytes = max_bytes / len(vrt)
-    overlaps = (yhalf, xhalf)
+    overlaps = (2 * yhalf, 2 * xhalf)
     block_gen = vrt.iter_blocks(
         overlaps=overlaps,
         max_bytes=stack_max_bytes,
@@ -250,22 +250,47 @@ def run_wrapped_phase_single(
 
         # Save each of the MLE estimates (ignoring the compressed SLCs)
         assert len(cur_mle_stack[first_non_comp_idx:]) == len(output_slc_files)
+
         # Get the location within the output file, shrinking down the slices
-        out_row_start = rows.start // ys
-        out_col_start = cols.start // xs
-        for img, f in zip(cur_mle_stack[first_non_comp_idx:], output_slc_files):
+        # Move the starts forward by half the overlap to trim the incomplete
+        # data sections for each output
+        out_row_start = (rows.start + yhalf) // ys
+        out_col_start = (cols.start + xhalf) // xs
+        # Also need to trim the data blocks themselves
+        trim_row_slice = slice(yhalf // ys, -yhalf // ys)
+        trim_col_slice = slice(xhalf // xs, -xhalf // xs)
+
+        for img, f in zip(
+            cur_mle_stack[first_non_comp_idx:, trim_row_slice, trim_col_slice],
+            output_slc_files,
+        ):
             writer.queue_write(img, f, out_row_start, out_col_start)
 
         # Save the temporal coherence blocks
-        writer.queue_write(tcorr, tcorr_file, out_row_start, out_col_start)
+        writer.queue_write(
+            tcorr[trim_row_slice, trim_col_slice],
+            tcorr_file,
+            out_row_start,
+            out_col_start,
+        )
 
         # Save avg coh index
         if avg_coh is not None:
-            writer.queue_write(avg_coh, avg_coh_file, out_row_start, out_col_start)
+            writer.queue_write(
+                avg_coh[trim_row_slice, trim_col_slice],
+                avg_coh_file,
+                out_row_start,
+                out_col_start,
+            )
 
         # Save the SHP counts for each pixel (if not using Rect window)
-        shp_counts = np.sum(neighbor_arrays[rows, cols], axis=(-2, -1))
-        writer.queue_write(shp_counts, shp_counts_file, out_row_start, out_col_start)
+        shp_counts = np.sum(neighbor_arrays, axis=(-2, -1))
+        writer.queue_write(
+            shp_counts[trim_row_slice, trim_col_slice],
+            shp_counts_file,
+            out_row_start,
+            out_col_start,
+        )
 
         # Compress the ministack using only the non-compressed SLCs
         cur_comp_slc = compress(
@@ -274,7 +299,12 @@ def run_wrapped_phase_single(
         )
         # Save the compressed SLC block
         # TODO: make a flag? We don't always need to save the compressed SLCs
-        writer.queue_write(cur_comp_slc, comp_slc_file, rows.start, cols.start)
+        writer.queue_write(
+            cur_comp_slc[yhalf:-yhalf, xhalf:-xhalf],
+            comp_slc_file,
+            rows.start + yhalf,
+            cols.start + xhalf,
+        )
         # logger.debug(f"Saved compressed block SLC to {cur_comp_slc_file}")
 
     # Block until all the writers for this ministack have finished

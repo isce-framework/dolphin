@@ -823,12 +823,12 @@ def _slice_iterator(
     arr_shape : tuple[int, int]
         (num_rows, num_cols), full size of array to access
     block_shape : tuple[int, int]
-        (height, width), size of accessing blocks
-    overlaps : tuple[int, int]
-        (row_overlap, col_overlap), number of pixels to re-include
-        after sliding the block (default (0, 0))
-    start_offsets : tuple[int, int]
-        Offsets to start reading from (default (0, 0))
+        (height, width), size of blocks to load
+    overlaps : tuple[int, int], default = (0, 0)
+        (row_overlap, col_overlap), number of pixels to re-include from
+        the previous block after sliding
+    start_offsets : tuple[int, int], default = (0, 0)
+        Offsets from top left to start reading from
 
     Yields
     ------
@@ -859,10 +859,10 @@ slice(90, 190, None)), (slice(90, 180, None), slice(180, 250, None))]
         width = cols
 
     # Check we're not moving backwards with the overlap:
-    if row_overlap >= height:
-        raise ValueError(f"row_overlap {row_overlap} must be less than {height}")
-    if col_overlap >= width:
-        raise ValueError(f"col_overlap {col_overlap} must be less than {width}")
+    if row_overlap >= height and height != rows:
+        raise ValueError(f"{row_overlap = } must be less than block height {height}")
+    if col_overlap >= width and width != cols:
+        raise ValueError(f"{col_overlap = } must be less than block width {width}")
     while row_off < rows:
         while col_off < cols:
             row_end = min(row_off + height, rows)  # Dont yield something OOB

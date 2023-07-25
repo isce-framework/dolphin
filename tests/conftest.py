@@ -155,7 +155,9 @@ def raster_100_by_200(tmp_path):
     d = tmp_path / "raster_100_by_200"
     d.mkdir()
     filename = str(d / "test.bin")
-    ds = driver.Create(filename, xsize, ysize, 1, gdal.GDT_CFloat32)  # noqa
+    ds = driver.Create(filename, xsize, ysize, 1, gdal.GDT_CFloat32)
+    data = np.random.randn(ysize, xsize) + 1j * np.random.randn(ysize, xsize)
+    ds.WriteArray(data)
     ds.FlushCache()
     ds = None
     return filename
@@ -180,6 +182,8 @@ def tiled_raster_100_by_200(tmp_path):
     ds = driver.Create(
         str(filename), xsize, ysize, 1, gdal.GDT_CFloat32, options=creation_options
     )
+    data = np.random.randn(ysize, xsize) + 1j * np.random.randn(ysize, xsize)
+    ds.WriteArray(data)
     ds.FlushCache()
     ds = None
     return filename
