@@ -347,6 +347,7 @@ def test_iter_blocks_rowcols(tiled_raster_100_by_200):
     for rs, cs in slices:
         assert rs.stop - rs.start == 10
         assert cs.stop - cs.start == 20
+    loader.notify_finished()
 
     # Non-multiple block size
     loader = io.EagerLoader(filename=tiled_raster_100_by_200, block_shape=(32, 32))
@@ -368,31 +369,82 @@ def test_iter_nodata(
     bs = io.get_max_block_shape(tiled_raster_100_by_200, 1, max_bytes=max_bytes)
     loader = io.EagerLoader(filename=tiled_raster_100_by_200, block_shape=bs)
     blocks, slices = zip(*list(loader.iter_blocks()))
+    loader.notify_finished()
 
     row_blocks = 100 // 32 + 1
     col_blocks = 200 // 32 + 1
     expected_num_blocks = row_blocks * col_blocks
     assert len(blocks) == expected_num_blocks
     assert blocks[0].shape == (32, 32)
-    loader.notify_finished()
 
     # One nan should be fine, will get loaded
     loader = io.EagerLoader(filename=raster_with_nan, block_shape=bs)
     blocks, slices = zip(*list(loader.iter_blocks()))
-    assert len(blocks) == expected_num_blocks
     loader.notify_finished()
+    assert len(blocks) == expected_num_blocks
 
     # Now check entire block for a skipped block
     loader = io.EagerLoader(filename=raster_with_nan_block, block_shape=bs)
     blocks, slices = zip(*list(loader.iter_blocks()))
-    assert len(blocks) == expected_num_blocks - 1
     loader.notify_finished()
+    assert len(blocks) == expected_num_blocks - 1
 
     # Now check entire block for a skipped block
     loader = io.EagerLoader(filename=raster_with_zero_block, block_shape=bs)
     blocks, slices = zip(*list(loader.iter_blocks()))
-    assert len(blocks) == expected_num_blocks - 1
     loader.notify_finished()
+    assert len(blocks) == expected_num_blocks - 1
+
+
+def test_iter_blocks_overlap(tiled_raster_100_by_200):
+    # Block size that is a multiple of the raster size
+    xhalf, yhalf = 4, 5
+    check_out = np.zeros((100, 200))
+    slices = list(
+        io._slice_iterator((100, 200), (30, 30), overlaps=(2 * yhalf, 2 * xhalf))
+    )
+
+    for rs, cs in slices:
+        trim_row = slice(rs.start + yhalf, rs.stop - yhalf)
+        trim_col = slice(cs.start + xhalf, cs.stop - xhalf)
+        check_out[trim_row, trim_col] += 1
+
+    # Everywhere in the middle should have been touched onces by the iteration
+    assert np.all(check_out[yhalf:-yhalf, xhalf:-xhalf] == 1)
+    # the outside is still 0
+    assert np.all(check_out[:yhalf] == 0)
+    assert np.all(check_out[-yhalf:] == 0)
+    assert np.all(check_out[:xhalf] == 0)
+    assert np.all(check_out[-xhalf:] == 0)
+
+    loader = io.EagerLoader(
+        filename=tiled_raster_100_by_200,
+        block_shape=(32, 32),
+        overlaps=(2 * yhalf, 2 * xhalf),
+    )
+    assert hasattr(loader, "_finished_event")
+    blocks, slices = zip(*list(loader.iter_blocks()))
+    loader.notify_finished()
+    check_out = np.zeros((100, 200), dtype="complex")
+    xs, ys = 1, 1  # 1-by-1 strides
+    for b, (rows, cols) in zip(blocks, slices):
+        # Use the logic in `single.py`
+        # TODO: figure out how to encapsulate so we test a function
+        out_row_start = (rows.start + yhalf) // ys
+        out_col_start = (cols.start + xhalf) // xs
+        # Also need to trim the data blocks themselves
+        trim_row_slice = slice(yhalf // ys, -yhalf // ys)
+        trim_col_slice = slice(xhalf // xs, -xhalf // xs)
+        b_trimmed = b[trim_row_slice, trim_col_slice]
+        check_out[
+            out_row_start : out_row_start + b_trimmed.shape[0],
+            out_col_start : out_col_start + b_trimmed.shape[1],
+        ] += b_trimmed
+
+    expected = io.load_gdal(tiled_raster_100_by_200)
+    npt.assert_allclose(
+        check_out[yhalf:-yhalf, xhalf:-xhalf], expected[yhalf:-yhalf, xhalf:-xhalf]
+    )
 
 
 @pytest.mark.skip
