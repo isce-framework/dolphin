@@ -27,6 +27,11 @@ def merge_by_date(
     output_dir: Filename = ".",
     driver: str = "ENVI",
     output_suffix: str = ".int",
+    out_nodata: Optional[Union[float, str]] = 0,
+    in_nodata: Optional[Union[float, str]] = None,
+    out_bounds: Optional[Bbox] = None,
+    out_bounds_epsg: Optional[int] = None,
+    options: Optional[Sequence[str]] = io.DEFAULT_ENVI_OPTIONS,
     overwrite: bool = False,
 ) -> dict[tuple[date, ...], Path]:
     """Group images from the same date and merge into one image per date.
@@ -43,6 +48,19 @@ def merge_by_date(
         GDAL driver to use for output. Default is ENVI.
     output_suffix : str
         Suffix to use to output stitched filenames. Default is ".int"
+    out_nodata : Optional[float | str]
+        Nodata value to use for output file. Default is 0.
+    in_nodata : Optional[float | str]
+        Override the files' `nodata` and use `in_nodata` during merging.
+    out_bounds: Optional[tuple[float]]
+        if provided, forces the output image bounds to
+            (left, bottom, right, top).
+        Otherwise, computes from the outside of all input images.
+    out_bounds_epsg: Optional[int]
+        EPSG code for the `out_bounds`.
+        If not provided, assumed to match the projections of `file_list`.
+    options : Optional[Sequence[str]]
+        Driver-specific creation options passed to GDAL. Default is ["SUFFIX=ADD"]
     overwrite : bool
         Overwrite existing files. Default is False.
 
@@ -76,6 +94,11 @@ def merge_by_date(
             outfile=outfile,
             driver=driver,
             overwrite=overwrite,
+            out_nodata=out_nodata,
+            out_bounds=out_bounds,
+            out_bounds_epsg=out_bounds_epsg,
+            in_nodata=in_nodata,
+            options=options,
         )
 
         stitched_acq_times[dates] = outfile
@@ -91,7 +114,7 @@ def merge_images(
     out_bounds_epsg: Optional[int] = None,
     strides: dict[str, int] = {"x": 1, "y": 1},
     driver: str = "ENVI",
-    out_nodata: Optional[float] = 0,
+    out_nodata: Optional[Union[float, str]] = 0,
     out_dtype: Optional[DTypeLike] = None,
     in_nodata: Optional[Union[float, str]] = None,
     resample_alg: str = "lanczos",
@@ -123,12 +146,12 @@ def merge_images(
         subsample factor: {"x": x strides, "y": y strides}
     driver : str
         GDAL driver to use for output file. Default is ENVI.
-    out_nodata : Optional[float]
+    out_nodata : Optional[float | str]
         Nodata value to use for output file. Default is 0.
     out_dtype : Optional[DTypeLike]
         Output data type. Default is None, which will use the data type
         of the first image in the list.
-    in_nodata : Optional[float]
+    in_nodata : Optional[float | str]
         Override the files' `nodata` and use `in_nodata` during merging.
     resample_alg : str, default="lanczos"
         Method for gdal to use for reprojection.
