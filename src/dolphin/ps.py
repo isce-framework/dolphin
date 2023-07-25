@@ -1,14 +1,17 @@
 """Find the persistent scatterers in a stack of SLCS."""
+from __future__ import annotations
+
 import shutil
 import warnings
 from collections import namedtuple
+from pathlib import Path
 from typing import Optional
 
 import numpy as np
 from numpy.typing import ArrayLike
 from osgeo import gdal
 
-from dolphin import io
+from dolphin import io, utils
 from dolphin._log import get_log
 from dolphin._types import Filename
 from dolphin.stack import VRTStack
@@ -250,9 +253,47 @@ def _use_existing_files(
     shutil.copy(existing_amp_mean_file, output_amp_mean_file)
 
 
-def _check_output_files(*files):
-    """Check if the output files already exist."""
-    err_msg = "Output file {} already exists. Please delete before running."
-    for f in files:
-        if f.exists():
-            raise FileExistsError(err_msg.format(f))
+def multilook_ps_mask(
+    strides: dict[str, int],
+    ps_mask_file: Filename,
+    output_file: Optional[Filename] = None,
+):
+    """Create a multilooked version of the full-res PS mask.
+
+    Parameters
+    ----------
+    strides : dict[str, int]
+        Decimation factor for 'x', 'y'
+    ps_mask_file : Filename
+        Name of input full-res uint8 PS mask file
+    output_file : Optional[Filename], optional
+        Name of file to save result to.
+        Defaults to same as `ps_mask_file`, but with "_looked" added before suffix.
+    """
+    if strides == {"x": 1, "y": 1}:
+        logger.info("No striding request, skipping multilook.")
+        return
+    if output_file is None:
+        ps_suffix = Path(ps_mask_file).suffix
+        output_file = Path(str(ps_mask_file).replace(ps_suffix, f"_looked{ps_suffix}"))
+        logger.info(f"Saving a looked PS mask to {output_file}")
+    if Path(output_file).exists():
+        logger.info(f"{output_file} exists, skipping.")
+        return
+
+    ps_mask = io.load_gdal(ps_mask_file, masked=True)
+    full_rows, full_cols = ps_mask.shape
+    ps_mask_looked = utils.take_looks(
+        ps_mask, strides["y"], strides["x"], func_type="any", edge_strategy="pad"
+    )
+    # make sure it's the same size as the MLE result/temp_coh after padding
+    out_rows, out_cols = full_rows // strides["y"], full_cols // strides["x"]
+    ps_mask_looked = ps_mask_looked[:out_rows, :out_cols]
+    ps_mask_looked = ps_mask_looked.astype("uint8").fill(255)
+    io.write_arr(
+        arr=ps_mask_looked,
+        like_filename=ps_mask_file,
+        output_name=output_file,
+        strides=strides,
+        nodata=255,
+    )
