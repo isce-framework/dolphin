@@ -1,4 +1,4 @@
-# Unreleased
+# [0.2.0](https://github.com/opera-adt/dolphin/compare/v0.1.0...v0.2.0) - 2023-07-25
 
 **Added**
 
