@@ -15,6 +15,7 @@ from .config import UnwrapMethod, Workflow
 def run(
     ifg_file_list: Sequence[Path],
     tcorr_file_list: Sequence[Path],
+    ps_file_list: Sequence[Path],
     cfg: Workflow,
     debug: bool = False,
     unwrap_jobs: int = 1,
@@ -23,11 +24,13 @@ def run(
 
     Parameters
     ----------
-    ifg_file_list : Sequence[VRTInterferogram]
-        Sequence of [`VRTInterferogram`][dolphin.interferogram.VRTInterferogram] objects
-        to stitch together
+    ifg_file_list : Sequence[Path]
+        Sequence of interferograms files.
+        Separate bursts (if any) will be stitched together before unwrapping.
     tcorr_file_list : Sequence[Path]
-        Sequence of paths to the correlation files for each interferogram
+        Sequence of paths to the burst-wise temporal coherence files.
+    ps_file_list : Sequence[Path]
+        Sequence of paths to the (looked) burst-wise ps mask files.
     cfg : Workflow
         [`Workflow`][dolphin.workflows.config.Workflow] object with workflow parameters
     debug : bool, optional
@@ -77,7 +80,18 @@ def run(
         tcorr_file_list,
         outfile=stitched_tcorr_file,
         driver="GTiff",
-        overwrite=False,
+        out_bounds=cfg.output_options.bounds,
+        out_bounds_epsg=cfg.output_options.bounds_epsg,
+    )
+
+    # Stitch the looked PS files
+    stitched_ps_file = stitched_ifg_dir / "ps_mask_looked.tif"
+    stitching.merge_images(
+        ps_file_list,
+        outfile=stitched_ps_file,
+        out_nodata=255,
+        driver="GTiff",
+        resample_alg="nearest",
         out_bounds=cfg.output_options.bounds,
         out_bounds_epsg=cfg.output_options.bounds_epsg,
     )
