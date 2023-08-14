@@ -4,8 +4,7 @@ import time
 from collections.abc import Callable
 from concurrent.futures import Executor, Future
 from queue import Empty, Full, Queue
-from threading import Event, Thread
-from threading import enumerate as threading_enumerate
+from threading import Event, Thread, main_thread
 from typing import Any, Optional
 
 from dolphin._log import get_log
@@ -14,17 +13,6 @@ from dolphin._types import Filename
 logger = get_log(__name__)
 
 _DEFAULT_TIMEOUT = 0.5
-
-
-def is_main_thread_active() -> bool:
-    """Check if the main thread is still active.
-
-    Used to check if the writing thread should exit if there was
-    some exception in the main thread.
-
-    Source: https://stackoverflow.com/a/23443397/4174466
-    """
-    return any((i.name == "MainThread") and i.is_alive() for i in threading_enumerate())
 
 
 class BackgroundWorker(abc.ABC):
@@ -78,7 +66,7 @@ class BackgroundWorker(abc.ABC):
 
     def _consume_work_queue(self):
         while True:
-            if not is_main_thread_active():
+            if not main_thread().is_alive():
                 break
 
             logger.debug(f"{self.name} getting work")
@@ -312,7 +300,7 @@ class NvidiaMemoryWatcher(Thread):
             # Write the header
             f.write("time(s),memory(GB)\n")
 
-        while not self._finished_event.is_set() and is_main_thread_active():
+        while not self._finished_event.is_set() and main_thread().is_alive():
             mem = self._get_gpu_memory()
             t_cur = time.time() - self.t0
             with open(self.log_file, "a") as f:
