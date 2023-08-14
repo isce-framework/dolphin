@@ -331,11 +331,6 @@ def full_suffix(filename: Filename):
     return "".join(fpath.suffixes)
 
 
-def half_window_to_full(half_window: Union[list, tuple]) -> tuple[int, int]:
-    """Convert a half window size to a full window size."""
-    return (2 * half_window[0] + 1, 2 * half_window[1] + 1)
-
-
 def gpu_is_available() -> bool:
     """Check if a GPU is available."""
     try:
