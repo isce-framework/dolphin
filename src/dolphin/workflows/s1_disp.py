@@ -97,6 +97,7 @@ def run(
 
     ifg_file_list: list[Path] = []
     tcorr_file_list: list[Path] = []
+    ps_file_list: list[Path] = []
     # The comp_slc tracking object is a dict, since we'll need to organize
     # multiple comp slcs by burst (they'll have the same filename)
     comp_slc_dict: dict[str, Path] = {}
@@ -119,10 +120,11 @@ def run(
         for fut in fut_to_burst:
             burst = fut_to_burst[fut]
 
-            cur_ifg_list, comp_slc, tcorr = fut.result()
+            cur_ifg_list, comp_slc, tcorr, ps_file = fut.result()
             ifg_file_list.extend(cur_ifg_list)
             comp_slc_dict[burst] = comp_slc
             tcorr_file_list.append(tcorr)
+            ps_file_list.append(ps_file)
 
     # ###################################
     # 2. Stitch and unwrap interferograms
@@ -131,6 +133,7 @@ def run(
         stitch_and_unwrap.run(
             ifg_file_list=ifg_file_list,
             tcorr_file_list=tcorr_file_list,
+            ps_file_list=ps_file_list,
             cfg=cfg,
             debug=debug,
         )
