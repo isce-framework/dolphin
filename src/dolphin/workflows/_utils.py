@@ -19,8 +19,6 @@ from .config import OPERA_BURST_RE, OPERA_DATASET_NAME, OPERA_IDENTIFICATION
 
 logger = get_log(__name__)
 
-__all__ = ["group_by_burst", "setup_output_folder"]
-
 
 def group_by_burst(
     file_list: Sequence[Filename],
