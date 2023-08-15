@@ -29,7 +29,6 @@ jobs:
               gdal=3.5
               h5py=3.6
               h5netcdf=1.0
-              isce3=0.8.0
               numpy=1.20
               numba=0.54
               pillow==7.0
@@ -67,9 +66,10 @@ jobs:
       - name: Disable numba boundscheck for better error catching
         run: |
           echo "NUMBA_BOUNDSCHECK=1" >> $GITHUB_ENV
+          echo "NUMBA_DISABLE_JIT=1" >> $GITHUB_ENV
       - name: Test (with numba boundscheck on)
         run: |
-          pytest
+          pytest -n0
       # https://community.codecov.com/t/numba-jitted-methods-are-not-captured-by-codecov/2649
       # - name: Coverage report
       #   uses: codecov/codecov-action@v2
