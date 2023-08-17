@@ -1,13 +1,8 @@
 """Module for handling blocked/decimated input and output."""
 from __future__ import annotations
 
-from copy import copy
 from dataclasses import dataclass, field
-from typing import Iterator, Optional
-
-# from numpy.typing import ArrayLike
-
-# from dolphin._types import Filename
+from typing import Iterator
 
 # 1. iterate without overlap over output, decimated array
 #   - Start with an offset, shrink the size, both by `half_window//strides`
@@ -16,7 +11,7 @@ from typing import Iterator, Optional
 # 3. pad the input block (using half window)
 
 
-@dataclass
+@dataclass(frozen=True)
 class BlockIndices:
     """Class holding slices for 2D array access."""
 
@@ -112,7 +107,10 @@ def dilate_block(
     in_block: BlockIndices,
     strides: dict[str, int],
 ) -> BlockIndices:
-    """Dilate the slices in `BlockIndices` for the larger array.
+    """Grow slices in `BlockIndices` to fit a larger array.
+
+    This is to undo the "stride"/decimation index changes, so
+     we can go from smaller, strided array indices to the original.
 
     Assumes in in_block is the smaller one which has been made
     by taking `strides` from the larger block.
@@ -120,7 +118,7 @@ def dilate_block(
     Parameters
     ----------
     in_block : BlockIndices
-        Slices for an output array.
+        Slices for an smaller, strided array.
     strides : dict[str, int]
         Decimation factor in x and y which was used for `in_block`
         {'x': col_strides, 'y': row_strides}
@@ -130,42 +128,46 @@ def dilate_block(
     BlockIndices
         Output slices for larger array
     """
-    block = copy(in_block)
     row_strides, col_strides = strides["y"], strides["x"]
-    block.row_start = block.row_start * row_strides - row_strides // 2
-    block.row_stop = block.row_stop * row_strides + row_strides // 2
-    block.col_start = block.col_start * col_strides - col_strides // 2
-    block.col_stop = block.col_stop * col_strides + col_strides // 2
-    return block
+    row_start = in_block.row_start * row_strides
+    row_stop = in_block.row_stop * row_strides
+    col_start = in_block.col_start * col_strides
+    col_stop = in_block.col_stop * col_strides
+    return BlockIndices(row_start, row_stop, col_start, col_stop)
+
+    # block.row_start = block.row_start * row_strides - row_strides // 2
+    # block.row_stop = block.row_stop * row_strides + row_strides // 2
+    # block.col_start = block.col_start * col_strides - col_strides // 2
+    # block.col_stop = block.col_stop * col_strides + col_strides // 2
 
 
-# def load_padded_block(
-#     input_raster: ArrayLike,
-#     block: BlockIndices,
-# ) -> np.ndarray:
-#     # Do some smart padding in order to handle negative indices
-#     # and/or indices that are greater than the corresponding input dimension
-#     ...
+def pad_block(in_block: BlockIndices, margins: tuple[int, int]) -> BlockIndices:
+    """Pad `in_block` by the (row_margin, col_margin) pixels in `margins`.
 
+    Will clip the row/column slice starts to be >= 0.
 
-# def foo(input_block: np.ndarray) -> np.ndarray:
-#     # Does something interesting and returns a decimated block
-#     ...
+    Parameters
+    ----------
+    in_block : BlockIndices
+        Slices original array block.
+    margins : dict[int, int]
+        Number of pixels to extend `in_block` in the (row, col) directions.
+        The margins are subtracted from the beginning and added to the end,
+        so the block size grows by (2 * row_margin, 2 * col_margin)
 
-
-# def do_the_thing(
-#     input_raster: ArrayLike,
-#     strides: dict[str, int],
-#     block_shape: tuple[int, int],
-# ) -> ArrayLike:
-#     input_shape = input_raster.shape
-#     output_shape = compute_out_shape(input_shape, strides)
-#     output = make_my_output_raster(output_shape)
-#     for output_block in iter_blocks(output_shape):
-#         input_block = dilate_block(output_block, strides)
-#         input_block_data = load_padded_block(input_raster, input_block)
-#         output_block_data = foo(input_block_data)
-#         write_block(output, output_block, output_block_data)
+    Returns
+    -------
+    BlockIndices
+        Output slices for larger block
+    """
+    r_margin, c_margin = margins
+    r_slice, c_slice = in_block
+    return BlockIndices(
+        max(r_slice.start - r_margin, 0),
+        r_slice.stop + r_margin,
+        max(c_slice.start - c_margin, 0),
+        c_slice.stop + c_margin,
+    )
 
 
 def compute_out_shape(
@@ -216,20 +218,34 @@ class BlockManager:
     """(row, col) size of each block to load at a time"""
     strides: dict[str, int] = field(default_factory=lambda: {"x": 1, "y": 1})
     """Decimation/downsampling factor in y/row and x/column direction"""
-    overlaps: Optional[tuple[int, int]] = (0, 0)
-    """Option to manually specify the (row, col) overlap between blocks"""
-    half_window: Optional[dict[str, int]] = None
-    """Size of the Decimation/downsampling factor in y/row and x/column direction.
-    Determines the `overlaps` if specified."""
+    half_window: dict[str, int] = field(default_factory=lambda: {"x": 0, "y": 0})
+    """For multi-looking iterations, size of the half window in y/row
+    and x/column direction. Used to find `overlaps` between blocks and
+    `start_offset`/`end_margin` for `iter_blocks."""
+
+    def __post_init__(self):
+        self._half_rowcol = (self.half_window["y"], self.half_window["x"])
+        self._overlaps = (2 * self.half_window["y"], 2 * self.half_window["x"])
 
     @property
     def output_shape(self):
         return compute_out_shape(self.arr_shape, self.strides)
 
-    @property
-    def output_slices(self):
-        return iter_blocks(
-            arr_shape=self.output_shape,
-            block_shape=self.block_shape,
-            overlaps=self.overlaps,
+    def get_output_blocks(self):
+        return list(
+            iter_blocks(
+                arr_shape=self.output_shape,
+                block_shape=self.block_shape,
+                overlaps=self._overlaps,
+                start_offsets=self._half_rowcol,
+                end_margin=self._half_rowcol,
+            )
         )
+
+    def get_input_blocks(self):
+        return [dilate_block(b, strides=self.strides) for b in self.get_output_blocks()]
+
+    def get_input_padded_blocks(self):
+        return [
+            pad_block(b, margins=self._half_rowcol) for b in self.get_input_blocks()
+        ]

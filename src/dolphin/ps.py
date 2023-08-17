@@ -69,7 +69,7 @@ def create_ps(
         The 2D block size to load all bands at a time.
         Default is (1024, 1024)
     show_progress : bool, default=True
-        If true, displays a `rich` ProgressBar.
+        If true, displays a `rich.ProgressBar`.
     """
     if existing_amp_dispersion_file and existing_amp_mean_file and not update_existing:
         logger.info("Using existing amplitude dispersion file, skipping calculation.")

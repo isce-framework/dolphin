@@ -15,6 +15,8 @@ from typing import Optional
 import numpy as np
 
 from dolphin import io, shp
+
+# from dolphin._blocks import iter_blocks
 from dolphin._log import get_log
 from dolphin._types import Filename
 from dolphin.phase_link import PhaseLinkRuntimeError, compress, run_mle
@@ -184,9 +186,6 @@ def run_wrapped_phase_single(
     # Iterate over the stack in blocks
     # Note the overlap to redo the edge effects
     # TODO: adjust the writing to avoid the overlap
-
-    # Note: dividing by len(stack) since cov is shape (rows, cols, nslc, nslc)
-    # so we need to load less to not overflow memory
     overlaps = (2 * yhalf, 2 * xhalf)
     block_gen = vrt.iter_blocks(
         block_shape=block_shape,
