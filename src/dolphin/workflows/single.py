@@ -8,6 +8,7 @@ References
 """
 from __future__ import annotations
 
+import math
 from pathlib import Path
 from typing import Optional
 
@@ -41,10 +42,11 @@ def run_wrapped_phase_single(
     amp_dispersion_file: Optional[Filename] = None,
     shp_method: ShpMethod = ShpMethod.NONE,
     shp_alpha: float = 0.05,
-    shp_nslc: Optional[int],
-    max_bytes: float = 32e6,
+    shp_nslc: Optional[int] = None,
+    block_shape: tuple[int, int] = (1024, 1024),
     n_workers: int = 1,
     gpu_enabled: bool = True,
+    show_progress: bool = False,
 ) -> tuple[list[Path], Path, Path]:
     """Estimate wrapped phase for one ministack."""
     # TODO: extract common stuff between here and sequential
@@ -185,14 +187,13 @@ def run_wrapped_phase_single(
 
     # Note: dividing by len(stack) since cov is shape (rows, cols, nslc, nslc)
     # so we need to load less to not overflow memory
-    stack_max_bytes = max_bytes / len(vrt)
     overlaps = (2 * yhalf, 2 * xhalf)
     block_gen = vrt.iter_blocks(
+        block_shape=block_shape,
         overlaps=overlaps,
-        max_bytes=stack_max_bytes,
         skip_empty=True,
         nodata_mask=nodata_mask,
-        show_progress=False,
+        show_progress=show_progress,
     )
     for cur_data, (rows, cols) in block_gen:
         if np.all(cur_data == 0):
@@ -225,7 +226,7 @@ def run_wrapped_phase_single(
                 beta=beta,
                 reference_idx=reference_idx,
                 nodata_mask=nodata_mask[rows, cols],
-                ps_mask=ps_mask[rows, cols],
+                # ps_mask=ps_mask[rows, cols],
                 neighbor_arrays=neighbor_arrays,
                 avg_mag=amp_mean[rows, cols] if amp_mean is not None else None,
                 n_workers=n_workers,
@@ -254,11 +255,17 @@ def run_wrapped_phase_single(
         # Get the location within the output file, shrinking down the slices
         # Move the starts forward by half the overlap to trim the incomplete
         # data sections for each output
-        out_row_start = (rows.start + yhalf) // ys
-        out_col_start = (cols.start + xhalf) // xs
+        # out_row_start = (rows.start + yhalf) // ys
+        # out_col_start = (cols.start + xhalf) // xs
+        out_row_start = math.ceil((rows.start + yhalf) / ys)
+        out_col_start = math.ceil((cols.start + xhalf) / xs)
         # Also need to trim the data blocks themselves
-        trim_row_slice = slice(yhalf // ys, -yhalf // ys)
-        trim_col_slice = slice(xhalf // xs, -xhalf // xs)
+        # # trim_row_slice = slice(yhalf // ys, -(yhalf // ys))
+        # trim_col_slice = slice(xhalf // xs, -(xhalf // xs))
+        empty_y = math.ceil(yhalf / ys)
+        empty_x = math.ceil(xhalf / xs)
+        trim_row_slice = slice(empty_y, -empty_y)
+        trim_col_slice = slice(empty_x, -empty_x)
 
         for img, f in zip(
             cur_mle_stack[first_non_comp_idx:, trim_row_slice, trim_col_slice],

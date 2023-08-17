@@ -44,7 +44,7 @@ def run_wrapped_phase_sequential(
     shp_alpha: float = 0.05,
     shp_nslc: Optional[int],
     beta: float = 0.01,
-    max_bytes: float = 32e6,
+    block_shape: tuple[int, int] = (1024, 1024),
     n_workers: int = 1,
     gpu_enabled: bool = True,
 ) -> tuple[list[Path], list[Path], Path]:
@@ -109,7 +109,7 @@ def run_wrapped_phase_sequential(
             shp_method=shp_method,
             shp_alpha=shp_alpha,
             shp_nslc=shp_nslc,
-            max_bytes=max_bytes,
+            block_shape=block_shape,
             n_workers=n_workers,
             gpu_enabled=gpu_enabled,
         )

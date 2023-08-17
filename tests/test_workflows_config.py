@@ -99,7 +99,7 @@ def test_worker_settings_defaults():
     assert ws.gpu_enabled is True
     assert ws.n_workers == cpu_count()
     assert ws.threads_per_worker == 1
-    assert ws.block_size_gb == 1.0
+    assert ws.block_shape == (1024, 1024)
 
 
 @pytest.fixture()
