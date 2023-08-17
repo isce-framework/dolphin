@@ -6,7 +6,7 @@ from typing import Optional
 import numpy as np
 from numba import cuda
 
-from dolphin.io import compute_out_shape
+from dolphin._blocks import compute_out_shape
 from dolphin.utils import decimate
 
 from . import covariance, metrics

@@ -13,8 +13,8 @@ import numpy as np
 import pymp
 from numba import cuda, njit
 
+from dolphin._blocks import compute_out_shape
 from dolphin._types import Filename
-from dolphin.io import compute_out_shape
 from dolphin.utils import _get_slices
 
 # CPU version of the covariance matrix computation
