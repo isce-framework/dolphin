@@ -13,7 +13,7 @@ from .config import Workflow
 
 
 @log_runtime
-def run(cfg: Workflow, debug: bool = False) -> tuple[list[Path], Path, Path]:
+def run(cfg: Workflow, debug: bool = False) -> tuple[list[Path], Path, Path, Path]:
     """Run the displacement workflow on a stack of SLCs.
 
     Parameters
@@ -88,7 +88,9 @@ def run(cfg: Workflow, debug: bool = False) -> tuple[list[Path], Path, Path]:
 
     # Save a looked version of the PS mask too
     strides = cfg.output_options.strides
-    ps.multilook_ps_mask(strides=strides, ps_mask_file=cfg.ps_options._output_file)
+    ps_looked_file = ps.multilook_ps_mask(
+        strides=strides, ps_mask_file=cfg.ps_options._output_file
+    )
 
     # #########################
     # phase linking/EVD step
@@ -183,4 +185,4 @@ def run(cfg: Workflow, debug: bool = False) -> tuple[list[Path], Path, Path]:
         else:
             ifg_file_list = [ifg.path for ifg in network.ifg_list]  # type: ignore
 
-    return ifg_file_list, comp_slc_file, tcorr_file
+    return ifg_file_list, comp_slc_file, tcorr_file, ps_looked_file
