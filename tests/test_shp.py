@@ -110,7 +110,7 @@ def test_shp_half_mean_different(slcs, method):
     halfwin_rowcol = (5, 5)
     # make the top half different amplitude
     mean2 = mean.copy()
-    mean2[:5, :] += 500
+    mean2[:5, :] += 2000
     # For this test, make all variances equal (just checking mean)
     var[:] = var[5, 5]
 
@@ -140,7 +140,7 @@ def test_shp_half_var_different(slcs, method):
     halfwin_rowcol = (5, 5)
     # make the top half different amplitude
     var2 = var.copy()
-    var2[:5, :] += 500
+    var2[:5, :] += 5000
     # For this test, make all means equal (just checking var)
     mean[:] = mean[5, 5]
 
