@@ -4,6 +4,7 @@ import numpy as np
 import numpy.testing as npt
 import pytest
 
+import dolphin._blocks
 from dolphin import io
 from dolphin.stack import VRTStack
 
@@ -100,19 +101,6 @@ def test_load_band(tmp_path, slc_stack, slc_file_list):
         npt.assert_array_equal(layer, slc_stack[i])
 
 
-def test_compute_out_size():
-    strides = {"x": 3, "y": 3}
-    assert (2, 2) == io.compute_out_shape((6, 6), strides)
-
-    # 1,2 more in each direction shouldn't change it
-    assert (2, 2) == io.compute_out_shape((7, 7), strides)
-    assert (2, 2) == io.compute_out_shape((8, 8), strides)
-
-    # 1,2 fewer should bump down to 1
-    assert (1, 1) == io.compute_out_shape((5, 5), strides)
-    assert (1, 1) == io.compute_out_shape((4, 4), strides)
-
-
 def test_get_raster_bounds(slc_file_list_nc_wgs84):
     # Use the created WGS84 SLC
     bnds = io.get_raster_bounds(slc_file_list_nc_wgs84[0])
@@ -166,7 +154,7 @@ def test_write_metadata(raster_100_by_200, tmpdir):
 def test_save_strided(raster_100_by_200, tmpdir):
     save_name = tmpdir / "same_size.tif"
     strides = {"x": 1, "y": 1}
-    out_shape = io.compute_out_shape((100, 200), strides)
+    out_shape = dolphin._blocks.compute_out_shape((100, 200), strides)
     assert out_shape == (100, 200)
     io.write_arr(
         arr=None,
@@ -180,7 +168,7 @@ def test_save_strided(raster_100_by_200, tmpdir):
 
     save_name2 = tmpdir / "smaller_size.tif"
     strides = {"x": 2, "y": 4}
-    out_shape = io.compute_out_shape((100, 200), strides)
+    out_shape = dolphin._blocks.compute_out_shape((100, 200), strides)
     assert out_shape == (25, 100)
     io.write_arr(
         arr=None,
@@ -414,8 +402,8 @@ def test_iter_blocks_overlap(tiled_raster_100_by_200):
     # the outside is still 0
     assert np.all(check_out[:yhalf] == 0)
     assert np.all(check_out[-yhalf:] == 0)
-    assert np.all(check_out[:xhalf] == 0)
-    assert np.all(check_out[-xhalf:] == 0)
+    assert np.all(check_out[:, :xhalf] == 0)
+    assert np.all(check_out[:, -xhalf:] == 0)
 
     loader = io.EagerLoader(
         filename=tiled_raster_100_by_200,
@@ -444,6 +432,66 @@ def test_iter_blocks_overlap(tiled_raster_100_by_200):
     expected = io.load_gdal(tiled_raster_100_by_200)
     npt.assert_allclose(
         check_out[yhalf:-yhalf, xhalf:-xhalf], expected[yhalf:-yhalf, xhalf:-xhalf]
+    )
+
+
+def test_iter_blocks_overlap_wide(tmp_path):
+    xhalf, yhalf = 11, 5
+    shape = (4563, 20622)
+    block_shape = (16, shape[1])
+    overlaps = (2 * yhalf, 2 * xhalf)
+    check_out = np.zeros(shape)
+    slices = list(io._slice_iterator(shape, block_shape=block_shape, overlaps=overlaps))
+
+    for rs, cs in slices:
+        trim_row = slice(rs.start + yhalf, rs.stop - yhalf)
+        trim_col = slice(cs.start + xhalf, cs.stop - xhalf)
+        check_out[trim_row, trim_col] += 1
+
+    # Everywhere in the middle should have been touched onces by the iteration
+    assert np.all(check_out[yhalf:-yhalf, xhalf:-xhalf] == 1)
+    # the outside is still 0
+    assert np.all(check_out[:yhalf] == 0)
+    assert np.all(check_out[-yhalf:] == 0)
+    assert np.all(check_out[:, :xhalf] == 0)
+    assert np.all(check_out[:, -xhalf:] == 0)
+
+    shape = (563, 2022)
+    xs, ys = 6, 3
+    arr = np.random.randn(*shape)
+    tmp_file = tmp_path / "wide_raster.tif"
+    io.write_arr(arr=arr, output_name=tmp_file)
+    loader = io.EagerLoader(
+        filename=tmp_file,
+        block_shape=block_shape,
+        overlaps=overlaps,
+        queue_size=0,
+    )
+    # blocks, slices = zip(*list(loader.iter_blocks()))
+    # loader.notify_finished()
+    check_out = np.zeros(shape)
+    max_row = 50
+    for b, (rows, cols) in loader.iter_blocks():
+        # Use the logic in `single.py`
+        # TODO: figure out how to encapsulate so we test a function
+        out_row_start = (rows.start + yhalf) // ys
+        out_col_start = (cols.start + xhalf) // xs
+        # Also need to trim the data blocks themselves
+        trim_row_slice = slice(yhalf // ys, -yhalf // ys)
+        trim_col_slice = slice(xhalf // xs, -xhalf // xs)
+        b_trimmed = b[trim_row_slice, trim_col_slice]
+        check_out[
+            out_row_start : out_row_start + b_trimmed.shape[0],
+            out_col_start : out_col_start + b_trimmed.shape[1],
+        ] += b_trimmed
+        if out_row_start > max_row:
+            break
+
+    loader.notify_finished()
+    expected = io.load_gdal(tmp_file)[::ys, ::xs]
+    npt.assert_allclose(
+        check_out[yhalf // ys : -yhalf // ys, xhalf // xs : -xhalf // xs],
+        expected[yhalf:-yhalf, xhalf:-xhalf],
     )
 
 
