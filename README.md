@@ -12,8 +12,10 @@ High resolution wrapped phase estimation for InSAR using combined PS/DS processi
 `dolphin` is available on conda:
 
 ```bash
-conda install -c conda-forge dolphin
+mamba install -c conda-forge dolphin
 ```
+
+(Note: [using `mamba`](https://mamba.readthedocs.io/en/latest/mamba-installation.html#mamba-install) is recommended for conda-forge packages, but miniconda can also be used.)
 
 To install locally:
 
@@ -23,12 +25,12 @@ git clone https://github.com/opera-adt/dolphin.git && cd dolphin
 ```
 2. Install dependencies:
 ```bash
-conda env create --file conda-env.yml
+mamba env create --file conda-env.yml
 ```
 
 or if you have an existing environment:
 ```bash
-conda env update --name my-existing-env --file conda-env.yml
+mamba env update --name my-existing-env --file conda-env.yml
 ```
 
 3. Install `dolphin` via pip:
