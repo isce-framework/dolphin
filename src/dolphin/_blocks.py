@@ -231,21 +231,62 @@ class BlockManager:
     def output_shape(self):
         return compute_out_shape(self.arr_shape, self.strides)
 
-    def get_output_blocks(self):
-        return list(
-            iter_blocks(
-                arr_shape=self.output_shape,
-                block_shape=self.block_shape,
-                overlaps=self._overlaps,
-                start_offsets=self._half_rowcol,
-                end_margin=self._half_rowcol,
-            )
+    def iter_outputs(self) -> Iterator[BlockIndices]:
+        yield from iter_blocks(
+            arr_shape=self.output_shape,
+            block_shape=self.block_shape,
+            overlaps=self._overlaps,
+            start_offsets=self._half_rowcol,
+            end_margin=self._half_rowcol,
         )
 
-    def get_input_blocks(self):
-        return [dilate_block(b, strides=self.strides) for b in self.get_output_blocks()]
+    def dilate_block(self, out_block: BlockIndices) -> BlockIndices:
+        return dilate_block(out_block, strides=self.strides)
 
-    def get_input_padded_blocks(self):
-        return [
-            pad_block(b, margins=self._half_rowcol) for b in self.get_input_blocks()
-        ]
+    def pad_block(self, unpadded_input_block: BlockIndices) -> BlockIndices:
+        return pad_block(unpadded_input_block, margins=self._half_rowcol)
+
+    def get_trimmed_block(self) -> BlockIndices:
+        """Compute the slices which trim output nodata values.
+
+        When the BlockIndex gets dilated (using `strides`) and padded (using
+        `half_window`), the result will have nodata around the edges.
+        The size of the nodata pixels in the full-res block is just
+            (half_window['y'], half_window['x'])
+        In the output (strided) coordinates, the number of nodata pixels is
+        shrunk by how many strides are taken.
+
+        Note that this is independent of which block we're on; the number of
+        nodata pixels on the border is always the same.
+        """
+        half_row, half_col = self._half_rowcol
+        row_strides, col_strides = self.strides["y"], self.strides["x"]
+        row_nodata_size = round(half_row / row_strides)
+        col_nodata_size = round(half_col / col_strides)
+
+        return BlockIndices(
+            row_nodata_size, -row_nodata_size, col_nodata_size, -col_nodata_size
+        )
+
+    def iter_blocks(
+        self,
+    ) -> Iterator[tuple[BlockIndices, BlockIndices, BlockIndices, BlockIndices]]:
+        """Iterate over the input/output blocks.
+
+        Yields
+        ------
+        output_block : BlockIndices
+            The current slices for the output raster
+        trimmed_block : BlockIndices
+            The slices to use on a processed output block to remove nodata border pixels.
+            These may be relative (e.g. slice(1, -1)), not absolute like `output_block`.
+        input_block : BlockIndices
+            Slices used to load the full-res input data
+        input_no_padding : BlockIndices
+            Slices which point to the position within the full-res data without padding
+        """
+        trimmed_block = self.get_trimmed_block()
+        for out_block in self.iter_outputs():
+            input_no_padding = self.dilate_block(out_block)
+            input_block = self.pad_block(input_no_padding)
+            yield (out_block, trimmed_block, input_block, input_no_padding)
