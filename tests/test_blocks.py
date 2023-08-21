@@ -1,13 +1,8 @@
 import numpy as np
 import pytest
 
-from dolphin._blocks import (
-    BlockIndices,
-    BlockManager,
-    compute_out_shape,
-    dilate_block,
-    iter_blocks,
-)
+from dolphin._blocks import BlockIndices, BlockManager, dilate_block, iter_blocks
+from dolphin.io import compute_out_shape
 
 
 def test_block_indices_create():
@@ -121,6 +116,16 @@ def test_dilate_block():
     ]
 
 
+def test_dilate_block_is_multiple():
+    # Iterate over the output, decimated raster
+    b = BlockIndices(0, 3, 0, 5)
+    strides = {"x": 3, "y": 3}
+    # the sizes should be multiples of 3
+    b_big = dilate_block(b, strides=strides)
+    check_arr = np.ones((100, 100))[tuple(b_big)]
+    assert check_arr.shape == (3 * 3, 5 * 3)
+
+
 def test_block_manager():
     # Check no stride version
     bm = BlockManager((5, 5), (2, 3))
@@ -142,8 +147,103 @@ def test_block_manager():
 def test_block_manager_no_trim():
     # Check no stride version
     bm = BlockManager(
-        (5, 10), (100, 100), strides={"x": 2, "y": 3}, half_window={"x": 1, "y": 1}
+        (5, 10), (100, 100), strides={"x": 3, "y": 3}, half_window={"x": 1, "y": 1}
     )
 
     trimmed_rows, trimmed_cols = bm.get_trimmed_block()
     assert trimmed_rows == trimmed_cols == slice(0, None)
+
+
+def test_block_manager_iter_outputs():
+    nrows, ncols = (100, 200)
+    xs, ys = 3, 3  # strides
+    hx, hy = 3, 1  # half window
+    bm = BlockManager(
+        arr_shape=(nrows, ncols),
+        block_shape=(17, 27),
+        strides={"x": xs, "y": xs},
+        half_window={"x": hx, "y": hy},
+    )
+
+    out_row_margin = hy // ys
+    out_col_margin = hx // ys
+    for row_slice, col_slice in bm.iter_outputs():
+        assert row_slice.start >= out_row_margin
+        assert col_slice.start >= out_col_margin
+        assert row_slice.stop < nrows - out_row_margin
+        assert col_slice.stop < ncols - out_col_margin
+
+
+def _fake_process(in_arr, strides, half_window):
+    """Dummy processing which has same nodata pattern as `phase_link.run_mle`."""
+    nrows, ncols = in_arr.shape
+    row_half, col_half = half_window["y"], half_window["x"]
+    rs, cs = strides["y"], strides["x"]
+    out_nrows, out_ncols = compute_out_shape(in_arr.shape, strides=strides)
+    out = np.ones((out_nrows, out_ncols))
+    for out_r in range(out_nrows):
+        for out_c in range(out_ncols):
+            # the input indexes computed from the output idx and strides
+            # Note: weirdly, moving these out of the loop causes r_start
+            # to be 0 in some cases...
+            in_r_start = rs // 2
+            in_c_start = cs // 2
+            in_r = in_r_start + out_r * rs
+            in_c = in_c_start + out_c * cs
+
+            # Check if the window is completely in bounds
+            if in_r + row_half >= nrows or in_r - row_half < 0:
+                out[out_r, out_c] = np.nan
+            if in_c + col_half >= ncols or in_c - col_half < 0:
+                out[out_r, out_c] = np.nan
+    return out
+
+
+@pytest.mark.parametrize("in_shape", [(100, 200), (101, 201)])
+@pytest.mark.parametrize(
+    "half_window", [{"x": 1, "y": 1}, {"x": 3, "y": 1}, {"x": 3, "y": 3}]
+)
+@pytest.mark.parametrize(
+    "strides", [{"x": 1, "y": 1}, {"x": 3, "y": 1}, {"x": 3, "y": 3}]
+)
+@pytest.mark.parametrize("block_shape", [(15, 15), (20, 30), (17, 27)])
+def test_block_manager_fake_process(in_shape, half_window, strides, block_shape):
+    in_shape = (100, 200)
+    rng = np.random.default_rng()
+    out_shape = compute_out_shape(in_shape, strides)
+
+    # full_res_data = np.random.randn(*in_shape) + 1j * np.random.randn(*in_shape)
+    # full_res_data = full_res_data.astype(np.complex64)
+    full_res_data = rng.normal(size=in_shape).astype("float32")
+    out_arr = np.zeros(out_shape, dtype=full_res_data.dtype)
+    counts = np.zeros(out_shape, dtype=int)
+
+    bm = BlockManager(
+        in_shape, block_shape=block_shape, strides=strides, half_window=half_window
+    )
+    for (
+        (out_rows, out_cols),
+        (trimmed_rows, trimmed_cols),
+        (in_rows, in_cols),
+        (in_no_pad_rows, in_no_pad_cols),
+    ) in bm.iter_blocks():
+        in_data = full_res_data[in_rows, in_cols]
+        out_data = _fake_process(in_data, strides, half_window)
+
+        data_trimmed = out_data[trimmed_rows, trimmed_cols]
+        assert np.all(~np.isnan(data_trimmed))
+
+        out_arr[out_rows, out_cols] = data_trimmed
+        counts[out_rows, out_cols] += 1
+
+        # out_upsampled = upsample_nearest(
+        #     data_trimmed, in_data[yhalf:-yhalf, xhalf:-xhalf]
+        # )
+
+    # Now check the inner part, away from the expected border of zeros
+    out_row_margin, out_col_margin = bm._out_margin
+    inner = slice(out_row_margin, -out_row_margin), slice(
+        out_col_margin, -out_col_margin
+    )
+    assert not np.any(out_arr[inner] == 0)
+    assert np.all(counts[inner] == 1)

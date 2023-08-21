@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Iterator
+from typing import Iterator, Optional
 
 # 1. iterate without overlap over output, decimated array
 #   - Start with an offset, shrink the size, both by `half_window//strides`
@@ -16,9 +16,9 @@ class BlockIndices:
     """Class holding slices for 2D array access."""
 
     row_start: int
-    row_stop: int
+    row_stop: Optional[int]  # Can be None if we want slice(0, None)
     col_start: int
-    col_stop: int
+    col_stop: Optional[int]
 
     def __iter__(self):
         return iter(
@@ -68,39 +68,42 @@ slice(90, 190, None)), (slice(0, 100, None), slice(180, 250, None)), \
 (slice(90, 180, None), slice(0, 100, None)), (slice(90, 180, None), \
 slice(90, 190, None)), (slice(90, 180, None), slice(180, 250, None))]
     """
-    rows, cols = arr_shape
+    total_rows, total_cols = arr_shape
     height, width = block_shape
     row_overlap, col_overlap = overlaps
-    row_off, col_off = start_offsets
-    last_row = rows - end_margin[0]
-    last_col = cols - end_margin[1]
+    start_row_offset, start_col_offset = start_offsets
+    last_row = total_rows - end_margin[0]
+    last_col = total_cols - end_margin[1]
 
     if height is None:
-        height = rows
+        height = total_rows
     if width is None:
-        width = cols
+        width = total_cols
 
     # Check we're not moving backwards with the overlap:
-    if row_overlap >= height and height != rows:
+    if row_overlap >= height and height != total_rows:
         raise ValueError(f"{row_overlap = } must be less than block height {height}")
-    if col_overlap >= width and width != cols:
+    if col_overlap >= width and width != total_cols:
         raise ValueError(f"{col_overlap = } must be less than block width {width}")
 
-    while row_off < rows:
-        while col_off < cols:
-            row_stop = min(row_off + height, last_row)
-            col_stop = min(col_off + width, last_col)
-            # yield (slice(row_off, row_stop), slice(col_off, col_stop))
-            yield BlockIndices(row_off, row_stop, col_off, col_stop)
+    # Set up the iterating indices
+    cur_row = start_row_offset
+    cur_col = start_col_offset
+    while cur_row < total_rows:
+        while cur_col < total_cols:
+            row_stop = min(cur_row + height, last_row)
+            col_stop = min(cur_col + width, last_col)
+            # yield (slice(cur_row, row_stop), slice(cur_col, col_stop))
+            yield BlockIndices(cur_row, row_stop, cur_col, col_stop)
 
-            col_off += width
-            if col_off < last_col:  # dont bring back if already at edge
-                col_off -= col_overlap
+            cur_col += width
+            if cur_col < last_col:  # dont bring back if already at edge
+                cur_col -= col_overlap
 
-        row_off += height
-        if row_off < last_row:
-            row_off -= row_overlap
-        col_off = 0
+        cur_row += height
+        if cur_row < last_row:
+            cur_row -= row_overlap
+        cur_col = start_col_offset  # reset back to the starting offset
 
 
 def dilate_block(
@@ -130,15 +133,10 @@ def dilate_block(
     """
     row_strides, col_strides = strides["y"], strides["x"]
     row_start = in_block.row_start * row_strides
-    row_stop = in_block.row_stop * row_strides
     col_start = in_block.col_start * col_strides
-    col_stop = in_block.col_stop * col_strides
+    row_stop = None if in_block.row_stop is None else in_block.row_stop * row_strides
+    col_stop = None if in_block.col_stop is None else in_block.col_stop * col_strides
     return BlockIndices(row_start, row_stop, col_start, col_stop)
-
-    # block.row_start = block.row_start * row_strides - row_strides // 2
-    # block.row_stop = block.row_stop * row_strides + row_strides // 2
-    # block.col_start = block.col_start * col_strides - col_strides // 2
-    # block.col_stop = block.col_stop * col_strides + col_strides // 2
 
 
 def pad_block(in_block: BlockIndices, margins: tuple[int, int]) -> BlockIndices:
@@ -226,13 +224,26 @@ class BlockManager:
 
     def __post_init__(self):
         self._half_rowcol = (self.half_window["y"], self.half_window["x"])
-        self._overlaps = (2 * self.half_window["y"], 2 * self.half_window["x"])
+        # self._overlaps = (2 * self.half_window["y"], 2 * self.half_window["x"])
         # The output margins that we'll skip depend on the half window
         # Now that the `half_window` is in full-res coordinates, so the output
         # margin size is smaller
-        row_margin = self._half_rowcol[0] // self.strides["y"]
-        col_margin = self._half_rowcol[1] // self.strides["x"]
-        self._margin = (row_margin, col_margin)
+        out_row_margin = self._half_rowcol[0] // self.strides["y"]
+        out_col_margin = self._half_rowcol[1] // self.strides["x"]
+        self._out_margin = (out_row_margin, out_col_margin)
+
+        # # The amount of extra padding the input blocks need depends on the
+        # # window and the strides.
+        # # The full-res slice is "automatically" padded by strides//2
+        # # But if our window is even bigger, we need a little extra to ensure
+        # # we have a full input window of data
+        # self._extra_row_pad = max(self._half_rowcol[0] - self.strides["y"] // 2, 0)
+        # self._extra_col_pad = max(self._half_rowcol[1] - self.strides["x"] // 2, 0)
+        # self._in_padding = (self._extra_row_pad, self._extra_col_pad)
+        self._in_padding = (
+            self.strides["y"] * self._get_out_nodata_size("y"),
+            self.strides["x"] * self._get_out_nodata_size("x"),
+        )
 
     @property
     def output_shape(self):
@@ -248,15 +259,15 @@ class BlockManager:
             block_shape=self.out_block_shape,
             # overlaps=self._overlaps,
             overlaps=(0, 0),  # We're not overlapping in the *output* grid
-            start_offsets=self._margin,
-            end_margin=self._margin,
+            start_offsets=self._out_margin,
+            end_margin=self._out_margin,
         )
 
     def dilate_block(self, out_block: BlockIndices) -> BlockIndices:
         return dilate_block(out_block, strides=self.strides)
 
     def pad_block(self, unpadded_input_block: BlockIndices) -> BlockIndices:
-        return pad_block(unpadded_input_block, margins=self._half_rowcol)
+        return pad_block(unpadded_input_block, margins=self._in_padding)
 
     def get_trimmed_block(self) -> BlockIndices:
         """Compute the slices which trim output nodata values.
@@ -271,15 +282,16 @@ class BlockManager:
         Note that this is independent of which block we're on; the number of
         nodata pixels on the border is always the same.
         """
-        half_row, half_col = self._half_rowcol
-        row_strides, col_strides = self.strides["y"], self.strides["x"]
-        row_nodata_size = round(half_row / row_strides)
-        col_nodata_size = round(half_col / col_strides)
+        row_nodata = self._get_out_nodata_size("y")
+        col_nodata = self._get_out_nodata_size("x")
         # Extra check if we have no trimming to do: use slice(0, None)
-        row_end = -row_nodata_size if row_nodata_size > 0 else None
-        col_end = -col_nodata_size if col_nodata_size > 0 else None
+        row_end = -row_nodata if row_nodata > 0 else None
+        col_end = -col_nodata if col_nodata > 0 else None
+        return BlockIndices(row_nodata, row_end, col_nodata, col_end)
 
-        return BlockIndices(row_nodata_size, row_end, col_nodata_size, col_end)
+    def _get_out_nodata_size(self, direction: str) -> int:
+        nodata_size = round(self.half_window[direction] / self.strides[direction])
+        return nodata_size
 
     def iter_blocks(
         self,
