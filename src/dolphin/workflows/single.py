@@ -124,7 +124,7 @@ def run_wrapped_phase_single(
     logger.info(msg)
 
     # Create the background writer for this ministack
-    writer = io.Writer()
+    writer = io.Writer(debug=False)
 
     logger.info(
         f"{vrt}: from {Path(vrt.file_list[first_non_comp_idx]).name} to"
@@ -158,7 +158,7 @@ def run_wrapped_phase_single(
             nodata=0,
         )
 
-    # Iterate over the stack in blocks
+    # Iterate over the output grid
     block_manager = BlockManager(
         arr_shape=(nrows, ncols),
         block_shape=block_shape,
@@ -258,8 +258,8 @@ def run_wrapped_phase_single(
         writer.queue_write(
             cur_comp_slc,
             output_files[0].filename,
-            in_no_pad_rows,
-            in_no_pad_cols,
+            in_no_pad_rows.start,
+            in_no_pad_cols.start,
         )
         # All other outputs are strided (smaller in size)
         out_datas = [tcorr, avg_coh, shp_counts]

@@ -124,7 +124,7 @@ def test_dilate_block():
 def test_block_manager():
     # Check no stride version
     bm = BlockManager((5, 5), (2, 3))
-    assert bm.get_output_blocks() == [
+    assert list(bm.iter_outputs()) == [
         BlockIndices(row_start=0, row_stop=2, col_start=0, col_stop=3),
         BlockIndices(row_start=0, row_stop=2, col_start=3, col_stop=5),
         BlockIndices(row_start=2, row_stop=4, col_start=0, col_stop=3),
@@ -133,6 +133,17 @@ def test_block_manager():
         BlockIndices(row_start=4, row_stop=5, col_start=3, col_stop=5),
     ]
 
-    assert bm.get_input_blocks() == bm.get_output_blocks()
-    assert bm.get_input_blocks() == bm.get_input_padded_blocks()
-    # {"x": 1, "y": 1})
+    outs, trimmed, ins, in_no_pads = zip(*list(bm.iter_blocks()))
+    assert outs == ins
+    assert outs == in_no_pads
+    assert all((rs, cs) == (slice(0, None), slice(0, None)) for (rs, cs) in trimmed)
+
+
+def test_block_manager_no_trim():
+    # Check no stride version
+    bm = BlockManager(
+        (5, 10), (100, 100), strides={"x": 2, "y": 3}, half_window={"x": 1, "y": 1}
+    )
+
+    trimmed_rows, trimmed_cols = bm.get_trimmed_block()
+    assert trimmed_rows == trimmed_cols == slice(0, None)

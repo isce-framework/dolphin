@@ -213,31 +213,43 @@ class BlockManager:
     """Class to handle slicing/trimming overlapping blocks with strides."""
 
     arr_shape: tuple[int, int]
-    """(row, col) of the total 2D image"""
+    """(row, col) of the full-res 2D image"""
     block_shape: tuple[int, int]
-    """(row, col) size of each block to load at a time"""
+    """(row, col) size of each input block to operate on at one time"""
     strides: dict[str, int] = field(default_factory=lambda: {"x": 1, "y": 1})
     """Decimation/downsampling factor in y/row and x/column direction"""
     half_window: dict[str, int] = field(default_factory=lambda: {"x": 0, "y": 0})
-    """For multi-looking iterations, size of the half window in y/row
-    and x/column direction. Used to find `overlaps` between blocks and
-    `start_offset`/`end_margin` for `iter_blocks."""
+    """For multi-looking iterations, size of the (full-res) half window
+    in y/row and x/column direction.
+    Used to find `overlaps` between blocks and `start_offset`/`end_margin` for
+    `iter_blocks`."""
 
     def __post_init__(self):
         self._half_rowcol = (self.half_window["y"], self.half_window["x"])
         self._overlaps = (2 * self.half_window["y"], 2 * self.half_window["x"])
+        # The output margins that we'll skip depend on the half window
+        # Now that the `half_window` is in full-res coordinates, so the output
+        # margin size is smaller
+        row_margin = self._half_rowcol[0] // self.strides["y"]
+        col_margin = self._half_rowcol[1] // self.strides["x"]
+        self._margin = (row_margin, col_margin)
 
     @property
     def output_shape(self):
         return compute_out_shape(self.arr_shape, self.strides)
 
+    @property
+    def out_block_shape(self):
+        return compute_out_shape(self.block_shape, self.strides)
+
     def iter_outputs(self) -> Iterator[BlockIndices]:
         yield from iter_blocks(
             arr_shape=self.output_shape,
-            block_shape=self.block_shape,
-            overlaps=self._overlaps,
-            start_offsets=self._half_rowcol,
-            end_margin=self._half_rowcol,
+            block_shape=self.out_block_shape,
+            # overlaps=self._overlaps,
+            overlaps=(0, 0),  # We're not overlapping in the *output* grid
+            start_offsets=self._margin,
+            end_margin=self._margin,
         )
 
     def dilate_block(self, out_block: BlockIndices) -> BlockIndices:
@@ -263,10 +275,11 @@ class BlockManager:
         row_strides, col_strides = self.strides["y"], self.strides["x"]
         row_nodata_size = round(half_row / row_strides)
         col_nodata_size = round(half_col / col_strides)
+        # Extra check if we have no trimming to do: use slice(0, None)
+        row_end = -row_nodata_size if row_nodata_size > 0 else None
+        col_end = -col_nodata_size if col_nodata_size > 0 else None
 
-        return BlockIndices(
-            row_nodata_size, -row_nodata_size, col_nodata_size, -col_nodata_size
-        )
+        return BlockIndices(row_nodata_size, row_end, col_nodata_size, col_end)
 
     def iter_blocks(
         self,
