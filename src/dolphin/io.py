@@ -666,8 +666,12 @@ class FileInfo:
 class Writer(BackgroundWriter):
     """Class to write data to files in a background thread."""
 
-    def __init__(self, max_queue: int = 0, **kwargs):
-        super().__init__(nq=max_queue, name="Writer", **kwargs)
+    def __init__(self, max_queue: int = 0, debug: bool = False, **kwargs):
+        if debug is False:
+            super().__init__(nq=max_queue, name="Writer", **kwargs)
+        else:
+            # Don't start a background thread. Just synchronously write data
+            self.queue_write = lambda *args: write_block(*args)  # type: ignore
 
     def write(
         self, data: ArrayLike, filename: Filename, row_start: int, col_start: int
