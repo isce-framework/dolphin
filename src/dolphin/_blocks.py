@@ -57,12 +57,12 @@ def iter_blocks(
 
     Examples
     --------
-        >>> list(_slice_iterator((180, 250), (100, 100)))
+        >>> list(iter_blocks((180, 250), (100, 100)))
         [(slice(0, 100, None), slice(0, 100, None)), (slice(0, 100, None), \
 slice(100, 200, None)), (slice(0, 100, None), slice(200, 250, None)), \
 (slice(100, 180, None), slice(0, 100, None)), (slice(100, 180, None), \
 slice(100, 200, None)), (slice(100, 180, None), slice(200, 250, None))]
-        >>> list(_slice_iterator((180, 250), (100, 100), overlaps=(10, 10)))
+        >>> list(iter_blocks((180, 250), (100, 100), overlaps=(10, 10)))
         [(slice(0, 100, None), slice(0, 100, None)), (slice(0, 100, None), \
 slice(90, 190, None)), (slice(0, 100, None), slice(180, 250, None)), \
 (slice(90, 180, None), slice(0, 100, None)), (slice(90, 180, None), \
