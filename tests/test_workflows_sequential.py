@@ -37,7 +37,6 @@ def test_sequential_gtiff(tmp_path, slc_file_list, gpu_enabled):
         shp_method="rect",
         shp_alpha=None,
         shp_nslc=None,
-        max_bytes=1e9,
         n_workers=4,
         gpu_enabled=gpu_enabled,
     )
@@ -85,7 +84,6 @@ def test_sequential_nc(tmp_path, slc_file_list_nc, half_window, strides):
         shp_method="rect",
         shp_alpha=None,
         shp_nslc=None,
-        max_bytes=1e9,
         n_workers=4,
         gpu_enabled=False,
     )
@@ -114,7 +112,6 @@ def test_sequential_ministack_sizes(tmp_path, slc_file_list_nc, ministack_size):
         shp_method="rect",
         shp_alpha=None,
         shp_nslc=None,
-        max_bytes=1e9,
         n_workers=4,
         gpu_enabled=False,
     )
