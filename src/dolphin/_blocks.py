@@ -58,11 +58,13 @@ def iter_blocks(
     Examples
     --------
         >>> list(iter_blocks((180, 250), (100, 100)))
-        [(slice(0, 100, None), slice(0, 100, None)), (slice(0, 100, None), \
-slice(100, 200, None)), (slice(0, 100, None), slice(200, 250, None)), \
-(slice(100, 180, None), slice(0, 100, None)), (slice(100, 180, None), \
-slice(100, 200, None)), (slice(100, 180, None), slice(200, 250, None))]
-        >>> list(iter_blocks((180, 250), (100, 100), overlaps=(10, 10)))
+        [BlockIndices(row_start=0, row_stop=100, col_start=0, col_stop=100), \
+BlockIndices(row_start=0, row_stop=100, col_start=100, col_stop=200), \
+BlockIndices(row_start=0, row_stop=100, col_start=200, col_stop=250), \
+BlockIndices(row_start=100, row_stop=180, col_start=0, col_stop=100), \
+BlockIndices(row_start=100, row_stop=180, col_start=100, col_stop=200), \
+BlockIndices(row_start=100, row_stop=180, col_start=200, col_stop=250)]
+        >>> list(map(tuple, iter_blocks((180, 250), (100, 100), overlaps=(10, 10))))
         [(slice(0, 100, None), slice(0, 100, None)), (slice(0, 100, None), \
 slice(90, 190, None)), (slice(0, 100, None), slice(180, 250, None)), \
 (slice(90, 180, None), slice(0, 100, None)), (slice(90, 180, None), \
