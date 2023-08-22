@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 
 from dolphin.cli import main
@@ -22,3 +24,12 @@ def test_subcommand_help(capsys, sub_cmd, option):
         pass
     output = capsys.readouterr().out
     assert f"usage: dolphin {sub_cmd} [-h]" in output
+
+
+def test_cli_config_basic(tmpdir, slc_file_list):
+    with tmpdir.as_cwd():
+        try:
+            main(["config", "--slc-files", *list(map(str, slc_file_list))])
+        except SystemExit:
+            pass
+        assert Path("dolphin_config.yaml").exists()
