@@ -234,18 +234,35 @@ class BlockManager:
         out_col_margin = self._half_rowcol[1] // self.strides["x"]
         self._out_margin = (out_row_margin, out_col_margin)
 
-        # # The amount of extra padding the input blocks need depends on the
-        # # window and the strides.
-        # # The full-res slice is "automatically" padded by strides//2
-        # # But if our window is even bigger, we need a little extra to ensure
-        # # we have a full input window of data
-        # self._extra_row_pad = max(self._half_rowcol[0] - self.strides["y"] // 2, 0)
-        # self._extra_col_pad = max(self._half_rowcol[1] - self.strides["x"] // 2, 0)
-        # self._in_padding = (self._extra_row_pad, self._extra_col_pad)
+        # The amount of extra padding the input blocks need depends on the
+        # window and the strides.
         self._in_padding = (
             self.strides["y"] * self._get_out_nodata_size("y"),
             self.strides["x"] * self._get_out_nodata_size("x"),
         )
+
+    def iter_blocks(
+        self,
+    ) -> Iterator[tuple[BlockIndices, BlockIndices, BlockIndices, BlockIndices]]:
+        """Iterate over the input/output block indices.
+
+        Yields
+        ------
+        output_block : BlockIndices
+            The current slices for the output raster
+        trimming_block : BlockIndices
+            The slices to use on a processed output block to remove nodata border pixels.
+            These may be relative (e.g. slice(1, -1)), not absolute like `output_block`.
+        input_block : BlockIndices
+            Slices used to load the full-res input data
+        input_no_padding : BlockIndices
+            Slices which point to the position within the full-res data without padding
+        """
+        trimming_block = self.get_trimming_block()
+        for out_block in self.iter_outputs():
+            input_no_padding = self.dilate_block(out_block)
+            input_block = self.pad_block(input_no_padding)
+            yield (out_block, trimming_block, input_block, input_no_padding)
 
     @property
     def output_shape(self):
@@ -259,7 +276,6 @@ class BlockManager:
         yield from iter_blocks(
             arr_shape=self.output_shape,
             block_shape=self.out_block_shape,
-            # overlaps=self._overlaps,
             overlaps=(0, 0),  # We're not overlapping in the *output* grid
             start_offsets=self._out_margin,
             end_margin=self._out_margin,
@@ -271,7 +287,7 @@ class BlockManager:
     def pad_block(self, unpadded_input_block: BlockIndices) -> BlockIndices:
         return pad_block(unpadded_input_block, margins=self._in_padding)
 
-    def get_trimmed_block(self) -> BlockIndices:
+    def get_trimming_block(self) -> BlockIndices:
         """Compute the slices which trim output nodata values.
 
         When the BlockIndex gets dilated (using `strides`) and padded (using
@@ -294,26 +310,3 @@ class BlockManager:
     def _get_out_nodata_size(self, direction: str) -> int:
         nodata_size = round(self.half_window[direction] / self.strides[direction])
         return nodata_size
-
-    def iter_blocks(
-        self,
-    ) -> Iterator[tuple[BlockIndices, BlockIndices, BlockIndices, BlockIndices]]:
-        """Iterate over the input/output blocks.
-
-        Yields
-        ------
-        output_block : BlockIndices
-            The current slices for the output raster
-        trimmed_block : BlockIndices
-            The slices to use on a processed output block to remove nodata border pixels.
-            These may be relative (e.g. slice(1, -1)), not absolute like `output_block`.
-        input_block : BlockIndices
-            Slices used to load the full-res input data
-        input_no_padding : BlockIndices
-            Slices which point to the position within the full-res data without padding
-        """
-        trimmed_block = self.get_trimmed_block()
-        for out_block in self.iter_outputs():
-            input_no_padding = self.dilate_block(out_block)
-            input_block = self.pad_block(input_no_padding)
-            yield (out_block, trimmed_block, input_block, input_no_padding)

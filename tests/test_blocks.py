@@ -3,6 +3,7 @@ import pytest
 
 from dolphin._blocks import BlockIndices, BlockManager, dilate_block, iter_blocks
 from dolphin.io import compute_out_shape
+from dolphin.utils import upsample_nearest
 
 
 def test_block_indices_create():
@@ -216,6 +217,7 @@ def test_block_manager_fake_process(in_shape, half_window, strides, block_shape)
     # full_res_data = full_res_data.astype(np.complex64)
     full_res_data = rng.normal(size=in_shape).astype("float32")
     out_arr = np.zeros(out_shape, dtype=full_res_data.dtype)
+    out_full_res = np.zeros_like(full_res_data)
     counts = np.zeros(out_shape, dtype=int)
 
     bm = BlockManager(
@@ -236,9 +238,10 @@ def test_block_manager_fake_process(in_shape, half_window, strides, block_shape)
         out_arr[out_rows, out_cols] = data_trimmed
         counts[out_rows, out_cols] += 1
 
-        # out_upsampled = upsample_nearest(
-        #     data_trimmed, in_data[yhalf:-yhalf, xhalf:-xhalf]
-        # )
+        out_full_nrows = len(range(*in_no_pad_rows.indices(10000)))
+        out_full_ncols = len(range(*in_no_pad_cols.indices(10000)))
+        out_upsampled = upsample_nearest(data_trimmed, (out_full_nrows, out_full_ncols))
+        out_full_res[in_no_pad_rows, in_no_pad_cols] = out_upsampled
 
     # Now check the inner part, away from the expected border of zeros
     out_row_margin, out_col_margin = bm._out_margin
