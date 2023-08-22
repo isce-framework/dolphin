@@ -139,10 +139,10 @@ def test_block_manager():
         BlockIndices(row_start=4, row_stop=5, col_start=3, col_stop=5),
     ]
 
-    outs, trimmed, ins, in_no_pads = zip(*list(bm.iter_blocks()))
+    outs, trimming, ins, in_no_pads = zip(*list(bm.iter_blocks()))
     assert outs == ins
     assert outs == in_no_pads
-    assert all((rs, cs) == (slice(0, None), slice(0, None)) for (rs, cs) in trimmed)
+    assert all((rs, cs) == (slice(0, None), slice(0, None)) for (rs, cs) in trimming)
 
 
 def test_block_manager_no_trim():
@@ -151,8 +151,8 @@ def test_block_manager_no_trim():
         (5, 10), (100, 100), strides={"x": 3, "y": 3}, half_window={"x": 1, "y": 1}
     )
 
-    trimmed_rows, trimmed_cols = bm.get_trimmed_block()
-    assert trimmed_rows == trimmed_cols == slice(0, None)
+    trimming_rows, trimming_cols = bm.get_trimming_block()
+    assert trimming_rows == trimming_cols == slice(0, None)
 
 
 def test_block_manager_iter_outputs():
@@ -225,14 +225,14 @@ def test_block_manager_fake_process(in_shape, half_window, strides, block_shape)
     )
     for (
         (out_rows, out_cols),
-        (trimmed_rows, trimmed_cols),
+        (trimming_rows, trimming_cols),
         (in_rows, in_cols),
         (in_no_pad_rows, in_no_pad_cols),
     ) in bm.iter_blocks():
         in_data = full_res_data[in_rows, in_cols]
         out_data = _fake_process(in_data, strides, half_window)
 
-        data_trimmed = out_data[trimmed_rows, trimmed_cols]
+        data_trimmed = out_data[trimming_rows, trimming_cols]
         assert np.all(~np.isnan(data_trimmed))
 
         out_arr[out_rows, out_cols] = data_trimmed
