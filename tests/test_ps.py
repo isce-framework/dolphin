@@ -3,6 +3,7 @@ import pytest
 from osgeo import gdal
 
 import dolphin.ps
+from dolphin import io
 from dolphin.stack import VRTStack
 
 
@@ -55,13 +56,19 @@ def vrt_stack(tmp_path, slc_file_list):
 
 
 def test_create_ps(tmp_path, vrt_stack):
+    ps_mask_file = tmp_path / "ps_pixels.tif"
+
+    amp_dispersion_file = tmp_path / "amp_disp.tif"
+    amp_mean_file = tmp_path / "amp_mean.tif"
     dolphin.ps.create_ps(
         slc_vrt_file=vrt_stack.outfile,
-        output_amp_dispersion_file=tmp_path / "amp_disp.tif",
-        output_amp_mean_file=tmp_path / "amp_mean.tif",
-        output_file=tmp_path / "ps_pixels.tif",
+        output_amp_dispersion_file=amp_dispersion_file,
+        output_amp_mean_file=amp_mean_file,
+        output_file=ps_mask_file,
     )
-    pass
+    assert io.get_raster_dtype(ps_mask_file) == np.uint8
+    assert io.get_raster_dtype(amp_mean_file) == np.float32
+    assert io.get_raster_dtype(amp_dispersion_file) == np.float32
 
 
 @pytest.fixture
@@ -77,3 +84,21 @@ def _write_zeros(file, shape):
     bnd.WriteArray(np.zeros(shape))
     ds.SetMetadataItem("N", "0", "ENVI")
     ds = bnd = None
+
+
+def test_multilook_ps_file(tmp_path, vrt_stack):
+    ps_mask_file = tmp_path / "ps_pixels.tif"
+
+    amp_dispersion_file = tmp_path / "amp_disp.tif"
+    amp_mean_file = tmp_path / "amp_mean.tif"
+    dolphin.ps.create_ps(
+        slc_vrt_file=vrt_stack.outfile,
+        output_amp_dispersion_file=amp_dispersion_file,
+        output_amp_mean_file=amp_mean_file,
+        output_file=ps_mask_file,
+    )
+
+    output_file = dolphin.ps.multilook_ps_mask(
+        strides={"x": 5, "y": 3}, ps_mask_file=ps_mask_file
+    )
+    assert io.get_raster_dtype(output_file) == np.uint8
