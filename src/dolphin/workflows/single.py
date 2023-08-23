@@ -213,7 +213,7 @@ def run_wrapped_phase_single(
                 beta=beta,
                 reference_idx=reference_idx,
                 nodata_mask=nodata_mask[in_rows, in_cols],
-                # ps_mask=ps_mask[in_rows, in_cols],
+                ps_mask=ps_mask[in_rows, in_cols],
                 neighbor_arrays=neighbor_arrays,
                 avg_mag=amp_mean[in_rows, in_cols] if amp_mean is not None else None,
                 n_workers=n_workers,

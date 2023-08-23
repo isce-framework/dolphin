@@ -29,7 +29,15 @@ def test_subcommand_help(capsys, sub_cmd, option):
 def test_cli_config_basic(tmpdir, slc_file_list):
     with tmpdir.as_cwd():
         try:
-            main(["config", "--slc-files", *list(map(str, slc_file_list))])
+            main(
+                [
+                    "config",
+                    "--n-workers",
+                    1,
+                    "--slc-files",
+                    *list(map(str, slc_file_list)),
+                ]
+            )
         except SystemExit:
             pass
         assert Path("dolphin_config.yaml").exists()
