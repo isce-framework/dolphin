@@ -44,7 +44,7 @@ def run_wrapped_phase_sequential(
     shp_alpha: float = 0.05,
     shp_nslc: Optional[int],
     beta: float = 0.01,
-    block_shape: tuple[int, int] = (1024, 1024),
+    block_shape: tuple[int, int] = (512, 512),
     n_workers: int = 1,
     gpu_enabled: bool = True,
 ) -> tuple[list[Path], list[Path], Path]:

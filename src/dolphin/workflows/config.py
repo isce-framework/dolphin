@@ -207,7 +207,7 @@ class WorkerSettings(BaseModel, extra=Extra.forbid):
         ),
     )
     block_shape: tuple[int, int] = Field(
-        (1024, 1024),
+        (512, 512),
         description="Size (rows, columns) of blocks of data to load at a time.",
     )
 

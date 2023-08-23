@@ -361,7 +361,7 @@ class VRTStack:
     def iter_blocks(
         self,
         overlaps: tuple[int, int] = (0, 0),
-        block_shape: tuple[int, int] = (1024, 1024),
+        block_shape: tuple[int, int] = (512, 512),
         skip_empty: bool = True,
         nodata_mask: Optional[np.ndarray] = None,
         show_progress: bool = True,

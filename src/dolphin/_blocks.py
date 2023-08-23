@@ -91,8 +91,8 @@ slice(90, 190, None)), (slice(90, 180, None), slice(180, 250, None))]
     # Set up the iterating indices
     cur_row = start_row_offset
     cur_col = start_col_offset
-    while cur_row < total_rows:
-        while cur_col < total_cols:
+    while cur_row < last_row:
+        while cur_col < last_col:
             row_stop = min(cur_row + height, last_row)
             col_stop = min(cur_col + width, last_col)
             # yield (slice(cur_row, row_stop), slice(cur_col, col_stop))
@@ -141,6 +141,16 @@ def dilate_block(
     return BlockIndices(row_start, row_stop, col_start, col_stop)
 
 
+def get_slice_length(s: slice, data_size: int = 1_000_000):
+    """Get the size of a slice of data.
+
+    Uses `slice.indices` to avoid making any dummy data.
+    Assumes that 1. data is larger than slice, and 2. size is
+    less than `data_size`.
+    """
+    return len(range(*s.indices(data_size)))
+
+
 def pad_block(in_block: BlockIndices, margins: tuple[int, int]) -> BlockIndices:
     """Pad `in_block` by the (row_margin, col_margin) pixels in `margins`.
 
@@ -162,6 +172,10 @@ def pad_block(in_block: BlockIndices, margins: tuple[int, int]) -> BlockIndices:
     """
     r_margin, c_margin = margins
     r_slice, c_slice = in_block
+    if r_slice.start - r_margin < 0:
+        raise ValueError(f"{r_slice = }, but {r_margin = }")
+    if c_slice.start - c_margin < 0:
+        raise ValueError(f"{c_slice = }, but {c_margin = }")
     return BlockIndices(
         max(r_slice.start - r_margin, 0),
         r_slice.stop + r_margin,
@@ -226,13 +240,13 @@ class BlockManager:
 
     def __post_init__(self):
         self._half_rowcol = (self.half_window["y"], self.half_window["x"])
-        # self._overlaps = (2 * self.half_window["y"], 2 * self.half_window["x"])
-        # The output margins that we'll skip depend on the half window
-        # Now that the `half_window` is in full-res coordinates, so the output
+        # The output margins that we'll skip depends on the half window and strides.
+        # The `half_window` is in full-res coordinates, so the output
         # margin size is smaller
-        out_row_margin = self._half_rowcol[0] // self.strides["y"]
-        out_col_margin = self._half_rowcol[1] // self.strides["x"]
-        self._out_margin = (out_row_margin, out_col_margin)
+        self._out_margin = (
+            self._get_out_nodata_size("y"),
+            self._get_out_nodata_size("x"),
+        )
 
         # The amount of extra padding the input blocks need depends on the
         # window and the strides.

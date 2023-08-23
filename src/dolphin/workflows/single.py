@@ -173,12 +173,15 @@ def run_wrapped_phase_single(
     #     show_progress=show_progress,
     # )
     # for cur_data, (rows, cols) in block_gen:
+    blocks = list(block_manager.iter_blocks())
+    logger.info(f"Iterating over {block_shape} blocks, {len(blocks)} total")
     for (
         (out_rows, out_cols),
         (trimmed_rows, trimmed_cols),
         (in_rows, in_cols),
         (in_no_pad_rows, in_no_pad_cols),
-    ) in block_manager.iter_blocks():
+    ) in blocks:
+        logger.debug(f"{out_rows = }, {out_cols = }, {in_rows = }, {in_no_pad_rows = }")
         cur_data = vrt.read_stack(rows=in_rows, cols=in_cols)
         if np.all(cur_data == 0):
             continue
@@ -246,9 +249,16 @@ def run_wrapped_phase_single(
         # Get the SHP counts for each pixel (if not using Rect window)
         shp_counts = np.sum(neighbor_arrays, axis=(-2, -1))
 
+        # Get the inner portion of the full-res SLC data
+        trim_full_col = slice(
+            in_no_pad_cols.start - in_cols.start, in_no_pad_cols.stop - in_cols.stop
+        )
+        trim_full_row = slice(
+            in_no_pad_rows.start - in_rows.start, in_no_pad_rows.stop - in_rows.stop
+        )
         # Compress the ministack using only the non-compressed SLCs
         cur_comp_slc = compress(
-            cur_data[first_non_comp_idx:, yhalf:-yhalf, xhalf:-xhalf],
+            cur_data[first_non_comp_idx:, trim_full_row, trim_full_col],
             cur_mle_stack[first_non_comp_idx:, trimmed_rows, trimmed_cols],
         )
 
@@ -261,9 +271,10 @@ def run_wrapped_phase_single(
             in_no_pad_rows.start,
             in_no_pad_cols.start,
         )
+
         # All other outputs are strided (smaller in size)
         out_datas = [tcorr, avg_coh, shp_counts]
-        for data, output_file in zip(out_datas, output_files):
+        for data, output_file in zip(out_datas, output_files[1:]):
             if data is None:  # May choose to skip some outputs, e.g. "avg_coh"
                 continue
             writer.queue_write(

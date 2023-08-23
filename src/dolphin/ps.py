@@ -36,7 +36,7 @@ def create_ps(
     existing_amp_dispersion_file: Optional[Filename] = None,
     nodata_mask: Optional[np.ndarray] = None,
     update_existing: bool = False,
-    block_shape: tuple[int, int] = (1024, 1024),
+    block_shape: tuple[int, int] = (512, 512),
     show_progress: bool = True,
 ):
     """Create the amplitude dispersion, mean, and PS files.
@@ -67,7 +67,7 @@ def create_ps(
         Default is False.
     block_shape : tuple[int, int], optional
         The 2D block size to load all bands at a time.
-        Default is (1024, 1024)
+        Default is (512, 512)
     show_progress : bool, default=True
         If true, displays a `rich.ProgressBar`.
     """

@@ -1,7 +1,13 @@
 import numpy as np
 import pytest
 
-from dolphin._blocks import BlockIndices, BlockManager, dilate_block, iter_blocks
+from dolphin._blocks import (
+    BlockIndices,
+    BlockManager,
+    dilate_block,
+    get_slice_length,
+    iter_blocks,
+)
 from dolphin.io import compute_out_shape
 from dolphin.utils import upsample_nearest
 
@@ -87,6 +93,20 @@ def test_iter_blocks_offset_margin():
     # Everywhere except the end should be 1
     assert np.all(check_out[:4, :5] == 1)
     assert np.all(check_out[-4:, -5:] == 0)
+
+
+def test_nonzero_block_size_with_margin():
+    shape = (33, 67)
+    block_shape = (5, 5)
+    offset = margin = (0, 1)
+    check_out = np.zeros(shape)
+    for rs, cs in iter_blocks(
+        shape, block_shape, start_offsets=offset, end_margin=margin
+    ):
+        assert get_slice_length(rs) > 0
+        assert get_slice_length(cs) > 0
+        check_out[rs, cs] += 1
+    assert np.all(check_out[:, 1:-1] == 1)
 
 
 def test_dilate_block():
@@ -200,21 +220,12 @@ def _fake_process(in_arr, strides, half_window):
     return out
 
 
-@pytest.mark.parametrize("in_shape", [(100, 200), (101, 201)])
-@pytest.mark.parametrize(
-    "half_window", [{"x": 1, "y": 1}, {"x": 3, "y": 1}, {"x": 3, "y": 3}]
-)
-@pytest.mark.parametrize(
-    "strides", [{"x": 1, "y": 1}, {"x": 3, "y": 1}, {"x": 3, "y": 3}]
-)
-@pytest.mark.parametrize("block_shape", [(15, 15), (20, 30), (17, 27)])
-def test_block_manager_fake_process(in_shape, half_window, strides, block_shape):
-    in_shape = (100, 200)
-    rng = np.random.default_rng()
+def fake_process_blocks(in_shape, half_window, strides, block_shape):
     out_shape = compute_out_shape(in_shape, strides)
 
     # full_res_data = np.random.randn(*in_shape) + 1j * np.random.randn(*in_shape)
     # full_res_data = full_res_data.astype(np.complex64)
+    rng = np.random.default_rng()
     full_res_data = rng.normal(size=in_shape).astype("float32")
     out_arr = np.zeros(out_shape, dtype=full_res_data.dtype)
     out_full_res = np.zeros_like(full_res_data)
@@ -234,12 +245,14 @@ def test_block_manager_fake_process(in_shape, half_window, strides, block_shape)
 
         data_trimmed = out_data[trimming_rows, trimming_cols]
         assert np.all(~np.isnan(data_trimmed))
+        assert get_slice_length(out_rows) == data_trimmed.shape[0]
+        assert get_slice_length(out_cols) == data_trimmed.shape[1]
 
         out_arr[out_rows, out_cols] = data_trimmed
         counts[out_rows, out_cols] += 1
 
-        out_full_nrows = len(range(*in_no_pad_rows.indices(10000)))
-        out_full_ncols = len(range(*in_no_pad_cols.indices(10000)))
+        out_full_nrows = get_slice_length(in_no_pad_rows)
+        out_full_ncols = get_slice_length(in_no_pad_cols)
         out_upsampled = upsample_nearest(data_trimmed, (out_full_nrows, out_full_ncols))
         out_full_res[in_no_pad_rows, in_no_pad_cols] = out_upsampled
 
@@ -250,3 +263,22 @@ def test_block_manager_fake_process(in_shape, half_window, strides, block_shape)
     )
     assert not np.any(out_arr[inner] == 0)
     assert np.all(counts[inner] == 1)
+
+
+@pytest.mark.parametrize("in_shape", [(100, 200), (101, 201)])
+@pytest.mark.parametrize(
+    "half_window", [{"x": 1, "y": 1}, {"x": 3, "y": 1}, {"x": 3, "y": 3}]
+)
+@pytest.mark.parametrize(
+    "strides", [{"x": 1, "y": 1}, {"x": 3, "y": 1}, {"x": 3, "y": 3}]
+)
+@pytest.mark.parametrize("block_shape", [(15, 15), (20, 30), (17, 27)])
+def test_block_manager_fake_process(in_shape, half_window, strides, block_shape):
+    fake_process_blocks(in_shape, half_window, strides, block_shape)
+
+
+def test_failing_block_params():
+    # Extra test from real-data params
+    half_window, strides = {"x": 11, "y": 5}, {"x": 6, "y": 3}
+    in_shape, block_shape = (2050, 4050), (1024, 1024)
+    fake_process_blocks(in_shape, half_window, strides, block_shape)
