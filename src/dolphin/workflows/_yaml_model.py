@@ -44,7 +44,7 @@ class YamlModel(BaseModel):
         if with_comments:
             _add_comments(
                 yaml_obj,
-                self.schema(by_alias=by_alias),
+                self.model_json_schema(by_alias=by_alias),
                 indent_per_level=indent_per_level,
             )
 
@@ -119,7 +119,9 @@ class YamlModel(BaseModel):
         so first, we manually make a dict of all the fields with None values
         then we update it with the default-filled values
         """
-        all_none_vals = dict(zip(cls.schema()["properties"].keys(), repeat(None)))
+        all_none_vals = dict(
+            zip(cls.model_json_schema()["properties"].keys(), repeat(None))
+        )
         all_none_vals.update(cls.construct().model_dump())
         return all_none_vals
 
@@ -144,7 +146,7 @@ def _add_comments(
     """Add comments above each YAML field using the pydantic model schema."""
     # Definitions are in schemas that contain nested pydantic Models
     if definitions is None:
-        definitions = schema.get("definitions")
+        definitions = schema.get("$defs")
 
     for key, val in schema["properties"].items():
         reference = ""
@@ -186,11 +188,18 @@ def _add_comments(
                 subsequent_indent=" " * indent_per_level,
             )
         )
-        type_str = f"\n  Type: {val['type']}."
+        if "anyOf" in val.keys():
+            #   'anyOf': [{'type': 'string'}, {'type': 'null'}],
+            # Join the options with a pipe, like Python types
+            type_str = "|".join(d["type"] for d in val["anyOf"])
+            type_str.replace("null", "None")
+        else:
+            type_str = val["type"]
+        type_line = f"\n  Type: {type_str}."
         choices = f"\n  Options: {val['enum']}." if "enum" in val.keys() else ""
 
         # Combine the description/type/choices as the YAML comment
-        comment = f"{desc}{type_str}{choices}"
+        comment = f"{desc}{type_line}{choices}"
         comment = comment.replace("..", ".")  # Remove double periods
 
         # Prepend the required label for fields that are required

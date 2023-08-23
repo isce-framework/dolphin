@@ -9,7 +9,6 @@ from typing import Any, Dict, List, Optional, Tuple
 from pydantic import (
     BaseModel,
     ConfigDict,
-    Extra,
     Field,
     PrivateAttr,
     field_validator,
@@ -42,7 +41,7 @@ OPERA_BURST_RE = re.compile(
 )
 
 
-class PsOptions(BaseModel, extra=Extra.forbid):
+class PsOptions(BaseModel, extra="forbid"):
     """Options for the PS pixel selection portion of the workflow."""
 
     _directory: Path = PrivateAttr(Path("PS"))
@@ -57,7 +56,7 @@ class PsOptions(BaseModel, extra=Extra.forbid):
     )
 
 
-class HalfWindow(BaseModel, extra=Extra.forbid):
+class HalfWindow(BaseModel, extra="forbid"):
     """Class to hold half-window size for multi-looking during phase linking."""
 
     x: int = Field(11, description="Half window size (in pixels) for x direction", gt=0)
@@ -73,7 +72,7 @@ class HalfWindow(BaseModel, extra=Extra.forbid):
         return cls(x=col_looks // 2, y=row_looks // 2)
 
 
-class PhaseLinkingOptions(BaseModel, extra=Extra.forbid):
+class PhaseLinkingOptions(BaseModel, extra="forbid"):
     """Configurable options for wrapped phase estimation."""
 
     _directory: Path = PrivateAttr(Path("linked_phase"))
@@ -99,7 +98,7 @@ class PhaseLinkingOptions(BaseModel, extra=Extra.forbid):
     )
 
 
-class InterferogramNetwork(BaseModel, extra=Extra.forbid):
+class InterferogramNetwork(BaseModel, extra="forbid"):
     """Options to determine the type of network for interferogram formation."""
 
     _directory: Path = PrivateAttr(Path("interferograms"))
@@ -157,7 +156,7 @@ class InterferogramNetwork(BaseModel, extra=Extra.forbid):
         return self
 
 
-class UnwrapOptions(BaseModel, extra=Extra.forbid):
+class UnwrapOptions(BaseModel, extra="forbid"):
     """Options for unwrapping after wrapped phase estimation."""
 
     run_unwrap: bool = Field(
@@ -180,7 +179,7 @@ class UnwrapOptions(BaseModel, extra=Extra.forbid):
     )
 
 
-class WorkerSettings(BaseModel, extra=Extra.forbid):
+class WorkerSettings(BaseModel, extra="forbid"):
     """Settings for controlling CPU/GPU settings and parallelism."""
 
     gpu_enabled: bool = Field(
@@ -217,7 +216,7 @@ class WorkerSettings(BaseModel, extra=Extra.forbid):
     )
 
 
-class InputOptions(BaseModel, extra=Extra.forbid):
+class InputOptions(BaseModel, extra="forbid"):
     """Options specifying input datasets for workflow."""
 
     subdataset: Optional[str] = Field(
@@ -234,7 +233,7 @@ class InputOptions(BaseModel, extra=Extra.forbid):
     )
 
 
-class OutputOptions(BaseModel, extra=Extra.forbid):
+class OutputOptions(BaseModel, extra="forbid"):
     """Options for the output size/format/compressions."""
 
     output_resolution: Optional[Dict[str, int]] = Field(

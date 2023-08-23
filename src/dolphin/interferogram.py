@@ -11,7 +11,6 @@ from numpy.typing import ArrayLike
 from osgeo import gdal
 from pydantic import (
     BaseModel,
-    Extra,
     Field,
     FieldValidationInfo,
     field_validator,
@@ -27,7 +26,7 @@ gdal.UseExceptions()
 logger = get_log(__name__)
 
 
-class VRTInterferogram(BaseModel, extra=Extra.allow):
+class VRTInterferogram(BaseModel, extra="allow"):
     """Create an interferogram using a VRTDerivedRasterBand.
 
     Attributes

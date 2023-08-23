@@ -4,7 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import ClassVar, List, Optional
 
-from pydantic import ConfigDict, Extra, Field
+from pydantic import ConfigDict, Field
 
 from ._yaml_model import YamlModel
 from .config import (
@@ -36,7 +36,7 @@ class InputFileGroup(YamlModel):
     )
 
 
-class DynamicAncillaryFileGroup(YamlModel, extra=Extra.forbid):
+class DynamicAncillaryFileGroup(YamlModel, extra="forbid"):
     """A group of dynamic ancillary files."""
 
     algorithm_parameters_file: Path = Field(  # type: ignore
@@ -98,7 +98,7 @@ class DynamicAncillaryFileGroup(YamlModel, extra=Extra.forbid):
     )
 
 
-class PrimaryExecutable(YamlModel, extra=Extra.forbid):
+class PrimaryExecutable(YamlModel, extra="forbid"):
     """Group describing the primary executable."""
 
     product_type: str = Field(
@@ -107,7 +107,7 @@ class PrimaryExecutable(YamlModel, extra=Extra.forbid):
     )
 
 
-class ProductPathGroup(YamlModel, extra=Extra.forbid):
+class ProductPathGroup(YamlModel, extra="forbid"):
     """Group describing the product paths."""
 
     product_path: Path = Field(  # type: ignore
@@ -139,7 +139,7 @@ class ProductPathGroup(YamlModel, extra=Extra.forbid):
     )
 
 
-class AlgorithmParameters(YamlModel, extra=Extra.forbid):
+class AlgorithmParameters(YamlModel, extra="forbid"):
     """Class containing all the other [`Workflow`][dolphin.workflows.config] classes."""
 
     # Options for each step in the workflow
@@ -156,7 +156,7 @@ class AlgorithmParameters(YamlModel, extra=Extra.forbid):
     )
 
 
-class RunConfig(YamlModel, extra=Extra.forbid):
+class RunConfig(YamlModel, extra="forbid"):
     """A PGE run configuration."""
 
     # Used for the top-level key
