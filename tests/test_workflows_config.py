@@ -373,3 +373,12 @@ def test_config_roundtrip_yaml_with_comments(tmp_path, dir_with_1_slc):
     c.to_yaml(outfile, with_comments=True)
     c2 = config.Workflow.from_yaml(outfile)
     assert c == c2
+
+
+def test_config_print_yaml_schema(tmp_path, dir_with_1_slc):
+    outfile = tmp_path / "empty_schema.yaml"
+    c = config.Workflow(
+        cslc_file_list=dir_with_1_slc / "slclist.txt",
+        input_options={"subdataset": "data"},
+    )
+    c.print_yaml_schema(outfile)
