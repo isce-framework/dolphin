@@ -108,7 +108,7 @@ class YamlModel(BaseModel):
         # UserWarning: Pydantic serializer warnings:
         # New V2 warning, but seems harmless for just printing the schema
         with warnings.catch_warnings():
-            warnings.filterwarnings("ignore", category=UserWarning, message="Pydantic*")
+            warnings.filterwarnings("ignore", category=UserWarning)
             cls.model_construct(**full_dict).to_yaml(
                 output_path, with_comments=True, indent_per_level=indent_per_level
             )
