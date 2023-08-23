@@ -80,7 +80,7 @@ def _parse_logfile(logfile: Path) -> dict:
 def _parse_config(workflow: Workflow):
     """Grab the relevant parameters from the config file."""
     return {
-        "block": workflow.worker_settings.block_size_gb,
+        "block": workflow.worker_settings.block_shape,
         "strides": workflow.output_options.strides,
         "threads_per_worker": workflow.worker_settings.threads_per_worker,
         "n_slc": len(workflow.cslc_file_list),

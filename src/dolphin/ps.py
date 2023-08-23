@@ -36,7 +36,7 @@ def create_ps(
     existing_amp_dispersion_file: Optional[Filename] = None,
     nodata_mask: Optional[np.ndarray] = None,
     update_existing: bool = False,
-    block_size_gb: float = 1.0,
+    block_shape: tuple[int, int] = (512, 512),
     show_progress: bool = True,
 ):
     """Create the amplitude dispersion, mean, and PS files.
@@ -65,11 +65,11 @@ def create_ps(
         data from the current SLC stack.
         If False, simply uses the existing files to create as PS mask.
         Default is False.
-    block_size_gb : int, optional
-        The maximum amount of data to read at a time (in GB).
-        Default is 1.0 GB.
+    block_shape : tuple[int, int], optional
+        The 2D block size to load all bands at a time.
+        Default is (512, 512)
     show_progress : bool, default=True
-        If true, displays a `rich` ProgressBar.
+        If true, displays a `rich.ProgressBar`.
     """
     if existing_amp_dispersion_file and existing_amp_mean_file and not update_existing:
         logger.info("Using existing amplitude dispersion file, skipping calculation.")
@@ -98,8 +98,6 @@ def create_ps(
         )
 
     vrt_stack = VRTStack.from_vrt_file(slc_vrt_file)
-    max_bytes = 1e9 * block_size_gb
-    block_shape = vrt_stack._get_block_shape(max_bytes=max_bytes)
 
     # Initialize the intermediate arrays for the calculation
     magnitude = np.zeros((len(vrt_stack), *block_shape), dtype=np.float32)
@@ -109,7 +107,7 @@ def create_ps(
     writer = io.Writer()
     # Make the generator for the blocks
     block_gen = vrt_stack.iter_blocks(
-        max_bytes=max_bytes,
+        block_shape=block_shape,
         skip_empty=skip_empty,
         nodata_mask=nodata_mask,
         show_progress=show_progress,
@@ -288,7 +286,7 @@ def multilook_ps_mask(
         logger.info(f"{out_path} exists, skipping.")
         return out_path
 
-    ps_mask = io.load_gdal(ps_mask_file, masked=True)
+    ps_mask = io.load_gdal(ps_mask_file, masked=True).astype(bool).filled(False)
     full_rows, full_cols = ps_mask.shape
     ps_mask_looked = utils.take_looks(
         ps_mask, strides["y"], strides["x"], func_type="any", edge_strategy="pad"
@@ -296,7 +294,7 @@ def multilook_ps_mask(
     # make sure it's the same size as the MLE result/temp_coh after padding
     out_rows, out_cols = full_rows // strides["y"], full_cols // strides["x"]
     ps_mask_looked = ps_mask_looked[:out_rows, :out_cols]
-    ps_mask_looked = ps_mask_looked.astype("uint8").filled(255)
+    ps_mask_looked = ps_mask_looked.astype("uint8")
     io.write_arr(
         arr=ps_mask_looked,
         like_filename=ps_mask_file,

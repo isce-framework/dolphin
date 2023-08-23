@@ -13,8 +13,8 @@ import numpy as np
 import pymp
 from numba import cuda, njit
 
+from dolphin._blocks import compute_out_shape
 from dolphin._types import Filename
-from dolphin.io import compute_out_shape
 from dolphin.utils import _get_slices
 
 # CPU version of the covariance matrix computation
@@ -88,16 +88,20 @@ def estimate_stack_covariance_cpu(
             # the input indexes computed from the output idx and strides
             # Note: weirdly, moving these out of the loop causes r_start
             # to be 0 in some cases...
-            r_start = row_strides // 2
-            c_start = col_strides // 2
-            in_r = r_start + out_r * row_strides
-            in_c = c_start + out_c * col_strides
+            in_r_start = row_strides // 2
+            in_c_start = col_strides // 2
+            in_r = in_r_start + out_r * row_strides
+            in_c = in_c_start + out_c * col_strides
 
-            (r_start, r_end), (c_start, c_end) = _get_slices(
-                half_row, half_col, in_r, in_c, rows, cols
-            )
+            # Check if the window is completely in bounds
+            if in_r + half_row >= rows or in_r - half_row < 0:
+                continue
+            if in_c + half_col >= cols or in_c - half_col < 0:
+                continue
+
+            (r0, r1), (c0, c1) = _get_slices(half_row, half_col, in_r, in_c, rows, cols)
             # Read the 3D current chunk
-            samples_stack = slcs_shared[:, r_start:r_end, c_start:c_end]
+            samples_stack = slcs_shared[:, r0:r1, c0:c1]
             # Read the current neighbor mask
             if do_shp:
                 # TODO: this will be different shape than samples_stack at edges
@@ -176,19 +180,25 @@ def estimate_stack_covariance_gpu(
     # Get the global position within the 2D GPU grid
     out_x, out_y = cuda.grid(2)
     out_rows, out_cols = C_out.shape[:2]
-    # Check if we are within the bounds of the array
-    if out_y >= out_rows or out_x >= out_cols:
-        return
 
+    # Convert the output locations to higher-res input locations
     row_strides, col_strides = strides_rowcol
     r1 = row_strides // 2
     c1 = col_strides // 2
     in_r = r1 + out_y * row_strides
     in_c = c1 + out_x * col_strides
+    N, rows, cols = slc_stack.shape
 
     half_row, half_col = halfwin_rowcol
+    # # Check if we are within the bounds of the array
+    # if out_y >= out_rows or out_x >= out_cols:
+    #     return
+    # Check if the window is completely in bounds
+    if in_r + half_row >= rows or in_r - half_row < 0:
+        return
+    if in_c + half_col >= cols or in_c - half_col < 0:
+        return
 
-    N, rows, cols = slc_stack.shape
     # Get the input slices, clamping the window to the image bounds
     (r_start, r_end), (c_start, c_end) = _get_slices(
         half_row, half_col, in_r, in_c, rows, cols

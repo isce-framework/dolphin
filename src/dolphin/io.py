@@ -20,6 +20,7 @@ from osgeo import gdal
 from pyproj import CRS
 
 from dolphin._background import _DEFAULT_TIMEOUT, BackgroundReader, BackgroundWriter
+from dolphin._blocks import compute_out_shape, iter_blocks
 from dolphin._log import get_log
 from dolphin._types import Bbox, Filename
 from dolphin.utils import gdal_to_numpy_type, numpy_to_gdal_type, progress
@@ -375,44 +376,6 @@ def _apply_gt(
     return x, y
 
 
-def compute_out_shape(
-    shape: tuple[int, int], strides: dict[str, int]
-) -> tuple[int, int]:
-    """Calculate the output size for an input `shape` and row/col `strides`.
-
-    Parameters
-    ----------
-    shape : tuple[int, int]
-        Input size: (rows, cols)
-    strides : dict[str, int]
-        {"x": x strides, "y": y strides}
-
-    Returns
-    -------
-    out_shape : tuple[int, int]
-        Size of output after striding
-
-    Notes
-    -----
-    If there is not a full window (of size `strides`), the end
-    will get cut off rather than padded with a partial one.
-    This should match the output size of `[dolphin.utils.take_looks][]`.
-
-    As a 1D example, in array of size 6 with `strides`=3 along this dim,
-    we could expect the pixels to be centered on indexes
-    `[1, 4]`.
-
-        [ 0  1  2   3  4  5]
-
-    So the output size would be 2, since we have 2 full windows.
-    If the array size was 7 or 8, we would have 2 full windows and 1 partial,
-    so the output size would still be 2.
-    """
-    rows, cols = shape
-    rs, cs = strides["y"], strides["x"]
-    return (rows // rs, cols // cs)
-
-
 def write_arr(
     *,
     arr: Optional[ArrayLike],
@@ -703,8 +666,12 @@ class FileInfo:
 class Writer(BackgroundWriter):
     """Class to write data to files in a background thread."""
 
-    def __init__(self, max_queue: int = 0, **kwargs):
-        super().__init__(nq=max_queue, name="Writer", **kwargs)
+    def __init__(self, max_queue: int = 0, debug: bool = False, **kwargs):
+        if debug is False:
+            super().__init__(nq=max_queue, name="Writer", **kwargs)
+        else:
+            # Don't start a background thread. Just synchronously write data
+            self.queue_write = lambda *args: write_block(*args)  # type: ignore
 
     def write(
         self, data: ArrayLike, filename: Filename, row_start: int, col_start: int
@@ -755,7 +722,7 @@ class EagerLoader(BackgroundReader):
         xsize, ysize = get_raster_xysize(filename)
         # convert the slice generator to a list so we have the size
         self.slices = list(
-            _slice_iterator(
+            iter_blocks(
                 arr_shape=(ysize, xsize),
                 block_shape=block_shape,
                 overlaps=overlaps,
@@ -808,75 +775,6 @@ class EagerLoader(BackgroundReader):
                 yield cur_block, (rows, cols)
 
         self.notify_finished()
-
-
-def _slice_iterator(
-    arr_shape: tuple[int, int],
-    block_shape: tuple[int, int],
-    overlaps: tuple[int, int] = (0, 0),
-    start_offsets: tuple[int, int] = (0, 0),
-):
-    """Create a generator to get indexes for accessing blocks of a raster.
-
-    Parameters
-    ----------
-    arr_shape : tuple[int, int]
-        (num_rows, num_cols), full size of array to access
-    block_shape : tuple[int, int]
-        (height, width), size of blocks to load
-    overlaps : tuple[int, int], default = (0, 0)
-        (row_overlap, col_overlap), number of pixels to re-include from
-        the previous block after sliding
-    start_offsets : tuple[int, int], default = (0, 0)
-        Offsets from top left to start reading from
-
-    Yields
-    ------
-    tuple[slice, slice]
-        Iterator of (slice(row_start, row_stop), slice(col_start, col_stop))
-
-    Examples
-    --------
-        >>> list(_slice_iterator((180, 250), (100, 100)))
-        [(slice(0, 100, None), slice(0, 100, None)), (slice(0, 100, None), \
-slice(100, 200, None)), (slice(0, 100, None), slice(200, 250, None)), \
-(slice(100, 180, None), slice(0, 100, None)), (slice(100, 180, None), \
-slice(100, 200, None)), (slice(100, 180, None), slice(200, 250, None))]
-        >>> list(_slice_iterator((180, 250), (100, 100), overlaps=(10, 10)))
-        [(slice(0, 100, None), slice(0, 100, None)), (slice(0, 100, None), \
-slice(90, 190, None)), (slice(0, 100, None), slice(180, 250, None)), \
-(slice(90, 180, None), slice(0, 100, None)), (slice(90, 180, None), \
-slice(90, 190, None)), (slice(90, 180, None), slice(180, 250, None))]
-    """
-    rows, cols = arr_shape
-    row_off, col_off = start_offsets
-    row_overlap, col_overlap = overlaps
-    height, width = block_shape
-
-    if height is None:
-        height = rows
-    if width is None:
-        width = cols
-
-    # Check we're not moving backwards with the overlap:
-    if row_overlap >= height and height != rows:
-        raise ValueError(f"{row_overlap = } must be less than block height {height}")
-    if col_overlap >= width and width != cols:
-        raise ValueError(f"{col_overlap = } must be less than block width {width}")
-    while row_off < rows:
-        while col_off < cols:
-            row_end = min(row_off + height, rows)  # Dont yield something OOB
-            col_end = min(col_off + width, cols)
-            yield (slice(row_off, row_end), slice(col_off, col_end))
-
-            col_off += width
-            if col_off < cols:  # dont bring back if already at edge
-                col_off -= col_overlap
-
-        row_off += height
-        if row_off < rows:
-            row_off -= row_overlap
-        col_off = 0
 
 
 def get_max_block_shape(

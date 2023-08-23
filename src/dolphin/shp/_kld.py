@@ -4,7 +4,7 @@ import numba
 import numpy as np
 from numpy.typing import ArrayLike
 
-from dolphin.io import compute_out_shape
+from dolphin._blocks import compute_out_shape
 
 from ._common import _make_loop_function, _read_cutoff_csv
 

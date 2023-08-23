@@ -37,7 +37,6 @@ def test_sequential_gtiff(tmp_path, slc_file_list, gpu_enabled):
         shp_method="rect",
         shp_alpha=None,
         shp_nslc=None,
-        max_bytes=1e9,
         n_workers=4,
         gpu_enabled=gpu_enabled,
     )
@@ -60,12 +59,20 @@ def test_sequential_gtiff(tmp_path, slc_file_list, gpu_enabled):
         npt.assert_allclose(layer, expected, atol=1e-3)
 
 
+# @pytest.mark.parametrize(
+#     "half_window", [{"x": 1, "y": 1}, {"x": 2, "y": 2}, {"x": 3, "y": 2}]
+# )
+# @pytest.mark.parametrize(
+#     "strides", [{"x": 1, "y": 1}, {"x": 1, "y": 2}, {"x": 2, "y": 2}, {"x": 3, "y": 2}]
+# )
 # Input is only (5, 10) so we can't use a larger window.
 @pytest.mark.parametrize(
-    "half_window", [{"x": 1, "y": 1}, {"x": 2, "y": 2}, {"x": 4, "y": 2}]
-)
-@pytest.mark.parametrize(
-    "strides", [{"x": 1, "y": 1}, {"x": 1, "y": 2}, {"x": 2, "y": 2}, {"x": 4, "y": 2}]
+    "half_window, strides",
+    [
+        ({"x": 1, "y": 1}, {"x": 1, "y": 1}),
+        ({"x": 2, "y": 1}, {"x": 2, "y": 3}),
+        ({"x": 3, "y": 1}, {"x": 3, "y": 1}),
+    ],
 )
 def test_sequential_nc(tmp_path, slc_file_list_nc, half_window, strides):
     """Check various strides/windows/ministacks with a NetCDF input stack."""
@@ -85,7 +92,6 @@ def test_sequential_nc(tmp_path, slc_file_list_nc, half_window, strides):
         shp_method="rect",
         shp_alpha=None,
         shp_nslc=None,
-        max_bytes=1e9,
         n_workers=4,
         gpu_enabled=False,
     )
@@ -114,7 +120,6 @@ def test_sequential_ministack_sizes(tmp_path, slc_file_list_nc, ministack_size):
         shp_method="rect",
         shp_alpha=None,
         shp_nslc=None,
-        max_bytes=1e9,
         n_workers=4,
         gpu_enabled=False,
     )

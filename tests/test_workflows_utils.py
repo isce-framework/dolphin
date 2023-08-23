@@ -8,7 +8,7 @@ from osgeo import gdal
 
 from dolphin import stack
 from dolphin.workflows import group_by_burst
-from dolphin.workflows._utils import setup_output_folder
+from dolphin.workflows.single import setup_output_folder
 
 
 def test_group_by_burst():

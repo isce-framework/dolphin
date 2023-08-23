@@ -7,8 +7,8 @@ import numpy as np
 from numba import cuda
 from numpy.typing import ArrayLike
 
+from dolphin._blocks import compute_out_shape
 from dolphin._log import get_log
-from dolphin.io import compute_out_shape
 from dolphin.utils import _get_slices
 
 from ._common import remove_unconnected

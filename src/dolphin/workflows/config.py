@@ -206,10 +206,9 @@ class WorkerSettings(BaseModel, extra=Extra.forbid):
             " for wrapped-phase-estimation."
         ),
     )
-    block_size_gb: float = Field(
-        1.0,
-        description="Size (in GB) of blocks of data to load at a time.",
-        gt=0.001,
+    block_shape: tuple[int, int] = Field(
+        (512, 512),
+        description="Size (rows, columns) of blocks of data to load at a time.",
     )
 
 

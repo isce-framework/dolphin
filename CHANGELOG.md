@@ -4,6 +4,12 @@
 
 - Save a multilooked version of the PS mask for output inspection
 
+**Changed**
+
+- Refectored the blockwise IO into `_blocks.py`.
+  - The iteration now happens over the output grid for easier dilating/padding when using `strides`
+  - New classes with `BlockIndices` and `BlockManager` for easier mangement of the different slices
+
 # [0.2.0](https://github.com/opera-adt/dolphin/compare/v0.1.0...v0.2.0) - 2023-07-25
 
 **Added**

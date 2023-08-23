@@ -8,23 +8,32 @@ References
 """
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
 import numpy as np
+from numpy.typing import DTypeLike
 
 from dolphin import io, shp
+from dolphin._blocks import BlockManager
 from dolphin._log import get_log
 from dolphin._types import Filename
 from dolphin.phase_link import PhaseLinkRuntimeError, compress, run_mle
 from dolphin.stack import VRTStack
 
 from ._enums import ShpMethod
-from ._utils import setup_output_folder
 
 logger = get_log(__name__)
 
 __all__ = ["run_wrapped_phase_single"]
+
+
+@dataclass
+class OutputFile:
+    filename: Path
+    dtype: DTypeLike
+    strides: Optional[dict[str, int]] = None
 
 
 def run_wrapped_phase_single(
@@ -41,10 +50,11 @@ def run_wrapped_phase_single(
     amp_dispersion_file: Optional[Filename] = None,
     shp_method: ShpMethod = ShpMethod.NONE,
     shp_alpha: float = 0.05,
-    shp_nslc: Optional[int],
-    max_bytes: float = 32e6,
+    shp_nslc: Optional[int] = None,
+    block_shape: tuple[int, int] = (1024, 1024),
     n_workers: int = 1,
     gpu_enabled: bool = True,
+    show_progress: bool = False,
 ) -> tuple[list[Path], Path, Path]:
     """Estimate wrapped phase for one ministack."""
     # TODO: extract common stuff between here and sequential
@@ -92,7 +102,6 @@ def run_wrapped_phase_single(
     amp_stack = None
 
     xhalf, yhalf = half_window["x"], half_window["y"]
-    xs, ys = strides["x"], strides["y"]
 
     # If we were passed any compressed SLCs in `file_list_all`,
     # then we want that index for when we create new compressed SLCs.
@@ -115,7 +124,7 @@ def run_wrapped_phase_single(
     logger.info(msg)
 
     # Create the background writer for this ministack
-    writer = io.Writer()
+    writer = io.Writer(debug=False)
 
     logger.info(
         f"{vrt}: from {Path(vrt.file_list[first_non_comp_idx]).name} to"
@@ -132,69 +141,48 @@ def run_wrapped_phase_single(
         nodata=0,
     )
 
-    # Create the empty compressed SLC file
-    comp_slc_file = output_folder / f"compressed_{start_end}.tif"
-    io.write_arr(
-        arr=None,
-        like_filename=vrt.outfile,
-        output_name=comp_slc_file,
-        nbands=1,
-        nodata=0,
-        # Note that the compressed SLC is the same size as the original SLC
-        # so we skip the `strides` argument
-    )
+    output_files: list[OutputFile] = [
+        OutputFile(output_folder / f"compressed_{start_end}.tif", np.complex64),
+        OutputFile(output_folder / f"tcorr_{start_end}.tif", np.float32, strides),
+        OutputFile(output_folder / f"avg_coh_{start_end}.tif", np.uint16, strides),
+        OutputFile(output_folder / f"shp_counts_{start_end}.tif", np.uint16, strides),
+    ]
+    for op in output_files:
+        io.write_arr(
+            arr=None,
+            like_filename=vrt.outfile,
+            output_name=op.filename,
+            dtype=op.dtype,
+            strides=op.strides,
+            nbands=1,
+            nodata=0,
+        )
 
-    # Create the empty compressed temporal coherence file
-    tcorr_file = output_folder / f"tcorr_{start_end}.tif"
-    io.write_arr(
-        arr=None,
-        like_filename=vrt.outfile,
-        output_name=tcorr_file,
-        nbands=1,
-        dtype=np.float32,
+    # Iterate over the output grid
+    block_manager = BlockManager(
+        arr_shape=(nrows, ncols),
+        block_shape=block_shape,
         strides=strides,
-        nodata=0,
+        half_window=half_window,
     )
-
-    avg_coh_file = output_folder / f"avg_coh_{start_end}.tif"
-    io.write_arr(
-        arr=None,
-        like_filename=vrt.outfile,
-        output_name=avg_coh_file,
-        nbands=1,
-        dtype=np.uint16,
-        strides=strides,
-        nodata=0,
-    )
-
-    # Create the empty compressed SHP count file
-    shp_counts_file = output_folder / f"shp_counts_{start_end}.tif"
-    io.write_arr(
-        arr=None,
-        like_filename=vrt.outfile,
-        output_name=shp_counts_file,
-        nbands=1,
-        dtype=np.uint16,
-        strides=strides,
-        nodata=0,
-    )
-
-    # Iterate over the stack in blocks
-    # Note the overlap to redo the edge effects
-    # TODO: adjust the writing to avoid the overlap
-
-    # Note: dividing by len(stack) since cov is shape (rows, cols, nslc, nslc)
-    # so we need to load less to not overflow memory
-    stack_max_bytes = max_bytes / len(vrt)
-    overlaps = (2 * yhalf, 2 * xhalf)
-    block_gen = vrt.iter_blocks(
-        overlaps=overlaps,
-        max_bytes=stack_max_bytes,
-        skip_empty=True,
-        nodata_mask=nodata_mask,
-        show_progress=False,
-    )
-    for cur_data, (rows, cols) in block_gen:
+    # block_gen = vrt.iter_blocks(
+    #     block_shape=block_shape,
+    #     overlaps=overlaps,
+    #     skip_empty=True,
+    #     nodata_mask=nodata_mask,
+    #     show_progress=show_progress,
+    # )
+    # for cur_data, (rows, cols) in block_gen:
+    blocks = list(block_manager.iter_blocks())
+    logger.info(f"Iterating over {block_shape} blocks, {len(blocks)} total")
+    for (
+        (out_rows, out_cols),
+        (trimmed_rows, trimmed_cols),
+        (in_rows, in_cols),
+        (in_no_pad_rows, in_no_pad_cols),
+    ) in blocks:
+        logger.debug(f"{out_rows = }, {out_cols = }, {in_rows = }, {in_no_pad_rows = }")
+        cur_data = vrt.read_stack(rows=in_rows, cols=in_cols)
         if np.all(cur_data == 0):
             continue
         cur_data = cur_data.astype(np.complex64)
@@ -208,8 +196,8 @@ def run_wrapped_phase_single(
             halfwin_rowcol=(yhalf, xhalf),
             alpha=shp_alpha,
             strides=strides,
-            mean=amp_mean[rows, cols] if amp_mean is not None else None,
-            var=amp_variance[rows, cols] if amp_variance is not None else None,
+            mean=amp_mean[in_rows, in_cols] if amp_mean is not None else None,
+            var=amp_variance[in_rows, in_cols] if amp_variance is not None else None,
             nslc=shp_nslc,
             amp_stack=amp_stack,
             method=shp_method,
@@ -224,17 +212,17 @@ def run_wrapped_phase_single(
                 strides=strides,
                 beta=beta,
                 reference_idx=reference_idx,
-                nodata_mask=nodata_mask[rows, cols],
-                ps_mask=ps_mask[rows, cols],
+                nodata_mask=nodata_mask[in_rows, in_cols],
+                ps_mask=ps_mask[in_rows, in_cols],
                 neighbor_arrays=neighbor_arrays,
-                avg_mag=amp_mean[rows, cols] if amp_mean is not None else None,
+                avg_mag=amp_mean[in_rows, in_cols] if amp_mean is not None else None,
                 n_workers=n_workers,
                 gpu_enabled=gpu_enabled,
             )
         except PhaseLinkRuntimeError as e:
             # note: this is a warning instead of info, since it should
             # get caught at the "skip_empty" step
-            msg = f"At block {rows.start}, {cols.start}: {e}"
+            msg = f"At block {in_rows.start}, {in_cols.start}: {e}"
             if "are all NaNs" in e.args[0]:
                 # Some SLCs in the ministack are all NaNs
                 # This happens from a shifting burst window near the edges,
@@ -248,68 +236,133 @@ def run_wrapped_phase_single(
         np.nan_to_num(cur_mle_stack, copy=False)
         np.nan_to_num(tcorr, copy=False)
 
-        # Save each of the MLE estimates (ignoring the compressed SLCs)
+        # Save each of the MLE estimates (ignoring those corresponding to
+        # compressed SLCs indexes)
         assert len(cur_mle_stack[first_non_comp_idx:]) == len(output_slc_files)
 
-        # Get the location within the output file, shrinking down the slices
-        # Move the starts forward by half the overlap to trim the incomplete
-        # data sections for each output
-        out_row_start = (rows.start + yhalf) // ys
-        out_col_start = (cols.start + xhalf) // xs
-        # Also need to trim the data blocks themselves
-        trim_row_slice = slice(yhalf // ys, -yhalf // ys)
-        trim_col_slice = slice(xhalf // xs, -xhalf // xs)
-
         for img, f in zip(
-            cur_mle_stack[first_non_comp_idx:, trim_row_slice, trim_col_slice],
+            cur_mle_stack[first_non_comp_idx:, trimmed_rows, trimmed_cols],
             output_slc_files,
         ):
-            writer.queue_write(img, f, out_row_start, out_col_start)
+            writer.queue_write(img, f, out_rows.start, out_cols.start)
 
-        # Save the temporal coherence blocks
-        writer.queue_write(
-            tcorr[trim_row_slice, trim_col_slice],
-            tcorr_file,
-            out_row_start,
-            out_col_start,
-        )
-
-        # Save avg coh index
-        if avg_coh is not None:
-            writer.queue_write(
-                avg_coh[trim_row_slice, trim_col_slice],
-                avg_coh_file,
-                out_row_start,
-                out_col_start,
-            )
-
-        # Save the SHP counts for each pixel (if not using Rect window)
+        # Get the SHP counts for each pixel (if not using Rect window)
         shp_counts = np.sum(neighbor_arrays, axis=(-2, -1))
-        writer.queue_write(
-            shp_counts[trim_row_slice, trim_col_slice],
-            shp_counts_file,
-            out_row_start,
-            out_col_start,
-        )
 
+        # Get the inner portion of the full-res SLC data
+        trim_full_col = slice(
+            in_no_pad_cols.start - in_cols.start, in_no_pad_cols.stop - in_cols.stop
+        )
+        trim_full_row = slice(
+            in_no_pad_rows.start - in_rows.start, in_no_pad_rows.stop - in_rows.stop
+        )
         # Compress the ministack using only the non-compressed SLCs
         cur_comp_slc = compress(
-            cur_data[first_non_comp_idx:],
-            cur_mle_stack[first_non_comp_idx:],
+            cur_data[first_non_comp_idx:, trim_full_row, trim_full_col],
+            cur_mle_stack[first_non_comp_idx:, trimmed_rows, trimmed_cols],
         )
+
+        # ### Save results ###
+
         # Save the compressed SLC block
-        # TODO: make a flag? We don't always need to save the compressed SLCs
         writer.queue_write(
-            cur_comp_slc[yhalf:-yhalf, xhalf:-xhalf],
-            comp_slc_file,
-            rows.start + yhalf,
-            cols.start + xhalf,
+            cur_comp_slc,
+            output_files[0].filename,
+            in_no_pad_rows.start,
+            in_no_pad_cols.start,
         )
-        # logger.debug(f"Saved compressed block SLC to {cur_comp_slc_file}")
+
+        # All other outputs are strided (smaller in size)
+        out_datas = [tcorr, avg_coh, shp_counts]
+        for data, output_file in zip(out_datas, output_files[1:]):
+            if data is None:  # May choose to skip some outputs, e.g. "avg_coh"
+                continue
+            writer.queue_write(
+                data[trimmed_rows, trimmed_cols],
+                output_file.filename,
+                out_rows.start,
+                out_cols.start,
+            )
 
     # Block until all the writers for this ministack have finished
     logger.info(f"Waiting to write {writer.num_queued} blocks of data.")
     writer.notify_finished()
     logger.info(f"Finished ministack of size {vrt.shape}.")
 
-    return output_slc_files, comp_slc_file, tcorr_file
+    # TODO: what would make most sense to return here?
+    # return output_slc_files, comp_slc_file, tcorr_file
+    return output_slc_files, output_files[0].filename, output_files[1].filename
+
+
+def setup_output_folder(
+    vrt_stack,
+    driver: str = "GTiff",
+    dtype="complex64",
+    start_idx: int = 0,
+    strides: dict[str, int] = {"y": 1, "x": 1},
+    nodata: Optional[float] = 0,
+    output_folder: Optional[Path] = None,
+) -> list[Path]:
+    """Create empty output files for each band after `start_idx` in `vrt_stack`.
+
+    Also creates an empty file for the compressed SLC.
+    Used to prepare output for block processing.
+
+    Parameters
+    ----------
+    vrt_stack : VRTStack
+        object containing the current stack of SLCs
+    driver : str, optional
+        Name of GDAL driver, by default "GTiff"
+    dtype : str, optional
+        Numpy datatype of output files, by default "complex64"
+    start_idx : int, optional
+        Index of vrt_stack to begin making output files.
+        This should match the ministack index to avoid re-creating the
+        past compressed SLCs.
+    strides : dict[str, int], optional
+        Strides to use when creating the empty files, by default {"y": 1, "x": 1}
+        Larger strides will create smaller output files, computed using
+        [dolphin.io.compute_out_shape][]
+    nodata : float, optional
+        Nodata value to use for the output files, by default 0.
+    output_folder : Path, optional
+        Path to output folder, by default None
+        If None, will use the same folder as the first SLC in `vrt_stack`
+
+    Returns
+    -------
+    list[Path]
+        list of saved empty files.
+    """
+    if output_folder is None:
+        output_folder = vrt_stack.outfile.parent
+
+    date_strs: list[str] = []
+    for d in vrt_stack.dates[start_idx:]:
+        if len(d) == 1:
+            # normal SLC files will have a single date
+            s = d[0].strftime(io.DEFAULT_DATETIME_FORMAT)
+        else:
+            # Compressed SLCs will have 2 dates in the name marking the start and end
+            s = io._format_date_pair(d[0], d[1])
+        date_strs.append(s)
+
+    output_files = []
+    for filename in date_strs:
+        slc_name = Path(filename).stem
+        output_path = output_folder / f"{slc_name}.slc.tif"
+
+        io.write_arr(
+            arr=None,
+            like_filename=vrt_stack.outfile,
+            output_name=output_path,
+            driver=driver,
+            nbands=1,
+            dtype=dtype,
+            strides=strides,
+            nodata=nodata,
+        )
+
+        output_files.append(output_path)
+    return output_files

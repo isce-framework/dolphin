@@ -83,7 +83,7 @@ def run(cfg: Workflow, debug: bool = False) -> tuple[list[Path], Path, Path, Pat
             amp_dispersion_threshold=cfg.ps_options.amp_dispersion_threshold,
             existing_amp_dispersion_file=existing_disp,
             existing_amp_mean_file=existing_amp,
-            block_size_gb=cfg.worker_settings.block_size_gb,
+            block_shape=cfg.worker_settings.block_shape,
         )
 
     # Save a looked version of the PS mask too
@@ -129,7 +129,7 @@ def run(cfg: Workflow, debug: bool = False) -> tuple[list[Path], Path, Path, Pat
                     shp_method=cfg.phase_linking.shp_method,
                     shp_alpha=cfg.phase_linking.shp_alpha,
                     shp_nslc=shp_nslc,
-                    max_bytes=cfg.worker_settings.block_size_gb * 1e9,
+                    block_shape=cfg.worker_settings.block_shape,
                     n_workers=cfg.worker_settings.n_workers,
                     gpu_enabled=cfg.worker_settings.gpu_enabled,
                 )
@@ -150,7 +150,7 @@ def run(cfg: Workflow, debug: bool = False) -> tuple[list[Path], Path, Path, Pat
                     shp_method=cfg.phase_linking.shp_method,
                     shp_alpha=cfg.phase_linking.shp_alpha,
                     shp_nslc=shp_nslc,
-                    max_bytes=cfg.worker_settings.block_size_gb * 1e9,
+                    block_shape=cfg.worker_settings.block_shape,
                     n_workers=cfg.worker_settings.n_workers,
                     gpu_enabled=cfg.worker_settings.gpu_enabled,
                 )

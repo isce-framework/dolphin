@@ -16,9 +16,6 @@ gdal.UseExceptions()
 logger = get_log(__name__)
 
 
-DEFAULT_BLOCK_BYTES = 32e6
-
-
 class VRTStack:
     """Class for creating a virtual stack of raster files.
 
@@ -364,8 +361,7 @@ class VRTStack:
     def iter_blocks(
         self,
         overlaps: tuple[int, int] = (0, 0),
-        block_shape: Optional[tuple[int, int]] = None,
-        max_bytes: Optional[float] = DEFAULT_BLOCK_BYTES,
+        block_shape: tuple[int, int] = (512, 512),
         skip_empty: bool = True,
         nodata_mask: Optional[np.ndarray] = None,
         show_progress: bool = True,
@@ -379,13 +375,9 @@ class VRTStack:
         overlaps : tuple[int, int], optional
             Pixels to overlap each block by (rows, cols)
             By default (0, 0)
-        block_shape : Optional[tuple[int, int]], optional
-            If provided, force the blocks to load in the given shape.
-            Otherwise, calculates how much blocks are possible to load
-            while staying under `max_bytes` that align wit the data's
-            internal chunking/tiling structure.
-        max_bytes : Optional[int], optional
-            RAM size (in Bytes) to attempt to stay under with each loaded block.
+        block_shape : tuple[int, int], optional
+            2D shape of blocks to load at a time.
+            Loads all dates/bands at a time with this shape.
         skip_empty : bool, optional (default True)
             Skip blocks that are entirely empty (all NaNs)
         nodata_mask : bool, optional
@@ -401,9 +393,6 @@ class VRTStack:
             Iterator of (data, (slice(row_start, row_stop), slice(col_start, col_stop))
 
         """
-        if block_shape is None:
-            block_shape = self._get_block_shape(max_bytes=max_bytes)
-
         self._loader = io.EagerLoader(
             self.outfile,
             block_shape=block_shape,
@@ -413,13 +402,6 @@ class VRTStack:
             show_progress=show_progress,
         )
         yield from self._loader.iter_blocks()
-
-    def _get_block_shape(self, max_bytes=DEFAULT_BLOCK_BYTES):
-        return io.get_max_block_shape(
-            self._gdal_file_strings[0],
-            len(self),
-            max_bytes=max_bytes,
-        )
 
     @property
     def shape(self):

@@ -241,7 +241,6 @@ def _compute_burst_ps_files(
                 output_amp_dispersion_file=cur_amp_dispersion,
                 output_file=cur_ps_file,
                 nodata_mask=nodata_mask,
-                block_size_gb=0.2,
             )
         else:
             logger.info(f"Skipping existing {basename} files in {output_folder}")

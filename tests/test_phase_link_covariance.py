@@ -5,7 +5,7 @@ import numpy as np
 import numpy.testing as npt
 import pytest
 
-from dolphin.io import compute_out_shape
+from dolphin._blocks import compute_out_shape
 from dolphin.phase_link import covariance, simulate
 from dolphin.utils import gpu_is_available, take_looks
 

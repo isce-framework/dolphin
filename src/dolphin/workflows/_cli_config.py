@@ -27,7 +27,7 @@ def create_config(
     shp_method: ShpMethod = ShpMethod.GLRT,
     amp_dispersion_threshold: float = 0.25,
     strides: tuple[int, int],
-    block_size_gb: float = 1,
+    block_shape: tuple[int, int] = (512, 512),
     n_workers: int = 4,
     threads_per_worker: int = 4,
     n_parallel_bursts: int = 1,
@@ -75,7 +75,7 @@ def create_config(
             unwrap_method=("icu" if use_icu else "snaphu"),
         ),
         worker_settings=dict(
-            block_size_gb=block_size_gb,
+            block_shape=block_shape,
             n_parallel_bursts=n_parallel_bursts,
             n_workers=n_workers,
             threads_per_worker=threads_per_worker,
@@ -221,10 +221,11 @@ def get_parser(subparser=None, subcommand_name="run"):
         help="Disable the GPU (if using a machine that has one available).",
     )
     worker_group.add_argument(
-        "--block-size-gb",
-        type=float,
-        default=1,
-        help="Size (in GB) of blocks of data to load at once time.",
+        "--block-shape",
+        type=int,
+        nargs=2,
+        default=(512, 512),
+        help="Shape (rows, col) of blocks of data to load at once time.",
     )
     worker_group.add_argument(
         "--n-workers",
