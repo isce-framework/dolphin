@@ -4,7 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import ClassVar, List, Optional
 
-from pydantic import Extra, Field
+from pydantic import ConfigDict, Extra, Field
 
 from ._yaml_model import YamlModel
 from .config import (
@@ -31,12 +31,9 @@ class InputFileGroup(YamlModel):
         ...,
         description="Frame ID of the bursts contained in `cslc_file_list`.",
     )
-
-    class Config:
-        """Pydantic config class."""
-
-        extra = Extra.forbid
-        schema_extra = {"required": ["cslc_file_list", "frame_id"]}
+    model_config = ConfigDict(
+        extra="forbid", json_schema_extra={"required": ["cslc_file_list", "frame_id"]}
+    )
 
 
 class DynamicAncillaryFileGroup(YamlModel, extra=Extra.forbid):
@@ -220,7 +217,7 @@ class RunConfig(YamlModel, extra=Extra.forbid):
         algorithm_parameters = AlgorithmParameters.from_yaml(
             self.dynamic_ancillary_file_group.algorithm_parameters_file
         )
-        param_dict = algorithm_parameters.dict()
+        param_dict = algorithm_parameters.model_dump()
         input_options = dict(subdataset=param_dict.pop("subdataset"))
 
         # This get's unpacked to load the rest of the parameters for the Workflow
@@ -257,7 +254,8 @@ class RunConfig(YamlModel, extra=Extra.forbid):
         This is mostly used as preliminary setup to further edit the fields.
         """
         # Load the algorithm parameters from the file
-        alg_param_dict = workflow.dict(include=AlgorithmParameters.__fields__.keys())
+        algo_keys = set(AlgorithmParameters.model_fields.keys())
+        alg_param_dict = workflow.model_dump(include=algo_keys)
         AlgorithmParameters(**alg_param_dict).to_yaml(algorithm_parameters_file)
         # This get's unpacked to load the rest of the parameters for the Workflow
 

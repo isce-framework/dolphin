@@ -120,7 +120,7 @@ class YamlModel(BaseModel):
         then we update it with the default-filled values
         """
         all_none_vals = dict(zip(cls.schema()["properties"].keys(), repeat(None)))
-        all_none_vals.update(cls.construct().dict())
+        all_none_vals.update(cls.construct().model_dump())
         return all_none_vals
 
     def _to_yaml_obj(self, by_alias: bool = True) -> CommentedMap:
@@ -128,7 +128,7 @@ class YamlModel(BaseModel):
         # We can't just do `dumps` for some reason, need a stream
         y = YAML()
         ss = StringIO()
-        y.dump(json.loads(self.json(by_alias=by_alias)), ss)
+        y.dump(json.loads(self.model_dump_json(by_alias=by_alias)), ss)
         yaml_obj = y.load(ss.getvalue())
         return yaml_obj
 
