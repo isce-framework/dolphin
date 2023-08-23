@@ -1,6 +1,7 @@
 import json
 import sys
 import textwrap
+import warnings
 from io import StringIO
 from itertools import repeat
 from typing import Optional, TextIO, Union
@@ -46,6 +47,7 @@ class YamlModel(BaseModel):
                 yaml_obj,
                 self.model_json_schema(by_alias=by_alias),
                 indent_per_level=indent_per_level,
+                pydantic_class=self.__class__,
             )
 
         y = YAML()
@@ -103,9 +105,13 @@ class YamlModel(BaseModel):
             Number of spaces to indent per level.
         """
         full_dict = cls._construct_empty()
-        cls.construct(**full_dict).to_yaml(
-            output_path, with_comments=True, indent_per_level=indent_per_level
-        )
+        # UserWarning: Pydantic serializer warnings:
+        # New V2 warning, but seems harmless for just printing the schema
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=UserWarning, message="Pydantic*")
+            cls.model_construct(**full_dict).to_yaml(
+                output_path, with_comments=True, indent_per_level=indent_per_level
+            )
 
     @classmethod
     def _construct_empty(cls):
@@ -122,7 +128,7 @@ class YamlModel(BaseModel):
         all_none_vals = dict(
             zip(cls.model_json_schema()["properties"].keys(), repeat(None))
         )
-        all_none_vals.update(cls.construct().model_dump())
+        all_none_vals.update(cls.model_construct().model_dump())
         return all_none_vals
 
     def _to_yaml_obj(self, by_alias: bool = True) -> CommentedMap:
@@ -142,6 +148,7 @@ def _add_comments(
     definitions: Optional[dict] = None,
     # variable specifying how much to indent per level
     indent_per_level: int = 2,
+    pydantic_class=None,
 ):
     """Add comments above each YAML field using the pydantic model schema."""
     # Definitions are in schemas that contain nested pydantic Models
@@ -191,7 +198,7 @@ def _add_comments(
         if "anyOf" in val.keys():
             #   'anyOf': [{'type': 'string'}, {'type': 'null'}],
             # Join the options with a pipe, like Python types
-            type_str = "|".join(d["type"] for d in val["anyOf"])
+            type_str = " | ".join(d["type"] for d in val["anyOf"])
             type_str.replace("null", "None")
         else:
             type_str = val["type"]

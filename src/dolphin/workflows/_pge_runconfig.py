@@ -175,9 +175,9 @@ class RunConfig(YamlModel, extra="forbid"):
         description="Path to the output log file in addition to logging to stderr.",
     )
 
-    # Override the constructor to allow recursively construct without validation
+    # Override the constructor to allow recursively model_construct without validation
     @classmethod
-    def construct(cls, **kwargs):
+    def model_construct(cls, **kwargs):
         if "input_file_group" not in kwargs:
             kwargs["input_file_group"] = InputFileGroup._construct_empty()
         if "dynamic_ancillary_file_group" not in kwargs:
@@ -186,7 +186,7 @@ class RunConfig(YamlModel, extra="forbid"):
             )
         if "product_path_group" not in kwargs:
             kwargs["product_path_group"] = ProductPathGroup._construct_empty()
-        return super().construct(
+        return super().model_construct(
             **kwargs,
         )
 
