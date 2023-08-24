@@ -6,7 +6,14 @@ from glob import glob
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from pydantic import BaseModel, Extra, Field, PrivateAttr, root_validator, validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    PrivateAttr,
+    field_validator,
+    model_validator,
+)
 
 from dolphin import __version__ as _dolphin_version
 from dolphin._log import get_log
@@ -24,10 +31,7 @@ __all__ = [
 logger = get_log(__name__)
 
 # Specific to OPERA CSLC products:
-# TODO: this will become f"/" in upcoming OPERA release
-# We may want to keep ths old for compatibility for awhile?
 OPERA_DATASET_ROOT = "/"
-# TODO: this will become f"{OPERA_DATASET_ROOT}/data/VV"
 OPERA_DATASET_NAME = f"{OPERA_DATASET_ROOT}/data/VV"
 OPERA_IDENTIFICATION = f"{OPERA_DATASET_ROOT}/identification"
 
@@ -37,7 +41,7 @@ OPERA_BURST_RE = re.compile(
 )
 
 
-class PsOptions(BaseModel, extra=Extra.forbid):
+class PsOptions(BaseModel, extra="forbid"):
     """Options for the PS pixel selection portion of the workflow."""
 
     _directory: Path = PrivateAttr(Path("PS"))
@@ -52,7 +56,7 @@ class PsOptions(BaseModel, extra=Extra.forbid):
     )
 
 
-class HalfWindow(BaseModel, extra=Extra.forbid):
+class HalfWindow(BaseModel, extra="forbid"):
     """Class to hold half-window size for multi-looking during phase linking."""
 
     x: int = Field(11, description="Half window size (in pixels) for x direction", gt=0)
@@ -68,7 +72,7 @@ class HalfWindow(BaseModel, extra=Extra.forbid):
         return cls(x=col_looks // 2, y=row_looks // 2)
 
 
-class PhaseLinkingOptions(BaseModel, extra=Extra.forbid):
+class PhaseLinkingOptions(BaseModel, extra="forbid"):
     """Configurable options for wrapped phase estimation."""
 
     _directory: Path = PrivateAttr(Path("linked_phase"))
@@ -94,7 +98,7 @@ class PhaseLinkingOptions(BaseModel, extra=Extra.forbid):
     )
 
 
-class InterferogramNetwork(BaseModel, extra=Extra.forbid):
+class InterferogramNetwork(BaseModel, extra="forbid"):
     """Options to determine the type of network for interferogram formation."""
 
     _directory: Path = PrivateAttr(Path("interferograms"))
@@ -125,11 +129,11 @@ class InterferogramNetwork(BaseModel, extra=Extra.forbid):
     network_type: InterferogramNetworkType = InterferogramNetworkType.SINGLE_REFERENCE
 
     # validation
-    @root_validator
-    def _check_network_type(cls, values):
-        ref_idx = values.get("reference_idx")
-        max_bw = values.get("max_bandwidth")
-        max_tb = values.get("max_temporal_baseline")
+    @model_validator(mode="after")
+    def _check_network_type(self) -> "InterferogramNetwork":
+        ref_idx = self.reference_idx
+        max_bw = self.max_bandwidth
+        max_tb = self.max_temporal_baseline
         # Check if more than one has been set:
         if sum([ref_idx is not None, max_bw is not None, max_tb is not None]) > 1:
             raise ValueError(
@@ -137,22 +141,22 @@ class InterferogramNetwork(BaseModel, extra=Extra.forbid):
                 " `max_temporal_baseline` can be set."
             )
         if max_tb is not None:
-            values["network_type"] = InterferogramNetworkType.MAX_TEMPORAL_BASELINE
-            return values
+            self.network_type = InterferogramNetworkType.MAX_TEMPORAL_BASELINE
+            return self
 
         if max_bw is not None:
-            values["network_type"] = InterferogramNetworkType.MAX_BANDWIDTH
-            return values
+            self.network_type = InterferogramNetworkType.MAX_BANDWIDTH
+            return self
 
         # If nothing else specified, set to a single reference network
-        values["network_type"] = InterferogramNetworkType.SINGLE_REFERENCE
+        self.network_type = InterferogramNetworkType.SINGLE_REFERENCE
         # and make sure the reference index is set
         if ref_idx is None:
-            values["reference_idx"] = 0
-        return values
+            self.reference_idx = 0
+        return self
 
 
-class UnwrapOptions(BaseModel, extra=Extra.forbid):
+class UnwrapOptions(BaseModel, extra="forbid"):
     """Options for unwrapping after wrapped phase estimation."""
 
     run_unwrap: bool = Field(
@@ -163,7 +167,7 @@ class UnwrapOptions(BaseModel, extra=Extra.forbid):
     )
     _directory: Path = PrivateAttr(Path("unwrapped"))
     unwrap_method: UnwrapMethod = UnwrapMethod.SNAPHU
-    tiles: List[int] = Field(
+    tiles: list[int] = Field(
         [1, 1],
         description=(
             "Number of tiles to split the unwrapping into (for multi-scale unwrapping)."
@@ -175,7 +179,7 @@ class UnwrapOptions(BaseModel, extra=Extra.forbid):
     )
 
 
-class WorkerSettings(BaseModel, extra=Extra.forbid):
+class WorkerSettings(BaseModel, extra="forbid"):
     """Settings for controlling CPU/GPU settings and parallelism."""
 
     gpu_enabled: bool = Field(
@@ -212,7 +216,7 @@ class WorkerSettings(BaseModel, extra=Extra.forbid):
     )
 
 
-class InputOptions(BaseModel, extra=Extra.forbid):
+class InputOptions(BaseModel, extra="forbid"):
     """Options specifying input datasets for workflow."""
 
     subdataset: Optional[str] = Field(
@@ -229,7 +233,7 @@ class InputOptions(BaseModel, extra=Extra.forbid):
     )
 
 
-class OutputOptions(BaseModel, extra=Extra.forbid):
+class OutputOptions(BaseModel, extra="forbid"):
     """Options for the output size/format/compressions."""
 
     output_resolution: Optional[Dict[str, int]] = Field(
@@ -246,6 +250,7 @@ class OutputOptions(BaseModel, extra=Extra.forbid):
             " strides of [4, 2] would turn an input resolution of [5, 10] into an"
             " output resolution of [20, 20]."
         ),
+        validate_default=True,
     )
     bounds: Optional[Bbox] = Field(
         None,
@@ -268,17 +273,12 @@ class OutputOptions(BaseModel, extra=Extra.forbid):
     )
 
     # validators
-    @validator("output_resolution", "strides", pre=True, always=True)
-    def _check_resolution(cls, v):
-        """Allow the user to specify just one float, applying to both dimensions."""
-        if isinstance(v, (int, float)):
-            return {"x": v, "y": v}
-        return v
 
-    @validator("strides", always=True)
-    def _check_strides_against_res(cls, strides, values):
+    @field_validator("strides")
+    @classmethod
+    def _check_strides_against_res(cls, strides, info):
         """Compute the output resolution from the strides."""
-        resolution = values.get("output_resolution")
+        resolution = info.data.get("output_resolution")
         if strides is not None and resolution is not None:
             raise ValueError("Cannot specify both strides and output_resolution.")
         elif strides is None and resolution is None:
@@ -329,10 +329,12 @@ class Workflow(YamlModel):
     scratch_directory: Path = Field(
         Path("scratch"),
         description="Name of sub-directory to use for scratch files",
+        validate_default=True,
     )
     output_directory: Path = Field(
         Path("output"),
         description="Name of sub-directory to use for output files",
+        validate_default=True,
     )
 
     # Options for each step in the workflow
@@ -376,24 +378,23 @@ class Workflow(YamlModel):
     creation_time_utc: datetime = Field(
         default_factory=datetime.utcnow, description="Time the config file was created"
     )
-    dolphin_version: str = Field(
-        _dolphin_version, description="Version of Dolphin used."
-    )
+    _dolphin_version: str = PrivateAttr(_dolphin_version)
 
     # internal helpers
     # Stores the list of directories to be created by the workflow
     _directory_list: List[Path] = PrivateAttr(default_factory=list)
+    model_config = ConfigDict(
+        extra="forbid", json_schema_extra={"required": ["cslc_file_list"]}
+    )
 
-    class Config:
-        extra = Extra.forbid
-        schema_extra = {"required": ["cslc_file_list"]}
-
-    @validator("output_directory", "scratch_directory", always=True)
-    def _dir_is_absolute(cls, v):
+    @field_validator("output_directory", "scratch_directory")
+    @classmethod
+    def _make_dir_absolute(cls, v: Path):
         return v.resolve()
 
     # validators
-    @validator("cslc_file_list", pre=True)
+    @field_validator("cslc_file_list", mode="before")
+    @classmethod
     def _check_input_file_list(cls, v):
         if v is None:
             return []
@@ -422,13 +423,13 @@ class Workflow(YamlModel):
             re.search(OPERA_BURST_RE, str(f)) is not None for f in cslc_file_list
         )
 
-    @root_validator
-    def _check_slc_files_exist(cls, values):
-        file_list = values.get("cslc_file_list")
+    @model_validator(mode="after")
+    def _check_slc_files_exist(self) -> "Workflow":
+        file_list = self.cslc_file_list
         if not file_list:
             raise ValueError("Must specify list of input SLC files.")
 
-        input_options = values.get("input_options")
+        input_options = self.input_options
         date_fmt = input_options.cslc_date_fmt
         # Filter out files that don't have dates in the filename
         file_matching_date = [Path(f) for f in file_list if get_dates(f, fmt=date_fmt)]
@@ -443,7 +444,7 @@ class Workflow(YamlModel):
         if ext in [".h5", ".nc"]:
             subdataset = input_options.subdataset
             if subdataset is None:
-                if cls._is_opera_file_list(file_list):
+                if self._is_opera_file_list(file_list):
                     # Assume that the user forgot to set the subdataset, and set it to the
                     # default OPERA dataset name
                     logger.info(
@@ -457,9 +458,10 @@ class Workflow(YamlModel):
                     )
 
         # Coerce the file_list to a sorted list of Path objects
-        file_list, _ = sort_files_by_date(file_list, file_date_fmt=date_fmt)
-        values["cslc_file_list"] = [Path(f) for f in file_list]
-        return values
+        self.cslc_file_list = [
+            Path(f) for f in sort_files_by_date(file_list, file_date_fmt=date_fmt)[0]
+        ]
+        return self
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         """After validation, set up properties for use during workflow run."""

@@ -1,6 +1,7 @@
 import json
 import sys
 import textwrap
+import warnings
 from io import StringIO
 from itertools import repeat
 from typing import Optional, TextIO, Union
@@ -44,8 +45,9 @@ class YamlModel(BaseModel):
         if with_comments:
             _add_comments(
                 yaml_obj,
-                self.schema(by_alias=by_alias),
+                self.model_json_schema(by_alias=by_alias),
                 indent_per_level=indent_per_level,
+                pydantic_class=self.__class__,
             )
 
         y = YAML()
@@ -103,9 +105,13 @@ class YamlModel(BaseModel):
             Number of spaces to indent per level.
         """
         full_dict = cls._construct_empty()
-        cls.construct(**full_dict).to_yaml(
-            output_path, with_comments=True, indent_per_level=indent_per_level
-        )
+        # UserWarning: Pydantic serializer warnings:
+        # New V2 warning, but seems harmless for just printing the schema
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=UserWarning)
+            cls.model_construct(**full_dict).to_yaml(
+                output_path, with_comments=True, indent_per_level=indent_per_level
+            )
 
     @classmethod
     def _construct_empty(cls):
@@ -119,8 +125,10 @@ class YamlModel(BaseModel):
         so first, we manually make a dict of all the fields with None values
         then we update it with the default-filled values
         """
-        all_none_vals = dict(zip(cls.schema()["properties"].keys(), repeat(None)))
-        all_none_vals.update(cls.construct().dict())
+        all_none_vals = dict(
+            zip(cls.model_json_schema()["properties"].keys(), repeat(None))
+        )
+        all_none_vals.update(cls.model_construct().model_dump())
         return all_none_vals
 
     def _to_yaml_obj(self, by_alias: bool = True) -> CommentedMap:
@@ -128,7 +136,7 @@ class YamlModel(BaseModel):
         # We can't just do `dumps` for some reason, need a stream
         y = YAML()
         ss = StringIO()
-        y.dump(json.loads(self.json(by_alias=by_alias)), ss)
+        y.dump(json.loads(self.model_dump_json(by_alias=by_alias)), ss)
         yaml_obj = y.load(ss.getvalue())
         return yaml_obj
 
@@ -140,11 +148,12 @@ def _add_comments(
     definitions: Optional[dict] = None,
     # variable specifying how much to indent per level
     indent_per_level: int = 2,
+    pydantic_class=None,
 ):
     """Add comments above each YAML field using the pydantic model schema."""
     # Definitions are in schemas that contain nested pydantic Models
     if definitions is None:
-        definitions = schema.get("definitions")
+        definitions = schema.get("$defs")
 
     for key, val in schema["properties"].items():
         reference = ""
@@ -186,11 +195,18 @@ def _add_comments(
                 subsequent_indent=" " * indent_per_level,
             )
         )
-        type_str = f"\n  Type: {val['type']}."
+        if "anyOf" in val.keys():
+            #   'anyOf': [{'type': 'string'}, {'type': 'null'}],
+            # Join the options with a pipe, like Python types
+            type_str = " | ".join(d["type"] for d in val["anyOf"])
+            type_str.replace("null", "None")
+        else:
+            type_str = val["type"]
+        type_line = f"\n  Type: {type_str}."
         choices = f"\n  Options: {val['enum']}." if "enum" in val.keys() else ""
 
         # Combine the description/type/choices as the YAML comment
-        comment = f"{desc}{type_str}{choices}"
+        comment = f"{desc}{type_line}{choices}"
         comment = comment.replace("..", ".")  # Remove double periods
 
         # Prepend the required label for fields that are required

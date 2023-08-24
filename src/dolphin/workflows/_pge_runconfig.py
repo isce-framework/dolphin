@@ -4,7 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import ClassVar, List, Optional
 
-from pydantic import Extra, Field
+from pydantic import ConfigDict, Field
 
 from ._yaml_model import YamlModel
 from .config import (
@@ -31,15 +31,12 @@ class InputFileGroup(YamlModel):
         ...,
         description="Frame ID of the bursts contained in `cslc_file_list`.",
     )
-
-    class Config:
-        """Pydantic config class."""
-
-        extra = Extra.forbid
-        schema_extra = {"required": ["cslc_file_list", "frame_id"]}
+    model_config = ConfigDict(
+        extra="forbid", json_schema_extra={"required": ["cslc_file_list", "frame_id"]}
+    )
 
 
-class DynamicAncillaryFileGroup(YamlModel, extra=Extra.forbid):
+class DynamicAncillaryFileGroup(YamlModel, extra="forbid"):
     """A group of dynamic ancillary files."""
 
     algorithm_parameters_file: Path = Field(  # type: ignore
@@ -101,7 +98,7 @@ class DynamicAncillaryFileGroup(YamlModel, extra=Extra.forbid):
     )
 
 
-class PrimaryExecutable(YamlModel, extra=Extra.forbid):
+class PrimaryExecutable(YamlModel, extra="forbid"):
     """Group describing the primary executable."""
 
     product_type: str = Field(
@@ -110,7 +107,7 @@ class PrimaryExecutable(YamlModel, extra=Extra.forbid):
     )
 
 
-class ProductPathGroup(YamlModel, extra=Extra.forbid):
+class ProductPathGroup(YamlModel, extra="forbid"):
     """Group describing the product paths."""
 
     product_path: Path = Field(  # type: ignore
@@ -142,7 +139,7 @@ class ProductPathGroup(YamlModel, extra=Extra.forbid):
     )
 
 
-class AlgorithmParameters(YamlModel, extra=Extra.forbid):
+class AlgorithmParameters(YamlModel, extra="forbid"):
     """Class containing all the other [`Workflow`][dolphin.workflows.config] classes."""
 
     # Options for each step in the workflow
@@ -159,7 +156,7 @@ class AlgorithmParameters(YamlModel, extra=Extra.forbid):
     )
 
 
-class RunConfig(YamlModel, extra=Extra.forbid):
+class RunConfig(YamlModel, extra="forbid"):
     """A PGE run configuration."""
 
     # Used for the top-level key
@@ -178,9 +175,9 @@ class RunConfig(YamlModel, extra=Extra.forbid):
         description="Path to the output log file in addition to logging to stderr.",
     )
 
-    # Override the constructor to allow recursively construct without validation
+    # Override the constructor to allow recursively model_construct without validation
     @classmethod
-    def construct(cls, **kwargs):
+    def model_construct(cls, **kwargs):
         if "input_file_group" not in kwargs:
             kwargs["input_file_group"] = InputFileGroup._construct_empty()
         if "dynamic_ancillary_file_group" not in kwargs:
@@ -189,7 +186,7 @@ class RunConfig(YamlModel, extra=Extra.forbid):
             )
         if "product_path_group" not in kwargs:
             kwargs["product_path_group"] = ProductPathGroup._construct_empty()
-        return super().construct(
+        return super().model_construct(
             **kwargs,
         )
 
@@ -220,7 +217,7 @@ class RunConfig(YamlModel, extra=Extra.forbid):
         algorithm_parameters = AlgorithmParameters.from_yaml(
             self.dynamic_ancillary_file_group.algorithm_parameters_file
         )
-        param_dict = algorithm_parameters.dict()
+        param_dict = algorithm_parameters.model_dump()
         input_options = dict(subdataset=param_dict.pop("subdataset"))
 
         # This get's unpacked to load the rest of the parameters for the Workflow
@@ -257,7 +254,8 @@ class RunConfig(YamlModel, extra=Extra.forbid):
         This is mostly used as preliminary setup to further edit the fields.
         """
         # Load the algorithm parameters from the file
-        alg_param_dict = workflow.dict(include=AlgorithmParameters.__fields__.keys())
+        algo_keys = set(AlgorithmParameters.model_fields.keys())
+        alg_param_dict = workflow.model_dump(include=algo_keys)
         AlgorithmParameters(**alg_param_dict).to_yaml(algorithm_parameters_file)
         # This get's unpacked to load the rest of the parameters for the Workflow
 

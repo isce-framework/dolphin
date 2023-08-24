@@ -39,7 +39,7 @@ def run(
     """
     # Set the logging level for all `dolphin.` modules
     logger = get_log(name="dolphin", debug=debug, filename=cfg.log_file)
-    logger.debug(pformat(cfg.dict()))
+    logger.debug(pformat(cfg.model_dump()))
     cfg.create_dir_tree(debug=debug)
 
     set_num_threads(cfg.worker_settings.threads_per_worker)
@@ -171,7 +171,7 @@ def run(
     # Print the maximum memory usage for each worker
     max_mem = get_max_memory_usage(units="GB")
     logger.info(f"Maximum memory usage: {max_mem:.2f} GB")
-    logger.info(f"Config file dolphin version: {cfg.dolphin_version}")
+    logger.info(f"Config file dolphin version: {cfg._dolphin_version}")
     logger.info(f"Current running dolphin version: {__version__}")
 
 
@@ -182,7 +182,7 @@ def _create_burst_cfg(
     grouped_amp_mean_files: dict[str, list[Path]],
     grouped_amp_dispersion_files: dict[str, list[Path]],
 ) -> Workflow:
-    cfg_temp_dict = cfg.copy(deep=True, exclude={"cslc_file_list"}).dict()
+    cfg_temp_dict = cfg.model_dump(exclude={"cslc_file_list"})
 
     # Just update the inputs and the scratch directory
     top_level_scratch = cfg_temp_dict["scratch_directory"]

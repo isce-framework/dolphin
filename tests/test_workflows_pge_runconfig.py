@@ -1,4 +1,5 @@
 import sys
+import warnings
 
 import pytest
 
@@ -13,11 +14,15 @@ from dolphin.workflows._pge_runconfig import (
 
 
 def test_algorithm_parameters_schema():
-    AlgorithmParameters.print_yaml_schema()
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=UserWarning)
+        AlgorithmParameters.print_yaml_schema()
 
 
 def test_run_config_schema():
-    RunConfig.print_yaml_schema()
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=UserWarning)
+        RunConfig.print_yaml_schema()
 
 
 @pytest.fixture

@@ -15,7 +15,7 @@ def test_half_window_defaults():
     hw = config.HalfWindow()
     assert hw.x == 11
     assert hw.y == 5
-    assert hw.dict() == dict(x=11, y=5)
+    assert hw.model_dump() == dict(x=11, y=5)
 
 
 def test_half_window_to_looks():
@@ -166,7 +166,7 @@ def test_input_find_slcs(slc_file_list_nc):
     opts2 = config.Workflow(
         cslc_file_list=cslc_dir / "slclist.txt", input_options={"subdataset": "data"}
     )
-    opts2.dict() == opts.dict()
+    opts2.model_dump() == opts.model_dump()
 
 
 def test_input_glob_pattern(slc_file_list_nc):
@@ -338,8 +338,8 @@ def test_config_roundtrip_dict(dir_with_1_slc):
         cslc_file_list=dir_with_1_slc / "slclist.txt",
         input_options={"subdataset": "data"},
     )
-    c_dict = c.dict()
-    c2 = config.Workflow.parse_obj(c_dict)
+    c_dict = c.model_dump()
+    c2 = config.Workflow(**c_dict)
     assert c == c2
 
 
@@ -348,8 +348,8 @@ def test_config_roundtrip_json(dir_with_1_slc):
         cslc_file_list=dir_with_1_slc / "slclist.txt",
         input_options={"subdataset": "data"},
     )
-    c_json = c.json()
-    c2 = config.Workflow.parse_raw(c_json)
+    c_json = c.model_dump_json()
+    c2 = config.Workflow.model_validate_json(c_json)
     assert c == c2
 
 
@@ -373,3 +373,12 @@ def test_config_roundtrip_yaml_with_comments(tmp_path, dir_with_1_slc):
     c.to_yaml(outfile, with_comments=True)
     c2 = config.Workflow.from_yaml(outfile)
     assert c == c2
+
+
+def test_config_print_yaml_schema(tmp_path, dir_with_1_slc):
+    outfile = tmp_path / "empty_schema.yaml"
+    c = config.Workflow(
+        cslc_file_list=dir_with_1_slc / "slclist.txt",
+        input_options={"subdataset": "data"},
+    )
+    c.print_yaml_schema(outfile)

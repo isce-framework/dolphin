@@ -118,7 +118,7 @@ def run(cfg: Workflow, debug: bool = False) -> tuple[list[Path], Path, Path, Pat
                 single.run_wrapped_phase_single(
                     slc_vrt_file=vrt_stack.outfile,
                     output_folder=pl_path,
-                    half_window=cfg.phase_linking.half_window.dict(),
+                    half_window=cfg.phase_linking.half_window.model_dump(),
                     strides=strides,
                     reference_idx=0,
                     beta=cfg.phase_linking.beta,
@@ -139,7 +139,7 @@ def run(cfg: Workflow, debug: bool = False) -> tuple[list[Path], Path, Path, Pat
                 sequential.run_wrapped_phase_sequential(
                     slc_vrt_file=vrt_stack.outfile,
                     output_folder=pl_path,
-                    half_window=cfg.phase_linking.half_window.dict(),
+                    half_window=cfg.phase_linking.half_window.model_dump(),
                     strides=strides,
                     beta=cfg.phase_linking.beta,
                     ministack_size=cfg.phase_linking.ministack_size,

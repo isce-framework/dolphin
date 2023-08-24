@@ -1,14 +1,21 @@
 # Unreleased
 
+# [0.3.0](https://github.com/opera-adt/dolphin/compare/v0.2.0...v0.3.0) - 2023-08-23
+
 **Added**
 
 - Save a multilooked version of the PS mask for output inspection
 
 **Changed**
 
-- Refectored the blockwise IO into `_blocks.py`.
+- Pydantic models were upgraded to V2
+- Refactored the blockwise IO into `_blocks.py`.
   - The iteration now happens over the output grid for easier dilating/padding when using `strides`
   - New classes with `BlockIndices` and `BlockManager` for easier mangement of the different slices
+
+**Dependencies**
+
+- pydantic >= 2.1
 
 # [0.2.0](https://github.com/opera-adt/dolphin/compare/v0.1.0...v0.2.0) - 2023-07-25
 
