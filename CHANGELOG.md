@@ -1,5 +1,7 @@
 # Unreleased
 
+# [0.3.0](https://github.com/opera-adt/dolphin/compare/v0.2.0...v0.3.0) - 2023-08-23
+
 **Added**
 
 - Save a multilooked version of the PS mask for output inspection
