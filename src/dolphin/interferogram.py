@@ -31,9 +31,9 @@ class VRTInterferogram(BaseModel, extra="allow"):
 
     Attributes
     ----------
-    ref_slc : Path | str
+    ref_slc : Union[Path, str]
         Path to reference SLC file
-    sec_slc : Path | str
+    sec_slc : Union[Path, str]
         Path to secondary SLC file
     path : Optional[Path], optional
         Path to output interferogram. Defaults to Path('<date1>_<date2>.vrt'),
@@ -59,13 +59,13 @@ class VRTInterferogram(BaseModel, extra="allow"):
 
     """
 
-    subdataset: str | None = Field(
+    subdataset: Optional[str] = Field(
         None,
         description="Subdataset to use for the input files. Defaults to None.",
     )
-    ref_slc: Path | str = Field(..., description="Path to reference SLC file")
-    sec_slc: Path | str = Field(..., description="Path to secondary SLC file")
-    outdir: Path | None = Field(
+    ref_slc: Union[Path, str] = Field(..., description="Path to reference SLC file")
+    sec_slc: Union[Path, str] = Field(..., description="Path to secondary SLC file")
+    outdir: Optional[Path] = Field(
         None,
         description=(
             "Directory to place output interferogram. Defaults to the same"
@@ -75,7 +75,7 @@ class VRTInterferogram(BaseModel, extra="allow"):
         ),
         validate_default=True,
     )
-    path: Path | None = Field(
+    path: Optional[Path] = Field(
         None,
         description=(
             "Path to output interferogram. Defaults to '<date1>_<date2>.vrt', where the"
@@ -104,7 +104,7 @@ class VRTInterferogram(BaseModel, extra="allow"):
 
     @field_validator("ref_slc", "sec_slc")
     @classmethod
-    def _check_gdal_string(cls, v: Path | str, info: FieldValidationInfo):
+    def _check_gdal_string(cls, v: Union[Path, str], info: FieldValidationInfo):
         subdataset = info.data.get("subdataset")
         # If we're using a subdataset, create a the GDAL-readable string
         gdal_str = io.format_nc_filename(v, subdataset)
