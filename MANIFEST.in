@@ -1,2 +1,2 @@
-src/dolphin/shp/glrt_cutoffs.csv
-src/dolphin/shp/kld_cutoffs.csv
+include src/dolphin/shp/glrt_cutoffs.csv
+include src/dolphin/shp/kld_cutoffs.csv
