@@ -15,7 +15,7 @@ from dolphin import io
 from dolphin._log import get_log
 from dolphin._types import Filename
 
-from .config import OPERA_BURST_RE, OPERA_DATASET_NAME, OPERA_IDENTIFICATION
+from .config import OPERA_BURST_RE, OPERA_DATASET_NAME, OPERA_IDENTIFICATION, Workflow
 
 logger = get_log(__name__)
 
@@ -207,3 +207,28 @@ def make_nodata_mask(
         cmd = f"gdal_rasterize -q -burn 1 {temp_vector_file} {out_file}"
         logger.info(cmd)
         subprocess.check_call(cmd, shell=True)
+
+
+def _create_burst_cfg(
+    cfg: Workflow,
+    burst_id: str,
+    grouped_slc_files: dict[str, list[Path]],
+    grouped_amp_mean_files: dict[str, list[Path]],
+    grouped_amp_dispersion_files: dict[str, list[Path]],
+) -> Workflow:
+    cfg_temp_dict = cfg.model_dump(exclude={"cslc_file_list"})
+
+    # Just update the inputs and the scratch directory
+    top_level_scratch = cfg_temp_dict["scratch_directory"]
+    cfg_temp_dict.update({"scratch_directory": top_level_scratch / burst_id})
+    cfg_temp_dict["cslc_file_list"] = grouped_slc_files[burst_id]
+    cfg_temp_dict["amplitude_mean_files"] = grouped_amp_mean_files[burst_id]
+    cfg_temp_dict["amplitude_dispersion_files"] = grouped_amp_dispersion_files[burst_id]
+    return Workflow(**cfg_temp_dict)
+
+
+def _remove_dir_if_empty(d: Path) -> None:
+    try:
+        d.rmdir()
+    except OSError:
+        pass

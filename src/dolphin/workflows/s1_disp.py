@@ -5,16 +5,14 @@ from collections import defaultdict
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 from pprint import pformat
-from typing import Optional
 
 from dolphin import __version__
 from dolphin._background import DummyProcessPoolExecutor
 from dolphin._log import get_log, log_runtime
 from dolphin.utils import get_max_memory_usage, set_num_threads
 
-from . import _product, stitch_and_unwrap, wrapped_phase
-from ._pge_runconfig import RunConfig
-from ._utils import group_by_burst
+from . import stitch_and_unwrap, wrapped_phase
+from ._utils import _create_burst_cfg, _remove_dir_if_empty, group_by_burst
 from .config import Workflow
 
 
@@ -22,7 +20,6 @@ from .config import Workflow
 def run(
     cfg: Workflow,
     debug: bool = False,
-    pge_runconfig: Optional[RunConfig] = None,
 ):
     """Run the displacement workflow on a stack of SLCs.
 
@@ -33,9 +30,6 @@ def run(
         workflow.
     debug : bool, optional
         Enable debug logging, by default False.
-    pge_runconfig : RunConfig, optional
-        If provided, adds PGE-specific metadata to the output product.
-        Not used by the workflow itself, only for extra metadata.
     """
     # Set the logging level for all `dolphin.` modules
     logger = get_log(name="dolphin", debug=debug, filename=cfg.log_file)
@@ -139,62 +133,8 @@ def run(
         )
     )
 
-    # ######################################
-    # 3. Finalize the output as an HDF5 product
-    # ######################################
-    logger.info(f"Creating {len(unwrapped_paths)} outputs in {cfg.output_directory}")
-    for unw_p, cc_p, s_corr_p in zip(
-        unwrapped_paths,
-        conncomp_paths,
-        spatial_corr_paths,
-    ):
-        output_name = cfg.output_directory / unw_p.with_suffix(".nc").name
-        _product.create_output_product(
-            unw_filename=unw_p,
-            conncomp_filename=cc_p,
-            tcorr_filename=stitched_tcorr_file,
-            spatial_corr_filename=s_corr_p,
-            output_name=output_name,
-            corrections={},
-            pge_runconfig=pge_runconfig,
-        )
-
-    if cfg.save_compressed_slc:
-        logger.info(f"Saving {len(comp_slc_dict.items())} compressed SLCs")
-        output_dir = cfg.output_directory / "compressed_slcs"
-        output_dir.mkdir(exist_ok=True)
-        _product.create_compressed_products(
-            comp_slc_dict=comp_slc_dict,
-            output_dir=output_dir,
-        )
-
     # Print the maximum memory usage for each worker
     max_mem = get_max_memory_usage(units="GB")
     logger.info(f"Maximum memory usage: {max_mem:.2f} GB")
     logger.info(f"Config file dolphin version: {cfg._dolphin_version}")
     logger.info(f"Current running dolphin version: {__version__}")
-
-
-def _create_burst_cfg(
-    cfg: Workflow,
-    burst_id: str,
-    grouped_slc_files: dict[str, list[Path]],
-    grouped_amp_mean_files: dict[str, list[Path]],
-    grouped_amp_dispersion_files: dict[str, list[Path]],
-) -> Workflow:
-    cfg_temp_dict = cfg.model_dump(exclude={"cslc_file_list"})
-
-    # Just update the inputs and the scratch directory
-    top_level_scratch = cfg_temp_dict["scratch_directory"]
-    cfg_temp_dict.update({"scratch_directory": top_level_scratch / burst_id})
-    cfg_temp_dict["cslc_file_list"] = grouped_slc_files[burst_id]
-    cfg_temp_dict["amplitude_mean_files"] = grouped_amp_mean_files[burst_id]
-    cfg_temp_dict["amplitude_dispersion_files"] = grouped_amp_dispersion_files[burst_id]
-    return Workflow(**cfg_temp_dict)
-
-
-def _remove_dir_if_empty(d: Path) -> None:
-    try:
-        d.rmdir()
-    except OSError:
-        pass
