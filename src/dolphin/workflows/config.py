@@ -167,7 +167,7 @@ class UnwrapOptions(BaseModel, extra="forbid"):
     )
     _directory: Path = PrivateAttr(Path("unwrapped"))
     unwrap_method: UnwrapMethod = UnwrapMethod.SNAPHU
-    tiles: list[int] = Field(
+    tiles: List[int] = Field(
         [1, 1],
         description=(
             "Number of tiles to split the unwrapping into (for multi-scale unwrapping)."
@@ -210,7 +210,7 @@ class WorkerSettings(BaseModel, extra="forbid"):
             " for wrapped-phase-estimation."
         ),
     )
-    block_shape: tuple[int, int] = Field(
+    block_shape: Tuple[int, int] = Field(
         (512, 512),
         description="Size (rows, columns) of blocks of data to load at a time.",
     )
