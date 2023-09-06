@@ -1,5 +1,21 @@
 # Unreleased
 
+**Changed**
+
+- Split apart OPERA-specific needs from more general library/workflow functionality
+- Removed the final NetCDF product creation
+  - Many rasters in the `scratch/` folder are of general interest after running the workflow
+  - Changed folder structure so that there's not longer a top-level `scratch/` and `output/` by default
+- Changed the required dependencies so the `isce3` unwrapper is optional, as people may wish to implement their own custom parallel unwrapping
+
+**Dependencies**
+
+Dropped:
+- h5netcdf
+
+Now optional:
+- isce3 (for unwrapping)
+
 # [0.3.0](https://github.com/opera-adt/dolphin/compare/v0.2.0...v0.3.0) - 2023-08-23
 
 **Added**
