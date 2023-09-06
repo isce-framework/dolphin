@@ -210,7 +210,7 @@ class WorkerSettings(BaseModel, extra="forbid"):
             " for wrapped-phase-estimation."
         ),
     )
-    block_shape: tuple[int, int] = Field(
+    block_shape: Tuple[int, int] = Field(
         (512, 512),
         description="Size (rows, columns) of blocks of data to load at a time.",
     )
