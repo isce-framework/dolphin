@@ -61,12 +61,7 @@ git clone https://github.com/isce-framework/dolphin.git && cd dolphin
 ```
 2. Install dependencies:
 ```bash
-mamba env create --file conda-env.yml
-```
-
-or if you have an existing environment:
-```bash
-mamba env update --name my-existing-env --file conda-env.yml
+mamba create -c conda-forge --name dolphin-env --file conda-env.txt --file conda-env-unwrapping.txt
 ```
 
 3. Install `dolphin` via pip:
@@ -74,14 +69,6 @@ mamba env update --name my-existing-env --file conda-env.yml
 mamba activate dolphin-env
 python -m pip install -e .
 ```
-
-
-If you have access to a GPU, you can install the extra requirements from running the GPU accelerated algorithms:
-```bash
-mamba env update --name dolphin-env --file conda-env-gpu-extras.yml
-```
-
-
 The extra packages required for testing and building the documentation can be installed:
 ```bash
 # Run "pip install -e" to install with extra development requirements
@@ -99,6 +86,21 @@ After making functional changes, you can rerun the existing tests and any new on
 ```bash
 python -m pytest
 ```
+
+
+## GPU setup
+If you have access to a GPU, you can install the extra requirements from running the GPU accelerated algorithms:
+```bash
+mamba install -c conda-forge --file conda-env-gpu-extras.yml
+```
+Note that the version of `cudatoolkit` must match the drivers installed for your GPU.
+See the [numba](https://numba.readthedocs.io/en/stable/cuda/overview.html#software) and [cupy](https://docs.cupy.dev/en/stable/install.html) installation instructions for more details on getting set up.
+
+To check whether you have successfully installed `numba` and `cupy`, run
+```bash
+python -c 'from dolphin import utils; print(utils.gpu_available())'
+```
+
 
 
 ### Creating Documentation

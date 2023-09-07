@@ -32,14 +32,20 @@ To install locally:
 ```bash
 git clone https://github.com/isce-framework/dolphin.git && cd dolphin
 ```
+
 2. Install dependencies:
 ```bash
-mamba env create --file conda-env.yml
+mamba create -c conda-forge --name dolphin-env --file conda-env.txt
 ```
 
 or if you have an existing environment:
 ```bash
-mamba env update --name my-existing-env --file conda-env.yml
+mamba install --name my-existing-env --file conda-env.txt
+```
+
+If you'd like to also install the `isce3` unwrappers, you can pass both files to the install command:
+```bash
+mamba create -c conda-forge --name dolphin-env --file conda-env.txt --file conda-env-unwrapping.txt
 ```
 
 3. Install `dolphin` via pip:
