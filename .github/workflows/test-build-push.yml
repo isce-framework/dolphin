@@ -52,7 +52,7 @@ jobs:
       - name: Setup environment
         uses: mamba-org/setup-micromamba@v1
         with:
-          environment-file: conda-env.yml
+          environment-file: conda-env.txt
           environment-name: dolphin-env
           create-args: ${{ matrix.deps.spec }}
           condarc: |
