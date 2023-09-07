@@ -65,8 +65,7 @@ def _create_cfg(
             half_window={"x": half_window_size[0], "y": half_window_size[1]},
             shp_method=shp_method,
         ),
-        scratch_directory=work_dir / "scratch",
-        output_directory=work_dir / "output",
+        work_directory=work_dir,
         worker_settings=dict(
             #     block_size_gb=block_size_gb,
             n_parallel_bursts=n_parallel_bursts,

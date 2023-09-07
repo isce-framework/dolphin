@@ -326,14 +326,9 @@ class Workflow(YamlModel):
             " uint8."
         ),
     )
-    scratch_directory: Path = Field(
-        Path("scratch"),
-        description="Name of sub-directory to use for scratch files",
-        validate_default=True,
-    )
-    output_directory: Path = Field(
-        Path("output"),
-        description="Name of sub-directory to use for output files",
+    work_directory: Path = Field(
+        Path("."),
+        description="Name of sub-directory to use for writing output files",
         validate_default=True,
     )
 
@@ -387,7 +382,7 @@ class Workflow(YamlModel):
         extra="forbid", json_schema_extra={"required": ["cslc_file_list"]}
     )
 
-    @field_validator("output_directory", "scratch_directory")
+    @field_validator("work_directory")
     @classmethod
     def _make_dir_absolute(cls, v: Path):
         return v.resolve()
@@ -467,13 +462,13 @@ class Workflow(YamlModel):
         """After validation, set up properties for use during workflow run."""
         super().__init__(*args, **kwargs)
 
-        # Ensure outputs from workflow steps are within scratch directory.
-        scratch_dir = self.scratch_directory
+        # Ensure outputs from workflow steps are within work directory.
+        work_dir = self.work_directory
         # Save all directories as absolute paths
-        scratch_dir = scratch_dir.resolve(strict=False)
+        work_dir = work_dir.resolve(strict=False)
 
         # For each workflow step that has an output folder, move it inside
-        # the scratch directory (if it's not already inside).
+        # the work directory (if it's not already inside).
         # They may already be inside if we're loading from a json/yaml file.
         for step in [
             "ps_options",
@@ -482,25 +477,24 @@ class Workflow(YamlModel):
             "unwrap_options",
         ]:
             opts = getattr(self, step)
-            if not opts._directory.parent == scratch_dir:
-                opts._directory = scratch_dir / opts._directory
+            if not opts._directory.parent == work_dir:
+                opts._directory = work_dir / opts._directory
             opts._directory = opts._directory.resolve(strict=False)
 
         # Track the directories that need to be created at start of workflow
         self._directory_list = [
-            scratch_dir,
-            self.output_directory,
+            work_dir,
             self.ps_options._directory,
             self.phase_linking._directory,
             self.interferogram_network._directory,
             self.unwrap_options._directory,
         ]
         # Add the output PS files we'll create to the `PS` directory, making
-        # sure they're inside the scratch directory
+        # sure they're inside the work directory
         ps_opts = self.ps_options
-        ps_opts._amp_dispersion_file = scratch_dir / ps_opts._amp_dispersion_file
-        ps_opts._amp_mean_file = scratch_dir / ps_opts._amp_mean_file
-        ps_opts._output_file = scratch_dir / ps_opts._output_file
+        ps_opts._amp_dispersion_file = work_dir / ps_opts._amp_dispersion_file
+        ps_opts._amp_mean_file = work_dir / ps_opts._amp_mean_file
+        ps_opts._output_file = work_dir / ps_opts._output_file
 
     def create_dir_tree(self, debug=False):
         """Create the directory tree for the workflow."""
