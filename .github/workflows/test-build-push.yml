@@ -14,11 +14,7 @@ jobs:
   pytest:
     strategy:
       matrix:
-        os:
-          - label: Linux
-            runner: ubuntu-latest
-          - label: macOS
-            runner: macos-latest
+        os: [macos-latest]
         deps:
           - label: Latest
             spec: >-
@@ -40,8 +36,7 @@ jobs:
               shapely=1.8
               threadpoolctl>=3.0
         exclude:  # TODO: Remove this once pymp is gone
-          - os:
-              label: macOS
+          - os: macos-latest
             deps:
               label: Latest
 
