@@ -86,6 +86,11 @@ def setup_logging(debug: bool = False) -> None:
     logger.setLevel(log_level)
 
 
+# NOTE: once python 3.10 is minimum, we can preserve wrapped types using
+# def log_runtime(f: Callable[P, T]) -> Callable[P, T]:
+# https://stackoverflow.com/a/74080156/4174466
+
+
 def log_runtime(f: Callable) -> Callable:
     """Decorate a function to time how long it takes to run.
 
