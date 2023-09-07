@@ -12,6 +12,7 @@
 
 Dropped:
 - h5netcdf
+- pillow
 
 Now optional:
 - isce3 (for unwrapping)
