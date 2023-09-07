@@ -1,0 +1,4 @@
+# Can be used to update the environment with the following command:
+#     mamba install --file conda-env-unwrapping.yml
+isce3>=0.14
+# tophu  # Once tophu added to conda forge, this will be installed

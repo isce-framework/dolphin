@@ -1,0 +1,10 @@
+# Can be used to install the GPU dependences with
+#
+#     mamba create -c conda-forge -n dolphin-gpu-env --file conda-env.txt --file conda-env-gpu-extras.txt
+# See also for numba's GPU installation instructions:
+# https://numba.pydata.org/numba-doc/latest/user/installing.html#installing-using-conda-on-x86-x86-64-power-platforms
+# NOTE: the `cudatoolkit` version must match the CUDA runtime version you have installed
+# See the `Getting Started` in the docs
+cupy>=11.0
+cudatoolkit
+pynvml>=11.0
