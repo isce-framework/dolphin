@@ -54,6 +54,7 @@ jobs:
         with:
           environment-file: conda-env.txt
           environment-name: dolphin-env
+          cache-environment: true
           create-args: ${{ matrix.deps.spec }}
           condarc: |
             channels:
