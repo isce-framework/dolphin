@@ -1,7 +1,7 @@
 # Unreleased
 
 
-# [0.4.0](https://github.com/opera-adt/dolphin/compare/v0.2.0...v0.3.0) - 2023-09-07
+# [0.4.0](https://github.com/isce-framework/dolphin/compare/v0.2.0...v0.3.0) - 2023-09-07
 
 **Changed**
 
@@ -20,7 +20,7 @@ Dropped:
 Now optional:
 - isce3 (for unwrapping)
 
-# [0.3.0](https://github.com/opera-adt/dolphin/compare/v0.2.0...v0.3.0) - 2023-08-23
+# [0.3.0](https://github.com/isce-framework/dolphin/compare/v0.2.0...v0.3.0) - 2023-08-23
 
 **Added**
 
@@ -37,7 +37,7 @@ Now optional:
 
 - pydantic >= 2.1
 
-# [0.2.0](https://github.com/opera-adt/dolphin/compare/v0.1.0...v0.2.0) - 2023-07-25
+# [0.2.0](https://github.com/isce-framework/dolphin/compare/v0.1.0...v0.2.0) - 2023-07-25
 
 **Added**
 
@@ -83,7 +83,7 @@ Added testing requirements:
 - pillow>=7.0
 
 
-# [0.1.0](https://github.com/opera-adt/dolphin/compare/v0.0.4...v0.1.0) - 2023-03-31
+# [0.1.0](https://github.com/isce-framework/dolphin/compare/v0.0.4...v0.1.0) - 2023-03-31
 
 - First version of the `_product.py` module to output the combined NetCDF product file.
 - `_pge_runconfig.py` module to handle the separate PGE-compatible configuration, which translates to-from the `Workflow` object.
@@ -114,7 +114,7 @@ Added requirements:
 - h5netcdf>=1.1
 - Avoid HDF5 version 1.12.1 until NetCDF loading issue is fixed
 
-# [0.0.4](https://github.com/opera-adt/dolphin/compare/v0.0.3...v0.0.4) - 2023-03-17
+# [0.0.4](https://github.com/isce-framework/dolphin/compare/v0.0.3...v0.0.4) - 2023-03-17
 
 **Added**
 
@@ -163,7 +163,7 @@ Removed requirements:
 - tqdm
 
 
-# [0.0.3](https://github.com/opera-adt/dolphin/compare/v0.0.2...v0.0.3) - 2023-01-26
+# [0.0.3](https://github.com/isce-framework/dolphin/compare/v0.0.2...v0.0.3) - 2023-01-26
 
 **Added**
 
@@ -179,7 +179,7 @@ Removed requirements:
 - Renamed module to `_log.py`
 - `workflows/wrapped_phase.py` absorbed much logic formerly in `s1_disp_stack.py`.
 
-# [0.0.2](https://github.com/opera-adt/dolphin/compare/v0.0.1...v0.0.2) - 2023-01-24
+# [0.0.2](https://github.com/isce-framework/dolphin/compare/v0.0.1...v0.0.2) - 2023-01-24
 
 **Added**
 

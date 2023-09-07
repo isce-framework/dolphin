@@ -1,5 +1,5 @@
 # dolphin
-[![Pytest and build docker image](https://github.com/opera-adt/dolphin/actions/workflows/test-build-push.yml/badge.svg?branch=main)](https://github.com/opera-adt/dolphin/actions/workflows/test-build-push.yml)
+[![Pytest and build docker image](https://github.com/isce-framework/dolphin/actions/workflows/test-build-push.yml/badge.svg?branch=main)](https://github.com/isce-framework/dolphin/actions/workflows/test-build-push.yml)
 
 High resolution wrapped phase estimation for InSAR using combined PS/DS processing.
 
@@ -29,7 +29,7 @@ To install locally:
 
 1. Download source code:
 ```bash
-git clone https://github.com/opera-adt/dolphin.git && cd dolphin
+git clone https://github.com/isce-framework/dolphin.git && cd dolphin
 ```
 2. Install dependencies:
 ```bash

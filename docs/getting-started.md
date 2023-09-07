@@ -4,7 +4,14 @@
 `dolphin` is available on conda-forge:
 
 ```bash
+# if mamba is not already installed: conda install -n base mamba
 mamba install -c conda-forge dolphin
+```
+
+`dolphin` has the ability to unwrap interferograms, but requires the optional dependency of `isce3` to use the python bindings to [SNAPHU](https://web.stanford.edu/group/radar/softwareandlinks/sw/snaphu/).
+To install both dolphin and isce3 through conda-forge, run
+```bash
+mamba install -c conda-forge isce3 dolphin
 ```
 
 
@@ -50,7 +57,7 @@ To install locally,
 
 1. Download source code:
 ```bash
-git clone https://github.com/opera-adt/dolphin.git && cd dolphin
+git clone https://github.com/isce-framework/dolphin.git && cd dolphin
 ```
 2. Install dependencies:
 ```bash
