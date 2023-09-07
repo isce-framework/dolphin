@@ -19,13 +19,12 @@ jobs:
             runner: ubuntu-latest
           - label: macOS
             runner: macos-latest
-
         deps:
           - label: Latest
-            spec: |
+            spec: >-
               isce3
           - label: Minimum
-            spec: |
+            spec: >-
               python=3.8
               isce3
               gdal=3.5
@@ -40,10 +39,15 @@ jobs:
               scipy=1.5
               shapely=1.8
               threadpoolctl>=3.0
+        exclude:  # TODO: Remove this once pymp is gone
+          - os:
+              label: macOS
+            deps:
+              label: Latest
 
       fail-fast: false
-    name: ${{ matrix.os.label }} • ${{ matrix.deps.label }}
-    runs-on: ${{ matrix.os.runner }}
+    name: ${{ matrix.os }} • ${{ matrix.deps.label }}
+    runs-on: ${{ matrix.os }}
     defaults:
       run:
         shell: bash -l {0}
@@ -51,12 +55,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
       - name: Setup environment
-        uses: mamba-org/provision-with-micromamba@main
+        uses: mamba-org/setup-micromamba@v1
         with:
           environment-file: conda-env.yml
           environment-name: dolphin-env
-          extra-specs: ${{ matrix.deps.spec }}
-          channels: conda-forge
+          create-args: ${{ matrix.deps.spec }}
+          condarc: |
+            channels:
+              - conda-forge
       - name: Install
         run: |
           pip install --no-deps .
