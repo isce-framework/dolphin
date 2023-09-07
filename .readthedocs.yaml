@@ -14,7 +14,7 @@ build:
     python: "mambaforge-4.10"
 
 conda:
-  environment: conda-env.yml
+  environment: conda-env.txt
 
 python:
   install:
