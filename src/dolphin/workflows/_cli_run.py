@@ -11,7 +11,6 @@ else:
 def run(
     config_file: str,
     debug: bool = False,
-    pge_format: bool = False,
 ) -> None:
     """Run the displacement workflow.
 
@@ -21,24 +20,14 @@ def run(
         YAML file containing the workflow options.
     debug : bool, optional
         Enable debug logging, by default False.
-    pge_format : bool, optional
-        If True, the config file is a runconfig in the PGE-expected format.
-        By default False.
     """
     # rest of imports here so --help doesn't take forever
 
     from . import s1_disp
-    from ._pge_runconfig import RunConfig
     from .config import Workflow
 
-    if pge_format:
-        pge_rc = RunConfig.from_yaml(config_file)
-        cfg = pge_rc.to_workflow()
-    else:
-        cfg = Workflow.from_yaml(config_file)
-        pge_rc = None
-
-    s1_disp.run(cfg, debug=debug, pge_runconfig=pge_rc)
+    cfg = Workflow.from_yaml(config_file)
+    s1_disp.run(cfg, debug=debug)
 
 
 def get_parser(
@@ -63,11 +52,6 @@ def get_parser(
         "--debug",
         action="store_true",
         help="Print debug messages to the log.",
-    )
-    parser.add_argument(
-        "--pge-format",
-        action="store_true",
-        help="Indicate that `config_file` is in the PGE `RunConfig` format.",
     )
     parser.set_defaults(run_func=run)
     return parser

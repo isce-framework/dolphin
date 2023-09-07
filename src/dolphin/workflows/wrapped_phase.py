@@ -35,7 +35,7 @@ def run(cfg: Workflow, debug: bool = False) -> tuple[list[Path], Path, Path, Pat
         In the case of sequential phase linking, this is the average tcorr file.
     """
     logger = get_log(debug=debug)
-    logger.info(f"Running wrapped phase estimation in {cfg.scratch_directory}")
+    logger.info(f"Running wrapped phase estimation in {cfg.work_directory}")
 
     input_file_list = cfg.cslc_file_list
     if not input_file_list:
@@ -48,12 +48,12 @@ def run(cfg: Workflow, debug: bool = False) -> tuple[list[Path], Path, Path, Pat
     vrt_stack = stack.VRTStack(
         input_file_list,
         subdataset=subdataset,
-        outfile=cfg.scratch_directory / "slc_stack.vrt",
+        outfile=cfg.work_directory / "slc_stack.vrt",
     )
 
     # Make the nodata mask from the polygons, if we're using OPERA CSLCs
     try:
-        nodata_mask_file = cfg.scratch_directory / "nodata_mask.tif"
+        nodata_mask_file = cfg.work_directory / "nodata_mask.tif"
         _utils.make_nodata_mask(
             vrt_stack.file_list, out_file=nodata_mask_file, buffer_pixels=200
         )

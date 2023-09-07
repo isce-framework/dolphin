@@ -1,0 +1,9 @@
+# Can be used to update the environment with the following command:
+#
+#     conda env update --name dolphin-env --file conda-env-unwrapping.yml
+# https://docs.conda.io/projects/conda/en/latest/commands/update.html
+channels:
+  - conda-forge
+dependencies:
+  - isce3>=0.14
+  # - tophu  # Once tophu added to conda forge, this will be installed
