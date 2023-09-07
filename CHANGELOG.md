@@ -1,5 +1,8 @@
 # Unreleased
 
+
+# [0.4.0](https://github.com/opera-adt/dolphin/compare/v0.2.0...v0.3.0) - 2023-09-07
+
 **Changed**
 
 - Split apart OPERA-specific needs from more general library/workflow functionality
