@@ -50,7 +50,7 @@ To install locally,
 
 1. Download source code:
 ```bash
-git clone https://github.com/opera-adt/dolphin.git && cd dolphin
+git clone https://github.com/isce-framework/dolphin.git && cd dolphin
 ```
 2. Install dependencies:
 ```bash
