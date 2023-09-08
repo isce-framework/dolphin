@@ -1,5 +1,14 @@
 # Unreleased
 
+
+# [0.4.1](https://github.com/isce-framework/dolphin/compare/v0.4.0...v0.4.1) - 2023-09-08
+
+**Dependencies**
+- Added back isce3
+
+# [0.4.0](https://github.com/isce-framework/dolphin/compare/v0.3.0...v0.4.0) - 2023-09-07
+
+
 **Changed**
 
 - Split apart OPERA-specific needs from more general library/workflow functionality
