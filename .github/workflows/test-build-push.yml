@@ -17,8 +17,7 @@ jobs:
         os: [ubuntu-latest, macos-latest]
         deps:
           - label: Latest
-            spec: >-
-              isce3
+            spec: ""
           - label: Minimum
             spec: >-
               python=3.8

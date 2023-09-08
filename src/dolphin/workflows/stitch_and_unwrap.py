@@ -4,19 +4,9 @@ from datetime import date
 from pathlib import Path
 from typing import Sequence
 
-from dolphin import io, stitching
+from dolphin import io, stitching, unwrap
 from dolphin._log import get_log, log_runtime
 from dolphin.interferogram import estimate_correlation_from_phase
-
-try:
-    from dolphin import unwrap
-
-    UNWRAP_INSTALLED = False
-except ImportError as e:
-    logger = get_log(__name__)
-    logger.info("Unwrapping dependencies not installed: %s", e)
-    UNWRAP_INSTALLED = False
-
 
 from .config import UnwrapMethod, Workflow
 
@@ -142,23 +132,16 @@ def run(
     ifg_filenames = sorted(Path(stitched_ifg_dir).glob("*.int"))  # type: ignore
     if not ifg_filenames:
         raise FileNotFoundError(f"No interferograms found in {stitched_ifg_dir}")
-    if UNWRAP_INSTALLED:
-        unwrapped_paths, conncomp_paths = unwrap.run(
-            ifg_filenames=ifg_filenames,
-            cor_filenames=spatial_corr_paths,
-            output_path=cfg.unwrap_options._directory,
-            nlooks=nlooks,
-            mask_file=output_mask,
-            # mask_file: Optional[Filename] = None,
-            # TODO: max jobs based on the CPUs and the available RAM? use dask?
-            max_jobs=unwrap_jobs,
-            # overwrite: bool = False,
-            no_tile=True,
-            use_icu=use_icu,
-        )
-    else:
-        logger.info("Unwrapping dependencies not installed, skipping.")
-        unwrapped_paths, conncomp_paths = [], []
+    unwrapped_paths, conncomp_paths = unwrap.run(
+        ifg_filenames=ifg_filenames,
+        cor_filenames=spatial_corr_paths,
+        output_path=cfg.unwrap_options._directory,
+        nlooks=nlooks,
+        mask_file=output_mask,
+        max_jobs=unwrap_jobs,
+        no_tile=True,
+        use_icu=use_icu,
+    )
 
     return unwrapped_paths, conncomp_paths, spatial_corr_paths, stitched_tcorr_file
 
