@@ -1,5 +1,6 @@
 # dolphin
 [![Pytest and build docker image](https://github.com/isce-framework/dolphin/actions/workflows/test-build-push.yml/badge.svg?branch=main)](https://github.com/isce-framework/dolphin/actions/workflows/test-build-push.yml)
+[![pre-commit.ci status](https://results.pre-commit.ci/badge/github/isce-framework/dolphin/main.svg)](https://results.pre-commit.ci/latest/github/isce-framework/dolphin/main)
 
 High resolution wrapped phase estimation for InSAR using combined PS/DS processing.
 
