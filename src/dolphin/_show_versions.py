@@ -90,11 +90,9 @@ def _get_gpu_info() -> dict[str, Optional[str]]:
     dict:
         version information on relevant Python libraries
     """
-    deps = [
-        "cudatoolkit",
-        "cupy",
-    ]
-    return {name: _get_version(name) for name in deps}
+    from dolphin.utils import gpu_is_available
+
+    return {"cupy": _get_version("cupy"), "gpu_is_available": str(gpu_is_available())}
 
 
 def _print_info_dict(info_dict: dict) -> None:
