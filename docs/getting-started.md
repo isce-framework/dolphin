@@ -50,7 +50,7 @@ To install locally,
 
 1. Download source code:
 ```bash
-git clone https://github.com/opera-adt/dolphin.git && cd dolphin
+git clone https://github.com/isce-framework/dolphin.git && cd dolphin
 ```
 2. Install dependencies:
 ```bash
@@ -93,6 +93,19 @@ After making functional changes, you can rerun the existing tests and any new on
 python -m pytest
 ```
 
+### GPU setup
+If you have access to a GPU, you can install the extra requirements from running the GPU accelerated algorithms:
+
+```bash
+mamba env update -n dolphin-env --file conda-env-gpu-extras.yml
+```
+Note that the version of `cudatoolkit` must match the drivers installed for your GPU (which may come from the output of `nvidia-smi`)
+See the [numba](https://numba.readthedocs.io/en/stable/cuda/overview.html#software) and [cupy](https://docs.cupy.dev/en/stable/install.html) installation instructions for more details on getting set up.
+
+To check whether you have successfully installed `numba` and `cupy`, run
+```bash
+python -c 'from dolphin import utils; print(utils.gpu_available())'
+```
 
 ### Creating Documentation
 

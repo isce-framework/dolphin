@@ -23,8 +23,8 @@ license = { file = "LICENSE.txt" }
 dynamic = ["version", "dependencies", "optional-dependencies"]
 
 [project.urls]
-Homepage = "https://github.com/opera-adt/dolphin"
-"Bug Tracker" = "https://github.com/opera-adt/dolphin/issues"
+Homepage = "https://github.com/isce-framework/dolphin"
+"Bug Tracker" = "https://github.com/isce-framework/dolphin/issues"
 
 # Entry points for the command line interface
 [project.scripts]

@@ -40,7 +40,7 @@ if [ -z "$TAG" ]; then
 fi
 
 # Build the Docker image
-CMD_BASE="docker build --network=host --tag opera-adt/dolphin:$TAG --file docker/Dockerfile"
+CMD_BASE="docker build --network=host --tag isce-framework/dolphin:$TAG --file docker/Dockerfile"
 
 # append --build-arg if specified:
 if [ -z "${BASE+x}" ]; then
@@ -64,16 +64,14 @@ eval $CMD_BASE
 
 # To run the image and see the help message....
 echo "To run the image and see the help message:"
-echo "docker run --rm -it opera-adt/dolphin:$TAG dolphin --help"
+echo "docker run --rm -it isce-framework/dolphin:$TAG dolphin --help"
 #
 echo "To run the workflow on a configuration in the current directory...."
-echo "docker run --user \$(id -u):\$(id -g) -v \$PWD:/work --rm -it opera-adt/dolphin:$TAG dolphin run dolphin_config.yaml"
-echo "To run on a PGE runconfig:"
-echo "docker run --user \$(id -u):\$(id -g) -v \$PWD:/work --rm -it opera-adt/dolphin:$TAG dolphin run --pge runconfig.yaml"
+echo "docker run --user \$(id -u):\$(id -g) -v \$PWD:/work --rm -it isce-framework/dolphin:$TAG dolphin run dolphin_config.yaml"
 # where...
 #     --user $(id -u):$(id -g)  # Needed to avoid permission issues when writing to the mounted volume.
 #     -v $PWD:/work  # Mounts the current directory to the /work directory in the container.
 #     --rm  # Removes the container after it exits.
 #     -it  # Needed to keep the container running after the command exits.
-#     opera-adt/dolphin:latest  # The name of the image to run.
+#     isce-framework/dolphin:latest  # The name of the image to run.
 #     dolphin run dolphin_config.yaml # The `dolphin` command that is run in the container
