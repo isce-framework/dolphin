@@ -9,13 +9,7 @@ from typing import Iterable, Literal, Optional, Sequence, Union
 import numpy as np
 from numpy.typing import ArrayLike
 from osgeo import gdal
-from pydantic import (
-    BaseModel,
-    Field,
-    FieldValidationInfo,
-    field_validator,
-    model_validator,
-)
+from pydantic import BaseModel, Field, ValidationInfo, field_validator, model_validator
 
 from dolphin import io, utils
 from dolphin._log import get_log
@@ -104,7 +98,7 @@ class VRTInterferogram(BaseModel, extra="allow"):
 
     @field_validator("ref_slc", "sec_slc")
     @classmethod
-    def _check_gdal_string(cls, v: Union[Path, str], info: FieldValidationInfo):
+    def _check_gdal_string(cls, v: Union[Path, str], info: ValidationInfo):
         subdataset = info.data.get("subdataset")
         # If we're using a subdataset, create a the GDAL-readable string
         gdal_str = io.format_nc_filename(v, subdataset)
@@ -126,7 +120,7 @@ class VRTInterferogram(BaseModel, extra="allow"):
 
     @field_validator("outdir")
     @classmethod
-    def _check_output_dir(cls, v, info: FieldValidationInfo):
+    def _check_output_dir(cls, v, info: ValidationInfo):
         if v is not None:
             return Path(v)
         # If outdir is not set, use the directory of the reference SLC
