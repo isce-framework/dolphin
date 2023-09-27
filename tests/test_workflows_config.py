@@ -240,7 +240,7 @@ def test_input_date_sort(dir_with_2_slcs):
 
 
 def test_input_opera_cslc(tmp_path, slc_stack):
-    """Check that we recognize the OPERA filename format and don't need a subdataset."""
+    """Check that we recognize the OPERA filename format."""
     # Make a file with the OPERA name like OPERA_BURST_RE
     # r"t(?P<track>\d{3})_(?P<burst_id>\d{6})_(?P<subswath>iw[1-3])"
     start_date = 20220101
@@ -260,9 +260,11 @@ def test_input_opera_cslc(tmp_path, slc_stack):
         )
         file_list.append(Path(fname))
 
-    opts = config.Workflow(cslc_file_list=file_list)
+    opts = config.Workflow(
+        cslc_file_list=file_list, input_options=dict(subdataset="/data/VV")
+    )
     assert opts.cslc_file_list == file_list
-    assert opts.input_options.subdataset == config.OPERA_DATASET_NAME
+    assert opts.input_options.subdataset == "/data/VV"
 
 
 def test_input_cslc_empty():
