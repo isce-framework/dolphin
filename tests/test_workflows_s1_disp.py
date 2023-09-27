@@ -7,6 +7,7 @@ import numpy as np
 import pytest
 from make_netcdf import create_test_nc
 
+from dolphin.opera_utils import OPERA_DATASET_NAME
 from dolphin.workflows import config, s1_disp
 
 # 'Grid size 49 will likely result in GPU under-utilization due to low occupancy.'
@@ -28,7 +29,7 @@ def opera_slc_files(tmp_path, slc_stack) -> list[Path]:
     d.mkdir()
     file_list = []
 
-    *group_parts, ds_name = config.OPERA_DATASET_NAME.split("/")
+    *group_parts, ds_name = OPERA_DATASET_NAME.split("/")
     group = "/".join(group_parts)
     for burst_id in ["t087_185683_iw2", "t087_185684_iw2"]:
         for i in range(len(slc_stack)):
@@ -54,6 +55,7 @@ def test_s1_disp_run_single(opera_slc_files: list[Path], tmpdir):
         cfg = config.Workflow(
             workflow_name=config.WorkflowName.SINGLE,
             cslc_file_list=opera_slc_files,
+            input_options=dict(subdataset="/data/VV"),
             interferogram_network=dict(
                 network_type=config.InterferogramNetworkType.MANUAL_INDEX,
                 indexes=[(0, -1)],
@@ -73,6 +75,7 @@ def test_s1_disp_run_stack(opera_slc_files: list[Path], tmpdir):
         cfg = config.Workflow(
             workflow_name=config.WorkflowName.STACK,
             cslc_file_list=opera_slc_files,
+            input_options=dict(subdataset="/data/VV"),
             phase_linking=dict(
                 ministack_size=500,
             ),

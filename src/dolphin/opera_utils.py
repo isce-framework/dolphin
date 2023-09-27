@@ -47,7 +47,7 @@ def group_by_burst(
         list of paths of CSLC files
     burst_id_fmt: str
         format of the burst id in the filename.
-        Default is [`OPERA_BURST_RE`][dolphin.workflows.config.OPERA_BURST_RE]
+        Default is [`OPERA_BURST_RE`][dolphin.opera_utils.OPERA_BURST_RE]
     minimum_images: int
         Minimum number of SLCs needed to run the workflow for each burst.
         If there are fewer SLCs in a burst, it will be skipped and
