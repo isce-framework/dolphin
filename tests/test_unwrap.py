@@ -7,6 +7,18 @@ import pytest
 
 from dolphin import io, unwrap
 
+try:
+    import tophu  # noqa
+
+    TOPHU_INSTALLED = True
+except ImportError:
+    TOPHU_INSTALLED = False
+
+# Dataset has no geotransform, gcps, or rpcs. The identity matrix will be returned.
+pytestmark = pytest.mark.filterwarnings(
+    "ignore::rasterio.errors.NotGeoreferencedWarning"
+)
+
 
 @pytest.fixture
 def corr_raster(raster_100_by_200):
@@ -138,6 +150,24 @@ def test_run_gtiff(list_of_gtiff_ifgs, corr_raster, unw_suffix):
         unw_suffix=unw_suffix,
         max_jobs=1,
     )
+
+
+@pytest.mark.skipif(
+    not TOPHU_INSTALLED, reason="tophu not installed for multiscale unwrapping"
+)
+def test_unwrap_multiscale(tmp_path, raster_100_by_200, corr_raster):
+    unw_filename = tmp_path / "unwrapped.unw.tif"
+    out_path, conncomp_path = unwrap.unwrap(
+        ifg_filename=raster_100_by_200,
+        corr_filename=corr_raster,
+        unw_filename=unw_filename,
+        nlooks=1,
+        ntiles=(2, 2),
+        downsample_factor=(3, 3),
+        init_method="mst",
+    )
+    assert out_path.exists()
+    assert conncomp_path.exists()
 
 
 @pytest.mark.skipif(os.environ.get("NUMBA_DISABLE_JIT") == "1", reason="JIT disabled")
