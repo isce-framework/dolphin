@@ -439,11 +439,10 @@ def multiscale_unwrap(
     conncomp_path : Path
         Path to output connected component label file.
     """
-    from tophu import RasterBand, SnaphuUnwrap, multiscale_unwrap
+    import rasterio as rio
+    import tophu
 
     def _get_rasterio_crs_transform(filename: Filename):
-        import rasterio as rio
-
         with rio.open(filename) as src:
             return src.crs, src.transform
 
@@ -456,7 +455,7 @@ def multiscale_unwrap(
     # SUFFIX=ADD
     envi_options = dict(opt.lower().split("=") for opt in io.DEFAULT_ENVI_OPTIONS)
     logger.debug(f"Saving conncomps to {conncomp_filename}")
-    conncomp_rb = RasterBand(
+    conncomp_rb = tophu.RasterBand(
         conncomp_filename,
         height=height,
         width=width,
@@ -467,7 +466,7 @@ def multiscale_unwrap(
         **envi_options,
     )
     gtiff_options = dict(opt.lower().split("=") for opt in io.DEFAULT_TIFF_OPTIONS)
-    unw_rb = RasterBand(
+    unw_rb = tophu.RasterBand(
         unw_filename,
         height=height,
         width=width,
@@ -482,26 +481,26 @@ def multiscale_unwrap(
         zeroed_ifg_file, zeroed_corr_file = _zero_from_mask(
             ifg_filename, corr_filename, mask_file
         )
-        igram = RasterBand(zeroed_ifg_file)
-        coherence = RasterBand(zeroed_corr_file)
+        igram_rb = tophu.RasterBand(zeroed_ifg_file)
+        coherence_rb = tophu.RasterBand(zeroed_corr_file)
     else:
-        igram = RasterBand(ifg_filename)
-        coherence = RasterBand(corr_filename)
+        igram_rb = tophu.RasterBand(ifg_filename)
+        coherence_rb = tophu.RasterBand(corr_filename)
 
-    unwrap_callback = SnaphuUnwrap(
+    unwrap_callback = tophu.SnaphuUnwrap(
         cost=cost,
         init_method=init_method,
     )
     if log_snaphu_to_file:
         _redirect_snaphu_log(unw_filename)
 
-    multiscale_unwrap(
+    tophu.multiscale_unwrap(
         unw_rb,
         conncomp_rb,
-        igram,
-        coherence,
+        igram_rb,
+        coherence_rb,
         nlooks=nlooks,
-        unwrap=unwrap_callback,
+        unwrap_func=unwrap_callback,
         downsample_factor=downsample_factor,
         ntiles=ntiles,
     )
