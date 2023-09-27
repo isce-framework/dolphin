@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from functools import lru_cache
 from os import fspath
 from pathlib import Path
 from typing import Optional, Union
@@ -38,7 +37,8 @@ def run(
     use_icu: bool = False,
     unw_suffix: str = ".unw.tif",
     max_jobs: int = 1,
-    downsample_factor: int = 1,
+    ntiles: Union[int, tuple[int, int]] = 1,
+    downsample_factor: Union[int, tuple[int, int]] = 1,
     overwrite: bool = False,
     **kwargs,
 ) -> tuple[list[Path], list[Path]]:
@@ -65,6 +65,10 @@ def run(
         unwrapped file suffix to use for creating/searching for existing files.
     max_jobs : int, optional, default = 1
         Maximum parallel processes.
+    ntiles : int or tuple[int, int], optional, default = (1, 1)
+        Use multi-resolution unwrapping with `tophu` on the interferograms.
+        If 1 or (1, 1), doesn't use tophu and unwraps the interferogram as
+        one single image.
     downsample_factor : int, optional, default = 1
         (For running coarse_unwrap): Downsample the interferograms by this
         factor to unwrap faster, then upsample to full resolution.
@@ -123,6 +127,7 @@ def run(
                 use_icu=use_icu,
                 mask_file=mask_file,
                 downsample_factor=downsample_factor,
+                ntiles=ntiles,
             )
             for ifg_file, out_file, cor_file in zip(in_files, out_files, cor_filenames)
         ]
@@ -152,7 +157,8 @@ def unwrap(
     cost: str = "smooth",
     log_snaphu_to_file: bool = True,
     use_icu: bool = False,
-    downsample_factor: int = 1,
+    downsample_factor: Union[int, tuple[int, int]] = 1,
+    ntiles: Union[int, tuple[int, int]] = 1,
 ) -> tuple[Path, Path]:
     """Unwrap a single interferogram using isce3's SNAPHU/ICU bindings.
 
@@ -185,6 +191,10 @@ def unwrap(
         Downsample the interferograms by this factor to unwrap faster, then upsample
         to full resolution.
         If 1, doesn't use coarse_unwrap and unwraps as normal.
+    ntiles : int or tuple[int, int], optional, default = (1, 1)
+        Use multi-resolution unwrapping with `tophu` on the interferograms.
+        If 1 or (1, 1), doesn't use tophu and unwraps the interferogram as
+        one single image.
 
     Returns
     -------
@@ -198,18 +208,23 @@ def unwrap(
     On MacOS, the SNAPHU unwrapper doesn't work due to a MemoryMap bug.
     ICU is used instead.
     """
-    if downsample_factor > 1:
-        return coarse_unwrap(
+    if isinstance(downsample_factor, int):
+        downsample_factor = (downsample_factor, downsample_factor)
+    if isinstance(ntiles, int):
+        ntiles = (ntiles, ntiles)
+    if any(t > 1 for t in ntiles):
+        return multiscale_unwrap(
             ifg_filename,
             corr_filename,
             unw_filename,
             downsample_factor,
-            nlooks,
-            mask_file,
-            zero_where_masked,
-            init_method,
-            cost,
-            log_snaphu_to_file,
+            ntiles=ntiles,
+            nlooks=nlooks,
+            mask_file=mask_file,
+            zero_where_masked=zero_where_masked,
+            init_method=init_method,
+            cost=cost,
+            log_snaphu_to_file=log_snaphu_to_file,
         )
 
     # check not MacOS
@@ -373,19 +388,20 @@ def _redirect_snaphu_log(unw_filename: Filename):
     logger.info(f"Logging snaphu output to {logfile}")
 
 
-def coarse_unwrap(
+def multiscale_unwrap(
     ifg_filename: Filename,
     corr_filename: Filename,
     unw_filename: Filename,
-    downsample_factor: Union[int, tuple[int, int]],
-    nlooks_correlation: float,
+    downsample_factor: tuple[int, int],
+    ntiles: tuple[int, int],
+    nlooks: float,
     mask_file: Optional[Filename] = None,
     zero_where_masked: bool = True,
     init_method: str = "mst",
     cost: str = "smooth",
     log_snaphu_to_file: bool = True,
 ) -> tuple[Path, Path]:
-    """Unwrap an interferogram using a coarse resolution unwrapped interferogram.
+    """Unwrap an interferogram using at multiple scales using `tophu`.
 
     Parameters
     ----------
@@ -395,9 +411,12 @@ def coarse_unwrap(
         Path to input correlation file.
     unw_filename : Filename
         Path to output unwrapped phase file.
-    downsample_factor : int, optional, default = 1
+    downsample_factor : tuple[int, int]
         Downsample the interferograms by this factor to unwrap faster, then upsample
-    nlooks_correlation : float
+    ntiles : tuple[int, int]
+        Number of tiles to split for full image into for high res unwrapping.
+        If `ntiles` is an int, will use `(ntiles, ntiles)`
+    nlooks : float
         Effective number of spatial looks used to form the input correlation data.
     mask_file : Filename, optional
         Path to binary byte mask file, by default None.
@@ -420,23 +439,54 @@ def coarse_unwrap(
     conncomp_path : Path
         Path to output connected component label file.
     """
-    from tophu import SnaphuUnwrap
-    from tophu.multiscale import coarse_unwrap
+    from tophu import RasterBand, SnaphuUnwrap, multiscale_unwrap
+
+    def _get_rasterio_crs_transform(filename: Filename):
+        import rasterio as rio
+
+        with rio.open(filename) as src:
+            return src.crs, src.transform
+
+    (width, height) = io.get_raster_xysize(ifg_filename)
+    crs, transform = _get_rasterio_crs_transform(ifg_filename)
 
     unw_suffix = full_suffix(unw_filename)
     conncomp_filename = str(unw_filename).replace(unw_suffix, CONNCOMP_SUFFIX)
-    if isinstance(downsample_factor, int):
-        downsample_factor = (downsample_factor, downsample_factor)
 
-    igram = io.load_gdal(ifg_filename)
-    coherence = io.load_gdal(corr_filename)
-    if mask_file is not None:
-        # https://github.com/python/mypy/issues/5107
-        mask = _load_mask(mask_file)  # type: ignore
-        # Set correlation to 0 where mask is 0
-        coherence[mask == 0] = 0
-        if zero_where_masked:
-            igram[mask == 0] = 0
+    # SUFFIX=ADD
+    envi_options = dict(opt.lower().split("=") for opt in io.DEFAULT_ENVI_OPTIONS)
+    logger.debug(f"Saving conncomps to {conncomp_filename}")
+    conncomp_rb = RasterBand(
+        conncomp_filename,
+        height=height,
+        width=width,
+        dtype=np.uint16,
+        driver="ENVI",
+        crs=crs,
+        transform=transform,
+        **envi_options,
+    )
+    gtiff_options = dict(opt.lower().split("=") for opt in io.DEFAULT_TIFF_OPTIONS)
+    unw_rb = RasterBand(
+        unw_filename,
+        height=height,
+        width=width,
+        dtype=np.float32,
+        crs=crs,
+        transform=transform,
+        **gtiff_options,
+    )
+
+    if zero_where_masked and mask_file is not None:
+        logger.info(f"Zeroing phase/corr of pixels masked in {mask_file}")
+        zeroed_ifg_file, zeroed_corr_file = _zero_from_mask(
+            ifg_filename, corr_filename, mask_file
+        )
+        igram = RasterBand(zeroed_ifg_file)
+        coherence = RasterBand(zeroed_corr_file)
+    else:
+        igram = RasterBand(ifg_filename)
+        coherence = RasterBand(corr_filename)
 
     unwrap_callback = SnaphuUnwrap(
         cost=cost,
@@ -445,32 +495,15 @@ def coarse_unwrap(
     if log_snaphu_to_file:
         _redirect_snaphu_log(unw_filename)
 
-    unwrapped_phase_lores, conncomp_lores = coarse_unwrap(
-        igram=igram,
-        coherence=coherence,
-        nlooks=nlooks_correlation,
+    multiscale_unwrap(
+        unw_rb,
+        conncomp_rb,
+        igram,
+        coherence,
+        nlooks=nlooks,
         unwrap=unwrap_callback,
         downsample_factor=downsample_factor,
-        do_lowpass_filter=True,
+        ntiles=ntiles,
     )
 
-    logger.info(f"Saving {unw_filename}")
-    io.write_arr(
-        arr=unwrapped_phase_lores,
-        output_name=unw_filename,
-        like_filename=ifg_filename,
-    )
-
-    io.write_arr(
-        arr=conncomp_lores,
-        output_name=conncomp_filename,
-        like_filename=ifg_filename,
-        driver="ENVI",
-    )
     return Path(unw_filename), Path(conncomp_filename)
-
-
-# make a cached version of loading the mask file
-@lru_cache
-def _load_mask(mask_file: Filename):
-    return io.load_gdal(mask_file)
