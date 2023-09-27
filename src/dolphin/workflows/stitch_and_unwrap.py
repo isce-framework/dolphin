@@ -139,7 +139,8 @@ def run(
         nlooks=nlooks,
         mask_file=output_mask,
         max_jobs=unwrap_jobs,
-        no_tile=True,
+        ntiles=cfg.unwrap_options.ntiles,
+        downsample_factor=cfg.unwrap_options.downsample_factor,
         use_icu=use_icu,
     )
 

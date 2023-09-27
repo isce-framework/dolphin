@@ -77,9 +77,10 @@ def test_interferogram_network_types():
 def test_unwrap_options_defaults():
     opts = config.UnwrapOptions()
     assert opts.unwrap_method == config.UnwrapMethod.SNAPHU
-    assert opts.tiles == [1, 1]
     assert opts.init_method == "mcf"
     assert opts._directory == Path("unwrapped")
+    assert opts.ntiles == [1, 1]
+    assert opts.downsample_factor == [1, 1]
 
 
 def test_outputs_defaults():

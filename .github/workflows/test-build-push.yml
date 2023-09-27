@@ -16,8 +16,12 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest]
         deps:
+            # Note: for now we're manually adding tophu deps,
+            # will change once it's on conda forge
           - label: Latest
-            spec: ""
+            spec: >-
+              dask
+              rasterio
           - label: Minimum
             spec: >-
               python=3.8
@@ -34,6 +38,8 @@ jobs:
               scipy=1.5
               shapely=1.8
               threadpoolctl>=3.0
+              dask
+              rasterio
         exclude:  # TODO: Remove this once pymp is gone
           - os: macos-latest
             deps:
@@ -63,6 +69,7 @@ jobs:
       - name: Install test dependencies
         run: |
           micromamba install -f tests/requirements.txt -c conda-forge
+          pip install --no-deps git+https://github.com/isce-framework/tophu@main
       - name: Disable numba boundscheck for better error catching
         run: |
           echo "NUMBA_BOUNDSCHECK=1" >> $GITHUB_ENV

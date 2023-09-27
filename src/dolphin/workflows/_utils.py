@@ -140,7 +140,7 @@ def make_nodata_mask(
     buffer_pixels: int = 0,
     overwrite: bool = False,
 ):
-    """Make a dummy raster from the first file in the list.
+    """Make a boolean raster mask from the union of nodata polygons.
 
     Parameters
     ----------
