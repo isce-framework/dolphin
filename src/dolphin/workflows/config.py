@@ -20,7 +20,7 @@ from dolphin._types import Bbox
 from dolphin.io import DEFAULT_HDF5_OPTIONS, DEFAULT_TIFF_OPTIONS
 from dolphin.utils import get_cpu_count, get_dates, sort_files_by_date
 
-from ._enums import InterferogramNetworkType, ShpMethod, UnwrapMethod, WorkflowName
+from ._enums import InterferogramNetworkType, ShpMethod, UnwrapMethod
 from ._yaml_model import YamlModel
 
 __all__ = [
@@ -300,8 +300,6 @@ class OutputOptions(BaseModel, extra="forbid"):
 class Workflow(YamlModel):
     """Configuration for the workflow."""
 
-    workflow_name: WorkflowName = WorkflowName.STACK
-
     # Paths to input/output files
     input_options: InputOptions = Field(default_factory=InputOptions)
     cslc_file_list: List[Path] = Field(
@@ -348,13 +346,6 @@ class Workflow(YamlModel):
     )
     unwrap_options: UnwrapOptions = Field(default_factory=UnwrapOptions)
     output_options: OutputOptions = Field(default_factory=OutputOptions)
-    save_compressed_slc: bool = Field(
-        default=False,
-        description=(
-            "Whether the SAS should output and save the Compressed SLCs in addition to"
-            " the standard product output."
-        ),
-    )
 
     # General workflow metadata
     worker_settings: WorkerSettings = Field(default_factory=WorkerSettings)
@@ -372,7 +363,7 @@ class Workflow(YamlModel):
     # Stores the list of directories to be created by the workflow
     _directory_list: List[Path] = PrivateAttr(default_factory=list)
     model_config = ConfigDict(
-        extra="forbid", json_schema_extra={"required": ["cslc_file_list"]}
+        extra="allow", json_schema_extra={"required": ["cslc_file_list"]}
     )
 
     @field_validator("work_directory")

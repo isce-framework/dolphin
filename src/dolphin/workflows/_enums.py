@@ -1,18 +1,10 @@
 from enum import Enum
 
 __all__ = [
-    "WorkflowName",
     "ShpMethod",
     "UnwrapMethod",
     "InterferogramNetworkType",
 ]
-
-
-class WorkflowName(str, Enum):
-    """Name of workflows."""
-
-    STACK = "stack"
-    SINGLE = "single"
 
 
 class ShpMethod(str, Enum):

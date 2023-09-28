@@ -9,7 +9,7 @@ from dolphin._log import get_log, log_runtime
 from dolphin.interferogram import Network
 from dolphin.opera_utils import make_nodata_mask
 
-from . import sequential, single
+from . import sequential
 from .config import Workflow
 
 
@@ -114,49 +114,27 @@ def run(cfg: Workflow, debug: bool = False) -> tuple[list[Path], Path, Path, Pat
         # If we pre-compute it from some big stack, we need to use that for SHP
         # finding, not use the size of `slc_vrt_file`
         shp_nslc = None
-        if cfg.workflow_name == "single":
-            phase_linked_slcs, comp_slc_file, tcorr_file = (
-                single.run_wrapped_phase_single(
-                    slc_vrt_file=vrt_stack.outfile,
-                    output_folder=pl_path,
-                    half_window=cfg.phase_linking.half_window.model_dump(),
-                    strides=strides,
-                    reference_idx=0,
-                    beta=cfg.phase_linking.beta,
-                    mask_file=nodata_mask_file,
-                    ps_mask_file=ps_output,
-                    amp_mean_file=cfg.ps_options._amp_mean_file,
-                    amp_dispersion_file=cfg.ps_options._amp_dispersion_file,
-                    shp_method=cfg.phase_linking.shp_method,
-                    shp_alpha=cfg.phase_linking.shp_alpha,
-                    shp_nslc=shp_nslc,
-                    block_shape=cfg.worker_settings.block_shape,
-                    n_workers=cfg.worker_settings.n_workers,
-                    gpu_enabled=cfg.worker_settings.gpu_enabled,
-                )
+        phase_linked_slcs, comp_slcs, tcorr_file = (
+            sequential.run_wrapped_phase_sequential(
+                slc_vrt_file=vrt_stack.outfile,
+                output_folder=pl_path,
+                half_window=cfg.phase_linking.half_window.model_dump(),
+                strides=strides,
+                beta=cfg.phase_linking.beta,
+                ministack_size=cfg.phase_linking.ministack_size,
+                mask_file=nodata_mask_file,
+                ps_mask_file=ps_output,
+                amp_mean_file=cfg.ps_options._amp_mean_file,
+                amp_dispersion_file=cfg.ps_options._amp_dispersion_file,
+                shp_method=cfg.phase_linking.shp_method,
+                shp_alpha=cfg.phase_linking.shp_alpha,
+                shp_nslc=shp_nslc,
+                block_shape=cfg.worker_settings.block_shape,
+                n_workers=cfg.worker_settings.n_workers,
+                gpu_enabled=cfg.worker_settings.gpu_enabled,
             )
-        else:
-            phase_linked_slcs, comp_slcs, tcorr_file = (
-                sequential.run_wrapped_phase_sequential(
-                    slc_vrt_file=vrt_stack.outfile,
-                    output_folder=pl_path,
-                    half_window=cfg.phase_linking.half_window.model_dump(),
-                    strides=strides,
-                    beta=cfg.phase_linking.beta,
-                    ministack_size=cfg.phase_linking.ministack_size,
-                    mask_file=nodata_mask_file,
-                    ps_mask_file=ps_output,
-                    amp_mean_file=cfg.ps_options._amp_mean_file,
-                    amp_dispersion_file=cfg.ps_options._amp_dispersion_file,
-                    shp_method=cfg.phase_linking.shp_method,
-                    shp_alpha=cfg.phase_linking.shp_alpha,
-                    shp_nslc=shp_nslc,
-                    block_shape=cfg.worker_settings.block_shape,
-                    n_workers=cfg.worker_settings.n_workers,
-                    gpu_enabled=cfg.worker_settings.gpu_enabled,
-                )
-            )
-            comp_slc_file = comp_slcs[-1]
+        )
+        comp_slc_file = comp_slcs[-1]
 
         if watcher:
             watcher.notify_finished()
