@@ -7,8 +7,9 @@ from dolphin import ps, stack, utils
 from dolphin._background import NvidiaMemoryWatcher
 from dolphin._log import get_log, log_runtime
 from dolphin.interferogram import Network
+from dolphin.opera_utils import make_nodata_mask
 
-from . import _utils, sequential, single
+from . import sequential, single
 from .config import Workflow
 
 
@@ -54,7 +55,7 @@ def run(cfg: Workflow, debug: bool = False) -> tuple[list[Path], Path, Path, Pat
     # Make the nodata mask from the polygons, if we're using OPERA CSLCs
     try:
         nodata_mask_file = cfg.work_directory / "nodata_mask.tif"
-        _utils.make_nodata_mask(
+        make_nodata_mask(
             vrt_stack.file_list, out_file=nodata_mask_file, buffer_pixels=200
         )
     except Exception as e:

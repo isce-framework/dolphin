@@ -7,13 +7,7 @@ from multiprocessing import cpu_count
 from pathlib import Path
 from typing import Optional, Union
 
-from .config import (
-    OPERA_DATASET_NAME,
-    InterferogramNetworkType,
-    ShpMethod,
-    Workflow,
-    WorkflowName,
-)
+from .config import InterferogramNetworkType, ShpMethod, Workflow, WorkflowName
 
 
 def create_config(
@@ -126,10 +120,7 @@ def get_parser(subparser=None, subcommand_name="run"):
     inputs.add_argument(
         "-sds",
         "--subdataset",
-        help=(
-            "Subdataset to use from HDF5/NetCDF files. For OPERA CSLC NetCDF files, if"
-            f" None is passed, the default is {OPERA_DATASET_NAME}."
-        ),
+        help="Subdataset to use from HDF5/NetCDF files.",
     )
     inputs.add_argument(
         "--amplitude-mean-files",

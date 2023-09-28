@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import re
 from datetime import datetime
 from glob import glob
 from pathlib import Path
@@ -29,16 +28,6 @@ __all__ = [
 ]
 
 logger = get_log(__name__)
-
-# Specific to OPERA CSLC products:
-OPERA_DATASET_ROOT = "/"
-OPERA_DATASET_NAME = f"{OPERA_DATASET_ROOT}/data/VV"
-OPERA_IDENTIFICATION = f"{OPERA_DATASET_ROOT}/identification"
-
-# for example, t087_185684_iw2
-OPERA_BURST_RE = re.compile(
-    r"t(?P<track>\d{3})_(?P<burst_id>\d{6})_(?P<subswath>iw[1-3])"
-)
 
 
 class PsOptions(BaseModel, extra="forbid"):
@@ -229,11 +218,7 @@ class InputOptions(BaseModel, extra="forbid"):
 
     subdataset: Optional[str] = Field(
         None,
-        description=(
-            "If passing HDF5/NetCDF files, subdataset to use from CSLC files. "
-            f"If not specified, but all `cslc_file_list` looks like {OPERA_BURST_RE}, "
-            f" will use {OPERA_DATASET_NAME} as the subdataset."
-        ),
+        description="If passing HDF5/NetCDF files, subdataset to use from CSLC files. ",
     )
     cslc_date_fmt: str = Field(
         "%Y%m%d",
@@ -420,12 +405,6 @@ class Workflow(YamlModel):
 
         return list(v)
 
-    @staticmethod
-    def _is_opera_file_list(cslc_file_list):
-        return all(
-            re.search(OPERA_BURST_RE, str(f)) is not None for f in cslc_file_list
-        )
-
     @model_validator(mode="after")
     def _check_slc_files_exist(self) -> "Workflow":
         file_list = self.cslc_file_list
@@ -435,11 +414,11 @@ class Workflow(YamlModel):
         input_options = self.input_options
         date_fmt = input_options.cslc_date_fmt
         # Filter out files that don't have dates in the filename
-        file_matching_date = [Path(f) for f in file_list if get_dates(f, fmt=date_fmt)]
-        if len(file_matching_date) < len(file_list):
+        files_matching_date = [Path(f) for f in file_list if get_dates(f, fmt=date_fmt)]
+        if len(files_matching_date) < len(file_list):
             raise ValueError(
-                f"Found {len(file_matching_date)} files with dates in the filename"
-                f" out of {len(file_list)} files."
+                f"Found {len(files_matching_date)} files with dates like {date_fmt} in"
+                f" the filename out of {len(file_list)} files."
             )
 
         ext = file_list[0].suffix
@@ -447,18 +426,9 @@ class Workflow(YamlModel):
         if ext in [".h5", ".nc"]:
             subdataset = input_options.subdataset
             if subdataset is None:
-                if self._is_opera_file_list(file_list):
-                    # Assume that the user forgot to set the subdataset, and set it to the
-                    # default OPERA dataset name
-                    logger.info(
-                        "CSLC files look like OPERA files, setting subdataset to"
-                        f" {OPERA_DATASET_NAME}."
-                    )
-                    subdataset = input_options.subdataset = OPERA_DATASET_NAME
-                else:
-                    raise ValueError(
-                        "Must provide subdataset name for input HDF5 files."
-                    )
+                raise ValueError(
+                    "Must provide subdataset name for input NetCDF/HDF5 files."
+                )
 
         # Coerce the file_list to a sorted list of Path objects
         self.cslc_file_list = [
