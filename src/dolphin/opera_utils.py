@@ -29,7 +29,7 @@ OPERA_IDENTIFICATION = f"{OPERA_DATASET_ROOT}/identification"
 # OPERA_L2_CSLC-S1_T078-165495-IW3_20190906T232711Z_20230101T100506Z_S1A_VV_v1.0.h5
 
 OPERA_BURST_RE = re.compile(
-    r"(?P<prefix>.*?)(?P<track>\d{3})[-_](?P<burst_id>\d{6})[-_](?P<subswath>iw[1-3])",
+    r"[tT](?P<track>\d{3})[-_](?P<burst_id>\d{6})[-_](?P<subswath>iw[1-3])",
     re.IGNORECASE,
 )
 
