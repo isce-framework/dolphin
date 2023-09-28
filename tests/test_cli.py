@@ -15,6 +15,15 @@ def test_help(capsys, option):
     assert " dolphin [-h] [--version] {run,config,unwrap}" in output
 
 
+def test_empty(capsys):
+    try:
+        main([])
+    except SystemExit:
+        pass
+    output = capsys.readouterr().out
+    assert " dolphin [-h] [--version] {run,config,unwrap}" in output
+
+
 @pytest.mark.parametrize("sub_cmd", ("run", "config", "unwrap"))
 @pytest.mark.parametrize("option", ("-h", "--help"))
 def test_subcommand_help(capsys, sub_cmd, option):

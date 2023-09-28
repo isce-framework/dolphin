@@ -1,4 +1,5 @@
 import argparse
+import sys
 
 import dolphin._cli_unwrap
 import dolphin.workflows._cli_config
@@ -22,5 +23,10 @@ def main(args=None):
     parsed_args = parser.parse_args(args=args)
 
     arg_dict = vars(parsed_args)
-    run_func = arg_dict.pop("run_func")
-    run_func(**arg_dict)
+    try:
+        run_func = arg_dict.pop("run_func")
+        run_func(**arg_dict)
+    except KeyError:
+        # No arguments passed
+        parser.print_help()
+        sys.exit(1)
