@@ -6,6 +6,9 @@
     - Other OPERA-specific quirks have been moved to the seperate `disp-s1` repo,
      but the functions remaining are the ones that seem most broadly useful to `sweets`
      and other users working with burst SLCs.
+    - Changed the burst regex to be able to match COMPASS and the official product name
+- Removed `WorkflowName` for separating `stack` vs `single`
+  - The name didn't really provide benefit, as the real differences cam from other configuration options
 
 # [0.4.1](https://github.com/isce-framework/dolphin/compare/v0.4.0...v0.4.1) - 2023-09-08
 
