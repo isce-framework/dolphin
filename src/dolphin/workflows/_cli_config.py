@@ -7,7 +7,7 @@ from multiprocessing import cpu_count
 from pathlib import Path
 from typing import Optional, Union
 
-from .config import InterferogramNetworkType, ShpMethod, Workflow, WorkflowName
+from .config import InterferogramNetworkType, ShpMethod, Workflow
 
 
 def create_config(
@@ -39,15 +39,12 @@ def create_config(
             network_type=InterferogramNetworkType.MANUAL_INDEX,
             indexes=[(0, -1)],
         )
-        workflow_name = WorkflowName.SINGLE
         # Override the ministack size so that only one phase linking is run
         ministack_size = 1000
     else:
         interferogram_network = {}  # Use default
-        workflow_name = WorkflowName.STACK
 
     cfg = Workflow(
-        workflow_name=workflow_name,
         cslc_file_list=slc_files,
         mask_file=mask_file,
         input_options=dict(
