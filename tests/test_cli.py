@@ -5,7 +5,7 @@ import pytest
 from dolphin.cli import main
 
 
-@pytest.mark.parametrize("option", ("-h", "--help"))
+@pytest.mark.parametrize("option", ("-h", "--help", ""))
 def test_help(capsys, option):
     try:
         main([option])

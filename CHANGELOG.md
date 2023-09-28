@@ -3,7 +3,7 @@
 **Changed**
 
 - Moved all `OPERA_` variables to a new module `dolphin.opera_utils`.
-    - Other OPERA-specific quirks have been moved to the seperate `disp-s1` repo,
+    - Other OPERA-specific quirks have been moved to the separate `disp-s1` repo,
      but the functions remaining are the ones that seem most broadly useful to `sweets`
      and other users working with burst SLCs.
     - Changed the burst regex to be able to match COMPASS and the official product name
