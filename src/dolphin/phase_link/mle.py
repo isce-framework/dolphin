@@ -235,7 +235,7 @@ def mle_stack(
     Gamma = xp.abs(C_arrays)
 
     if use_evd:
-        V = _get_eigvecs(C_arrays, n_workers=n_workers)
+        V = _get_eigvecs(C_arrays, n_workers=n_workers, use_evd=True)
         column_idx = -1
     else:
         if beta > 0:
@@ -246,7 +246,7 @@ def mle_stack(
             Gamma = (1 - beta) * Gamma + beta * Id
 
         Gamma_inv = xp.linalg.inv(Gamma)
-        V = _get_eigvecs(Gamma_inv * C_arrays, n_workers=n_workers)
+        V = _get_eigvecs(Gamma_inv * C_arrays, n_workers=n_workers, use_evd=False)
         column_idx = 0
 
     # The shape of V is (rows, cols, nslc, nslc)
@@ -267,12 +267,12 @@ def mle_stack(
     return xp.moveaxis(phase_stack, -1, 0)
 
 
-def _get_eigvecs(C, n_workers: int = 1):
+def _get_eigvecs(C, n_workers: int = 1, use_evd: bool = False):
     xp = get_array_module(C)
     if xp == np:
         # The block splitting isn't needed for numpy.
         # return np.linalg.eigh(C)[1]
-        return _get_eigvecs_scipy(C, n_workers=n_workers)
+        return _get_eigvecs_scipy(C, n_workers=n_workers, use_evd=use_evd)
 
     # Make sure we don't overflow: cupy https://github.com/cupy/cupy/issues/7261
     # The work_size must be less than 2**30, so
@@ -298,24 +298,29 @@ def _get_eigvecs(C, n_workers: int = 1):
     return V_out
 
 
-def _get_eigvecs_scipy(C, n_workers=1):
-    C_shared = pymp.shared.array(C.shape, dtype="complex64")
-    C_shared[:] = C[:]
-    rows, cols, nslc, _ = C.shape
+def _get_eigvecs_scipy(A: np.ndarray, n_workers: int = 1, use_evd: bool = False):
+    # Subset index for scipy.eigh: larges eig for EVD. Smallest for EMI.
+    subset_idx = A.shape[-1] - 1 if use_evd else 0
+
+    A_shared = pymp.shared.array(A.shape, dtype="complex64")
+    A_shared[:] = A[:]
+    rows, cols, nslc, _ = A.shape
     out = pymp.shared.array((rows, cols, nslc), dtype="complex64")
     with pymp.Parallel(n_workers) as p:
         # Looping over linear index for pixels (less nesting of pymp context managers)
         for idx in p.range(rows * cols):
             # Iterating over every output pixels, convert to a row/col index
             r, c = np.unravel_index(idx, (rows, cols))
-            out[r, c, :] = eigh(C_shared[r, c], subset_by_index=[0, 0])[1].ravel()
+            out[r, c, :] = eigh(
+                A_shared[r, c], subset_by_index=[subset_idx, subset_idx]
+            )[1].ravel()
 
-    del C_shared
+    del A_shared
     # Add the last dimension back to match the shape of the cupy output
     return out[:, :, :, None]
 
 
-def _check_all_nans(slc_stack):
+def _check_all_nans(slc_stack: np.ndarray):
     """Check for all NaNs in each SLC of the stack."""
     nans = np.isnan(slc_stack)
     # Check that there are no SLCS which are all nans:

@@ -87,8 +87,8 @@ def run_cpu(
 
     if calc_average_coh:
         # If requested, average the Cov matrix at each row for reference selection
-        d_avg_coh_per_date = np.abs(C_arrays).mean(axis=3)
-        avg_coh = np.argmax(d_avg_coh_per_date, axis=2)
+        avg_coh_per_date = np.abs(C_arrays).mean(axis=3)
+        avg_coh = np.argmax(avg_coh_per_date, axis=2)
     else:
         avg_coh = None
 
