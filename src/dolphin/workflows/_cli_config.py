@@ -29,6 +29,7 @@ def create_config(
     no_gpu: bool = False,
     ntiles: tuple[int, int] = (1, 1),
     downsample_factor: tuple[int, int] = (1, 1),
+    n_parallel_unwrap: int = 1,
     use_icu: bool = False,
     single_update: bool = False,
     log_file: Optional[Path] = None,
@@ -70,6 +71,7 @@ def create_config(
             unwrap_method=("icu" if use_icu else "snaphu"),
             ntiles=ntiles,
             downsample_factor=downsample_factor,
+            n_parallel_jobs=n_parallel_unwrap,
         ),
         worker_settings=dict(
             block_shape=block_shape,
@@ -208,6 +210,12 @@ def get_parser(subparser=None, subcommand_name="run"):
             "(For multiscale unwrapping) Factor to multilook the coarse unwrapped"
             " version."
         ),
+    )
+    unwrap_group.add_argument(
+        "--n-parallel-unwrap",
+        type=int,
+        default=1,
+        help="Number of interferograms to unwrap in parallel.",
     )
 
     # Get Outputs from the command line
