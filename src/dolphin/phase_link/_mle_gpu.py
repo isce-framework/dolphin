@@ -17,6 +17,7 @@ def run_gpu(
     slc_stack: np.ndarray,
     half_window: dict[str, int],
     strides: dict[str, int] = {"x": 1, "y": 1},
+    use_evd: bool = False,
     beta: float = 0.01,
     reference_idx: int = 0,
     use_slc_amp: bool = True,
@@ -38,6 +39,9 @@ def run_gpu(
     strides : dict[str, int], optional
         The (x, y) strides (in pixels) to use for the sliding window.
         By default {"x": 1, "y": 1}
+    use_evd : bool, default = False
+        Use eigenvalue decomposition on the covariance matrix instead of
+        the EMI algorithm.
     beta : float, optional
         The regularization parameter, by default 0.01.
     reference_idx : int, optional
@@ -105,7 +109,9 @@ def run_gpu(
         do_shp,
     )
 
-    d_output_phase = mle_stack(d_C_arrays, beta=beta, reference_idx=reference_idx)
+    d_output_phase = mle_stack(
+        d_C_arrays, use_evd=use_evd, beta=beta, reference_idx=reference_idx
+    )
     d_cpx_phase = cp.exp(1j * d_output_phase)
 
     # Get the temporal coherence

@@ -69,6 +69,10 @@ class PhaseLinkingOptions(BaseModel, extra="forbid"):
         15, description="Size of the ministack for sequential estimator.", gt=1
     )
     half_window: HalfWindow = HalfWindow()
+    use_evd: bool = Field(
+        False, description="Use EVD on the coherence instead of using the EMI algorithm"
+    )
+
     beta: float = Field(
         0.01,
         description=(

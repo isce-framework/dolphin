@@ -29,6 +29,7 @@ def run_mle(
     slc_stack: np.ndarray,
     half_window: dict[str, int],
     strides: dict[str, int] = {"x": 1, "y": 1},
+    use_evd: bool = False,
     beta: float = 0.01,
     reference_idx: int = 0,
     nodata_mask: np.ndarray = None,
@@ -52,6 +53,9 @@ def run_mle(
     strides : dict[str, int], optional
         The (x, y) strides (in pixels) to use for the sliding window.
         By default {"x": 1, "y": 1}
+    use_evd : bool, default = False
+        Use eigenvalue decomposition on the covariance matrix instead of
+        the EMI algorithm.
     beta : float, optional
         The regularization parameter, by default 0.01.
     reference_idx : int, optional
@@ -136,6 +140,7 @@ def run_mle(
             slc_stack=slc_stack_masked,
             half_window=half_window,
             strides=strides,
+            use_evd=use_evd,
             beta=beta,
             reference_idx=reference_idx,
             neighbor_arrays=neighbor_arrays,
@@ -148,6 +153,7 @@ def run_mle(
             slc_stack=slc_stack_masked,
             half_window=half_window,
             strides=strides,
+            use_evd=use_evd,
             beta=beta,
             reference_idx=reference_idx,
             neighbor_arrays=neighbor_arrays,
@@ -177,7 +183,11 @@ def run_mle(
 
 
 def mle_stack(
-    C_arrays, beta: float = 0.01, reference_idx: float = 0, n_workers: int = 1
+    C_arrays,
+    use_evd: bool = False,
+    beta: float = 0.01,
+    reference_idx: float = 0,
+    n_workers: int = 1,
 ):
     """Estimate the linked phase for a stack of covariance matrices.
 
@@ -191,6 +201,9 @@ def mle_stack(
     C_arrays : ndarray, shape = (rows, cols, nslc, nslc)
         The sample covariance matrix at each pixel
         (e.g. from [dolphin.phase_link.covariance.estimate_stack_covariance_cpu][])
+    use_evd : bool, default = False
+        Use eigenvalue decomposition on the covariance matrix instead of
+        the EMI algorithm.
     beta : float, optional
         The regularization parameter for inverting Gamma = |C|
         The regularization is applied as (1 - beta) * Gamma + beta * I
@@ -221,21 +234,28 @@ def mle_stack(
     # *smallest* eigenvalue decomposition of the (|Gamma|^-1  *  C) matrix
     Gamma = xp.abs(C_arrays)
 
-    if beta > 0:
-        # Perform regularization
-        Id = xp.eye(Gamma.shape[-1], dtype=Gamma.dtype)
-        # repeat the identity matrix for each pixel
-        Id = xp.tile(Id, (Gamma.shape[0], Gamma.shape[1], 1, 1))
-        Gamma = (1 - beta) * Gamma + beta * Id
+    if use_evd:
+        V = _get_eigvecs(C_arrays, n_workers=n_workers)
+        column_idx = -1
+    else:
+        if beta > 0:
+            # Perform regularization
+            Id = xp.eye(Gamma.shape[-1], dtype=Gamma.dtype)
+            # repeat the identity matrix for each pixel
+            Id = xp.tile(Id, (Gamma.shape[0], Gamma.shape[1], 1, 1))
+            Gamma = (1 - beta) * Gamma + beta * Id
 
-    Gamma_inv = xp.linalg.inv(Gamma)
-    V = _get_eigvecs(Gamma_inv * C_arrays, n_workers=n_workers)
+        Gamma_inv = xp.linalg.inv(Gamma)
+        V = _get_eigvecs(Gamma_inv * C_arrays, n_workers=n_workers)
+        column_idx = -1
 
     # The shape of V is (rows, cols, nslc, nslc)
     # at pixel (r, c), the columns of V[r, c] are the eigenvectors.
     # They're ordered by increasing eigenvalue, so the first column is the
-    # eigenvector corresponding to the smallest eigenvalue (our phase solution).
-    evd_estimate = V[:, :, :, 0]
+    # eigenvector corresponding to the smallest eigenvalue (phase solution for EMI),
+    # and the last column is for the largest eigenvalue (used by EVD)
+    evd_estimate = V[:, :, :, column_idx]
+
     # The phase estimate on the reference day will be size (rows, cols)
     ref = evd_estimate[:, :, reference_idx]
     # Make sure each still has 3 dims, then reference all phases to `ref`

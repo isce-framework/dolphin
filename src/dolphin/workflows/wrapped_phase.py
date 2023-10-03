@@ -120,6 +120,7 @@ def run(cfg: Workflow, debug: bool = False) -> tuple[list[Path], Path, Path, Pat
                 output_folder=pl_path,
                 half_window=cfg.phase_linking.half_window.model_dump(),
                 strides=strides,
+                use_evd=cfg.phase_linking.use_evd,
                 beta=cfg.phase_linking.beta,
                 ministack_size=cfg.phase_linking.ministack_size,
                 mask_file=nodata_mask_file,
