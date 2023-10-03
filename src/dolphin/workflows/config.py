@@ -174,6 +174,9 @@ class UnwrapOptions(BaseModel, extra="forbid"):
             " unwrap."
         ),
     )
+    n_parallel_jobs: int = Field(
+        1, description="Number of interferograms to unwrap in parallel."
+    )
     init_method: str = Field(
         "mcf",
         description="Initialization method for SNAPHU.",

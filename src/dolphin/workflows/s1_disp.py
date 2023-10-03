@@ -131,6 +131,7 @@ def run(
             ps_file_list=ps_file_list,
             cfg=cfg,
             debug=debug,
+            unwrap_jobs=cfg.unwrap_options.n_parallel_jobs,
         )
     )
 
