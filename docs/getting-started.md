@@ -1,32 +1,12 @@
 ## Install
 
-The following will install `dolphin` into a conda environment.
 
-1. Download source code:
+`dolphin` is available on conda-forge:
+
 ```bash
-git clone https://github.com/opera-adt/dolphin.git && cd dolphin
-```
-2. Install dependencies:
-```bash
-conda env create --file conda-env.yml
+mamba install -c conda-forge dolphin
 ```
 
-or if you have an existing environment:
-```bash
-conda env update --name my-existing-env --file conda-env.yml
-```
-
-3. Install `dolphin` via pip:
-```bash
-conda activate dolphin-env
-python -m pip install .
-```
-
-
-If you have access to a GPU, you can install the extra requirements from running the GPU accelerated algorithms:
-```bash
-conda env update --name dolphin-env --file conda-env-gpu-extras.yml
-```
 
 ## Usage
 
@@ -66,16 +46,42 @@ The full set of options is written to the configuration file; you can edit this 
 To contribute to the development of `dolphin`, you can fork the repository and install the package in development mode.
 We encourage new features to be developed on a new branch of your fork, and then submitted as a pull request to the main repository.
 
-Once you're ready to write new code, you can use the following additional steps to add to your development environment:
+To install locally,
+
+1. Download source code:
+```bash
+git clone https://github.com/isce-framework/dolphin.git && cd dolphin
+```
+2. Install dependencies:
+```bash
+mamba env create --file conda-env.yml
+```
+
+or if you have an existing environment:
+```bash
+mamba env update --name my-existing-env --file conda-env.yml
+```
+
+3. Install `dolphin` via pip:
+```bash
+mamba activate dolphin-env
+python -m pip install -e .
+```
 
 
+If you have access to a GPU, you can install the extra requirements from running the GPU accelerated algorithms:
+```bash
+mamba env update --name dolphin-env --file conda-env-gpu-extras.yml
+```
+
+
+The extra packages required for testing and building the documentation can be installed:
 ```bash
 # Run "pip install -e" to install with extra development requirements
 python -m pip install -e ".[docs,test]"
 ```
-This will install the `dolphin` package in development mode, and install the additional dependencies for documentation and testing.
 
-After changing code, we use [`pre-commit`](https://pre-commit.com/) to automatically run linting and formatting:
+We use [`pre-commit`](https://pre-commit.com/) to automatically run linting and formatting:
 ```bash
 # Get pre-commit hooks so that linting/formatting is done automatically
 pre-commit install
@@ -87,6 +93,19 @@ After making functional changes, you can rerun the existing tests and any new on
 python -m pytest
 ```
 
+### GPU setup
+If you have access to a GPU, you can install the extra requirements from running the GPU accelerated algorithms:
+
+```bash
+mamba env update -n dolphin-env --file conda-env-gpu-extras.yml
+```
+Note that the version of `cudatoolkit` must match the drivers installed for your GPU (which may come from the output of `nvidia-smi`)
+See the [numba](https://numba.readthedocs.io/en/stable/cuda/overview.html#software) and [cupy](https://docs.cupy.dev/en/stable/install.html) installation instructions for more details on getting set up.
+
+To check whether you have successfully installed `numba` and `cupy`, run
+```bash
+python -c 'from dolphin import utils; print(utils.gpu_available())'
+```
 
 ### Creating Documentation
 

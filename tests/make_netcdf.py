@@ -1,7 +1,9 @@
 #!/usr/bin/env python
+from __future__ import annotations
 
 import argparse
 import os
+from typing import Union
 
 import h5py
 import numpy as np
@@ -19,7 +21,7 @@ def _add_complex_type(h5_root_group):
 def create_test_nc(
     outfile,
     epsg=32615,
-    subdir="/",
+    subdir: Union[str, list[str]] = "/",
     data=None,
     data_ds_name="data",
     shape=(21, 15),
@@ -27,6 +29,8 @@ def create_test_nc(
     xoff=0,
     yoff=0,
     write_mode="w",
+    dx=1.0,
+    dy=1.0,
 ):
     if isinstance(subdir, list):
         # Create groups in the same file to make multiple SubDatasets
@@ -51,10 +55,10 @@ def create_test_nc(
     hf.attrs["Conventions"] = "CF-1.8"
 
     xds = hf.create_dataset(
-        os.path.join(subdir, "x"), data=xoff + (np.arange(cols) - cols / 2)
+        os.path.join(subdir, "x"), data=xoff + (np.arange(cols) - cols / 2) * dx
     )
     yds = hf.create_dataset(
-        os.path.join(subdir, "y"), data=yoff + (np.arange(rows, 0, -1) - rows / 2)
+        os.path.join(subdir, "y"), data=yoff + (np.arange(rows, 0, -1) - rows / 2) * dy
     )
 
     if dtype == np.complex64:

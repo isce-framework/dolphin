@@ -34,7 +34,7 @@ def vrt_stack_nc(tmp_path, slc_stack, slc_file_list_nc):
 def vrt_stack_nc_subdataset(tmp_path, slc_stack, slc_file_list_nc_with_sds):
     vrt_file = tmp_path / "test_nc.vrt"
     files_only = [_get_path_from_gdal_str(f) for f in slc_file_list_nc_with_sds]
-    s = VRTStack(files_only, outfile=vrt_file, subdataset="slc/data")
+    s = VRTStack(files_only, outfile=vrt_file, subdataset="data/VV")
 
     assert s.shape == slc_stack.shape
     return s
@@ -65,8 +65,9 @@ def test_create(vrt_stack, vrt_stack_nc):
 def test_create_over_existing(tmp_path, slc_file_list):
     vrt_file = tmp_path / "test.vrt"
     VRTStack(slc_file_list, outfile=vrt_file)
+    VRTStack(slc_file_list, outfile=vrt_file, fail_on_overwrite=False)
     with pytest.raises(FileExistsError):
-        VRTStack(slc_file_list, outfile=vrt_file)
+        VRTStack(slc_file_list, outfile=vrt_file, fail_on_overwrite=True)
 
 
 def test_from_vrt_file(tmp_path, slc_file_list):
@@ -135,7 +136,7 @@ def test_add_file(vrt_stack, slc_stack):
     slc = slc_stack[0]
 
     # Make the file in the past
-    new_path_past = (vrt_stack.outfile.parent / "20000101.slc").absolute()
+    new_path_past = (vrt_stack.outfile.parent / "20000101.slc").resolve()
     driver = gdal.GetDriverByName("ENVI")
     ds = driver.Create(
         str(new_path_past), slc.shape[1], slc.shape[0], 1, gdal.GDT_CFloat32
@@ -149,7 +150,7 @@ def test_add_file(vrt_stack, slc_stack):
     assert len(vrt_stack.dates) == slc_stack.shape[0] + 1
 
     # Make the file in the future
-    new_path_future = (vrt_stack.outfile.parent / "20250101.slc").absolute()
+    new_path_future = (vrt_stack.outfile.parent / "20250101.slc").resolve()
     ds = driver.Create(
         str(new_path_future), slc.shape[1], slc.shape[0], 1, gdal.GDT_CFloat32
     )
@@ -180,8 +181,7 @@ def test_iter_blocks(vrt_stack):
 def test_tiled_iter_blocks(tmp_path, tiled_file_list):
     outfile = tmp_path / "stack.vrt"
     vrt_stack = VRTStack(tiled_file_list, outfile=outfile)
-    max_bytes = len(vrt_stack) * 32 * 32 * 8
-    blocks, slices = zip(*list(vrt_stack.iter_blocks(max_bytes=max_bytes)))
+    blocks, slices = zip(*list(vrt_stack.iter_blocks(block_shape=(32, 32))))
     # (100, 200) total shape, breaks into 32x32 blocks
     assert len(blocks) == len(slices) == 28
     for i, b in enumerate(blocks, start=1):
@@ -193,6 +193,5 @@ def test_tiled_iter_blocks(tmp_path, tiled_file_list):
             else:
                 assert b.shape == (len(vrt_stack), 32, 8)
 
-    max_bytes = len(vrt_stack) * 32 * 32 * 8 * 4
-    blocks, slices = zip(*list(vrt_stack.iter_blocks(max_bytes=max_bytes)))
-    assert len(blocks) == len(slices) == 8
+    blocks, slices = zip(*list(vrt_stack.iter_blocks(block_shape=(50, 100))))
+    assert len(blocks) == len(slices) == 4

@@ -5,42 +5,82 @@ set -o errexit
 set -o nounset
 set -o pipefail
 
-readonly HELP='usage: ./create-lockfile.sh ENVFILE > specfile.txt
+readonly HELP='usage: ./create-lockfile.sh --file ENVFILE [--pkgs PACKAGE ...] > specfile.txt
 
-Create a conda lockfile from an environment YAML file for reproducible
-environments.
-
-positional arguments:
-ENVFILE     a YAML file containing package specifications
+Create a conda lockfile from an environment YAML file and additional packages for reproducible environments.
 
 options:
--h, --help  show this help message and exit
+--file ENVFILE    Specify a YAML file containing package specifications.
+--pkgs PACKAGE    Specify additional packages separated by spaces. Example: --pkgs numpy scipy
+-h, --help        Show this help message and exit
 '
 
-main() {
-    # Get absolute path of input YAML file.
-    local ENVFILE
-    ENVFILE=$(realpath "$1")
+install_packages() {
+    local ENVFILE=$(realpath "$1")
+    shift
+    local PACKAGES="$@"
+
+    # Prepare arguments for the command
+    local FILE_ARG="--file /tmp/$(basename "$ENVFILE")"
+    local PKGS_ARGS=(${PACKAGES[@]})
 
     # Get concretized package list.
     local PKGLIST
-    PKGLIST=$(docker run \
-        -v "$ENVFILE:/tmp/environment.yml:ro" --rm \
-        mambaorg/micromamba:1.1.0 bash -c '\
-            micromamba install -y -n base -f /tmp/environment.yml > /dev/null && \
-            micromamba env export --explicit')
+    PKGLIST=$(docker run --rm --network=host \
+        -v "$ENVFILE:/tmp/$(basename "$ENVFILE"):ro" \
+        mambaorg/micromamba:1.1.0 bash -c "\
+            micromamba install -y -n base $FILE_ARG ${PKGS_ARGS[*]} > /dev/null && \
+            micromamba env export --explicit")
 
     # Sort packages alphabetically.
     # (The first 4 lines are assumed to be header lines and ignored.)
-    echo "$PKGLIST" | (sed -u 4q; sort)
+    echo "$PKGLIST" | (
+        sed -u 4q
+        sort
+    )
 }
 
-if [[ "${1-}" =~ ^-*h(elp)?$ ]]; then
-    echo "$HELP"
-elif [[ "$#" -ne 1 ]]; then
-    echo 'Illegal number of parameters' >&2
-    echo "$HELP"
-    exit 1
-else
-    main "$@"
-fi
+main() {
+    local ENVFILE=""
+    local PACKAGES=()
+
+    while [[ "$#" -gt 0 ]]; do
+        case $1 in
+        --file)
+            shift
+            if [[ -z "${1-}" ]]; then
+                echo "No file provided after --file" >&2
+                exit 1
+            fi
+            ENVFILE="$1"
+            shift
+            ;;
+        --pkgs)
+            shift
+            while [[ "$#" -gt 0 && ! "$1" =~ ^-- ]]; do
+                PACKAGES+=("$1")
+                shift
+            done
+            ;;
+        -h | --help)
+            echo "$HELP"
+            exit 0
+            ;;
+        *)
+            echo "Unknown option: $1" >&2
+            echo "$HELP"
+            exit 1
+            ;;
+        esac
+    done
+
+    if [[ -z "$ENVFILE" ]]; then
+        echo 'No environment file provided' >&2
+        echo "$HELP"
+        exit 1
+    fi
+
+    install_packages "$ENVFILE" "${PACKAGES[@]}"
+}
+
+main "$@"

@@ -1,14 +1,17 @@
 #!/usr/bin/env python
 import argparse
+from typing import TYPE_CHECKING, Any, Optional, Sequence
 
-from dolphin._log import log_runtime
+if TYPE_CHECKING:
+    _SubparserType = argparse._SubParsersAction[argparse.ArgumentParser]
+else:
+    _SubparserType = Any
 
-from ._enums import WorkflowName
-from .config import Workflow
 
-
-@log_runtime
-def run(config_file: str, debug: bool = False):
+def run(
+    config_file: str,
+    debug: bool = False,
+) -> None:
     """Run the displacement workflow.
 
     Parameters
@@ -18,22 +21,18 @@ def run(config_file: str, debug: bool = False):
     debug : bool, optional
         Enable debug logging, by default False.
     """
+    # rest of imports here so --help doesn't take forever
+
+    from . import s1_disp
+    from .config import Workflow
+
     cfg = Workflow.from_yaml(config_file)
-    cfg.create_dir_tree(debug=debug)
-    if cfg.workflow_name == "stack":
-        from dolphin.workflows import s1_disp_stack
-
-        s1_disp_stack.run(cfg, debug=debug)
-    elif cfg.workflow_name == "single":
-        raise NotImplementedError("Single interferogram workflow not yet implemented")
-    else:
-        choices = WorkflowName.__members__.values()
-        raise ValueError(
-            f"Unknown workflow name: {cfg.workflow_name}. Must be one of {choices}"
-        )
+    s1_disp.run(cfg, debug=debug)
 
 
-def get_parser(subparser=None, subcommand_name="run"):
+def get_parser(
+    subparser: Optional[_SubparserType] = None, subcommand_name: str = "run"
+) -> argparse.ArgumentParser:
     """Set up the command line interface."""
     metadata = dict(
         description="Run a displacement workflow",
@@ -41,9 +40,9 @@ def get_parser(subparser=None, subcommand_name="run"):
     )
     if subparser:
         # Used by the subparser to make a nested command line interface
-        parser = subparser.add_parser(subcommand_name, **metadata)
+        parser = subparser.add_parser(subcommand_name, **metadata)  # type: ignore
     else:
-        parser = argparse.ArgumentParser(**metadata)
+        parser = argparse.ArgumentParser(**metadata)  # type: ignore
 
     parser.add_argument(
         "config_file",
@@ -58,10 +57,11 @@ def get_parser(subparser=None, subcommand_name="run"):
     return parser
 
 
-def main(args=None):
+def main(args: Optional[Sequence[str]] = None) -> None:
     """Get the command line arguments and run the workflow."""
     parser = get_parser()
     parsed_args = parser.parse_args(args)
+
     run(parsed_args.config_file, debug=parsed_args.debug)
 
 

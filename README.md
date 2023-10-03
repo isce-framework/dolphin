@@ -1,5 +1,6 @@
 # dolphin
-[![Pytest and build docker image](https://github.com/opera-adt/dolphin/actions/workflows/tests.yml/badge.svg?branch=main)](https://github.com/opera-adt/dolphin/actions/workflows/tests.yml)
+[![Pytest and build docker image](https://github.com/isce-framework/dolphin/actions/workflows/test-build-push.yml/badge.svg?branch=main)](https://github.com/isce-framework/dolphin/actions/workflows/test-build-push.yml)
+[![pre-commit.ci status](https://results.pre-commit.ci/badge/github/isce-framework/dolphin/main.svg)](https://results.pre-commit.ci/latest/github/isce-framework/dolphin/main)
 
 High resolution wrapped phase estimation for InSAR using combined PS/DS processing.
 
@@ -9,20 +10,36 @@ High resolution wrapped phase estimation for InSAR using combined PS/DS processi
 
 ## Install
 
-The following will install `dolphin` into a conda environment.
+`dolphin` is available on conda:
+
+```bash
+# if mamba is not already installed: conda install -n base mamba
+mamba install -c conda-forge dolphin
+```
+(Note: [using `mamba`](https://mamba.readthedocs.io/en/latest/mamba-installation.html#mamba-install) is recommended for conda-forge packages, but miniconda can also be used.)
+
+
+`dolphin` has the ability to unwrap interferograms, but requires the optional dependency of `isce3` to use the python bindings to [SNAPHU](https://web.stanford.edu/group/radar/softwareandlinks/sw/snaphu/).
+To install both dolphin and isce3 through conda-forge, run
+```bash
+mamba install -c conda-forge isce3 dolphin
+```
+
+
+To install locally:
 
 1. Download source code:
 ```bash
-git clone https://github.com/opera-adt/dolphin.git && cd dolphin
+git clone https://github.com/isce-framework/dolphin.git && cd dolphin
 ```
 2. Install dependencies:
 ```bash
-conda env create --file conda-env.yml
+mamba env create --file conda-env.yml
 ```
 
 or if you have an existing environment:
 ```bash
-conda env update --name my-existing-env --file conda-env.yml
+mamba env update --name my-existing-env --file conda-env.yml
 ```
 
 3. Install `dolphin` via pip:
@@ -43,8 +60,9 @@ Example usage:
 
 ```bash
 $ dolphin config --slc-files /path/to/slcs/*tif
+$ dolphin run dolphin_config.yaml
 ```
-This will create a YAML file (by default `dolphin_config.yaml` in the current directory).
+The `config` command creates a YAML file (by default `dolphin_config.yaml` in the current directory).
 
 The only required inputs for the workflow is a list of coregistered SLC files (in either geographic or radar coordinates).
 If the SLC files are spread over multiple files, you can either

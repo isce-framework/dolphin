@@ -1,22 +1,32 @@
 import argparse
+import sys
+
+import dolphin._cli_unwrap
+import dolphin.workflows._cli_config
+import dolphin.workflows._cli_run
+from dolphin import __version__
 
 
 def main(args=None):
     """Top-level command line interface to the workflows."""
-    import dolphin.workflows._config_cli
-    import dolphin.workflows._run_cli
-
     parser = argparse.ArgumentParser(
         prog=__package__,
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     subparser = parser.add_subparsers(title="subcommands")
+    parser.add_argument("--version", action="version", version=__version__)
 
     # Adds the subcommand to the top-level parser
-    dolphin.workflows._run_cli.get_parser(subparser, "run")
-    dolphin.workflows._config_cli.get_parser(subparser, "config")
+    dolphin.workflows._cli_run.get_parser(subparser, "run")
+    dolphin.workflows._cli_config.get_parser(subparser, "config")
+    dolphin._cli_unwrap.get_parser(subparser, "unwrap")
     parsed_args = parser.parse_args(args=args)
 
     arg_dict = vars(parsed_args)
-    run_func = arg_dict.pop("run_func")
-    run_func(**arg_dict)
+    try:
+        run_func = arg_dict.pop("run_func")
+        run_func(**arg_dict)
+    except KeyError:
+        # No arguments passed
+        parser.print_help()
+        sys.exit(1)

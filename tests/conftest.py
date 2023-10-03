@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 import numpy as np
@@ -5,11 +6,21 @@ import pytest
 from make_netcdf import create_test_nc
 from osgeo import gdal
 
+# https://numba.readthedocs.io/en/stable/user/threading-layer.html#example-of-limiting-the-number-of-threads
+if not os.environ.get("NUMBA_NUM_THREADS"):
+    os.environ["NUMBA_NUM_THREADS"] = str(min(os.cpu_count(), 16))  # type: ignore
+
 from dolphin.io import load_gdal, write_arr
 from dolphin.phase_link import simulate
 
-simulate._seed(1234)
 NUM_ACQ = 30
+
+
+# https://github.com/pytest-dev/pytest/issues/667#issuecomment-112206152
+@pytest.fixture
+def random():
+    np.random.seed(1234)
+    simulate._seed(1234)
 
 
 @pytest.fixture(scope="session")
@@ -94,12 +105,15 @@ def slc_file_list_nc_with_sds(tmp_path, slc_stack):
     name_template = d / "{date}.nc"
     d.mkdir()
     file_list = []
-    subdirs = ["/slc", "/slc2"]
+    subdirs = ["/data", "/data2"]
+    ds_name = "VV"
     for i in range(len(slc_stack)):
         fname = str(name_template).format(date=str(start_date + i))
-        create_test_nc(fname, epsg=32615, subdir=subdirs, data=slc_stack[i])
+        create_test_nc(
+            fname, epsg=32615, subdir=subdirs, data_ds_name=ds_name, data=slc_stack[i]
+        )
         # just point to one of them
-        file_list.append(f"NETCDF:{fname}:/slc/data")
+        file_list.append(f"NETCDF:{fname}:{subdirs[0]}/{ds_name}")
 
     # Write the list of SLC files to a text file
     with open(d / "slclist.txt", "w") as f:
@@ -142,6 +156,8 @@ def raster_100_by_200(tmp_path):
     d.mkdir()
     filename = str(d / "test.bin")
     ds = driver.Create(filename, xsize, ysize, 1, gdal.GDT_CFloat32)
+    data = np.random.randn(ysize, xsize) + 1j * np.random.randn(ysize, xsize)
+    ds.WriteArray(data)
     ds.FlushCache()
     ds = None
     return filename
@@ -166,6 +182,8 @@ def tiled_raster_100_by_200(tmp_path):
     ds = driver.Create(
         str(filename), xsize, ysize, 1, gdal.GDT_CFloat32, options=creation_options
     )
+    data = np.random.randn(ysize, xsize) + 1j * np.random.randn(ysize, xsize)
+    ds.WriteArray(data)
     ds.FlushCache()
     ds = None
     return filename

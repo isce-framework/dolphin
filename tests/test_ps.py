@@ -1,5 +1,4 @@
 import numpy as np
-import numpy.testing as npt
 import pytest
 from osgeo import gdal
 
@@ -57,13 +56,19 @@ def vrt_stack(tmp_path, slc_file_list):
 
 
 def test_create_ps(tmp_path, vrt_stack):
+    ps_mask_file = tmp_path / "ps_pixels.tif"
+
+    amp_dispersion_file = tmp_path / "amp_disp.tif"
+    amp_mean_file = tmp_path / "amp_mean.tif"
     dolphin.ps.create_ps(
         slc_vrt_file=vrt_stack.outfile,
-        amp_dispersion_file=tmp_path / "amp_disp.tif",
-        amp_mean_file=tmp_path / "amp_mean.tif",
-        output_file=tmp_path / "ps_pixels.tif",
+        output_amp_dispersion_file=amp_dispersion_file,
+        output_amp_mean_file=amp_mean_file,
+        output_file=ps_mask_file,
     )
-    pass
+    assert io.get_raster_dtype(ps_mask_file) == np.uint8
+    assert io.get_raster_dtype(amp_mean_file) == np.float32
+    assert io.get_raster_dtype(amp_dispersion_file) == np.float32
 
 
 @pytest.fixture
@@ -81,41 +86,19 @@ def _write_zeros(file, shape):
     ds = bnd = None
 
 
-def test_update_amp_disp(tmp_path, vrt_stack, slc_stack, slc_file_list):
-    slc_vrt_file = vrt_stack.outfile
-    amp_disp_file = slc_vrt_file.parent / "amp_disp"
-    amp_mean_file = slc_vrt_file.parent / "amp_mean"
-    # Start out the files with all zeros, and N=0
-    _write_zeros(amp_disp_file, slc_stack.shape[1:])
-    _write_zeros(amp_mean_file, slc_stack.shape[1:])
+def test_multilook_ps_file(tmp_path, vrt_stack):
+    ps_mask_file = tmp_path / "ps_pixels.tif"
 
-    out_path = tmp_path / "output"
+    amp_dispersion_file = tmp_path / "amp_disp.tif"
+    amp_mean_file = tmp_path / "amp_mean.tif"
+    dolphin.ps.create_ps(
+        slc_vrt_file=vrt_stack.outfile,
+        output_amp_dispersion_file=amp_dispersion_file,
+        output_amp_mean_file=amp_mean_file,
+        output_file=ps_mask_file,
+    )
 
-    amp_stack = np.abs(slc_stack)
-
-    for i in range(slc_stack.shape[0]):
-        # Make a new VRT file as the stack gets bigger
-
-        # slc_vrt_file = _make_slc_vrt_file(tmp_path, slc_stack[: i + 1])
-        cur_slc_vrt_file = slc_vrt_file.parent / f"slc_{i}.vrt"
-        VRTStack(slc_file_list[: i + 1], outfile=cur_slc_vrt_file)
-        dolphin.ps.update_amp_disp(
-            amp_mean_file=amp_mean_file,
-            amp_dispersion_file=amp_disp_file,
-            slc_vrt_file=cur_slc_vrt_file,
-            output_directory=out_path,
-        )
-        new_amp_file = out_path / amp_mean_file.name
-        new_disp_file = out_path / amp_disp_file.name
-        computed_mean = io.load_gdal(new_amp_file)
-        computed_disp = io.load_gdal(new_disp_file)
-
-        mean = amp_stack[: i + 1].mean(axis=0)
-        sigma = amp_stack[: i + 1].std(axis=0)
-
-        npt.assert_array_almost_equal(mean, computed_mean)
-        npt.assert_array_almost_equal(sigma / mean, computed_disp)
-
-        # Move the new files to the old files
-        new_amp_file.rename(amp_mean_file)
-        new_disp_file.rename(amp_disp_file)
+    output_file = dolphin.ps.multilook_ps_mask(
+        strides={"x": 5, "y": 3}, ps_mask_file=ps_mask_file
+    )
+    assert io.get_raster_dtype(output_file) == np.uint8

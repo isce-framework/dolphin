@@ -1,0 +1,135 @@
+name: Pytest, build docker image, push to GHCR
+
+on: [pull_request, push]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref }}
+  cancel-in-progress: true
+
+env:
+  # https://github.com/pytest-dev/pytest/issues/2042#issuecomment-429289164
+  PY_IGNORE_IMPORTMISMATCH: 1
+
+jobs:
+  pytest:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        deps:
+            # Note: for now we're manually adding tophu deps,
+            # will change once it's on conda forge
+          - label: Latest
+            spec: >-
+              dask
+              rasterio
+          - label: Minimum
+            spec: >-
+              python=3.8
+              isce3
+              gdal=3.5
+              h5py=3.6
+              numpy=1.20
+              numba=0.54
+              pydantic=2.1
+              pymp-pypi=0.4.5
+              pyproj=3.3
+              rich=12.0
+              ruamel_yaml=0.15
+              scipy=1.5
+              shapely=1.8
+              threadpoolctl>=3.0
+              dask
+              rasterio
+        exclude:  # TODO: Remove this once pymp is gone
+          - os: macos-latest
+            deps:
+              label: Latest
+
+      fail-fast: false
+    name: ${{ matrix.os }} • ${{ matrix.deps.label }}
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash -l {0}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Setup environment
+        uses: mamba-org/setup-micromamba@v1
+        with:
+          environment-file: conda-env.yml
+          environment-name: dolphin-env
+          create-args: ${{ matrix.deps.spec }}
+          condarc: |
+            channels:
+              - conda-forge
+      - name: Install
+        run: |
+          pip install --no-deps .
+      - name: Install test dependencies
+        run: |
+          micromamba install -f tests/requirements.txt -c conda-forge
+          pip install --no-deps git+https://github.com/isce-framework/tophu@main
+      - name: Disable numba boundscheck for better error catching
+        run: |
+          echo "NUMBA_BOUNDSCHECK=1" >> $GITHUB_ENV
+      - name: Test (with numba boundscheck on)
+        run: |
+          pytest -n0
+      # https://community.codecov.com/t/numba-jitted-methods-are-not-captured-by-codecov/2649
+      # - name: Coverage report
+      #   uses: codecov/codecov-action@v2
+
+  dockerize: # Based on Mintpy: https://github.com/insarlab/MintPy/blob/5ca554fef324b816f9130feec567e2cf463e41d2/.github/workflows/build-n-publish-to-pypi.yml
+    name: Build Docker image and push to GitHub Container Registry
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      - name: Set environment variables for docker build
+        run: |
+          pip install setuptools_scm # Install setuptools_scm to get version number
+          # Save version number from CLI
+          version=$(python -m setuptools_scm)
+          sanitized_version=${version//+/-} # Replace all '+' with '-'
+          echo "DOLPHIN_VERSION=${sanitized_version}" >> $GITHUB_ENV
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build, tag, and push image to Github Container Registry
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          file: ./docker/Dockerfile
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: |
+            ghcr.io/${{ github.repository }}:${{ env.DOLPHIN_VERSION }}
+          labels: |
+            org.opencontainers.image.created=${{ env.CI_JOB_TIMESTAMP }}
+            org.opencontainers.image.version=${{ env.DOLPHIN_VERSION }}
+            org.opencontainers.image.revision=${{ github.sha }}
+
+      - name: Add develop tag
+        if: github.ref == 'refs/heads/main'
+        uses: akhilerm/tag-push-action@v2.1.0
+        with:
+          src: ghcr.io/${{ github.repository }}:${{ env.DOLPHIN_VERSION }}
+          dst: ghcr.io/${{ github.repository }}:develop
+
+      - name: Add latest tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: akhilerm/tag-push-action@v2.1.0
+        with:
+          src: ghcr.io/${{ github.repository }}:${{ env.DOLPHIN_VERSION }}
+          dst: ghcr.io/${{ github.repository }}:latest

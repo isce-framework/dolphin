@@ -1,12 +1,15 @@
+import os
+
 import numpy as np
 import numpy.testing as npt
 import pytest
 
 from dolphin.phase_link import covariance, mle, simulate
+from dolphin.phase_link._mle_cpu import run_cpu
 from dolphin.phase_link._mle_gpu import run_gpu
 from dolphin.utils import gpu_is_available
 
-GPU_AVAILABLE = gpu_is_available()
+GPU_AVAILABLE = gpu_is_available() and not (os.environ.get("NUMBA_DISABLE_JIT") == "1")
 NUM_ACQ = 30
 simulate._seed(1234)
 
@@ -31,35 +34,61 @@ def C_hat(slc_samples):
 
 # Make the single-pixel comparisons with simple implementation
 @pytest.fixture(scope="module")
-def est_mle_cpu(C_hat):
+def est_mle_verify(C_hat):
     return np.angle(simulate.mle(C_hat))
 
 
 @pytest.fixture(scope="module")
-def est_evd_cpu(C_hat):
+def est_evd_verify(C_hat):
     return np.angle(simulate.evd(C_hat))
 
 
 # Check that the estimates are close to the truth
-def test_estimation(C_truth, est_mle_cpu, est_evd_cpu):
+def test_estimation(C_truth, est_mle_verify, est_evd_verify):
     _, truth = C_truth
 
     err_deg = 10
-    assert np.degrees(simulate.rmse(truth, est_evd_cpu)) < err_deg
-    assert np.degrees(simulate.rmse(truth, est_mle_cpu)) < err_deg
+    assert np.degrees(simulate.rmse(truth, est_evd_verify)) < err_deg
+    assert np.degrees(simulate.rmse(truth, est_mle_verify)) < err_deg
 
 
-@pytest.mark.skipif(not GPU_AVAILABLE, reason="GPU not available")
-def test_estimation_gpu(slc_samples, est_mle_cpu):
+def test_estimation_cpu(slc_samples, est_mle_verify):
     # Get the GPU version
     slc_stack = slc_samples.reshape(NUM_ACQ, 11, 11)
 
-    est_mle_gpu_fullres, temp_coh = run_gpu(slc_stack, half_window={"x": 5, "y": 5})
-    assert est_mle_gpu_fullres.shape == (len(est_mle_cpu), 11, 11)
+    est_mle_fullres, temp_coh, _ = run_cpu(slc_stack, half_window={"x": 5, "y": 5})
+    assert est_mle_fullres.shape == (len(est_mle_verify), 11, 11)
     assert temp_coh.shape == (11, 11)
     # The middle pixel should be the same, since it had the full window
-    est_phase_gpu2 = np.angle(est_mle_gpu_fullres[:, 5, 5])
-    npt.assert_array_almost_equal(est_mle_cpu, est_phase_gpu2, decimal=3)
+    est_phase = np.angle(est_mle_fullres[:, 5, 5])
+    npt.assert_array_almost_equal(est_mle_verify, est_phase, decimal=3)
+
+
+@pytest.mark.skipif(not GPU_AVAILABLE, reason="GPU not available")
+def test_estimation_gpu(slc_samples, est_mle_verify):
+    # Get the GPU version
+    slc_stack = slc_samples.reshape(NUM_ACQ, 11, 11)
+
+    est_mle_fullres, temp_coh, _ = run_gpu(slc_stack, half_window={"x": 5, "y": 5})
+    assert est_mle_fullres.shape == (len(est_mle_verify), 11, 11)
+    assert temp_coh.shape == (11, 11)
+    # The middle pixel should be the same, since it had the full window
+    est_phase = np.angle(est_mle_fullres[:, 5, 5])
+    npt.assert_array_almost_equal(est_mle_verify, est_phase, decimal=3)
+
+
+def test_estimation_evd_cpu(slc_samples, est_evd_verify):
+    # Get the GPU version
+    slc_stack = slc_samples.reshape(NUM_ACQ, 11, 11)
+
+    est_evd_fullres, temp_coh, _ = run_cpu(
+        slc_stack, half_window={"x": 5, "y": 5}, use_evd=True
+    )
+    assert est_evd_fullres.shape == (len(est_evd_verify), 11, 11)
+    assert temp_coh.shape == (11, 11)
+    # The middle pixel should be the same, since it had the full window
+    est_phase = np.angle(est_evd_fullres[:, 5, 5])
+    npt.assert_array_almost_equal(est_evd_verify, est_phase, decimal=3)
 
 
 def test_masked(slc_samples, C_truth):
@@ -90,16 +119,14 @@ def test_masked(slc_samples, C_truth):
     if not GPU_AVAILABLE:
         pytest.skip("GPU version not available")
     # Now check GPU version
-    est_mle_gpu_fullres, temp_coh = run_gpu(
-        slc_stack_masked, half_window={"x": 5, "y": 5}
-    )
+    est_mle_gpu_fullres, _, _ = run_gpu(slc_stack_masked, half_window={"x": 5, "y": 5})
     est_phase_gpu = np.angle(est_mle_gpu_fullres[:, 5, 5])
     npt.assert_array_almost_equal(est_mle, est_phase_gpu, decimal=1)
 
 
 def test_run_mle(slc_samples):
     slc_stack = slc_samples.reshape(NUM_ACQ, 11, 11)
-    mle_est, _ = mle.run_mle(
+    mle_est, _, _ = mle.run_mle(
         slc_stack,
         half_window={"x": 5, "y": 5},
         gpu_enabled=False,
@@ -116,7 +143,7 @@ def test_run_mle_norm_output(slc_samples):
     slc_stack = slc_samples.reshape(NUM_ACQ, 11, 11)
     ps_mask = np.zeros((11, 11), dtype=bool)
     ps_mask[1, 1] = True
-    mle_est, _ = mle.run_mle(
+    mle_est, _, _ = mle.run_mle(
         slc_stack,
         half_window={"x": 5, "y": 5},
         ps_mask=ps_mask,
@@ -153,15 +180,11 @@ def test_ps_fill(slc_samples, strides):
     ps_mask = np.zeros((11, 11), dtype=bool)
     ps_mask[ps_idx, ps_idx] = True
 
-    # all valid data
-    nodata_mask = np.zeros((11, 11), dtype=bool)
-
     mle._fill_ps_pixels(
         mle_est,
         temp_coh,
         slc_stack,
         ps_mask,
-        nodata_mask,
         {"x": strides, "y": strides},
         None,  # avg_mag
     )
@@ -184,7 +207,7 @@ def test_run_mle_ps_fill(slc_samples, gpu_enabled, strides):
     ps_idx = 2
     ps_mask = np.zeros((11, 11), dtype=bool)
     ps_mask[ps_idx, ps_idx] = True
-    mle_est, temp_coh = mle.run_mle(
+    mle_est, temp_coh, _ = mle.run_mle(
         slc_stack,
         half_window={"x": 5, "y": 5},
         strides={"x": strides, "y": strides},

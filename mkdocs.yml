@@ -2,6 +2,9 @@ site_name: Documentation for dolphin
 
 theme:
   name: "material"
+  palette:
+    # https://squidfunk.github.io/mkdocs-material/setup/changing-the-colors/#primary-color
+    primary: "cyan"
   favicon: img/favicon.ico
   logo: img/apple-touch-icon.png
   highlightjs: true

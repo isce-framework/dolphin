@@ -1,9 +1,29 @@
+# This is the image we are going add micromaba to:
+ARG BASE=ubuntu:22.04@sha256:7a57c69fe1e9d5b97c5fe649849e79f2cfc3bf11d10bbd5218b4eb61716aebe6
+
 # bring in the micromamba image so we can copy files from it
 FROM mambaorg/micromamba:1.1.0@sha256:53697a4bae2d9a4407463b8f314d370e201c58f6b5e5ff7c1f24699ed7e37a41 AS micromamba
 
-# This is the image we are going add micromaba to:
-# See https://github.com/oracle/container-images or https://hub.docker.com/_/oraclelinux
-FROM oraclelinux:8-slim@sha256:5da605ca1fe5a75824cdca00b3a5f39907a2057c0cc0c34c48feb33b4915a3e6
+FROM $BASE
+
+# Needed to redefine the arg so we can use it later
+ARG BASE
+
+# Label image following opencontainers image-spec annotations recommendation:
+# https://github.com/opencontainers/image-spec/blob/main/annotations.md
+LABEL org.opencontainers.image.description="Container for InSAR PS/DS phase analysis using dolphin"
+LABEL org.opencontainers.image.authors="Scott Staniewicz <scott.j.staniewicz@jpl.nasa.gov>"
+LABEL org.opencontainers.image.url="https://github.com/isce-framework/dolphin"
+LABEL org.opencontainers.image.source="https://github.com/isce-framework/dolphin"
+LABEL org.opencontainers.image.documentation="https://dolphin-insar.readthedocs.io/en/latest/"
+LABEL org.opencontainers.image.licenses="BSD-3-Clause OR Apache-2.0"
+
+# Install CA certificates if the base image has apt-get, otherwise we can't install conda packages
+RUN if command -v apt-get > /dev/null; then \
+    apt-get update && \
+    apt-get install -y ca-certificates && \
+    rm -rf /var/lib/apt/lists/*; \
+    fi
 
 ARG MAMBA_USER=mamba
 ARG MAMBA_USER_ID=1000
@@ -50,9 +70,14 @@ COPY --chown=$MAMBA_USER:$MAMBA_USER . .
 # Activate, otherwise python will not be found
 # https://github.com/mamba-org/micromamba-docker#running-commands-in-dockerfile-within-the-conda-environment
 ARG MAMBA_DOCKERFILE_ACTIVATE=1
+# For now, manually install tophu from git
+RUN python -m pip install --no-deps git+https://github.com/isce-framework/tophu@main
 # --no-deps because they are installed with conda
 RUN python -m pip install --no-deps .
 
+# Run the entrypoint from the /work directory
+# This means if they mount a volume to /work, we won't be mixing in the repository code
+WORKDIR /work
 
-ENTRYPOINT ["/usr/local/bin/_entrypoint.sh", "python", "-m", "dolphin"]
-CMD ["--help"]
+ENTRYPOINT ["/usr/local/bin/_entrypoint.sh"]
+CMD ["dolphin", "--help"]

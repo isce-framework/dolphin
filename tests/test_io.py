@@ -4,6 +4,7 @@ import numpy as np
 import numpy.testing as npt
 import pytest
 
+import dolphin._blocks
 from dolphin import io
 from dolphin.stack import VRTStack
 
@@ -19,7 +20,18 @@ def test_get_raster_xysize(raster_100_by_200):
     assert (200, 100) == io.get_raster_xysize(raster_100_by_200)
 
 
-def test_load_slice(raster_100_by_200):
+def test_load_1_slice(raster_100_by_200):
+    arr = io.load_gdal(raster_100_by_200)
+    block = io.load_gdal(raster_100_by_200, rows=slice(0, 10))
+    assert block.shape == (10, 200)
+    npt.assert_allclose(block, arr[:10, :])
+
+    block = io.load_gdal(raster_100_by_200, cols=slice(10, 20))
+    assert block.shape == (100, 10)
+    npt.assert_allclose(block, arr[:, 10:20])
+
+
+def test_load_slices(raster_100_by_200):
     arr = io.load_gdal(raster_100_by_200)
     block = io.load_gdal(raster_100_by_200, rows=slice(0, 10), cols=slice(0, 10))
     assert block.shape == (10, 10)
@@ -28,6 +40,19 @@ def test_load_slice(raster_100_by_200):
     block = io.load_gdal(raster_100_by_200, rows=slice(10, 20), cols=slice(10, 20))
     assert block.shape == (10, 10)
     npt.assert_allclose(block, arr[10:20, 10:20])
+
+
+def test_load_none_slices(raster_100_by_200):
+    arr = io.load_gdal(raster_100_by_200)
+    block = io.load_gdal(raster_100_by_200, rows=slice(0, 10), cols=slice(None))
+    assert block.shape == (10, 200)
+    npt.assert_allclose(block, arr[:10, :])
+
+    block = io.load_gdal(
+        raster_100_by_200, rows=slice(None, None, None), cols=slice(10, 20)
+    )
+    assert block.shape == (100, 10)
+    npt.assert_allclose(block, arr[:, 10:20])
 
 
 def test_load_slice_oob(raster_100_by_200):
@@ -53,6 +78,12 @@ def test_load_masked(raster_with_nan_block):
     assert np.all(np.isnan(arr[:32, :32]))
 
 
+def test_load_masked_empty_nodata(raster_100_by_200):
+    arr = io.load_gdal(raster_100_by_200, masked=True)
+    assert isinstance(arr, np.ma.masked_array)
+    assert arr.mask == np.ma.nomask
+
+
 def test_load_band(tmp_path, slc_stack, slc_file_list):
     # Check on a VRT, which has multiple bands
     vrt_file = tmp_path / "test.vrt"
@@ -68,19 +99,6 @@ def test_load_band(tmp_path, slc_stack, slc_file_list):
     for i in range(len(slc_stack)):
         layer = io.load_gdal(s.outfile, band=i + 1)
         npt.assert_array_equal(layer, slc_stack[i])
-
-
-def test_compute_out_size():
-    strides = {"x": 3, "y": 3}
-    assert (2, 2) == io.compute_out_shape((6, 6), strides)
-
-    # 1,2 more in each direction shouldn't change it
-    assert (2, 2) == io.compute_out_shape((7, 7), strides)
-    assert (2, 2) == io.compute_out_shape((8, 8), strides)
-
-    # 1,2 fewer should bump down to 1
-    assert (1, 1) == io.compute_out_shape((5, 5), strides)
-    assert (1, 1) == io.compute_out_shape((4, 4), strides)
 
 
 def test_get_raster_bounds(slc_file_list_nc_wgs84):
@@ -113,7 +131,7 @@ def test_write_empty_like(raster_100_by_200, tmpdir):
 def test_write_metadata(raster_100_by_200, tmpdir):
     save_name = tmpdir / "empty_nometa.tif"
     io.write_arr(arr=None, like_filename=raster_100_by_200, output_name=save_name)
-    assert io.get_dtype(save_name) == np.complex64
+    assert io.get_raster_dtype(save_name) == np.complex64
     assert io.get_raster_nodata(save_name) is None
 
     save_name = tmpdir / "empty_bool_255_nodata.tif"
@@ -136,7 +154,7 @@ def test_write_metadata(raster_100_by_200, tmpdir):
 def test_save_strided(raster_100_by_200, tmpdir):
     save_name = tmpdir / "same_size.tif"
     strides = {"x": 1, "y": 1}
-    out_shape = io.compute_out_shape((100, 200), strides)
+    out_shape = dolphin._blocks.compute_out_shape((100, 200), strides)
     assert out_shape == (100, 200)
     io.write_arr(
         arr=None,
@@ -150,7 +168,7 @@ def test_save_strided(raster_100_by_200, tmpdir):
 
     save_name2 = tmpdir / "smaller_size.tif"
     strides = {"x": 2, "y": 4}
-    out_shape = io.compute_out_shape((100, 200), strides)
+    out_shape = dolphin._blocks.compute_out_shape((100, 200), strides)
     assert out_shape == (25, 100)
     io.write_arr(
         arr=None,
@@ -240,18 +258,21 @@ def test_save_block_cpx(raster_100_by_200, cpx_arr, tmpdir):
 
 
 def test_get_raster_block_sizes(raster_100_by_200, tiled_raster_100_by_200):
-    assert io.get_raster_block_size(tiled_raster_100_by_200) == [32, 32]
-    assert io.get_raster_block_size(raster_100_by_200) == [200, 1]
+    assert io.get_raster_chunk_size(tiled_raster_100_by_200) == [32, 32]
+    assert io.get_raster_chunk_size(raster_100_by_200) == [200, 1]
+
+
+def test_get_max_block_shape(raster_100_by_200, tiled_raster_100_by_200):
     # for io.get_max_block_shape, the rasters are 8 bytes per pixel
     # if we have 1 GB, the whole raster should fit in memory
-    bs = io.get_max_block_shape(tiled_raster_100_by_200, 1, max_bytes=1e9)
+    bs = io.get_max_block_shape(tiled_raster_100_by_200, nstack=1, max_bytes=1e9)
     assert bs == (100, 200)
 
     # for untiled, the block size is one line
-    bs = io.get_max_block_shape(raster_100_by_200, 1, max_bytes=0)
+    bs = io.get_max_block_shape(raster_100_by_200, nstack=1, max_bytes=0)
     # The function forces at least 16 lines to be read at a time
     assert bs == (16, 200)
-    bs = io.get_max_block_shape(raster_100_by_200, 1, max_bytes=8 * 17 * 200)
+    bs = io.get_max_block_shape(raster_100_by_200, nstack=1, max_bytes=8 * 17 * 200)
     assert bs == (32, 200)
 
     # Pretend we have a stack of 10 images
@@ -269,11 +290,10 @@ def test_get_raster_block_sizes(raster_100_by_200, tiled_raster_100_by_200):
     )
     assert bs == (32, 64)
 
-    # 200 / 32 = 6.25, so with 7, it should add a new row
     bs = io.get_max_block_shape(
-        tiled_raster_100_by_200, nstack, max_bytes=7 * bytes_per_tile
+        tiled_raster_100_by_200, nstack, max_bytes=4 * bytes_per_tile
     )
-    assert bs == (64, 200)
+    assert bs == (64, 64)
 
 
 def test_iter_blocks(tiled_raster_100_by_200):
@@ -315,6 +335,7 @@ def test_iter_blocks_rowcols(tiled_raster_100_by_200):
     for rs, cs in slices:
         assert rs.stop - rs.start == 10
         assert cs.stop - cs.start == 20
+    loader.notify_finished()
 
     # Non-multiple block size
     loader = io.EagerLoader(filename=tiled_raster_100_by_200, block_shape=(32, 32))
@@ -322,6 +343,7 @@ def test_iter_blocks_rowcols(tiled_raster_100_by_200):
     assert blocks[0].shape == (32, 32)
     for b, (rs, cs) in zip(blocks, slices):
         assert b.shape == (rs.stop - rs.start, cs.stop - cs.start)
+    loader.notify_finished()
 
 
 def test_iter_nodata(
@@ -335,6 +357,7 @@ def test_iter_nodata(
     bs = io.get_max_block_shape(tiled_raster_100_by_200, 1, max_bytes=max_bytes)
     loader = io.EagerLoader(filename=tiled_raster_100_by_200, block_shape=bs)
     blocks, slices = zip(*list(loader.iter_blocks()))
+    loader.notify_finished()
 
     row_blocks = 100 // 32 + 1
     col_blocks = 200 // 32 + 1
@@ -345,16 +368,19 @@ def test_iter_nodata(
     # One nan should be fine, will get loaded
     loader = io.EagerLoader(filename=raster_with_nan, block_shape=bs)
     blocks, slices = zip(*list(loader.iter_blocks()))
+    loader.notify_finished()
     assert len(blocks) == expected_num_blocks
 
     # Now check entire block for a skipped block
     loader = io.EagerLoader(filename=raster_with_nan_block, block_shape=bs)
     blocks, slices = zip(*list(loader.iter_blocks()))
+    loader.notify_finished()
     assert len(blocks) == expected_num_blocks - 1
 
     # Now check entire block for a skipped block
     loader = io.EagerLoader(filename=raster_with_zero_block, block_shape=bs)
     blocks, slices = zip(*list(loader.iter_blocks()))
+    loader.notify_finished()
     assert len(blocks) == expected_num_blocks - 1
 
 

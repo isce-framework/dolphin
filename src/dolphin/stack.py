@@ -1,35 +1,32 @@
 #!/usr/bin/env python
-from math import nan
+from __future__ import annotations
+
 from os import fspath
 from pathlib import Path
-from pprint import pformat
-from typing import Generator, Optional, Sequence, Tuple
+from typing import Generator, Optional, Sequence
 
 import numpy as np
 from osgeo import gdal
 
 from dolphin import io, utils
 from dolphin._log import get_log
-from dolphin._types import Filename
+from dolphin._types import Bbox, Filename
 
 gdal.UseExceptions()
-logger = get_log()
-
-
-DEFAULT_BLOCK_BYTES = 32e6
+logger = get_log(__name__)
 
 
 class VRTStack:
-    """Class for creating a VRT for a stack of raster files.
+    """Class for creating a virtual stack of raster files.
 
     Attributes
     ----------
-    file_list : List[pathlib.Path]
+    file_list : list[pathlib.Path]
         Names of files to stack
     outfile : pathlib.Path, optional (default = Path("slc_stack.vrt"))
         Name of output file to write
-    dates : List[List[datetime.date]]
-        List, where each entry is all dates matched from the corresponding file
+    dates : list[list[datetime.date]]
+        list, where each entry is all dates matched from the corresponding file
         in `file_list`. This is used to sort the files by date.
         Each entry is a list because some files (compressed SLCs) may have
         multiple dates in the filename.
@@ -47,9 +44,6 @@ class VRTStack:
     sort_files : bool, optional (default = True)
         Sort the files in `file_list`. Assumes that the naming convention
         will sort the files in increasing time order.
-    nodata_value : float, optional
-        Value to use for nodata. If not specified, will use the nodata value
-        from the first file in the stack, or nan if not specified in the raster.
     nodata_mask_file : pathlib.Path, optional
         Path to file containing a mask of pixels containing with nodata
         in every images. Used for skipping the loading of these pixels.
@@ -64,26 +58,30 @@ class VRTStack:
         outfile: Filename = "slc_stack.vrt",
         use_abs_path: bool = True,
         subdataset: Optional[str] = None,
-        pixel_bbox: Optional[Tuple[int, int, int, int]] = None,
-        target_extent: Optional[Tuple[float, float, float, float]] = None,
-        latlon_bbox: Optional[Tuple[float, float, float, float]] = None,
+        pixel_bbox: Optional[tuple[int, int, int, int]] = None,
+        target_extent: Optional[tuple[float, float, float, float]] = None,
+        latlon_bbox: Optional[Bbox] = None,
         sort_files: bool = True,
-        nodata_value: Optional[float] = None,
         file_date_fmt: str = "%Y%m%d",
         write_file: bool = True,
+        fail_on_overwrite: bool = False,
+        skip_size_check: bool = False,
     ):
         """Initialize a VRTStack object for a list of files, optionally subsetting."""
         if Path(outfile).exists() and write_file:
-            raise FileExistsError(
-                f"Output file {outfile} already exists. "
-                "Please delete or specify a different output file. "
-                "To create from an existing VRT, use the `from_vrt_file` method."
-            )
+            if fail_on_overwrite:
+                raise FileExistsError(
+                    f"Output file {outfile} already exists. "
+                    "Please delete or specify a different output file. "
+                    "To create from an existing VRT, use the `from_vrt_file` method."
+                )
+            else:
+                logger.info(f"Overwriting {outfile}")
 
-        files = [Path(f) for f in file_list]
+        files: list[Filename] = [Path(f) for f in file_list]
         self._use_abs_path = use_abs_path
         if use_abs_path:
-            files = [p.resolve() for p in files]
+            files = [utils._resolve_gdal_path(p) for p in files]
         # Extract the date/datetimes from the filenames
         dates = [utils.get_dates(f, fmt=file_date_fmt) for f in files]
         if sort_files:
@@ -101,20 +99,15 @@ class VRTStack:
         # Assumes that all files use the same subdataset (if NetCDF)
         self.subdataset = subdataset
 
-        self._assert_images_same_size()
-
-        if nodata_value is None:
-            self.nodata_value = io.get_raster_nodata(self._gdal_file_strings[0]) or nan
-        self.nodata_mask_file = (
-            self.outfile.parent / f"{self.outfile.stem}_nodata_mask.tif"
-        )
+        if not skip_size_check:
+            io._assert_images_same_size(self._gdal_file_strings)
 
         # Use the first file in the stack to get size, transform info
         ds = gdal.Open(fspath(self._gdal_file_strings[0]))
         self.xsize = ds.RasterXSize
         self.ysize = ds.RasterYSize
         # Should be CFloat32
-        self.dtype = gdal.GetDataTypeName(ds.GetRasterBand(1).DataType)
+        self.gdal_dtype = gdal.GetDataTypeName(ds.GetRasterBand(1).DataType)
         # Save these for setting at the end
         self.gt = ds.GetGeoTransform()
         self.proj = ds.GetProjection()
@@ -140,18 +133,18 @@ class VRTStack:
             )
 
             for idx, filename in enumerate(self._gdal_file_strings, start=1):
-                block_size = io.get_raster_block_size(filename)
-                # blocks in a vrt have a min of 16, max of 2**14=16384
+                chunk_size = io.get_raster_chunk_size(filename)
+                # chunks in a vrt have a min of 16, max of 2**14=16384
                 # https://github.com/OSGeo/gdal/blob/2530defa1e0052827bc98696e7806037a6fec86e/frmts/vrt/vrtrasterband.cpp#L339
-                if any([b < 16 for b in block_size]) or any(
-                    [b > 16384 for b in block_size]
+                if any([b < 16 for b in chunk_size]) or any(
+                    [b > 16384 for b in chunk_size]
                 ):
-                    block_str = ""
+                    chunk_str = ""
                 else:
-                    block_str = (
-                        f'blockXSize="{block_size[0]}" blockYSize="{block_size[1]}"'
+                    chunk_str = (
+                        f'blockXSize="{chunk_size[0]}" blockYSize="{chunk_size[1]}"'
                     )
-                outstr = f"""  <VRTRasterBand dataType="{self.dtype}" band="{idx}" {block_str}>
+                outstr = f"""  <VRTRasterBand dataType="{self.gdal_dtype}" band="{idx}" {chunk_str}>
     <SimpleSource>
       <SourceFilename>{filename}</SourceFilename>
       <SourceBand>1</SourceBand>
@@ -170,18 +163,6 @@ class VRTStack:
         ds.SetSpatialRef(self.srs)
         ds = None
 
-    def _assert_images_same_size(self):
-        """Make sure all files in the stack are the same size."""
-        from collections import defaultdict
-
-        size_to_file = defaultdict(list)
-        for f in self._gdal_file_strings:
-            s = io.get_raster_xysize(f)
-            size_to_file[s].append(f)
-        if len(size_to_file) > 1:
-            size_str = pformat(dict(sorted(size_to_file.items())))
-            raise ValueError(f"Not files have same raster (x, y) size:\n{size_str}")
-
     @property
     def _gdal_file_strings(self):
         """Get the GDAL-compatible paths to write to the VRT.
@@ -190,9 +171,23 @@ class VRTStack:
         """
         return [io.format_nc_filename(f, self.subdataset) for f in self.file_list]
 
-    def read_stack(self, band: Optional[int] = None, subsample_factor: int = 1):
+    def read_stack(
+        self,
+        band: Optional[int] = None,
+        subsample_factor: int = 1,
+        rows: Optional[slice] = None,
+        cols: Optional[slice] = None,
+        masked: bool = False,
+    ):
         """Read in the SLC stack."""
-        return io.load_gdal(self.outfile, band=band, subsample_factor=subsample_factor)
+        return io.load_gdal(
+            self.outfile,
+            band=band,
+            subsample_factor=subsample_factor,
+            rows=rows,
+            cols=cols,
+            masked=masked,
+        )
 
     def __fspath__(self):
         # Allows os.fspath() to work on the object, enabling rasterio.open()
@@ -279,12 +274,12 @@ class VRTStack:
     def _parse_vrt_file(vrt_file):
         """Extract the filenames, and possible subdatasets, from a .vrt file.
 
-        Note that we are parsing the XML, not using `GetFileList`, because the
+        Note that we are parsing the XML, not using `GetFilelist`, because the
         function does not seem to work when using HDF5 files. E.g.
 
             <SourceFilename ="1">NETCDF:20220111.nc:SLC/VV</SourceFilename>
 
-        This would not get added to the result of `GetFileList`
+        This would not get added to the result of `GetFilelist`
 
         Parameters
         ----------
@@ -303,15 +298,7 @@ class VRTStack:
                 # Get the middle part of < >filename</ >
                 fn = line.split(">")[1].strip().split("<")[0]
                 file_strings.append(fn)
-        # double check we got the same count
-        ds = gdal.Open(fspath(vrt_file))
-        count = ds.RasterCount
-        ds = None
-        if count != len(file_strings):
-            raise ValueError(
-                f"Found {len(file_strings)} parsing {vrt_file}, but file has"
-                f" {count} bands."
-            )
+
         testname = file_strings[0].upper()
         if testname.startswith("HDF5:") or testname.startswith("NETCDF:"):
             name_triplets = [name.split(":") for name in file_strings]
@@ -373,92 +360,48 @@ class VRTStack:
 
     def iter_blocks(
         self,
-        overlaps: Tuple[int, int] = (0, 0),
-        block_shape: Optional[Tuple[int, int]] = None,
-        max_bytes: Optional[float] = DEFAULT_BLOCK_BYTES,
+        overlaps: tuple[int, int] = (0, 0),
+        block_shape: tuple[int, int] = (512, 512),
         skip_empty: bool = True,
-        use_nodata_mask: bool = False,
-    ) -> Generator[Tuple[np.ndarray, Tuple[slice, slice]], None, None]:
+        nodata_mask: Optional[np.ndarray] = None,
+        show_progress: bool = True,
+    ) -> Generator[tuple[np.ndarray, tuple[slice, slice]], None, None]:
         """Iterate over blocks of the stack.
 
         Loads all images for one window at a time into memory.
 
         Parameters
         ----------
-        overlaps : Tuple[int, int], optional
+        overlaps : tuple[int, int], optional
             Pixels to overlap each block by (rows, cols)
             By default (0, 0)
-        block_shape : Optional[Tuple[int, int]], optional
-            If provided, force the blocks to load in the given shape.
-            Otherwise, calculates how much blocks are possible to load
-            while staying under `max_bytes` that align wit the data's
-            internal chunking/tiling structure.
-        max_bytes : Optional[int], optional
-            RAM size (in Bytes) to attempt to stay under with each loaded block.
+        block_shape : tuple[int, int], optional
+            2D shape of blocks to load at a time.
+            Loads all dates/bands at a time with this shape.
         skip_empty : bool, optional (default True)
             Skip blocks that are entirely empty (all NaNs)
-        use_nodata_mask : bool, optional (default True)
-            Use the nodata mask to determine if a block is empty.
-            Not used if `skip_empty` is False.
+        nodata_mask : bool, optional
+            Optional mask indicating nodata values. If provided, will skip
+            blocks that are entirely nodata.
+            1s are the nodata values, 0s are valid data.
+        show_progress : bool, default=True
+            If true, displays a `rich` ProgressBar.
 
         Yields
         ------
-        Tuple[Tuple[int, int], Tuple[int, int]]
-            Iterator of ((row_start, row_stop), (col_start, col_stop))
+        tuple[np.ndarray, tuple[slice, slice]]
+            Iterator of (data, (slice(row_start, row_stop), slice(col_start, col_stop))
+
         """
-        if block_shape is None:
-            block_shape = self._get_block_shape(max_bytes=max_bytes)
-
-        ndm = None  # TODO: get the polygon indicating nodata
-        if use_nodata_mask:
-            logger.info("Nodata mask not implemented, skipping")
-
-        loader = io.EagerLoader(
+        self._loader = io.EagerLoader(
             self.outfile,
             block_shape=block_shape,
             overlaps=overlaps,
+            nodata_mask=nodata_mask,
             skip_empty=skip_empty,
-            nodata_mask=ndm,
+            show_progress=show_progress,
         )
-        yield from loader.iter_blocks()
-
-    def _get_block_shape(self, max_bytes=DEFAULT_BLOCK_BYTES):
-        test_file = self._get_non_vrt_file(self._gdal_file_strings[0])
-
-        return io.get_max_block_shape(
-            # Note that we're using the actual first file, not the VRT
-            # since the VRT always has the same block size.
-            test_file,
-            len(self),
-            max_bytes=max_bytes,
-        )
-
-    def _get_nodata_mask(self, nodata=nan, buffer_pixels=100):
-        if self.nodata_mask_file.exists():
-            return io.load_gdal(self.nodata_mask_file).astype(bool)
-        # TODO: Write the code to grab the pre-computed polygon, rather
-        # than the loading data.
-        else:
-            return io.get_stack_nodata_mask(
-                self.outfile,
-                output_file=self.nodata_mask_file,
-                nodata=nodata,
-                buffer_pixels=buffer_pixels,
-            )
-
-    @staticmethod
-    def _get_non_vrt_file(filename: Filename):
-        """Get one of the files within a VRT.
-
-        If the file is not a VRT, return the file itself.
-        Will traverse nested VRTs.
-        """
-        if Path(filename).suffix == ".vrt":
-            file_list = gdal.Info(fspath(filename), format="json")["files"]
-            if len(file_list) <= 1:
-                raise ValueError(f"VRT file {filename} contains no files")
-            return VRTStack._get_non_vrt_file(file_list[1])
-        return filename
+        yield from self._loader.iter_blocks()
 
     @property
     def shape(self):
@@ -480,3 +423,41 @@ class VRTStack:
             self._gdal_file_strings == other._gdal_file_strings
             and self.outfile == other.outfile
         )
+
+    # To allow VRTStack to be passed to `dask.array.from_array`, we need:
+    # .shape, .ndim, .dtype and support numpy-style slicing.
+    @property
+    def ndim(self):
+        return 3
+
+    def __getitem__(self, index):
+        if isinstance(index, int):
+            if index < 0:
+                index = len(self) + index
+            return self.read_stack(band=index + 1)
+
+        # TODO: raise an error if they try to skip like [::2, ::2]
+        # or pass it to read_stack... but I dont think I need to support it.
+        n, rows, cols = index
+        if isinstance(rows, int):
+            rows = slice(rows, rows + 1)
+        if isinstance(cols, int):
+            cols = slice(cols, cols + 1)
+        if isinstance(n, int):
+            if n < 0:
+                n = len(self) + n
+            return self.read_stack(band=n + 1, rows=rows, cols=cols)
+
+        bands = list(range(1, 1 + len(self)))[n]
+        if len(bands) == len(self):
+            # This will use gdal's ds.ReadAsRaster, no iteration needed
+            data = self.read_stack(band=None, rows=rows, cols=cols)
+        else:
+            data = np.stack(
+                [self.read_stack(band=i, rows=rows, cols=cols) for i in bands], axis=0
+            )
+        return data.squeeze()
+
+    @property
+    def dtype(self):
+        return io.get_raster_dtype(self._gdal_file_strings[0])

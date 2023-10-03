@@ -4,17 +4,19 @@ Adapted from `rasterio.show_versions`,
 which was adapted from `sklearn.utils._show_versions`
 which was adapted from `pandas.show_versions`
 """
+from __future__ import annotations
+
 import importlib
 import platform
 import sys
-from typing import Dict, Optional
+from typing import Optional
 
 import dolphin
 
 __all__ = ["show_versions"]
 
 
-def _get_sys_info() -> Dict[str, str]:
+def _get_sys_info() -> dict[str, str]:
     """System information.
 
     Returns
@@ -27,23 +29,6 @@ def _get_sys_info() -> Dict[str, str]:
         "executable": sys.executable,
         "machine": platform.platform(),
     }
-
-
-def _get_opera_info() -> Dict[str, Optional[str]]:
-    """Information on system on core modules.
-
-    Returns
-    -------
-    dict
-        dolphin / opera module information
-    """
-    blob = {
-        "dolphin": dolphin.__version__,
-        # optionals
-        "isce3": _get_version("isce3"),
-        "compass": _get_version("compass"),
-    }
-    return blob
 
 
 def _get_version(module_name: str) -> Optional[str]:
@@ -60,7 +45,24 @@ def _get_version(module_name: str) -> Optional[str]:
         return mod.version
 
 
-def _get_deps_info() -> Dict[str, Optional[str]]:
+def _get_opera_info() -> dict[str, Optional[str]]:
+    """Information on isce/opera specific modules.
+
+    Returns
+    -------
+    dict
+        dolphin / opera module information
+    """
+    blob = {
+        "dolphin": dolphin.__version__,
+        # optionals
+        "isce3": _get_version("isce3"),
+        "tophu": _get_version("tophu"),
+    }
+    return blob
+
+
+def _get_deps_info() -> dict[str, Optional[str]]:
     """Overview of the installed version of main dependencies.
 
     Returns
@@ -80,7 +82,20 @@ def _get_deps_info() -> Dict[str, Optional[str]]:
     return {name: _get_version(name) for name in deps}
 
 
-def _print_info_dict(info_dict: Dict) -> None:
+def _get_gpu_info() -> dict[str, Optional[str]]:
+    """Overview of the optional GPU packages.
+
+    Returns
+    -------
+    dict:
+        version information on relevant Python libraries
+    """
+    from dolphin.utils import gpu_is_available
+
+    return {"cupy": _get_version("cupy"), "gpu_is_available": str(gpu_is_available())}
+
+
+def _print_info_dict(info_dict: dict) -> None:
     """Print the information dictionary."""
     for key, stat in info_dict.items():
         print(f"{key:>12}: {stat}")
@@ -93,9 +108,14 @@ def show_versions() -> None:
     --------
     > python -c "import dolphin; dolphin.show_versions()"
     """
-    print("dolphin info:")
+    from dolphin.utils import gpu_is_available
+
+    print("dolphin/isce info:")
     _print_info_dict(_get_opera_info())
     print("\nSystem:")
     _print_info_dict(_get_sys_info())
     print("\nPython deps:")
     _print_info_dict(_get_deps_info())
+    print("optional GPU info:")
+    print(f"{gpu_is_available() = }")
+    _print_info_dict(_get_gpu_info())

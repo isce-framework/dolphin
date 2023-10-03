@@ -1,19 +1,69 @@
+from __future__ import annotations
+
 import datetime
+import itertools
+import math
 import re
+import resource
+import sys
 import warnings
-from os import fspath
+from multiprocessing import cpu_count
 from pathlib import Path
-from typing import Iterable, List, Optional, Tuple, Union
+from typing import Iterable, Optional, Union
 
 import numpy as np
-from numpy.typing import DTypeLike
+from numba import njit
+from numpy.typing import ArrayLike, DTypeLike
 from osgeo import gdal, gdal_array, gdalconst
+from rich.progress import MofNCompleteColumn, Progress, SpinnerColumn, TimeElapsedColumn
 
 from dolphin._log import get_log
 from dolphin._types import Filename
 
 gdal.UseExceptions()
-logger = get_log()
+logger = get_log(__name__)
+
+
+def progress(dummy=False):
+    """Create a Progress bar context manager.
+
+    Parameters
+    ----------
+    dummy : bool, default = False
+        If True, skips showing and calls `contextlib.nullcontext`
+
+    Usage
+    -----
+    >>> with progress() as p:
+    ...     for i in p.track(range(10)):
+    ...         pass
+    10/10 Working... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 100% 0:00:00
+    """
+
+    class DummyProgress:
+        """Context manager that does no additional processing.
+
+        Needs a `track` method to match rich.Progress.
+        """
+
+        def track(self, iterable, **kwargs):
+            yield from iterable
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *excinfo):
+            pass
+
+    if dummy:
+        return DummyProgress()
+
+    return Progress(
+        SpinnerColumn(),
+        MofNCompleteColumn(),
+        *Progress.get_default_columns()[:-1],  # Skip the ETA column
+        TimeElapsedColumn(),
+    )
 
 
 def numpy_to_gdal_type(np_dtype: DTypeLike) -> int:
@@ -49,10 +99,10 @@ def gdal_to_numpy_type(gdal_type: Union[str, int]) -> np.dtype:
     """Convert gdal type to numpy type."""
     if isinstance(gdal_type, str):
         gdal_type = gdal.GetDataTypeByName(gdal_type)
-    return gdal_array.GDALTypeCodeToNumericTypeCode(gdal_type)
+    return np.dtype(gdal_array.GDALTypeCodeToNumericTypeCode(gdal_type))
 
 
-def get_dates(filename: Filename, fmt: str = "%Y%m%d") -> List[datetime.date]:
+def get_dates(filename: Filename, fmt: str = "%Y%m%d") -> list[datetime.date]:
     """Search for dates in the stem of `filename` matching `fmt`.
 
     Excludes dates that are not in the stem of `filename` (in the directories).
@@ -67,7 +117,7 @@ def get_dates(filename: Filename, fmt: str = "%Y%m%d") -> List[datetime.date]:
     Returns
     -------
     list[datetime.date]
-        List of dates found in the stem of `filename` matching `fmt`.
+        list of dates found in the stem of `filename` matching `fmt`.
 
     Examples
     --------
@@ -82,8 +132,6 @@ def get_dates(filename: Filename, fmt: str = "%Y%m%d") -> List[datetime.date]:
     pattern = _date_format_to_regex(fmt)
     date_list = re.findall(pattern, path.stem)
     if not date_list:
-        msg = f"{filename} does not contain date like {fmt}"
-        logger.warning(msg)
         return []
     return [_parse_date(d, fmt) for d in date_list]
 
@@ -94,29 +142,30 @@ def _parse_date(datestr: str, fmt: str = "%Y%m%d") -> datetime.date:
 
 def _get_path_from_gdal_str(name: Filename) -> Path:
     s = str(name)
-    if s.startswith("DERIVED_SUBDATASET"):
+    if s.upper().startswith("DERIVED_SUBDATASET"):
+        # like DERIVED_SUBDATASET:AMPLITUDE:slc_filepath.tif
         p = s.split(":")[-1].strip('"').strip("'")
-    elif ":" in s and (s.startswith("NETCDF") or s.startswith("HDF")):
+    elif ":" in s and (s.upper().startswith("NETCDF") or s.upper().startswith("HDF")):
+        # like NETCDF:"slc_filepath.nc":subdataset
         p = s.split(":")[1].strip('"').strip("'")
     else:
-        return Path(name)
+        # Whole thing is the path
+        p = str(name)
     return Path(p)
 
 
-def _resolve_gdal_path(gdal_str):
+def _resolve_gdal_path(gdal_str: Filename) -> Filename:
     """Resolve the file portion of a gdal-openable string to an absolute path."""
     s = str(gdal_str)
-    if s.startswith("DERIVED_SUBDATASET"):
-        # like DERIVED_SUBDATASET:AMPLITUDE:slc_filepath.tif
-        file_part = s.split(":")[-1]
-    elif ":" in s and (s.startswith("NETCDF") or s.startswith("HDF")):
-        # like NETCDF:"slc_filepath.nc":slc_var
-        file_part = s.split(":")[1]
+    prefixes = ["DERIVED_SUBDATASET", "NETCDF", "HDF"]
+    is_gdal_str = any(s.upper().startswith(pre) for pre in prefixes)
+    file_part = str(_get_path_from_gdal_str(gdal_str))
 
     # strip quotes to add back in after
     file_part = file_part.strip('"').strip("'")
     file_part_resolved = Path(file_part).resolve()
-    return gdal_str.replace(file_part, str(file_part_resolved))
+    resolved = s.replace(file_part, str(file_part_resolved))
+    return Path(resolved) if not is_gdal_str else resolved
 
 
 def _date_format_to_regex(date_format):
@@ -157,7 +206,7 @@ def _date_format_to_regex(date_format):
 
 def sort_files_by_date(
     files: Iterable[Filename], file_date_fmt: str = "%Y%m%d"
-) -> Tuple[List[Filename], List[List[datetime.date]]]:
+) -> tuple[list[Filename], list[list[datetime.date]]]:
     """Sort a list of files by date.
 
     If some files have multiple dates, the files with the most dates are sorted
@@ -170,15 +219,15 @@ def sort_files_by_date(
     Parameters
     ----------
     files : Iterable[Filename]
-        List of files to sort.
+        list of files to sort.
     file_date_fmt : str, optional
         Datetime format passed to `strptime`, by default "%Y%m%d"
 
     Returns
     -------
-    file_list : List[Filename]
-        List of files sorted by date.
-    dates : List[List[datetime.date,...]]
+    file_list : list[Filename]
+        list of files sorted by date.
+    dates : list[list[datetime.date,...]]
         Sorted list, where each entry has all the dates from the corresponding file.
     """
 
@@ -201,74 +250,61 @@ def sort_files_by_date(
     return list(file_list), list(dates)
 
 
-def combine_mask_files(
-    mask_files: List[Filename],
-    scratch_dir: Filename,
-    output_file_name: str = "combined_mask.tif",
-    dtype: str = "uint8",
-    zero_is_valid: bool = False,
-) -> Path:
-    """Combine multiple mask files into a single mask file.
+def group_by_date(
+    file_list: Iterable[Filename], file_date_fmt: Optional[str] = None
+) -> dict[tuple[datetime.date, ...], list[Filename]]:
+    """Combine files by date into a dict.
 
     Parameters
     ----------
-    mask_files : list of Path or str
-        List of mask files to combine.
-    scratch_dir : Path or str
-        Directory to write output file.
-    output_file_name : str
-        Name of output file to write into `scratch_dir`
-    dtype : str, optional
-        Data type of output file. Default is uint8.
-    zero_is_valid : bool, optional
-        If True, zeros mark the valid pixels (like numpy's masking convention).
-        Default is False (matches ISCE convention).
+    file_list: Iterable[Filename]
+        Path to folder containing files with dates in the filename.
+    file_date_fmt: str
+        Format of the date in the filename.
+        Default is [dolphin.io.DEFAULT_DATETIME_FORMAT][]
 
     Returns
     -------
-    output_file : Path
+    dict
+        key is a list of dates in the filenames.
+        Value is a list of Paths on that date.
+        E.g.:
+        {(datetime.date(2017, 10, 13),
+          [Path(...)
+            Path(...),
+            ...]),
+         (datetime.date(2017, 10, 25),
+          [Path(...)
+            Path(...),
+            ...]),
+        }
     """
-    output_file = Path(scratch_dir) / output_file_name
+    if file_date_fmt is None:
+        import dolphin.io
 
-    ds = gdal.Open(fspath(mask_files[0]))
-    projection = ds.GetProjection()
-    geotransform = ds.GetGeoTransform()
+        file_date_fmt = dolphin.io.DEFAULT_DATETIME_FORMAT
+    sorted_file_list, _ = sort_files_by_date(file_list, file_date_fmt=file_date_fmt)
 
-    if projection is None and geotransform is None:
-        logger.warning("No projection or geotransform found on file %s", mask_files[0])
+    # Now collapse into groups, sorted by the date
+    grouped_images = {
+        dates: list(g)
+        for dates, g in itertools.groupby(
+            sorted_file_list, key=lambda x: tuple(get_dates(x))
+        )
+    }
+    return grouped_images
 
-    nodata = 1 if zero_is_valid else 0
 
-    # Create output file
-    driver = gdal.GetDriverByName("GTiff")
-    ds_out = driver.Create(
-        fspath(output_file),
-        ds.RasterXSize,
-        ds.RasterYSize,
-        1,
-        numpy_to_gdal_type(dtype),
-    )
-    ds_out.SetGeoTransform(geotransform)
-    ds_out.SetProjection(projection)
-    ds_out.GetRasterBand(1).SetNoDataValue(nodata)
-    ds = None
-
-    # Loop through mask files and update the total mask (starts with all valid)
-    mask_total = np.ones((ds.RasterYSize, ds.RasterXSize), dtype=bool)
-    for mask_file in mask_files:
-        ds_input = gdal.Open(fspath(mask_file))
-        mask = ds_input.GetRasterBand(1).ReadAsArray().astype(bool)
-        if zero_is_valid:
-            mask = ~mask
-        mask_total = np.logical_and(mask_total, mask)
-        ds_input = None
-
-    if zero_is_valid:
-        mask_total = ~mask_total
-    ds_out.GetRasterBand(1).WriteArray(mask_total.astype(dtype))
-    ds_out = None
-
-    return output_file
+@njit
+def _get_slices(half_r: int, half_c: int, r: int, c: int, rows: int, cols: int):
+    """Get the slices for the given pixel and half window size."""
+    # Clamp min indexes to 0
+    r_start = max(r - half_r, 0)
+    c_start = max(c - half_c, 0)
+    # Clamp max indexes to the array size
+    r_end = min(r + half_r + 1, rows)
+    c_end = min(c + half_c + 1, cols)
+    return (r_start, r_end), (c_start, c_end)
 
 
 def full_suffix(filename: Filename):
@@ -293,11 +329,6 @@ def full_suffix(filename: Filename):
     """
     fpath = Path(filename)
     return "".join(fpath.suffixes)
-
-
-def half_window_to_full(half_window: Union[List, Tuple]) -> Tuple[int, int]:
-    """Convert a half window size to a full window size."""
-    return (2 * half_window[0] + 1, 2 * half_window[1] + 1)
 
 
 def gpu_is_available() -> bool:
@@ -377,7 +408,18 @@ def take_looks(arr, row_looks, col_looks, func_type="nansum", edge_strategy="cut
         return arr
 
     if arr.ndim >= 3:
-        return xp.stack([take_looks(a, row_looks, col_looks, func_type) for a in arr])
+        return xp.stack(
+            [
+                take_looks(
+                    a,
+                    row_looks,
+                    col_looks,
+                    func_type=func_type,
+                    edge_strategy=edge_strategy,
+                )
+                for a in arr
+            ]
+        )
 
     arr = _make_dims_multiples(arr, row_looks, col_looks, how=edge_strategy)
 
@@ -423,8 +465,8 @@ def _make_dims_multiples(arr, row_looks, col_looks, how="cutoff"):
 
 def upsample_nearest(
     arr: np.ndarray,
-    output_shape: Tuple[int, int],
-    looks: Optional[Tuple[int, int]] = None,
+    output_shape: tuple[int, int],
+    looks: Optional[tuple[int, int]] = None,
 ) -> np.ndarray:
     """Upsample a numpy matrix by repeating blocks of (row_looks, col_looks).
 
@@ -432,9 +474,9 @@ def upsample_nearest(
     ----------
     arr : np.array
         2D or 3D downsampled array.
-    output_shape : Tuple[int, int]
+    output_shape : tuple[int, int]
         The desired output shape.
-    looks : Tuple[int, int]
+    looks : tuple[int, int]
         The number of looks in the row and column directions.
         If not provided, will be calculated from `output_shape`.
 
@@ -469,3 +511,206 @@ def upsample_nearest(
     arr_out = xp.zeros(shape=shape, dtype=arr.dtype)
     arr_out[..., :out_r, :out_c] = arr_up[..., :out_r, :out_c]
     return arr_out
+
+
+def decimate(arr: ArrayLike, strides: dict[str, int]) -> ArrayLike:
+    """Decimate an array by strides in the x and y directions.
+
+    Output will match [`io.compute_out_shape`][dolphin.io.compute_out_shape]
+
+    Parameters
+    ----------
+    arr : ArrayLike
+        2D or 3D array to decimate.
+    strides : dict[str, int]
+        The strides in the x and y directions.
+
+    Returns
+    -------
+    ArrayLike
+        The decimated array.
+
+    """
+    xs, ys = strides["x"], strides["y"]
+    rows, cols = arr.shape[-2:]
+    start_r = ys // 2
+    start_c = xs // 2
+    end_r = (rows // ys) * ys + 1
+    end_c = (cols // xs) * xs + 1
+    return arr[..., start_r:end_r:ys, start_c:end_c:xs]
+
+
+def get_max_memory_usage(units: str = "GB", children: bool = True) -> float:
+    """Get the maximum memory usage of the current process.
+
+    Parameters
+    ----------
+    units : str, optional, choices=["GB", "MB", "KB", "byte"]
+        The units to return, by default "GB".
+    children : bool, optional
+        Whether to include the memory usage of child processes, by default True
+
+    Returns
+    -------
+    float
+        The maximum memory usage in the specified units.
+
+    Raises
+    ------
+    ValueError
+        If the units are not recognized.
+
+    References
+    ----------
+    1. https://stackoverflow.com/a/7669279/4174466
+    2. https://unix.stackexchange.com/a/30941/295194
+    3. https://manpages.debian.org/bullseye/manpages-dev/getrusage.2.en.html
+
+    """
+    max_mem = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    if children:
+        max_mem += resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss
+    if units.lower().startswith("g"):
+        factor = 1e9
+    elif units.lower().startswith("m"):
+        factor = 1e6
+    elif units.lower().startswith("k"):
+        factor = 1e3
+    elif units.lower().startswith("byte"):
+        factor = 1.0
+    else:
+        raise ValueError(f"Unknown units: {units}")
+    if sys.platform.startswith("linux"):
+        # on linux, ru_maxrss is in kilobytes, while on mac, ru_maxrss is in bytes
+        factor /= 1e3
+
+    return max_mem / factor
+
+
+def get_gpu_memory(pid: Optional[int] = None, gpu_id: int = 0) -> float:
+    """Get the memory usage (in GiB) of the GPU for the current pid."""
+    try:
+        from pynvml.smi import nvidia_smi
+    except ImportError:
+        raise ImportError("Please install pynvml through pip or conda")
+
+    def get_mem(process):
+        used_mem = process["used_memory"] if process else 0
+        if process["unit"] == "MiB":
+            multiplier = 1 / 1024
+        else:
+            logger.warning(f"Unknown unit: {process['unit']}")
+        return used_mem * multiplier
+
+    nvsmi = nvidia_smi.getInstance()
+    processes = nvsmi.DeviceQuery()["gpu"][gpu_id]["processes"]
+    if not processes:
+        return 0.0
+
+    if pid is None:
+        # Return sum of all processes
+        return sum(get_mem(p) for p in processes)
+    else:
+        procs = [p for p in processes if p["pid"] == pid]
+        return get_mem(procs[0]) if procs else 0.0
+
+
+def moving_window_mean(
+    image: ArrayLike, size: Union[int, tuple[int, int]]
+) -> np.ndarray:
+    """Calculate the mean of a moving window of size `size`.
+
+    Parameters
+    ----------
+    image : ndarray
+        input image
+    size : int or tuple of int
+        Window size. If a single int, the window is square.
+        If a tuple of (row_size, col_size), the window can be rectangular.
+
+    Returns
+    -------
+    ndarray
+        image the same size as `image`, where each pixel is the mean
+        of the corresponding window.
+    """
+    if isinstance(size, int):
+        size = (size, size)
+    if len(size) != 2:
+        raise ValueError("size must be a single int or a tuple of 2 ints")
+    if size[0] % 2 == 0 or size[1] % 2 == 0:
+        raise ValueError("size must be odd in both dimensions")
+
+    row_size, col_size = size
+    row_pad = row_size // 2
+    col_pad = col_size // 2
+
+    # Pad the image with zeros
+    image_padded = np.pad(
+        image, ((row_pad + 1, row_pad), (col_pad + 1, col_pad)), mode="constant"
+    )
+
+    # Calculate the cumulative sum of the image
+    integral_img = np.cumsum(np.cumsum(image_padded, axis=0), axis=1)
+    if not np.iscomplexobj(integral_img):
+        integral_img = integral_img.astype(float)
+
+    # Calculate the mean of the moving window
+    # Uses the algorithm from https://en.wikipedia.org/wiki/Summed-area_table
+    window_mean = (
+        integral_img[row_size:, col_size:]
+        - integral_img[:-row_size, col_size:]
+        - integral_img[row_size:, :-col_size]
+        + integral_img[:-row_size, :-col_size]
+    )
+    window_mean /= row_size * col_size
+    return window_mean
+
+
+def set_num_threads(num_threads: int):
+    """Set the cap on threads spawned by numpy and numba.
+
+    Uses https://github.com/joblib/threadpoolctl for numpy.
+    """
+    import numba
+    from threadpoolctl import ThreadpoolController
+
+    # Set the environment variables for the workers
+    controller = ThreadpoolController()
+    controller.limit(limits=num_threads)
+    # https://numba.readthedocs.io/en/stable/user/threading-layer.html#example-of-limiting-the-number-of-threads
+    numba.set_num_threads(num_threads)
+
+
+def get_cpu_count():
+    """Get the number of CPUs available to the current process.
+
+    This function accounts for the possibility of a Docker container with
+    limited CPU resources on a larger machine (which is ignored by
+    `multiprocessing.cpu_count()`).
+
+    Returns
+    -------
+    int
+        The number of CPUs available to the current process.
+
+    References
+    ----------
+    1. https://github.com/joblib/loky/issues/111
+    2. https://github.com/conan-io/conan/blob/982a97041e1ece715d157523e27a14318408b925/conans/client/tools/oss.py#L27 # noqa
+    """
+
+    def get_cpu_quota():
+        return int(Path("/sys/fs/cgroup/cpu/cpu.cfs_quota_us").read_text())
+
+    def get_cpu_period():
+        return int(Path("/sys/fs/cgroup/cpu/cpu.cfs_period_us").read_text())
+
+    try:
+        cfs_quota_us = get_cpu_quota()
+        cfs_period_us = get_cpu_period()
+        if cfs_quota_us > 0 and cfs_period_us > 0:
+            return int(math.ceil(cfs_quota_us / cfs_period_us))
+    except:
+        pass
+    return cpu_count()
