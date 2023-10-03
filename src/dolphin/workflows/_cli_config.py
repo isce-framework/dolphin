@@ -68,6 +68,8 @@ def create_config(
         ),
         unwrap_options=dict(
             unwrap_method=("icu" if use_icu else "snaphu"),
+            ntiles=ntiles,
+            downsample_factor=downsample_factor,
         ),
         worker_settings=dict(
             block_shape=block_shape,
@@ -262,7 +264,7 @@ def get_parser(subparser=None, subcommand_name="run"):
     worker_group.add_argument(
         "--threads-per-worker",
         type=int,
-        default=cpu_count() // 4,
+        default=min(1, cpu_count() // 4),
         help="Number of threads to use per worker.",
     )
     parser.set_defaults(run_func=create_config)
