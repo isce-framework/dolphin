@@ -247,7 +247,7 @@ def mle_stack(
 
         Gamma_inv = xp.linalg.inv(Gamma)
         V = _get_eigvecs(Gamma_inv * C_arrays, n_workers=n_workers)
-        column_idx = -1
+        column_idx = 0
 
     # The shape of V is (rows, cols, nslc, nslc)
     # at pixel (r, c), the columns of V[r, c] are the eigenvectors.
