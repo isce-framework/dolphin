@@ -407,7 +407,7 @@ def get_combined_bounds_nodata(
         Otherwise, computes from the outside of all input images.
     out_bounds_epsg: Optional[int]
         The EPSG of `out_bounds`. If not provided, assumed to be the same
-        as the EPSG of all `filenames`.
+        as the EPSG of all `*filenames`.
     strides : dict[str, int]
         subsample factor: {"x": x strides, "y": y strides}
 

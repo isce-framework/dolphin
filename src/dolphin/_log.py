@@ -54,7 +54,7 @@ def get_log(
     """
     logger = logging.getLogger(name)
     if not logger.hasHandlers():
-        setup_logging(debug=debug)
+        setup_logging(debug=debug, root_name=name.split(".")[0])
     if debug:
         logger.setLevel(logging.DEBUG)
 
@@ -69,17 +69,20 @@ def get_log(
     return logger
 
 
-def setup_logging(debug: bool = False) -> None:
+def setup_logging(debug: bool = False, root_name: str = "dolphin") -> None:
     """Make the logging output pretty and colored with times.
 
     Parameters
     ----------
-    debug : bool (Default value = False)
+    debug : bool (default = False)
         If true, sets logging level to DEBUG
-
+    root_name : str (default = "dolphin")
+        Name of the base logger to configure.
+        All sub-loggers (e.g. modules with <root_name>.<module_name>) will
+        also get access to the handler.
     """
     # Set for all dolphin modules
-    logger = logging.getLogger("dolphin")
+    logger = logging.getLogger(root_name)
     h = RichHandler(rich_tracebacks=True, log_time_format="[%Y-%m-%d %H:%M:%S]")
     logger.addHandler(h)
     log_level = logging.DEBUG if debug else logging.INFO
