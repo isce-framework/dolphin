@@ -43,6 +43,7 @@ def run_wrapped_phase_sequential(
     shp_method: ShpMethod = ShpMethod.NONE,
     shp_alpha: float = 0.05,
     shp_nslc: Optional[int],
+    use_evd: bool = False,
     beta: float = 0.01,
     block_shape: tuple[int, int] = (512, 512),
     n_workers: int = 1,
@@ -101,6 +102,7 @@ def run_wrapped_phase_sequential(
             strides=strides,
             # TODO: what situations do we need to set reference-idx != 0
             reference_idx=ref_idx,
+            use_evd=use_evd,
             beta=beta,
             mask_file=mask_file,
             ps_mask_file=ps_mask_file,

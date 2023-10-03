@@ -46,6 +46,7 @@ def test_phase_linking_options_defaults():
     assert opts.ministack_size == 15
     assert opts.half_window == config.HalfWindow()
     assert opts._directory == Path("linked_phase")
+    assert opts.use_evd is False
 
 
 def test_phase_linking_options_bad_size():

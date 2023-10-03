@@ -17,6 +17,7 @@ def run_cpu(
     slc_stack: np.ndarray,
     half_window: dict[str, int],
     strides: dict[str, int] = {"x": 1, "y": 1},
+    use_evd: bool = False,
     beta: float = 0.01,
     reference_idx: int = 0,
     use_slc_amp: bool = True,
@@ -37,6 +38,9 @@ def run_cpu(
     strides : dict[str, int], optional
         The (x, y) strides (in pixels) to use for the sliding window.
         By default {"x": 1, "y": 1}
+    use_evd : bool, default = False
+        Use eigenvalue decomposition on the covariance matrix instead of
+        the EMI algorithm.
     beta : float, optional
         The regularization parameter, by default 0.01.
     reference_idx : int, optional
@@ -69,7 +73,13 @@ def run_cpu(
         n_workers=n_workers,
     )
 
-    output_phase = mle_stack(C_arrays, beta, reference_idx, n_workers=n_workers)
+    output_phase = mle_stack(
+        C_arrays,
+        use_evd=use_evd,
+        beta=beta,
+        reference_idx=reference_idx,
+        n_workers=n_workers,
+    )
     cpx_phase = np.exp(1j * output_phase)
     # Get the temporal coherence
     temp_coh = metrics.estimate_temp_coh(cpx_phase, C_arrays)
@@ -77,8 +87,8 @@ def run_cpu(
 
     if calc_average_coh:
         # If requested, average the Cov matrix at each row for reference selection
-        d_avg_coh_per_date = np.abs(C_arrays).mean(axis=3)
-        avg_coh = np.argmax(d_avg_coh_per_date, axis=2)
+        avg_coh_per_date = np.abs(C_arrays).mean(axis=3)
+        avg_coh = np.argmax(avg_coh_per_date, axis=2)
     else:
         avg_coh = None
 
