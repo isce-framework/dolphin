@@ -15,6 +15,7 @@ def create_config(
     outfile: Union[str, Path],
     slc_files: Optional[list[str]] = None,
     subdataset: Optional[str] = None,
+    work_directory: Optional[Path] = Path("."),
     mask_file: Optional[str] = None,
     ministack_size: Optional[int] = 15,
     half_window_size: tuple[int, int] = (11, 5),
@@ -26,6 +27,8 @@ def create_config(
     threads_per_worker: int = 4,
     n_parallel_bursts: int = 1,
     no_gpu: bool = False,
+    ntiles: tuple[int, int] = (1, 1),
+    downsample_factor: tuple[int, int] = (1, 1),
     use_icu: bool = False,
     single_update: bool = False,
     log_file: Optional[Path] = None,
@@ -46,6 +49,7 @@ def create_config(
 
     cfg = Workflow(
         cslc_file_list=slc_files,
+        work_directory=work_directory,
         mask_file=mask_file,
         input_options=dict(
             subdataset=subdataset,
@@ -64,6 +68,8 @@ def create_config(
         ),
         unwrap_options=dict(
             unwrap_method=("icu" if use_icu else "snaphu"),
+            ntiles=ntiles,
+            downsample_factor=downsample_factor,
         ),
         worker_settings=dict(
             block_shape=block_shape,
@@ -181,6 +187,28 @@ def get_parser(subparser=None, subcommand_name="run"):
         action="store_true",
         help="Use the ICU algorithm instead of the default SNAPHU.",
     )
+    unwrap_group.add_argument(
+        "-t",
+        "--ntiles",
+        nargs=2,
+        type=int,
+        metavar=("row_tiles", "col_tiles"),
+        default=(1, 1),
+        help=(
+            "(For multiscale unwrapping) Number of tiles to split interferograms into."
+        ),
+    )
+    unwrap_group.add_argument(
+        "--downsample-factor",
+        nargs=2,
+        type=int,
+        metavar=("row_downsample", "col_downsample"),
+        default=(1, 1),
+        help=(
+            "(For multiscale unwrapping) Factor to multilook the coarse unwrapped"
+            " version."
+        ),
+    )
 
     # Get Outputs from the command line
     out_group = parser.add_argument_group("Output options")
@@ -204,6 +232,12 @@ def get_parser(subparser=None, subcommand_name="run"):
 
     worker_group = parser.add_argument_group("Worker options")
     worker_group.add_argument(
+        "--work-directory",
+        type=Path,
+        default=Path(".").resolve(),
+        help="Disable the GPU (if using a machine that has one available).",
+    )
+    worker_group.add_argument(
         "--no-gpu",
         action="store_true",
         help="Disable the GPU (if using a machine that has one available).",
@@ -218,7 +252,7 @@ def get_parser(subparser=None, subcommand_name="run"):
     worker_group.add_argument(
         "--n-workers",
         type=int,
-        default=cpu_count() // 4,
+        default=4,
         help="Number of CPU workers to use (for CPU processing).",
     )
     worker_group.add_argument(
@@ -230,7 +264,7 @@ def get_parser(subparser=None, subcommand_name="run"):
     worker_group.add_argument(
         "--threads-per-worker",
         type=int,
-        default=4,
+        default=min(1, cpu_count() // 4),
         help="Number of threads to use per worker.",
     )
     parser.set_defaults(run_func=create_config)
