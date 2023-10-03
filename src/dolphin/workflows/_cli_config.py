@@ -27,6 +27,8 @@ def create_config(
     threads_per_worker: int = 4,
     n_parallel_bursts: int = 1,
     no_gpu: bool = False,
+    ntiles: tuple[int, int] = (1, 1),
+    downsample_factor: tuple[int, int] = (1, 1),
     use_icu: bool = False,
     single_update: bool = False,
     log_file: Optional[Path] = None,
