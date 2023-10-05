@@ -16,7 +16,7 @@ import numpy as np
 from numpy.typing import DTypeLike
 from osgeo import gdal
 
-from dolphin import io, shp
+from dolphin import io, shp, utils
 from dolphin._blocks import BlockManager
 from dolphin._log import get_log
 from dolphin._types import Filename
@@ -308,8 +308,8 @@ def run_wrapped_phase_single(
 
 def _save_compressed_metadata(
     comp_slc_file: Path,
-    input_real_slc_files: list[Path],
-    input_compressed_files: list[Path],
+    input_real_slc_files: list[Filename],
+    input_compressed_files: list[Filename],
 ):
     """Save metadata about the compressed SLCs.
 
@@ -329,14 +329,16 @@ def _save_compressed_metadata(
         by the phase linking optimization.
     """
     comp_ds = gdal.Open(str(comp_slc_file), gdal.GA_Update)
+    real_names = [utils._get_path_from_gdal_str(p).name for p in input_real_slc_files]
     comp_ds.SetMetadataItem(
         "input_real_slc_files",
-        ",".join([str(p.name) for p in input_real_slc_files]),
+        ",".join(map(str, real_names)),
         "DOLPHIN",
     )
+    comp_names = [utils._get_path_from_gdal_str(p).name for p in input_compressed_files]
     comp_ds.SetMetadataItem(
         "input_compressed_slc_files",
-        ",".join([str(p.name) for p in input_compressed_files]),
+        ",".join(map(str, comp_names)),
         "DOLPHIN",
     )
     comp_ds.FlushCache()

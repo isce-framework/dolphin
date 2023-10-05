@@ -21,8 +21,8 @@ class VRTStack:
 
     Attributes
     ----------
-    file_list : list[pathlib.Path]
-        Names of files to stack
+    file_list : list[Filename]
+        Paths or GDAL-compatible strings (NETCDF:...) for paths to files.
     outfile : pathlib.Path, optional (default = Path("slc_stack.vrt"))
         Name of output file to write
     dates : list[list[datetime.date]]
