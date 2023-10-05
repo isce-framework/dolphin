@@ -505,7 +505,7 @@ def estimate_correlation_from_phase(
     """Estimate correlation from only an interferogram (no SLCs/magnitudes).
 
     This is a simple correlation estimator that takes the (complex) average
-    in a moving window in an interferogram. Used to get some estimate of spatial
+    in a moving window in an interferogram. Used to get some estimate of interferometric
     correlation on the result of phase-linking interferograms.
 
     Parameters

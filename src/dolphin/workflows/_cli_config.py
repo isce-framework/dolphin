@@ -7,7 +7,7 @@ from multiprocessing import cpu_count
 from pathlib import Path
 from typing import Optional, Union
 
-from .config import InterferogramNetworkType, ShpMethod, Workflow
+from .config import InterferogramNetworkType, ShpMethod, UnwrapMethod, Workflow
 
 
 def create_config(
@@ -30,7 +30,7 @@ def create_config(
     ntiles: tuple[int, int] = (1, 1),
     downsample_factor: tuple[int, int] = (1, 1),
     n_parallel_unwrap: int = 1,
-    use_icu: bool = False,
+    unwrap_method: UnwrapMethod = UnwrapMethod.SNAPHU,
     single_update: bool = False,
     log_file: Optional[Path] = None,
     amplitude_mean_files: list[str] = [],
@@ -68,7 +68,7 @@ def create_config(
             amp_dispersion_threshold=amp_dispersion_threshold,
         ),
         unwrap_options=dict(
-            unwrap_method=("icu" if use_icu else "snaphu"),
+            unwrap_method=unwrap_method,
             ntiles=ntiles,
             downsample_factor=downsample_factor,
             n_parallel_jobs=n_parallel_unwrap,
@@ -185,9 +185,10 @@ def get_parser(subparser=None, subcommand_name="run"):
     # Unwrap options
     unwrap_group = parser.add_argument_group("Unwrap options")
     unwrap_group.add_argument(
-        "--use-icu",
-        action="store_true",
-        help="Use the ICU algorithm instead of the default SNAPHU.",
+        "--unwrap-method",
+        choices=[m.value for m in UnwrapMethod],
+        default=UnwrapMethod.SNAPHU,
+        help="Choice of unwrapping algorithm to use.",
     )
     unwrap_group.add_argument(
         "-t",

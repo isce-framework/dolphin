@@ -66,7 +66,7 @@ class PhaseLinkingOptions(BaseModel, extra="forbid"):
 
     _directory: Path = PrivateAttr(Path("linked_phase"))
     ministack_size: int = Field(
-        15, description="Size of the ministack for sequential estimator.", gt=1
+        10, description="Size of the ministack for sequential estimator.", gt=1
     )
     half_window: HalfWindow = HalfWindow()
     use_evd: bool = Field(

@@ -23,6 +23,7 @@ class UnwrapMethod(str, Enum):
 
     SNAPHU = "snaphu"
     ICU = "icu"
+    PHASS = "phass"
 
 
 class InterferogramNetworkType(str, Enum):

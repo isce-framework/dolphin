@@ -93,14 +93,13 @@ def run_wrapped_phase_sequential(
             sort_files=False,
             subdataset=v_all.subdataset,
         )
-        # TODO: what do we gain by choosing a different ref_idx here...
+        # TODO: what situations do we need to set reference-idx != 0
         ref_idx = 0
         cur_output_files, cur_comp_slc_file, tcorr_file = run_wrapped_phase_single(
             slc_vrt_file=cur_vrt,
             output_folder=cur_output_folder,
             half_window=half_window,
             strides=strides,
-            # TODO: what situations do we need to set reference-idx != 0
             reference_idx=ref_idx,
             use_evd=use_evd,
             beta=beta,

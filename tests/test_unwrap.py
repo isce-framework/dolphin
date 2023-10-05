@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 
 from dolphin import io, unwrap
+from dolphin.workflows import UnwrapMethod
 
 try:
     import tophu  # noqa
@@ -64,7 +65,18 @@ def test_unwrap_icu(tmp_path, raster_100_by_200, corr_raster):
         corr_filename=corr_raster,
         unw_filename=unw_filename,
         nlooks=1,
-        use_icu=True,
+        unwrap_method=UnwrapMethod.ICU,
+    )
+
+
+def test_unwrap_phass(tmp_path, raster_100_by_200, corr_raster):
+    unw_filename = tmp_path / "phass_unwrapped.unw.tif"
+    unwrap.unwrap(
+        ifg_filename=raster_100_by_200,
+        corr_filename=corr_raster,
+        unw_filename=unw_filename,
+        nlooks=1,
+        unwrap_method=UnwrapMethod.PHASS,
     )
 
 
