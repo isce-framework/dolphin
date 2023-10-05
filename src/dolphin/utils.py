@@ -242,11 +242,11 @@ def sort_files_by_date(
         except TypeError:
             return (-1, dates)
 
-    date_lists = [get_dates(f, fmt=file_date_fmt) for f in files]
-    file_dates = sorted([fd_tuple for fd_tuple in zip(files, date_lists)], key=sort_key)
+    date_file_tuples = [(get_dates(f, fmt=file_date_fmt), f) for f in files]
+    date_files = sorted([fd_tuple for fd_tuple in date_file_tuples], key=sort_key)
 
     # Unpack the sorted pairs with new sorted values
-    file_list, dates = zip(*file_dates)  # type: ignore
+    dates, file_list = zip(*date_files)  # type: ignore
     return list(file_list), list(dates)
 
 
