@@ -14,8 +14,9 @@ from typing import Optional
 
 import numpy as np
 from numpy.typing import DTypeLike
+from osgeo import gdal
 
-from dolphin import io, shp
+from dolphin import io, shp, utils
 from dolphin._blocks import BlockManager
 from dolphin._log import get_log
 from dolphin._types import Filename
@@ -61,13 +62,13 @@ def run_wrapped_phase_single(
     # TODO: extract common stuff between here and sequential
     output_folder = Path(output_folder)
     vrt = VRTStack.from_vrt_file(slc_vrt_file)
-    file_list_all = vrt.file_list
-    date_list_all = vrt.dates
+    input_slc_files = vrt.file_list
+    input_slc_dates = vrt.dates
 
     # If we are using a different number of SLCs for the amplitude data,
     # we should note that for the SHP finding algorithms
     if shp_nslc is None:
-        shp_nslc = len(file_list_all)
+        shp_nslc = len(input_slc_files)
 
     logger.info(f"{vrt}: from {vrt.file_list[0]} to {vrt.file_list[-1]}")
 
@@ -104,22 +105,22 @@ def run_wrapped_phase_single(
 
     xhalf, yhalf = half_window["x"], half_window["y"]
 
-    # If we were passed any compressed SLCs in `file_list_all`,
+    # If we were passed any compressed SLCs in `input_slc_files`,
     # then we want that index for when we create new compressed SLCs.
     # We skip the old compressed SLCs to create new ones
     first_non_comp_idx = 0
-    for filename in file_list_all:
+    for filename in input_slc_files:
         if not Path(filename).name.startswith("compressed"):
             break
         first_non_comp_idx += 1
 
     # Make the output folder using the start/end dates
-    d0 = date_list_all[first_non_comp_idx][0]
-    d1 = date_list_all[-1][0]
+    d0 = input_slc_dates[first_non_comp_idx][0]
+    d1 = input_slc_dates[-1][0]
     start_end = io._format_date_pair(d0, d1)
 
     msg = (
-        f"Processing {len(file_list_all) - first_non_comp_idx} SLCs +"
+        f"Processing {len(input_slc_files) - first_non_comp_idx} SLCs +"
         f" {first_non_comp_idx} compressed SLCs. "
     )
     logger.info(msg)
@@ -133,7 +134,7 @@ def run_wrapped_phase_single(
     )
     logger.info(f"Total stack size (in pixels): {vrt.shape}")
     # Set up the output folder with empty files to write into
-    output_slc_files = setup_output_folder(
+    phase_linked_slc_files = setup_output_folder(
         vrt,
         driver="GTiff",
         start_idx=first_non_comp_idx,
@@ -204,7 +205,9 @@ def run_wrapped_phase_single(
             method=shp_method,
         )
         # # Run the phase linking process on the current ministack
-        # # TESTING TODO
+        # TODO: Currently trying to use the latest-in-time compressed SLC as
+        # the reference (and we're assuming all compressed SLCs have the
+        # same "base phase")
         reference_idx = max(0, first_non_comp_idx - 1)
         try:
             cur_mle_stack, tcorr, avg_coh = run_mle(
@@ -240,11 +243,11 @@ def run_wrapped_phase_single(
 
         # Save each of the MLE estimates (ignoring those corresponding to
         # compressed SLCs indexes)
-        assert len(cur_mle_stack[first_non_comp_idx:]) == len(output_slc_files)
+        assert len(cur_mle_stack[first_non_comp_idx:]) == len(phase_linked_slc_files)
 
         for img, f in zip(
             cur_mle_stack[first_non_comp_idx:, trimmed_rows, trimmed_cols],
-            output_slc_files,
+            phase_linked_slc_files,
         ):
             writer.queue_write(img, f, out_rows.start, out_cols.start)
 
@@ -291,9 +294,54 @@ def run_wrapped_phase_single(
     writer.notify_finished()
     logger.info(f"Finished ministack of size {vrt.shape}.")
 
+    comp_slc_file, tcorr_file = output_files[0:2]
+
+    input_compressed_files = input_slc_files[:first_non_comp_idx]
+    input_real_slc_files = input_slc_files[first_non_comp_idx:]
+    _save_compressed_metadata(
+        comp_slc_file.filename, input_real_slc_files, input_compressed_files
+    )
     # TODO: what would make most sense to return here?
-    # return output_slc_files, comp_slc_file, tcorr_file
-    return output_slc_files, output_files[0].filename, output_files[1].filename
+    # return phase_linked_slc_files, comp_slc_file, tcorr_file
+    return phase_linked_slc_files, comp_slc_file.filename, tcorr_file.filename
+
+
+def _save_compressed_metadata(
+    comp_slc_file: Path,
+    input_real_slc_files: list[Filename],
+    input_compressed_files: list[Filename],
+):
+    """Save metadata about the compressed SLCs.
+
+    The filenames will be stored in GDAL metadata as a list of strings, separated
+    by commas, saved into the "DOLPHIN" domain.
+
+    Parameters
+    ----------
+    comp_slc_file : Path
+        Path to the compressed SLC file
+    input_real_slc_files : list[Path]
+        List of input SLC files that were used to create the compressed SLC
+    input_compressed_files : list[Path]
+        List of input compressed SLC files that were used in the ministack
+        which produced the phase linking result used the compressed SLCs.
+        Note that these were not included in the dot product, but were used
+        by the phase linking optimization.
+    """
+    comp_ds = gdal.Open(str(comp_slc_file), gdal.GA_Update)
+    real_names = [utils._get_path_from_gdal_str(p).name for p in input_real_slc_files]
+    comp_ds.SetMetadataItem(
+        "input_real_slc_files",
+        ",".join(map(str, real_names)),
+        "DOLPHIN",
+    )
+    comp_names = [utils._get_path_from_gdal_str(p).name for p in input_compressed_files]
+    comp_ds.SetMetadataItem(
+        "input_compressed_slc_files",
+        ",".join(map(str, comp_names)),
+        "DOLPHIN",
+    )
+    comp_ds.FlushCache()
 
 
 def setup_output_folder(
@@ -335,7 +383,7 @@ def setup_output_folder(
     Returns
     -------
     list[Path]
-        list of saved empty files.
+        list of saved empty files for the outputs of phase linking
     """
     if output_folder is None:
         output_folder = vrt_stack.outfile.parent
@@ -350,7 +398,7 @@ def setup_output_folder(
             s = io._format_date_pair(d[0], d[1])
         date_strs.append(s)
 
-    output_files = []
+    phase_linked_slc_files = []
     for filename in date_strs:
         slc_name = Path(filename).stem
         output_path = output_folder / f"{slc_name}.slc.tif"
@@ -366,5 +414,5 @@ def setup_output_folder(
             nodata=nodata,
         )
 
-        output_files.append(output_path)
-    return output_files
+        phase_linked_slc_files.append(output_path)
+    return phase_linked_slc_files

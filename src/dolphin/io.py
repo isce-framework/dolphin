@@ -329,6 +329,26 @@ def get_raster_bounds(
     return (left, bottom, right, top)
 
 
+def get_raster_metadata(filename: Filename, domain: str = ""):
+    """Get metadata from a raster file.
+
+    Parameters
+    ----------
+    filename : Filename
+        Path to the file to load.
+    domain : str, optional
+        Domain to get metadata for. Default is "" (all domains).
+
+    Returns
+    -------
+    dict
+        Dictionary of metadata.
+    """
+    ds = gdal.Open(fspath(filename))
+    md = ds.GetMetadata(domain)
+    return md
+
+
 def rowcol_to_xy(
     row: int,
     col: int,
