@@ -66,7 +66,7 @@ class PhaseLinkingOptions(BaseModel, extra="forbid"):
 
     _directory: Path = PrivateAttr(Path("linked_phase"))
     ministack_size: int = Field(
-        15, description="Size of the ministack for sequential estimator.", gt=1
+        10, description="Size of the ministack for sequential estimator.", gt=1
     )
     half_window: HalfWindow = HalfWindow()
     use_evd: bool = Field(
@@ -329,6 +329,9 @@ class Workflow(YamlModel):
         description="Name of sub-directory to use for writing output files",
         validate_default=True,
     )
+    resolve_paths: bool = Field(
+        True, description="Resolve all filepaths given as relative to be absolute."
+    )
 
     # Options for each step in the workflow
     ps_options: PsOptions = Field(default_factory=PsOptions)
@@ -373,11 +376,6 @@ class Workflow(YamlModel):
         extra="allow", json_schema_extra={"required": ["cslc_file_list"]}
     )
 
-    @field_validator("work_directory")
-    @classmethod
-    def _make_dir_absolute(cls, v: Path):
-        return v.resolve()
-
     # validators
     @field_validator("cslc_file_list", mode="before")
     @classmethod
@@ -393,6 +391,7 @@ class Workflow(YamlModel):
             # Check if it's a newline-delimited list of input files
             elif v_path.exists() and v_path.is_file():
                 filenames = [Path(f) for f in v_path.read_text().splitlines()]
+
                 # If given as relative paths, make them relative to the text file
                 parent = v_path.parent
                 return [parent / f if not f.is_absolute() else f for f in filenames]
@@ -439,10 +438,11 @@ class Workflow(YamlModel):
         super().__init__(*args, **kwargs)
 
         # Ensure outputs from workflow steps are within work directory.
-        work_dir = self.work_directory
-        # Save all directories as absolute paths
-        work_dir = work_dir.resolve(strict=False)
+        if self.resolve_paths:
+            # Save all directories as absolute paths
+            self.work_directory = self.work_directory.resolve(strict=False)
 
+        work_dir = self.work_directory
         # For each workflow step that has an output folder, move it inside
         # the work directory (if it's not already inside).
         # They may already be inside if we're loading from a json/yaml file.
@@ -455,7 +455,8 @@ class Workflow(YamlModel):
             opts = getattr(self, step)
             if not opts._directory.parent == work_dir:
                 opts._directory = work_dir / opts._directory
-            opts._directory = opts._directory.resolve(strict=False)
+            if self.resolve_paths:
+                opts._directory = opts._directory.resolve(strict=False)
 
         # Track the directories that need to be created at start of workflow
         self._directory_list = [

@@ -7,7 +7,7 @@ import pydantic
 import pytest
 from make_netcdf import create_test_nc
 
-from dolphin.workflows import InterferogramNetworkType, config
+from dolphin.workflows import InterferogramNetworkType, UnwrapMethod, config
 
 
 # Testing what the defaults look like for each class
@@ -43,7 +43,7 @@ def test_ps_options_defaults():
 
 def test_phase_linking_options_defaults():
     opts = config.PhaseLinkingOptions()
-    assert opts.ministack_size == 15
+    assert opts.ministack_size == 10
     assert opts.half_window == config.HalfWindow()
     assert opts._directory == Path("linked_phase")
     assert opts.use_evd is False
@@ -77,7 +77,7 @@ def test_interferogram_network_types():
 
 def test_unwrap_options_defaults():
     opts = config.UnwrapOptions()
-    assert opts.unwrap_method == config.UnwrapMethod.SNAPHU
+    assert opts.unwrap_method == UnwrapMethod.SNAPHU
     assert opts.init_method == "mcf"
     assert opts._directory == Path("unwrapped")
     assert opts.ntiles == [1, 1]
@@ -164,11 +164,28 @@ def test_input_find_slcs(slc_file_list_nc):
         cslc_file_list=slc_file_list_nc, input_options={"subdataset": "data"}
     )
     assert opts.cslc_file_list == slc_file_list_nc
+    dict1 = opts.model_dump()
 
     opts2 = config.Workflow(
         cslc_file_list=cslc_dir / "slclist.txt", input_options={"subdataset": "data"}
     )
-    opts2.model_dump() == opts.model_dump()
+    dict2 = opts2.model_dump()
+
+    dict1.pop("creation_time_utc")
+    dict2.pop("creation_time_utc")
+    assert dict1 == dict2
+
+
+def test_input_relative_paths(tmpdir, slc_file_list_nc):
+    with tmpdir.as_cwd():
+        newfile = Path(slc_file_list_nc[0].name)
+        shutil.copy(slc_file_list_nc[0], newfile)
+        opts = config.Workflow(
+            cslc_file_list=[newfile],
+            input_options={"subdataset": "data"},
+            resolve=False,
+        )
+        assert opts.cslc_file_list == [newfile]
 
 
 def test_input_glob_pattern(slc_file_list_nc):

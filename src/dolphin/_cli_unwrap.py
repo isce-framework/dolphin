@@ -3,6 +3,8 @@ import argparse
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from dolphin.workflows.config import UnwrapMethod
+
 if TYPE_CHECKING:
     _SubparserType = argparse._SubParsersAction[argparse.ArgumentParser]
 else:
@@ -66,6 +68,15 @@ def get_parser(subparser=None, subcommand_name="unwrap") -> argparse.ArgumentPar
         type=int,
         default=1,
         help="Number of parallel files to unwrap",
+    )
+
+    algorithm_opts = parser.add_argument_group("Algorithm options")
+    algorithm_opts.add_argument(
+        "--unwrap-method",
+        type=UnwrapMethod,
+        choices=[m.value for m in UnwrapMethod],
+        default=UnwrapMethod.SNAPHU.value,
+        help="Choice of unwrapping algorithm to use.",
     )
 
     tophu_opts = parser.add_argument_group("Tophu options")

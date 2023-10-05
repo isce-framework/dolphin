@@ -1,5 +1,14 @@
 # [Unreleased](https://github.com/isce-framework/dolphin/compare/v0.4.2...main)
 
+**Added**
+- Ability to unwrap using isce3's `PHASS`
+
+**Changed**
+
+- Instead of specifying the unwrapping algorithm in `dolphin unwrap` as `--use-icu`, the option is not `--unwrap-method`
+  - This let's us add `--unwrap-method "phass"`, but also future unwrap methods without a `--use-<name>` for every one
+
+
 # [0.4.2](https://github.com/isce-framework/dolphin/compare/v0.4.1...v0.4.2)
 
 **Added**
@@ -9,10 +18,10 @@
 **Changed**
 
 - Moved all `OPERA_` variables to a new module `dolphin.opera_utils`.
-    - Other OPERA-specific quirks have been moved to the separate `disp-s1` repo,
+  - Other OPERA-specific quirks have been moved to the separate `disp-s1` repo,
      but the functions remaining are the ones that seem most broadly useful to `sweets`
      and other users working with burst SLCs.
-    - Changed the burst regex to be able to match COMPASS and the official product name
+  - Changed the burst regex to be able to match COMPASS and the official product name
 - Removed `WorkflowName` for separating `stack` vs `single`
   - The name didn't really provide benefit, as the real differences cam from other configuration options
 - Internals for which functions are called in `sequential.py`

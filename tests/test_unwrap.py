@@ -1,11 +1,11 @@
 import os
-import sys
 from pathlib import Path
 
 import numpy as np
 import pytest
 
 from dolphin import io, unwrap
+from dolphin.workflows import UnwrapMethod
 
 try:
     import tophu  # noqa
@@ -64,24 +64,31 @@ def test_unwrap_icu(tmp_path, raster_100_by_200, corr_raster):
         corr_filename=corr_raster,
         unw_filename=unw_filename,
         nlooks=1,
-        use_icu=True,
+        unwrap_method=UnwrapMethod.ICU,
+    )
+
+
+def test_unwrap_phass(tmp_path, raster_100_by_200, corr_raster):
+    unw_filename = tmp_path / "phass_unwrapped.unw.tif"
+    unwrap.unwrap(
+        ifg_filename=raster_100_by_200,
+        corr_filename=corr_raster,
+        unw_filename=unw_filename,
+        nlooks=1,
+        unwrap_method=UnwrapMethod.PHASS,
     )
 
 
 # Skip this on mac, since snaphu doesn't run on mac
-@pytest.mark.skipif(
-    sys.platform == "darwin",
-    reason="snaphu doesn't run on mac",
-)
-def test_unwrap_snaphu_logfile(tmp_path, raster_100_by_200, corr_raster):
+def test_unwrap_logfile(tmp_path, raster_100_by_200, corr_raster):
     unw_filename = tmp_path / "unwrapped.unw.tif"
     unwrap.unwrap(
         ifg_filename=raster_100_by_200,
         corr_filename=corr_raster,
         unw_filename=unw_filename,
         nlooks=1,
-        init_method="mst",
-        log_snaphu_to_file=True,
+        unwrap_method="icu",
+        log_to_file=True,
     )
     logfile_name = str(unw_filename).replace(".unw.tif", ".unw.log")
     assert Path(logfile_name).exists()

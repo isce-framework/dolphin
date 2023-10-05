@@ -17,6 +17,7 @@ from dolphin._background import DummyProcessPoolExecutor
 from dolphin._log import get_log, log_runtime
 from dolphin._types import Filename
 from dolphin.utils import full_suffix, progress
+from dolphin.workflows import UnwrapMethod
 
 logger = get_log(__name__)
 
@@ -33,8 +34,8 @@ def run(
     *,
     nlooks: float = 5,
     mask_file: Optional[Filename] = None,
+    unwrap_method: UnwrapMethod = UnwrapMethod.SNAPHU,
     init_method: str = "mst",
-    use_icu: bool = False,
     unw_suffix: str = ".unw.tif",
     max_jobs: int = 1,
     ntiles: Union[int, tuple[int, int]] = 1,
@@ -53,14 +54,15 @@ def run(
     output_path : Filename
         Path to output directory.
     nlooks : int, optional
-        Effective number of spatial looks used to form the input correlation data.
+        Effective number of looks used to form the input correlation data.
     mask_file : Filename, optional
         Path to binary byte mask file, by default None.
         Assumes that 1s are valid pixels and 0s are invalid.
+    unwrap_method : UnwrapMethod or str, optional, default = "snaphu"
+        Choice of unwrapping algorithm to use.
+        Choices: {"snaphu", "icu", "phass"}
     init_method : str, choices = {"mcf", "mst"}
         SNAPHU initialization method, by default "mst".
-    use_icu : bool, optional
-        Force the use of isce3's ICU instead of snaphu, by default False.
     unw_suffix : str, optional, default = ".unw.tif"
         unwrapped file suffix to use for creating/searching for existing files.
     max_jobs : int, optional, default = 1
@@ -124,7 +126,7 @@ def run(
                 unw_filename=out_file,
                 nlooks=nlooks,
                 init_method=init_method,
-                use_icu=use_icu,
+                unwrap_method=unwrap_method,
                 mask_file=mask_file,
                 downsample_factor=downsample_factor,
                 ntiles=ntiles,
@@ -153,10 +155,10 @@ def unwrap(
     nlooks: float,
     mask_file: Optional[Filename] = None,
     zero_where_masked: bool = True,
+    unwrap_method: UnwrapMethod = UnwrapMethod.SNAPHU,
     init_method: str = "mst",
     cost: str = "smooth",
-    log_snaphu_to_file: bool = True,
-    use_icu: bool = False,
+    log_to_file: bool = True,
     downsample_factor: Union[int, tuple[int, int]] = 1,
     ntiles: Union[int, tuple[int, int]] = 1,
 ) -> tuple[Path, Path]:
@@ -171,7 +173,7 @@ def unwrap(
     unw_filename : Filename
         Path to output unwrapped phase file.
     nlooks : float
-        Effective number of spatial looks used to form the input correlation data.
+        Effective number of looks used to form the input correlation data.
     mask_file : Filename, optional
         Path to binary byte mask file, by default None.
         Assumes that 1s are valid pixels and 0s are invalid.
@@ -179,14 +181,15 @@ def unwrap(
         Set wrapped phase/correlation to 0 where mask is 0 before unwrapping.
         If not mask is provided, this is ignored.
         By default True.
+    unwrap_method : UnwrapMethod or str, optional, default = "snaphu"
+        Choice of unwrapping algorithm to use.
+        Choices: {"snaphu", "icu", "phass"}
     init_method : str, choices = {"mcf", "mst"}
         SNAPHU initialization method, by default "mst"
     cost : str, choices = {"smooth", "defo", "p-norm",}
         SNAPHU cost function, by default "smooth"
-    log_snaphu_to_file : bool, optional
+    log_to_file : bool, optional
         Redirect SNAPHU's logging output to file, by default True
-    use_icu : bool, optional, default = False
-        Force the unwrapping to use ICU
     downsample_factor : int, optional, default = 1
         Downsample the interferograms by this factor to unwrap faster, then upsample
         to full resolution.
@@ -212,6 +215,9 @@ def unwrap(
         downsample_factor = (downsample_factor, downsample_factor)
     if isinstance(ntiles, int):
         ntiles = (ntiles, ntiles)
+    # Coerce to the enum
+    unwrap_method = UnwrapMethod(unwrap_method)
+
     if any(t > 1 for t in ntiles):
         return multiscale_unwrap(
             ifg_filename,
@@ -224,11 +230,12 @@ def unwrap(
             zero_where_masked=zero_where_masked,
             init_method=init_method,
             cost=cost,
-            log_snaphu_to_file=log_snaphu_to_file,
+            unwrap_method=unwrap_method,
+            log_to_file=log_to_file,
         )
 
     # check not MacOS
-    use_snaphu = sys.platform != "darwin" and not use_icu
+    use_snaphu = sys.platform != "darwin" and unwrap_method not in ("icu", "phass")
     Raster = isce3.io.gdal.Raster if use_snaphu else isce3.io.Raster
 
     shape = io.get_raster_xysize(ifg_filename)[::-1]
@@ -286,8 +293,7 @@ def unwrap(
         unw_raster = Raster(fspath(unw_filename), True)
         conncomp_raster = Raster(fspath(conncomp_filename), True)
 
-    if log_snaphu_to_file and use_snaphu:
-        _redirect_snaphu_log(unw_filename)
+    _redirect_unwrapping_log(unw_filename, unwrap_method.value)
 
     if zero_where_masked and mask_file is not None:
         logger.info(f"Zeroing phase/corr of pixels masked in {mask_file}")
@@ -380,12 +386,14 @@ def _compute_phase_diffs(phase):
     return round(d1 - 0.5) + round(d2 - 0.5)
 
 
-def _redirect_snaphu_log(unw_filename: Filename):
+def _redirect_unwrapping_log(unw_filename: Filename, method: str):
     import journal
 
     logfile = Path(unw_filename).with_suffix(".log")
-    journal.info("isce3.unwrap.snaphu").device = journal.logfile(fspath(logfile), "w")
-    logger.info(f"Logging snaphu output to {logfile}")
+    journal.info(f"isce3.unwrap.{method}").device = journal.logfile(
+        fspath(logfile), "w"
+    )
+    logger.info(f"Logging unwrapping output to {logfile}")
 
 
 def multiscale_unwrap(
@@ -397,9 +405,10 @@ def multiscale_unwrap(
     nlooks: float,
     mask_file: Optional[Filename] = None,
     zero_where_masked: bool = True,
+    unwrap_method: UnwrapMethod = UnwrapMethod.SNAPHU,
     init_method: str = "mst",
     cost: str = "smooth",
-    log_snaphu_to_file: bool = True,
+    log_to_file: bool = True,
 ) -> tuple[Path, Path]:
     """Unwrap an interferogram using at multiple scales using `tophu`.
 
@@ -417,7 +426,7 @@ def multiscale_unwrap(
         Number of tiles to split for full image into for high res unwrapping.
         If `ntiles` is an int, will use `(ntiles, ntiles)`
     nlooks : float
-        Effective number of spatial looks used to form the input correlation data.
+        Effective number of looks used to form the input correlation data.
     mask_file : Filename, optional
         Path to binary byte mask file, by default None.
         Assumes that 1s are valid pixels and 0s are invalid.
@@ -425,12 +434,16 @@ def multiscale_unwrap(
         Set wrapped phase/correlation to 0 where mask is 0 before unwrapping.
         If not mask is provided, this is ignored.
         By default True.
+    unwrap_method : UnwrapMethod or str, optional, default = "snaphu"
+        Choice of unwrapping algorithm to use.
+        Choices: {"snaphu", "icu", "phass"}
     init_method : str, choices = {"mcf", "mst"}
         SNAPHU initialization method, by default "mst"
     cost : str, choices = {"smooth", "defo", "p-norm",}
         SNAPHU cost function, by default "smooth"
-    log_snaphu_to_file : bool, optional
-        Redirect SNAPHU's logging output to file, by default True
+    downsample_factor : int, optional, default = 1
+    log_to_file : bool, optional
+        Redirect isce3's logging output to file, by default True
 
     Returns
     -------
@@ -445,6 +458,22 @@ def multiscale_unwrap(
     def _get_rasterio_crs_transform(filename: Filename):
         with rio.open(filename) as src:
             return src.crs, src.transform
+
+    unwrap_method = UnwrapMethod(unwrap_method)
+    if unwrap_method == UnwrapMethod.ICU:
+        unwrap_callback = tophu.ICUUnwrap()
+        nodata = 0  # TODO: confirm this?
+    elif unwrap_method == UnwrapMethod.PHASS:
+        unwrap_callback = tophu.PhassUnwrap()
+        nodata = -10_000
+    elif unwrap_method == UnwrapMethod.SNAPHU:
+        unwrap_callback = tophu.SnaphuUnwrap(
+            cost=cost,
+            init_method=init_method,
+        )
+        nodata = 0
+    else:
+        raise ValueError(f"Unknown {unwrap_method = }")
 
     (width, height) = io.get_raster_xysize(ifg_filename)
     crs, transform = _get_rasterio_crs_transform(ifg_filename)
@@ -473,6 +502,7 @@ def multiscale_unwrap(
         dtype=np.float32,
         crs=crs,
         transform=transform,
+        nodata=nodata,
         **gtiff_options,
     )
 
@@ -487,12 +517,8 @@ def multiscale_unwrap(
         igram_rb = tophu.RasterBand(ifg_filename)
         coherence_rb = tophu.RasterBand(corr_filename)
 
-    unwrap_callback = tophu.SnaphuUnwrap(
-        cost=cost,
-        init_method=init_method,
-    )
-    if log_snaphu_to_file:
-        _redirect_snaphu_log(unw_filename)
+    if log_to_file:
+        _redirect_unwrapping_log(unw_filename, unwrap_method.value)
 
     tophu.multiscale_unwrap(
         unw_rb,

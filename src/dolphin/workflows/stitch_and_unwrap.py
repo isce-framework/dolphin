@@ -8,7 +8,7 @@ from dolphin import io, stitching, unwrap
 from dolphin._log import get_log, log_runtime
 from dolphin.interferogram import estimate_correlation_from_phase
 
-from .config import UnwrapMethod, Workflow
+from .config import Workflow
 
 
 @log_runtime
@@ -122,7 +122,6 @@ def run(
     else:
         output_mask = None
 
-    use_icu = cfg.unwrap_options.unwrap_method == UnwrapMethod.ICU
     # Note: ICU doesn't seem to support masks, but we'll zero the phase/cor
     logger.info(f"Unwrapping interferograms in {stitched_ifg_dir}")
     # Compute the looks for the unwrapping
@@ -141,7 +140,7 @@ def run(
         max_jobs=unwrap_jobs,
         ntiles=cfg.unwrap_options.ntiles,
         downsample_factor=cfg.unwrap_options.downsample_factor,
-        use_icu=use_icu,
+        unwrap_method=cfg.unwrap_options.unwrap_method,
     )
 
     return unwrapped_paths, conncomp_paths, spatial_corr_paths, stitched_tcorr_file
