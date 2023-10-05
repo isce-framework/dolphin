@@ -215,6 +215,9 @@ def unwrap(
         downsample_factor = (downsample_factor, downsample_factor)
     if isinstance(ntiles, int):
         ntiles = (ntiles, ntiles)
+    # Coerce to the enum
+    unwrap_method = UnwrapMethod(unwrap_method)
+
     if any(t > 1 for t in ntiles):
         return multiscale_unwrap(
             ifg_filename,
@@ -456,6 +459,7 @@ def multiscale_unwrap(
         with rio.open(filename) as src:
             return src.crs, src.transform
 
+    unwrap_method = UnwrapMethod(unwrap_method)
     if unwrap_method == UnwrapMethod.ICU:
         unwrap_callback = tophu.ICUUnwrap()
         nodata = 0  # TODO: confirm this?
