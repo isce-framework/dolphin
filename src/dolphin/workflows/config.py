@@ -304,6 +304,34 @@ class OutputOptions(BaseModel, extra="forbid"):
         return strides
 
 
+# Add a class for troposphere, ionosphere corrections, with geometry files and DEM
+class CorrectionOptions(BaseModel, extra="forbid"):
+    """Configuration for the auxillary phase corrections."""
+
+    troposphere_files: List[Path] = Field(
+        default_factory=list,
+        description="List of weather-model files for tropospheric corrections",
+    )
+    ionosphere_files: List[Path] = Field(
+        default_factory=list,
+        description=(
+            "List of GNSS-derived TEC maps for ionospheric corrections. Source is"
+            "https://cddis.nasa.gov/archive/gnss/products/ionex/"
+        ),
+    )
+    geometry_files: List[Path] = Field(
+        default_factory=list,
+        description=(
+            "Line-of-sight geometry files for each burst/SLC stack area, for use in"
+            " correction computations."
+        ),
+    )
+    dem_file: Optional[Path] = Field(
+        None,
+        description="DEM file for tropospheric/ topographic phase corrections.",
+    )
+
+
 class Workflow(YamlModel):
     """Configuration for the workflow."""
 
@@ -329,8 +357,11 @@ class Workflow(YamlModel):
         description="Name of sub-directory to use for writing output files",
         validate_default=True,
     )
-    resolve_paths: bool = Field(
-        True, description="Resolve all filepaths given as relative to be absolute."
+    keep_paths_relative: bool = Field(
+        False,
+        description=(
+            "Don't resolve filepaths that are given as relative to be absolute."
+        ),
     )
 
     # Options for each step in the workflow
@@ -355,6 +386,7 @@ class Workflow(YamlModel):
         default_factory=InterferogramNetwork
     )
     unwrap_options: UnwrapOptions = Field(default_factory=UnwrapOptions)
+    correction_options: CorrectionOptions = Field(default_factory=CorrectionOptions)
     output_options: OutputOptions = Field(default_factory=OutputOptions)
 
     # General workflow metadata
@@ -438,7 +470,7 @@ class Workflow(YamlModel):
         super().__init__(*args, **kwargs)
 
         # Ensure outputs from workflow steps are within work directory.
-        if self.resolve_paths:
+        if not self.keep_paths_relative:
             # Save all directories as absolute paths
             self.work_directory = self.work_directory.resolve(strict=False)
 
@@ -455,7 +487,7 @@ class Workflow(YamlModel):
             opts = getattr(self, step)
             if not opts._directory.parent == work_dir:
                 opts._directory = work_dir / opts._directory
-            if self.resolve_paths:
+            if not self.keep_paths_relative:
                 opts._directory = opts._directory.resolve(strict=False)
 
         # Track the directories that need to be created at start of workflow
