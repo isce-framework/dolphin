@@ -2,6 +2,10 @@
 
 **Added**
 - Ability to unwrap using isce3's `PHASS`
+- `CorrectionOptions` model for specifying the correction options in the `Workflow` config
+  - Currently a placeholder for the files which will be used for tropospheric/ionospheric corrections
+- Ability to keep relative files in the `Workflow` config
+  - This is useful for keeping the relative paths to the SLCs in the config, and then running the workflow from a different directory
 
 **Changed**
 
