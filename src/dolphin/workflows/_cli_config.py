@@ -15,6 +15,7 @@ def create_config(
     outfile: Union[str, Path],
     slc_files: Optional[list[str]] = None,
     subdataset: Optional[str] = None,
+    keep_paths_relative: bool = False,
     work_directory: Optional[Path] = Path("."),
     mask_file: Optional[str] = None,
     ministack_size: Optional[int] = 15,
@@ -31,6 +32,10 @@ def create_config(
     downsample_factor: tuple[int, int] = (1, 1),
     n_parallel_unwrap: int = 1,
     unwrap_method: UnwrapMethod = UnwrapMethod.SNAPHU,
+    troposphere_files: list[str] = [],
+    ionosphere_files: list[str] = [],
+    geometry_files: list[str] = [],
+    dem_file: Optional[str] = None,
     single_update: bool = False,
     log_file: Optional[Path] = None,
     amplitude_mean_files: list[str] = [],
@@ -51,6 +56,7 @@ def create_config(
     cfg = Workflow(
         cslc_file_list=slc_files,
         work_directory=work_directory,
+        keep_paths_relative=keep_paths_relative,
         mask_file=mask_file,
         input_options=dict(
             subdataset=subdataset,
@@ -72,6 +78,12 @@ def create_config(
             ntiles=ntiles,
             downsample_factor=downsample_factor,
             n_parallel_jobs=n_parallel_unwrap,
+        ),
+        correction_options=dict(
+            troposphere_files=troposphere_files,
+            ionosphere_files=ionosphere_files,
+            geometry_files=geometry_files,
+            dem_file=dem_file,
         ),
         worker_settings=dict(
             block_shape=block_shape,
@@ -120,7 +132,14 @@ def get_parser(subparser=None, subcommand_name="run"):
         nargs=argparse.ZERO_OR_MORE,
         help="List the paths of all SLC files to include.",
     )
-
+    inputs.add_argument(
+        "--keep-paths-relative",
+        action="store_true",
+        help=(
+            "Don't resolve file paths that are given as relative (useful for running"
+            " inside docker). "
+        ),
+    )
     # Get the subdataset of the SLCs to use, if passing HDF5/NetCDF files
     inputs.add_argument(
         "-sds",
@@ -139,14 +158,13 @@ def get_parser(subparser=None, subcommand_name="run"):
         help="Optional: List the paths of existing amplitude dispersion files.",
         default=[],
     )
-    parser.add_argument(
+    inputs.add_argument(
         "--mask-file",
         help=(
             "Path to Byte mask file used to ignore low correlation/bad data (e.g water"
             " mask). Convention is 0 for no data/invalid, and 1 for good data."
         ),
     )
-    parser.add_argument("--log-file", help="Path to log to, in addition to stderr")
 
     # Phase linking options
     pl_group = parser.add_argument_group("Phase Linking options")
@@ -182,6 +200,7 @@ def get_parser(subparser=None, subcommand_name="run"):
         default=0.25,
         help="Threshold for the amplitude dispersion.",
     )
+
     # Unwrap options
     unwrap_group = parser.add_argument_group("Unwrap options")
     unwrap_group.add_argument(
@@ -219,6 +238,28 @@ def get_parser(subparser=None, subcommand_name="run"):
         help="Number of interferograms to unwrap in parallel.",
     )
 
+    # Correction options
+    correction_group = parser.add_argument_group("Correction options")
+    correction_group.add_argument(
+        "--troposphere-files",
+        nargs=argparse.ZERO_OR_MORE,
+        help="List the paths of all troposphere files to include.",
+    )
+    correction_group.add_argument(
+        "--ionosphere-files",
+        nargs=argparse.ZERO_OR_MORE,
+        help="List the paths of all ionosphere files to include.",
+    )
+    correction_group.add_argument(
+        "--geometry-files",
+        nargs=argparse.ZERO_OR_MORE,
+        help="List the paths of all geometry files to include.",
+    )
+    correction_group.add_argument(
+        "--dem-file",
+        help="Path to DEM file to use for topographic correction.",
+    )
+
     # Get Outputs from the command line
     out_group = parser.add_argument_group("Output options")
     out_group.add_argument(
@@ -241,10 +282,13 @@ def get_parser(subparser=None, subcommand_name="run"):
 
     worker_group = parser.add_argument_group("Worker options")
     worker_group.add_argument(
+        "--log-file", help="Path to log to, in addition to stderr"
+    )
+    worker_group.add_argument(
         "--work-directory",
         type=Path,
         default=Path(".").resolve(),
-        help="Disable the GPU (if using a machine that has one available).",
+        help="Path to directory to store intermediate/output files.",
     )
     worker_group.add_argument(
         "--no-gpu",
