@@ -71,14 +71,13 @@ def group_by_burst(
 
     def sort_by_burst_id(file_list):
         """Sort files by burst id."""
-        burst_ids = [get_burst_id(f) for f in file_list]
-        file_burst_tups = sorted(
-            [(Path(f), d) for f, d in zip(file_list, burst_ids)],
+        file_burst_tuples = sorted(
+            [(Path(f), get_burst_id(f)) for f in file_list],
             # use the date or dates as the key
-            key=lambda f_d_tuple: f_d_tuple[1],  # type: ignore
+            key=lambda f_b_tuple: f_b_tuple[1],  # type: ignore
         )
         # Unpack the sorted pairs with new sorted values
-        file_list, burst_ids = zip(*file_burst_tups)  # type: ignore
+        file_list, _ = zip(*file_burst_tuples)  # type: ignore
         return file_list
 
     if not file_list:
