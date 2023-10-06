@@ -310,13 +310,15 @@ class CorrectionOptions(BaseModel, extra="forbid"):
 
     troposphere_files: List[Path] = Field(
         default_factory=list,
-        description="List of weather-model files for tropospheric corrections",
+        description=(
+            "List of weather-model files (one per date) for tropospheric corrections"
+        ),
     )
     ionosphere_files: List[Path] = Field(
         default_factory=list,
         description=(
-            "List of GNSS-derived TEC maps for ionospheric corrections. Source is"
-            "https://cddis.nasa.gov/archive/gnss/products/ionex/"
+            "List of GNSS-derived TEC maps for ionospheric corrections (one per date)."
+            " Source is https://cddis.nasa.gov/archive/gnss/products/ionex/"
         ),
     )
     geometry_files: List[Path] = Field(
@@ -330,6 +332,13 @@ class CorrectionOptions(BaseModel, extra="forbid"):
         None,
         description="DEM file for tropospheric/ topographic phase corrections.",
     )
+
+    @field_validator(
+        "troposphere_files", "ionosphere_files", "geometry_files", mode="before"
+    )
+    @classmethod
+    def _to_empty_list(cls, v):
+        return v if v is not None else []
 
 
 class Workflow(YamlModel):
