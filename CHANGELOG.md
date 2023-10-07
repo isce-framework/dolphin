@@ -1,4 +1,6 @@
-# [Unreleased](https://github.com/isce-framework/dolphin/compare/v0.4.2...main)
+# [Unreleased](https://github.com/isce-framework/dolphin/compare/v0.4.3...main)
+
+# [v0.4.3](https://github.com/isce-framework/dolphin/compare/v0.4.2...v0.4.3)
 
 **Added**
 - Ability to unwrap using isce3's `PHASS`
@@ -11,6 +13,10 @@
 
 - Instead of specifying the unwrapping algorithm in `dolphin unwrap` as `--use-icu`, the option is not `--unwrap-method`
   - This let's us add `--unwrap-method "phass"`, but also future unwrap methods without a `--use-<name>` for every one
+- Use `spawn` instead of `fork` for parallel burst multiprocessing
+  - This leads to the error `Terminating: fork() called from a process already using GNU OpenMP, this is unsafe.`
+    in certain situations, and does not happen with `spawn`. See https://pythonspeed.com/articles/python-multiprocessing/ for more details.
+
 
 
 # [0.4.2](https://github.com/isce-framework/dolphin/compare/v0.4.1...v0.4.2)

@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 from __future__ import annotations
 
+import multiprocessing as mp
 from collections import defaultdict
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
@@ -103,7 +104,9 @@ def run(
         if cfg.worker_settings.n_parallel_bursts > 1
         else DummyProcessPoolExecutor
     )
-    with Executor(max_workers=cfg.worker_settings.n_parallel_bursts) as exc:
+    mw = cfg.worker_settings.n_parallel_bursts
+    ctx = mp.get_context("spawn")
+    with Executor(max_workers=mw, mp_context=ctx) as exc:
         fut_to_burst = {
             exc.submit(
                 wrapped_phase.run,

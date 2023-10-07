@@ -329,7 +329,7 @@ class NvidiaMemoryWatcher(Thread):
 class DummyProcessPoolExecutor(Executor):
     """Dummy ProcessPoolExecutor for to avoid forking for single_job purposes."""
 
-    def __init__(self, max_workers: Optional[int] = None):
+    def __init__(self, max_workers: Optional[int] = None, **kwargs):
         self._max_workers = max_workers
 
     def submit(self, fn: Callable, *args, **kwargs) -> Future:
