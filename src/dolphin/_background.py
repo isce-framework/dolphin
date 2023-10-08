@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import abc
+import csv
 import os
 import time
 from collections.abc import Callable
@@ -364,9 +365,9 @@ class CPURecorder:
 
     Methods
     -------
-    start_recording():
+    start():
         Start recording CPU usage in a separate thread.
-    stop_recording():
+    notify_finished():
         Stop recording CPU usage.
     get_peak_usage() -> float:
         Returns the peak CPU usage.
@@ -376,10 +377,10 @@ class CPURecorder:
 
     def __init__(
         self,
-        interval: float = 0.5,
+        interval: float = 0.4,
         start: bool = True,
         pid: Optional[int] = None,
-        use_processes: bool = False,
+        filename: Optional[Filename] = None,
     ) -> None:
         """Set up the CPU usage recorder.
 
@@ -392,9 +393,16 @@ class CPURecorder:
         pid : int, optional
             The process ID to record CPU usage for (default is None, which
             records the current process).
-        use_processes : bool, optional
-            Whether to use a multiprocessing.Process or a threading.Thread
-            (default is False, which uses a thread).
+        filename : str, optional
+            The filename to save the CPU usage readings to upon exit
+            default is None, which does not save the readings to a file.
+            Note that you can manually call `to_csv` or `to_dataframe` to save
+            the readings to a file after recording.
+            This option is useful within a context manager, e.g.:
+            ```
+            with CPURecorder(filename="cpu_usage.csv") as recorder:
+                # Do some work here
+            ```
         """
         import psutil
 
@@ -403,15 +411,18 @@ class CPURecorder:
         self._stop_event = Event()
         self._process = psutil.Process(pid=pid)
         self._thread = Thread(target=self._record)
+        self.filename = filename
         # By default, start recording upon creation
         if start:
-            self.start_recording()
+            self.start()
 
     def _record(self) -> None:
         """Record the CPU usage at regular intervals."""
         while not self._stop_event.is_set():
+            # Measure how long the measurement takes
+            t0 = time.perf_counter()
             with self._process.oneshot():  # Makes multiple calls to psutil faster
-                cur_elapsed = time.perf_counter() - self._t0
+                cur_elapsed = time.perf_counter() - self._start_time
                 cpu_time_tuple: tuple[float, ...] = tuple(self._process.cpu_times())[:5]
                 # convert memory to GB
                 memory_rss = self._process.memory_info().rss / 2**30
@@ -422,17 +433,22 @@ class CPURecorder:
                     memory_rss,
                 )
                 self.readings.append(result)
-            time.sleep(self.interval)
+            query_time = time.perf_counter() - t0
+            time.sleep(max(0, self.interval - query_time))
 
-    def start_recording(self) -> None:
+    def start(self) -> None:
         """Start recording CPU usage in a separate thread."""
-        self._t0 = time.perf_counter()
+        self._start_time = time.perf_counter()
         self._thread.start()
 
-    def stop_recording(self) -> None:
+    def notify_finished(self) -> None:
         """Stop recording CPU usage."""
         self._stop_event.set()
         self._thread.join()
+        if self.filename:
+            self.to_csv(self.filename)
+            logger.debug("Saving to %s", self.filename)
+        logger.debug("CPURecorder recorded %d readings", len(self.readings))
 
     @property
     def stats(self) -> np.ndarray:
@@ -481,7 +497,28 @@ class CPURecorder:
             "rss_gb",
         ]
 
-    def to_dataframe(self):
+    def to_csv(self, filename: Filename, decimal_places: int = 4) -> None:
+        """Save the readings to a CSV file.
+
+        Parameters
+        ----------
+        filename : str
+            The filename to save the readings to.
+        decimal_places : int, optional
+            The number of decimal places to round the values to (default is 4).
+        """
+        # Allow either a filename, or sys.stdout:
+        # https://stackoverflow.com/a/23036785/5666087
+        with open(filename, "w") as f:
+            writer = csv.writer(f)
+            writer.writerow(self.columns)
+            # Round the values to the specified number of decimal places
+            # https://stackoverflow.com/a/45523586/5666087
+            writer.writerows(
+                [round(v, decimal_places) for v in row] for row in self.readings
+            )
+
+    def to_dataframe(self) -> Any:
         """Convert the readings to a pandas dataframe.
 
         Returns
@@ -497,7 +534,7 @@ class CPURecorder:
         return self
 
     def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any):
-        self.stop_recording()
+        self.notify_finished()
 
     def __del__(self):
-        self.stop_recording()
+        self.notify_finished()

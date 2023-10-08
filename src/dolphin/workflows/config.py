@@ -405,6 +405,13 @@ class Workflow(YamlModel):
         default=None,
         description="Path to output log file (in addition to logging to `stderr`).",
     )
+    benchmark_log_dir: Optional[Path] = Field(
+        default=None,
+        description=(
+            "Path to directory to write CPU/Memory usage logs. If none passed, will"
+            " skip recording"
+        ),
+    )
     creation_time_utc: datetime = Field(
         default_factory=datetime.utcnow, description="Time the config file was created"
     )

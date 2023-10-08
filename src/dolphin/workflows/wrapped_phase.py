@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Optional
 
 from dolphin import ps, stack, utils
-from dolphin._background import NvidiaMemoryWatcher
+from dolphin._background import CPURecorder, NvidiaMemoryWatcher
 from dolphin._log import get_log, log_runtime
 from dolphin.interferogram import Network
 from dolphin.opera_utils import make_nodata_mask
@@ -37,6 +38,9 @@ def run(cfg: Workflow, debug: bool = False) -> tuple[list[Path], Path, Path, Pat
     """
     logger = get_log(debug=debug)
     logger.info(f"Running wrapped phase estimation in {cfg.work_directory}")
+    log_dir = cfg.benchmark_log_dir
+    if log_dir:
+        log_dir.mkdir(parents=True, exist_ok=True)
 
     input_file_list = cfg.cslc_file_list
     if not input_file_list:
@@ -105,10 +109,19 @@ def run(cfg: Workflow, debug: bool = False) -> tuple[list[Path], Path, Path, Pat
         tcorr_file = next(pl_path.glob("tcorr*tif"))
     else:
         logger.info(f"Running sequential EMI step in {pl_path}")
-        if utils.gpu_is_available():  # Track the GPU mem usage if we're using it
-            watcher = NvidiaMemoryWatcher(log_file=pl_path / "nvidia_memory.log")
+
+        if log_dir:
+            cpu_filename = log_dir / f"cpu_{os.getpid()}.log"
+            cpu_recorder = CPURecorder(filename=cpu_filename)
+            if utils.gpu_is_available():
+                # Track the GPU mem usage if we're using it
+                watcher = NvidiaMemoryWatcher(
+                    log_file=log_dir / f"nvidia_memory_{os.getpid()}.log"
+                )
+            else:
+                watcher = None
         else:
-            watcher = None
+            watcher = cpu_recorder = None
 
         # TODO: Need a good way to store the nslc attribute in the PS file...
         # If we pre-compute it from some big stack, we need to use that for SHP
@@ -137,6 +150,8 @@ def run(cfg: Workflow, debug: bool = False) -> tuple[list[Path], Path, Path, Pat
         )
         comp_slc_file = comp_slcs[-1]
 
+        if cpu_recorder:
+            cpu_recorder.notify_finished()
         if watcher:
             watcher.notify_finished()
 
