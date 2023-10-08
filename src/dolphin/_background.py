@@ -1,13 +1,15 @@
 from __future__ import annotations
+
 import abc
 import os
 import time
 from collections.abc import Callable
 from concurrent.futures import Executor, Future
-from multiprocessing import get_context
 from queue import Empty, Full, Queue
 from threading import Event, Thread, main_thread
 from typing import Any, Optional
+
+import numpy as np
 
 from dolphin._log import get_log
 from dolphin._types import Filename
@@ -394,47 +396,31 @@ class CPURecorder:
             Whether to use a multiprocessing.Process or a threading.Thread
             (default is False, which uses a thread).
         """
-        # import psutil
-
-        if use_processes:
-            from multiprocessing import Event, Queue
-        else:
-            from threading import Event
+        import psutil
 
         self.interval = interval
-        self.readings: list[float] = []
+        self.readings: list[tuple[float, ...]] = []
         self._stop_event = Event()
-        # self._process = psutil.Process(pid=pid)
-        self._results_queue = Queue()
-        if use_processes:
-            self._thread = get_context("spawn").Process(
-                target=self._record, args=(pid, self._results_queue)
-            )
-        else:
-            self._thread = Thread(target=self._record)
+        self._process = psutil.Process(pid=pid)
+        self._thread = Thread(target=self._record)
         # By default, start recording upon creation
         if start:
             self.start_recording()
 
-    def _record(self, pid: int, results_queue: Queue) -> None:
+    def _record(self) -> None:
         """Record the CPU usage at regular intervals."""
-        import psutil
-
-        process = psutil.Process(pid=pid)
         while not self._stop_event.is_set():
-            # with self._process.oneshot():
-            with process.oneshot():
+            with self._process.oneshot():
                 cur_elapsed = time.perf_counter() - self._t0
+                cpu_time_tuple: tuple[float, ...] = tuple(self._process.cpu_times())[:5]
+                memory_tuple = tuple(self._process.memory_info())[:3]
                 result = (
                     cur_elapsed,
-                    # self._process.cpu_percent(),
-                    # *tuple(self._process.cpu_times()),
-                    process.cpu_percent(),
-                    *tuple(process.cpu_times()),
+                    self._process.cpu_percent(),
+                    *cpu_time_tuple,
+                    *memory_tuple,
                 )
-                # self.readings.append(result)
-                results_queue.put(result)
-                print(result)
+                self.readings.append(result)
             time.sleep(self.interval)
 
     def start_recording(self) -> None:
@@ -447,6 +433,11 @@ class CPURecorder:
         self._stop_event.set()
         self._thread.join()
 
+    @property
+    def stats(self) -> np.ndarray:
+        """Return the CPU usage stats as a numpy array."""
+        return np.array(self.readings)
+
     def get_peak_usage(self) -> float:
         """Get the peak CPU usage over the recorded time.
 
@@ -455,7 +446,7 @@ class CPURecorder:
         float
             The peak CPU usage.
         """
-        return max(self.readings) if self.readings else 0.0
+        return max(self.stats[:, 1]) if self.stats.size else 0.0
 
     def get_average_usage(self) -> float:
         """Get the average CPU usage over the recorded time.
@@ -465,7 +456,7 @@ class CPURecorder:
         float
             The average CPU usage.
         """
-        return sum(self.readings) / len(self.readings) if self.readings else 0.0
+        return sum(self.stats[:, 1]) / len(self.stats[:, 1]) if self.stats else 0.0
 
     @property
     def columns(self) -> list[str]:
@@ -485,6 +476,10 @@ class CPURecorder:
             "children_user",
             "children_system",
             "iowait",
+            # memory columns
+            "rss",
+            "vms",
+            "shared",
         ]
 
     def to_dataframe(self):
