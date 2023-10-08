@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import Optional
 
@@ -37,17 +36,16 @@ def run(cfg: Workflow, debug: bool = False) -> tuple[list[Path], Path, Path, Pat
         In the case of sequential phase linking, this is the average tcorr file.
     """
     logger = get_log(debug=debug)
-    logger.info(f"Running wrapped phase estimation in {cfg.work_directory}")
-    log_dir = cfg.benchmark_log_dir
-    if log_dir:
-        log_dir.mkdir(parents=True, exist_ok=True)
-        cpu_filename = log_dir / f"wrapped_phase_{os.getpid()}.log"
-        logger.info("Recording CPU/memory usage to %s", cpu_filename)
-        cpu_recorder = CPURecorder(filename=cpu_filename)
+    work_dir = cfg.work_directory
+    logger.info("Running wrapped phase estimation in %s", work_dir)
+
+    benchmark_dir = cfg.benchmark_log_dir
+    if benchmark_dir:
+        benchmark_dir.mkdir(parents=True, exist_ok=True)
         if utils.gpu_is_available():
             # Track the GPU mem usage if we're using it
             watcher = NvidiaMemoryWatcher(
-                log_file=log_dir / f"nvidia_memory_{os.getpid()}.log"
+                log_file=benchmark_dir / f"nvidia_memory_{work_dir.name}.log"
             )
         else:
             watcher = None
@@ -91,6 +89,10 @@ def run(cfg: Workflow, debug: bool = False) -> tuple[list[Path], Path, Path, Pat
             existing_disp: Optional[Path] = cfg.amplitude_dispersion_files[0]
         except IndexError:
             existing_amp = existing_disp = None
+        if benchmark_dir:
+            filename = benchmark_dir / f"ps_{work_dir.name}.log"
+            logger.info("Recording CPU/memory usage to %s", filename)
+            recorder = CPURecorder(filename=filename)
 
         ps.create_ps(
             slc_vrt_file=vrt_stack.outfile,
@@ -102,6 +104,8 @@ def run(cfg: Workflow, debug: bool = False) -> tuple[list[Path], Path, Path, Pat
             existing_amp_mean_file=existing_amp,
             block_shape=cfg.worker_settings.block_shape,
         )
+        if benchmark_dir:
+            recorder.notify_finished()
 
     # Save a looked version of the PS mask too
     strides = cfg.output_options.strides
@@ -121,6 +125,11 @@ def run(cfg: Workflow, debug: bool = False) -> tuple[list[Path], Path, Path, Pat
         tcorr_file = next(pl_path.glob("tcorr*tif"))
     else:
         logger.info(f"Running sequential EMI step in {pl_path}")
+
+        if benchmark_dir:
+            filename = benchmark_dir / f"wrapped_phase_{work_dir.name}.log"
+            logger.info("Recording CPU/memory usage to %s", filename)
+            recorder = CPURecorder(filename=filename)
 
         # TODO: Need a good way to store the nslc attribute in the PS file...
         # If we pre-compute it from some big stack, we need to use that for SHP
@@ -148,6 +157,8 @@ def run(cfg: Workflow, debug: bool = False) -> tuple[list[Path], Path, Path, Pat
             )
         )
         comp_slc_file = comp_slcs[-1]
+        if benchmark_dir:
+            recorder.notify_finished()
 
     # ###################################################
     # Form interferograms from estimated wrapped phase
