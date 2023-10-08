@@ -1,8 +1,10 @@
+from __future__ import annotations
 import abc
 import os
 import time
 from collections.abc import Callable
 from concurrent.futures import Executor, Future
+from multiprocessing import get_context
 from queue import Empty, Full, Queue
 from threading import Event, Thread, main_thread
 from typing import Any, Optional
@@ -346,3 +348,162 @@ class DummyProcessPoolExecutor(Executor):
 
     def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any):
         pass
+
+
+class CPURecorder:
+    """Records the CPU usage of the current process over time.
+
+    Attributes
+    ----------
+    interval : float
+        Time in seconds between each CPU usage measurement.
+    readings : List[float]
+        List to store CPU usage percentages.
+
+    Methods
+    -------
+    start_recording():
+        Start recording CPU usage in a separate thread.
+    stop_recording():
+        Stop recording CPU usage.
+    get_peak_usage() -> float:
+        Returns the peak CPU usage.
+    get_average_usage() -> float:
+        Returns the average CPU usage.
+    """
+
+    def __init__(
+        self,
+        interval: float = 0.5,
+        start: bool = True,
+        pid: Optional[int] = None,
+        use_processes: bool = False,
+    ) -> None:
+        """Set up the CPU usage recorder.
+
+        Parameters
+        ----------
+        interval : float, optiona,
+            Time in seconds between each CPU usage measurement (default is 0.5).
+        start : bool, optional
+            Whether to start recording immediately (default is True).
+        pid : int, optional
+            The process ID to record CPU usage for (default is None, which
+            records the current process).
+        use_processes : bool, optional
+            Whether to use a multiprocessing.Process or a threading.Thread
+            (default is False, which uses a thread).
+        """
+        # import psutil
+
+        if use_processes:
+            from multiprocessing import Event, Queue
+        else:
+            from threading import Event
+
+        self.interval = interval
+        self.readings: list[float] = []
+        self._stop_event = Event()
+        # self._process = psutil.Process(pid=pid)
+        self._results_queue = Queue()
+        if use_processes:
+            self._thread = get_context("spawn").Process(
+                target=self._record, args=(pid, self._results_queue)
+            )
+        else:
+            self._thread = Thread(target=self._record)
+        # By default, start recording upon creation
+        if start:
+            self.start_recording()
+
+    def _record(self, pid: int, results_queue: Queue) -> None:
+        """Record the CPU usage at regular intervals."""
+        import psutil
+
+        process = psutil.Process(pid=pid)
+        while not self._stop_event.is_set():
+            # with self._process.oneshot():
+            with process.oneshot():
+                cur_elapsed = time.perf_counter() - self._t0
+                result = (
+                    cur_elapsed,
+                    # self._process.cpu_percent(),
+                    # *tuple(self._process.cpu_times()),
+                    process.cpu_percent(),
+                    *tuple(process.cpu_times()),
+                )
+                # self.readings.append(result)
+                results_queue.put(result)
+                print(result)
+            time.sleep(self.interval)
+
+    def start_recording(self) -> None:
+        """Start recording CPU usage in a separate thread."""
+        self._t0 = time.perf_counter()
+        self._thread.start()
+
+    def stop_recording(self) -> None:
+        """Stop recording CPU usage."""
+        self._stop_event.set()
+        self._thread.join()
+
+    def get_peak_usage(self) -> float:
+        """Get the peak CPU usage over the recorded time.
+
+        Returns
+        -------
+        float
+            The peak CPU usage.
+        """
+        return max(self.readings) if self.readings else 0.0
+
+    def get_average_usage(self) -> float:
+        """Get the average CPU usage over the recorded time.
+
+        Returns
+        -------
+        float
+            The average CPU usage.
+        """
+        return sum(self.readings) / len(self.readings) if self.readings else 0.0
+
+    @property
+    def columns(self) -> list[str]:
+        """Get the column names for the readings.
+
+        Returns
+        -------
+        list[str]
+            The column names for the readings.
+        """
+        return [
+            "elapsed",
+            "cpu_percent",
+            # Other columns are "cpu_time" results
+            "user",
+            "system",
+            "children_user",
+            "children_system",
+            "iowait",
+        ]
+
+    def to_dataframe(self):
+        """Convert the readings to a pandas dataframe.
+
+        Returns
+        -------
+        pd.DataFrame
+            A dataframe with the CPU usage readings.
+        """
+        import pandas as pd
+
+        return pd.DataFrame(self.readings, columns=self.columns)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any):
+        self.stop_recording()
+
+    def __del__(self):
+        self.stop_recording()
