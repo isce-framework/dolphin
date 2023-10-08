@@ -412,6 +412,10 @@ class CPURecorder:
         self._process = psutil.Process(pid=pid)
         self._thread = Thread(target=self._record)
         self.filename = filename
+        if filename:
+            self._outfile = open(filename, "w")
+            self._writer = csv.writer(self._outfile)
+
         # By default, start recording upon creation
         if start:
             self.start()
@@ -433,6 +437,10 @@ class CPURecorder:
                     memory_rss,
                 )
                 self.readings.append(result)
+                if self.filename:
+                    self._writer.writerow([round(v, 5) for v in result])
+                    # Flush the file to disk to we can see the results in real time
+                    self._outfile.flush()
             query_time = time.perf_counter() - t0
             time.sleep(max(0, self.interval - query_time))
 
@@ -443,11 +451,10 @@ class CPURecorder:
 
     def notify_finished(self) -> None:
         """Stop recording CPU usage."""
+        if self.filename:
+            self._outfile.close()
         self._stop_event.set()
         self._thread.join()
-        if self.filename:
-            self.to_csv(self.filename)
-            logger.debug("Saving to %s", self.filename)
         logger.debug("CPURecorder recorded %d readings", len(self.readings))
 
     @property

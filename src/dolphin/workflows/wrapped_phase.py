@@ -41,6 +41,18 @@ def run(cfg: Workflow, debug: bool = False) -> tuple[list[Path], Path, Path, Pat
     log_dir = cfg.benchmark_log_dir
     if log_dir:
         log_dir.mkdir(parents=True, exist_ok=True)
+        cpu_filename = log_dir / f"wrapped_phase_{os.getpid()}.log"
+        logger.info("Recording CPU/memory usage to %s", cpu_filename)
+        cpu_recorder = CPURecorder(filename=cpu_filename)
+        if utils.gpu_is_available():
+            # Track the GPU mem usage if we're using it
+            watcher = NvidiaMemoryWatcher(
+                log_file=log_dir / f"nvidia_memory_{os.getpid()}.log"
+            )
+        else:
+            watcher = None
+    else:
+        watcher = cpu_recorder = None
 
     input_file_list = cfg.cslc_file_list
     if not input_file_list:
@@ -110,19 +122,6 @@ def run(cfg: Workflow, debug: bool = False) -> tuple[list[Path], Path, Path, Pat
     else:
         logger.info(f"Running sequential EMI step in {pl_path}")
 
-        if log_dir:
-            cpu_filename = log_dir / f"cpu_{os.getpid()}.log"
-            cpu_recorder = CPURecorder(filename=cpu_filename)
-            if utils.gpu_is_available():
-                # Track the GPU mem usage if we're using it
-                watcher = NvidiaMemoryWatcher(
-                    log_file=log_dir / f"nvidia_memory_{os.getpid()}.log"
-                )
-            else:
-                watcher = None
-        else:
-            watcher = cpu_recorder = None
-
         # TODO: Need a good way to store the nslc attribute in the PS file...
         # If we pre-compute it from some big stack, we need to use that for SHP
         # finding, not use the size of `slc_vrt_file`
@@ -150,11 +149,6 @@ def run(cfg: Workflow, debug: bool = False) -> tuple[list[Path], Path, Path, Pat
         )
         comp_slc_file = comp_slcs[-1]
 
-        if cpu_recorder:
-            cpu_recorder.notify_finished()
-        if watcher:
-            watcher.notify_finished()
-
     # ###################################################
     # Form interferograms from estimated wrapped phase
     # ###################################################
@@ -180,4 +174,8 @@ def run(cfg: Workflow, debug: bool = False) -> tuple[list[Path], Path, Path, Pat
         else:
             ifg_file_list = [ifg.path for ifg in network.ifg_list]  # type: ignore
 
+    if cpu_recorder:
+        cpu_recorder.notify_finished()
+    if watcher:
+        watcher.notify_finished()
     return ifg_file_list, comp_slc_file, tcorr_file, ps_looked_file
