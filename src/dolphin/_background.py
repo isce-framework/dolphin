@@ -410,15 +410,16 @@ class CPURecorder:
     def _record(self) -> None:
         """Record the CPU usage at regular intervals."""
         while not self._stop_event.is_set():
-            with self._process.oneshot():
+            with self._process.oneshot():  # Makes multiple calls to psutil faster
                 cur_elapsed = time.perf_counter() - self._t0
                 cpu_time_tuple: tuple[float, ...] = tuple(self._process.cpu_times())[:5]
-                memory_tuple = tuple(self._process.memory_info())[:3]
+                # convert memory to GB
+                memory_rss = self._process.memory_info().rss / 2**30
                 result = (
                     cur_elapsed,
                     self._process.cpu_percent(),
                     *cpu_time_tuple,
-                    *memory_tuple,
+                    memory_rss,
                 )
                 self.readings.append(result)
             time.sleep(self.interval)
@@ -468,7 +469,7 @@ class CPURecorder:
             The column names for the readings.
         """
         return [
-            "elapsed",
+            "time",
             "cpu_percent",
             # Other columns are "cpu_time" results
             "user",
@@ -477,9 +478,7 @@ class CPURecorder:
             "children_system",
             "iowait",
             # memory columns
-            "rss",
-            "vms",
-            "shared",
+            "rss_gb",
         ]
 
     def to_dataframe(self):
