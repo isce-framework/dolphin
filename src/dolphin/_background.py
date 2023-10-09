@@ -415,6 +415,7 @@ class CPURecorder:
         if filename:
             self._outfile = open(filename, "w")
             self._writer = csv.writer(self._outfile)
+            self._writer.writerow(self.columns)
 
         # By default, start recording upon creation
         if start:

@@ -42,15 +42,6 @@ def run(cfg: Workflow, debug: bool = False) -> tuple[list[Path], Path, Path, Pat
     benchmark_dir = cfg.benchmark_log_dir
     if benchmark_dir:
         benchmark_dir.mkdir(parents=True, exist_ok=True)
-        if utils.gpu_is_available():
-            # Track the GPU mem usage if we're using it
-            watcher = NvidiaMemoryWatcher(
-                log_file=benchmark_dir / f"nvidia_memory_{work_dir.name}.log"
-            )
-        else:
-            watcher = None
-    else:
-        watcher = cpu_recorder = None
 
     input_file_list = cfg.cslc_file_list
     if not input_file_list:
@@ -130,6 +121,13 @@ def run(cfg: Workflow, debug: bool = False) -> tuple[list[Path], Path, Path, Pat
             filename = benchmark_dir / f"wrapped_phase_{work_dir.name}.log"
             logger.info("Recording CPU/memory usage to %s", filename)
             recorder = CPURecorder(filename=filename)
+            if cfg.worker_settings.gpu_enabled and utils.gpu_is_available():
+                # Track the GPU mem usage if we're using it
+                watcher = NvidiaMemoryWatcher(
+                    log_file=benchmark_dir / f"nvidia_memory_{work_dir.name}.log"
+                )
+            else:
+                watcher = None
 
         # TODO: Need a good way to store the nslc attribute in the PS file...
         # If we pre-compute it from some big stack, we need to use that for SHP
@@ -159,6 +157,8 @@ def run(cfg: Workflow, debug: bool = False) -> tuple[list[Path], Path, Path, Pat
         comp_slc_file = comp_slcs[-1]
         if benchmark_dir:
             recorder.notify_finished()
+        if watcher:
+            watcher.notify_finished()
 
     # ###################################################
     # Form interferograms from estimated wrapped phase
@@ -185,8 +185,4 @@ def run(cfg: Workflow, debug: bool = False) -> tuple[list[Path], Path, Path, Pat
         else:
             ifg_file_list = [ifg.path for ifg in network.ifg_list]  # type: ignore
 
-    if cpu_recorder:
-        cpu_recorder.notify_finished()
-    if watcher:
-        watcher.notify_finished()
     return ifg_file_list, comp_slc_file, tcorr_file, ps_looked_file
