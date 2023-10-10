@@ -1,11 +1,11 @@
 # [Unreleased](https://github.com/isce-framework/dolphin/compare/v0.5.1...main)
 
-# [v0.5.1](https://github.com/isce-framework/dolphin/compare/v0.5.0...v0.5.1)
+# [v0.5.1](https://github.com/isce-framework/dolphin/compare/v0.5.0...v0.5.1) - 2023-10-10
 
 **Added**
 - `stitch_and_unwrap.run` returns the stitch PS mask
 
-# [v0.5.0](https://github.com/isce-framework/dolphin/compare/v0.4.3...v0.5.0)
+# [v0.5.0](https://github.com/isce-framework/dolphin/compare/v0.4.3...v0.5.0) - 2023-10-09
 
 **Added**
 - `CPURecorder` class for fine grained benchmarking of the CPU/memory usage for
@@ -13,7 +13,7 @@
 **Changed**
 - Docker `specfile` now builds with tophu
 
-# [v0.4.3](https://github.com/isce-framework/dolphin/compare/v0.4.2...v0.4.3)
+# [v0.4.3](https://github.com/isce-framework/dolphin/compare/v0.4.2...v0.4.3) - 2023-10-06
 
 **Added**
 - Ability to unwrap using isce3's `PHASS`
@@ -32,7 +32,7 @@
 
 
 
-# [0.4.2](https://github.com/isce-framework/dolphin/compare/v0.4.1...v0.4.2)
+# [0.4.2](https://github.com/isce-framework/dolphin/compare/v0.4.1...v0.4.2) - 2023-10-03
 
 **Added**
 - `use_evd` option to force the use of eigenvalue decomposition instead of the EMI phase linking algorithm
