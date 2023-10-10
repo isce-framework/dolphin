@@ -183,7 +183,7 @@ def test_input_relative_paths(tmpdir, slc_file_list_nc):
         opts = config.Workflow(
             cslc_file_list=[newfile],
             input_options={"subdataset": "data"},
-            resolve=False,
+            keep_paths_relative=True,
         )
         assert opts.cslc_file_list == [newfile]
 
