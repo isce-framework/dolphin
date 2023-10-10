@@ -1,5 +1,7 @@
 **/__pycache__/*
-.mypy_cache
+.mypy_cache/*
 build/
 data/
+/tests/data/
 dist/
+.nox/
