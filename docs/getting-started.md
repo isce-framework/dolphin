@@ -7,6 +7,12 @@
 mamba install -c conda-forge dolphin
 ```
 
+`dolphin` has the ability to unwrap interferograms using `isce3`'s python bindings to [SNAPHU](https://web.stanford.edu/group/radar/softwareandlinks/sw/snaphu/).
+It is also integrated with [`tophu`](https://github.com/isce-framework/tophu) to unwrap large interferograms in parallel tiles at multiple resolution.
+To install both dolphin and tophu through conda-forge, run
+```bash
+mamba install -c conda-forge tophu dolphin
+```
 
 ## Usage
 
