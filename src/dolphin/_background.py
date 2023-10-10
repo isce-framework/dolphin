@@ -318,10 +318,10 @@ class ResourceRecorder(abc.ABC):
 
     def notify_finished(self) -> None:
         """Stop recording and shut down the thread."""
-        if self.filename:
-            self._outfile.close()
         self._finished_event.set()
         self._thread.join()
+        if self.filename:
+            self._outfile.close()
         logger.debug("%s recorded %d results", self.name, len(self.results))
 
     def run(self):
@@ -349,7 +349,7 @@ class ResourceRecorder(abc.ABC):
         return self
 
     def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any):
-        pass
+        self.notify_finished()
 
     @property
     def stats(self) -> np.ndarray:
