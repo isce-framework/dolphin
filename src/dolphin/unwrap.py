@@ -40,6 +40,7 @@ def run(
     max_jobs: int = 1,
     ntiles: Union[int, tuple[int, int]] = 1,
     downsample_factor: Union[int, tuple[int, int]] = 1,
+    scratchdir: Optional[Filename] = None,
     overwrite: bool = False,
     **kwargs,
 ) -> tuple[list[Path], list[Path]]:
@@ -74,6 +75,9 @@ def run(
     downsample_factor : int, optional, default = 1
         (For running coarse_unwrap): Downsample the interferograms by this
         factor to unwrap faster, then upsample to full resolution.
+    scratchdir : Filename, optional
+        Path to scratch directory to hold intermediate files.
+        If None, uses `tophu`'s `/tmp/...` default.
     overwrite : bool, optional, default = False
         Overwrite existing unwrapped files.
 
@@ -130,6 +134,7 @@ def run(
                 mask_file=mask_file,
                 downsample_factor=downsample_factor,
                 ntiles=ntiles,
+                scratchdir=scratchdir,
             )
             for ifg_file, out_file, cor_file in zip(in_files, out_files, cor_filenames)
         ]
@@ -161,6 +166,7 @@ def unwrap(
     log_to_file: bool = True,
     downsample_factor: Union[int, tuple[int, int]] = 1,
     ntiles: Union[int, tuple[int, int]] = 1,
+    scratchdir: Optional[Filename] = None,
 ) -> tuple[Path, Path]:
     """Unwrap a single interferogram using isce3's SNAPHU/ICU bindings.
 
@@ -198,6 +204,9 @@ def unwrap(
         Use multi-resolution unwrapping with `tophu` on the interferograms.
         If 1 or (1, 1), doesn't use tophu and unwraps the interferogram as
         one single image.
+    scratchdir : Filename, optional
+        Path to scratch directory to hold intermediate files.
+        If None, uses `tophu`'s `/tmp/...` default.
 
     Returns
     -------
@@ -231,6 +240,7 @@ def unwrap(
             init_method=init_method,
             cost=cost,
             unwrap_method=unwrap_method,
+            scratchdir=scratchdir,
             log_to_file=log_to_file,
         )
 
@@ -408,6 +418,7 @@ def multiscale_unwrap(
     unwrap_method: UnwrapMethod = UnwrapMethod.SNAPHU,
     init_method: str = "mst",
     cost: str = "smooth",
+    scratchdir: Optional[Filename] = None,
     log_to_file: bool = True,
 ) -> tuple[Path, Path]:
     """Unwrap an interferogram using at multiple scales using `tophu`.
@@ -441,7 +452,9 @@ def multiscale_unwrap(
         SNAPHU initialization method, by default "mst"
     cost : str, choices = {"smooth", "defo", "p-norm",}
         SNAPHU cost function, by default "smooth"
-    downsample_factor : int, optional, default = 1
+    scratchdir : Filename, optional
+        Path to scratch directory to hold intermediate files.
+        If None, uses `tophu`'s `/tmp/...` default.
     log_to_file : bool, optional
         Redirect isce3's logging output to file, by default True
 
@@ -529,6 +542,7 @@ def multiscale_unwrap(
         unwrap_func=unwrap_callback,
         downsample_factor=downsample_factor,
         ntiles=ntiles,
+        scratchdir=scratchdir,
     )
 
     return Path(unw_filename), Path(conncomp_filename)

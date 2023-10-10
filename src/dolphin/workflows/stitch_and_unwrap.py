@@ -133,6 +133,11 @@ def run(
     ifg_filenames = sorted(Path(stitched_ifg_dir).glob("*.int"))  # type: ignore
     if not ifg_filenames:
         raise FileNotFoundError(f"No interferograms found in {stitched_ifg_dir}")
+
+    # Make a scratch directory for unwrapping
+    unwrap_scratchdir = cfg.unwrap_options._directory / "scratch"
+    unwrap_scratchdir.mkdir(exist_ok=True)
+
     unwrapped_paths, conncomp_paths = unwrap.run(
         ifg_filenames=ifg_filenames,
         cor_filenames=spatial_corr_paths,
@@ -143,6 +148,7 @@ def run(
         ntiles=cfg.unwrap_options.ntiles,
         downsample_factor=cfg.unwrap_options.downsample_factor,
         unwrap_method=cfg.unwrap_options.unwrap_method,
+        scratchdir=unwrap_scratchdir,
     )
 
     return (
