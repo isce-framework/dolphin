@@ -1,4 +1,13 @@
-# [Unreleased](https://github.com/isce-framework/dolphin/compare/v0.4.3...main)
+# [Unreleased](https://github.com/isce-framework/dolphin/compare/v0.5.0...main)
+
+
+# [v0.4.3](https://github.com/isce-framework/dolphin/compare/v0.4.3...v0.5.0)
+
+**Added**
+- `CPURecorder` class for fine grained benchmarking of the CPU/memory usage for
+
+**Changed**
+- Docker `specfile` now builds with tophu
 
 # [v0.4.3](https://github.com/isce-framework/dolphin/compare/v0.4.2...v0.4.3)
 
