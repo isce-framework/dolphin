@@ -1,5 +1,7 @@
 # [Unreleased](https://github.com/isce-framework/dolphin/compare/v0.5.0...main)
 
+**Added**
+- `stitch_and_unwrap.run` returns the stitch PS mask
 
 # [v0.5.0](https://github.com/isce-framework/dolphin/compare/v0.4.3...v0.5.0)
 

@@ -489,6 +489,8 @@ class Workflow(YamlModel):
         if not self.keep_paths_relative:
             # Save all directories as absolute paths
             self.work_directory = self.work_directory.resolve(strict=False)
+            # Resolve all CSLC paths:
+            self.cslc_file_list = [p.resolve(strict=False) for p in self.cslc_file_list]
 
         work_dir = self.work_directory
         # For each workflow step that has an output folder, move it inside
