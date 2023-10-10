@@ -19,7 +19,7 @@ def run(
     cfg: Workflow,
     debug: bool = False,
     unwrap_jobs: int = 1,
-) -> tuple[list[Path], list[Path], list[Path], Path]:
+) -> tuple[list[Path], list[Path], list[Path], Path, Path]:
     """Run the displacement workflow on a stack of SLCs.
 
     Parameters
@@ -48,6 +48,8 @@ def run(
         list of Paths to spatial correlation files created.
     stitched_tcorr_file : Path
         Path to temporal correlation file created.
+    stitched_ps_file : Path
+        Path to ps mask file created.
     """
     logger = get_log(debug=debug)
 
@@ -101,7 +103,7 @@ def run(
     # #####################################
     if not cfg.unwrap_options.run_unwrap:
         logger.info("Skipping unwrap step")
-        return [], [], [], stitched_tcorr_file
+        return [], [], [], stitched_tcorr_file, stitched_ps_file
 
     if cfg.mask_file is not None:
         # Check that the input mask is the same size as the ifgs:
@@ -143,7 +145,13 @@ def run(
         unwrap_method=cfg.unwrap_options.unwrap_method,
     )
 
-    return unwrapped_paths, conncomp_paths, spatial_corr_paths, stitched_tcorr_file
+    return (
+        unwrapped_paths,
+        conncomp_paths,
+        spatial_corr_paths,
+        stitched_tcorr_file,
+        stitched_ps_file,
+    )
 
 
 def _estimate_spatial_correlations(

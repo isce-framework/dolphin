@@ -127,15 +127,19 @@ def run(
     # ###################################
     # 2. Stitch and unwrap interferograms
     # ###################################
-    unwrapped_paths, conncomp_paths, spatial_corr_paths, stitched_tcorr_file = (
-        stitch_and_unwrap.run(
-            ifg_file_list=ifg_file_list,
-            tcorr_file_list=tcorr_file_list,
-            ps_file_list=ps_file_list,
-            cfg=cfg,
-            debug=debug,
-            unwrap_jobs=cfg.unwrap_options.n_parallel_jobs,
-        )
+    (
+        unwrapped_paths,
+        conncomp_paths,
+        spatial_corr_paths,
+        stitched_tcorr_file,
+        stitched_ps_file,
+    ) = stitch_and_unwrap.run(
+        ifg_file_list=ifg_file_list,
+        tcorr_file_list=tcorr_file_list,
+        ps_file_list=ps_file_list,
+        cfg=cfg,
+        debug=debug,
+        unwrap_jobs=cfg.unwrap_options.n_parallel_jobs,
     )
 
     # Print the maximum memory usage for each worker
