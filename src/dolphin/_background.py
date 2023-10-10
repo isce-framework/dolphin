@@ -8,7 +8,7 @@ from collections.abc import Callable
 from concurrent.futures import Executor, Future
 from queue import Empty, Full, Queue
 from threading import Event, Thread, main_thread
-from typing import Any, Optional
+from typing import Any, Optional, Sequence
 
 import numpy as np
 
@@ -260,77 +260,6 @@ class BackgroundReader(BackgroundWorker):
         pass
 
 
-class NvidiaMemoryWatcher(Thread):
-    """Watch the memory usage of the GPU and log it to a file.
-
-    Parameters
-    ----------
-    log_file : str
-        The file to write the memory usage to.
-    refresh_rate : float, optional
-        The refresh_rate in seconds to check the memory usage, by default 1.0
-    """
-
-    def __init__(
-        self,
-        log_file: Filename = f"nvidia_memory_{os.getpid()}.log",
-        refresh_rate: float = 1.0,
-        gpu_id: int = 0,
-    ):
-        try:
-            from pynvml.smi import nvidia_smi  # noqa: F401
-        except ImportError:
-            raise ImportError("Please install pynvml through pip or conda")
-
-        super().__init__(name="NvidiaMemoryWatcher")
-        self.log_file = log_file
-        self.pid = os.getpid()
-        self.t0 = time.time()
-        self.refresh_rate = refresh_rate
-        self.gpu_id = gpu_id
-        # The query lag is the time it takes to query the GPU memory
-        # This is used to try and refresh close to the refresh rate
-        self._query_lag = 0.5
-        self._finished_event = Event()
-        self._thread = Thread(target=self.run)
-
-        self._thread.start()
-
-    def run(self):
-        """Run the background task."""
-        logger.info(
-            f"Logging GPU memory usage to {self.log_file} every {self.refresh_rate} s"
-        )
-        with open(self.log_file, "w") as f:
-            # Write the header
-            f.write("time(s),memory(GB)\n")
-
-        while not self._finished_event.is_set() and main_thread().is_alive():
-            mem = self._get_gpu_memory()
-            t_cur = time.time() - self.t0
-            with open(self.log_file, "a") as f:
-                row = f"{t_cur:.3f},{mem:.2f}\n"
-                f.write(row)
-
-            # Sleep until the next refresh
-            time.sleep(max(0, self.refresh_rate - self._query_lag))
-
-    def join(self):
-        """Wait for the thread to finish."""
-        self._thread.join()
-
-    def notify_finished(self):
-        """Notify the thread that it should finish."""
-        self._finished_event.set()
-        self._thread.join()
-
-    def _get_gpu_memory(self) -> float:
-        """Get the memory usage (in GiB) of the GPU for the current pid."""
-        from dolphin.utils import get_gpu_memory
-
-        return get_gpu_memory(pid=self.pid, gpu_id=self.gpu_id)
-
-
 class DummyProcessPoolExecutor(Executor):
     """Dummy ProcessPoolExecutor for to avoid forking for single_job purposes."""
 
@@ -346,71 +275,29 @@ class DummyProcessPoolExecutor(Executor):
     def shutdown(self, wait: bool = True):
         pass
 
-    def __enter__(self):
-        return self
 
-    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any):
-        pass
+class ResourceRecorder(abc.ABC):
+    """Base class for recording system resources.
 
-
-class CPURecorder:
-    """Records the CPU usage of the current process over time.
-
-    Attributes
-    ----------
-    interval : float
-        Time in seconds between each CPU usage measurement.
-    readings : List[float]
-        List to store CPU usage percentages.
-
-    Methods
-    -------
-    start():
-        Start recording CPU usage in a separate thread.
-    notify_finished():
-        Stop recording CPU usage.
-    get_peak_usage() -> float:
-        Returns the peak CPU usage.
-    get_average_usage() -> float:
-        Returns the average CPU usage.
+    Subclasses should provide a `name` for the background thread, and
+    1. a `_record` method that returns a tuple of values to record and save
+    2. a `columns` property that returns the column names for the values
     """
 
     def __init__(
         self,
+        name: str,
+        columns: Sequence[str],
+        filename: Optional[Filename] = None,
         interval: float = 0.4,
         start: bool = True,
-        pid: Optional[int] = None,
-        filename: Optional[Filename] = None,
-    ) -> None:
-        """Set up the CPU usage recorder.
-
-        Parameters
-        ----------
-        interval : float, optiona,
-            Time in seconds between each CPU usage measurement (default is 0.5).
-        start : bool, optional
-            Whether to start recording immediately (default is True).
-        pid : int, optional
-            The process ID to record CPU usage for (default is None, which
-            records the current process).
-        filename : str, optional
-            The filename to save the CPU usage readings to upon exit
-            default is None, which does not save the readings to a file.
-            Note that you can manually call `to_csv` or `to_dataframe` to save
-            the readings to a file after recording.
-            This option is useful within a context manager, e.g.:
-            ```
-            with CPURecorder(filename="cpu_usage.csv") as recorder:
-                # Do some work here
-            ```
-        """
-        import psutil
-
+    ):
+        self.columns = columns
+        self.name = name
+        self.results: list[tuple[float, ...]] = []
         self.interval = interval
-        self.readings: list[tuple[float, ...]] = []
-        self._stop_event = Event()
-        self._process = psutil.Process(pid=pid)
-        self._thread = Thread(target=self._record)
+        self._finished_event = Event()
+        self._thread = Thread(target=self.run, name=name)
         self.filename = filename
         if filename:
             self._outfile = open(filename, "w")
@@ -421,47 +308,186 @@ class CPURecorder:
         if start:
             self.start()
 
-    def _record(self) -> None:
-        """Record the CPU usage at regular intervals."""
-        while not self._stop_event.is_set():
-            # Measure how long the measurement takes
+    def start(self) -> None:
+        """Start recording in a separate thread."""
+        self._start_time = time.perf_counter()
+        self._thread.start()
+        logger.debug(
+            "Starting recording for %s. filename = %s", self.name, self.filename
+        )
+
+    def notify_finished(self) -> None:
+        """Stop recording and shut down the thread."""
+        if self.filename:
+            self._outfile.close()
+        self._finished_event.set()
+        self._thread.join()
+        logger.debug("%s recorded %d results", self.name, len(self.results))
+
+    def run(self):
+        while not self._finished_event.is_set() and main_thread().is_alive():
             t0 = time.perf_counter()
-            with self._process.oneshot():  # Makes multiple calls to psutil faster
-                cur_elapsed = time.perf_counter() - self._start_time
-                cpu_time_tuple: tuple[float, ...] = tuple(self._process.cpu_times())[:5]
-                # convert memory to GB
-                memory_rss = self._process.memory_info().rss / 2**30
-                result = (
-                    cur_elapsed,
-                    self._process.cpu_percent(),
-                    *cpu_time_tuple,
-                    memory_rss,
-                )
-                self.readings.append(result)
-                if self.filename:
-                    self._writer.writerow([round(v, 5) for v in result])
-                    # Flush the file to disk to we can see the results in real time
-                    self._outfile.flush()
+            # Record the time for whatever resources they are getting
+            cur_elapsed = time.perf_counter() - self._start_time
+            result = self._record()
+            # concatenate the time + their results
+            self.results.append((cur_elapsed, *result))
+
+            if self.filename:
+                self._writer.writerow([round(v, 5) for v in result])
+                # Flush the file to disk to we can see the results in real time
+                self._outfile.flush()
             query_time = time.perf_counter() - t0
             time.sleep(max(0, self.interval - query_time))
 
-    def start(self) -> None:
-        """Start recording CPU usage in a separate thread."""
-        self._start_time = time.perf_counter()
-        self._thread.start()
+    @abc.abstractmethod
+    def _record(self) -> tuple[float, ...]:
+        pass
 
-    def notify_finished(self) -> None:
-        """Stop recording CPU usage."""
-        if self.filename:
-            self._outfile.close()
-        self._stop_event.set()
-        self._thread.join()
-        logger.debug("CPURecorder recorded %d readings", len(self.readings))
+    # Add methods to use as context manager
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any):
+        pass
 
     @property
     def stats(self) -> np.ndarray:
         """Return the CPU usage stats as a numpy array."""
-        return np.array(self.readings)
+        return np.array(self.results)
+
+    def to_csv(self, filename: Filename, decimal_places: int = 4) -> None:
+        """Save the results to a CSV file.
+
+        Parameters
+        ----------
+        filename : str
+            The filename to save the results to.
+        decimal_places : int, optional
+            The number of decimal places to round the values to (default is 4).
+        """
+        # Allow either a filename, or sys.stdout:
+        # https://stackoverflow.com/a/23036785/5666087
+        with open(filename, "w") as f:
+            writer = csv.writer(f)
+            writer.writerow(self.columns)
+            # Round the values to the specified number of decimal places
+            # https://stackoverflow.com/a/45523586/5666087
+            writer.writerows(
+                [round(v, decimal_places) for v in row] for row in self.results
+            )
+
+
+class NvidiaRecorder(ResourceRecorder):
+    """Watch the memory usage of the GPU and log it to a file."""
+
+    def __init__(
+        self,
+        filename: Optional[Filename] = None,
+        interval: float = 1.0,
+        pid: Optional[int] = None,
+        gpu_id: int = 0,
+        start: bool = True,
+    ) -> None:
+        try:
+            from pynvml.smi import nvidia_smi  # noqa: F401
+        except ImportError:
+            raise ImportError("Please install pynvml through pip or conda")
+
+        self.gpu_id = gpu_id
+        self.pid = pid or os.getpid()
+        super().__init__(
+            filename=filename,
+            interval=interval,
+            name="NvidiaRecorder",
+            columns=["memory(GB)"],
+            start=start,
+        )
+
+    def _record(self) -> tuple[float]:
+        """Record the GPU usage at regular intervals."""
+        from dolphin.utils import get_gpu_memory
+
+        mem = get_gpu_memory(pid=self.pid, gpu_id=self.gpu_id)
+        # Need to return a tuple. May record more stats in the future
+        return (mem,)
+
+
+class CPURecorder(ResourceRecorder):
+    """Records the CPU usage of the current process over time.
+
+    Attributes
+    ----------
+    interval : float
+        Time in seconds between each CPU usage measurement.
+    results : List[float]
+        List to store CPU usage percentages.
+    """
+
+    def __init__(
+        self,
+        filename: Optional[Filename] = None,
+        interval: float = 0.4,
+        start: bool = True,
+        pid: Optional[int] = None,
+    ) -> None:
+        """Set up the CPU usage recorder.
+
+        Parameters
+        ----------
+        interval : float, optional,
+            Time in seconds between each CPU usage measurement (default is 0.5).
+        start : bool, optional
+            Whether to start recording immediately (default is True).
+        pid : int, optional
+            The process ID to record CPU usage for (default is None, which
+            records the current process).
+        filename : str, optional
+            The filename to save the CPU usage results to upon exit
+            default is None, which does not save the results to a file.
+            Note that you can manually call `to_csv` or `to_dataframe` to save
+            the results to a file after recording.
+            This option is useful within a context manager, e.g.:
+            ```
+            with CPURecorder(filename="cpu_usage.csv") as recorder:
+                # Do some work here
+            ```
+        """
+        import psutil
+
+        columns = [
+            "time",
+            "cpu_percent",
+            # Other columns are "cpu_time" results
+            "user",
+            "system",
+            "children_user",
+            "children_system",
+            "iowait",
+            # memory columns
+            "rss_gb",
+        ]
+        self._process = psutil.Process(pid=pid)
+        super().__init__(
+            name="CPURecorder",
+            columns=columns,
+            filename=filename,
+            interval=interval,
+            start=start,
+        )
+
+    def _record(self) -> tuple[float, ...]:
+        """Record the CPU usage at regular intervals."""
+        with self._process.oneshot():  # Makes multiple calls to psutil faster
+            cpu_time_tuple: tuple[float, ...] = tuple(self._process.cpu_times())[:5]
+            # convert memory to GB
+            memory_rss = self._process.memory_info().rss / 2**30
+            result = (
+                self._process.cpu_percent(),
+                *cpu_time_tuple,
+                memory_rss,
+            )
+            return result
 
     def get_peak_usage(self) -> float:
         """Get the peak CPU usage over the recorded time.
@@ -482,67 +508,3 @@ class CPURecorder:
             The average CPU usage.
         """
         return sum(self.stats[:, 1]) / len(self.stats[:, 1]) if self.stats else 0.0
-
-    @property
-    def columns(self) -> list[str]:
-        """Get the column names for the readings.
-
-        Returns
-        -------
-        list[str]
-            The column names for the readings.
-        """
-        return [
-            "time",
-            "cpu_percent",
-            # Other columns are "cpu_time" results
-            "user",
-            "system",
-            "children_user",
-            "children_system",
-            "iowait",
-            # memory columns
-            "rss_gb",
-        ]
-
-    def to_csv(self, filename: Filename, decimal_places: int = 4) -> None:
-        """Save the readings to a CSV file.
-
-        Parameters
-        ----------
-        filename : str
-            The filename to save the readings to.
-        decimal_places : int, optional
-            The number of decimal places to round the values to (default is 4).
-        """
-        # Allow either a filename, or sys.stdout:
-        # https://stackoverflow.com/a/23036785/5666087
-        with open(filename, "w") as f:
-            writer = csv.writer(f)
-            writer.writerow(self.columns)
-            # Round the values to the specified number of decimal places
-            # https://stackoverflow.com/a/45523586/5666087
-            writer.writerows(
-                [round(v, decimal_places) for v in row] for row in self.readings
-            )
-
-    def to_dataframe(self) -> Any:
-        """Convert the readings to a pandas dataframe.
-
-        Returns
-        -------
-        pd.DataFrame
-            A dataframe with the CPU usage readings.
-        """
-        import pandas as pd
-
-        return pd.DataFrame(self.readings, columns=self.columns)
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any):
-        self.notify_finished()
-
-    def __del__(self):
-        self.notify_finished()

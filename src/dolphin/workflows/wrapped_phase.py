@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Optional
 
 from dolphin import ps, stack, utils
-from dolphin._background import CPURecorder, NvidiaMemoryWatcher
+from dolphin._background import CPURecorder, NvidiaRecorder
 from dolphin._log import get_log, log_runtime
 from dolphin.interferogram import Network
 from dolphin.opera_utils import make_nodata_mask
@@ -67,6 +67,10 @@ def run(cfg: Workflow, debug: bool = False) -> tuple[list[Path], Path, Path, Pat
         logger.warning(f"Could not make nodata mask: {e}")
         nodata_mask_file = None
 
+    # For possibly recording CPU/memory/GPU usage
+    cpu_logger: Optional[CPURecorder] = None
+    gpu_logger: Optional[NvidiaRecorder] = None
+
     # ###############
     # PS selection
     # ###############
@@ -80,10 +84,11 @@ def run(cfg: Workflow, debug: bool = False) -> tuple[list[Path], Path, Path, Pat
             existing_disp: Optional[Path] = cfg.amplitude_dispersion_files[0]
         except IndexError:
             existing_amp = existing_disp = None
+
         if benchmark_dir:
             filename = benchmark_dir / f"ps_{work_dir.name}.log"
             logger.info("Recording CPU/memory usage to %s", filename)
-            recorder = CPURecorder(filename=filename)
+            cpu_logger = CPURecorder(filename=filename)
 
         ps.create_ps(
             slc_vrt_file=vrt_stack.outfile,
@@ -95,8 +100,8 @@ def run(cfg: Workflow, debug: bool = False) -> tuple[list[Path], Path, Path, Pat
             existing_amp_mean_file=existing_amp,
             block_shape=cfg.worker_settings.block_shape,
         )
-        if benchmark_dir:
-            recorder.notify_finished()
+        if cpu_logger:
+            cpu_logger.notify_finished()
 
     # Save a looked version of the PS mask too
     strides = cfg.output_options.strides
@@ -120,14 +125,12 @@ def run(cfg: Workflow, debug: bool = False) -> tuple[list[Path], Path, Path, Pat
         if benchmark_dir:
             filename = benchmark_dir / f"wrapped_phase_{work_dir.name}.log"
             logger.info("Recording CPU/memory usage to %s", filename)
-            recorder = CPURecorder(filename=filename)
+            cpu_logger = CPURecorder(filename=filename)
             if cfg.worker_settings.gpu_enabled and utils.gpu_is_available():
                 # Track the GPU mem usage if we're using it
-                watcher = NvidiaMemoryWatcher(
-                    log_file=benchmark_dir / f"nvidia_memory_{work_dir.name}.log"
-                )
-            else:
-                watcher = None
+                gpu_log_file = benchmark_dir / f"nvidia_memory_{work_dir.name}.log"
+                logger.info("Recording GPU usage to %s", gpu_log_file)
+                gpu_logger = NvidiaRecorder(filename=gpu_log_file)
 
         # TODO: Need a good way to store the nslc attribute in the PS file...
         # If we pre-compute it from some big stack, we need to use that for SHP
@@ -155,10 +158,10 @@ def run(cfg: Workflow, debug: bool = False) -> tuple[list[Path], Path, Path, Pat
             )
         )
         comp_slc_file = comp_slcs[-1]
-        if benchmark_dir:
-            recorder.notify_finished()
-        if watcher:
-            watcher.notify_finished()
+        if cpu_logger:
+            cpu_logger.notify_finished()
+        if gpu_logger:
+            gpu_logger.notify_finished()
 
     # ###################################################
     # Form interferograms from estimated wrapped phase
