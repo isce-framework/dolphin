@@ -118,6 +118,38 @@ def estimate_stack_covariance_cpu(
     del slcs_shared
     return C_arrays
 
+import jax.numpy as jnp
+from jax import vmap, lax
+
+def pad_stack(stack, half_row, half_col):
+    return jnp.pad(stack, ((0,0), (half_row, half_row), (half_col, half_col)))
+
+def get_neighborhood(padded_stack, r, c, half_row, half_col):
+    slice_size = (padded_stack.shape[0], 2*half_row + 1, 2*half_col + 1)
+    start_indices = (0, r, c)
+    return lax.dynamic_slice(padded_stack, start_indices, slice_size)
+
+def single_pixel_covariance(padded_stack, r, c, half_row, half_col, n_images):
+    neighborhood = get_neighborhood(padded_stack, r, c, half_row, half_col).reshape(n_images, -1)
+    return coh_mat_vectorized(neighborhood)
+    # # c = jnp.cov(neighborhood, rowvar=True)
+    # powers = jnp.diag(c)
+    # # return c / jnp.sqrt(powers[:, None] * powers[None, :])
+    # return c / powers
+
+def compute_covariances(stack, half_row, half_col):
+    n_images, nrows, ncols = stack.shape
+    padded_stack = pad_stack(stack, half_row, half_col)
+
+    cov_fn = lambda r, c: single_pixel_covariance(padded_stack, r, c, half_row, half_col, n_images)
+
+    r_indices, c_indices = jnp.meshgrid(jnp.arange(nrows), jnp.arange(ncols), indexing="ij")
+    
+    cov_matrices = vmap(vmap(cov_fn))(r_indices, c_indices)
+    
+    return cov_matrices
+
+
 
 @njit(nogil=True)
 def coh_mat_single(slc_samples, cov_mat=None, neighbor_mask=None, do_shp: bool = True):
@@ -163,6 +195,106 @@ def coh_mat_single(slc_samples, cov_mat=None, neighbor_mask=None, do_shp: bool =
             cov_mat[tj, ti] = np.conjugate(cov)
 
     return cov_mat
+
+def test(slc_samples):
+    """Given a (n_slc, n_samps) samples, estimate the coherence matrix."""
+    nslc, nsamps = slc_samples.shape
+    numermat = np.zeros((nslc, nslc), dtype=slc_samples.dtype)
+    a1mat = np.zeros((nslc, nslc), dtype=slc_samples.dtype)
+    a2mat = np.zeros((nslc, nslc), dtype=slc_samples.dtype)
+
+    for ti in range(nslc):
+        for tj in range(ti + 1, nslc):
+            c1, c2 = slc_samples[ti, :], slc_samples[tj, :]
+            # a1 = np.nansum(np.abs(c1) ** 2)
+            # a2 = np.nansum(np.abs(c2) ** 2)
+            # Manually sum to skip based on the neighbor mask
+            numer = a1 = a2 = 0.0
+            for sidx in range(nsamps):
+                s1 = c1[sidx]
+                s2 = c2[sidx]
+                if np.isnan(s1) or np.isnan(s2):
+                    continue
+                numer += s1 * s2.conjugate()
+                a1 += s1 * s1.conjugate()
+                a2 += s2 * s2.conjugate()
+
+            numermat[ti, tj] = numer
+            a1mat[ti, tj] = a1
+            a2mat[ti, tj] = a2
+
+    return numermat, a1mat, a2mat
+
+
+def coh_mat_vectorized2(slc_samples, neighbor_mask=None):
+    nslc, nsamps = slc_samples.shape
+
+    # We assume the covariance matrix is initialized to zeros
+    cov_mat = jnp.zeros((nslc, nslc), dtype=slc_samples.dtype)
+
+    # Setup mask
+    if neighbor_mask is None:
+        neighbor_mask = jnp.ones(nsamps, dtype=jnp.bool_)
+    
+    valid_samples_mask = ~jnp.isnan(slc_samples)
+    combined_mask = valid_samples_mask & neighbor_mask[None, :]
+    
+    # Inner computations
+    c1_expanded = slc_samples[:, :, None]
+    c2_expanded = slc_samples[:, None, :]
+    s1s2_conj = c1_expanded * jnp.conjugate(c2_expanded)
+
+    numer = jnp.where(combined_mask[:, :, None] & combined_mask[:, None, :], s1s2_conj, 0).sum(axis=-1)
+    a1 = jnp.where(combined_mask, slc_samples * jnp.conjugate(slc_samples), 0).sum(axis=-1)
+    a2 = jnp.where(combined_mask, slc_samples * jnp.conjugate(slc_samples), 0).sum(axis=-1).reshape(-1, 1)
+    
+    a_prod = a1 * a2
+    coherence = jnp.where(jnp.abs(a_prod) < 1e-6, 0.0, numer / jnp.sqrt(a_prod))
+
+    # Fill diagonal with 1.0
+    diag_indices = jnp.arange(nslc)
+    coherence = jnp.where(diag_indices[:, None] == diag_indices, 1.0, coherence)
+
+    # # Ensure the matrix is symmetric
+    # upper_tri_indices = jnp.triu_indices(nslc, k=1)
+    # coherence = coherence.at[upper_tri_indices[::-1]].set(jnp.conjugate(coherence[upper_tri_indices]))
+
+    return coherence
+
+import jax.numpy as jnp
+
+def coh_mat_vectorized(slc_samples):
+    nslc, _ = slc_samples.shape
+
+    # # Outer product with conjugate of other signals
+    # outer_product = jnp.einsum('ij,ik->ijk', slc_samples, jnp.conj(slc_samples))
+    # # Sum over the samples dimension to get numerators
+    # numer = outer_product.sum(axis=-1)
+
+    numer = jnp.dot(slc_samples, jnp.conj(slc_samples.T))
+    
+    # Calculate energy for each signal
+    power = jnp.sum(jnp.abs(slc_samples) ** 2, axis=1)
+    a1 = power[None, :]
+    a2 = power[:, None]  # Make it a column vector for broadcasting
+    
+    a_prod = jnp.sqrt(a1 * a2)
+
+    # Where a_prod is too small, set to 1 to avoid division by zero
+    safe_a_prod = jnp.where(a_prod < 1e-6, 1.0, a_prod)
+    coherence = numer / safe_a_prod
+
+    # # Fill diagonal with 1.0
+    # diag_indices = jnp.arange(nslc)
+    # coherence = jnp.where(diag_indices[:, None] == diag_indices, 1.0, coherence)
+
+    # Ensure the matrix is symmetric
+    # upper_tri_indices = jnp.triu_indices(nslc, k=1)
+    # coherence = coherence.at[upper_tri_indices[::-1]].set(jnp.conjugate(coherence[upper_tri_indices]))
+
+    return coherence
+
+
 
 
 # GPU version of the covariance matrix computation
