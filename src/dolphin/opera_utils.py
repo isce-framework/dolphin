@@ -34,10 +34,39 @@ OPERA_BURST_RE = re.compile(
 )
 
 
+def get_burst_id(
+    filename: Filename, burst_id_fmt: Union[str, Pattern[str]] = OPERA_BURST_RE
+) -> str:
+    """Extract the burst id from a filename.
+
+    Matches either format of
+        t087_185684_iw2 (which comes from COMPASS)
+        T087-165495-IW3 (which is the official product naming scheme)
+
+    Parameters
+    ----------
+    filename: Filename
+        CSLC filename
+    burst_id_fmt: str
+        format of the burst id in the filename.
+        Default is [`OPERA_BURST_RE`][dolphin.opera_utils.OPERA_BURST_RE]
+
+    Returns
+    -------
+    str
+        burst id of the SLC acquisition, normalized to be in the format
+            t087_185684_iw2
+    """
+    if not (m := re.search(burst_id_fmt, str(filename))):
+        raise ValueError(f"Could not parse burst id from {filename}")
+    burst_str = m.group()
+    # Normalize
+    return burst_str.lower().replace("-", "_")
+
+
 def group_by_burst(
     file_list: Sequence[Filename],
     burst_id_fmt: Union[str, Pattern[str]] = OPERA_BURST_RE,
-    minimum_images: int = 2,
 ) -> dict[str, list[Path]]:
     """Group Sentinel CSLC files by burst.
 
@@ -48,10 +77,6 @@ def group_by_burst(
     burst_id_fmt: str
         format of the burst id in the filename.
         Default is [`OPERA_BURST_RE`][dolphin.opera_utils.OPERA_BURST_RE]
-    minimum_images: int
-        Minimum number of SLCs needed to run the workflow for each burst.
-        If there are fewer SLCs in a burst, it will be skipped and
-        a warning will be logged.
 
     Returns
     -------
@@ -64,15 +89,10 @@ def group_by_burst(
         }
     """
 
-    def get_burst_id(filename):
-        if not (m := re.search(burst_id_fmt, str(filename))):
-            raise ValueError(f"Could not parse burst id from {filename}")
-        return m.group()
-
     def sort_by_burst_id(file_list):
         """Sort files by burst id."""
         file_burst_tuples = sorted(
-            [(Path(f), get_burst_id(f)) for f in file_list],
+            [(Path(f), get_burst_id(f, burst_id_fmt)) for f in file_list],
             # use the date or dates as the key
             key=lambda f_b_tuple: f_b_tuple[1],  # type: ignore
         )
@@ -91,17 +111,7 @@ def group_by_burst(
             sorted_file_list, key=lambda x: get_burst_id(x)
         )
     }
-    # Make sure that each burst has at least the minimum number of SLCs
-    out = {}
-    for burst_id, slc_list in grouped_images.items():
-        if len(slc_list) < minimum_images:
-            logger.warning(
-                f"Skipping burst {burst_id} because it has only {len(slc_list)} SLCs."
-                f"Minimum number of SLCs is {minimum_images}"
-            )
-        else:
-            out[burst_id] = slc_list
-    return out
+    return grouped_images
 
 
 def get_cslc_polygon(

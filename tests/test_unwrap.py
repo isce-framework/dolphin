@@ -4,7 +4,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from dolphin import io, unwrap
+import dolphin.unwrap
+from dolphin import io
 from dolphin.workflows import UnwrapMethod
 
 try:
@@ -36,7 +37,7 @@ def corr_raster(raster_100_by_200):
 
 def test_unwrap_snaphu(tmp_path, raster_100_by_200, corr_raster):
     unw_filename = tmp_path / "unwrapped.unw.tif"
-    unw_path, conncomp_path = unwrap.unwrap(
+    unw_path, conncomp_path = dolphin.unwrap.unwrap(
         ifg_filename=raster_100_by_200,
         corr_filename=corr_raster,
         unw_filename=unw_filename,
@@ -48,7 +49,7 @@ def test_unwrap_snaphu(tmp_path, raster_100_by_200, corr_raster):
     assert io.get_raster_xysize(unw_filename) == io.get_raster_xysize(raster_100_by_200)
 
     # test other init_method
-    unw_path, conncomp_path = unwrap.unwrap(
+    unw_path, conncomp_path = dolphin.unwrap.unwrap(
         ifg_filename=raster_100_by_200,
         corr_filename=corr_raster,
         unw_filename=unw_filename,
@@ -59,7 +60,7 @@ def test_unwrap_snaphu(tmp_path, raster_100_by_200, corr_raster):
 
 def test_unwrap_icu(tmp_path, raster_100_by_200, corr_raster):
     unw_filename = tmp_path / "icu_unwrapped.unw.tif"
-    unwrap.unwrap(
+    dolphin.unwrap.unwrap(
         ifg_filename=raster_100_by_200,
         corr_filename=corr_raster,
         unw_filename=unw_filename,
@@ -70,7 +71,7 @@ def test_unwrap_icu(tmp_path, raster_100_by_200, corr_raster):
 
 def test_unwrap_phass(tmp_path, raster_100_by_200, corr_raster):
     unw_filename = tmp_path / "phass_unwrapped.unw.tif"
-    unwrap.unwrap(
+    dolphin.unwrap.unwrap(
         ifg_filename=raster_100_by_200,
         corr_filename=corr_raster,
         unw_filename=unw_filename,
@@ -82,7 +83,7 @@ def test_unwrap_phass(tmp_path, raster_100_by_200, corr_raster):
 # Skip this on mac, since snaphu doesn't run on mac
 def test_unwrap_logfile(tmp_path, raster_100_by_200, corr_raster):
     unw_filename = tmp_path / "unwrapped.unw.tif"
-    unwrap.unwrap(
+    dolphin.unwrap.unwrap(
         ifg_filename=raster_100_by_200,
         corr_filename=corr_raster,
         unw_filename=unw_filename,
@@ -115,7 +116,7 @@ def list_of_ifgs(tmp_path, raster_100_by_200):
 @pytest.mark.parametrize("unw_suffix", [".unw", ".unw.tif"])
 def test_run(list_of_ifgs, corr_raster, unw_suffix):
     ifg_path = list_of_ifgs[0].parent
-    out_files, conncomp_files = unwrap.run(
+    out_files, conncomp_files = dolphin.unwrap.run(
         ifg_filenames=list_of_ifgs,
         cor_filenames=[corr_raster] * len(list_of_ifgs),
         output_path=ifg_path,
@@ -147,7 +148,7 @@ def list_of_gtiff_ifgs(tmp_path, raster_100_by_200):
 @pytest.mark.parametrize("unw_suffix", [".unw", ".unw.tif"])
 def test_run_gtiff(list_of_gtiff_ifgs, corr_raster, unw_suffix):
     ifg_path = list_of_gtiff_ifgs[0].parent
-    out_files, conncomp_files = unwrap.run(
+    out_files, conncomp_files = dolphin.unwrap.run(
         ifg_filenames=list_of_gtiff_ifgs,
         cor_filenames=[corr_raster] * len(list_of_gtiff_ifgs),
         output_path=ifg_path,
@@ -164,7 +165,7 @@ def test_run_gtiff(list_of_gtiff_ifgs, corr_raster, unw_suffix):
 )
 def test_unwrap_multiscale(tmp_path, raster_100_by_200, corr_raster):
     unw_filename = tmp_path / "unwrapped.unw.tif"
-    out_path, conncomp_path = unwrap.unwrap(
+    out_path, conncomp_path = dolphin.unwrap.unwrap(
         ifg_filename=raster_100_by_200,
         corr_filename=corr_raster,
         unw_filename=unw_filename,
@@ -182,14 +183,14 @@ def test_compute_phase_diffs():
     # test on a 2D array with no phase jumps > pi
     phase1 = np.array([[0, 1], [1, 2]], dtype=float)
     expected1 = np.array([[0, 0], [0, 0]], dtype=float)
-    assert np.allclose(unwrap.compute_phase_diffs(phase1), expected1)
+    assert np.allclose(dolphin.unwrap.compute_phase_diffs(phase1), expected1)
 
     # test on a 2D array with some phase jumps > pi at the top-left pixel
     phase2 = np.array([[0, 3.15], [3.15, 0]], dtype=float)
     expected2 = np.array([[2, 0], [0, 0]], dtype=float)
-    assert np.allclose(unwrap.compute_phase_diffs(phase2), expected2)
+    assert np.allclose(dolphin.unwrap.compute_phase_diffs(phase2), expected2)
 
     # test on a larger 2D array
     phase3 = np.full((10, 10), np.pi, dtype=float)
     expected3 = np.zeros((10, 10), dtype=float)
-    assert np.allclose(unwrap.compute_phase_diffs(phase3), expected3)
+    assert np.allclose(dolphin.unwrap.compute_phase_diffs(phase3), expected3)

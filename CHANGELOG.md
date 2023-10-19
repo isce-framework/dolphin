@@ -1,5 +1,9 @@
 # [Unreleased](https://github.com/isce-framework/dolphin/compare/v0.5.1...main)
 
+**Changed**
+- removed `minimum_images` as an argument from `opera_utils.group_by_burst`. Checking for too-few images now must be done by the caller
+- `opera_utils.group_by_burst` now matches the official product name more robustly, but still returns the lowered version of the burst ID.
+
 # [v0.5.1](https://github.com/isce-framework/dolphin/compare/v0.5.0...v0.5.1) - 2023-10-10
 
 **Added**

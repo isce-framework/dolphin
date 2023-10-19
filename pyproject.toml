@@ -65,7 +65,7 @@ ignore = "D100,D102,D104,D105,D106,D107,D203,D204,D213,D413"
 
 [tool.pytest.ini_options]
 doctest_optionflags = "NORMALIZE_WHITESPACE NUMBER"
-addopts = "  --cov=dolphin  -n auto --maxprocesses=8 --doctest-modules --randomly-seed=1234 --ignore=scripts --ignore=docs --ignore=data"
+addopts = "  --cov=dolphin  -n auto --maxprocesses=8 --doctest-modules --randomly-seed=1234 --ignore=scripts --ignore=docs --ignore=data --ignore=pkgs"
 filterwarnings = [
   "error",
   # DeprecationWarning thrown in pkg_resources for older numba verions and llvmlite
