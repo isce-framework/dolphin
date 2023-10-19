@@ -37,7 +37,7 @@ def corr_raster(raster_100_by_200):
 
 def test_unwrap_snaphu(tmp_path, raster_100_by_200, corr_raster):
     unw_filename = tmp_path / "unwrapped.unw.tif"
-    unw_path, conncomp_path = dolphin.unwrap(
+    unw_path, conncomp_path = dolphin.unwrap.unwrap(
         ifg_filename=raster_100_by_200,
         corr_filename=corr_raster,
         unw_filename=unw_filename,
@@ -49,7 +49,7 @@ def test_unwrap_snaphu(tmp_path, raster_100_by_200, corr_raster):
     assert io.get_raster_xysize(unw_filename) == io.get_raster_xysize(raster_100_by_200)
 
     # test other init_method
-    unw_path, conncomp_path = dolphin.unwrap(
+    unw_path, conncomp_path = dolphin.unwrap.unwrap(
         ifg_filename=raster_100_by_200,
         corr_filename=corr_raster,
         unw_filename=unw_filename,
@@ -60,7 +60,7 @@ def test_unwrap_snaphu(tmp_path, raster_100_by_200, corr_raster):
 
 def test_unwrap_icu(tmp_path, raster_100_by_200, corr_raster):
     unw_filename = tmp_path / "icu_unwrapped.unw.tif"
-    dolphin.unwrap(
+    dolphin.unwrap.unwrap(
         ifg_filename=raster_100_by_200,
         corr_filename=corr_raster,
         unw_filename=unw_filename,
@@ -71,7 +71,7 @@ def test_unwrap_icu(tmp_path, raster_100_by_200, corr_raster):
 
 def test_unwrap_phass(tmp_path, raster_100_by_200, corr_raster):
     unw_filename = tmp_path / "phass_unwrapped.unw.tif"
-    dolphin.unwrap(
+    dolphin.unwrap.unwrap(
         ifg_filename=raster_100_by_200,
         corr_filename=corr_raster,
         unw_filename=unw_filename,
@@ -83,7 +83,7 @@ def test_unwrap_phass(tmp_path, raster_100_by_200, corr_raster):
 # Skip this on mac, since snaphu doesn't run on mac
 def test_unwrap_logfile(tmp_path, raster_100_by_200, corr_raster):
     unw_filename = tmp_path / "unwrapped.unw.tif"
-    dolphin.unwrap(
+    dolphin.unwrap.unwrap(
         ifg_filename=raster_100_by_200,
         corr_filename=corr_raster,
         unw_filename=unw_filename,
@@ -116,7 +116,7 @@ def list_of_ifgs(tmp_path, raster_100_by_200):
 @pytest.mark.parametrize("unw_suffix", [".unw", ".unw.tif"])
 def test_run(list_of_ifgs, corr_raster, unw_suffix):
     ifg_path = list_of_ifgs[0].parent
-    out_files, conncomp_files = dolphin.dolphin.unwrap.run(
+    out_files, conncomp_files = dolphin.unwrap.run(
         ifg_filenames=list_of_ifgs,
         cor_filenames=[corr_raster] * len(list_of_ifgs),
         output_path=ifg_path,
@@ -165,7 +165,7 @@ def test_run_gtiff(list_of_gtiff_ifgs, corr_raster, unw_suffix):
 )
 def test_unwrap_multiscale(tmp_path, raster_100_by_200, corr_raster):
     unw_filename = tmp_path / "unwrapped.unw.tif"
-    out_path, conncomp_path = dolphin.unwrap(
+    out_path, conncomp_path = dolphin.unwrap.unwrap(
         ifg_filename=raster_100_by_200,
         corr_filename=corr_raster,
         unw_filename=unw_filename,
