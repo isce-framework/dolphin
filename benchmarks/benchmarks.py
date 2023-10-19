@@ -29,8 +29,9 @@ class CovarianceBenchmark:
     """Benchmark results for covariance matrix formation."""
 
     # https://asv.readthedocs.io/en/v0.6.1/writing_benchmarks.html#parameterized-benchmarks
-    # Number of SLCs
+    # Parameterize by the number of SLCs
     params = [10, 20, 30]
+    param_names = ["nslc"]
 
     def setup_cache(self):
         # Run the several-second generation of samples once in setup_cache
@@ -61,6 +62,7 @@ class PhaseLinkingBenchmark:
 
     # (nslc, use_evd)
     params = ([10, 20, 30], [True, False])
+    param_names = ["nslc", "use_evd"]
 
     def setup_cache(self):
         np.save("slc_samples.npy", _make_slc_samples())
