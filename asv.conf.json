@@ -6,6 +6,13 @@
     "branches": [
         "main"
     ],
+    // To build the package using pyproject.toml (PEP518), uncomment the following lines
+    "build_command": [
+        "python -m pip install setuptools_scm",
+        "python -m pip install build",
+        "python -m build",
+        "PIP_NO_BUILD_ISOLATION=false python -mpip wheel --no-deps --no-index -w {build_cache_dir} {build_dir}"
+    ],
     "environment_type": "mamba",
     // timeout in seconds for installing any dependencies in environment
     "install_timeout": 600,
