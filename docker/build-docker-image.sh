@@ -79,7 +79,7 @@ eval $cmd_base
 echo "To run the image and see the help message:"
 echo "docker run --rm -it $image_name dolphin --help"
 #
-echo "To run on a PGE runconfig:"
+echo "To run on a workflow config file:"
 echo "docker run --user \$(id -u):\$(id -g) -v \$PWD:/work --rm -it $image_name dolphin run dolphin_config.yaml"
 # where...
 #     --user $(id -u):$(id -g)  # Needed to avoid permission issues when writing to the mounted volume.
