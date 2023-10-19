@@ -6,8 +6,6 @@ on:
   pull_request:
     types: [labeled]
   workflow_dispatch:
-  schedule:
-  - cron: '31 1 * * SUN'  # M H d m w (Sundays at 01:31)
 
 jobs:
   benchmark:
@@ -22,15 +20,22 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-python@v4
-        name: Install Python
+      - name: Setup environment
+        uses: mamba-org/setup-micromamba@v1
         with:
-          python-version: "3.11"
+          environment-file: requirements.txt
+          environment-name: dolphin
+          condarc: |
+            channels:
+              - conda-forge
+              - nodefaults
+          create-args: >-
+            python=3.11
+            asv>=0.6
 
-      - name: Setup some dependencies
+      - name: Record machine info
         shell: bash -l {0}
         run: |
-          pip install asv
           asv machine --yes
       # https://github.com/tqdm/tqdm/blob/4c956c20b83be4312460fc0c4812eeb3fef5e7df/.github/workflows/check.yml#L26
       - name: Restore previous results
