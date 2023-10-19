@@ -96,8 +96,8 @@ class ShpBenchmark:
         slc_samples = _make_slc_samples()
         slc_stack = slc_samples.reshape((self.nslc, *SHAPE))
 
-        self.amp_mean = np.mean(slc_stack, axis=0)
-        self.amp_variance = np.var(slc_stack, axis=0)
+        self.amp_mean = np.mean(np.abs(slc_stack), axis=0)
+        self.amp_variance = np.var(np.abs(slc_stack), axis=0)
 
     def time_estimate_neighbors(self):
         shp.estimate_neighbors(
