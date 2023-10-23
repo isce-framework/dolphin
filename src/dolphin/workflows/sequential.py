@@ -6,6 +6,7 @@ References
     efficient InSAR time series analysis. IEEE Transactions on Geoscience and
     Remote Sensing, 55(10), 5637-5652.
 """
+
 from __future__ import annotations
 
 from collections import defaultdict

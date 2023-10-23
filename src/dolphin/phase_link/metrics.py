@@ -1,4 +1,5 @@
 """Module for computing quality metrics of estimated solutions."""
+
 import functools
 
 from dolphin.utils import get_array_module

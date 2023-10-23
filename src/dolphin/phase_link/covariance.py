@@ -2,6 +2,7 @@
 
 Contains for CPU and GPU versions (which will not be available if no GPU).
 """
+
 from __future__ import annotations
 
 from cmath import isnan
