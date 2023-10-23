@@ -4,6 +4,7 @@ Adapted from `rasterio.show_versions`,
 which was adapted from `sklearn.utils._show_versions`
 which was adapted from `pandas.show_versions`
 """
+
 from __future__ import annotations
 
 import importlib

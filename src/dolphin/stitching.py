@@ -1,4 +1,5 @@
 """stitching.py: utilities for combining interferograms into larger images."""
+
 from __future__ import annotations
 
 import math

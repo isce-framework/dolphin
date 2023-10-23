@@ -3,6 +3,7 @@
 Contains simple versions of MLE and EVD estimator to compare against the
 full CPU/GPU stack implementations.
 """
+
 import numpy as np
 import numpy.linalg as la
 from numba import njit
