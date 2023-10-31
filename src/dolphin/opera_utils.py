@@ -6,8 +6,9 @@ import re
 import subprocess
 import tempfile
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
-from typing import Pattern, Sequence, Union
+from typing import Iterable, Optional, Pattern, Sequence, Union
 
 import h5py
 import numpy as np
@@ -67,14 +68,14 @@ def get_burst_id(
 
 
 def group_by_burst(
-    file_list: Sequence[Filename],
+    file_list: Iterable[Filename],
     burst_id_fmt: Union[str, Pattern[str]] = OPERA_BURST_RE,
 ) -> dict[str, list[Path]]:
     """Group Sentinel CSLC files by burst.
 
     Parameters
     ----------
-    file_list: list[Filename]
+    file_list: Iterable[Filename]
         list of paths of CSLC files
     burst_id_fmt: str
         format of the burst id in the filename.
@@ -91,7 +92,7 @@ def group_by_burst(
         }
     """
 
-    def sort_by_burst_id(file_list):
+    def sort_by_burst_id(file_list: list[Filename]) -> list[Path]:
         """Sort files by burst id."""
         file_burst_tuples = sorted(
             [(Path(f), get_burst_id(f, burst_id_fmt)) for f in file_list],
@@ -99,13 +100,13 @@ def group_by_burst(
             key=lambda f_b_tuple: f_b_tuple[1],  # type: ignore
         )
         # Unpack the sorted pairs with new sorted values
-        file_list, _ = zip(*file_burst_tuples)  # type: ignore
-        return file_list
+        out_file_list = [f for f, _ in file_burst_tuples]
+        return out_file_list
 
     if not file_list:
         return {}
 
-    sorted_file_list = sort_by_burst_id(file_list)
+    sorted_file_list = sort_by_burst_id(list(file_list))
     # Now collapse into groups, sorted by the burst_id
     grouped_images = {
         burst_id: list(g)
@@ -235,7 +236,7 @@ def make_nodata_mask(
         subprocess.check_call(cmd, shell=True)
 
 
-@dataclass
+@dataclass(frozen=True)
 class BurstSubsetOption:
     """Dataclass for a possible subset of SLC data."""
 
@@ -249,8 +250,11 @@ class BurstSubsetOption:
     """List of burst IDs used in this subset."""
 
 
-def get_missing_data_options(slc_file_list: list[Filename]) -> list[BurstSubsetOption]:
-    """Get a list of possible data subsets for the given SLC files.
+def get_missing_data_options(
+    slc_files: Optional[Iterable[Filename]] = None,
+    burst_id_date_tuples: Optional[Iterable[tuple[str, date]]] = None,
+) -> list[BurstSubsetOption]:
+    """Get a list of possible data subsets for a set of burst SLCs.
 
     The default optimization criteria for choosing among these subsets is
 
@@ -263,29 +267,27 @@ def get_missing_data_options(slc_file_list: list[Filename]) -> list[BurstSubsetO
 
     Parameters
     ----------
-    slc_file_list : list[Filename]
+    slc_files : Optional[Iterable[Filename]]
         list of OPERA CSLC filenames.
+    burst_id_date_tuples : Optional[Iterable[tuple[str, date]]]
+        Alternative input: list of all existing (burst_id, date) tuples.
 
     Returns
     -------
     list[BurstSubsetOption]
         List of possible subsets of the given SLC data.
-        The options will be sorted by the total number of bursts used.
+        The options will be sorted by the total number of bursts used, so
+        that the first option is the one that uses the most data.
     """
-    from dolphin.utils import get_dates, group_by_date
+    if slc_files is not None:
+        burst_id_to_dates = _burst_id_mapping_from_files(slc_files)
+    elif burst_id_date_tuples is not None:
+        burst_id_to_dates = _burst_id_mapping_from_tuples(burst_id_date_tuples)
+    else:
+        raise ValueError("Must provide either slc_files or burst_id_date_tuples")
 
-    # Group the possible SLC files by their date and by their Burst ID
-    burst_id_to_files = group_by_burst(slc_file_list)
-    dates_to_file_tuples = group_by_date(slc_file_list)
-    assert all(len(tup) == 1 for tup in dates_to_file_tuples)
-    dates_to_files = {tup[0]: val for (tup, val) in dates_to_file_tuples.items()}
-
-    all_dates = list(dates_to_files.keys())
-    all_burst_ids = list(burst_id_to_files.keys())
-    burst_id_to_dates = {
-        date: [get_dates(f)[0] for f in file_list]
-        for (date, file_list) in burst_id_to_files.items()
-    }
+    all_dates = sorted(set(itertools.chain.from_iterable(burst_id_to_dates.values())))
+    all_burst_ids = list(burst_id_to_dates.keys())
 
     # Construct the incidence matrix of dates vs. burst IDs
     burst_id_to_date_incidence = {}
@@ -295,27 +297,22 @@ def get_missing_data_options(slc_file_list: list[Filename]) -> list[BurstSubsetO
         cur_incidences[idxs] = True
         burst_id_to_date_incidence[burst_id] = cur_incidences
 
-    B = np.array(
-        [tuple(incidences) for incidences in burst_id_to_date_incidence.values()]
-    )
+    B = np.array(list(burst_id_to_date_incidence.values()))
     # In this matrix,
     # - Each column corresponds to one of the possible dates
     # - Each row corresponds to one of the possible burst IDs
     unique_date_idxs, burst_id_counts = np.unique(B, axis=0, return_counts=True)
     out = []
 
-    for udi in unique_date_idxs:
-        required_num_dates = udi.sum()
+    for date_idxs in unique_date_idxs:
+        required_num_dates = date_idxs.sum()
         keep_burst_idxs = np.array(
-            [required_num_dates == burst_row[udi].sum() for burst_row in B]
+            [required_num_dates == burst_row[date_idxs].sum() for burst_row in B]
         )
-        cur_burst_total = B[keep_burst_idxs][:, udi].sum()
+        # B.shape: (num_burst_ids, num_dates)
+        cur_burst_total = B[keep_burst_idxs, :][:, date_idxs].sum()
 
         cur_burst_id_list = np.array(all_burst_ids)[keep_burst_idxs].tolist()
-        # TODO: If we want to include geometries in the output, we need to
-        #       read the files and get the geometries from them.
-        #       e.g. using the `get_cslc_polygon` function
-        # geoms = gdf_slcs.geometry[gdf_slcs.burst_id.isin(cur_burst_id_list)].unique()
         out.append(
             BurstSubsetOption(
                 num_dates=required_num_dates,
@@ -325,3 +322,38 @@ def get_missing_data_options(slc_file_list: list[Filename]) -> list[BurstSubsetO
             )
         )
     return sorted(out, key=lambda x: x.total_num_bursts, reverse=True)
+
+
+def _burst_id_mapping_from_tuples(
+    burst_id_date_tuples: Iterable[tuple[str, date]]
+) -> dict[str, list[date]]:
+    """Create a {burst_id -> [date,...]} (burst_id, date) tuples."""
+    # Don't exhaust the iterator for multiple groupings
+    burst_id_date_tuples = list(burst_id_date_tuples)
+
+    # Group the possible SLC files by their date and by their Burst ID
+    return {
+        burst_id: [date for burst_id, date in g]
+        for burst_id, g in itertools.groupby(burst_id_date_tuples, key=lambda x: x[0])
+    }
+
+
+def _burst_id_mapping_from_files(
+    slc_files: Iterable[Filename],
+) -> dict[str, list[date]]:
+    """Create a {burst_id -> [date,...]} mapping from filenames."""
+    from dolphin.utils import get_dates
+
+    # Don't exhaust the iterator for multiple groupings
+    slc_file_list = list(slc_files)
+
+    # Group the possible SLC files by their date and by their Burst ID
+    burst_id_to_files = group_by_burst(slc_file_list)
+
+    date_tuples = [get_dates(f) for f in slc_file_list]
+    assert all(len(tup) == 1 for tup in date_tuples)
+
+    return {
+        burst_id: [get_dates(f)[0] for f in file_list]
+        for (burst_id, file_list) in burst_id_to_files.items()
+    }
