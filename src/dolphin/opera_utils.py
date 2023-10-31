@@ -5,10 +5,12 @@ import json
 import re
 import subprocess
 import tempfile
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Pattern, Sequence, Union
 
 import h5py
+import numpy as np
 from shapely import geometry, ops, wkt
 
 from dolphin._log import get_log
@@ -231,3 +233,95 @@ def make_nodata_mask(
         cmd = f"gdal_rasterize -q -burn 1 {temp_vector_file} {out_file}"
         logger.info(cmd)
         subprocess.check_call(cmd, shell=True)
+
+
+@dataclass
+class BurstSubsetOption:
+    """Dataclass for a possible subset of SLC data."""
+
+    num_dates: int
+    """Number of dates used in this subset"""
+    num_burst_ids: int
+    """Number of burst IDs used in this subset."""
+    total_num_bursts: int
+    """Total number of bursts used in this subset."""
+    burst_id_list: list[str]
+    """List of burst IDs used in this subset."""
+
+
+def get_missing_data_options(slc_file_list: list[Filename]) -> list[BurstSubsetOption]:
+    """Get a list of possible data subsets for the given SLC files.
+
+    The default optimization criteria for choosing among these subsets is
+
+        maximize        total number of bursts used
+        subject to      dates used for each burst ID are all equal
+
+    The constraint that the same dates are used for each burst ID is to
+    avoid spatial discontinuities the estimated displacement/velocity,
+    which can occur if different dates are used for different burst IDs.
+
+    Parameters
+    ----------
+    slc_file_list : list[Filename]
+        list of OPERA CSLC filenames.
+
+    Returns
+    -------
+    list[BurstSubsetOption]
+        List of possible subsets of the given SLC data.
+        The options will be sorted by the total number of bursts used.
+    """
+    from dolphin.utils import get_dates, group_by_date
+
+    # Group the possible SLC files by their date and by their Burst ID
+    burst_id_to_files = group_by_burst(slc_file_list)
+    dates_to_file_tuples = group_by_date(slc_file_list)
+    assert all(len(tup) == 1 for tup in dates_to_file_tuples)
+    dates_to_files = {tup[0]: val for (tup, val) in dates_to_file_tuples.items()}
+
+    all_dates = list(dates_to_files.keys())
+    all_burst_ids = list(burst_id_to_files.keys())
+    burst_id_to_dates = {
+        date: [get_dates(f)[0] for f in file_list]
+        for (date, file_list) in burst_id_to_files.items()
+    }
+
+    # Construct the incidence matrix of dates vs. burst IDs
+    burst_id_to_date_incidence = {}
+    for burst_id, date_list in burst_id_to_dates.items():
+        cur_incidences = np.zeros(len(all_dates), dtype=bool)
+        idxs = np.searchsorted(all_dates, date_list)
+        cur_incidences[idxs] = True
+        burst_id_to_date_incidence[burst_id] = cur_incidences
+
+    B = np.array(
+        [tuple(incidences) for incidences in burst_id_to_date_incidence.values()]
+    )
+    # In this matrix,
+    # - Each column corresponds to one of the possible dates
+    # - Each row corresponds to one of the possible burst IDs
+    unique_date_idxs, burst_id_counts = np.unique(B, axis=0, return_counts=True)
+    out = []
+
+    for udi in unique_date_idxs:
+        required_num_dates = udi.sum()
+        keep_burst_idxs = np.array(
+            [required_num_dates == burst_row[udi].sum() for burst_row in B]
+        )
+        cur_burst_total = B[keep_burst_idxs][:, udi].sum()
+
+        cur_burst_id_list = np.array(all_burst_ids)[keep_burst_idxs].tolist()
+        # TODO: If we want to include geometries in the output, we need to
+        #       read the files and get the geometries from them.
+        #       e.g. using the `get_cslc_polygon` function
+        # geoms = gdf_slcs.geometry[gdf_slcs.burst_id.isin(cur_burst_id_list)].unique()
+        out.append(
+            BurstSubsetOption(
+                num_dates=required_num_dates,
+                num_burst_ids=len(cur_burst_id_list),
+                total_num_bursts=cur_burst_total,
+                burst_id_list=cur_burst_id_list,
+            )
+        )
+    return sorted(out, key=lambda x: x.total_num_bursts, reverse=True)
