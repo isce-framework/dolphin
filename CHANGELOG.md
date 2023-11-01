@@ -3,6 +3,8 @@
 **Changed**
 - removed `minimum_images` as an argument from `opera_utils.group_by_burst`. Checking for too-few images now must be done by the caller
 - `opera_utils.group_by_burst` now matches the official product name more robustly, but still returns the lowered version of the burst ID.
+- The `s1_disp` workflow has been renamed to `displacement`, since it is not specific to Sentinel-1.
+- The `Workflow` config class has been renamed to `DisplacementWorkflow` for the same reason.
 
 # [v0.5.1](https://github.com/isce-framework/dolphin/compare/v0.5.0...v0.5.1) - 2023-10-10
 

@@ -4,18 +4,18 @@ from pathlib import Path
 
 from dolphin._log import get_log
 
-from .config import Workflow
+from .config import DisplacementWorkflow
 
 logger = get_log(__name__)
 
 
 def _create_burst_cfg(
-    cfg: Workflow,
+    cfg: DisplacementWorkflow,
     burst_id: str,
     grouped_slc_files: dict[str, list[Path]],
     grouped_amp_mean_files: dict[str, list[Path]],
     grouped_amp_dispersion_files: dict[str, list[Path]],
-) -> Workflow:
+) -> DisplacementWorkflow:
     cfg_temp_dict = cfg.model_dump(exclude={"cslc_file_list"})
 
     # Just update the inputs and the work directory
@@ -24,7 +24,7 @@ def _create_burst_cfg(
     cfg_temp_dict["cslc_file_list"] = grouped_slc_files[burst_id]
     cfg_temp_dict["amplitude_mean_files"] = grouped_amp_mean_files[burst_id]
     cfg_temp_dict["amplitude_dispersion_files"] = grouped_amp_dispersion_files[burst_id]
-    return Workflow(**cfg_temp_dict)
+    return DisplacementWorkflow(**cfg_temp_dict)
 
 
 def _remove_dir_if_empty(d: Path) -> None:

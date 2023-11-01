@@ -24,7 +24,7 @@ from ._enums import InterferogramNetworkType, ShpMethod, UnwrapMethod
 from ._yaml_model import YamlModel
 
 __all__ = [
-    "Workflow",
+    "DisplacementWorkflow",
 ]
 
 logger = get_log(__name__)
@@ -341,7 +341,7 @@ class CorrectionOptions(BaseModel, extra="forbid"):
         return v if v is not None else []
 
 
-class Workflow(YamlModel):
+class DisplacementWorkflow(YamlModel):
     """Configuration for the workflow."""
 
     # Paths to input/output files
@@ -451,7 +451,7 @@ class Workflow(YamlModel):
         return list(v)
 
     @model_validator(mode="after")
-    def _check_slc_files_exist(self) -> "Workflow":
+    def _check_slc_files_exist(self) -> "DisplacementWorkflow":
         file_list = self.cslc_file_list
         if not file_list:
             raise ValueError("Must specify list of input SLC files.")

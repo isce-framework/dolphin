@@ -90,7 +90,7 @@ def opera_slc_files_official(tmp_path) -> list[Path]:
 
 def test_s1_disp_run_single(opera_slc_files: list[Path], tmpdir):
     with tmpdir.as_cwd():
-        cfg = config.Workflow(
+        cfg = config.DisplacementWorkflow(
             cslc_file_list=opera_slc_files,
             input_options=dict(subdataset="/data/VV"),
             interferogram_network=dict(
@@ -109,7 +109,7 @@ def test_s1_disp_run_single(opera_slc_files: list[Path], tmpdir):
 
 def test_s1_disp_run_single_official(opera_slc_files_official: list[Path], tmpdir):
     with tmpdir.as_cwd():
-        cfg = config.Workflow(
+        cfg = config.DisplacementWorkflow(
             cslc_file_list=opera_slc_files_official,
             input_options=dict(subdataset="/data/VV"),
             interferogram_network=dict(
@@ -128,7 +128,7 @@ def test_s1_disp_run_single_official(opera_slc_files_official: list[Path], tmpdi
 
 def test_s1_disp_run_stack(opera_slc_files: list[Path], tmpdir):
     with tmpdir.as_cwd():
-        cfg = config.Workflow(
+        cfg = config.DisplacementWorkflow(
             cslc_file_list=opera_slc_files,
             input_options=dict(subdataset="/data/VV"),
             phase_linking=dict(

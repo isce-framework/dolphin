@@ -7,7 +7,12 @@ from multiprocessing import cpu_count
 from pathlib import Path
 from typing import Optional, Union
 
-from .config import InterferogramNetworkType, ShpMethod, UnwrapMethod, Workflow
+from .config import (
+    DisplacementWorkflow,
+    InterferogramNetworkType,
+    ShpMethod,
+    UnwrapMethod,
+)
 
 
 def create_config(
@@ -53,7 +58,7 @@ def create_config(
     else:
         interferogram_network = {}  # Use default
 
-    cfg = Workflow(
+    cfg = DisplacementWorkflow(
         cslc_file_list=slc_files,
         work_directory=work_directory,
         keep_paths_relative=keep_paths_relative,

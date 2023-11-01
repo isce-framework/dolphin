@@ -8,7 +8,7 @@ from dolphin import io, stitching, unwrap
 from dolphin._log import get_log, log_runtime
 from dolphin.interferogram import estimate_correlation_from_phase
 
-from .config import Workflow
+from .config import DisplacementWorkflow
 
 
 @log_runtime
@@ -16,7 +16,7 @@ def run(
     ifg_file_list: Sequence[Path],
     tcorr_file_list: Sequence[Path],
     ps_file_list: Sequence[Path],
-    cfg: Workflow,
+    cfg: DisplacementWorkflow,
     debug: bool = False,
     unwrap_jobs: int = 1,
 ) -> tuple[list[Path], list[Path], list[Path], Path, Path]:
@@ -31,8 +31,9 @@ def run(
         Sequence of paths to the burst-wise temporal coherence files.
     ps_file_list : Sequence[Path]
         Sequence of paths to the (looked) burst-wise ps mask files.
-    cfg : Workflow
-        [`Workflow`][dolphin.workflows.config.Workflow] object with workflow parameters
+    cfg : DisplacementWorkflow
+        [`DisplacementWorkflow`][dolphin.workflows.config.DisplacementWorkflow] object
+        for controlling the workflow.
     debug : bool, optional
         Enable debug logging, by default False.
     unwrap_jobs : int, default = 1
