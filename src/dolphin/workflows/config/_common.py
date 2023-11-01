@@ -1,16 +1,27 @@
 from __future__ import annotations
 
+from datetime import datetime
+from glob import glob
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-from pydantic import BaseModel, Field, PrivateAttr, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    PrivateAttr,
+    field_validator,
+    model_validator,
+)
 
+from dolphin import __version__ as _dolphin_version
 from dolphin._log import get_log
 from dolphin._types import Bbox
 from dolphin.io import DEFAULT_HDF5_OPTIONS, DEFAULT_TIFF_OPTIONS
 from dolphin.utils import get_cpu_count
 
 from ._enums import InterferogramNetworkType, ShpMethod, UnwrapMethod
+from ._yaml_model import YamlModel
 
 logger = get_log(__name__)
 
@@ -25,6 +36,14 @@ __all__ = [
     "InterferogramNetwork",
     "UnwrapOptions",
 ]
+
+
+def create_dir_tree(directory_list: Sequence[Path], debug: bool = False):
+    """Create the directory tree for a workflow."""
+    log = get_log(debug=debug)
+    for d in directory_list:
+        log.debug(f"Creating directory: {d}")
+        d.mkdir(parents=True, exist_ok=True)
 
 
 class PsOptions(BaseModel, extra="forbid"):
@@ -301,9 +320,89 @@ class OutputOptions(BaseModel, extra="forbid"):
         return strides
 
 
-def create_dir_tree(directory_list: Sequence[Path], debug: bool = False):
-    """Create the directory tree for a workflow."""
-    log = get_log(debug=debug)
-    for d in directory_list:
-        log.debug(f"Creating directory: {d}")
-        d.mkdir(parents=True, exist_ok=True)
+class WorkflowBase(YamlModel):
+    """Base of multiple workflow configuration models."""
+
+    # Paths to input/output files
+    input_options: InputOptions = Field(default_factory=InputOptions)
+
+    mask_file: Optional[Path] = Field(
+        None,
+        description=(
+            "Mask file used to ignore low correlation/bad data (e.g water mask)."
+            " Convention is 0 for no data/invalid, and 1 for good data. Dtype must be"
+            " uint8."
+        ),
+    )
+    work_directory: Path = Field(
+        Path("."),
+        description="Name of sub-directory to use for writing output files",
+        validate_default=True,
+    )
+    keep_paths_relative: bool = Field(
+        False,
+        description=(
+            "Don't resolve filepaths that are given as relative to be absolute."
+        ),
+    )
+
+    # General workflow metadata
+    worker_settings: WorkerSettings = Field(default_factory=WorkerSettings)
+    log_file: Optional[Path] = Field(
+        default=None,
+        description="Path to output log file (in addition to logging to `stderr`).",
+    )
+    creation_time_utc: datetime = Field(
+        default_factory=datetime.utcnow, description="Time the config file was created"
+    )
+
+    model_config = ConfigDict(extra="allow")
+    _dolphin_version: str = PrivateAttr(_dolphin_version)
+    # internal helpers
+    # Stores the list of directories to be created by the workflow
+    _directory_list: List[Path] = PrivateAttr(default_factory=list)
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        """After validation, set up properties for use during workflow run."""
+        super().__init__(*args, **kwargs)
+
+        # Ensure outputs from workflow steps are within work directory.
+        if not self.keep_paths_relative:
+            # Save all directories as absolute paths
+            self.work_directory = self.work_directory.resolve(strict=False)
+
+
+def _read_file_list_or_glob(cls, value):
+    """Check if the input file list is a glob pattern or a text file.
+
+    If it's a text file, read the lines and return a list of Path objects.
+    If it's a string representing a glob pattern, return a list of Path objects.
+
+    Parameters
+    ----------
+    cls
+        pydantic model class
+    value : str | Path | list[str] | list[Path]
+        Value passed to pydantic model: Input file list.
+    """
+    if value is None:
+        return []
+    if isinstance(value, (str, Path)):
+        v_path = Path(value)
+
+        # Check if they've passed a glob pattern
+        if len(list(glob(str(value)))) > 1:
+            value = glob(str(value))
+        # Check if it's a newline-delimited list of input files
+        elif v_path.exists() and v_path.is_file():
+            filenames = [Path(f) for f in v_path.read_text().splitlines()]
+
+            # If given as relative paths, make them relative to the text file
+            parent = v_path.parent
+            return [parent / f if not f.is_absolute() else f for f in filenames]
+        else:
+            raise ValueError(
+                f"Input file list {v_path} does not exist or is not a file."
+            )
+
+    return list(value)

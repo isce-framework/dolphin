@@ -1,33 +1,23 @@
 from __future__ import annotations
 
-from datetime import datetime
-from glob import glob
 from pathlib import Path
 from typing import Any, List, Optional
 
-from pydantic import (
-    BaseModel,
-    ConfigDict,
-    Field,
-    PrivateAttr,
-    field_validator,
-    model_validator,
-)
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from dolphin import __version__ as _dolphin_version
 from dolphin._log import get_log
 from dolphin.utils import get_dates, sort_files_by_date
 
 from ._common import (
     InputOptions,
     InterferogramNetwork,
-    OutputOptions,
     PhaseLinkingOptions,
     PsOptions,
     UnwrapOptions,
-    WorkerSettings,
+    WorkflowBase,
+    _read_file_list_or_glob,
+    create_dir_tree,
 )
-from ._yaml_model import YamlModel
 
 __all__ = [
     "DisplacementWorkflow",
@@ -73,7 +63,7 @@ class CorrectionOptions(BaseModel, extra="forbid"):
         return v if v is not None else []
 
 
-class DisplacementWorkflow(YamlModel):
+class DisplacementWorkflow(WorkflowBase):
     """Configuration for the workflow."""
 
     # Paths to input/output files
@@ -83,25 +73,6 @@ class DisplacementWorkflow(YamlModel):
         description=(
             "list of CSLC files, or newline-delimited file "
             "containing list of CSLC files."
-        ),
-    )
-    mask_file: Optional[Path] = Field(
-        None,
-        description=(
-            "Byte mask file used to ignore low correlation/bad data (e.g water mask)."
-            " Convention is 0 for no data/invalid, and 1 for good data. Dtype must be"
-            " uint8."
-        ),
-    )
-    work_directory: Path = Field(
-        Path("."),
-        description="Name of sub-directory to use for writing output files",
-        validate_default=True,
-    )
-    keep_paths_relative: bool = Field(
-        False,
-        description=(
-            "Don't resolve filepaths that are given as relative to be absolute."
         ),
     )
 
@@ -128,15 +99,7 @@ class DisplacementWorkflow(YamlModel):
     )
     unwrap_options: UnwrapOptions = Field(default_factory=UnwrapOptions)
     correction_options: CorrectionOptions = Field(default_factory=CorrectionOptions)
-    output_options: OutputOptions = Field(default_factory=OutputOptions)
 
-    # General workflow metadata
-    worker_settings: WorkerSettings = Field(default_factory=WorkerSettings)
-    log_file: Optional[Path] = Field(
-        # TODO: Probably more work to make sure log_file is implemented okay
-        default=None,
-        description="Path to output log file (in addition to logging to `stderr`).",
-    )
     benchmark_log_dir: Optional[Path] = Field(
         default=None,
         description=(
@@ -144,43 +107,18 @@ class DisplacementWorkflow(YamlModel):
             " skip recording"
         ),
     )
-    creation_time_utc: datetime = Field(
-        default_factory=datetime.utcnow, description="Time the config file was created"
-    )
-    _dolphin_version: str = PrivateAttr(_dolphin_version)
 
     # internal helpers
     # Stores the list of directories to be created by the workflow
-    _directory_list: List[Path] = PrivateAttr(default_factory=list)
     model_config = ConfigDict(
         extra="allow", json_schema_extra={"required": ["cslc_file_list"]}
     )
 
     # validators
-    @field_validator("cslc_file_list", mode="before")
-    @classmethod
-    def _check_input_file_list(cls, v):
-        if v is None:
-            return []
-        if isinstance(v, (str, Path)):
-            v_path = Path(v)
-
-            # Check if they've passed a glob pattern
-            if len(list(glob(str(v)))) > 1:
-                v = glob(str(v))
-            # Check if it's a newline-delimited list of input files
-            elif v_path.exists() and v_path.is_file():
-                filenames = [Path(f) for f in v_path.read_text().splitlines()]
-
-                # If given as relative paths, make them relative to the text file
-                parent = v_path.parent
-                return [parent / f if not f.is_absolute() else f for f in filenames]
-            else:
-                raise ValueError(
-                    f"Input file list {v_path} does not exist or is not a file."
-                )
-
-        return list(v)
+    # reuse the _read_file_list_or_glob
+    _check_cslc_file_glob = field_validator("cslc_file_list", mode="before")(
+        _read_file_list_or_glob
+    )
 
     @model_validator(mode="after")
     def _check_slc_files_exist(self) -> "DisplacementWorkflow":
@@ -213,14 +151,16 @@ class DisplacementWorkflow(YamlModel):
         ]
         return self
 
+    def create_dir_tree(self, debug: bool = False) -> None:
+        """Create the directory tree for the workflow."""
+        create_dir_tree(self._directory_list, debug=debug)
+
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         """After validation, set up properties for use during workflow run."""
         super().__init__(*args, **kwargs)
 
         # Ensure outputs from workflow steps are within work directory.
         if not self.keep_paths_relative:
-            # Save all directories as absolute paths
-            self.work_directory = self.work_directory.resolve(strict=False)
             # Resolve all CSLC paths:
             self.cslc_file_list = [p.resolve(strict=False) for p in self.cslc_file_list]
 
