@@ -337,7 +337,7 @@ def test_config_create_dir_tree(tmpdir, slc_file_list_nc):
         c = config.DisplacementWorkflow(
             cslc_file_list=[fname0], input_options={"subdataset": "data"}
         )
-        c.create_dir_tree()
+        config.create_dir_tree(c._directory_list)
         assert c.ps_options._directory.exists()
         assert c.interferogram_network._directory.exists()
         assert c.phase_linking._directory.exists()

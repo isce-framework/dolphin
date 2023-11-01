@@ -60,7 +60,7 @@ def run(
 
     # TODO: this should be made in the config
     stitched_ifg_dir = cfg.interferogram_network._directory / "stitched"
-    stitched_ifg_dir.mkdir(exist_ok=True)
+    stitched_ifg_dir.mkdir(exist_ok=True, parents=True)
 
     # Also preps for snaphu, which needs binary format with no nans
     logger.info("Stitching interferograms by date.")
@@ -137,7 +137,7 @@ def run(
 
     # Make a scratch directory for unwrapping
     unwrap_scratchdir = cfg.unwrap_options._directory / "scratch"
-    unwrap_scratchdir.mkdir(exist_ok=True)
+    unwrap_scratchdir.mkdir(exist_ok=True, parents=True)
 
     unwrapped_paths, conncomp_paths = unwrap.run(
         ifg_filenames=ifg_filenames,

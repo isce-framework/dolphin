@@ -8,7 +8,7 @@ import pytest
 from make_netcdf import create_test_nc
 
 from dolphin.opera_utils import OPERA_DATASET_NAME
-from dolphin.workflows import config, s1_disp
+from dolphin.workflows import config, displacement
 
 # 'Grid size 49 will likely result in GPU under-utilization due to low occupancy.'
 pytestmark = pytest.mark.filterwarnings(
@@ -25,7 +25,7 @@ def opera_slc_files(tmp_path) -> list[Path]:
         np.complex64
     )
 
-    d = tmp_path / "s1_disp"
+    d = tmp_path / "input_slcs"
     d.mkdir()
     file_list = []
 
@@ -104,7 +104,7 @@ def test_s1_disp_run_single(opera_slc_files: list[Path], tmpdir):
                 gpu_enabled=(os.environ.get("NUMBA_DISABLE_JIT") != "1")
             ),
         )
-        s1_disp.run(cfg)
+        displacement.run(cfg)
 
 
 def test_s1_disp_run_single_official(opera_slc_files_official: list[Path], tmpdir):
@@ -123,7 +123,7 @@ def test_s1_disp_run_single_official(opera_slc_files_official: list[Path], tmpdi
                 gpu_enabled=(os.environ.get("NUMBA_DISABLE_JIT") != "1")
             ),
         )
-        s1_disp.run(cfg)
+        displacement.run(cfg)
 
 
 def test_s1_disp_run_stack(opera_slc_files: list[Path], tmpdir):
@@ -140,4 +140,4 @@ def test_s1_disp_run_stack(opera_slc_files: list[Path], tmpdir):
             benchmark_log_dir=Path("."),
             log_file=Path(".") / "dolphin.log",
         )
-        s1_disp.run(cfg)
+        displacement.run(cfg)

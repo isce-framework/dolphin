@@ -15,7 +15,7 @@ from dolphin.utils import get_max_memory_usage, set_num_threads
 
 from . import stitch_and_unwrap, wrapped_phase
 from ._utils import _create_burst_cfg, _remove_dir_if_empty
-from .config import DisplacementWorkflow
+from .config import DisplacementWorkflow, create_dir_tree
 
 
 @log_runtime
@@ -36,7 +36,6 @@ def run(
     # Set the logging level for all `dolphin.` modules
     logger = get_log(name="dolphin", debug=debug, filename=cfg.log_file)
     logger.debug(pformat(cfg.model_dump()))
-    cfg.create_dir_tree(debug=debug)
 
     set_num_threads(cfg.worker_settings.threads_per_worker)
 
@@ -77,13 +76,14 @@ def run(
             for burst in grouped_slc_files
         ]
         for _, burst_cfg in wrapped_phase_cfgs:
-            burst_cfg.create_dir_tree()
+            create_dir_tree(burst_cfg._directory_list)
         # Remove the mid-level directories which will be empty due to re-grouping
         _remove_dir_if_empty(cfg.phase_linking._directory)
         _remove_dir_if_empty(cfg.ps_options._directory)
 
     else:
         # grab the only key (either a burst, or "") and use that
+        create_dir_tree(cfg._directory_list)
         b = list(grouped_slc_files.keys())[0]
         wrapped_phase_cfgs = [(b, cfg)]
 

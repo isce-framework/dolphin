@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from glob import glob
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from pydantic import (
     BaseModel,
@@ -523,9 +523,10 @@ class DisplacementWorkflow(YamlModel):
         ps_opts._amp_mean_file = work_dir / ps_opts._amp_mean_file
         ps_opts._output_file = work_dir / ps_opts._output_file
 
-    def create_dir_tree(self, debug=False):
-        """Create the directory tree for the workflow."""
-        log = get_log(debug=debug)
-        for d in self._directory_list:
-            log.debug(f"Creating directory: {d}")
-            d.mkdir(parents=True, exist_ok=True)
+
+def create_dir_tree(directory_list: Sequence[Path], debug: bool = False):
+    """Create the directory tree for a workflow."""
+    log = get_log(debug=debug)
+    for d in directory_list:
+        log.debug(f"Creating directory: {d}")
+        d.mkdir(parents=True, exist_ok=True)
