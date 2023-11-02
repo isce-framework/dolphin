@@ -371,6 +371,10 @@ class WorkflowBase(YamlModel):
             # Save all directories as absolute paths
             self.work_directory = self.work_directory.resolve(strict=False)
 
+    def create_dir_tree(self, debug: bool = False) -> None:
+        """Create the directory tree for the workflow."""
+        create_dir_tree(self._directory_list, debug=debug)
+
 
 def _read_file_list_or_glob(cls, value):
     """Check if the input file list is a glob pattern or a text file.

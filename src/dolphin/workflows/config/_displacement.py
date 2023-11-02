@@ -11,12 +11,12 @@ from dolphin.utils import get_dates, sort_files_by_date
 from ._common import (
     InputOptions,
     InterferogramNetwork,
+    OutputOptions,
     PhaseLinkingOptions,
     PsOptions,
     UnwrapOptions,
     WorkflowBase,
     _read_file_list_or_glob,
-    create_dir_tree,
 )
 
 __all__ = [
@@ -75,6 +75,7 @@ class DisplacementWorkflow(WorkflowBase):
             "containing list of CSLC files."
         ),
     )
+    output_options: OutputOptions = Field(default_factory=OutputOptions)
 
     # Options for each step in the workflow
     ps_options: PsOptions = Field(default_factory=PsOptions)
@@ -150,10 +151,6 @@ class DisplacementWorkflow(WorkflowBase):
             Path(f) for f in sort_files_by_date(file_list, file_date_fmt=date_fmt)[0]
         ]
         return self
-
-    def create_dir_tree(self, debug: bool = False) -> None:
-        """Create the directory tree for the workflow."""
-        create_dir_tree(self._directory_list, debug=debug)
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         """After validation, set up properties for use during workflow run."""
