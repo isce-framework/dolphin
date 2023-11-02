@@ -292,7 +292,7 @@ def test_input_cslc_empty():
         config.DisplacementWorkflow(cslc_file_list=[])
 
 
-def test_config_defaults(dir_with_1_slc):
+def test_config_displacement_workflow_defaults(dir_with_1_slc):
     c = config.DisplacementWorkflow(
         cslc_file_list=dir_with_1_slc / "slclist.txt",
         input_options={"subdataset": "data"},
@@ -401,3 +401,16 @@ def test_config_print_yaml_schema(tmp_path, dir_with_1_slc):
         input_options={"subdataset": "data"},
     )
     c.print_yaml_schema(outfile)
+
+
+def test_config_ps_workflow_defaults(dir_with_1_slc):
+    c = config.PsWorkflow(
+        cslc_file_list=dir_with_1_slc / "slclist.txt",
+        input_options={"subdataset": "data"},
+    )
+
+    assert c.input_options == config.InputOptions(subdataset="data")
+    # Need to compare `model_fields` because the new instance of `PsOptions`
+    assert c.output_options == config.OutputOptions()
+    # has different private directories
+    assert c.ps_options.model_fields == config.PsOptions().model_fields
