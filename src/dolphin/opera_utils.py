@@ -70,7 +70,7 @@ def get_burst_id(
 def group_by_burst(
     file_list: Iterable[Filename],
     burst_id_fmt: Union[str, Pattern[str]] = OPERA_BURST_RE,
-) -> dict[str, list[Path]]:
+) -> dict[str, list[Filename]]:
     """Group Sentinel CSLC files by burst.
 
     Parameters
@@ -85,17 +85,17 @@ def group_by_burst(
     -------
     dict
         key is the burst id of the SLC acquisition
-        Value is a list of Paths on that burst:
+        Value is a list of inputs which correspond to that burst:
         {
-            't087_185678_iw2': [Path(...), Path(...),],
-            't087_185678_iw3': [Path(...),... ],
+            't087_185678_iw2': ['inputs/t087_185678_iw2_20200101.h5',...,],
+            't087_185678_iw3': ['inputs/t087_185678_iw3_20200101.h5',...,],
         }
     """
 
-    def sort_by_burst_id(file_list: list[Filename]) -> list[Path]:
+    def sort_by_burst_id(file_list: list[Filename]) -> list[Filename]:
         """Sort files by burst id."""
         file_burst_tuples = sorted(
-            [(Path(f), get_burst_id(f, burst_id_fmt)) for f in file_list],
+            [(f, get_burst_id(f, burst_id_fmt)) for f in file_list],
             # use the date or dates as the key
             key=lambda f_b_tuple: f_b_tuple[1],  # type: ignore
         )
