@@ -1,5 +1,8 @@
 # [Unreleased](https://github.com/isce-framework/dolphin/compare/v0.5.1...main)
 
+**Added**
+- `opera_utils.get_missing_data_options` to parse the full list of SLCs and return possible subsets which have the same dates used for all Burst IDs
+
 **Changed**
 - removed `minimum_images` as an argument from `opera_utils.group_by_burst`. Checking for too-few images now must be done by the caller
 - `opera_utils.group_by_burst` now matches the official product name more robustly, but still returns the lowered version of the burst ID.
