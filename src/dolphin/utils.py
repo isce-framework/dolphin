@@ -711,6 +711,6 @@ def get_cpu_count():
         cfs_period_us = get_cpu_period()
         if cfs_quota_us > 0 and cfs_period_us > 0:
             return int(math.ceil(cfs_quota_us / cfs_period_us))
-    except:
+    except Exception:
         pass
     return cpu_count()

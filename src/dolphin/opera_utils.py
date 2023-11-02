@@ -15,7 +15,7 @@ import numpy as np
 from shapely import geometry, ops, wkt
 
 from dolphin._log import get_log
-from dolphin._types import Filename
+from dolphin._types import Filename, FilenameT
 
 logger = get_log(__name__)
 
@@ -68,9 +68,9 @@ def get_burst_id(
 
 
 def group_by_burst(
-    file_list: Iterable[Filename],
+    file_list: Iterable[FilenameT],
     burst_id_fmt: Union[str, Pattern[str]] = OPERA_BURST_RE,
-) -> dict[str, list[Filename]]:
+) -> dict[str, list[FilenameT]]:
     """Group Sentinel CSLC files by burst.
 
     Parameters
@@ -92,7 +92,7 @@ def group_by_burst(
         }
     """
 
-    def sort_by_burst_id(file_list: list[Filename]) -> list[Filename]:
+    def sort_by_burst_id(file_list: list[FilenameT]) -> list[FilenameT]:
         """Sort files by burst id."""
         file_burst_tuples = sorted(
             [(f, get_burst_id(f, burst_id_fmt)) for f in file_list],
@@ -345,7 +345,7 @@ def _burst_id_mapping_from_files(
     from dolphin.utils import get_dates
 
     # Don't exhaust the iterator for multiple groupings
-    slc_file_list = list(slc_files)
+    slc_file_list = list(map(str, slc_files))
 
     # Group the possible SLC files by their date and by their Burst ID
     burst_id_to_files = group_by_burst(slc_file_list)

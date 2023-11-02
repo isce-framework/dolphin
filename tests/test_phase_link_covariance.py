@@ -54,7 +54,9 @@ def test_coh_mat_single(slcs, expected_cov, looks=(5, 5)):
     num_slc, rows, cols = slcs.shape
 
     # Check the single pixel function
-    expected_looked_size = tuple(floor(s / l) for s, l in zip((rows, cols), looks))
+    expected_looked_size = tuple(
+        floor(size / look) for size, look in zip((rows, cols), looks)
+    )
     assert expected_cov.shape == (expected_looked_size + (num_slc, num_slc))
 
     r_looks, c_looks = looks
