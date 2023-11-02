@@ -2,12 +2,19 @@
 
 **Added**
 - `opera_utils.get_missing_data_options` to parse the full list of SLCs and return possible subsets which have the same dates used for all Burst IDs
+- `PsWorkflow` class for running just the PS estimation workflow
 
 **Changed**
 - removed `minimum_images` as an argument from `opera_utils.group_by_burst`. Checking for too-few images now must be done by the caller
 - `opera_utils.group_by_burst` now matches the official product name more robustly, but still returns the lowered version of the burst ID.
 - The `s1_disp` workflow has been renamed to `displacement`, since it is not specific to Sentinel-1.
-- The `Workflow` config class has been renamed to `DisplacementWorkflow` for the same reason.
+- The configuration was refactored to enable smaller workflow
+  - The `Workflow` config class has been renamed to `DisplacementWorkflow`.
+  - A `PsWorkflow` config class has been added for the PS estimation workflow.
+  - A `WorkflowBase` encompasses some of the common configuration options.
+
+**Maintenance**
+- `ruff` has replaced `isort`/`black`/`flake8` in the pre-commit checks
 
 # [v0.5.1](https://github.com/isce-framework/dolphin/compare/v0.5.0...v0.5.1) - 2023-10-10
 

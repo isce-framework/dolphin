@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from glob import glob
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from pydantic import (
     BaseModel,
@@ -26,7 +26,6 @@ from ._yaml_model import YamlModel
 logger = get_log(__name__)
 
 __all__ = [
-    "create_dir_tree",
     "HalfWindow",
     "InputOptions",
     "OutputOptions",
@@ -36,14 +35,6 @@ __all__ = [
     "InterferogramNetwork",
     "UnwrapOptions",
 ]
-
-
-def create_dir_tree(directory_list: Sequence[Path], debug: bool = False):
-    """Create the directory tree for a workflow."""
-    log = get_log(debug=debug)
-    for d in directory_list:
-        log.debug(f"Creating directory: {d}")
-        d.mkdir(parents=True, exist_ok=True)
 
 
 class PsOptions(BaseModel, extra="forbid"):
@@ -373,7 +364,10 @@ class WorkflowBase(YamlModel):
 
     def create_dir_tree(self, debug: bool = False) -> None:
         """Create the directory tree for the workflow."""
-        create_dir_tree(self._directory_list, debug=debug)
+        log = get_log(debug=debug)
+        for d in self._directory_list:
+            log.debug(f"Creating directory: {d}")
+            d.mkdir(parents=True, exist_ok=True)
 
 
 def _read_file_list_or_glob(cls, value):

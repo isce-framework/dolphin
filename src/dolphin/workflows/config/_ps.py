@@ -21,21 +21,6 @@ __all__ = [
 
 logger = get_log(__name__)
 
-# def create_ps(
-#     *,
-#     slc_vrt_file: Filename,
-#     output_file: Filename,
-#     output_amp_mean_file: Filename,
-#     output_amp_dispersion_file: Filename,
-#     amp_dispersion_threshold: float = 0.25,
-#     existing_amp_mean_file: Optional[Filename] = None,
-#     existing_amp_dispersion_file: Optional[Filename] = None,
-#     nodata_mask: Optional[np.ndarray] = None,
-#     update_existing: bool = False,
-#     block_shape: tuple[int, int] = (512, 512),
-#     show_progress: bool = True,
-# ):
-
 
 class PsWorkflow(WorkflowBase):
     """Configuration for the workflow."""
