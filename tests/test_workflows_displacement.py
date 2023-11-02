@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 
 import pytest
+
 from dolphin.workflows import config, displacement
 
 # 'Grid size 49 will likely result in GPU under-utilization due to low occupancy.'
@@ -12,7 +13,7 @@ pytestmark = pytest.mark.filterwarnings(
 )
 
 
-def test_s1_disp_run_single(opera_slc_files: list[Path], tmpdir):
+def test_displacement_run_single(opera_slc_files: list[Path], tmpdir):
     with tmpdir.as_cwd():
         cfg = config.DisplacementWorkflow(
             cslc_file_list=opera_slc_files,
@@ -31,7 +32,7 @@ def test_s1_disp_run_single(opera_slc_files: list[Path], tmpdir):
         displacement.run(cfg)
 
 
-def test_s1_disp_run_single_official(opera_slc_files_official: list[Path], tmpdir):
+def test_displacement_run_single_official(opera_slc_files_official: list[Path], tmpdir):
     with tmpdir.as_cwd():
         cfg = config.DisplacementWorkflow(
             cslc_file_list=opera_slc_files_official,
@@ -50,7 +51,7 @@ def test_s1_disp_run_single_official(opera_slc_files_official: list[Path], tmpdi
         displacement.run(cfg)
 
 
-def test_s1_disp_run_stack(opera_slc_files: list[Path], tmpdir):
+def test_displacement_run_stack(opera_slc_files: list[Path], tmpdir):
     with tmpdir.as_cwd():
         cfg = config.DisplacementWorkflow(
             cslc_file_list=opera_slc_files,

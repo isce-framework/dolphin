@@ -45,6 +45,9 @@ write_to = "src/dolphin/_version.py"
 # https://github.com/pypa/setuptools_scm#version-number-construction
 version_scheme = "no-guess-dev" # Will not guess the next version
 
+[tool.ruff]
+src = ["src"]
+
 [tool.ruff.lint]
 # Enable the isort rules.
 extend-select = ["I"]
