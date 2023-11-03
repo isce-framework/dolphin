@@ -390,14 +390,14 @@ def _read_file_list_or_glob(cls, value):
     if (
         isinstance(value, (list, tuple))
         and (len(value) == 1)
-        and glob.has_magic(value[0])
+        and glob.has_magic(str(value[0]))
     ):
         value = glob.glob(str(value[0]))
     elif isinstance(value, (str, Path)):
         v_path = Path(value)
 
         # Check if it's a newline-delimited list of input files
-        if glob.has_magic(value):
+        if glob.has_magic(str(value)):
             value = glob.glob(str(value))
         elif v_path.exists() and v_path.is_file():
             filenames = [Path(f) for f in v_path.read_text().splitlines()]
