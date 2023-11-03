@@ -16,6 +16,9 @@ from ._common import remove_unconnected
 logger = get_log(__name__)
 
 
+_get_slices = numba.njit(_get_slices)
+
+
 def estimate_neighbors(
     amp_stack: ArrayLike,
     halfwin_rowcol: tuple[int, int],

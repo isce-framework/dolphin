@@ -19,6 +19,7 @@ from dolphin._types import Filename
 from dolphin.utils import _get_slices
 
 # CPU version of the covariance matrix computation
+_get_slices = njit(_get_slices)
 
 
 def estimate_stack_covariance_cpu(

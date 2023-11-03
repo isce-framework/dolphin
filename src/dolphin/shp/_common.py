@@ -11,6 +11,8 @@ from numpy.typing import ArrayLike
 
 from dolphin.utils import _get_slices
 
+_get_slices = numba.njit(_get_slices)
+
 
 @numba.njit(nogil=True)
 def remove_unconnected(data: ArrayLike, inplace: bool = True) -> np.ndarray:

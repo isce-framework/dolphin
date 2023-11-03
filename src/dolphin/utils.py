@@ -12,7 +12,6 @@ from pathlib import Path
 from typing import Iterable, Optional, Union
 
 import numpy as np
-from numba import njit
 from numpy.typing import ArrayLike, DTypeLike
 from osgeo import gdal, gdal_array, gdalconst
 from rich.progress import MofNCompleteColumn, Progress, SpinnerColumn, TimeElapsedColumn
@@ -295,7 +294,6 @@ def group_by_date(
     return grouped_images
 
 
-@njit
 def _get_slices(half_r: int, half_c: int, r: int, c: int, rows: int, cols: int):
     """Get the slices for the given pixel and half window size."""
     # Clamp min indexes to 0

@@ -8,7 +8,7 @@ import dolphin.ps
 from dolphin import __version__, opera_utils, stack
 from dolphin._log import get_log, log_runtime
 from dolphin.opera_utils import group_by_burst
-from dolphin.utils import get_max_memory_usage, set_num_threads
+from dolphin.utils import get_max_memory_usage
 
 from .config import PsWorkflow
 
@@ -44,8 +44,6 @@ def run(
     if all(f.exists() for f in output_file_list):
         logger.info(f"Skipping making existing PS files {output_file_list}")
         return output_file_list
-
-    set_num_threads(cfg.worker_settings.threads_per_worker)
 
     # Check the number of bursts that were passed
     try:
