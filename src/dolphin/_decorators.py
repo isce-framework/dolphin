@@ -2,6 +2,7 @@ import functools
 import inspect
 import shutil
 import tempfile
+from inspect import Parameter
 from pathlib import Path
 from typing import Any, Callable, Optional
 
@@ -62,10 +63,28 @@ def atomic_output(
             # Extract the output file path
             if output_arg in kwargs:
                 final_out_name = kwargs[output_arg]
+                # Track where we will slot in the new tempfile name (kwargs here)
+                replace_tuple = (kwargs, output_arg)
             else:
+                # Check that it was provided as positional, in `args`
                 sig = inspect.signature(func)
-                if output_arg in sig.parameters:
-                    final_out_name = sig.parameters[output_arg].default
+                for idx, param in enumerate(sig.parameters.values()):
+                    if output_arg == param.name:
+                        try:
+                            # If the gave it in the args, use that
+                            final_out_name = args[idx]
+                            # Track where we will slot in the new tempfile name (args here)
+                            # Need to make `args` into a list to we can mutate
+                            replace_tuple = (list(args), idx)
+                        except IndexError:
+                            # Otherwise, nothing was given, so use the default
+                            final_out_name = param.default
+                            if param.kind == Parameter.POSITIONAL_ONLY:
+                                # Insert as a positional arg if it needs to be
+                                replace_tuple = (list(args), idx)
+                            else:
+                                replace_tuple = (kwargs, output_arg)
+                        break
                 else:
                     raise ValueError(
                         f"Argument {output_arg} not found in function {func.__name__}"
@@ -77,6 +96,7 @@ def atomic_output(
             else:
                 tmp_dir = None
 
+            # Make the tempfile start the same as the desired output
             prefix = final_path.name
             if is_dir:
                 # Create a temporary directory
@@ -88,7 +108,9 @@ def atomic_output(
 
             try:
                 # Replace the output file path with the temp file
-                kwargs[output_arg] = temp_path
+                # It would be like this if we only allows keyword:
+                # kwargs[output_arg] = temp_path
+                replace_tuple[0][replace_tuple[1]] = temp_path
                 # Execute the original function
                 result = func(*args, **kwargs)
                 # Move the temp file to the final location
@@ -97,6 +119,7 @@ def atomic_output(
                 return result
             finally:
                 logger.debug("Cleaning up temp file %s", temp_path)
+                # Different cleanup is needed
                 if is_dir:
                     shutil.rmtree(temp_path, ignore_errors=True)
                 else:
