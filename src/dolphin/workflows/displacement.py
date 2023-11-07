@@ -15,28 +15,27 @@ from dolphin.utils import get_max_memory_usage, set_num_threads
 
 from . import stitch_and_unwrap, wrapped_phase
 from ._utils import _create_burst_cfg, _remove_dir_if_empty
-from .config import Workflow
+from .config import DisplacementWorkflow
 
 
 @log_runtime
 def run(
-    cfg: Workflow,
+    cfg: DisplacementWorkflow,
     debug: bool = False,
 ):
     """Run the displacement workflow on a stack of SLCs.
 
     Parameters
     ----------
-    cfg : Workflow
-        [`Workflow`][dolphin.workflows.config.Workflow] object for controlling the
-        workflow.
+    cfg : DisplacementWorkflow
+        [`DisplacementWorkflow`][dolphin.workflows.config.DisplacementWorkflow] object
+        for controlling the workflow.
     debug : bool, optional
         Enable debug logging, by default False.
     """
     # Set the logging level for all `dolphin.` modules
     logger = get_log(name="dolphin", debug=debug, filename=cfg.log_file)
     logger.debug(pformat(cfg.model_dump()))
-    cfg.create_dir_tree(debug=debug)
 
     set_num_threads(cfg.worker_settings.threads_per_worker)
 
@@ -84,6 +83,7 @@ def run(
 
     else:
         # grab the only key (either a burst, or "") and use that
+        cfg.create_dir_tree()
         b = list(grouped_slc_files.keys())[0]
         wrapped_phase_cfgs = [(b, cfg)]
 

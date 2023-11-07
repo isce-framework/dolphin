@@ -258,8 +258,9 @@ def fake_process_blocks(in_shape, half_window, strides, block_shape):
 
     # Now check the inner part, away from the expected border of zeros
     out_row_margin, out_col_margin = bm._out_margin
-    inner = slice(out_row_margin, -out_row_margin), slice(
-        out_col_margin, -out_col_margin
+    inner = (
+        slice(out_row_margin, -out_row_margin),
+        slice(out_col_margin, -out_col_margin),
     )
     assert not np.any(out_arr[inner] == 0)
     assert np.all(counts[inner] == 1)

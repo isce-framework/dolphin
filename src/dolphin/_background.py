@@ -13,7 +13,7 @@ from typing import Any, Optional, Sequence
 import numpy as np
 
 from dolphin._log import get_log
-from dolphin._types import Filename
+from dolphin._types import Filename, P, T
 
 logger = get_log(__name__)
 
@@ -266,13 +266,15 @@ class DummyProcessPoolExecutor(Executor):
     def __init__(self, max_workers: Optional[int] = None, **kwargs):
         self._max_workers = max_workers
 
-    def submit(self, fn: Callable, *args, **kwargs) -> Future:
+    def submit(
+        self, fn: Callable[P, T], /, *args: P.args, **kwargs: P.kwargs
+    ) -> Future[T]:
         future: Future = Future()
         result = fn(*args, **kwargs)
         future.set_result(result)
         return future
 
-    def shutdown(self, wait: bool = True):
+    def shutdown(self, wait: bool = True, cancel_futures: bool = True):
         pass
 
 

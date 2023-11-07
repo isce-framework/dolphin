@@ -1,4 +1,5 @@
 import os
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -163,6 +164,7 @@ def test_run_gtiff(list_of_gtiff_ifgs, corr_raster, unw_suffix):
 @pytest.mark.skipif(
     not TOPHU_INSTALLED, reason="tophu not installed for multiscale unwrapping"
 )
+@pytest.mark.skipif(sys.platform == "darwin", reason="Snaphu does not work on MacOS")
 def test_unwrap_multiscale(tmp_path, raster_100_by_200, corr_raster):
     unw_filename = tmp_path / "unwrapped.unw.tif"
     out_path, conncomp_path = dolphin.unwrap.unwrap(

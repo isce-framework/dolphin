@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import os
 from pathlib import Path
 
@@ -11,6 +13,7 @@ if not os.environ.get("NUMBA_NUM_THREADS"):
     os.environ["NUMBA_NUM_THREADS"] = str(min(os.cpu_count(), 16))  # type: ignore
 
 from dolphin.io import load_gdal, write_arr
+from dolphin.opera_utils import OPERA_DATASET_NAME
 from dolphin.phase_link import simulate
 
 NUM_ACQ = 30
@@ -255,3 +258,78 @@ def raster_with_zero_block(tmpdir, tiled_raster_100_by_200):
         nodata=0,
     )
     return output_name
+
+
+# For displacement/workflow tests
+
+
+@pytest.fixture()
+def opera_slc_files(tmp_path) -> list[Path]:
+    """Save the slc stack as a series of NetCDF files."""
+    start_date = 20220101
+    shape = (4, 128, 128)
+    slc_stack = (np.random.rand(*shape) + 1j * np.random.rand(*shape)).astype(
+        np.complex64
+    )
+
+    d = tmp_path / "input_slcs"
+    d.mkdir()
+    file_list = []
+
+    *group_parts, ds_name = OPERA_DATASET_NAME.split("/")
+    group = "/".join(group_parts)
+    for burst_id in ["t087_185683_iw2", "t087_185684_iw2"]:
+        for i in range(len(slc_stack)):
+            fname = d / f"{burst_id}_{start_date + i}.h5"
+            yoff = i * shape[0] / 2
+            create_test_nc(
+                fname,
+                epsg=32615,
+                data_ds_name=ds_name,
+                # The "dummy" is so that two datasets are created in the file
+                # otherwise GDAL doesn't respect the NETCDF:file:/path/to/nested/data
+                subdir=[group, "dummy"],
+                data=slc_stack[i],
+                yoff=yoff,
+            )
+            file_list.append(Path(fname))
+
+    return file_list
+
+
+@pytest.fixture()
+def opera_slc_files_official(tmp_path) -> list[Path]:
+    base = "OPERA_L2_CSLC-S1"
+    ending = "20230101T100506Z_S1A_VV_v1.0"
+    # expected = {
+    # "t087_185678_iw2": [
+    # Path(f"{base}_T087-185678-IW2_20180210T232711Z_{ending}"),
+    start_date = 20220101
+    shape = (4, 128, 128)
+    slc_stack = (np.random.rand(*shape) + 1j * np.random.rand(*shape)).astype(
+        np.complex64
+    )
+
+    d = tmp_path / "input_slcs"
+    d.mkdir()
+    file_list = []
+
+    *group_parts, ds_name = OPERA_DATASET_NAME.split("/")
+    group = "/".join(group_parts)
+    for burst_id in ["T087-185683-IW2", "T087-185684-IW2"]:
+        for i in range(len(slc_stack)):
+            fname = d / f"{base}_{burst_id}_{start_date + i}_{ending}.h5"
+            yoff = i * shape[0] / 2
+            create_test_nc(
+                fname,
+                epsg=32615,
+                data_ds_name=ds_name,
+                # The "dummy" is so that two datasets are created in the file
+                # otherwise GDAL doesn't respect the NETCDF:file:/path/to/nested/data
+                subdir=[group, "corrections"],
+                data=slc_stack[i],
+                yoff=yoff,
+            )
+            file_list.append(Path(fname))
+
+    return file_list

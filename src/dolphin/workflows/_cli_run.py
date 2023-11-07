@@ -23,11 +23,11 @@ def run(
     """
     # rest of imports here so --help doesn't take forever
 
-    from . import s1_disp
-    from .config import Workflow
+    from . import displacement
+    from .config import DisplacementWorkflow
 
-    cfg = Workflow.from_yaml(config_file)
-    s1_disp.run(cfg, debug=debug)
+    cfg = DisplacementWorkflow.from_yaml(config_file)
+    displacement.run(cfg, debug=debug)
 
 
 def get_parser(

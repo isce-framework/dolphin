@@ -20,3 +20,4 @@ dependencies:
   - shapely>=1.8
   - tbb>=2021.6.0 # Module for numba threading which prevents `fork()` crashes
   - threadpoolctl>=3.0
+  - typing_extensions>=3.10

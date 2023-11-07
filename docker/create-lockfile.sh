@@ -22,14 +22,19 @@ install_packages() {
 
     # Prepare arguments for the command
     local FILE_ARG="--file /tmp/$(basename "$ENVFILE")"
-    local PKGS_ARGS=(${PACKAGES[@]})
+    if [[ -n "$PACKAGES" ]]; then
+        PKGS_ARGS=(${PACKAGES[@]})
+    else
+        PKGS_ARGS=""
+    fi
+    echo "$PKGS_ARGS"
 
     # Get concretized package list.
     local PKGLIST
     PKGLIST=$(docker run --rm --network=host \
         -v "$ENVFILE:/tmp/$(basename "$ENVFILE"):ro" \
         mambaorg/micromamba:1.1.0 bash -c "\
-            micromamba install -y -n base $FILE_ARG ${PKGS_ARGS[*]} > /dev/null && \
+            micromamba install -y -n base $FILE_ARG $PKGS_ARGS > /dev/null && \
             micromamba env export --explicit")
 
     # Sort packages alphabetically.
@@ -80,7 +85,12 @@ main() {
         exit 1
     fi
 
-    install_packages "$ENVFILE" "${PACKAGES[@]}"
+    # If no packages were passed, install only the packages in the environment file.
+    if [[ "${#PACKAGES[@]}" -eq 0 ]]; then
+        install_packages "$ENVFILE"
+    else
+        install_packages "$ENVFILE" "${PACKAGES[@]}"
+    fi
 }
 
 main "$@"

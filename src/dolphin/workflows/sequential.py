@@ -22,7 +22,7 @@ from dolphin._log import get_log
 from dolphin._types import Filename
 from dolphin.stack import VRTStack
 
-from ._enums import ShpMethod
+from .config import ShpMethod
 from .single import run_wrapped_phase_single
 
 logger = get_log(__name__)

@@ -24,7 +24,7 @@ from dolphin._types import Filename
 from dolphin.phase_link import PhaseLinkRuntimeError, compress, run_mle
 from dolphin.stack import VRTStack
 
-from ._enums import ShpMethod
+from .config import ShpMethod
 
 logger = get_log(__name__)
 
