@@ -2,20 +2,21 @@ from __future__ import annotations
 
 import itertools
 import json
+import os
 import re
 import subprocess
 import tempfile
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
-from typing import Iterable, Optional, Pattern, Sequence, Union
+from typing import Iterable, Optional, Pattern, Sequence, Union, overload
 
 import h5py
 import numpy as np
 from shapely import geometry, ops, wkt
 
 from dolphin._log import get_log
-from dolphin._types import Filename, FilenameT
+from dolphin._types import Filename
 
 logger = get_log(__name__)
 
@@ -67,10 +68,23 @@ def get_burst_id(
     return burst_str.lower().replace("-", "_")
 
 
+@overload
 def group_by_burst(
-    file_list: Iterable[FilenameT],
+    file_list: Iterable[str],
     burst_id_fmt: Union[str, Pattern[str]] = OPERA_BURST_RE,
-) -> dict[str, list[FilenameT]]:
+) -> dict[str, list[str]]:
+    ...
+
+
+@overload
+def group_by_burst(
+    file_list: Iterable[os.PathLike[str]],
+    burst_id_fmt: Union[str, Pattern[str]] = OPERA_BURST_RE,
+) -> dict[str, list[os.PathLike[str]]]:
+    ...
+
+
+def group_by_burst(file_list, burst_id_fmt):
     """Group Sentinel CSLC files by burst.
 
     Parameters
@@ -91,22 +105,10 @@ def group_by_burst(
             't087_185678_iw3': ['inputs/t087_185678_iw3_20200101.h5',...,],
         }
     """
-
-    def sort_by_burst_id(file_list: list[FilenameT]) -> list[FilenameT]:
-        """Sort files by burst id."""
-        file_burst_tuples = sorted(
-            [(f, get_burst_id(f, burst_id_fmt)) for f in file_list],
-            # use the date or dates as the key
-            key=lambda f_b_tuple: f_b_tuple[1],  # type: ignore
-        )
-        # Unpack the sorted pairs with new sorted values
-        out_file_list = [f for f, _ in file_burst_tuples]
-        return out_file_list
-
     if not file_list:
         return {}
 
-    sorted_file_list = sort_by_burst_id(list(file_list))
+    sorted_file_list = _sort_by_burst_id(list(file_list))
     # Now collapse into groups, sorted by the burst_id
     grouped_images = {
         burst_id: list(g)
@@ -115,6 +117,30 @@ def group_by_burst(
         )
     }
     return grouped_images
+
+
+@overload
+def _sort_by_burst_id(file_list: list[str], burst_id_fmt) -> list[str]:
+    ...
+
+
+@overload
+def _sort_by_burst_id(
+    file_list: list[os.PathLike[str]], burst_id_fmt
+) -> list[os.PathLike[str]]:
+    ...
+
+
+def _sort_by_burst_id(file_list, burst_id_fmt):
+    """Sort files/paths by burst id."""
+    file_burst_tuples = sorted(
+        [(f, get_burst_id(f, burst_id_fmt)) for f in file_list],
+        # use the date or dates as the key
+        key=lambda f_b_tuple: f_b_tuple[1],  # type: ignore
+    )
+    # Unpack the sorted pairs with new sorted values
+    out_file_list = [f for f, _ in file_burst_tuples]
+    return out_file_list
 
 
 def get_cslc_polygon(
