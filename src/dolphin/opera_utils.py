@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import itertools
 import json
-import os
 import re
 import subprocess
 import tempfile
@@ -78,9 +77,9 @@ def group_by_burst(
 
 @overload
 def group_by_burst(
-    file_list: Iterable[os.PathLike[str]],
+    file_list: Iterable[Path],
     burst_id_fmt: Union[str, Pattern[str]] = OPERA_BURST_RE,
-) -> dict[str, list[os.PathLike[str]]]:
+) -> dict[str, list[Path]]:
     ...
 
 
@@ -108,7 +107,7 @@ def group_by_burst(file_list, burst_id_fmt):
     if not file_list:
         return {}
 
-    sorted_file_list = _sort_by_burst_id(list(file_list))
+    sorted_file_list = _sort_by_burst_id(list(file_list), burst_id_fmt)
     # Now collapse into groups, sorted by the burst_id
     grouped_images = {
         burst_id: list(g)
@@ -120,14 +119,12 @@ def group_by_burst(file_list, burst_id_fmt):
 
 
 @overload
-def _sort_by_burst_id(file_list: list[str], burst_id_fmt) -> list[str]:
+def _sort_by_burst_id(file_list: Sequence[str], burst_id_fmt) -> list[str]:
     ...
 
 
 @overload
-def _sort_by_burst_id(
-    file_list: list[os.PathLike[str]], burst_id_fmt
-) -> list[os.PathLike[str]]:
+def _sort_by_burst_id(file_list: Sequence[Path], burst_id_fmt) -> list[Path]:
     ...
 
 

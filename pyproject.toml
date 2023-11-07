@@ -61,7 +61,7 @@ profile = "black"
 known_first_party = ["dolphin"]
 
 [tool.mypy]
-python_version = "3.8"
+python_version = "3.9"
 ignore_missing_imports = true
 plugins = ["pydantic.mypy"]
 
