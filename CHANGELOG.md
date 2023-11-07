@@ -1,4 +1,7 @@
-# [Unreleased](https://github.com/isce-framework/dolphin/compare/v0.5.1...main)
+# [Unreleased](https://github.com/isce-framework/dolphin/compare/v0.6.0...main)
+
+
+# [v0.6.0](https://github.com/isce-framework/dolphin/compare/v0.5.1...v0.6.0) - 2023-11-07
 
 **Added**
 - `opera_utils.get_missing_data_options` to parse the full list of SLCs and return possible subsets which have the same dates used for all Burst IDs
