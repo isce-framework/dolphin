@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from os import PathLike
-from typing import TYPE_CHECKING, Tuple, Union
+from typing import TYPE_CHECKING, Tuple, TypeVar, Union
 
 # Some classes are declared as generic in stubs, but not at runtime.
 # In Python 3.9 and earlier, os.PathLike is not subscriptable, results in a runtime error
@@ -11,7 +11,10 @@ if TYPE_CHECKING:
 else:
     PathLikeStr = PathLike
 
-Filename = Union[str, PathLikeStr]
+
+PathOrStr = Union[str, PathLikeStr]
+Filename = PathOrStr  # May add a deprecation notice for `Filename`
+PathLikeT = TypeVar("PathLikeT", bound=PathLikeStr)
 
 # left, bottom, right, top
 Bbox = Tuple[float, float, float, float]

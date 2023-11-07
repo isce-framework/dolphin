@@ -15,7 +15,7 @@ import numpy as np
 from shapely import geometry, ops, wkt
 
 from dolphin._log import get_log
-from dolphin._types import Filename
+from dolphin._types import Filename, PathLikeT
 
 logger = get_log(__name__)
 
@@ -77,13 +77,13 @@ def group_by_burst(
 
 @overload
 def group_by_burst(
-    file_list: Iterable[Path],
+    file_list: Iterable[PathLikeT],
     burst_id_fmt: Union[str, Pattern[str]] = OPERA_BURST_RE,
-) -> dict[str, list[Path]]:
+) -> dict[str, list[PathLikeT]]:
     ...
 
 
-def group_by_burst(file_list, burst_id_fmt):
+def group_by_burst(file_list, burst_id_fmt=OPERA_BURST_RE):
     """Group Sentinel CSLC files by burst.
 
     Parameters
@@ -119,12 +119,12 @@ def group_by_burst(file_list, burst_id_fmt):
 
 
 @overload
-def _sort_by_burst_id(file_list: Sequence[str], burst_id_fmt) -> list[str]:
+def _sort_by_burst_id(file_list: Iterable[str], burst_id_fmt) -> list[str]:
     ...
 
 
 @overload
-def _sort_by_burst_id(file_list: Sequence[Path], burst_id_fmt) -> list[Path]:
+def _sort_by_burst_id(file_list: Iterable[Path], burst_id_fmt) -> list[Path]:
     ...
 
 
