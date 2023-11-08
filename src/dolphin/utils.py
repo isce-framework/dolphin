@@ -263,7 +263,7 @@ def group_by_date(
         Path to folder containing files with dates in the filename.
     file_date_fmt: str
         Format of the date in the filename.
-        Default is [dolphin.io.DEFAULT_DATETIME_FORMAT][]
+        Default is [dolphin.DEFAULT_DATETIME_FORMAT][]
 
     Returns
     -------

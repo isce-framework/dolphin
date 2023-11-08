@@ -19,6 +19,7 @@ from osgeo import gdal
 
 from dolphin import io, shp, utils
 from dolphin._blocks import BlockManager
+from dolphin._constants import DEFAULT_DATETIME_FORMAT
 from dolphin._log import get_log
 from dolphin._types import Filename
 from dolphin.phase_link import PhaseLinkRuntimeError, compress, run_mle
@@ -393,7 +394,7 @@ def setup_output_folder(
     for d in vrt_stack.dates[start_idx:]:
         if len(d) == 1:
             # normal SLC files will have a single date
-            s = d[0].strftime(io.DEFAULT_DATETIME_FORMAT)
+            s = d[0].strftime(DEFAULT_DATETIME_FORMAT)
         else:
             # Compressed SLCs will have 2 dates in the name marking the start and end
             s = io._format_date_pair(d[0], d[1])
