@@ -12,8 +12,9 @@ from osgeo import gdal
 if not os.environ.get("NUMBA_NUM_THREADS"):
     os.environ["NUMBA_NUM_THREADS"] = str(min(os.cpu_count(), 16))  # type: ignore
 
+from opera_utils import OPERA_DATASET_NAME
+
 from dolphin.io import load_gdal, write_arr
-from dolphin.opera_utils import OPERA_DATASET_NAME
 from dolphin.phase_link import simulate
 
 NUM_ACQ = 30

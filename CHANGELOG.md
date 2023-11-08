@@ -1,11 +1,18 @@
 # [Unreleased](https://github.com/isce-framework/dolphin/compare/v0.6.0...main)
 
+**Removed**
+- `dolphin.opera_utils` now lives in the separate package
+
+**Dependencies**
+- `opera_utils`
 
 # [v0.6.0](https://github.com/isce-framework/dolphin/compare/v0.5.1...v0.6.0) - 2023-11-07
 
 **Added**
 - `opera_utils.get_missing_data_options` to parse the full list of SLCs and return possible subsets which have the same dates used for all Burst IDs
 - `PsWorkflow` class for running just the PS estimation workflow
+- `asv` benchmark setup to measure runtime across versions
+- `@atomic_output` decorator for long running write processes, to avoid partially-written output files
 
 **Changed**
 - removed `minimum_images` as an argument from `opera_utils.group_by_burst`. Checking for too-few images now must be done by the caller
