@@ -11,7 +11,7 @@ dependencies:
   - hdf5!=1.12.2 # https://github.com/SciTools/iris/issues/5187 and https://github.com/pydata/xarray/issues/7549
   - numba>=0.54
   - numpy>=1.20
-  - opera_utils>=0.1.1
+  - opera-utils>=0.1.1
   - pydantic>=2.1
   - pymp-pypi>=0.4.5
   - pyproj>=3.3
