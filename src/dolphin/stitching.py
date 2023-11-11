@@ -16,6 +16,7 @@ from osgeo import gdal, osr
 from pyproj import Transformer
 
 from dolphin import io, utils
+from dolphin._constants import DEFAULT_DATETIME_FORMAT
 from dolphin._log import get_log
 from dolphin._types import Bbox, Filename
 
@@ -24,7 +25,7 @@ logger = get_log(__name__)
 
 def merge_by_date(
     image_file_list: list[Filename],
-    file_date_fmt: str = io.DEFAULT_DATETIME_FORMAT,
+    file_date_fmt: str = DEFAULT_DATETIME_FORMAT,
     output_dir: Filename = ".",
     driver: str = "ENVI",
     output_suffix: str = ".int",

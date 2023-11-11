@@ -4,3 +4,4 @@ from ._common import *  # noqa
 from ._displacement import *  # noqa
 from ._enums import *  # noqa
 from ._ps import *  # noqa
+from ._yaml_model import *  # noqa

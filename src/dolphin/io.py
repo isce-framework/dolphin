@@ -22,6 +22,7 @@ from pyproj import CRS
 
 from dolphin._background import _DEFAULT_TIMEOUT, BackgroundReader, BackgroundWriter
 from dolphin._blocks import compute_out_shape, iter_blocks
+from dolphin._constants import DEFAULT_DATETIME_FORMAT
 from dolphin._log import get_log
 from dolphin._types import Bbox, Filename
 from dolphin.utils import gdal_to_numpy_type, numpy_to_gdal_type, progress
@@ -52,8 +53,6 @@ DEFAULT_HDF5_OPTIONS = dict(
     compression_opts=4,
     shuffle=True,
 )
-DEFAULT_DATETIME_FORMAT = "%Y%m%d"
-
 logger = get_log(__name__)
 
 

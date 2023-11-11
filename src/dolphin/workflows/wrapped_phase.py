@@ -3,11 +3,12 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional
 
+from opera_utils import make_nodata_mask
+
 from dolphin import ps, stack, utils
 from dolphin._background import CPURecorder, NvidiaRecorder
 from dolphin._log import get_log, log_runtime
 from dolphin.interferogram import Network
-from dolphin.opera_utils import make_nodata_mask
 
 from . import sequential
 from .config import DisplacementWorkflow

@@ -16,6 +16,7 @@ from numpy.typing import ArrayLike, DTypeLike
 from osgeo import gdal, gdal_array, gdalconst
 from rich.progress import MofNCompleteColumn, Progress, SpinnerColumn, TimeElapsedColumn
 
+from dolphin._constants import DEFAULT_DATETIME_FORMAT
 from dolphin._log import get_log
 from dolphin._types import Filename
 
@@ -101,7 +102,9 @@ def gdal_to_numpy_type(gdal_type: Union[str, int]) -> np.dtype:
     return np.dtype(gdal_array.GDALTypeCodeToNumericTypeCode(gdal_type))
 
 
-def get_dates(filename: Filename, fmt: str = "%Y%m%d") -> list[datetime.date]:
+def get_dates(
+    filename: Filename, fmt: str = DEFAULT_DATETIME_FORMAT
+) -> list[datetime.date]:
     """Search for dates in the stem of `filename` matching `fmt`.
 
     Excludes dates that are not in the stem of `filename` (in the directories).
@@ -250,7 +253,7 @@ def sort_files_by_date(
 
 
 def group_by_date(
-    file_list: Iterable[Filename], file_date_fmt: Optional[str] = None
+    file_list: Iterable[Filename], file_date_fmt: str = DEFAULT_DATETIME_FORMAT
 ) -> dict[tuple[datetime.date, ...], list[Filename]]:
     """Combine files by date into a dict.
 
@@ -260,7 +263,7 @@ def group_by_date(
         Path to folder containing files with dates in the filename.
     file_date_fmt: str
         Format of the date in the filename.
-        Default is [dolphin.io.DEFAULT_DATETIME_FORMAT][]
+        Default is [dolphin.DEFAULT_DATETIME_FORMAT][]
 
     Returns
     -------
@@ -278,10 +281,6 @@ def group_by_date(
             ...]),
         }
     """
-    if file_date_fmt is None:
-        import dolphin.io
-
-        file_date_fmt = dolphin.io.DEFAULT_DATETIME_FORMAT
     sorted_file_list, _ = sort_files_by_date(file_list, file_date_fmt=file_date_fmt)
 
     # Now collapse into groups, sorted by the date

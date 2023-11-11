@@ -7,10 +7,11 @@ from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 from pprint import pformat
 
+from opera_utils import group_by_burst
+
 from dolphin import __version__
 from dolphin._background import DummyProcessPoolExecutor
 from dolphin._log import get_log, log_runtime
-from dolphin.opera_utils import group_by_burst
 from dolphin.utils import get_max_memory_usage, set_num_threads
 
 from . import stitch_and_unwrap, wrapped_phase

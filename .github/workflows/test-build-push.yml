@@ -59,6 +59,7 @@ jobs:
         with:
           environment-file: conda-env.yml
           environment-name: dolphin-env
+          generate-run-shell: false
           create-args: ${{ matrix.deps.spec }}
           condarc: |
             channels:

@@ -4,10 +4,11 @@ from __future__ import annotations
 from pathlib import Path
 from pprint import pformat
 
+import opera_utils
+
 import dolphin.ps
-from dolphin import __version__, opera_utils, stack
+from dolphin import __version__, stack
 from dolphin._log import get_log, log_runtime
-from dolphin.opera_utils import group_by_burst
 from dolphin.utils import get_max_memory_usage
 
 from .config import PsWorkflow
@@ -47,7 +48,7 @@ def run(
 
     # Check the number of bursts that were passed
     try:
-        grouped_slc_files = group_by_burst(cfg.cslc_file_list)
+        grouped_slc_files = opera_utils.group_by_burst(cfg.cslc_file_list)
         if len(grouped_slc_files) > 1:
             raise NotImplementedError(
                 "Multiple bursts not yet supported for PsWorkflow"
