@@ -40,7 +40,10 @@ def test_sequential_gtiff(tmp_path, slc_file_list, gpu_enabled):
         n_workers=4,
         gpu_enabled=gpu_enabled,
     )
+    assert len(list(output_folder.glob("2*.slc.tif"))) == vrt_stack.shape[0]
 
+    # TODO: This probably won't work with just random data
+    pytest.skip("This test is not working with random data.")
     # Get the MLE estimates from the entire stack output.
     slc_stack = vrt_stack.read_stack()
     mle_est, _, _ = mle.run_mle(
@@ -50,8 +53,6 @@ def test_sequential_gtiff(tmp_path, slc_file_list, gpu_enabled):
         gpu_enabled=gpu_enabled,
     )
 
-    # TODO: This probably won't work with just random data
-    pytest.skip("This test is not working with random data.")
     # Check that the sequential output matches the MLE estimates.
     for idx, out_file in enumerate(sorted(output_folder.glob("2*.slc.tif"))):
         layer = io.load_gdal(out_file)

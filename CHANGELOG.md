@@ -1,5 +1,9 @@
 # [Unreleased](https://github.com/isce-framework/dolphin/compare/v0.6.1...main)
 
+**Added**
+- `Stack` and `MiniStack` class which does the planning for how a large stack of SLCs will be processed in batches.
+  - Previously this was done at run time in `sequential.py`. We want to separate that out to view the plan in advance/allow us to dispatch the work to multiple machines.
+
 **Changed**
 - Date functions have been moved from `dolphin.utils` to `dolphin._dates`. They are accessible at `dolphin.get_dates`, etc
 - `get_dates` now uses `datetime.datetime` instead of `datetime.date`.

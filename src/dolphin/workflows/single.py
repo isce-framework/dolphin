@@ -21,6 +21,7 @@ import dolphin._dates
 from dolphin import io, shp, utils
 from dolphin._blocks import BlockManager
 from dolphin._dates import DEFAULT_DATETIME_FORMAT
+from dolphin._decorators import atomic_output
 from dolphin._log import get_log
 from dolphin._readers import VRTStack
 from dolphin._types import Filename
@@ -40,6 +41,7 @@ class OutputFile:
     strides: Optional[dict[str, int]] = None
 
 
+@atomic_output(output_arg="output_folder", is_dir=True)
 def run_wrapped_phase_single(
     *,
     slc_vrt_file: Filename,
@@ -61,8 +63,11 @@ def run_wrapped_phase_single(
     n_workers: int = 1,
     gpu_enabled: bool = True,
     show_progress: bool = False,
-) -> tuple[list[Path], Path, Path]:
-    """Estimate wrapped phase for one ministack."""
+):
+    """Estimate wrapped phase for one ministack.
+
+    Output files will all be placed in the provided `output_folder`.
+    """
     # TODO: extract common stuff between here and sequential
     output_folder = Path(output_folder)
     vrt = VRTStack.from_vrt_file(slc_vrt_file)

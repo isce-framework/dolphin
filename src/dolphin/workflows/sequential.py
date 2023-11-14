@@ -91,13 +91,13 @@ def run_wrapped_phase_sequential(
         # cur_files = comp_slc_files[-3:] + cur_files
         cur_vrt = VRTStack(
             cur_files,
-            outfile=cur_output_folder / f"{start_end}.vrt",
+            outfile=output_folder / f"{start_end}.vrt",
             sort_files=False,
             subdataset=v_all.subdataset,
         )
         # TODO: what situations do we need to set reference-idx != 0
         ref_idx = 0
-        cur_output_files, cur_comp_slc_file, tcorr_file = run_wrapped_phase_single(
+        run_wrapped_phase_single(
             slc_vrt_file=cur_vrt,
             output_folder=cur_output_folder,
             half_window=half_window,
@@ -116,6 +116,9 @@ def run_wrapped_phase_sequential(
             n_workers=n_workers,
             gpu_enabled=gpu_enabled,
         )
+        cur_output_files = sorted(cur_output_folder.glob("2*.slc.tif"))
+        cur_comp_slc_file = next(cur_output_folder.glob("compressed_*"))
+        tcorr_file = next(cur_output_folder.glob("tcorr_*"))
 
         output_slc_files[mini_idx] = cur_output_files
         comp_slc_files.append(cur_comp_slc_file)
