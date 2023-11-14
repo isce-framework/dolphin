@@ -20,8 +20,8 @@ from osgeo_utils import gdal_calc
 import dolphin._dates
 from dolphin import io
 from dolphin._log import get_log
+from dolphin._readers import VRTStack
 from dolphin._types import Filename
-from dolphin.stack import VRTStack
 
 from .config import ShpMethod
 from .single import run_wrapped_phase_single

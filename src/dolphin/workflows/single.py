@@ -24,7 +24,7 @@ from dolphin._dates import DEFAULT_DATETIME_FORMAT
 from dolphin._log import get_log
 from dolphin._types import Filename
 from dolphin.phase_link import PhaseLinkRuntimeError, compress, run_mle
-from dolphin.stack import VRTStack
+from dolphin.VRTStack import VRTStack
 
 from .config import ShpMethod
 

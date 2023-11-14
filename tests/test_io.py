@@ -6,7 +6,7 @@ import pytest
 
 import dolphin._blocks
 from dolphin import io
-from dolphin.stack import VRTStack
+from dolphin._readers import VRTStack
 
 
 def test_load(raster_100_by_200):

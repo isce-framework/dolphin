@@ -14,8 +14,8 @@ from osgeo import gdal
 
 from dolphin import io, utils
 from dolphin._log import get_log
+from dolphin._readers import VRTStack
 from dolphin._types import Filename
-from dolphin.stack import VRTStack
 
 gdal.UseExceptions()
 

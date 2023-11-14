@@ -1,7 +1,7 @@
 import numpy.testing as npt
 import pytest
 
-from dolphin import io, stack
+from dolphin import _readers, io
 from dolphin.phase_link import mle, simulate
 from dolphin.utils import gpu_is_available
 from dolphin.workflows import sequential
@@ -19,7 +19,7 @@ pytestmark = pytest.mark.filterwarnings(
 def test_sequential_gtiff(tmp_path, slc_file_list, gpu_enabled):
     """Run through the sequential estimation with a GeoTIFF stack."""
     vrt_file = tmp_path / "slc_stack.vrt"
-    vrt_stack = stack.VRTStack(slc_file_list, outfile=vrt_file)
+    vrt_stack = _readers.VRTStack(slc_file_list, outfile=vrt_file)
     _, rows, cols = vrt_stack.shape
 
     half_window = {"x": cols // 2, "y": rows // 2}
@@ -77,7 +77,7 @@ def test_sequential_gtiff(tmp_path, slc_file_list, gpu_enabled):
 def test_sequential_nc(tmp_path, slc_file_list_nc, half_window, strides):
     """Check various strides/windows/ministacks with a NetCDF input stack."""
     vrt_file = tmp_path / "slc_stack.vrt"
-    _ = stack.VRTStack(slc_file_list_nc, outfile=vrt_file, subdataset="data")
+    _ = _readers.VRTStack(slc_file_list_nc, outfile=vrt_file, subdataset="data")
 
     output_folder = tmp_path / "sequential"
     sequential.run_wrapped_phase_sequential(
@@ -102,7 +102,7 @@ def test_sequential_ministack_sizes(tmp_path, slc_file_list_nc, ministack_size):
     """Check various strides/windows/ministacks with a NetCDF input stack."""
     vrt_file = tmp_path / "slc_stack.vrt"
     # Make it not a round number to test
-    vrt_stack = stack.VRTStack(
+    vrt_stack = _readers.VRTStack(
         slc_file_list_nc[:21], outfile=vrt_file, subdataset="data"
     )
     _, rows, cols = vrt_stack.shape

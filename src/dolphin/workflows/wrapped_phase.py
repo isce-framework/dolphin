@@ -5,7 +5,7 @@ from typing import Optional
 
 from opera_utils import make_nodata_mask
 
-from dolphin import ps, stack, utils
+from dolphin import _readers, ps, utils
 from dolphin._background import CPURecorder, NvidiaRecorder
 from dolphin._log import get_log, log_runtime
 from dolphin.interferogram import Network
@@ -55,7 +55,7 @@ def run(
     # Make a VRT pointing to the input SLC files
     # #############################################
     subdataset = cfg.input_options.subdataset
-    vrt_stack = stack.VRTStack(
+    vrt_stack = _readers.VRTStack(
         input_file_list,
         subdataset=subdataset,
         outfile=cfg.work_directory / "slc_stack.vrt",

@@ -1,9 +1,13 @@
-# [Unreleased](https://github.com/isce-framework/dolphin/compare/v0.6.0...main)
+# [Unreleased](https://github.com/isce-framework/dolphin/compare/v0.6.1...main)
 
 **Changed**
 - Date functions have been moved from `dolphin.utils` to `dolphin._dates`. They are accessible at `dolphin.get_dates`, etc
 - `get_dates` now uses `datetime.datetime` instead of `datetime.date`.
   - This is to allow for more flexibility in the date parsing, and to allow for the use of `datetime.date` or `datetime.datetime` in the output filenames.
+- `VRTStack` has been moved to `_readers.py`. The minstack planning functions have been removed to focus the class on just reading input GDAL rasters.
+
+**Removed**
+- Extra subsetting functions from `VRTStack` have been removed, as they are not used in the workflow and the reimplmenent simple GDAL calls.
 
 # [v0.6.1](https://github.com/isce-framework/dolphin/compare/v0.6.0...v0.6.1) - 2023-11-13
 
