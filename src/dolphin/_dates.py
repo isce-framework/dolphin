@@ -48,7 +48,7 @@ def get_dates(
     >>> get_dates("S1A_IW_SLC__1SDV_20221204T005230_20221204T005257_046175_05873C_3B80.SAFE", fmt="%Y%m%dT%H%M%S")
     [datetime.datetime(2022, 12, 4, 0, 52, 30), datetime.datetime(2022, 12, 4, 0, 52, 57)]
     >>> get_dates("S1A_IW_SLC__1SDV_20221204T005230_20221204T005257_046175_05873C_3B80.SAFE")
-    [datetime.datetime(2022, 12, 4, 0, 0, 0), datetime.datetime(2022, 12, 4, 0, 0, 0)]
+    [datetime.datetime(2022, 12, 4, 0, 0), datetime.datetime(2022, 12, 4, 0, 0)]
     >>> get_dates("/not/a/date_named_file.tif")
     []
     """  # noqa: E501
