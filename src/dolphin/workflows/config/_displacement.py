@@ -5,8 +5,8 @@ from typing import Any, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from dolphin._dates import get_dates, sort_files_by_date
 from dolphin._log import get_log
-from dolphin.utils import get_dates, sort_files_by_date
 
 from ._common import (
     InputOptions,

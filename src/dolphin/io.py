@@ -9,7 +9,6 @@ from __future__ import annotations
 import math
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-from datetime import date
 from os import fspath
 from pathlib import Path
 from typing import Any, Generator, Optional, Sequence, Union
@@ -22,7 +21,6 @@ from pyproj import CRS
 
 from dolphin._background import _DEFAULT_TIMEOUT, BackgroundReader, BackgroundWriter
 from dolphin._blocks import compute_out_shape, iter_blocks
-from dolphin._constants import DEFAULT_DATETIME_FORMAT
 from dolphin._log import get_log
 from dolphin._types import Bbox, Filename
 from dolphin.utils import gdal_to_numpy_type, numpy_to_gdal_type, progress
@@ -851,10 +849,6 @@ def get_raster_chunk_size(filename: Filename) -> list[int]:
             logger.warning(f"Warning: {filename} bands have different block shapes.")
             break
     return block_size
-
-
-def _format_date_pair(start: date, end: date, fmt=DEFAULT_DATETIME_FORMAT) -> str:
-    return f"{start.strftime(fmt)}_{end.strftime(fmt)}"
 
 
 def _increment_until_max(

@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 import subprocess
 import tempfile
-from datetime import date
+from datetime import datetime
 from os import fspath
 from pathlib import Path
 from typing import Iterable, Optional, Sequence, Union
@@ -15,8 +15,9 @@ from numpy.typing import DTypeLike
 from osgeo import gdal, osr
 from pyproj import Transformer
 
+import dolphin._dates
 from dolphin import io, utils
-from dolphin._constants import DEFAULT_DATETIME_FORMAT
+from dolphin._dates import DEFAULT_DATETIME_FORMAT, group_by_date
 from dolphin._log import get_log
 from dolphin._types import Bbox, Filename
 
@@ -24,7 +25,7 @@ logger = get_log(__name__)
 
 
 def merge_by_date(
-    image_file_list: list[Filename],
+    image_file_list: Iterable[Filename],
     file_date_fmt: str = DEFAULT_DATETIME_FORMAT,
     output_dir: Filename = ".",
     driver: str = "ENVI",
@@ -35,15 +36,15 @@ def merge_by_date(
     out_bounds_epsg: Optional[int] = None,
     options: Optional[Sequence[str]] = io.DEFAULT_ENVI_OPTIONS,
     overwrite: bool = False,
-) -> dict[tuple[date, ...], Path]:
-    """Group images from the same date and merge into one image per date.
+) -> dict[tuple[datetime, ...], Path]:
+    """Group images from the same datetime and merge into one image per datetime.
 
     Parameters
     ----------
     image_file_list : Iterable[Filename]
         list of paths to images.
     file_date_fmt : Optional[str]
-        Format of the date in the filename. Default is %Y%m%d
+        Format of the datetime in the filename. Default is %Y%m%d
     output_dir : Filename
         Path to output directory
     driver : str
@@ -69,22 +70,23 @@ def merge_by_date(
     Returns
     -------
     dict
-        key: the date of the SLC acquisitions/date pair of the interferogram.
+        key: the datetime of the SLC acquisitions/datetime pair of the interferogram.
         value: the path to the stitched image
 
     Notes
     -----
-    This function is intended to be used with filenames that contain date pairs
+    This function is intended to be used with filenames that contain datetime pairs
     (from interferograms).
     """
-    grouped_images = utils.group_by_date(image_file_list, file_date_fmt=file_date_fmt)
+    image_path_list = [Path(f) for f in image_file_list]
+    grouped_images = group_by_date(image_path_list, file_date_fmt=file_date_fmt)
     stitched_acq_times = {}
     Path(output_dir).mkdir(parents=True, exist_ok=True)
 
     for dates, cur_images in grouped_images.items():
         logger.info(f"{dates}: Stitching {len(cur_images)} images.")
         if len(dates) == 2:
-            date_str = io._format_date_pair(*dates)
+            date_str = dolphin._dates._format_date_pair(*dates)
         elif len(dates) == 1:
             date_str = dates[0].strftime(file_date_fmt)
         else:

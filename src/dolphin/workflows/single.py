@@ -17,13 +17,14 @@ import numpy as np
 from numpy.typing import DTypeLike
 from osgeo import gdal
 
+import dolphin._dates
 from dolphin import io, shp, utils
 from dolphin._blocks import BlockManager
-from dolphin._constants import DEFAULT_DATETIME_FORMAT
+from dolphin._dates import DEFAULT_DATETIME_FORMAT
 from dolphin._log import get_log
 from dolphin._types import Filename
 from dolphin.phase_link import PhaseLinkRuntimeError, compress, run_mle
-from dolphin.stack import MiniStack, VRTStack
+from dolphin.stack import VRTStack
 
 from .config import ShpMethod
 
@@ -42,7 +43,7 @@ class OutputFile:
 def run_wrapped_phase_single(
     *,
     slc_vrt_file: Filename,
-    Ministack: MiniStack,
+    # Ministack: MiniStack,
     output_folder: Filename,
     half_window: dict,
     strides: dict = {"x": 1, "y": 1},
@@ -96,7 +97,7 @@ def run_wrapped_phase_single(
     # Make the output folder using the start/end dates
     d0 = input_slc_dates[first_non_comp_idx][0]
     d1 = input_slc_dates[-1][0]
-    start_end = io._format_date_pair(d0, d1)
+    start_end = dolphin._dates._format_date_pair(d0, d1)
 
     msg = (
         f"Processing {len(input_slc_files) - first_non_comp_idx} SLCs +"
@@ -348,7 +349,7 @@ def _get_ps_mask(
         # Fill the nodata values with false
         ps_mask = ps_mask.astype(bool).filled(False)
     else:
-        ps_mask = np.zeros_like((nrows, ncols), dtype=bool)
+        ps_mask = np.zeros((nrows, ncols), dtype=bool)
     return ps_mask
 
 
@@ -419,7 +420,7 @@ def setup_output_folder(
             s = d[0].strftime(DEFAULT_DATETIME_FORMAT)
         else:
             # Compressed SLCs will have 2 dates in the name marking the start and end
-            s = io._format_date_pair(d[0], d[1])
+            s = dolphin._dates._format_date_pair(d[0], d[1])
         date_strs.append(s)
 
     phase_linked_slc_files = []

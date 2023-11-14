@@ -3,12 +3,12 @@ from __future__ import annotations
 import datetime
 import itertools
 import re
-from typing import Iterable, Pattern, overload
+from datetime import date
+from typing import Iterable, Pattern
 
 from ._types import PathLikeT, PathOrStr
 from .utils import _get_path_from_gdal_str
 
-DateOrDatetime = datetime.datetime | datetime.date
 DEFAULT_DATETIME_FORMAT = "%Y%m%d"
 
 __all__ = [
@@ -42,11 +42,13 @@ def get_dates(
     Examples
     --------
     >>> get_dates("/path/to/20191231.slc.tif")
-    (datetime.datetime(2019, 12, 31, 0, 0, 0),)
+    [datetime.datetime(2019, 12, 31, 0, 0)]
     >>> get_dates("ifg_20190101_20200101.tif")
-    (datetime.date(2019, 1, 1), datetime.date(2020, 1, 1)]
-    >>> get_dates("S1A_IW_SLC__1SDV_20191231T000000_20191231T000000_032123_03B8F1_1C1D.nc")
-    [datetime.date(2019, 12, 31, 0, 0, 0), datetime.date(2019, 12, 31, 0, 0, 0)]
+    [datetime.datetime(2019, 1, 1, 0, 0), datetime.datetime(2020, 1, 1, 0, 0)]
+    >>> get_dates("S1A_IW_SLC__1SDV_20221204T005230_20221204T005257_046175_05873C_3B80.SAFE", fmt="%Y%m%dT%H%M%S")
+    [datetime.datetime(2022, 12, 4, 0, 52, 30), datetime.datetime(2022, 12, 4, 0, 52, 57)]
+    >>> get_dates("S1A_IW_SLC__1SDV_20221204T005230_20221204T005257_046175_05873C_3B80.SAFE")
+    [datetime.datetime(2022, 12, 4, 0, 0, 0), datetime.datetime(2022, 12, 4, 0, 0, 0)]
     >>> get_dates("/not/a/date_named_file.tif")
     []
     """  # noqa: E501
@@ -93,26 +95,18 @@ def _date_format_to_regex(date_format) -> Pattern:
     date_format = date_format.replace("%Y", r"\d{4}")
     date_format = date_format.replace("%m", r"\d{2}")
     date_format = date_format.replace("%d", r"\d{2}")
+    # hour, minute, second
+    date_format = date_format.replace("%H", r"\d{2}")
+    date_format = date_format.replace("%M", r"\d{2}")
+    date_format = date_format.replace("%S", r"\d{2}")
 
     # Return the resulting regular expression
     return re.compile(date_format)
 
 
-@overload
-def sort_files_by_date(
-    files: Iterable[str], file_date_fmt: str = DEFAULT_DATETIME_FORMAT
-) -> tuple[list[str], list[list[datetime.datetime]]]:
-    ...
-
-
-@overload
 def sort_files_by_date(
     files: Iterable[PathLikeT], file_date_fmt: str = DEFAULT_DATETIME_FORMAT
 ) -> tuple[list[PathLikeT], list[list[datetime.datetime]]]:
-    ...
-
-
-def sort_files_by_date(files, file_date_fmt=DEFAULT_DATETIME_FORMAT):
     """Sort a list of files by date.
 
     If some files have multiple dates, the files with the most dates are sorted
@@ -156,21 +150,9 @@ def sort_files_by_date(files, file_date_fmt=DEFAULT_DATETIME_FORMAT):
     return list(file_list), list(dates)
 
 
-@overload
-def group_by_date(
-    files: Iterable[str], file_date_fmt: str = DEFAULT_DATETIME_FORMAT
-) -> dict[tuple[datetime.date, ...], list[str]]:
-    ...
-
-
-@overload
 def group_by_date(
     files: Iterable[PathLikeT], file_date_fmt: str = DEFAULT_DATETIME_FORMAT
-) -> dict[tuple[datetime.date, ...], list[PathLikeT]]:
-    ...
-
-
-def group_by_date(files, file_date_fmt=DEFAULT_DATETIME_FORMAT):
+) -> dict[tuple[datetime.datetime, ...], list[PathLikeT]]:
     """Combine files by date into a dict.
 
     Parameters
@@ -207,3 +189,7 @@ def group_by_date(files, file_date_fmt=DEFAULT_DATETIME_FORMAT):
         )
     }
     return grouped_images
+
+
+def _format_date_pair(start: date, end: date, fmt=DEFAULT_DATETIME_FORMAT) -> str:
+    return f"{start.strftime(fmt)}_{end.strftime(fmt)}"

@@ -17,6 +17,7 @@ from typing import Optional
 
 from osgeo_utils import gdal_calc
 
+import dolphin._dates
 from dolphin import io
 from dolphin._log import get_log
 from dolphin._types import Filename
@@ -76,7 +77,7 @@ def run_wrapped_phase_sequential(
         # Make the current ministack output folder using the start/end dates
         d0 = cur_dates[0][0]
         d1 = cur_dates[-1][0]
-        start_end = io._format_date_pair(d0, d1)
+        start_end = dolphin._dates._format_date_pair(d0, d1)
         cur_output_folder = output_folder / start_end
         cur_output_folder.mkdir(parents=True, exist_ok=True)
 

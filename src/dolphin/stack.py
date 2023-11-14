@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 from __future__ import annotations
 
-import datetime
 from dataclasses import dataclass
 from os import fspath
 from pathlib import Path
@@ -10,9 +9,11 @@ from typing import Generator, Optional, Sequence
 import numpy as np
 from osgeo import gdal
 
+import dolphin._dates
 from dolphin import io, utils
+from dolphin._dates import get_dates, sort_files_by_date
 from dolphin._log import get_log
-from dolphin._types import Bbox, Filename
+from dolphin._types import Bbox, DateOrDatetime, Filename
 
 gdal.UseExceptions()
 logger = get_log(__name__)
@@ -24,23 +25,21 @@ class BaseStack:
 
     file_list: list[Filename]
     is_compressed: list[bool]
-    dates: Optional[list[tuple[datetime.date]]] = None
+    dates: Optional[list[tuple[DateOrDatetime, ...]]] = None
     file_date_fmt: str = "%Y%m%d"
     output_folder: Optional[Path] = None
     reference_idx: int = 0
 
     def __post_init__(self):
         if self.dates is None:
-            self.dates = [
-                utils.get_dates(f, fmt=self.file_date_fmt) for f in self.file_list
-            ]
+            self.dates = [get_dates(f, fmt=self.file_date_fmt) for f in self.file_list]
 
     @property
     def date_range(self):
         """Get the date range of the ministack as a string, e.g. '20210101_20210202'."""
         d0 = self.dates[0][0]
         d1 = self.dates[-1][-1]
-        return io._format_date_pair(d0, d1, fmt=self.file_date_fmt)
+        return dolphin._dates._format_date_pair(d0, d1, fmt=self.file_date_fmt)
 
 
 @dataclass
@@ -60,8 +59,8 @@ class CompressedSlc:
     """Class for holding attributes about one compressed SLC."""
 
     input_files: list[Filename]
-    reference_date: datetime.date
-    dates: list[tuple[datetime.date]]
+    reference_date: DateOrDatetime
+    dates: list[tuple[DateOrDatetime]]
     output_folder: Optional[Path] = None
 
     @property
@@ -134,7 +133,7 @@ class VRTStack:
         Paths or GDAL-compatible strings (NETCDF:...) for paths to files.
     outfile : pathlib.Path, optional (default = Path("slc_stack.vrt"))
         Name of output file to write
-    dates : list[list[datetime.date]]
+    dates : list[list[DateOrDatetime]]
         list, where each entry is all dates matched from the corresponding file
         in `file_list`. This is used to sort the files by date.
         Each entry is a list because some files (compressed SLCs) may have
@@ -158,7 +157,7 @@ class VRTStack:
         in every images. Used for skipping the loading of these pixels.
     file_date_fmt : str, optional (default = "%Y%m%d")
         Format string for parsing the dates from the filenames.
-        Passed to [dolphin.utils.get_dates][].
+        Passed to [dolphin._dates.get_dates][].
     """
 
     def __init__(
@@ -192,9 +191,9 @@ class VRTStack:
         if use_abs_path:
             files = [utils._resolve_gdal_path(p) for p in files]
         # Extract the date/datetimes from the filenames
-        dates = [utils.get_dates(f, fmt=file_date_fmt) for f in files]
+        dates = [get_dates(f, fmt=file_date_fmt) for f in files]
         if sort_files:
-            files, dates = utils.sort_files_by_date(  # type: ignore
+            files, dates = sort_files_by_date(  # type: ignore
                 files, file_date_fmt=file_date_fmt
             )
 
@@ -310,10 +309,10 @@ class VRTStack:
         self.file_list.append(new_file)
 
         # Parse the new date, and add it to the list
-        new_date = utils.get_dates(new_file, fmt=self.file_date_fmt)
+        new_date = get_dates(new_file, fmt=self.file_date_fmt)
         self.dates.append(new_date)
         if sort_files:
-            self.file_list, self.dates = utils.sort_files_by_date(  # type: ignore
+            self.file_list, self.dates = sort_files_by_date(  # type: ignore
                 self.file_list, file_date_fmt=self.file_date_fmt
             )
 

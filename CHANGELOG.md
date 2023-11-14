@@ -1,10 +1,17 @@
 # [Unreleased](https://github.com/isce-framework/dolphin/compare/v0.6.0...main)
 
+**Changed**
+- Date functions have been moved from `dolphin.utils` to `dolphin._dates`. They are accessible at `dolphin.get_dates`, etc
+- `get_dates` now uses `datetime.datetime` instead of `datetime.date`.
+  - This is to allow for more flexibility in the date parsing, and to allow for the use of `datetime.date` or `datetime.datetime` in the output filenames.
+
+# [v0.6.1](https://github.com/isce-framework/dolphin/compare/v0.6.0...v0.6.1) - 2023-11-13
+
 **Removed**
 - `dolphin.opera_utils` now lives in the separate package
 
 **Dependencies**
-- `opera_utils`
+- Added `opera_utils`
 
 # [v0.6.0](https://github.com/isce-framework/dolphin/compare/v0.5.1...v0.6.0) - 2023-11-07
 

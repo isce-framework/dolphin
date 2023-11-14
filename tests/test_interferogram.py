@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import datetime
 from pathlib import Path
 
 import numpy as np
@@ -19,7 +19,7 @@ def test_derived_vrt_interferogram(slc_file_list):
 
     assert "20220101_20220102.vrt" == ifg.path.name
     assert io.get_raster_xysize(ifg.path) == io.get_raster_xysize(slc_file_list[0])
-    assert ifg.dates == (date(2022, 1, 1), date(2022, 1, 2))
+    assert ifg.dates == (datetime(2022, 1, 1), datetime(2022, 1, 2))
 
     arr0 = io.load_gdal(slc_file_list[0])
     arr1 = io.load_gdal(slc_file_list[1])
