@@ -417,6 +417,7 @@ def setup_output_folder(
     """
     if output_folder is None:
         output_folder = vrt_stack.outfile.parent
+    output_folder.mkdir(exist_ok=True, parents=True)
 
     date_strs: list[str] = []
     for d in vrt_stack.dates[start_idx:]:

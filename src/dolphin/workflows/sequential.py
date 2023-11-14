@@ -53,6 +53,7 @@ def run_wrapped_phase_sequential(
 ) -> tuple[list[Path], list[Path], Path]:
     """Estimate wrapped phase using batches of ministacks."""
     output_folder = Path(output_folder)
+    output_folder.mkdir(parents=True, exist_ok=True)
     v_all = VRTStack.from_vrt_file(slc_vrt_file)
     file_list_all = v_all.file_list
     date_list_all = v_all.dates
@@ -76,50 +77,56 @@ def run_wrapped_phase_sequential(
 
         # Make the current ministack output folder using the start/end dates
         d0 = cur_dates[0][0]
-        d1 = cur_dates[-1][0]
+        d1 = cur_dates[-1][-1]
         start_end = dolphin._dates._format_date_pair(d0, d1)
         cur_output_folder = output_folder / start_end
-        cur_output_folder.mkdir(parents=True, exist_ok=True)
+        if (
+            cur_output_folder.exists()
+            and len(list(cur_output_folder.glob("*.tif"))) > 0
+        ):
+            # This ministack was already processed
+            logger.info(f"Skipping {cur_output_folder} because it already exists.")
+        else:
+            logger.info(
+                f"Processing {len(cur_files)} SLCs. Output folder: {cur_output_folder}"
+            )
+            # Add the existing compressed SLC files to the start
+            cur_files = comp_slc_files + cur_files
+            cur_vrt = VRTStack(
+                cur_files,
+                outfile=output_folder / f"{start_end}.vrt",
+                sort_files=False,
+                subdataset=v_all.subdataset,
+            )
 
-        msg = f"Processing {len(cur_files)} SLCs."
-        msg += f"Output folder: {cur_output_folder}"
-        logger.info(msg)
-        # Add the existing compressed SLC files to the start
-        cur_files = comp_slc_files + cur_files
-        # TODO TESTING:
-        # LIMIT THE NUM COMP SLCS TO 3!
-        # cur_files = comp_slc_files[-3:] + cur_files
-        cur_vrt = VRTStack(
-            cur_files,
-            outfile=output_folder / f"{start_end}.vrt",
-            sort_files=False,
-            subdataset=v_all.subdataset,
-        )
-        # TODO: what situations do we need to set reference-idx != 0
-        ref_idx = 0
-        run_wrapped_phase_single(
-            slc_vrt_file=cur_vrt,
-            output_folder=cur_output_folder,
-            half_window=half_window,
-            strides=strides,
-            reference_idx=ref_idx,
-            use_evd=use_evd,
-            beta=beta,
-            mask_file=mask_file,
-            ps_mask_file=ps_mask_file,
-            amp_mean_file=amp_mean_file,
-            amp_dispersion_file=amp_dispersion_file,
-            shp_method=shp_method,
-            shp_alpha=shp_alpha,
-            shp_nslc=shp_nslc,
-            block_shape=block_shape,
-            n_workers=n_workers,
-            gpu_enabled=gpu_enabled,
-        )
-        cur_output_files = sorted(cur_output_folder.glob("2*.slc.tif"))
-        cur_comp_slc_file = next(cur_output_folder.glob("compressed_*"))
-        tcorr_file = next(cur_output_folder.glob("tcorr_*"))
+            # Currently: we are always using the first SLC as the reference,
+            # even if this is a compressed SLC.
+            # Will need to change this if we want to accomodate the original
+            # Sequential Estimator+Datum Adjustment method.
+            reference_idx = 0
+            run_wrapped_phase_single(
+                slc_vrt_file=cur_vrt,
+                output_folder=cur_output_folder,
+                half_window=half_window,
+                strides=strides,
+                reference_idx=reference_idx,
+                use_evd=use_evd,
+                beta=beta,
+                mask_file=mask_file,
+                ps_mask_file=ps_mask_file,
+                amp_mean_file=amp_mean_file,
+                amp_dispersion_file=amp_dispersion_file,
+                shp_method=shp_method,
+                shp_alpha=shp_alpha,
+                shp_nslc=shp_nslc,
+                block_shape=block_shape,
+                n_workers=n_workers,
+                gpu_enabled=gpu_enabled,
+            )
 
+        cur_output_files, cur_comp_slc_file, tcorr_file = _get_outputs_from_folder(
+            cur_output_folder
+        )
         output_slc_files[mini_idx] = cur_output_files
         comp_slc_files.append(cur_comp_slc_file)
         tcorr_files.append(tcorr_file)
@@ -161,3 +168,10 @@ def run_wrapped_phase_sequential(
         comp_outputs.append(output_folder / p.name)
 
     return pl_outputs, comp_outputs, output_tcorr_file
+
+
+def _get_outputs_from_folder(output_folder: Path):
+    cur_output_files = sorted(output_folder.glob("2*.slc.tif"))
+    cur_comp_slc_file = next(output_folder.glob("compressed_*"))
+    tcorr_file = next(output_folder.glob("tcorr_*"))
+    return cur_output_files, cur_comp_slc_file, tcorr_file
