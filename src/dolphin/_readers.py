@@ -108,12 +108,9 @@ class VRTStack:
         ds = None
         # Save the subset info
 
-        self._set_subset(
-            pixel_bbox=pixel_bbox,
-            target_extent=target_extent,
-            latlon_bbox=latlon_bbox,
-            filename=self.file_list[0],
-        )
+        self.xoff, self.yoff = 0, 0
+        self.xsize_sub, self.ysize_sub = self.xsize, self.ysize
+
         if write_file:
             self._write()
 
@@ -186,50 +183,6 @@ class VRTStack:
         # Allows os.fspath() to work on the object, enabling rasterio.open()
         return fspath(self.outfile)
 
-    def _set_subset(
-        self, pixel_bbox=None, target_extent=None, latlon_bbox=None, filename=None
-    ):
-        """Save the subset bounding box for a given target extent.
-
-        Sets the attributes `xoff`, `yoff`, `xsize_sub`, `ysize_sub` for the subset.
-
-        Parameters
-        ----------
-        pixel_bbox : tuple[int], optional
-            Desired bounding box of subset as (left, bottom, right, top)
-        target_extent : tuple[int], optional
-            Target extent: alternative way to subset the stack like the `-te` gdal option:
-        latlon_bbox : tuple[int], optional
-            Bounding box in lat/lon coordinates: (left, bottom, right, top)
-        filename : str, optional
-            Name of file to get the bounding box from, if providing `target_extent`
-
-        """
-        if all(
-            (pixel_bbox is not None, target_extent is not None, latlon_bbox is not None)
-        ):
-            raise ValueError(
-                "Cannot only specif one of `pixel_bbox` and `latlon_bbox`, and"
-                " `target_extent`"
-            )
-        # If target extent is provided, convert to pixel bounding box
-        if latlon_bbox is not None:
-            # convert in 2 steps: first lat/lon -> UTM, then UTM -> pixel
-            target_extent = VRTStack._latlon_bbox_to_te(latlon_bbox, filename=filename)
-        if target_extent is not None:
-            # convert UTM -> pixels
-            pixel_bbox = VRTStack._te_to_bbox(target_extent, filename=filename)
-
-        if pixel_bbox is not None:
-            left, bottom, right, top = pixel_bbox
-            self.xoff = left
-            self.yoff = top
-            self.xsize_sub = right - left
-            self.ysize_sub = bottom - top
-        else:
-            self.xoff, self.yoff = 0, 0
-            self.xsize_sub, self.ysize_sub = self.xsize, self.ysize
-
     @classmethod
     def from_vrt_file(cls, vrt_file, new_outfile=None, **kwargs):
         """Create a new VRTStack using an existing VRT file."""
@@ -290,49 +243,6 @@ class VRTStack:
             # If no prefix, the file_strings are actually paths
             filepaths, sds = file_strings, None
         return list(filepaths), sds
-
-    @staticmethod
-    def _latlon_bbox_to_te(
-        latlon_bbox,
-        filename,
-        epsg=None,
-    ):
-        """Convert a lat/lon bounding box to a target extent.
-
-        Parameters
-        ----------
-        latlon_bbox : tuple[float]
-            Bounding box in lat/lon coordinates: (left, bottom, right, top)
-        filename : str
-            Name of file to get the destination SRS from
-        epsg : int or str, optional
-            EPSG code of the destination SRS
-
-        Returns
-        -------
-        target_extent : tuple[float]
-            Target extent: (xmin, ymin, xmax, ymax) in units of `filename`s SRS (e.g. UTM)
-        """
-        from pyproj import Transformer
-
-        if epsg is None:
-            ds = gdal.Open(fspath(filename))
-            srs_out = ds.GetSpatialRef()
-            epsg = int(srs_out.GetAttrValue("AUTHORITY", 1))
-            ds = None
-        if int(epsg) == 4326:
-            return latlon_bbox
-        t = Transformer.from_crs(4326, epsg, always_xy=True)
-        left, bottom, right, top = latlon_bbox
-        return t.transform(left, bottom) + t.transform(right, top)
-
-    @staticmethod
-    def _te_to_bbox(target_extent, ds=None, filename=None):
-        """Convert target extent to pixel bounding box, in georeferenced coordinates."""
-        xmin, ymin, xmax, ymax = target_extent  # in georeferenced coordinates
-        row_bottom, col_left = io.xy_to_rowcol(xmin, ymin, ds=ds, filename=filename)
-        row_top, col_right = io.xy_to_rowcol(xmax, ymax, ds=ds, filename=filename)
-        return col_left, row_bottom, col_right, row_top
 
     def iter_blocks(
         self,
