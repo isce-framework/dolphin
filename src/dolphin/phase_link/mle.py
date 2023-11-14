@@ -210,9 +210,7 @@ def mle_stack(
         Default is 0.01.
     reference_idx : int, optional
         The index of the reference acquisition, by default 0
-        If the SLC stack from which `C_arrays` was computed contained
-        compressed SLCs at the stack, then this should be the index
-        of the first non-compressed SLC.
+        All outputs are multiplied by the conjugate of the data at this index.
     n_workers : int, optional
         The number of workers to use (CPU version) for the eigenvector problem.
         If 1 (default), no multiprocessing is used.
