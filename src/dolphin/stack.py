@@ -200,8 +200,6 @@ class VRTStack:
         # Save the attributes
         self.file_list = files
         self.dates = dates
-        # save for future parsing of dates with `add_file`
-        self.file_date_fmt = file_date_fmt
 
         self.outfile = Path(outfile).resolve()
         # Assumes that all files use the same subdataset (if NetCDF)
@@ -300,23 +298,6 @@ class VRTStack:
     def __fspath__(self):
         # Allows os.fspath() to work on the object, enabling rasterio.open()
         return fspath(self.outfile)
-
-    def add_file(self, new_file: Filename, sort_files: bool = True):
-        """Append a new file to the stack, and (optionally) re-sort."""
-        new_file = Path(new_file)
-        if self._use_abs_path:
-            new_file = new_file.resolve()
-        self.file_list.append(new_file)
-
-        # Parse the new date, and add it to the list
-        new_date = get_dates(new_file, fmt=self.file_date_fmt)
-        self.dates.append(new_date)
-        if sort_files:
-            self.file_list, self.dates = sort_files_by_date(  # type: ignore
-                self.file_list, file_date_fmt=self.file_date_fmt
-            )
-
-        self._write()
 
     def _set_subset(
         self, pixel_bbox=None, target_extent=None, latlon_bbox=None, filename=None

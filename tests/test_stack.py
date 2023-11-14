@@ -127,44 +127,6 @@ def test_bad_sizes(slc_file_list, raster_10_by_20):
         VRTStack(slc_file_list + [raster_10_by_20], outfile="other.vrt")
 
 
-# TODO: target extent
-# TODO: latlon_bbox
-
-
-def test_add_file(vrt_stack, slc_stack):
-    # Repeat the data, but create a new file
-    slc = slc_stack[0]
-
-    # Make the file in the past
-    new_path_past = (vrt_stack.outfile.parent / "20000101.slc").resolve()
-    driver = gdal.GetDriverByName("ENVI")
-    ds = driver.Create(
-        str(new_path_past), slc.shape[1], slc.shape[0], 1, gdal.GDT_CFloat32
-    )
-    ds.GetRasterBand(1).WriteArray(slc)
-    ds = None
-
-    # Check that the new file is added to the VRT
-    vrt_stack.add_file(new_path_past)
-    assert len(vrt_stack.file_list) == slc_stack.shape[0] + 1
-    assert len(vrt_stack.dates) == slc_stack.shape[0] + 1
-
-    # Make the file in the future
-    new_path_future = (vrt_stack.outfile.parent / "20250101.slc").resolve()
-    ds = driver.Create(
-        str(new_path_future), slc.shape[1], slc.shape[0], 1, gdal.GDT_CFloat32
-    )
-    ds.GetRasterBand(1).WriteArray(slc)
-    ds = None
-
-    vrt_stack.add_file(new_path_future)
-    assert len(vrt_stack.file_list) == slc_stack.shape[0] + 2
-
-    ds = gdal.Open(str(vrt_stack.outfile))
-    read_stack = ds.ReadAsArray()
-    assert read_stack.shape[0] == slc_stack.shape[0] + 2
-
-
 def test_iter_blocks(vrt_stack):
     blocks, slices = zip(*list(vrt_stack.iter_blocks(block_shape=(5, 5))))
     # (5, 10) total shape, breaks into 5x5 blocks
