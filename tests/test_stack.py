@@ -16,6 +16,11 @@ def files(slc_file_list):
 
 
 @pytest.fixture
+def files_nc(slc_file_list_nc):
+    return slc_file_list_nc[:NUM_ACQ]
+
+
+@pytest.fixture
 def dates(slc_date_list):
     return slc_date_list[:NUM_ACQ]
 
@@ -96,7 +101,7 @@ def test_create_compressed_slc(files, date_tuples, is_compressed):
     assert comp_slc2.compressed_slc_file_list == files[0:1]
 
 
-def test_ministack_planner(files, date_tuples, is_compressed):
+def run_ministack_planner(files, date_tuples, is_compressed):
     msp = MiniStackPlanner(
         files,
         dates=date_tuples,
@@ -107,25 +112,43 @@ def test_ministack_planner(files, date_tuples, is_compressed):
     ms_list = msp.plan(4)
     assert len(ms_list) == 3
 
-    with pytest.warns(UserWarning):
-        ms_list = msp.plan(3)
-
+    ms_size = 3
+    ms_list = msp.plan(ms_size)
     assert len(ms_list) == 4
-    assert ms_list[0].file_list == files[:3]
-    assert ms_list[1].file_list == files[3:6]
-    assert ms_list[2].file_list == files[6:9]
-    assert ms_list[3].file_list == files[9:10]
 
-    assert ms_list[0].output_folder == Path("fake_dir/20220101_20220103")
-    assert ms_list[1].output_folder == Path("fake_dir/20220104_20220106")
-    assert ms_list[2].output_folder == Path("fake_dir/20220107_20220109")
-    assert ms_list[3].output_folder == Path("fake_dir/20220110_20220110")
+    expected_out_folders = [
+        Path("fake_dir/20220101_20220103"),
+        Path("fake_dir/20220104_20220106"),
+        Path("fake_dir/20220107_20220109"),
+        Path("fake_dir/20220110_20220110"),
+    ]
+    for idx, ms in enumerate(ms_list):
+        # size should increment by 1 each time
+        if idx < 3:
+            assert len(ms.file_list) == idx + 3
+        else:
+            # Last one is 1 real, + 3 compressed
+            assert len(ms.file_list) == 4
+
+        # number of compressed should increment by 1 each time
+        assert sum(ms.is_compressed) == idx
+        assert ms.file_list[idx:] == files[ms_size * idx : ms_size * (1 + idx)]
+
+        assert ms.output_folder == expected_out_folders[idx]
 
     assert all([ms.reference_date == datetime(2022, 1, 1) for ms in ms_list])
 
 
-# """Result above is:
+def test_ministack_planner_gtiff(files, date_tuples, is_compressed):
+    run_ministack_planner(files, date_tuples, is_compressed)
 
+
+# Unclear how to parameterize over the 2 fixtures
+def test_mini_stack_planner_nc(files_nc, date_tuples, is_compressed):
+    run_ministack_planner(files_nc, date_tuples, is_compressed)
+
+
+# """Result above is:
 # [
 #     MiniStackInfo(
 #         file_list=[
@@ -133,7 +156,11 @@ def test_ministack_planner(files, date_tuples, is_compressed):
 #             PosixPath('pathtest/gtiff/20220102.slc.tif'),
 #             PosixPath('pathtest/gtiff/20220103.slc.tif')
 #         ],
-#         dates=[(datetime.datetime(2022, 1, 1, 0, 0),), (datetime.datetime(2022, 1, 2, 0, 0),), (datetime.datetime(2022, 1, 3, 0, 0),)],
+#         dates=[
+#             (datetime.datetime(2022, 1, 1, 0, 0),),
+#             (datetime.datetime(2022, 1, 2, 0, 0),),
+#             (datetime.datetime(2022, 1, 3, 0, 0),)
+#         ],
 #         is_compressed=[False, False, False],
 #         reference_date=datetime.datetime(2022, 1, 1, 0, 0),
 #         file_date_fmt='%Y%m%d',
@@ -142,12 +169,18 @@ def test_ministack_planner(files, date_tuples, is_compressed):
 #     ),
 #     MiniStackInfo(
 #         file_list=[
+#             PosixPath('20220101_20220103/compressed_20220101_20220103.tif'),
 #             PosixPath('pathtest/gtiff/20220104.slc.tif'),
 #             PosixPath('pathtest/gtiff/20220105.slc.tif'),
 #             PosixPath('pathtest/gtiff/20220106.slc.tif')
 #         ],
-#         dates=[(datetime.datetime(2022, 1, 4, 0, 0),), (datetime.datetime(2022, 1, 5, 0, 0),), (datetime.datetime(2022, 1, 6, 0, 0),)],
-#         is_compressed=[False, False, False],
+#         dates=[
+#             (datetime.datetime(2022, 1, 1, 0, 0), datetime.datetime(2022, 1, 3, 0, 0)),
+#             (datetime.datetime(2022, 1, 4, 0, 0),),
+#             (datetime.datetime(2022, 1, 5, 0, 0),),
+#             (datetime.datetime(2022, 1, 6, 0, 0),)
+#         ],
+#         is_compressed=[True, False, False, False],
 #         reference_date=datetime.datetime(2022, 1, 1, 0, 0),
 #         file_date_fmt='%Y%m%d',
 #         output_folder=PosixPath('20220104_20220106'),
@@ -155,25 +188,43 @@ def test_ministack_planner(files, date_tuples, is_compressed):
 #     ),
 #     MiniStackInfo(
 #         file_list=[
+#             PosixPath('20220101_20220103/compressed_20220101_20220103.tif'),
+#             PosixPath('20220104_20220106/compressed_20220104_20220106.tif'),
 #             PosixPath('pathtest/gtiff/20220107.slc.tif'),
 #             PosixPath('pathtest/gtiff/20220108.slc.tif'),
 #             PosixPath('pathtest/gtiff/20220109.slc.tif')
 #         ],
-#         dates=[(datetime.datetime(2022, 1, 7, 0, 0),), (datetime.datetime(2022, 1, 8, 0, 0),), (datetime.datetime(2022, 1, 9, 0, 0),)],
-#         is_compressed=[False, False, False],
+#         dates=[
+#             (datetime.datetime(2022, 1, 1, 0, 0), datetime.datetime(2022, 1, 3, 0, 0)),
+#             (datetime.datetime(2022, 1, 4, 0, 0), datetime.datetime(2022, 1, 6, 0, 0)),
+#             (datetime.datetime(2022, 1, 7, 0, 0),),
+#             (datetime.datetime(2022, 1, 8, 0, 0),),
+#             (datetime.datetime(2022, 1, 9, 0, 0),)
+#         ],
+#         is_compressed=[True, True, False, False, False],
 #         reference_date=datetime.datetime(2022, 1, 1, 0, 0),
 #         file_date_fmt='%Y%m%d',
 #         output_folder=PosixPath('20220107_20220109'),
-#         reference_idx=0
+#         reference_idx=1
 #     ),
 #     MiniStackInfo(
-#         file_list=[PosixPath('pathtest/gtiff/20220110.slc.tif')],
-#         dates=[(datetime.datetime(2022, 1, 10, 0, 0),)],
-#         is_compressed=[False],
+#         file_list=[
+#             PosixPath('20220101_20220103/compressed_20220101_20220103.tif'),
+#             PosixPath('20220104_20220106/compressed_20220104_20220106.tif'),
+#             PosixPath('20220107_20220109/compressed_20220107_20220109.tif'),
+#             PosixPath('pathtest/gtiff/20220110.slc.tif')
+#         ],
+#         dates=[
+#             (datetime.datetime(2022, 1, 1, 0, 0), datetime.datetime(2022, 1, 3, 0, 0)),
+#             (datetime.datetime(2022, 1, 4, 0, 0), datetime.datetime(2022, 1, 6, 0, 0)),
+#             (datetime.datetime(2022, 1, 7, 0, 0), datetime.datetime(2022, 1, 9, 0, 0)),
+#             (datetime.datetime(2022, 1, 10, 0, 0),)
+#         ],
+#         is_compressed=[True, True, True, False],
 #         reference_date=datetime.datetime(2022, 1, 1, 0, 0),
 #         file_date_fmt='%Y%m%d',
 #         output_folder=PosixPath('20220110_20220110'),
-#         reference_idx=0
+#         reference_idx=2
 #     )
 # ]
 # """

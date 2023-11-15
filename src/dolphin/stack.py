@@ -257,6 +257,9 @@ class MiniStackPlanner(BaseStack):
 
     def plan(self, ministack_size: int) -> list[MiniStackInfo]:
         """Create a list of ministacks to be processed."""
+        if ministack_size < 2:
+            raise ValueError("Cannot create ministacks with size < 2")
+
         output_ministacks: list[MiniStackInfo] = []
         compressed_slc_infos: list[CompressedSlcInfo] = []
 
@@ -304,8 +307,8 @@ class MiniStackPlanner(BaseStack):
             )
 
             output_ministacks.append(cur_ministack)
-            # cur_comp_slc = cur_ministack.get_compressed_slc_info()
-            # compressed_slc_infos.append(cur_comp_slc)
+            cur_comp_slc = cur_ministack.get_compressed_slc_info()
+            compressed_slc_infos.append(cur_comp_slc)
 
         return output_ministacks
         # return output_ministacks, compressed_slc_infos
