@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from datetime import date
+import datetime
 from pathlib import Path
-from typing import Sequence
+from typing import Mapping, Sequence
 
 from dolphin import io, stitching, unwrap
 from dolphin._log import get_log, log_runtime
@@ -162,7 +162,8 @@ def run(
 
 
 def _estimate_interferometric_correlations(
-    date_to_ifg_path: dict[tuple[date, ...], Path], window_size: tuple[int, int]
+    date_to_ifg_path: Mapping[tuple[datetime.datetime, ...], Path],
+    window_size: tuple[int, int],
 ) -> list[Path]:
     logger = get_log()
 
