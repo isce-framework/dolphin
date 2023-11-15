@@ -186,7 +186,7 @@ def mle_stack(
     C_arrays,
     use_evd: bool = False,
     beta: float = 0.01,
-    reference_idx: float = 0,
+    reference_idx: int = 0,
     n_workers: int = 1,
 ):
     """Estimate the linked phase for a stack of covariance matrices.
