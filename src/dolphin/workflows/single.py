@@ -365,7 +365,9 @@ def setup_output_folder(
     """
     if output_folder is None:
         output_folder = ministack.output_folder
-    output_folder = Path(ministack.output_folder)
+    # Note: DONT use the ministack.output_folder here, since that will
+    # be the tempdir made by @atomic_output
+    # # output_folder = Path(ministack.output_folder)
     output_folder.mkdir(exist_ok=True, parents=True)
 
     start_idx = ministack.first_real_slc_idx

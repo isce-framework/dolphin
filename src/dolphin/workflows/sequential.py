@@ -9,7 +9,6 @@ References
 
 from __future__ import annotations
 
-from collections import defaultdict
 from itertools import chain
 from os import fspath
 from pathlib import Path
@@ -17,11 +16,11 @@ from typing import Optional
 
 from osgeo_utils import gdal_calc
 
-import dolphin._dates
 from dolphin import io
 from dolphin._log import get_log
 from dolphin._readers import VRTStack
 from dolphin._types import Filename
+from dolphin.stack import MiniStackPlanner
 
 from .config import ShpMethod
 from .single import run_wrapped_phase_single
@@ -38,6 +37,8 @@ def run_wrapped_phase_sequential(
     half_window: dict,
     strides: dict = {"x": 1, "y": 1},
     ministack_size: int = 10,
+    # TODO: make this configurable?
+    max_num_compressed: int = 5,
     mask_file: Optional[Filename] = None,
     ps_mask_file: Optional[Filename] = None,
     amp_mean_file: Optional[Filename] = None,
@@ -55,43 +56,44 @@ def run_wrapped_phase_sequential(
     output_folder = Path(output_folder)
     output_folder.mkdir(parents=True, exist_ok=True)
     v_all = VRTStack.from_vrt_file(slc_vrt_file)
-    file_list_all = v_all.file_list
-    date_list_all = v_all.dates
+    logger.info(
+        f"Full file range for {v_all}: from {v_all.file_list[0]} to {v_all.file_list[-1]}"
+    )
+
+    # Create ministacks
+    mini_stack_planner = MiniStackPlanner(
+        v_all.file_list,
+        v_all.dates,
+        is_compressed=[False] * len(v_all.file_list),
+        output_folder=output_folder,
+        max_num_compressed=max_num_compressed,
+    )
+    ministacks = mini_stack_planner.plan(ministack_size)
 
     if shp_nslc is None:
-        shp_nslc = len(file_list_all)
+        shp_nslc = v_all.shape[0]
 
-    logger.info(f"{v_all}: from {v_all.file_list[0]} to {v_all.file_list[-1]}")
-
-    # Map of {ministack_index: [output_slc_files]}
-    output_slc_files: dict[int, list] = defaultdict(list)
-    comp_slc_files: list[Path] = []
+    # list where each item is [output_slc_files] from a ministack
+    output_slc_files: list[list] = []
+    # Each item is the tcorr file from a ministack
     tcorr_files: list[Path] = []
 
-    # Solve each ministack using the current chunk (and the previous compressed SLCs)
-    ministack_starts = range(0, len(file_list_all), ministack_size)
-    for mini_idx, full_stack_idx in enumerate(ministack_starts):
-        cur_slice = slice(full_stack_idx, full_stack_idx + ministack_size)
-        cur_files = file_list_all[cur_slice].copy()
-        cur_dates = date_list_all[cur_slice].copy()
+    # function to check if a ministack has already been processed
+    def already_processed(d: Path, search_ext: str = ".tif") -> bool:
+        return d.exists() and len(list(d.glob(f"*{search_ext}"))) > 0
 
-        # Make the current ministack output folder using the start/end dates
-        d0 = cur_dates[0][0]
-        d1 = cur_dates[-1][-1]
-        start_end = dolphin._dates._format_date_pair(d0, d1)
-        cur_output_folder = output_folder / start_end
-        if (
-            cur_output_folder.exists()
-            and len(list(cur_output_folder.glob("*.tif"))) > 0
-        ):
-            # This ministack was already processed
+    # Solve each ministack using the current chunk (and the previous compressed SLCs)
+    for ministack in ministacks:
+        cur_output_folder = ministack.output_folder
+
+        if already_processed(cur_output_folder):
             logger.info(f"Skipping {cur_output_folder} because it already exists.")
         else:
+            cur_files = ministack.file_list
+            start_end = ministack.real_slc_date_range_str
             logger.info(
                 f"Processing {len(cur_files)} SLCs. Output folder: {cur_output_folder}"
             )
-            # Add the existing compressed SLC files to the start
-            cur_files = comp_slc_files + cur_files
             cur_vrt = VRTStack(
                 cur_files,
                 outfile=output_folder / f"{start_end}.vrt",
@@ -106,6 +108,7 @@ def run_wrapped_phase_sequential(
             reference_idx = 0
             run_wrapped_phase_single(
                 slc_vrt_file=cur_vrt,
+                ministack=ministack,
                 output_folder=cur_output_folder,
                 half_window=half_window,
                 strides=strides,
@@ -127,8 +130,7 @@ def run_wrapped_phase_sequential(
         cur_output_files, cur_comp_slc_file, tcorr_file = _get_outputs_from_folder(
             cur_output_folder
         )
-        output_slc_files[mini_idx] = cur_output_files
-        comp_slc_files.append(cur_comp_slc_file)
+        output_slc_files.append(cur_output_files)
         tcorr_files.append(tcorr_file)
 
     ##############################################
@@ -155,7 +157,8 @@ def run_wrapped_phase_sequential(
         tcorr_files[0].rename(output_tcorr_file)
 
     # Combine the separate SLC output lists into a single list
-    all_slc_files = list(chain.from_iterable(output_slc_files.values()))
+    all_slc_files = list(chain.from_iterable(output_slc_files))
+    all_comp_slc_files = [ms.get_compressed_slc_info().path for ms in ministacks]
 
     pl_outputs = []
     for slc_fname in all_slc_files:
@@ -163,7 +166,7 @@ def run_wrapped_phase_sequential(
         pl_outputs.append(output_folder / slc_fname.name)
 
     comp_outputs = []
-    for p in comp_slc_files:
+    for p in all_comp_slc_files:
         p.rename(output_folder / p.name)
         comp_outputs.append(output_folder / p.name)
 
