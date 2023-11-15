@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime
 import os
 from pathlib import Path
 
@@ -39,20 +40,31 @@ def slc_stack():
 
 
 @pytest.fixture()
-def slc_file_list(tmp_path, slc_stack):
+def slc_date_list(slc_stack):
+    start_date = datetime.datetime(2022, 1, 1)
+    out = []
+    dt = datetime.timedelta(days=1)
+    for i in range(len(slc_stack)):
+        out.append(start_date + i * dt)
+
+    return out
+
+
+@pytest.fixture()
+def slc_file_list(tmp_path, slc_stack, slc_date_list):
     shape = slc_stack.shape
     # Write to a file
     driver = gdal.GetDriverByName("GTiff")
-    start_date = 20220101
     d = tmp_path / "gtiff"
     d.mkdir()
     name_template = d / "{date}.slc.tif"
+
     file_list = []
-    for i in range(shape[0]):
-        fname = str(name_template).format(date=str(start_date + i))
+    for cur_date, cur_slc in zip(slc_date_list, slc_stack):
+        fname = str(name_template).format(date=cur_date.strftime("%Y%m%d"))
         file_list.append(Path(fname))
         ds = driver.Create(fname, shape[-1], shape[-2], 1, gdal.GDT_CFloat32)
-        ds.GetRasterBand(1).WriteArray(slc_stack[i])
+        ds.GetRasterBand(1).WriteArray(cur_slc)
         ds = None
 
     # Write the list of SLC files to a text file
@@ -62,16 +74,15 @@ def slc_file_list(tmp_path, slc_stack):
 
 
 @pytest.fixture()
-def slc_file_list_nc(tmp_path, slc_stack):
+def slc_file_list_nc(tmp_path, slc_stack, slc_date_list):
     """Save the slc stack as a series of NetCDF files."""
-    start_date = 20220101
     d = tmp_path / "32615"
     d.mkdir()
     name_template = d / "{date}.nc"
     file_list = []
-    for i in range(len(slc_stack)):
-        fname = str(name_template).format(date=str(start_date + i))
-        create_test_nc(fname, epsg=32615, subdir="/", data=slc_stack[i])
+    for cur_date, cur_slc in zip(slc_date_list, slc_stack):
+        fname = str(name_template).format(date=cur_date.strftime("%Y%m%d"))
+        create_test_nc(fname, epsg=32615, subdir="/", data=cur_slc)
         assert 'AUTHORITY["EPSG","32615"]]' in gdal.Open(fname).GetProjection()
         file_list.append(Path(fname))
 
@@ -82,17 +93,16 @@ def slc_file_list_nc(tmp_path, slc_stack):
 
 
 @pytest.fixture()
-def slc_file_list_nc_wgs84(tmp_path, slc_stack):
+def slc_file_list_nc_wgs84(tmp_path, slc_stack, slc_date_list):
     """Make one with lat/lon as the projection system."""
 
-    start_date = 20220101
     d = tmp_path / "wgs84"
     d.mkdir()
     name_template = d / "{date}.nc"
     file_list = []
-    for i in range(len(slc_stack)):
-        fname = str(name_template).format(date=str(start_date + i))
-        create_test_nc(fname, epsg=4326, subdir="/", data=slc_stack[i])
+    for cur_date, cur_slc in zip(slc_date_list, slc_stack):
+        fname = str(name_template).format(date=cur_date.strftime("%Y%m%d"))
+        create_test_nc(fname, epsg=4326, subdir="/", data=cur_slc)
         assert 'AUTHORITY["EPSG","4326"]]' in gdal.Open(fname).GetProjection()
         file_list.append(Path(fname))
 
@@ -102,19 +112,18 @@ def slc_file_list_nc_wgs84(tmp_path, slc_stack):
 
 
 @pytest.fixture()
-def slc_file_list_nc_with_sds(tmp_path, slc_stack):
+def slc_file_list_nc_with_sds(tmp_path, slc_stack, slc_date_list):
     """Save NetCDF files with multiple valid datsets."""
-    start_date = 20220101
     d = tmp_path / "nc_with_sds"
     name_template = d / "{date}.nc"
     d.mkdir()
     file_list = []
     subdirs = ["/data", "/data2"]
     ds_name = "VV"
-    for i in range(len(slc_stack)):
-        fname = str(name_template).format(date=str(start_date + i))
+    for cur_date, cur_slc in zip(slc_date_list, slc_stack):
+        fname = str(name_template).format(date=str(cur_date))
         create_test_nc(
-            fname, epsg=32615, subdir=subdirs, data_ds_name=ds_name, data=slc_stack[i]
+            fname, epsg=32615, subdir=subdirs, data_ds_name=ds_name, data=cur_slc
         )
         # just point to one of them
         file_list.append(f"NETCDF:{fname}:{subdirs[0]}/{ds_name}")
