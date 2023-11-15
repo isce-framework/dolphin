@@ -1,6 +1,6 @@
 import pytest
 
-from dolphin import _readers
+from dolphin import _readers, stack
 from dolphin.phase_link import simulate
 from dolphin.utils import gpu_is_available
 from dolphin.workflows import single
@@ -21,12 +21,19 @@ def test_sequential_gtiff(tmp_path, slc_file_list, gpu_enabled):
     files = slc_file_list[:3]
     vrt_stack = _readers.VRTStack(files, outfile=vrt_file)
     _, rows, cols = vrt_stack.shape
+    is_compressed = [False] * len(files)
+    ministack = stack.MiniStackInfo(
+        vrt_stack.file_list,
+        dates=vrt_stack.dates,
+        is_compressed=is_compressed,
+    )
 
     half_window = {"x": cols // 2, "y": rows // 2}
     strides = {"x": 1, "y": 1}
     output_folder = tmp_path / "single"
     single.run_wrapped_phase_single(
         slc_vrt_file=vrt_file,
+        ministack=ministack,
         output_folder=output_folder,
         half_window=half_window,
         strides=strides,
