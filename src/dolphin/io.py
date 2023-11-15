@@ -11,7 +11,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from os import fspath
 from pathlib import Path
-from typing import Any, Generator, Optional, Sequence, Union
+from typing import Any, Generator, Mapping, Optional, Sequence, Union
 
 import h5py
 import numpy as np
@@ -345,6 +345,28 @@ def get_raster_metadata(filename: Filename, domain: str = ""):
     ds = gdal.Open(fspath(filename))
     md = ds.GetMetadata(domain)
     return md
+
+
+def set_raster_metadata(
+    filename: Filename, metadata: Mapping[str, Any], domain: str = ""
+):
+    """Set metadata on a raster file.
+
+    Parameters
+    ----------
+    filename : Filename
+        Path to the file to load.
+    metadata : dict
+        Dictionary of metadata to set.
+    domain : str, optional
+        Domain to set metadata for. Default is "" (all domains).
+    """
+    ds = gdal.Open(fspath(filename), gdal.GA_Update)
+    # Ensure the keys/values are written as strings
+    md_dict = {k: str(v) for k, v in metadata.items()}
+    ds.SetMetadata(md_dict, domain)
+    ds.FlushCache()
+    ds = None
 
 
 def rowcol_to_xy(
