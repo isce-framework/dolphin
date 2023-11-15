@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from os import fspath
 from pathlib import Path
 from typing import Generator, Optional, Sequence
@@ -7,7 +9,7 @@ from osgeo import gdal
 
 from dolphin import io, utils
 from dolphin._dates import get_dates, sort_files_by_date
-from dolphin._types import Bbox, Filename
+from dolphin._types import Filename
 from dolphin.stack import logger
 
 
@@ -53,9 +55,6 @@ class VRTStack:
         outfile: Filename = "slc_stack.vrt",
         use_abs_path: bool = True,
         subdataset: Optional[str] = None,
-        pixel_bbox: Optional[tuple[int, int, int, int]] = None,
-        target_extent: Optional[tuple[float, float, float, float]] = None,
-        latlon_bbox: Optional[Bbox] = None,
         sort_files: bool = True,
         file_date_fmt: str = "%Y%m%d",
         write_file: bool = True,
