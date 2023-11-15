@@ -121,7 +121,7 @@ def slc_file_list_nc_with_sds(tmp_path, slc_stack, slc_date_list):
     subdirs = ["/data", "/data2"]
     ds_name = "VV"
     for cur_date, cur_slc in zip(slc_date_list, slc_stack):
-        fname = str(name_template).format(date=str(cur_date))
+        fname = str(name_template).format(date=cur_date.strftime("%Y%m%d"))
         create_test_nc(
             fname, epsg=32615, subdir=subdirs, data_ds_name=ds_name, data=cur_slc
         )

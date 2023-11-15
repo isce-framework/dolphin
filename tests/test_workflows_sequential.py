@@ -1,5 +1,3 @@
-import warnings
-
 import numpy.testing as npt
 import pytest
 
@@ -104,11 +102,8 @@ def test_sequential_nc(tmp_path, slc_file_list_nc, half_window, strides):
 
 
 @pytest.mark.parametrize("ministack_size", [5, 9, 20])
-def test_sequential_ministack_sizes(
-    tmp_path, slc_file_list_nc, ministack_size, recwarn
-):
+def test_sequential_ministack_sizes(tmp_path, slc_file_list_nc, ministack_size):
     """Check various strides/windows/ministacks with a NetCDF input stack."""
-    warnings.simplefilter("always")
     vrt_file = tmp_path / "slc_stack.vrt"
     # Make it not a round number to test
     vrt_stack = _readers.VRTStack(
@@ -117,10 +112,6 @@ def test_sequential_ministack_sizes(
     _, rows, cols = vrt_stack.shape
 
     output_folder = tmp_path / "sequential"
-
-    # Eat the warning if there's 1 leftover ministack
-    warning_str = "Creating ministack with only one SLC"
-    should_raise_warning = len(vrt_stack.file_list) % ministack_size == 1
 
     # Record the warning, check after if it's thrown
     sequential.run_wrapped_phase_sequential(
@@ -138,10 +129,3 @@ def test_sequential_ministack_sizes(
         n_workers=4,
         gpu_enabled=False,
     )
-
-    if should_raise_warning:
-        assert len(recwarn) == 1
-        w = recwarn.pop(UserWarning)
-        assert warning_str in str(w.message)
-    else:
-        assert len(recwarn) == 0

@@ -31,4 +31,4 @@ Bbox = Tuple[float, float, float, float]
 T = TypeVar("T")
 P = ParamSpec("P")
 
-DateOrDatetime = datetime.datetime | datetime.date
+DateOrDatetime = Union[datetime.datetime, datetime.date]
