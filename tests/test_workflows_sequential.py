@@ -1,7 +1,7 @@
 import numpy.testing as npt
 import pytest
 
-from dolphin import _readers, io
+from dolphin import _readers, io, stack
 from dolphin.phase_link import mle, simulate
 from dolphin.utils import gpu_is_available
 from dolphin.workflows import sequential
@@ -26,13 +26,19 @@ def test_sequential_gtiff(tmp_path, slc_file_list, gpu_enabled):
     strides = {"x": 1, "y": 1}
     output_folder = tmp_path / "sequential"
     ms_size = 10
+    ms_planner = stack.MiniStackPlanner(
+        file_list=slc_file_list,
+        dates=vrt_stack.dates,
+        is_compressed=[False] * len(slc_file_list),
+        output_folder=output_folder,
+    )
 
     sequential.run_wrapped_phase_sequential(
         slc_vrt_file=vrt_file,
-        output_folder=output_folder,
+        ministack_planner=ms_planner,
+        ministack_size=ms_size,
         half_window=half_window,
         strides=strides,
-        ministack_size=ms_size,
         ps_mask_file=None,
         amp_mean_file=None,
         amp_dispersion_file=None,
@@ -81,15 +87,20 @@ def test_sequential_gtiff(tmp_path, slc_file_list, gpu_enabled):
 def test_sequential_nc(tmp_path, slc_file_list_nc, half_window, strides):
     """Check various strides/windows/ministacks with a NetCDF input stack."""
     vrt_file = tmp_path / "slc_stack.vrt"
-    _ = _readers.VRTStack(slc_file_list_nc, outfile=vrt_file, subdataset="data")
+    v = _readers.VRTStack(slc_file_list_nc, outfile=vrt_file, subdataset="data")
+    ms_planner = stack.MiniStackPlanner(
+        file_list=slc_file_list_nc,
+        dates=v.dates,
+        is_compressed=[False] * len(slc_file_list_nc),
+        output_folder=tmp_path / "sequential",
+    )
 
-    output_folder = tmp_path / "sequential"
     sequential.run_wrapped_phase_sequential(
         slc_vrt_file=vrt_file,
-        output_folder=output_folder,
+        ministack_planner=ms_planner,
+        ministack_size=10,
         half_window=half_window,
         strides=strides,
-        ministack_size=10,
         ps_mask_file=None,
         amp_mean_file=None,
         amp_dispersion_file=None,
@@ -110,16 +121,20 @@ def test_sequential_ministack_sizes(tmp_path, slc_file_list_nc, ministack_size):
         slc_file_list_nc[:21], outfile=vrt_file, subdataset="data"
     )
     _, rows, cols = vrt_stack.shape
-
-    output_folder = tmp_path / "sequential"
+    ms_planner = stack.MiniStackPlanner(
+        file_list=vrt_stack.file_list,
+        dates=vrt_stack.dates,
+        is_compressed=[False] * len(vrt_stack.file_list),
+        output_folder=tmp_path / "sequential",
+    )
 
     # Record the warning, check after if it's thrown
     sequential.run_wrapped_phase_sequential(
         slc_vrt_file=vrt_file,
-        output_folder=output_folder,
+        ministack_planner=ms_planner,
+        ministack_size=ministack_size,
         half_window={"x": cols // 2, "y": rows // 2},
         strides={"x": 1, "y": 1},
-        ministack_size=ministack_size,
         ps_mask_file=None,
         amp_mean_file=None,
         amp_dispersion_file=None,
