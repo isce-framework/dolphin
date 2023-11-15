@@ -166,7 +166,7 @@ class CompressedSlcInfo:
         return (self.real_slc_dates[0][0], self.real_slc_dates[-1][-1])
 
     @property
-    def filename(self):
+    def filename(self) -> str:
         """The filename of the compressed SLC for this ministack."""
         date_str = dolphin._dates._format_date_pair(
             *self.real_date_range, fmt=self.file_date_fmt
@@ -175,12 +175,12 @@ class CompressedSlcInfo:
         return name
 
     @property
-    def path(self):
+    def path(self) -> Path:
         """The path of the compressed SLC for this ministack."""
         return self.output_folder / self.filename
 
     @property
-    def file_metadata(self):
+    def metadata(self) -> dict[str, str]:
         """Prepare metadata about the compressed SLCs to be stored in the output file.
 
         The filenames will be stored in GDAL metadata as a list of strings, separated
