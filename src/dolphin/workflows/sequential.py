@@ -33,12 +33,10 @@ __all__ = ["run_wrapped_phase_sequential"]
 def run_wrapped_phase_sequential(
     *,
     slc_vrt_file: Filename,
-    output_folder: Filename,
+    ministack_planner: MiniStackPlanner,
+    ministack_size: int,
     half_window: dict,
     strides: dict = {"x": 1, "y": 1},
-    ministack_size: int = 10,
-    # TODO: make this configurable?
-    max_num_compressed: int = 5,
     mask_file: Optional[Filename] = None,
     ps_mask_file: Optional[Filename] = None,
     amp_mean_file: Optional[Filename] = None,
@@ -53,22 +51,16 @@ def run_wrapped_phase_sequential(
     gpu_enabled: bool = True,
 ) -> tuple[list[Path], list[Path], Path]:
     """Estimate wrapped phase using batches of ministacks."""
-    output_folder = Path(output_folder)
+    output_folder = ministack_planner.output_folder
     output_folder.mkdir(parents=True, exist_ok=True)
+    ministacks = ministack_planner.plan(ministack_size)
+
     v_all = VRTStack.from_vrt_file(slc_vrt_file)
     logger.info(
         f"Full file range for {v_all}: from {v_all.file_list[0]} to {v_all.file_list[-1]}"
     )
-
-    # Create ministacks
-    mini_stack_planner = MiniStackPlanner(
-        v_all.file_list,
-        v_all.dates,
-        is_compressed=[False] * len(v_all.file_list),
-        output_folder=output_folder,
-        max_num_compressed=max_num_compressed,
-    )
-    ministacks = mini_stack_planner.plan(ministack_size)
+    logger.info(f"Output folder: {output_folder}")
+    logger.info(f"Number of ministacks of size {ministack_size}: {len(ministacks)}")
 
     if shp_nslc is None:
         shp_nslc = v_all.shape[0]

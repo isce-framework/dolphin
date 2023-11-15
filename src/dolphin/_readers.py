@@ -31,13 +31,6 @@ class VRTStack:
         Write the filepaths of the SLCs in the VRT as "relative=0"
     subdataset : str, optional
         Subdataset to use from the files in `file_list`, if using NetCDF files.
-    pixel_bbox : tuple[int], optional
-        Desired bounding box (in pixels) of subset as (left, bottom, right, top)
-    target_extent : tuple[int], optional
-        Target extent: alternative way to subset the stack like the `-te` gdal option:
-            (xmin, ymin, xmax, ymax) in units of the SLCs' SRS (e.g. UTM coordinates)
-    latlon_bbox : tuple[int], optional
-        Bounding box in lat/lon coordinates: (left, bottom, right, top)
     sort_files : bool, optional (default = True)
         Sort the files in `file_list`. Assumes that the naming convention
         will sort the files in increasing time order.
@@ -61,7 +54,6 @@ class VRTStack:
         fail_on_overwrite: bool = False,
         skip_size_check: bool = False,
     ):
-        """Initialize a VRTStack object for a list of files, optionally subsetting."""
         if Path(outfile).exists() and write_file:
             if fail_on_overwrite:
                 raise FileExistsError(

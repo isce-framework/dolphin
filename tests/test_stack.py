@@ -144,7 +144,7 @@ def test_ministack_planner_gtiff(files, date_tuples, is_compressed):
 
 
 # Unclear how to parameterize over the 2 fixtures
-def test_mini_stack_planner_nc(files_nc, date_tuples, is_compressed):
+def test_ministack_planner_nc(files_nc, date_tuples, is_compressed):
     run_ministack_planner(files_nc, date_tuples, is_compressed)
 
 

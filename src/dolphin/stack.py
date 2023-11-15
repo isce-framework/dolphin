@@ -25,14 +25,14 @@ _DUMMY_DATE = datetime(1900, 1, 1)
 class BaseStack:
     """Base class for mini- and full stack classes."""
 
-    file_list: list[Filename]
+    file_list: Sequence[Filename]
     """List of SLC filenames in the ministack."""
-    dates: list[Sequence[DateOrDatetime]]
+    dates: Sequence[Sequence[DateOrDatetime]]
     """List of date sequences, one for each SLC in the ministack.
     Each item is a list/tuple of datetime.date or datetime.datetime objects,
     as returned by [dolphin._dates.get_dates][].
     """
-    is_compressed: list[bool]
+    is_compressed: Sequence[bool]
     """List of booleans indicating whether each SLC is compressed or real."""
     reference_date: DateOrDatetime = _DUMMY_DATE
     """Reference date to be used for understanding output interferograms.
@@ -150,9 +150,9 @@ class BaseStack:
 class CompressedSlcInfo:
     """Class for holding attributes about one compressed SLC."""
 
-    real_slc_file_list: list[Filename]
-    real_slc_dates: list[Sequence[DateOrDatetime]]
-    compressed_slc_file_list: list[Filename]
+    real_slc_file_list: Sequence[Filename]
+    real_slc_dates: Sequence[Sequence[DateOrDatetime]]
+    compressed_slc_file_list: Sequence[Filename]
     reference_date: DateOrDatetime
     file_date_fmt: str
     output_folder: Path = Path("")
@@ -268,8 +268,8 @@ class MiniStackPlanner(BaseStack):
 
         for full_stack_idx in ministack_starts:
             cur_slice = slice(full_stack_idx, full_stack_idx + ministack_size)
-            cur_files = self.file_list[cur_slice].copy()
-            cur_dates = self.dates[cur_slice].copy()
+            cur_files = list(self.file_list[cur_slice]).copy()
+            cur_dates = list(self.dates[cur_slice]).copy()
 
             comp_slc_files = [c.path for c in compressed_slc_infos]
             # Add the existing compressed SLC files to the start, but
@@ -282,7 +282,9 @@ class MiniStackPlanner(BaseStack):
             ] + cur_dates
 
             num_ccslc = len(cur_comp_slc_files)
-            combined_is_compressed = num_ccslc * [True] + self.is_compressed[cur_slice]
+            combined_is_compressed = num_ccslc * [True] + list(
+                self.is_compressed[cur_slice]
+            )
             # If there are any compressed SLCs, set the reference to the last one
             try:
                 last_compressed_idx = np.where(combined_is_compressed)[0]

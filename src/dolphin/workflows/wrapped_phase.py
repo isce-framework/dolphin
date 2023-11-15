@@ -5,8 +5,9 @@ from typing import Optional
 
 from opera_utils import make_nodata_mask
 
-from dolphin import _readers, ps, utils
+from dolphin import _readers, ps, stack, utils
 from dolphin._background import CPURecorder, NvidiaRecorder
+from dolphin._dates import get_dates
 from dolphin._log import get_log, log_runtime
 from dolphin.interferogram import Network
 
@@ -50,6 +51,9 @@ def run(
     input_file_list = cfg.cslc_file_list
     if not input_file_list:
         raise ValueError("No input files found")
+    input_dates = [
+        get_dates(f, fmt=cfg.input_options.cslc_date_fmt) for f in input_file_list
+    ]
 
     # #############################################
     # Make a VRT pointing to the input SLC files
@@ -117,6 +121,17 @@ def run(
     # phase linking/EVD step
     # #########################
     pl_path = cfg.phase_linking._directory
+    pl_path.mkdir(parents=True, exist_ok=True)
+
+    # Plan out which minstacks will be createdo
+    # TODO: need to read which files are compressed, and get their reference date
+    ministack_planner = stack.MiniStackPlanner(
+        input_file_list,
+        input_dates,
+        is_compressed=[False] * len(input_file_list),
+        output_folder=pl_path,
+        max_num_compressed=cfg.phase_linking.max_num_compressed,
+    )
 
     phase_linked_slcs = list(pl_path.glob("2*.tif"))
     if len(phase_linked_slcs) > 0:
@@ -146,12 +161,12 @@ def run(
             tcorr_file,
         ) = sequential.run_wrapped_phase_sequential(
             slc_vrt_file=vrt_stack.outfile,
-            output_folder=pl_path,
+            ministack_planner=ministack_planner,
+            ministack_size=cfg.phase_linking.ministack_size,
             half_window=cfg.phase_linking.half_window.model_dump(),
             strides=strides,
             use_evd=cfg.phase_linking.use_evd,
             beta=cfg.phase_linking.beta,
-            ministack_size=cfg.phase_linking.ministack_size,
             mask_file=nodata_mask_file,
             ps_mask_file=ps_output,
             amp_mean_file=cfg.ps_options._amp_mean_file,
