@@ -4,7 +4,7 @@ from osgeo import gdal
 
 import dolphin.ps
 from dolphin import io
-from dolphin.stack import VRTStack
+from dolphin._readers import VRTStack
 
 
 def test_ps_block(slc_stack):

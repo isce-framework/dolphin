@@ -5,8 +5,9 @@ from typing import Optional
 
 from opera_utils import make_nodata_mask
 
-from dolphin import ps, stack, utils
+from dolphin import _readers, ps, stack, utils
 from dolphin._background import CPURecorder, NvidiaRecorder
+from dolphin._dates import get_dates
 from dolphin._log import get_log, log_runtime
 from dolphin.interferogram import Network
 
@@ -51,11 +52,27 @@ def run(
     if not input_file_list:
         raise ValueError("No input files found")
 
+    # Mark any files beinning with "compressed" as compressed
+    is_compressed = [f.name.startswith("compressed") for f in input_file_list]
+    input_dates = [
+        get_dates(f, fmt=cfg.input_options.cslc_date_fmt) for f in input_file_list
+    ]
+    # For any that aren't compressed, take the first date.
+    # this is because the official product name of OPERA/Sentinel-1 has both
+    # "acquisition_date" ... "generation_date" in the filename
+    # TODO: this is a bit hacky, perhaps we can make this some input option
+    # so that the user can specify how to get dates from their files (or even
+    # directly pass in dates?)
+    input_dates = [
+        dates[:1] if not is_comp else dates
+        for dates, is_comp in zip(input_dates, is_compressed)
+    ]
+
     # #############################################
     # Make a VRT pointing to the input SLC files
     # #############################################
     subdataset = cfg.input_options.subdataset
-    vrt_stack = stack.VRTStack(
+    vrt_stack = _readers.VRTStack(
         input_file_list,
         subdataset=subdataset,
         outfile=cfg.work_directory / "slc_stack.vrt",
@@ -117,6 +134,17 @@ def run(
     # phase linking/EVD step
     # #########################
     pl_path = cfg.phase_linking._directory
+    pl_path.mkdir(parents=True, exist_ok=True)
+
+    # Plan out which minstacks will be createdo
+    # TODO: need to read which files are compressed, and get their reference date
+    ministack_planner = stack.MiniStackPlanner(
+        file_list=input_file_list,
+        dates=input_dates,
+        is_compressed=[False] * len(input_file_list),
+        output_folder=pl_path,
+        max_num_compressed=cfg.phase_linking.max_num_compressed,
+    )
 
     phase_linked_slcs = list(pl_path.glob("2*.tif"))
     if len(phase_linked_slcs) > 0:
@@ -146,12 +174,12 @@ def run(
             tcorr_file,
         ) = sequential.run_wrapped_phase_sequential(
             slc_vrt_file=vrt_stack.outfile,
-            output_folder=pl_path,
+            ministack_planner=ministack_planner,
+            ministack_size=cfg.phase_linking.ministack_size,
             half_window=cfg.phase_linking.half_window.model_dump(),
             strides=strides,
             use_evd=cfg.phase_linking.use_evd,
             beta=cfg.phase_linking.beta,
-            ministack_size=cfg.phase_linking.ministack_size,
             mask_file=nodata_mask_file,
             ps_mask_file=ps_output,
             amp_mean_file=cfg.ps_options._amp_mean_file,

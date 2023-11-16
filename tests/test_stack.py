@@ -1,197 +1,204 @@
+from datetime import datetime
 from pathlib import Path
 
 import numpy as np
-import numpy.testing as npt
 import pytest
-from osgeo import gdal
 
-from dolphin.stack import VRTStack
-from dolphin.utils import _get_path_from_gdal_str
+from dolphin import io
+from dolphin.stack import CompressedSlcInfo, MiniStackInfo, MiniStackPlanner
+from dolphin.utils import flatten
+
+NUM_ACQ = 10
+
 
 # Note: uses the fixtures from conftest.py
+# Use a smaller subset for these tests
+@pytest.fixture
+def files(slc_file_list):
+    return slc_file_list[:NUM_ACQ]
 
 
 @pytest.fixture
-def vrt_stack(tmp_path, slc_stack, slc_file_list):
-    vrt_file = tmp_path / "test.vrt"
-    s = VRTStack(slc_file_list, outfile=vrt_file)
-
-    assert s.shape == slc_stack.shape
-    assert len(s) == len(slc_stack) == len(slc_file_list)
-    return s
+def files_nc(slc_file_list_nc):
+    return slc_file_list_nc[:NUM_ACQ]
 
 
 @pytest.fixture
-def vrt_stack_nc(tmp_path, slc_stack, slc_file_list_nc):
-    vrt_file = tmp_path / "test_nc.vrt"
-    s = VRTStack(slc_file_list_nc, outfile=vrt_file, subdataset="data")
-
-    assert s.shape == slc_stack.shape
-    return s
+def dates(slc_date_list):
+    return slc_date_list[:NUM_ACQ]
 
 
 @pytest.fixture
-def vrt_stack_nc_subdataset(tmp_path, slc_stack, slc_file_list_nc_with_sds):
-    vrt_file = tmp_path / "test_nc.vrt"
-    files_only = [_get_path_from_gdal_str(f) for f in slc_file_list_nc_with_sds]
-    s = VRTStack(files_only, outfile=vrt_file, subdataset="data/VV")
-
-    assert s.shape == slc_stack.shape
-    return s
+def is_compressed(files):
+    return [False] * len(files[:NUM_ACQ])
 
 
 @pytest.fixture
-def vrt_stack_nc_wgs84(tmp_path, slc_stack, slc_file_list_nc_wgs84):
-    # Check an alternative projection system
-    vrt_file = tmp_path / "test_nc_wgs84.vrt"
-    s = VRTStack(slc_file_list_nc_wgs84, outfile=vrt_file)
-
-    assert s.shape == slc_stack.shape
-    return s
+def date_lists(dates):
+    # To mimic what we get back from running `get_dates` on a list of files
+    return [[d] for d in dates]
 
 
-def test_create(vrt_stack, vrt_stack_nc):
-    for v in [vrt_stack, vrt_stack_nc]:
-        vrt_file = vrt_stack.outfile
-        assert vrt_file.exists()
-        assert vrt_file.stat().st_size > 0
+def test_create_ministack(tmp_path, files, date_lists, is_compressed):
+    MiniStackInfo(file_list=files, is_compressed=is_compressed, dates=date_lists)
 
-        # Check that the VRT is valid
-        ds = gdal.Open(str(vrt_file))
-        assert ds is not None
-        ds = None
-
-
-def test_create_over_existing(tmp_path, slc_file_list):
-    vrt_file = tmp_path / "test.vrt"
-    VRTStack(slc_file_list, outfile=vrt_file)
-    VRTStack(slc_file_list, outfile=vrt_file, fail_on_overwrite=False)
-    with pytest.raises(FileExistsError):
-        VRTStack(slc_file_list, outfile=vrt_file, fail_on_overwrite=True)
-
-
-def test_from_vrt_file(tmp_path, slc_file_list):
-    vrt_file = tmp_path / "test.vrt"
-    s = VRTStack(slc_file_list, outfile=vrt_file)
-    s2 = VRTStack.from_vrt_file(vrt_file)
-    assert s == s2
-
-
-def test_read_stack(vrt_stack, slc_stack):
-    ds = gdal.Open(str(vrt_stack.outfile))
-    loaded = ds.ReadAsArray()
-    npt.assert_array_almost_equal(loaded, slc_stack)
-    npt.assert_array_almost_equal(vrt_stack.read_stack(), slc_stack)
-
-
-def test_read_stack_nc(vrt_stack_nc, slc_stack):
-    ds = gdal.Open(str(vrt_stack_nc.outfile))
-    loaded = ds.ReadAsArray()
-    npt.assert_array_almost_equal(loaded, slc_stack)
-    npt.assert_array_almost_equal(vrt_stack_nc.read_stack(), slc_stack)
-
-
-def test_sort_order(tmp_path, slc_file_list):
-    random_order = [Path(f) for f in np.random.permutation(slc_file_list)]
-    # Make sure the files are sorted by date
-    vrt_stack = VRTStack(random_order, outfile=tmp_path / "test.vrt")
-    assert vrt_stack.file_list == [Path(f) for f in slc_file_list]
-
-    vrt_stack2 = VRTStack(
-        random_order, sort_files=False, outfile=tmp_path / "test2.vrt"
+    # Check it works by providing a real local dir
+    MiniStackInfo(
+        file_list=files,
+        dates=date_lists,
+        is_compressed=is_compressed,
+        output_folder=tmp_path,
     )
-    assert vrt_stack2.file_list == random_order
+
+    # Check it works when making up a future output dir which doesn't exist
+    MiniStackInfo(
+        file_list=files,
+        dates=date_lists,
+        is_compressed=is_compressed,
+        output_folder=Path("fake_dir"),
+    )
 
 
-def test_dates(vrt_stack, vrt_stack_nc_subdataset):
-    dates = vrt_stack.dates
-    assert len(dates) == len(vrt_stack)
-    d0 = 20220101
-    for d in dates:
-        assert d[0].strftime("%Y%m%d") == str(d0)
-        d0 += 1
-
-    d0 = 20220101
-    for d in vrt_stack_nc_subdataset.dates:
-        assert d[0].strftime("%Y%m%d") == str(d0)
-        d0 += 1
-
-
-def test_bad_sizes(slc_file_list, raster_10_by_20):
-    from dolphin.io import get_raster_xysize
-
-    # Make sure the files are the same size
-    assert get_raster_xysize(slc_file_list[0]) == get_raster_xysize(slc_file_list[1])
-    assert get_raster_xysize(slc_file_list[0]) != get_raster_xysize(raster_10_by_20)
+def test_mismatched_lengths(files, date_lists, is_compressed):
     with pytest.raises(ValueError):
-        VRTStack(slc_file_list + [raster_10_by_20], outfile="other.vrt")
+        MiniStackInfo(
+            file_list=files, dates=date_lists[1:], is_compressed=is_compressed
+        )
+
+    with pytest.raises(ValueError):
+        MiniStackInfo(
+            file_list=files, dates=date_lists, is_compressed=is_compressed[:-1]
+        )
 
 
-# TODO: target extent
-# TODO: latlon_bbox
+def test_create_ministack_dates(files, dates, is_compressed):
+    # Check we can provide a list of dates instead of tuples
+    m = MiniStackInfo(file_list=files, dates=dates, is_compressed=is_compressed)
+    assert m.dates[0] == [
+        dates[0],
+    ]
 
 
-def test_add_file(vrt_stack, slc_stack):
-    # Repeat the data, but create a new file
-    slc = slc_stack[0]
-
-    # Make the file in the past
-    new_path_past = (vrt_stack.outfile.parent / "20000101.slc").resolve()
-    driver = gdal.GetDriverByName("ENVI")
-    ds = driver.Create(
-        str(new_path_past), slc.shape[1], slc.shape[0], 1, gdal.GDT_CFloat32
+@pytest.fixture
+def ministack(files, date_lists, is_compressed):
+    return MiniStackInfo(
+        file_list=files,
+        dates=date_lists,
+        is_compressed=is_compressed,
+        output_folder="fake_dir",
     )
-    ds.GetRasterBand(1).WriteArray(slc)
-    ds = None
 
-    # Check that the new file is added to the VRT
-    vrt_stack.add_file(new_path_past)
-    assert len(vrt_stack.file_list) == slc_stack.shape[0] + 1
-    assert len(vrt_stack.dates) == slc_stack.shape[0] + 1
 
-    # Make the file in the future
-    new_path_future = (vrt_stack.outfile.parent / "20250101.slc").resolve()
-    ds = driver.Create(
-        str(new_path_future), slc.shape[1], slc.shape[0], 1, gdal.GDT_CFloat32
+def test_ministack_attrs(ministack, dates):
+    assert ministack.full_date_range == (dates[0], dates[-1])
+    assert ministack.real_slc_date_range_str == "20220101_20220110"
+
+
+def test_create_compressed_slc(files, date_lists, is_compressed):
+    m = MiniStackInfo(file_list=files, is_compressed=is_compressed, dates=date_lists)
+    comp_slc = m.get_compressed_slc_info()
+    flat_dates = list(flatten(date_lists))
+    assert comp_slc.real_slc_dates == flat_dates
+    assert comp_slc.real_slc_file_list == files
+
+    # Now try one where we marked the first of the stack as compressed
+    is_compressed2 = is_compressed.copy()
+    is_compressed2[0] = True
+    m2 = MiniStackInfo(file_list=files, is_compressed=is_compressed2, dates=date_lists)
+    comp_slc2 = m2.get_compressed_slc_info()
+    assert comp_slc2.real_slc_dates == flat_dates[1:]
+    assert comp_slc2.real_slc_file_list == files[1:]
+    assert comp_slc2.compressed_slc_file_list == files[0:1]
+
+
+def run_ministack_planner(files, date_lists, is_compressed):
+    msp = MiniStackPlanner(
+        file_list=files,
+        dates=date_lists,
+        is_compressed=is_compressed,
+        output_folder=Path("fake_dir"),
+        max_num_compressed=5,
     )
-    ds.GetRasterBand(1).WriteArray(slc)
-    ds = None
+    ms_list = msp.plan(4)
+    assert len(ms_list) == 3
 
-    vrt_stack.add_file(new_path_future)
-    assert len(vrt_stack.file_list) == slc_stack.shape[0] + 2
+    ms_size = 3
+    ms_list = msp.plan(ms_size)
+    assert len(ms_list) == 4
 
-    ds = gdal.Open(str(vrt_stack.outfile))
-    read_stack = ds.ReadAsArray()
-    assert read_stack.shape[0] == slc_stack.shape[0] + 2
+    expected_out_folders = [
+        Path("fake_dir/20220101_20220103"),
+        Path("fake_dir/20220104_20220106"),
+        Path("fake_dir/20220107_20220109"),
+        Path("fake_dir/20220110_20220110"),
+    ]
+    for idx, ms in enumerate(ms_list):
+        # size should increment by 1 each time
+        if idx < 3:
+            assert len(ms.file_list) == idx + 3
+        else:
+            # Last one is 1 real, + 3 compressed
+            assert len(ms.file_list) == 4
+
+        # number of compressed should increment by 1 each time
+        assert sum(ms.is_compressed) == idx
+        assert ms.file_list[idx:] == files[ms_size * idx : ms_size * (1 + idx)]
+
+        assert ms.output_folder == expected_out_folders[idx]
+
+    assert all([ms.reference_date == datetime(2022, 1, 1) for ms in ms_list])
 
 
-def test_iter_blocks(vrt_stack):
-    blocks, slices = zip(*list(vrt_stack.iter_blocks(block_shape=(5, 5))))
-    # (5, 10) total shape, breaks into 5x5 blocks
-    assert len(blocks) == 2
-    for b in blocks:
-        assert b.shape == (len(vrt_stack), 5, 5)
-
-    blocks, slices = zip(*list(vrt_stack.iter_blocks(block_shape=(1, 2))))
-    assert len(blocks) == 25
-    for b in blocks:
-        assert b.shape == (len(vrt_stack), 1, 2)
+def test_ministack_planner_gtiff(files, date_lists, is_compressed):
+    run_ministack_planner(files, date_lists, is_compressed)
 
 
-def test_tiled_iter_blocks(tmp_path, tiled_file_list):
-    outfile = tmp_path / "stack.vrt"
-    vrt_stack = VRTStack(tiled_file_list, outfile=outfile)
-    blocks, slices = zip(*list(vrt_stack.iter_blocks(block_shape=(32, 32))))
-    # (100, 200) total shape, breaks into 32x32 blocks
-    assert len(blocks) == len(slices) == 28
-    for i, b in enumerate(blocks, start=1):
-        # Account for the smaller block sizes at the ends
-        if i % 7 == 0:
-            # last col
-            if i > 21:  # Last row
-                assert b.shape == (len(vrt_stack), 4, 8)
-            else:
-                assert b.shape == (len(vrt_stack), 32, 8)
+# Unclear how to parameterize over the 2 fixtures
+def test_ministack_planner_nc(files_nc, date_lists, is_compressed):
+    run_ministack_planner(files_nc, date_lists, is_compressed)
 
-    blocks, slices = zip(*list(vrt_stack.iter_blocks(block_shape=(50, 100))))
-    assert len(blocks) == len(slices) == 4
+
+@pytest.fixture
+def ministack_planner(files, date_lists, is_compressed):
+    return MiniStackPlanner(
+        file_list=files,
+        dates=date_lists,
+        is_compressed=is_compressed,
+        output_folder=Path("fake_dir"),
+        max_num_compressed=5,
+    )
+
+
+def test_ccslc_infos(ministack_planner):
+    # Check we can get the compressed SLC info
+    ministacks = ministack_planner.plan(3)
+    flat_dates = list(flatten(ministack_planner.dates))
+    m = ministacks[0]
+    ccslc = m.get_compressed_slc_info()
+    assert ccslc.real_slc_dates == flat_dates[0:3]
+    assert ccslc.real_slc_file_list == ministack_planner.file_list[0:3]
+    assert ccslc.compressed_slc_file_list == []
+
+    m2 = ministacks[1]
+    ccslc2 = m2.get_compressed_slc_info()
+    assert ccslc2.real_slc_dates == flat_dates[3:6]
+    assert ccslc2.real_slc_file_list == ministack_planner.file_list[3:6]
+    assert ccslc2.compressed_slc_file_list == [ccslc.path]
+
+
+def test_ccslc_round_trip_metadata(ministack_planner, tmp_path):
+    ministacks = ministack_planner.plan(3)
+    m = ministacks[1]
+    m.output_folder = tmp_path
+    ccslc = m.get_compressed_slc_info()
+
+    io.write_arr(arr=np.ones((2, 2)), output_name=ccslc.path)
+    ccslc.write_metadata()
+
+    md_dict = io.get_raster_metadata(ccslc.path, domain="DOLPHIN")
+    assert set(md_dict.keys()) == ccslc.model_dump().keys()
+
+    c2 = CompressedSlcInfo.from_file_metadata(ccslc.path)
+    assert c2.real_slc_dates == ccslc.real_slc_dates
+    # files will have turned to strings in the dump
+    assert list(map(str, ccslc.real_slc_file_list)) == c2.real_slc_file_list

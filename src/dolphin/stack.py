@@ -1,463 +1,402 @@
 #!/usr/bin/env python
 from __future__ import annotations
 
+import warnings
+from datetime import date, datetime
 from os import fspath
 from pathlib import Path
-from typing import Generator, Optional, Sequence
+from typing import Optional, Sequence
 
 import numpy as np
-from osgeo import gdal
+from pydantic import BaseModel, Field, field_validator, model_validator
 
-from dolphin import io, utils
+import dolphin._dates
 from dolphin._log import get_log
-from dolphin._types import Bbox, Filename
+from dolphin._types import DateOrDatetime, Filename
 
-gdal.UseExceptions()
 logger = get_log(__name__)
 
+# Sentinel value for when no reference date is provided
+# Appeases mypy
+_DUMMY_DATE = datetime(1900, 1, 1)
 
-class VRTStack:
-    """Class for creating a virtual stack of raster files.
 
-    Attributes
-    ----------
-    file_list : list[Filename]
-        Paths or GDAL-compatible strings (NETCDF:...) for paths to files.
-    outfile : pathlib.Path, optional (default = Path("slc_stack.vrt"))
-        Name of output file to write
-    dates : list[list[datetime.date]]
-        list, where each entry is all dates matched from the corresponding file
-        in `file_list`. This is used to sort the files by date.
-        Each entry is a list because some files (compressed SLCs) may have
-        multiple dates in the filename.
-    use_abs_path : bool, optional (default = True)
-        Write the filepaths of the SLCs in the VRT as "relative=0"
-    subdataset : str, optional
-        Subdataset to use from the files in `file_list`, if using NetCDF files.
-    pixel_bbox : tuple[int], optional
-        Desired bounding box (in pixels) of subset as (left, bottom, right, top)
-    target_extent : tuple[int], optional
-        Target extent: alternative way to subset the stack like the `-te` gdal option:
-            (xmin, ymin, xmax, ymax) in units of the SLCs' SRS (e.g. UTM coordinates)
-    latlon_bbox : tuple[int], optional
-        Bounding box in lat/lon coordinates: (left, bottom, right, top)
-    sort_files : bool, optional (default = True)
-        Sort the files in `file_list`. Assumes that the naming convention
-        will sort the files in increasing time order.
-    nodata_mask_file : pathlib.Path, optional
-        Path to file containing a mask of pixels containing with nodata
-        in every images. Used for skipping the loading of these pixels.
-    file_date_fmt : str, optional (default = "%Y%m%d")
-        Format string for parsing the dates from the filenames.
-        Passed to [dolphin.utils.get_dates][].
-    """
+class BaseStack(BaseModel):
+    """Base class for mini- and full stack classes."""
 
-    def __init__(
-        self,
-        file_list: Sequence[Filename],
-        outfile: Filename = "slc_stack.vrt",
-        use_abs_path: bool = True,
-        subdataset: Optional[str] = None,
-        pixel_bbox: Optional[tuple[int, int, int, int]] = None,
-        target_extent: Optional[tuple[float, float, float, float]] = None,
-        latlon_bbox: Optional[Bbox] = None,
-        sort_files: bool = True,
-        file_date_fmt: str = "%Y%m%d",
-        write_file: bool = True,
-        fail_on_overwrite: bool = False,
-        skip_size_check: bool = False,
-    ):
-        """Initialize a VRTStack object for a list of files, optionally subsetting."""
-        if Path(outfile).exists() and write_file:
-            if fail_on_overwrite:
-                raise FileExistsError(
-                    f"Output file {outfile} already exists. "
-                    "Please delete or specify a different output file. "
-                    "To create from an existing VRT, use the `from_vrt_file` method."
-                )
-            else:
-                logger.info(f"Overwriting {outfile}")
+    file_list: list[Filename] = Field(
+        ...,
+        description="List of SLC filenames in the ministack.",
+    )
+    dates: list[Sequence[datetime]] = Field(
+        ...,
+        description="List of date sequences, one for each SLC in the ministack. "
+        "Each item is a list/tuple of datetime.date or datetime.datetime objects, "
+        "as returned by [dolphin._dates.get_dates][].",
+    )
+    is_compressed: list[bool] = Field(
+        ...,
+        description="List of booleans indicating whether each SLC is compressed or real.",
+    )
+    reference_date: datetime = Field(
+        _DUMMY_DATE,
+        description="Reference date to be used for understanding output interferograms. "
+        "Note that this may be different from `dates[reference_idx]` if the ministack "
+        "starts with a compressed SLC which has an earlier 'base phase', which "
+        "is used as the phase linking references. "
+        "It will propagate across ministacks when we always use `reference_idx=0`.",
+        validate_default=True,
+    )
+    file_date_fmt: str = Field(
+        dolphin.DEFAULT_DATETIME_FORMAT,
+        description="Format string for the dates/datetimes in the ministack filenames.",
+    )
+    output_folder: Path = Field(
+        Path(""),
+        description="Folder/location where ministack will write outputs to.",
+    )
+    reference_idx: int = Field(
+        0,
+        description="Index of the SLC to use as reference during phase linking",
+    )
 
-        files: list[Filename] = [Path(f) for f in file_list]
-        self._use_abs_path = use_abs_path
-        if use_abs_path:
-            files = [utils._resolve_gdal_path(p) for p in files]
-        # Extract the date/datetimes from the filenames
-        dates = [utils.get_dates(f, fmt=file_date_fmt) for f in files]
-        if sort_files:
-            files, dates = utils.sort_files_by_date(  # type: ignore
-                files, file_date_fmt=file_date_fmt
+    @field_validator("dates", mode="before")
+    @classmethod
+    def _check_if_not_tuples(cls, v):
+        if isinstance(v[0], (date, datetime)):
+            v = [[d] for d in v]
+        return v
+
+    @model_validator(mode="after")
+    def _check_lengths(self):
+        if len(self.file_list) == 0:
+            raise ValueError("Cannot create empty ministack")
+        elif len(self.file_list) == 1:
+            warnings.warn("Creating ministack with only one SLC")
+        if not len(self.file_list) == len(self.is_compressed):
+            lengths = f"{len(self.file_list)} and {len(self.is_compressed)}"
+            raise ValueError(
+                f"file_list and is_compressed must be the same length: Got {lengths}"
             )
-
-        # Save the attributes
-        self.file_list = files
-        self.dates = dates
-        # save for future parsing of dates with `add_file`
-        self.file_date_fmt = file_date_fmt
-
-        self.outfile = Path(outfile).resolve()
-        # Assumes that all files use the same subdataset (if NetCDF)
-        self.subdataset = subdataset
-
-        if not skip_size_check:
-            io._assert_images_same_size(self._gdal_file_strings)
-
-        # Use the first file in the stack to get size, transform info
-        ds = gdal.Open(fspath(self._gdal_file_strings[0]))
-        self.xsize = ds.RasterXSize
-        self.ysize = ds.RasterYSize
-        # Should be CFloat32
-        self.gdal_dtype = gdal.GetDataTypeName(ds.GetRasterBand(1).DataType)
-        # Save these for setting at the end
-        self.gt = ds.GetGeoTransform()
-        self.proj = ds.GetProjection()
-        self.srs = ds.GetSpatialRef()
-        ds = None
-        # Save the subset info
-
-        self._set_subset(
-            pixel_bbox=pixel_bbox,
-            target_extent=target_extent,
-            latlon_bbox=latlon_bbox,
-            filename=self.file_list[0],
-        )
-        if write_file:
-            self._write()
-
-    def _write(self):
-        """Write out the VRT file pointing to the stack of SLCs, erroring if exists."""
-        with open(self.outfile, "w") as fid:
-            fid.write(
-                f'<VRTDataset rasterXSize="{self.xsize_sub}"'
-                f' rasterYSize="{self.ysize_sub}">\n'
+        if not len(self.dates) == len(self.file_list):
+            lengths = f"{len(self.dates)} and {len(self.file_list)}"
+            raise ValueError(
+                f"dates and file_list must be the same length. Got {lengths}"
             )
+        return self
 
-            for idx, filename in enumerate(self._gdal_file_strings, start=1):
-                chunk_size = io.get_raster_chunk_size(filename)
-                # chunks in a vrt have a min of 16, max of 2**14=16384
-                # https://github.com/OSGeo/gdal/blob/2530defa1e0052827bc98696e7806037a6fec86e/frmts/vrt/vrtrasterband.cpp#L339
-                if any([b < 16 for b in chunk_size]) or any(
-                    [b > 16384 for b in chunk_size]
-                ):
-                    chunk_str = ""
-                else:
-                    chunk_str = (
-                        f'blockXSize="{chunk_size[0]}" blockYSize="{chunk_size[1]}"'
-                    )
-                outstr = f"""  <VRTRasterBand dataType="{self.gdal_dtype}" band="{idx}" {chunk_str}>
-    <SimpleSource>
-      <SourceFilename>{filename}</SourceFilename>
-      <SourceBand>1</SourceBand>
-      <SrcRect xOff="{self.xoff}" yOff="{self.yoff}" xSize="{self.xsize_sub}" ySize="{self.ysize_sub}"/>
-      <DstRect xOff="0" yOff="0" xSize="{self.xsize_sub}" ySize="{self.ysize_sub}"/>
-    </SimpleSource>
-  </VRTRasterBand>\n"""  # noqa: E501
-                fid.write(outstr)
-
-            fid.write("</VRTDataset>")
-
-        # Set the georeferencing metadata
-        ds = gdal.Open(fspath(self.outfile), gdal.GA_Update)
-        ds.SetGeoTransform(self.gt)
-        ds.SetProjection(self.proj)
-        ds.SetSpatialRef(self.srs)
-        ds = None
+    @model_validator(mode="after")
+    def _check_unset_reference_date(self):
+        if self.reference_date == _DUMMY_DATE:
+            ref_date = self.dates[self.reference_idx][0]
+            logger.debug("No reference date provided, using first date: %s", ref_date)
+            self.reference_date = ref_date
+        return self
 
     @property
-    def _gdal_file_strings(self):
-        """Get the GDAL-compatible paths to write to the VRT.
+    def full_date_range(self) -> tuple[DateOrDatetime, DateOrDatetime]:
+        """Full date range of all SLCs in the ministack."""
+        return (self.reference_date, self.dates[-1][-1])
 
-        If we're not using .h5 or .nc, this will just be the file_list as is.
+    @property
+    def full_date_range_str(self) -> str:
+        """Full date range of the ministack as a string, e.g. '20210101_20210202'.
+
+        Includes both compressed + normal SLCs in the range.
         """
-        return [io.format_nc_filename(f, self.subdataset) for f in self.file_list]
-
-    def read_stack(
-        self,
-        band: Optional[int] = None,
-        subsample_factor: int = 1,
-        rows: Optional[slice] = None,
-        cols: Optional[slice] = None,
-        masked: bool = False,
-    ):
-        """Read in the SLC stack."""
-        return io.load_gdal(
-            self.outfile,
-            band=band,
-            subsample_factor=subsample_factor,
-            rows=rows,
-            cols=cols,
-            masked=masked,
+        return dolphin._dates._format_date_pair(
+            *self.full_date_range, fmt=self.file_date_fmt
         )
 
-    def __fspath__(self):
-        # Allows os.fspath() to work on the object, enabling rasterio.open()
-        return fspath(self.outfile)
+    @property
+    def first_real_slc_idx(self) -> int:
+        """Index of the first real SLC in the ministack."""
+        try:
+            return np.where(~np.array(self.is_compressed))[0][0]
+        except IndexError:
+            raise ValueError("No real SLCs in ministack")
 
-    def add_file(self, new_file: Filename, sort_files: bool = True):
-        """Append a new file to the stack, and (optionally) re-sort."""
-        new_file = Path(new_file)
-        if self._use_abs_path:
-            new_file = new_file.resolve()
-        self.file_list.append(new_file)
+    @property
+    def real_slc_date_range(self) -> tuple[DateOrDatetime, DateOrDatetime]:
+        """Date range of the real SLCs in the ministack."""
+        return (self.dates[self.first_real_slc_idx][0], self.dates[-1][-1])
 
-        # Parse the new date, and add it to the list
-        new_date = utils.get_dates(new_file, fmt=self.file_date_fmt)
-        self.dates.append(new_date)
-        if sort_files:
-            self.file_list, self.dates = utils.sort_files_by_date(  # type: ignore
-                self.file_list, file_date_fmt=self.file_date_fmt
+    @property
+    def real_slc_date_range_str(self) -> str:
+        """Date range of the real SLCs in the ministack."""
+        return dolphin._dates._format_date_pair(
+            *self.real_slc_date_range, fmt=self.file_date_fmt
+        )
+
+    @property
+    def compressed_slc_file_list(self) -> list[Filename]:
+        """List of compressed SLCs for this ministack."""
+        return [f for f, is_comp in zip(self.file_list, self.is_compressed) if is_comp]
+
+    @property
+    def real_slc_file_list(self) -> list[Filename]:
+        """List of real SLCs for this ministack."""
+        return [
+            f for f, is_comp in zip(self.file_list, self.is_compressed) if not is_comp
+        ]
+
+    def get_date_str_list(self) -> list[str]:
+        """Get a formated string for each date/date tuple in the ministack."""
+        date_strs: list[str] = []
+        for d in self.dates:
+            if len(d) == 1:
+                # normal SLC files will have a single date
+                s = d[0].strftime(self.file_date_fmt)
+            else:
+                # Compressed SLCs will have 2 dates in the name marking the start and end
+                s = dolphin._dates._format_date_pair(d[0], d[1], fmt=self.file_date_fmt)
+            date_strs.append(s)
+        return date_strs
+
+    def __rich_repr__(self):
+        yield "file_list", self.file_list
+        yield "dates", self.dates
+        yield "is_compressed", self.is_compressed
+        yield "reference_date", self.reference_date
+        yield "file_date_fmt", self.file_date_fmt
+        yield "output_folder", self.output_folder
+        yield "reference_idx", self.reference_idx
+
+
+class CompressedSlcInfo(BaseModel):
+    """Class for holding attributes about one compressed SLC."""
+
+    real_slc_file_list: list[Filename] = Field(
+        ...,
+        description="List of real SLC filenames in the ministack.",
+    )
+    real_slc_dates: list[datetime] = Field(
+        ...,
+        description="List of date sequences, one for each SLC in the ministack. "
+        "Each item is a list/tuple of datetime.date or datetime.datetime objects, "
+        "as returned by [dolphin._dates.get_dates][].",
+    )
+    compressed_slc_file_list: list[Filename] = Field(
+        ...,
+        description="List of compressed SLC filenames in the ministack.",
+    )
+    reference_date: datetime = Field(
+        _DUMMY_DATE,
+        description="Reference date to be used for understanding output interferograms. "
+        "Note that this may be different from `dates[reference_idx]` if the ministack "
+        "starts with a compressed SLC which has an earlier 'base phase', which "
+        "is used as the phase linking references. "
+        "It will propagate across ministacks when we always use `reference_idx=0`.",
+        validate_default=True,
+    )
+    file_date_fmt: str = Field(
+        dolphin.DEFAULT_DATETIME_FORMAT,
+        description="Format string for the dates/datetimes in the ministack filenames.",
+    )
+    output_folder: Path = Field(
+        Path(""),
+        description="Folder/location where ministack will write outputs to.",
+    )
+
+    @field_validator("real_slc_dates", mode="before")
+    @classmethod
+    def _untuple_dates(cls, v):
+        """Make the dates not be tuples/lists of datetimes."""
+        out = []
+        for item in v:
+            if hasattr(item, "__iter__"):
+                # Make sure they didn't pass more than 1 date, implying
+                # a compressed SLC
+                # assert len(item) == 1
+                if isinstance(item, str):
+                    out.append(item)
+                elif len(item) > 1:
+                    raise ValueError(
+                        f"Cannot pass multiple dates for a compressed SLC. Got {item}"
+                    )
+                else:
+                    out.append(item[0])
+            else:
+                out.append(item)
+        return out
+
+    @model_validator(mode="after")
+    def _check_lengths(self):
+        rlen = len(self.real_slc_file_list)
+        clen = len(self.real_slc_dates)
+        if not rlen == clen:
+            lengths = f"{rlen} and {clen}"
+            raise ValueError(
+                f"real_slc_file_list and real_slc_dates must be the same length. Got {lengths}"
             )
+        return self
 
-        self._write()
+    @property
+    def real_date_range(self) -> tuple[DateOrDatetime, DateOrDatetime]:
+        """Date range of the real SLCs in the ministack."""
+        return (self.real_slc_dates[0], self.real_slc_dates[-1])
 
-    def _set_subset(
-        self, pixel_bbox=None, target_extent=None, latlon_bbox=None, filename=None
+    @property
+    def filename(self) -> str:
+        """The filename of the compressed SLC for this ministack."""
+        date_str = dolphin._dates._format_date_pair(
+            *self.real_date_range, fmt=self.file_date_fmt
+        )
+        name = f"compressed_{date_str}.tif"
+        return name
+
+    @property
+    def path(self) -> Path:
+        """The path of the compressed SLC for this ministack."""
+        return self.output_folder / self.filename
+
+    def write_metadata(
+        self, domain: str = "DOLPHIN", output_file: Optional[Filename] = None
     ):
-        """Save the subset bounding box for a given target extent.
-
-        Sets the attributes `xoff`, `yoff`, `xsize_sub`, `ysize_sub` for the subset.
+        """Write the metadata to the compressed SLC file.
 
         Parameters
         ----------
-        pixel_bbox : tuple[int], optional
-            Desired bounding box of subset as (left, bottom, right, top)
-        target_extent : tuple[int], optional
-            Target extent: alternative way to subset the stack like the `-te` gdal option:
-        latlon_bbox : tuple[int], optional
-            Bounding box in lat/lon coordinates: (left, bottom, right, top)
-        filename : str, optional
-            Name of file to get the bounding box from, if providing `target_extent`
-
+        domain : str, optional
+            Domain to write the metadata to, by default "DOLPHIN".
+        output_file : Optional[Filename], optional
+            Path to the file to write the metadata to, by default None.
+            If None, will use `self.path`.
         """
-        if all(
-            (pixel_bbox is not None, target_extent is not None, latlon_bbox is not None)
-        ):
-            raise ValueError(
-                "Cannot only specif one of `pixel_bbox` and `latlon_bbox`, and"
-                " `target_extent`"
-            )
-        # If target extent is provided, convert to pixel bounding box
-        if latlon_bbox is not None:
-            # convert in 2 steps: first lat/lon -> UTM, then UTM -> pixel
-            target_extent = VRTStack._latlon_bbox_to_te(latlon_bbox, filename=filename)
-        if target_extent is not None:
-            # convert UTM -> pixels
-            pixel_bbox = VRTStack._te_to_bbox(target_extent, filename=filename)
+        from dolphin.io import set_raster_metadata
 
-        if pixel_bbox is not None:
-            left, bottom, right, top = pixel_bbox
-            self.xoff = left
-            self.yoff = top
-            self.xsize_sub = right - left
-            self.ysize_sub = bottom - top
-        else:
-            self.xoff, self.yoff = 0, 0
-            self.xsize_sub, self.ysize_sub = self.xsize, self.ysize
+        out = self.path if output_file is None else Path(output_file)
+        if not out.exists():
+            raise FileNotFoundError(f"Must create {out} before writing metadata")
+
+        set_raster_metadata(
+            out,
+            metadata=self.model_dump(mode="json"),
+            domain=domain,
+        )
 
     @classmethod
-    def from_vrt_file(cls, vrt_file, new_outfile=None, **kwargs):
-        """Create a new VRTStack using an existing VRT file."""
-        file_list, subdataset = cls._parse_vrt_file(vrt_file)
-        if new_outfile is None:
-            # Point to the same, if none provided
-            new_outfile = vrt_file
+    def from_file_metadata(cls, filename: Filename) -> CompressedSlcInfo:
+        """Try to parse the CCSLC metadata from `filename`."""
+        import json
 
-        return cls(
-            file_list,
-            outfile=new_outfile,
-            subdataset=subdataset,
-            write_file=False,
-            **kwargs,
-        )
+        from dolphin.io import get_raster_metadata
 
-    @staticmethod
-    def _parse_vrt_file(vrt_file):
-        """Extract the filenames, and possible subdatasets, from a .vrt file.
-
-        Note that we are parsing the XML, not using `GetFilelist`, because the
-        function does not seem to work when using HDF5 files. E.g.
-
-            <SourceFilename ="1">NETCDF:20220111.nc:SLC/VV</SourceFilename>
-
-        This would not get added to the result of `GetFilelist`
-
-        Parameters
-        ----------
-        vrt_file : Filename
-            Path to the VRT file to read.
-
-        Returns
-        -------
-        filepaths
-        """
-        file_strings = []
-        with open(vrt_file) as f:
-            for line in f:
-                if "<SourceFilename" not in line:
-                    continue
-                # Get the middle part of < >filename</ >
-                fn = line.split(">")[1].strip().split("<")[0]
-                file_strings.append(fn)
-
-        testname = file_strings[0].upper()
-        if testname.startswith("HDF5:") or testname.startswith("NETCDF:"):
-            name_triplets = [name.split(":") for name in file_strings]
-            prefixes, filepaths, subdatasets = zip(*name_triplets)
-            # Remove quoting if it was present
-            filepaths = [f.replace('"', "").replace("'", "") for f in filepaths]
-            if len(set(subdatasets)) > 1:
-                raise NotImplementedError("Only 1 subdataset name is supported")
-            sds = (
-                subdatasets[0].replace('"', "").replace("'", "").lstrip("/")
-            )  # Only returning one subdataset name
+        domains = ["DOLPHIN", ""]
+        for domain in domains:
+            gdal_md = get_raster_metadata(filename, domain=domain)
+            if not gdal_md:
+                continue
+            else:
+                break
         else:
-            # If no prefix, the file_strings are actually paths
-            filepaths, sds = file_strings, None
-        return list(filepaths), sds
+            raise ValueError(f"Could not find metadata in {filename}")
+        # GDAL can write it weirdly and mess up the JSON
+        cleaned = {}
+        for k, v in gdal_md.items():
+            try:
+                # Swap the single quotes for double quotes to parse lists
+                cleaned[k] = json.loads(v.replace("'", '"'))
+            except json.JSONDecodeError:
+                cleaned[k] = v
+        # Parse the date/file lists from the metadata
+        return cls.model_validate(cleaned)
 
-    @staticmethod
-    def _latlon_bbox_to_te(
-        latlon_bbox,
-        filename,
-        epsg=None,
-    ):
-        """Convert a lat/lon bounding box to a target extent.
+    def __fspath__(self):
+        return fspath(self.path)
 
-        Parameters
-        ----------
-        latlon_bbox : tuple[float]
-            Bounding box in lat/lon coordinates: (left, bottom, right, top)
-        filename : str
-            Name of file to get the destination SRS from
-        epsg : int or str, optional
-            EPSG code of the destination SRS
 
-        Returns
-        -------
-        target_extent : tuple[float]
-            Target extent: (xmin, ymin, xmax, ymax) in units of `filename`s SRS (e.g. UTM)
+class MiniStackInfo(BaseStack):
+    """Class for holding attributes about one mini-stack of SLCs.
+
+    Used for planning the processing of a batch of SLCs.
+    """
+
+    def get_compressed_slc_info(self) -> CompressedSlcInfo:
+        """Get the compressed SLC which will come from this ministack.
+
+        Excludes the existing compressed SLCs during the compression.
         """
-        from pyproj import Transformer
+        real_slc_files: list[Filename] = []
+        real_slc_dates: list[Sequence[DateOrDatetime]] = []
+        comp_slc_files: list[Filename] = []
+        for f, d, is_comp in zip(self.file_list, self.dates, self.is_compressed):
+            if is_comp:
+                comp_slc_files.append(f)
+            else:
+                real_slc_files.append(f)
+                real_slc_dates.append(d)
 
-        if epsg is None:
-            ds = gdal.Open(fspath(filename))
-            srs_out = ds.GetSpatialRef()
-            epsg = int(srs_out.GetAttrValue("AUTHORITY", 1))
-            ds = None
-        if int(epsg) == 4326:
-            return latlon_bbox
-        t = Transformer.from_crs(4326, epsg, always_xy=True)
-        left, bottom, right, top = latlon_bbox
-        return t.transform(left, bottom) + t.transform(right, top)
-
-    @staticmethod
-    def _te_to_bbox(target_extent, ds=None, filename=None):
-        """Convert target extent to pixel bounding box, in georeferenced coordinates."""
-        xmin, ymin, xmax, ymax = target_extent  # in georeferenced coordinates
-        row_bottom, col_left = io.xy_to_rowcol(xmin, ymin, ds=ds, filename=filename)
-        row_top, col_right = io.xy_to_rowcol(xmax, ymax, ds=ds, filename=filename)
-        return col_left, row_bottom, col_right, row_top
-
-    def iter_blocks(
-        self,
-        overlaps: tuple[int, int] = (0, 0),
-        block_shape: tuple[int, int] = (512, 512),
-        skip_empty: bool = True,
-        nodata_mask: Optional[np.ndarray] = None,
-        show_progress: bool = True,
-    ) -> Generator[tuple[np.ndarray, tuple[slice, slice]], None, None]:
-        """Iterate over blocks of the stack.
-
-        Loads all images for one window at a time into memory.
-
-        Parameters
-        ----------
-        overlaps : tuple[int, int], optional
-            Pixels to overlap each block by (rows, cols)
-            By default (0, 0)
-        block_shape : tuple[int, int], optional
-            2D shape of blocks to load at a time.
-            Loads all dates/bands at a time with this shape.
-        skip_empty : bool, optional (default True)
-            Skip blocks that are entirely empty (all NaNs)
-        nodata_mask : bool, optional
-            Optional mask indicating nodata values. If provided, will skip
-            blocks that are entirely nodata.
-            1s are the nodata values, 0s are valid data.
-        show_progress : bool, default=True
-            If true, displays a `rich` ProgressBar.
-
-        Yields
-        ------
-        tuple[np.ndarray, tuple[slice, slice]]
-            Iterator of (data, (slice(row_start, row_stop), slice(col_start, col_stop))
-
-        """
-        self._loader = io.EagerLoader(
-            self.outfile,
-            block_shape=block_shape,
-            overlaps=overlaps,
-            nodata_mask=nodata_mask,
-            skip_empty=skip_empty,
-            show_progress=show_progress,
-        )
-        yield from self._loader.iter_blocks()
-
-    @property
-    def shape(self):
-        """Get the 3D shape of the stack."""
-        xsize, ysize = io.get_raster_xysize(self._gdal_file_strings[0])
-        return (len(self.file_list), ysize, xsize)
-
-    def __len__(self):
-        return len(self.file_list)
-
-    def __repr__(self):
-        outname = fspath(self.outfile) if self.outfile else "(not written)"
-        return f"VRTStack({len(self.file_list)} bands, outfile={outname})"
-
-    def __eq__(self, other):
-        if not isinstance(other, VRTStack):
-            return False
-        return (
-            self._gdal_file_strings == other._gdal_file_strings
-            and self.outfile == other.outfile
+        return CompressedSlcInfo(
+            real_slc_file_list=real_slc_files,
+            real_slc_dates=real_slc_dates,
+            compressed_slc_file_list=comp_slc_files,
+            reference_date=self.reference_date,
+            file_date_fmt=self.file_date_fmt,
+            output_folder=self.output_folder,
         )
 
-    # To allow VRTStack to be passed to `dask.array.from_array`, we need:
-    # .shape, .ndim, .dtype and support numpy-style slicing.
-    @property
-    def ndim(self):
-        return 3
 
-    def __getitem__(self, index):
-        if isinstance(index, int):
-            if index < 0:
-                index = len(self) + index
-            return self.read_stack(band=index + 1)
+class MiniStackPlanner(BaseStack):
+    """Class for planning the processing of batches of SLCs."""
 
-        # TODO: raise an error if they try to skip like [::2, ::2]
-        # or pass it to read_stack... but I dont think I need to support it.
-        n, rows, cols = index
-        if isinstance(rows, int):
-            rows = slice(rows, rows + 1)
-        if isinstance(cols, int):
-            cols = slice(cols, cols + 1)
-        if isinstance(n, int):
-            if n < 0:
-                n = len(self) + n
-            return self.read_stack(band=n + 1, rows=rows, cols=cols)
+    max_num_compressed: int = 5
 
-        bands = list(range(1, 1 + len(self)))[n]
-        if len(bands) == len(self):
-            # This will use gdal's ds.ReadAsRaster, no iteration needed
-            data = self.read_stack(band=None, rows=rows, cols=cols)
-        else:
-            data = np.stack(
-                [self.read_stack(band=i, rows=rows, cols=cols) for i in bands], axis=0
+    def plan(self, ministack_size: int) -> list[MiniStackInfo]:
+        """Create a list of ministacks to be processed."""
+        if ministack_size < 2:
+            raise ValueError("Cannot create ministacks with size < 2")
+
+        output_ministacks: list[MiniStackInfo] = []
+        compressed_slc_infos: list[CompressedSlcInfo] = []
+
+        # Solve each ministack using the current chunk (and the previous compressed SLCs)
+        ministack_starts = range(0, len(self.file_list), ministack_size)
+
+        for full_stack_idx in ministack_starts:
+            cur_slice = slice(full_stack_idx, full_stack_idx + ministack_size)
+            cur_files = list(self.file_list[cur_slice]).copy()
+            cur_dates = list(self.dates[cur_slice]).copy()
+
+            comp_slc_files = [c.path for c in compressed_slc_infos]
+            # Add the existing compressed SLC files to the start, but
+            # limit the num comp slcs `max_num_compressed`
+            cur_comp_slc_files = comp_slc_files[-self.max_num_compressed :]
+            combined_files = cur_comp_slc_files + cur_files
+
+            combined_dates = [
+                c.real_date_range for c in compressed_slc_infos
+            ] + cur_dates
+
+            num_ccslc = len(cur_comp_slc_files)
+            combined_is_compressed = num_ccslc * [True] + list(
+                self.is_compressed[cur_slice]
             )
-        return data.squeeze()
+            # If there are any compressed SLCs, set the reference to the last one
+            try:
+                last_compressed_idx = np.where(combined_is_compressed)[0]
+                reference_idx = last_compressed_idx[-1]
+            except IndexError:
+                reference_idx = 0
 
-    @property
-    def dtype(self):
-        return io.get_raster_dtype(self._gdal_file_strings[0])
+            # Make the current ministack output folder using the start/end dates
+            new_date_str = dolphin._dates._format_date_pair(
+                cur_dates[0][0], cur_dates[-1][-1], fmt=self.file_date_fmt
+            )
+            cur_output_folder = self.output_folder / new_date_str
+            cur_ministack = MiniStackInfo(
+                file_list=combined_files,
+                dates=combined_dates,
+                is_compressed=combined_is_compressed,
+                reference_idx=reference_idx,
+                output_folder=cur_output_folder,
+                reference_date=self.reference_date,
+                # TODO: we'll need to alter logic here if we dont fix
+                # reference_idx=0, since this will change the reference date
+            )
+
+            output_ministacks.append(cur_ministack)
+            cur_comp_slc = cur_ministack.get_compressed_slc_info()
+            compressed_slc_infos.append(cur_comp_slc)
+
+        return output_ministacks

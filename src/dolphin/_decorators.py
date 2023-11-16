@@ -121,7 +121,8 @@ def _raise_if_exists(final_path: Path, is_dir: bool):
             try:
                 final_path.rmdir()
             except OSError as e:
-                if "Directory not empty" not in e.args[0]:
+                err_msg = str(e)
+                if "Directory not empty" not in err_msg:
                     raise e
                 else:
                     raise FileExistsError(err_msg)

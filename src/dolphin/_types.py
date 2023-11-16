@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime
 import sys
 from os import PathLike
 from typing import TYPE_CHECKING, Tuple, TypeVar, Union
@@ -20,7 +21,8 @@ else:
 
 PathOrStr = Union[str, PathLikeStr]
 Filename = PathOrStr  # May add a deprecation notice for `Filename`
-PathLikeT = TypeVar("PathLikeT", bound=PathLikeStr)
+# TypeVar added for generic functions which should return the same type as the input
+PathLikeT = TypeVar("PathLikeT", str, PathLikeStr)
 
 # left, bottom, right, top
 Bbox = Tuple[float, float, float, float]
@@ -28,3 +30,5 @@ Bbox = Tuple[float, float, float, float]
 # Used for callable types
 T = TypeVar("T")
 P = ParamSpec("P")
+
+DateOrDatetime = Union[datetime.datetime, datetime.date]

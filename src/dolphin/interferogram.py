@@ -12,7 +12,9 @@ from numpy.typing import ArrayLike
 from osgeo import gdal
 from pydantic import BaseModel, Field, ValidationInfo, field_validator, model_validator
 
+import dolphin._dates
 from dolphin import io, utils
+from dolphin._dates import get_dates
 from dolphin._log import get_log
 from dolphin._types import Filename
 
@@ -134,8 +136,8 @@ class VRTInterferogram(BaseModel, extra="allow"):
         ref_slc, sec_slc = self.ref_slc, self.sec_slc
 
         fmt = self.date_format
-        date1 = utils.get_dates(ref_slc, fmt=fmt)[0]
-        date2 = utils.get_dates(sec_slc, fmt=fmt)[0]
+        date1 = get_dates(ref_slc, fmt=fmt)[0]
+        date2 = get_dates(sec_slc, fmt=fmt)[0]
 
         if self.path is not None:
             return self
@@ -144,7 +146,9 @@ class VRTInterferogram(BaseModel, extra="allow"):
             # If outdir is not set, use the directory of the reference SLC
             self.outdir = utils._get_path_from_gdal_str(ref_slc).parent
 
-        path = self.outdir / (io._format_date_pair(date1, date2, fmt) + ".vrt")
+        path = self.outdir / (
+            dolphin._dates._format_date_pair(date1, date2, fmt) + ".vrt"
+        )
         if Path(path).exists():
             logger.info(f"Removing {path}")
             path.unlink()
@@ -179,8 +183,8 @@ class VRTInterferogram(BaseModel, extra="allow"):
     def __init__(self, **data):
         """Create a VRTInterferogram object and write the VRT file."""
         super().__init__(**data)
-        date1 = utils.get_dates(self.ref_slc, fmt=self.date_format)[0]
-        date2 = utils.get_dates(self.sec_slc, fmt=self.date_format)[0]
+        date1 = get_dates(self.ref_slc, fmt=self.date_format)[0]
+        date2 = get_dates(self.sec_slc, fmt=self.date_format)[0]
         self.dates = (date1, date2)
         if self.write:
             self._write_vrt()
@@ -224,7 +228,7 @@ class VRTInterferogram(BaseModel, extra="allow"):
             VRTInterferogram object.
 
         """
-        from dolphin.stack import VRTStack
+        from dolphin._readers import VRTStack
 
         # Use the parsing function
         (ref_slc, sec_slc), subdataset = VRTStack._parse_vrt_file(path)
@@ -302,7 +306,8 @@ class Network:
         write : bool
             Whether to write the VRT files to disk. Defaults to True.
         """
-        self.slc_list, dates = utils.sort_files_by_date(slc_list)
+        self.slc_list = slc_list
+        self.slc_dates = [get_dates(f)[0] for f in slc_list]
         self.slc_file_pairs = self._make_ifg_pairs(
             self.slc_list,
             max_bandwidth=max_bandwidth,
@@ -311,7 +316,6 @@ class Network:
             indexes=indexes,
         )
         # Save the parameters used to create the network
-        self.slc_dates = [dates[0] for dates in dates]
         self.max_bandwidth = max_bandwidth
         self.max_temporal_baseline = max_temporal_baseline
         self.reference_idx = reference_idx
@@ -461,7 +465,7 @@ class Network:
             If any of the input files have more than one date.
         """
         ifg_strs = Network._all_pairs(slc_file_list)
-        slc_date_lists = [utils.get_dates(f) for f in slc_file_list]
+        slc_date_lists = [get_dates(f) for f in slc_file_list]
         # Check we've got all single-date files
         if any(len(d) != 1 for d in slc_date_lists):
             raise ValueError(

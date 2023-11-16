@@ -75,6 +75,15 @@ class PhaseLinkingOptions(BaseModel, extra="forbid"):
     ministack_size: int = Field(
         10, description="Size of the ministack for sequential estimator.", gt=1
     )
+    max_num_compressed: int = Field(
+        5,
+        description=(
+            "Maximum number of compressed images to use in sequential estimator."
+            " If there are more ministacks than this, the earliest CCSLCs will be"
+            " left out of the later stacks."
+        ),
+        gt=0,
+    )
     half_window: HalfWindow = HalfWindow()
     use_evd: bool = Field(
         False, description="Use EVD on the coherence instead of using the EMI algorithm"
