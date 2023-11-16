@@ -32,7 +32,9 @@ def test_displacement_run_single(opera_slc_files: list[Path], tmpdir):
         displacement.run(cfg)
 
 
-def test_displacement_run_single_official(opera_slc_files_official: list[Path], tmpdir):
+def test_displacement_run_single_official_opera_naming(
+    opera_slc_files_official: list[Path], tmpdir
+):
     with tmpdir.as_cwd():
         cfg = config.DisplacementWorkflow(
             cslc_file_list=opera_slc_files_official,

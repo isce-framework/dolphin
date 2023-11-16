@@ -265,12 +265,10 @@ def run_wrapped_phase_single(
     writer.notify_finished()
     logger.info(f"Finished ministack of size {vrt.shape}.")
 
-    comp_slc_file, tcorr_file = output_files[0:2]
+    written_comp_slc = output_files[0]
 
-    comp_slc_info = ministack.get_compressed_slc_info()
-    io.set_raster_metadata(
-        comp_slc_file.filename, metadata=comp_slc_info.metadata, domain="DOLPHIN"
-    )
+    ccslc_info = ministack.get_compressed_slc_info()
+    ccslc_info.write_metadata(output_file=written_comp_slc.filename)
     # TODO: Does it make sense to return anything from this?
     # or just allow user to search through the `output_folder` they provided?
 

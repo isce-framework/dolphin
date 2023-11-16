@@ -4,9 +4,10 @@ import math
 import resource
 import sys
 import warnings
+from itertools import chain
 from multiprocessing import cpu_count
 from pathlib import Path
-from typing import Optional, Union
+from typing import Any, Iterable, Optional, Union
 
 import numpy as np
 from numpy.typing import ArrayLike, DTypeLike
@@ -544,3 +545,8 @@ def get_cpu_count():
     except Exception:
         pass
     return cpu_count()
+
+
+def flatten(list_of_lists: Iterable[Iterable[Any]]) -> chain[Any]:
+    """Flatten one level of a nested iterable."""
+    return chain.from_iterable(list_of_lists)

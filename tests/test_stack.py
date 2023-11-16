@@ -1,9 +1,12 @@
 from datetime import datetime
 from pathlib import Path
 
+import numpy as np
 import pytest
 
-from dolphin.stack import MiniStackInfo, MiniStackPlanner
+from dolphin import io
+from dolphin.stack import CompressedSlcInfo, MiniStackInfo, MiniStackPlanner
+from dolphin.utils import flatten
 
 NUM_ACQ = 10
 
@@ -94,7 +97,8 @@ def test_ministack_attrs(ministack, dates):
 def test_create_compressed_slc(files, date_lists, is_compressed):
     m = MiniStackInfo(file_list=files, is_compressed=is_compressed, dates=date_lists)
     comp_slc = m.get_compressed_slc_info()
-    assert comp_slc.real_slc_dates == date_lists
+    flat_dates = list(flatten(date_lists))
+    assert comp_slc.real_slc_dates == flat_dates
     assert comp_slc.real_slc_file_list == files
 
     # Now try one where we marked the first of the stack as compressed
@@ -102,7 +106,7 @@ def test_create_compressed_slc(files, date_lists, is_compressed):
     is_compressed2[0] = True
     m2 = MiniStackInfo(file_list=files, is_compressed=is_compressed2, dates=date_lists)
     comp_slc2 = m2.get_compressed_slc_info()
-    assert comp_slc2.real_slc_dates == date_lists[1:]
+    assert comp_slc2.real_slc_dates == flat_dates[1:]
     assert comp_slc2.real_slc_file_list == files[1:]
     assert comp_slc2.compressed_slc_file_list == files[0:1]
 
@@ -154,83 +158,47 @@ def test_ministack_planner_nc(files_nc, date_lists, is_compressed):
     run_ministack_planner(files_nc, date_lists, is_compressed)
 
 
-# """Result above is:
-# [
-#     MiniStackInfo(
-#         file_list=[
-#             PosixPath('pathtest/gtiff/20220101.slc.tif'),
-#             PosixPath('pathtest/gtiff/20220102.slc.tif'),
-#             PosixPath('pathtest/gtiff/20220103.slc.tif')
-#         ],
-#         dates=[
-#             (datetime.datetime(2022, 1, 1, 0, 0),),
-#             (datetime.datetime(2022, 1, 2, 0, 0),),
-#             (datetime.datetime(2022, 1, 3, 0, 0),)
-#         ],
-#         is_compressed=[False, False, False],
-#         reference_date=datetime.datetime(2022, 1, 1, 0, 0),
-#         file_date_fmt='%Y%m%d',
-#         output_folder=PosixPath('20220101_20220103'),
-#         reference_idx=0
-#     ),
-#     MiniStackInfo(
-#         file_list=[
-#             PosixPath('20220101_20220103/compressed_20220101_20220103.tif'),
-#             PosixPath('pathtest/gtiff/20220104.slc.tif'),
-#             PosixPath('pathtest/gtiff/20220105.slc.tif'),
-#             PosixPath('pathtest/gtiff/20220106.slc.tif')
-#         ],
-#         dates=[
-#             (datetime.datetime(2022, 1, 1, 0, 0), datetime.datetime(2022, 1, 3, 0, 0)),
-#             (datetime.datetime(2022, 1, 4, 0, 0),),
-#             (datetime.datetime(2022, 1, 5, 0, 0),),
-#             (datetime.datetime(2022, 1, 6, 0, 0),)
-#         ],
-#         is_compressed=[True, False, False, False],
-#         reference_date=datetime.datetime(2022, 1, 1, 0, 0),
-#         file_date_fmt='%Y%m%d',
-#         output_folder=PosixPath('20220104_20220106'),
-#         reference_idx=0
-#     ),
-#     MiniStackInfo(
-#         file_list=[
-#             PosixPath('20220101_20220103/compressed_20220101_20220103.tif'),
-#             PosixPath('20220104_20220106/compressed_20220104_20220106.tif'),
-#             PosixPath('pathtest/gtiff/20220107.slc.tif'),
-#             PosixPath('pathtest/gtiff/20220108.slc.tif'),
-#             PosixPath('pathtest/gtiff/20220109.slc.tif')
-#         ],
-#         dates=[
-#             (datetime.datetime(2022, 1, 1, 0, 0), datetime.datetime(2022, 1, 3, 0, 0)),
-#             (datetime.datetime(2022, 1, 4, 0, 0), datetime.datetime(2022, 1, 6, 0, 0)),
-#             (datetime.datetime(2022, 1, 7, 0, 0),),
-#             (datetime.datetime(2022, 1, 8, 0, 0),),
-#             (datetime.datetime(2022, 1, 9, 0, 0),)
-#         ],
-#         is_compressed=[True, True, False, False, False],
-#         reference_date=datetime.datetime(2022, 1, 1, 0, 0),
-#         file_date_fmt='%Y%m%d',
-#         output_folder=PosixPath('20220107_20220109'),
-#         reference_idx=1
-#     ),
-#     MiniStackInfo(
-#         file_list=[
-#             PosixPath('20220101_20220103/compressed_20220101_20220103.tif'),
-#             PosixPath('20220104_20220106/compressed_20220104_20220106.tif'),
-#             PosixPath('20220107_20220109/compressed_20220107_20220109.tif'),
-#             PosixPath('pathtest/gtiff/20220110.slc.tif')
-#         ],
-#         dates=[
-#             (datetime.datetime(2022, 1, 1, 0, 0), datetime.datetime(2022, 1, 3, 0, 0)),
-#             (datetime.datetime(2022, 1, 4, 0, 0), datetime.datetime(2022, 1, 6, 0, 0)),
-#             (datetime.datetime(2022, 1, 7, 0, 0), datetime.datetime(2022, 1, 9, 0, 0)),
-#             (datetime.datetime(2022, 1, 10, 0, 0),)
-#         ],
-#         is_compressed=[True, True, True, False],
-#         reference_date=datetime.datetime(2022, 1, 1, 0, 0),
-#         file_date_fmt='%Y%m%d',
-#         output_folder=PosixPath('20220110_20220110'),
-#         reference_idx=2
-#     )
-# ]
-# """
+@pytest.fixture
+def ministack_planner(files, date_lists, is_compressed):
+    return MiniStackPlanner(
+        file_list=files,
+        dates=date_lists,
+        is_compressed=is_compressed,
+        output_folder=Path("fake_dir"),
+        max_num_compressed=5,
+    )
+
+
+def test_ccslc_infos(ministack_planner):
+    # Check we can get the compressed SLC info
+    ministacks = ministack_planner.plan(3)
+    flat_dates = list(flatten(ministack_planner.dates))
+    m = ministacks[0]
+    ccslc = m.get_compressed_slc_info()
+    assert ccslc.real_slc_dates == flat_dates[0:3]
+    assert ccslc.real_slc_file_list == ministack_planner.file_list[0:3]
+    assert ccslc.compressed_slc_file_list == []
+
+    m2 = ministacks[1]
+    ccslc2 = m2.get_compressed_slc_info()
+    assert ccslc2.real_slc_dates == flat_dates[3:6]
+    assert ccslc2.real_slc_file_list == ministack_planner.file_list[3:6]
+    assert ccslc2.compressed_slc_file_list == [ccslc.path]
+
+
+def test_ccslc_round_trip_metadata(ministack_planner, tmp_path):
+    ministacks = ministack_planner.plan(3)
+    m = ministacks[1]
+    m.output_folder = tmp_path
+    ccslc = m.get_compressed_slc_info()
+
+    io.write_arr(arr=np.ones((2, 2)), output_name=ccslc.path)
+    ccslc.write_metadata()
+
+    md_dict = io.get_raster_metadata(ccslc.path, domain="DOLPHIN")
+    assert set(md_dict.keys()) == ccslc.model_dump().keys()
+
+    c2 = CompressedSlcInfo.from_file_metadata(ccslc.path)
+    assert c2.real_slc_dates == ccslc.real_slc_dates
+    # files will have turned to strings in the dump
+    assert list(map(str, ccslc.real_slc_file_list)) == c2.real_slc_file_list

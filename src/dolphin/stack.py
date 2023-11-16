@@ -5,7 +5,7 @@ import warnings
 from datetime import date, datetime
 from os import fspath
 from pathlib import Path
-from typing import Sequence
+from typing import Optional, Sequence
 
 import numpy as np
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -207,8 +207,15 @@ class CompressedSlcInfo(BaseModel):
             if hasattr(item, "__iter__"):
                 # Make sure they didn't pass more than 1 date, implying
                 # a compressed SLC
-                assert len(item) == 1
-                out.append(item[0])
+                # assert len(item) == 1
+                if isinstance(item, str):
+                    out.append(item)
+                elif len(item) > 1:
+                    raise ValueError(
+                        f"Cannot pass multiple dates for a compressed SLC. Got {item}"
+                    )
+                else:
+                    out.append(item[0])
             else:
                 out.append(item)
         return out
@@ -243,37 +250,57 @@ class CompressedSlcInfo(BaseModel):
         """The path of the compressed SLC for this ministack."""
         return self.output_folder / self.filename
 
-    @property
-    def metadata(self) -> dict[str, str]:
-        """Prepare metadata about the compressed SLCs to be stored in the output file.
+    def write_metadata(
+        self, domain: str = "DOLPHIN", output_file: Optional[Filename] = None
+    ):
+        """Write the metadata to the compressed SLC file.
 
-        The filenames will be stored in GDAL metadata as a list of strings, separated
-        by commas, saved into the "DOLPHIN" domain.
+        Parameters
+        ----------
+        domain : str, optional
+            Domain to write the metadata to, by default "DOLPHIN".
+        output_file : Optional[Filename], optional
+            Path to the file to write the metadata to, by default None.
+            If None, will use `self.path`.
         """
-        real_names = [Path(p).name for p in self.real_slc_file_list]
-        comp_names = [Path(p).name for p in self.compressed_slc_file_list]
-        return {
-            "input_real_slc_files": ",".join(map(str, real_names)),
-            "input_compressed_slc_files": ",".join(map(str, comp_names)),
-            "reference_date": self.reference_date.strftime(self.file_date_fmt),
-        }
+        from dolphin.io import set_raster_metadata
+
+        out = self.path if output_file is None else Path(output_file)
+        if not out.exists():
+            raise FileNotFoundError(f"Must create {out} before writing metadata")
+
+        set_raster_metadata(
+            out,
+            metadata=self.model_dump(mode="json"),
+            domain=domain,
+        )
 
     @classmethod
     def from_file_metadata(cls, filename: Filename) -> CompressedSlcInfo:
         """Try to parse the CCSLC metadata from `filename`."""
+        import json
+
         from dolphin.io import get_raster_metadata
 
         domains = ["DOLPHIN", ""]
         for domain in domains:
-            md = get_raster_metadata(filename, domain=domain)
-            if not md:
+            gdal_md = get_raster_metadata(filename, domain=domain)
+            if not gdal_md:
                 continue
             else:
                 break
         else:
             raise ValueError(f"Could not find metadata in {filename}")
+        # GDAL can write it weirdly and mess up the JSON
+        cleaned = {}
+        for k, v in gdal_md.items():
+            try:
+                # Swap the single quotes for double quotes to parse lists
+                cleaned[k] = json.loads(v.replace("'", '"'))
+            except json.JSONDecodeError:
+                cleaned[k] = v
         # Parse the date/file lists from the metadata
-        return cls.model_validate(md)
+        return cls.model_validate(cleaned)
 
     def __fspath__(self):
         return fspath(self.path)

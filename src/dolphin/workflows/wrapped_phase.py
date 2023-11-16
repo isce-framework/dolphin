@@ -51,8 +51,21 @@ def run(
     input_file_list = cfg.cslc_file_list
     if not input_file_list:
         raise ValueError("No input files found")
+
+    # Mark any files beinning with "compressed" as compressed
+    is_compressed = [f.name.startswith("compressed") for f in input_file_list]
     input_dates = [
         get_dates(f, fmt=cfg.input_options.cslc_date_fmt) for f in input_file_list
+    ]
+    # For any that aren't compressed, take the first date.
+    # this is because the official product name of OPERA/Sentinel-1 has both
+    # "acquisition_date" ... "generation_date" in the filename
+    # TODO: this is a bit hacky, perhaps we can make this some input option
+    # so that the user can specify how to get dates from their files (or even
+    # directly pass in dates?)
+    input_dates = [
+        dates[:1] if not is_comp else dates
+        for dates, is_comp in zip(input_dates, is_compressed)
     ]
 
     # #############################################

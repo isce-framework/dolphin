@@ -314,7 +314,8 @@ def opera_slc_files_official(tmp_path) -> list[Path]:
     # expected = {
     # "t087_185678_iw2": [
     # Path(f"{base}_T087-185678-IW2_20180210T232711Z_{ending}"),
-    start_date = 20220101
+    start = datetime.datetime(2022, 1, 1, 1, 2, 3)
+    dt = datetime.timedelta(days=1)
     shape = (4, 128, 128)
     slc_stack = (np.random.rand(*shape) + 1j * np.random.rand(*shape)).astype(
         np.complex64
@@ -328,7 +329,8 @@ def opera_slc_files_official(tmp_path) -> list[Path]:
     group = "/".join(group_parts)
     for burst_id in ["T087-185683-IW2", "T087-185684-IW2"]:
         for i in range(len(slc_stack)):
-            fname = d / f"{base}_{burst_id}_{start_date + i}_{ending}.h5"
+            date_str = (start + i * dt).strftime("%Y%m%dT%H%M%S")
+            fname = d / f"{base}_{burst_id}_{date_str}_{ending}.h5"
             yoff = i * shape[0] / 2
             create_test_nc(
                 fname,
