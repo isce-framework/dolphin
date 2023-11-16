@@ -1,8 +1,12 @@
 # [Unreleased](https://github.com/isce-framework/dolphin/compare/v0.6.1...main)
 
 **Added**
-- `Stack` and `MiniStack` class which does the planning for how a large stack of SLCs will be processed in batches.
+- `MiniStackPlanner` and `MiniStackInfo` class which does the planning for how a large stack of SLCs will be processed in batches.
   - Previously this was done at run time in `sequential.py`. We want to separate that out to view the plan in advance/allow us to dispatch the work to multiple machines.
+- `CompressedSlcInfo` class added to track the attributes of a compressed SLC file created during the workflow.
+  - This has the `reference_date` as an attribute, which allows us to know what the base phase is even without starting from
+    the first SLC in the stack (i.e. if we have limited the number of compressed SLCs)
+- config: `phase_linking.max_compressed_slcs` to cap the number of compressed SLCs added during large-stack sequential workflows
 
 **Changed**
 - Date functions have been moved from `dolphin.utils` to `dolphin._dates`. They are accessible at `dolphin.get_dates`, etc
