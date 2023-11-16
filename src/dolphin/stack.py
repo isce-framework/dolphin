@@ -166,17 +166,11 @@ class BaseStack(BaseModel):
 class CompressedSlcInfo(BaseModel):
     """Class for holding attributes about one compressed SLC."""
 
-    # real_slc_file_list: Sequence[Filename]
-    # real_slc_dates: Sequence[Sequence[DateOrDatetime]]
-    # compressed_slc_file_list: Sequence[Filename]
-    # reference_date: DateOrDatetime
-    # file_date_fmt: str = dolphin.DEFAULT_DATETIME_FORMAT
-    # output_folder: Path = Path("")
     real_slc_file_list: list[Filename] = Field(
         ...,
         description="List of real SLC filenames in the ministack.",
     )
-    real_slc_dates: list[Sequence[DateOrDatetime]] = Field(
+    real_slc_dates: list[datetime] = Field(
         ...,
         description="List of date sequences, one for each SLC in the ministack. "
         "Each item is a list/tuple of datetime.date or datetime.datetime objects, "
@@ -204,14 +198,36 @@ class CompressedSlcInfo(BaseModel):
         description="Folder/location where ministack will write outputs to.",
     )
 
+    @field_validator("real_slc_dates", mode="before")
+    @classmethod
+    def _untuple_dates(cls, v):
+        """Make the dates not be tuples/lists of datetimes."""
+        out = []
+        for item in v:
+            if hasattr(item, "__iter__"):
+                # Make sure they didn't pass more than 1 date, implying
+                # a compressed SLC
+                assert len(item) == 1
+                out.append(item[0])
+            else:
+                out.append(item)
+        return out
+
     @model_validator(mode="after")
     def _check_lengths(self):
-        assert len(self.real_slc_file_list) == len(self.real_slc_dates)
+        rlen = len(self.real_slc_file_list)
+        clen = len(self.real_slc_dates)
+        if not rlen == clen:
+            lengths = f"{rlen} and {clen}"
+            raise ValueError(
+                f"real_slc_file_list and real_slc_dates must be the same length. Got {lengths}"
+            )
+        return self
 
     @property
     def real_date_range(self) -> tuple[DateOrDatetime, DateOrDatetime]:
         """Date range of the real SLCs in the ministack."""
-        return (self.real_slc_dates[0][0], self.real_slc_dates[-1][-1])
+        return (self.real_slc_dates[0], self.real_slc_dates[-1])
 
     @property
     def filename(self) -> str:
