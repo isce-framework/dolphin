@@ -23,7 +23,7 @@ def test_sequential_gtiff(tmp_path, slc_file_list, gpu_enabled):
     _, rows, cols = vrt_stack.shape
     is_compressed = [False] * len(files)
     ministack = stack.MiniStackInfo(
-        vrt_stack.file_list,
+        file_list=vrt_stack.file_list,
         dates=vrt_stack.dates,
         is_compressed=is_compressed,
     )

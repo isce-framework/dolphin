@@ -126,8 +126,8 @@ def run(
     # Plan out which minstacks will be createdo
     # TODO: need to read which files are compressed, and get their reference date
     ministack_planner = stack.MiniStackPlanner(
-        input_file_list,
-        input_dates,
+        file_list=input_file_list,
+        dates=input_dates,
         is_compressed=[False] * len(input_file_list),
         output_folder=pl_path,
         max_num_compressed=cfg.phase_linking.max_num_compressed,

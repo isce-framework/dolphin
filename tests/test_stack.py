@@ -31,50 +31,56 @@ def is_compressed(files):
 
 
 @pytest.fixture
-def date_tuples(dates):
-    # To mimic what we get back from `get_dates`
-    return [(d,) for d in dates]
+def date_lists(dates):
+    # To mimic what we get back from running `get_dates` on a list of files
+    return [[d] for d in dates]
 
 
-def test_create_ministack(tmp_path, files, date_tuples, is_compressed):
-    MiniStackInfo(files, is_compressed=is_compressed, dates=date_tuples)
+def test_create_ministack(tmp_path, files, date_lists, is_compressed):
+    MiniStackInfo(file_list=files, is_compressed=is_compressed, dates=date_lists)
 
     # Check it works by providing a real local dir
     MiniStackInfo(
-        files,
-        dates=date_tuples,
+        file_list=files,
+        dates=date_lists,
         is_compressed=is_compressed,
         output_folder=tmp_path,
     )
 
     # Check it works when making up a future output dir which doesn't exist
     MiniStackInfo(
-        files,
-        dates=date_tuples,
+        file_list=files,
+        dates=date_lists,
         is_compressed=is_compressed,
         output_folder=Path("fake_dir"),
     )
 
 
-def test_mismatched_lengths(files, date_tuples, is_compressed):
+def test_mismatched_lengths(files, date_lists, is_compressed):
     with pytest.raises(ValueError):
-        MiniStackInfo(files, dates=date_tuples[1:], is_compressed=is_compressed)
+        MiniStackInfo(
+            file_list=files, dates=date_lists[1:], is_compressed=is_compressed
+        )
 
     with pytest.raises(ValueError):
-        MiniStackInfo(files, dates=date_tuples, is_compressed=is_compressed[:-1])
+        MiniStackInfo(
+            file_list=files, dates=date_lists, is_compressed=is_compressed[:-1]
+        )
 
 
 def test_create_ministack_dates(files, dates, is_compressed):
     # Check we can provide a list of dates instead of tuples
-    m = MiniStackInfo(files, dates=dates, is_compressed=is_compressed)
-    assert m.dates[0] == (dates[0],)
+    m = MiniStackInfo(file_list=files, dates=dates, is_compressed=is_compressed)
+    assert m.dates[0] == [
+        dates[0],
+    ]
 
 
 @pytest.fixture
-def ministack(files, date_tuples, is_compressed):
+def ministack(files, date_lists, is_compressed):
     return MiniStackInfo(
-        files,
-        dates=date_tuples,
+        file_list=files,
+        dates=date_lists,
         is_compressed=is_compressed,
         output_folder="fake_dir",
     )
@@ -85,26 +91,26 @@ def test_ministack_attrs(ministack, dates):
     assert ministack.real_slc_date_range_str == "20220101_20220110"
 
 
-def test_create_compressed_slc(files, date_tuples, is_compressed):
-    m = MiniStackInfo(files, is_compressed=is_compressed, dates=date_tuples)
+def test_create_compressed_slc(files, date_lists, is_compressed):
+    m = MiniStackInfo(file_list=files, is_compressed=is_compressed, dates=date_lists)
     comp_slc = m.get_compressed_slc_info()
-    assert comp_slc.real_slc_dates == date_tuples
+    assert comp_slc.real_slc_dates == date_lists
     assert comp_slc.real_slc_file_list == files
 
     # Now try one where we marked the first of the stack as compressed
     is_compressed2 = is_compressed.copy()
     is_compressed2[0] = True
-    m2 = MiniStackInfo(files, is_compressed=is_compressed2, dates=date_tuples)
+    m2 = MiniStackInfo(file_list=files, is_compressed=is_compressed2, dates=date_lists)
     comp_slc2 = m2.get_compressed_slc_info()
-    assert comp_slc2.real_slc_dates == date_tuples[1:]
+    assert comp_slc2.real_slc_dates == date_lists[1:]
     assert comp_slc2.real_slc_file_list == files[1:]
     assert comp_slc2.compressed_slc_file_list == files[0:1]
 
 
-def run_ministack_planner(files, date_tuples, is_compressed):
+def run_ministack_planner(files, date_lists, is_compressed):
     msp = MiniStackPlanner(
-        files,
-        dates=date_tuples,
+        file_list=files,
+        dates=date_lists,
         is_compressed=is_compressed,
         output_folder=Path("fake_dir"),
         max_num_compressed=5,
@@ -139,13 +145,13 @@ def run_ministack_planner(files, date_tuples, is_compressed):
     assert all([ms.reference_date == datetime(2022, 1, 1) for ms in ms_list])
 
 
-def test_ministack_planner_gtiff(files, date_tuples, is_compressed):
-    run_ministack_planner(files, date_tuples, is_compressed)
+def test_ministack_planner_gtiff(files, date_lists, is_compressed):
+    run_ministack_planner(files, date_lists, is_compressed)
 
 
 # Unclear how to parameterize over the 2 fixtures
-def test_ministack_planner_nc(files_nc, date_tuples, is_compressed):
-    run_ministack_planner(files_nc, date_tuples, is_compressed)
+def test_ministack_planner_nc(files_nc, date_lists, is_compressed):
+    run_ministack_planner(files_nc, date_lists, is_compressed)
 
 
 # """Result above is:

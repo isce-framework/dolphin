@@ -2,13 +2,13 @@
 from __future__ import annotations
 
 import warnings
-from dataclasses import dataclass
 from datetime import date, datetime
 from os import fspath
 from pathlib import Path
 from typing import Sequence
 
 import numpy as np
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 import dolphin._dates
 from dolphin._log import get_log
@@ -21,35 +21,54 @@ logger = get_log(__name__)
 _DUMMY_DATE = datetime(1900, 1, 1)
 
 
-@dataclass(frozen=True)
-class BaseStack:
+class BaseStack(BaseModel):
     """Base class for mini- and full stack classes."""
 
-    file_list: Sequence[Filename]
-    """List of SLC filenames in the ministack."""
-    dates: Sequence[Sequence[DateOrDatetime]]
-    """List of date sequences, one for each SLC in the ministack.
-    Each item is a list/tuple of datetime.date or datetime.datetime objects,
-    as returned by [dolphin._dates.get_dates][].
-    """
-    is_compressed: Sequence[bool]
-    """List of booleans indicating whether each SLC is compressed or real."""
-    reference_date: DateOrDatetime = _DUMMY_DATE
-    """Reference date to be used for understanding output interferograms.
-    Note that this may be different from `dates[reference_idx]` if the ministack
-    starts with a compressed SLC which has an earlier "base phase", which
-    is used as the phase linking references.
-    It will propagate across ministacks when we always use `reference_idx=0`.
-    """
-    file_date_fmt: str = "%Y%m%d"
-    """Format string for the dates/datetimes in the ministack filenames."""
-    output_folder: Path = Path("")
-    """Folder/location where ministack will write outputs to."""
-    reference_idx: int = 0
-    """Index of the SLC to use as reference during phase linking"""
+    file_list: list[Filename] = Field(
+        ...,
+        description="List of SLC filenames in the ministack.",
+    )
+    dates: list[Sequence[datetime]] = Field(
+        ...,
+        description="List of date sequences, one for each SLC in the ministack. "
+        "Each item is a list/tuple of datetime.date or datetime.datetime objects, "
+        "as returned by [dolphin._dates.get_dates][].",
+    )
+    is_compressed: list[bool] = Field(
+        ...,
+        description="List of booleans indicating whether each SLC is compressed or real.",
+    )
+    reference_date: datetime = Field(
+        _DUMMY_DATE,
+        description="Reference date to be used for understanding output interferograms. "
+        "Note that this may be different from `dates[reference_idx]` if the ministack "
+        "starts with a compressed SLC which has an earlier 'base phase', which "
+        "is used as the phase linking references. "
+        "It will propagate across ministacks when we always use `reference_idx=0`.",
+        validate_default=True,
+    )
+    file_date_fmt: str = Field(
+        dolphin.DEFAULT_DATETIME_FORMAT,
+        description="Format string for the dates/datetimes in the ministack filenames.",
+    )
+    output_folder: Path = Field(
+        Path(""),
+        description="Folder/location where ministack will write outputs to.",
+    )
+    reference_idx: int = Field(
+        0,
+        description="Index of the SLC to use as reference during phase linking",
+    )
 
-    def __post_init__(self):
-        super().__init__()
+    @field_validator("dates", mode="before")
+    @classmethod
+    def _check_if_not_tuples(cls, v):
+        if isinstance(v[0], (date, datetime)):
+            v = [[d] for d in v]
+        return v
+
+    @model_validator(mode="after")
+    def _check_lengths(self):
         if len(self.file_list) == 0:
             raise ValueError("Cannot create empty ministack")
         elif len(self.file_list) == 1:
@@ -64,17 +83,15 @@ class BaseStack:
             raise ValueError(
                 f"dates and file_list must be the same length. Got {lengths}"
             )
+        return self
 
-        if isinstance(self.dates[0], (date, datetime)):
-            date_tuples = [(d,) for d in self.dates]
-            # self.dates = date_tuples
-            # Workaround for `frozen=True` dataclass
-            object.__setattr__(self, "dates", date_tuples)
-
+    @model_validator(mode="after")
+    def _check_unset_reference_date(self):
         if self.reference_date == _DUMMY_DATE:
             ref_date = self.dates[self.reference_idx][0]
             logger.debug("No reference date provided, using first date: %s", ref_date)
-            object.__setattr__(self, "reference_date", ref_date)
+            self.reference_date = ref_date
+        return self
 
     @property
     def full_date_range(self) -> tuple[DateOrDatetime, DateOrDatetime]:
@@ -146,18 +163,49 @@ class BaseStack:
         yield "reference_idx", self.reference_idx
 
 
-@dataclass(frozen=True)
-class CompressedSlcInfo:
+class CompressedSlcInfo(BaseModel):
     """Class for holding attributes about one compressed SLC."""
 
-    real_slc_file_list: Sequence[Filename]
-    real_slc_dates: Sequence[Sequence[DateOrDatetime]]
-    compressed_slc_file_list: Sequence[Filename]
-    reference_date: DateOrDatetime
-    file_date_fmt: str
-    output_folder: Path = Path("")
+    # real_slc_file_list: Sequence[Filename]
+    # real_slc_dates: Sequence[Sequence[DateOrDatetime]]
+    # compressed_slc_file_list: Sequence[Filename]
+    # reference_date: DateOrDatetime
+    # file_date_fmt: str = dolphin.DEFAULT_DATETIME_FORMAT
+    # output_folder: Path = Path("")
+    real_slc_file_list: list[Filename] = Field(
+        ...,
+        description="List of real SLC filenames in the ministack.",
+    )
+    real_slc_dates: list[Sequence[DateOrDatetime]] = Field(
+        ...,
+        description="List of date sequences, one for each SLC in the ministack. "
+        "Each item is a list/tuple of datetime.date or datetime.datetime objects, "
+        "as returned by [dolphin._dates.get_dates][].",
+    )
+    compressed_slc_file_list: list[Filename] = Field(
+        ...,
+        description="List of compressed SLC filenames in the ministack.",
+    )
+    reference_date: datetime = Field(
+        _DUMMY_DATE,
+        description="Reference date to be used for understanding output interferograms. "
+        "Note that this may be different from `dates[reference_idx]` if the ministack "
+        "starts with a compressed SLC which has an earlier 'base phase', which "
+        "is used as the phase linking references. "
+        "It will propagate across ministacks when we always use `reference_idx=0`.",
+        validate_default=True,
+    )
+    file_date_fmt: str = Field(
+        dolphin.DEFAULT_DATETIME_FORMAT,
+        description="Format string for the dates/datetimes in the ministack filenames.",
+    )
+    output_folder: Path = Field(
+        Path(""),
+        description="Folder/location where ministack will write outputs to.",
+    )
 
-    def __post_init__(self):
+    @model_validator(mode="after")
+    def _check_lengths(self):
         assert len(self.real_slc_file_list) == len(self.real_slc_dates)
 
     @property
@@ -194,11 +242,27 @@ class CompressedSlcInfo:
             "reference_date": self.reference_date.strftime(self.file_date_fmt),
         }
 
+    @classmethod
+    def from_file_metadata(cls, filename: Filename) -> CompressedSlcInfo:
+        """Try to parse the CCSLC metadata from `filename`."""
+        from dolphin.io import get_raster_metadata
+
+        domains = ["DOLPHIN", ""]
+        for domain in domains:
+            md = get_raster_metadata(filename, domain=domain)
+            if not md:
+                continue
+            else:
+                break
+        else:
+            raise ValueError(f"Could not find metadata in {filename}")
+        # Parse the date/file lists from the metadata
+        return cls.model_validate(md)
+
     def __fspath__(self):
         return fspath(self.path)
 
 
-@dataclass(frozen=True)
 class MiniStackInfo(BaseStack):
     """Class for holding attributes about one mini-stack of SLCs.
 
@@ -210,17 +274,6 @@ class MiniStackInfo(BaseStack):
 
         Excludes the existing compressed SLCs during the compression.
         """
-        # is_comp_arr = np.array(self.is_compressed)
-        # real_slc_idxs = np.where(~is_comp_arr)[0]
-        # real_slc_files = np.array(self.file_list)[real_slc_idxs].tolist()
-        # real_slc_dates = np.array(self.dates)[real_slc_idxs].tolist()
-
-        # comp_slc_idxs = np.where(is_comp_arr)[0]
-        # comp_slc_files = np.array(self.file_list)[comp_slc_idxs].tolist()
-
-        # The above doesn't work when theres some 2-tuples, some one
-        # just in python only:
-
         real_slc_files: list[Filename] = []
         real_slc_dates: list[Sequence[DateOrDatetime]] = []
         comp_slc_files: list[Filename] = []
@@ -241,19 +294,10 @@ class MiniStackInfo(BaseStack):
         )
 
 
-@dataclass(frozen=True)
 class MiniStackPlanner(BaseStack):
     """Class for planning the processing of batches of SLCs."""
 
     max_num_compressed: int = 5
-
-    def __post_init__(self):
-        super().__post_init__()
-        # Default the reference date for a full stack to the first date
-        if self.reference_date is None:
-            object.__setattr__(
-                self, "reference_date", self.dates[self.reference_idx][0]
-            )
 
     def plan(self, ministack_size: int) -> list[MiniStackInfo]:
         """Create a list of ministacks to be processed."""
@@ -298,7 +342,7 @@ class MiniStackPlanner(BaseStack):
             )
             cur_output_folder = self.output_folder / new_date_str
             cur_ministack = MiniStackInfo(
-                combined_files,
+                file_list=combined_files,
                 dates=combined_dates,
                 is_compressed=combined_is_compressed,
                 reference_idx=reference_idx,
@@ -313,4 +357,3 @@ class MiniStackPlanner(BaseStack):
             compressed_slc_infos.append(cur_comp_slc)
 
         return output_ministacks
-        # return output_ministacks, compressed_slc_infos

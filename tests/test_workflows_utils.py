@@ -12,7 +12,7 @@ def test_setup_output_folder(tmpdir, tiled_file_list):
     vrt_stack = _readers.VRTStack(tiled_file_list, outfile=tmpdir / "stack.vrt")
     is_compressed = [False] * len(vrt_stack.file_list)
     ministack = stack.MiniStackInfo(
-        vrt_stack.file_list,
+        file_list=vrt_stack.file_list,
         dates=vrt_stack.dates,
         is_compressed=is_compressed,
     )
@@ -33,7 +33,7 @@ def test_setup_output_folder(tmpdir, tiled_file_list):
 
     is_compressed[0] = True
     m2 = stack.MiniStackInfo(
-        vrt_stack.file_list,
+        file_list=vrt_stack.file_list,
         dates=vrt_stack.dates,
         is_compressed=is_compressed,
     )
@@ -57,7 +57,7 @@ def test_setup_output_folder(tmpdir, tiled_file_list):
 def test_setup_output_folder_strided(tmpdir, tiled_file_list, strides):
     vrt_stack = _readers.VRTStack(tiled_file_list, outfile=tmpdir / "stack.vrt")
     ministack = stack.MiniStackInfo(
-        vrt_stack.file_list,
+        file_list=vrt_stack.file_list,
         dates=vrt_stack.dates,
         is_compressed=[False] * len(vrt_stack.file_list),
     )
