@@ -12,9 +12,8 @@ from numpy.typing import ArrayLike
 from osgeo import gdal
 from pydantic import BaseModel, Field, ValidationInfo, field_validator, model_validator
 
-import dolphin._dates
 from dolphin import io, utils
-from dolphin._dates import get_dates
+from dolphin._dates import _format_date_pair, get_dates
 from dolphin._log import get_log
 from dolphin._types import DateOrDatetime, Filename
 
@@ -141,31 +140,6 @@ class VRTInterferogram(BaseModel, extra="allow"):
         return utils._get_path_from_gdal_str(ref_slc).parent
 
     @model_validator(mode="after")
-    def _form_path(self) -> "VRTInterferogram":
-        """Create the filename (if not provided) from the provided SLCs."""
-        ref_slc, sec_slc = self.ref_slc, self.sec_slc
-
-        fmt = self.date_format
-        date1 = get_dates(ref_slc, fmt=fmt)[0]
-        date2 = get_dates(sec_slc, fmt=fmt)[0]
-
-        if self.path is not None:
-            return self
-
-        if self.outdir is None:
-            # If outdir is not set, use the directory of the reference SLC
-            self.outdir = utils._get_path_from_gdal_str(ref_slc).parent
-
-        path = self.outdir / (
-            dolphin._dates._format_date_pair(date1, date2, fmt) + ".vrt"
-        )
-        if Path(path).exists():
-            logger.info(f"Removing {path}")
-            path.unlink()
-        self.path = path
-        return self
-
-    @model_validator(mode="after")
     def _parse_dates(self) -> "VRTInterferogram":
         # Get the dates from the input files if not provided
         if self.ref_date is None:
@@ -198,6 +172,25 @@ class VRTInterferogram(BaseModel, extra="allow"):
                 f"Input files {ref_slc} and {sec_slc} have different GeoTransforms"
             )
 
+        return self
+
+    @model_validator(mode="after")
+    def _form_path(self) -> "VRTInterferogram":
+        """Create the filename (if not provided) from the provided SLCs."""
+        if self.path is not None:
+            return self
+
+        if self.outdir is None:
+            # If outdir is not set, use the directory of the reference SLC
+            self.outdir = utils._get_path_from_gdal_str(self.ref_slc).parent
+        assert self.ref_date is not None
+        assert self.sec_date is not None
+        date_str = _format_date_pair(self.ref_date, self.sec_date, fmt=self.date_format)
+        path = self.outdir / (date_str + ".vrt")
+        if Path(path).exists():
+            logger.info(f"Removing {path}")
+            path.unlink()
+        self.path = path
         return self
 
     def __init__(self, **data):
