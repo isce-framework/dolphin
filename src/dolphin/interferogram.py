@@ -16,7 +16,7 @@ import dolphin._dates
 from dolphin import io, utils
 from dolphin._dates import get_dates
 from dolphin._log import get_log
-from dolphin._types import Filename
+from dolphin._types import DateOrDatetime, Filename
 
 gdal.UseExceptions()
 
@@ -82,6 +82,16 @@ class VRTInterferogram(BaseModel, extra="allow"):
         validate_default=True,
     )
     date_format: str = "%Y%m%d"
+    ref_date: Optional[DateOrDatetime] = Field(
+        None,
+        description="Reference date of the interferogram. If not specified,"
+        "will be parsed from `ref_slc` using `date_format`.",
+    )
+    sec_date: Optional[DateOrDatetime] = Field(
+        None,
+        description="Secondary date of the interferogram. If not specified,"
+        "will be parsed from `sec_slc` using `date_format`.",
+    )
     write: bool = Field(True, description="Write the VRT file to disk")
 
     pixel_function: Literal["cmul", "mul"] = "cmul"
@@ -156,6 +166,16 @@ class VRTInterferogram(BaseModel, extra="allow"):
         return self
 
     @model_validator(mode="after")
+    def _parse_dates(self) -> "VRTInterferogram":
+        # Get the dates from the input files if not provided
+        if self.ref_date is None:
+            self.ref_date = get_dates(self.ref_slc, fmt=self.date_format)[0]
+        if self.sec_date is None:
+            self.sec_date = get_dates(self.sec_slc, fmt=self.date_format)[0]
+
+        return self
+
+    @model_validator(mode="after")
     def _validate_files(self) -> "VRTInterferogram":
         """Check that the inputs are the same size and geotransform."""
         ref_slc = self.ref_slc
@@ -183,9 +203,7 @@ class VRTInterferogram(BaseModel, extra="allow"):
     def __init__(self, **data):
         """Create a VRTInterferogram object and write the VRT file."""
         super().__init__(**data)
-        date1 = get_dates(self.ref_slc, fmt=self.date_format)[0]
-        date2 = get_dates(self.sec_slc, fmt=self.date_format)[0]
-        self.dates = (date1, date2)
+        self.dates = (self.ref_date, self.sec_date)
         if self.write:
             self._write_vrt()
 
