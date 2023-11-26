@@ -44,8 +44,6 @@ def run(
     logger.info("Running wrapped phase estimation in %s", work_dir)
 
     input_file_list = cfg.cslc_file_list
-    if not input_file_list:
-        raise ValueError("No input files found")
 
     # Mark any files beinning with "compressed" as compressed
     is_compressed = [f.name.startswith("compressed") for f in input_file_list]
