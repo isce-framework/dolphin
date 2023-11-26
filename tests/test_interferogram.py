@@ -9,6 +9,7 @@ from dolphin import io, utils
 from dolphin.interferogram import (
     Network,
     VRTInterferogram,
+    _create_vrt_conj,
     estimate_correlation_from_phase,
 )
 
@@ -277,3 +278,16 @@ def test_correlation_from_phase_vrtinterferogram_input(window_size, slc_file_lis
     ifg = VRTInterferogram(ref_slc=slc_file_list[0], sec_slc=slc_file_list[1])
     estimate_correlation_from_phase(ifg, window_size)
     # just checking it loads and runs
+
+
+def test_create_vrt_conj(tmp_path, slc_file_list_nc_wgs84):
+    # create a VRTInterferogram
+    infile = io.format_nc_filename(slc_file_list_nc_wgs84[0], "data")
+    out = tmp_path / "test.vrt"
+    _create_vrt_conj(infile, output_filename=out)
+
+    assert out.exists()
+    assert io.get_raster_gt(out) == io.get_raster_gt(infile)
+    assert io.get_raster_xysize(out) == io.get_raster_xysize(infile)
+    assert io.get_raster_crs(out) == io.get_raster_crs(infile)
+    np.testing.assert_array_equal(io.load_gdal(out).conj(), io.load_gdal(infile))

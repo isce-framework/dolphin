@@ -239,15 +239,15 @@ class VRTInterferogram(BaseModel, extra="allow"):
             VRTInterferogram object.
 
         """
-        from dolphin._readers import VRTStack
+        from dolphin._readers import _parse_vrt_file
 
         # Use the parsing function
-        (ref_slc, sec_slc), subdataset = VRTStack._parse_vrt_file(path)
+        (ref_slc, sec_slc), subdataset = _parse_vrt_file(path)
         if subdataset is not None:
             ref_slc = io.format_nc_filename(ref_slc, subdataset)
             sec_slc = io.format_nc_filename(sec_slc, subdataset)
 
-        return cls.construct(
+        return cls.model_construct(
             ref_slc=ref_slc,
             sec_slc=sec_slc,
             path=Path(path).resolve(),
@@ -559,3 +559,57 @@ def estimate_correlation_from_phase(
     # If the input was 0, the correlation is 0
     cor[zero_mask] = 0
     return cor
+
+
+def _create_vrt_conj(
+    filename: Filename, output_filename: Filename, is_relative: bool = False
+):
+    """Create a VRT raster of the conjugate of `filename`."""
+    xsize, ysize = io.get_raster_xysize(filename)
+    rel = "1" if is_relative else "0"
+
+    # See https://gdal.org/drivers/raster/vrt.html#default-pixel-functions
+    vrt_template = f"""\
+<VRTDataset rasterXSize="{xsize}" rasterYSize="{ysize}">
+    <VRTRasterBand dataType="CFloat32" band="1" subClass="VRTDerivedRasterBand">
+        <PixelFunctionType>conj</PixelFunctionType>
+        <SimpleSource>
+            <SourceFilename relativeToVRT="{rel}">{filename}</SourceFilename>
+        </SimpleSource>
+    </VRTRasterBand>
+</VRTDataset>
+    """
+    with open(output_filename, "w") as f:
+        f.write(vrt_template)
+    io.copy_projection(filename, output_filename)
+
+
+def convert_pl_to_ifg(
+    phase_linked_slc: Filename, reference_date: DateOrDatetime, output_dir: Filename
+) -> Path:
+    """Convert a phase-linked SLC to an interferogram by conjugating the phase.
+
+    Parameters
+    ----------
+    phase_linked_slc : Filename
+        Path to phase-linked SLC file.
+    reference_date : DateOrDatetime
+        Reference date of the interferogram.
+    output_dir : Filename
+        Directory to place the renamed file.
+    conjudate: bool, default=True
+        Conjugate the phase before renaming. Otherwise, simply renames the file.
+
+    Returns
+    -------
+    Path
+        Path to renamed file.
+    """
+    # The phase_linked_slc will be named with the secondary date.
+    # Make the output from that, plus the given reference date
+    secondary_date = get_dates(phase_linked_slc)[-1]
+    date_str = _format_date_pair(reference_date, secondary_date)
+    out_name = Path(output_dir) / f"{date_str}.int.vrt"
+    # Now make a VRT to do the .conj
+    _create_vrt_conj(phase_linked_slc, out_name)
+    return out_name
