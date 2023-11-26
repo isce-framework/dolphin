@@ -28,6 +28,30 @@ def test_derived_vrt_interferogram(slc_file_list):
     npt.assert_allclose(ifg_arr, arr0 * arr1.conj(), rtol=1e-6)
 
 
+def test_specify_dates(slc_file_list):
+    ref_slc, sec_slc = slc_file_list[0:2]
+    ref_date, sec_date = datetime(2022, 1, 1), datetime(2022, 1, 2)
+    ifg = VRTInterferogram(ref_slc=ref_slc, sec_slc=sec_slc)
+    assert ifg.dates == (ref_date, sec_date)
+    assert ifg.path.name == "20220101_20220102.vrt"
+
+    # Check other dates don't fail or get overwritten
+    ref_date2 = datetime(2023, 2, 2)
+    sec_date2 = datetime(2023, 2, 3)
+    ifg = VRTInterferogram(
+        ref_slc=ref_slc, sec_slc=sec_slc, ref_date=ref_date2, sec_date=sec_date2
+    )
+    assert ifg.dates == (ref_date2, sec_date2)
+    assert ifg.path.name == "20230202_20230203.vrt"
+    # One at a time check
+    ifg = VRTInterferogram(ref_slc=ref_slc, sec_slc=sec_slc, ref_date=ref_date2)
+    assert ifg.dates == (ref_date2, sec_date)
+    assert ifg.path.name == "20230202_20220102.vrt"
+    ifg = VRTInterferogram(ref_slc=ref_slc, sec_slc=sec_slc, sec_date=sec_date2)
+    assert ifg.dates == (ref_date, sec_date2)
+    assert ifg.path.name == "20220101_20230203.vrt"
+
+
 def test_derived_vrt_interferogram_nc(slc_file_list_nc):
     ifg = VRTInterferogram(
         ref_slc=slc_file_list_nc[0], sec_slc=slc_file_list_nc[1], subdataset="data"
