@@ -64,7 +64,6 @@ def test_displacement_run_stack(opera_slc_files: list[Path], tmpdir):
             worker_settings=dict(
                 gpu_enabled=(os.environ.get("NUMBA_DISABLE_JIT") != "1")
             ),
-            benchmark_log_dir=Path("."),
             log_file=Path(".") / "dolphin.log",
         )
         displacement.run(cfg)

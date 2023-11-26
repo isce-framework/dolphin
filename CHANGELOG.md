@@ -16,6 +16,7 @@
 
 **Removed**
 - Extra subsetting functions from `VRTStack` have been removed, as they are not used in the workflow and the reimplmenent simple GDAL calls.
+- `CPURecorder` and `GPURecorder` have been removed to simplify code. May be moved to separate repo.
 
 # [v0.6.1](https://github.com/isce-framework/dolphin/compare/v0.6.0...v0.6.1) - 2023-11-13
 
