@@ -18,7 +18,7 @@ def test_derived_vrt_interferogram(slc_file_list):
     """Basic test that the VRT loads the same as S1 * S2.conj()."""
     ifg = VRTInterferogram(ref_slc=slc_file_list[0], sec_slc=slc_file_list[1])
 
-    assert "20220101_20220102.vrt" == ifg.path.name
+    assert "20220101_20220102.int.vrt" == ifg.path.name
     assert io.get_raster_xysize(ifg.path) == io.get_raster_xysize(slc_file_list[0])
     assert ifg.dates == (datetime(2022, 1, 1), datetime(2022, 1, 2))
 
@@ -34,7 +34,7 @@ def test_specify_dates(slc_file_list):
     ref_date, sec_date = datetime(2022, 1, 1), datetime(2022, 1, 2)
     ifg = VRTInterferogram(ref_slc=ref_slc, sec_slc=sec_slc)
     assert ifg.dates == (ref_date, sec_date)
-    assert ifg.path.name == "20220101_20220102.vrt"
+    assert ifg.path.name == "20220101_20220102.int.vrt"
 
     # Check other dates don't fail or get overwritten
     ref_date2 = datetime(2023, 2, 2)
@@ -43,14 +43,14 @@ def test_specify_dates(slc_file_list):
         ref_slc=ref_slc, sec_slc=sec_slc, ref_date=ref_date2, sec_date=sec_date2
     )
     assert ifg.dates == (ref_date2, sec_date2)
-    assert ifg.path.name == "20230202_20230203.vrt"
+    assert ifg.path.name == "20230202_20230203.int.vrt"
     # One at a time check
     ifg = VRTInterferogram(ref_slc=ref_slc, sec_slc=sec_slc, ref_date=ref_date2)
     assert ifg.dates == (ref_date2, sec_date)
-    assert ifg.path.name == "20230202_20220102.vrt"
+    assert ifg.path.name == "20230202_20220102.int.vrt"
     ifg = VRTInterferogram(ref_slc=ref_slc, sec_slc=sec_slc, sec_date=sec_date2)
     assert ifg.dates == (ref_date, sec_date2)
-    assert ifg.path.name == "20220101_20230203.vrt"
+    assert ifg.path.name == "20220101_20230203.int.vrt"
 
 
 def test_derived_vrt_interferogram_nc(slc_file_list_nc):
@@ -58,7 +58,7 @@ def test_derived_vrt_interferogram_nc(slc_file_list_nc):
         ref_slc=slc_file_list_nc[0], sec_slc=slc_file_list_nc[1], subdataset="data"
     )
 
-    assert "20220101_20220102.vrt" == ifg.path.name
+    assert "20220101_20220102.int.vrt" == ifg.path.name
     assert io.get_raster_xysize(ifg.path) == io.get_raster_xysize(slc_file_list_nc[0])
 
     arr0 = io.load_gdal(slc_file_list_nc[0])
@@ -74,7 +74,7 @@ def test_derived_vrt_interferogram_with_subdataset(slc_file_list_nc_with_sds):
         ref_slc=slc_file_list_nc_with_sds[0], sec_slc=slc_file_list_nc_with_sds[1]
     )
 
-    assert "20220101_20220102.vrt" == ifg.path.name
+    assert "20220101_20220102.int.vrt" == ifg.path.name
     assert io.get_raster_xysize(ifg.path) == io.get_raster_xysize(
         slc_file_list_nc_with_sds[0]
     )
@@ -105,12 +105,12 @@ def test_derived_vrt_interferogram_with_subdataset(slc_file_list_nc_with_sds):
 
 def test_derived_vrt_interferogram_outdir(tmp_path, slc_file_list):
     ifg = VRTInterferogram(ref_slc=slc_file_list[0], sec_slc=slc_file_list[1])
-    assert slc_file_list[0].parent / "20220101_20220102.vrt" == ifg.path
+    assert slc_file_list[0].parent / "20220101_20220102.int.vrt" == ifg.path
 
     ifg = VRTInterferogram(
         ref_slc=slc_file_list[0], sec_slc=slc_file_list[1], outdir=tmp_path
     )
-    assert tmp_path / "20220101_20220102.vrt" == ifg.path
+    assert tmp_path / "20220101_20220102.int.vrt" == ifg.path
 
 
 def test_derived_vrt_interferogram_outfile(tmpdir, slc_file_list):
@@ -147,9 +147,9 @@ def test_single_reference_network(tmp_path, four_slc_files):
         ("20220101", "20220104"),
     ]
     # check the written out files:
-    assert Path(tmp_path / "20220101_20220102.vrt").exists()
-    assert Path(tmp_path / "20220101_20220103.vrt").exists()
-    assert Path(tmp_path / "20220101_20220104.vrt").exists()
+    assert Path(tmp_path / "20220101_20220102.int.vrt").exists()
+    assert Path(tmp_path / "20220101_20220103.int.vrt").exists()
+    assert Path(tmp_path / "20220101_20220104.int.vrt").exists()
 
     n = Network(four_slc_files, reference_idx=1, outdir=tmp_path)
     assert _get_pair_stems(n.slc_file_pairs) == [
@@ -157,9 +157,9 @@ def test_single_reference_network(tmp_path, four_slc_files):
         ("20220102", "20220103"),
         ("20220102", "20220104"),
     ]
-    assert Path(tmp_path / "20220101_20220102.vrt").exists()
-    assert Path(tmp_path / "20220102_20220103.vrt").exists()
-    assert Path(tmp_path / "20220102_20220104.vrt").exists()
+    assert Path(tmp_path / "20220101_20220102.int.vrt").exists()
+    assert Path(tmp_path / "20220102_20220103.int.vrt").exists()
+    assert Path(tmp_path / "20220102_20220104.int.vrt").exists()
 
 
 def test_limit_by_bandwidth(tmp_path, four_slc_files):

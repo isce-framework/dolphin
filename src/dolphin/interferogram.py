@@ -21,6 +21,8 @@ gdal.UseExceptions()
 
 logger = get_log(__name__)
 
+DEFAULT_SUFFIX = ".int.vrt"
+
 
 class VRTInterferogram(BaseModel, extra="allow"):
     """Create an interferogram using a VRTDerivedRasterBand.
@@ -32,12 +34,12 @@ class VRTInterferogram(BaseModel, extra="allow"):
     sec_slc : Union[Path, str]
         Path to secondary SLC file
     path : Optional[Path], optional
-        Path to output interferogram. Defaults to Path('<date1>_<date2>.vrt'),
+        Path to output interferogram. Defaults to Path('<date1>_<date2>.int.vrt'),
         placed in the same directory as `ref_slc`.
     outdir : Optional[Path], optional
         Directory to place output interferogram. Defaults to the same directory as
         `ref_slc`. If only `outdir` is specified, the output interferogram will
-        be named '<date1>_<date2>.vrt', where the dates are parsed from the
+        be named '<date1>_<date2>.int.vrt', where the dates are parsed from the
         inputs. If `path` is specified, this is ignored.
     subdataset : Optional[str], optional
         Subdataset to use for the input files (if passing file paths
@@ -66,7 +68,7 @@ class VRTInterferogram(BaseModel, extra="allow"):
         description=(
             "Directory to place output interferogram. Defaults to the same"
             " directory as `ref_slc`. If only `outdir` is specified, the output"
-            " interferogram will be named '<date1>_<date2>.vrt', where the dates"
+            f" interferogram will be named '<date1>_<date2>{DEFAULT_SUFFIX}', where the dates"
             " are parsed from the inputs. If `path` is specified, this is ignored."
         ),
         validate_default=True,
@@ -74,9 +76,9 @@ class VRTInterferogram(BaseModel, extra="allow"):
     path: Optional[Path] = Field(
         None,
         description=(
-            "Path to output interferogram. Defaults to '<date1>_<date2>.vrt', where the"
-            " dates are parsed from the input files, placed in the same directory as"
-            " `ref_slc`."
+            f"Path to output interferogram. Defaults to '<date1>_<date2>{DEFAULT_SUFFIX}'"
+            ", where the dates are parsed from the input files, placed in the same "
+            "directory as `ref_slc`."
         ),
         validate_default=True,
     )
@@ -186,7 +188,7 @@ class VRTInterferogram(BaseModel, extra="allow"):
         assert self.ref_date is not None
         assert self.sec_date is not None
         date_str = _format_date_pair(self.ref_date, self.sec_date, fmt=self.date_format)
-        path = self.outdir / (date_str + ".vrt")
+        path = self.outdir / (date_str + DEFAULT_SUFFIX)
         if Path(path).exists():
             logger.info(f"Removing {path}")
             path.unlink()
