@@ -24,7 +24,7 @@ jobs:
               rasterio
           - label: Minimum
             spec: >-
-              python=3.8
+              python=3.9
               isce3
               gdal=3.5
               h5py=3.6
