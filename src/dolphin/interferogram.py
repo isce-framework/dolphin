@@ -591,6 +591,9 @@ def convert_pl_to_ifg(
 ) -> Path:
     """Convert a phase-linked SLC to an interferogram by conjugating the phase.
 
+    The SLC has already been multiplied by the (conjugate) phase of a reference SLC,
+    so it only needs to be conjugated to put it in the form (ref * sec.conj()).
+
     Parameters
     ----------
     phase_linked_slc : Filename
@@ -599,8 +602,6 @@ def convert_pl_to_ifg(
         Reference date of the interferogram.
     output_dir : Filename
         Directory to place the renamed file.
-    conjudate: bool, default=True
-        Conjugate the phase before renaming. Otherwise, simply renames the file.
 
     Returns
     -------
