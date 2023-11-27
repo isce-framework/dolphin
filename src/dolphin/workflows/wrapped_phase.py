@@ -1,14 +1,14 @@
 from __future__ import annotations
 
+import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Sequence
 
 from opera_utils import make_nodata_mask
 
-from dolphin import _readers, ps, stack
+from dolphin import _readers, interferogram, ps, stack
 from dolphin._dates import get_dates
 from dolphin._log import get_log, log_runtime
-from dolphin.interferogram import Network
 
 from . import sequential
 from .config import DisplacementWorkflow
@@ -44,22 +44,6 @@ def run(
     logger.info("Running wrapped phase estimation in %s", work_dir)
 
     input_file_list = cfg.cslc_file_list
-
-    # Mark any files beinning with "compressed" as compressed
-    is_compressed = [f.name.startswith("compressed") for f in input_file_list]
-    input_dates = [
-        get_dates(f, fmt=cfg.input_options.cslc_date_fmt) for f in input_file_list
-    ]
-    # For any that aren't compressed, take the first date.
-    # this is because the official product name of OPERA/Sentinel-1 has both
-    # "acquisition_date" ... "generation_date" in the filename
-    # TODO: this is a bit hacky, perhaps we can make this some input option
-    # so that the user can specify how to get dates from their files (or even
-    # directly pass in dates?)
-    input_dates = [
-        dates[:1] if not is_comp else dates
-        for dates, is_comp in zip(input_dates, is_compressed)
-    ]
 
     # #############################################
     # Make a VRT pointing to the input SLC files
@@ -118,20 +102,28 @@ def run(
     pl_path = cfg.phase_linking._directory
     pl_path.mkdir(parents=True, exist_ok=True)
 
-    # Plan out which minstacks will be createdo
-    # TODO: need to read which files are compressed, and get their reference date
+    # Mark any files beinning with "compressed" as compressed
+    is_compressed = [f.name.startswith("compressed") for f in input_file_list]
+    input_dates = _get_input_dates(
+        input_file_list, is_compressed, cfg.input_options.cslc_date_fmt
+    )
+    reference_date = _get_reference_date(input_file_list, is_compressed, input_dates)
+    reference_idx = 0  # Not sure when we wouldn't need this
+
     ministack_planner = stack.MiniStackPlanner(
         file_list=input_file_list,
         dates=input_dates,
-        is_compressed=[False] * len(input_file_list),
+        is_compressed=is_compressed,
         output_folder=pl_path,
         max_num_compressed=cfg.phase_linking.max_num_compressed,
+        reference_date=reference_date,
+        reference_idx=reference_idx,
     )
 
     phase_linked_slcs = list(pl_path.glob("2*.tif"))
     if len(phase_linked_slcs) > 0:
         logger.info(f"Skipping EVD step, {len(phase_linked_slcs)} files already exist")
-        comp_slc_file = next(pl_path.glob("compressed*tif"))
+        comp_slc_file = sorted(pl_path.glob("compressed*tif"))[-1]
         tcorr_file = next(pl_path.glob("tcorr*tif"))
     else:
         logger.info(f"Running sequential EMI step in {pl_path}")
@@ -169,30 +161,69 @@ def run(
     # Form interferograms from estimated wrapped phase
     # ###################################################
 
-    # TO FIX THE MISSING IFG problem:
-    # 1. check if the full stack has "compressed" for the first file
-    #   this may be pushed up...
-
     ifg_dir = cfg.interferogram_network._directory
+    ministack_planner.dates
     existing_ifgs = list(ifg_dir.glob("*.int.*"))
     if len(existing_ifgs) > 0:
         logger.info(f"Skipping interferogram step, {len(existing_ifgs)} exists")
-        ifg_file_list = existing_ifgs
-    else:
-        logger.info(
-            f"Creating virtual interferograms from {len(phase_linked_slcs)} files"
+        return existing_ifgs, comp_slc_file, tcorr_file, ps_looked_file
+
+    pl_ifgs: list[Path] = []
+    for f in phase_linked_slcs:
+        p = interferogram.convert_pl_to_ifg(
+            f, reference_date=reference_date, output_dir=ifg_dir
         )
-        network = Network(
-            slc_list=phase_linked_slcs,
-            reference_idx=cfg.interferogram_network.reference_idx,
-            max_bandwidth=cfg.interferogram_network.max_bandwidth,
-            max_temporal_baseline=cfg.interferogram_network.max_temporal_baseline,
-            indexes=cfg.interferogram_network.indexes,
-            outdir=ifg_dir,
-        )
-        if len(network.ifg_list) == 0:
-            raise ValueError("No interferograms were created")
-        else:
-            ifg_file_list = [ifg.path for ifg in network.ifg_list]  # type: ignore
+        pl_ifgs.append(p)
+
+    # if cfg.interferogram_network.network_type == InterferogramNetworkType.SINGLE_REFERENCE:
+    # TO FIX THE MISSING IFG problem:
+    # Then if theres a network, i add those extra ones...
+    # This seems complicated to track both the normal case we've done, plus this
+    # compressed slc case
+    # TODO: make the network worth with a list of pl ifgs?
+
+    logger.info(f"Creating virtual interferograms from {len(phase_linked_slcs)} files")
+    network = interferogram.Network(
+        slc_list=phase_linked_slcs,
+        reference_idx=cfg.interferogram_network.reference_idx,
+        max_bandwidth=cfg.interferogram_network.max_bandwidth,
+        max_temporal_baseline=cfg.interferogram_network.max_temporal_baseline,
+        indexes=cfg.interferogram_network.indexes,
+        outdir=ifg_dir,
+    )
+    if len(network.ifg_list) == 0:
+        raise ValueError("No interferograms were created")
+    ifg_file_list: list[Path] = [ifg.path for ifg in network.ifg_list]  # type: ignore
+    assert all(p is not None for p in ifg_file_list)
 
     return ifg_file_list, comp_slc_file, tcorr_file, ps_looked_file
+
+
+def _get_reference_date(
+    input_file_list: Sequence[Path],
+    is_compressed: Sequence[bool],
+    input_dates: Sequence[Sequence[datetime.datetime]],
+) -> datetime.datetime:
+    is_compressed = [f.name.startswith("compressed") for f in input_file_list]
+    if not is_compressed[0]:
+        return input_dates[0][0]
+    # Otherwise we need to read the first Compressed SLC metadat to find it's reference date
+    comp_slc = stack.CompressedSlcInfo.from_file_metadata(input_file_list[0])
+    return comp_slc.reference_date
+
+
+def _get_input_dates(
+    input_file_list: Sequence[Path], is_compressed: Sequence[bool], date_fmt: str
+) -> list[list[datetime.datetime]]:
+    input_dates = [get_dates(f, fmt=date_fmt) for f in input_file_list]
+    # For any that aren't compressed, take the first date.
+    # this is because the official product name of OPERA/Sentinel1 has both
+    # "acquisition_date" ... "generation_date" in the filename
+    # TODO: this is a bit hacky, perhaps we can make this some input option
+    # so that the user can specify how to get dates from their files (or even
+    # directly pass in dates?)
+    input_dates = [
+        dates[:1] if not is_comp else dates
+        for dates, is_comp in zip(input_dates, is_compressed)
+    ]
+    return input_dates
