@@ -221,11 +221,11 @@ def _create_ifgs(
         return ifg_file_list
 
     # For other networks, we have to combine other ones formed from the `Network`
-    if network_type != InterferogramNetworkType.MAX_BANDWIDTH:
-        raise NotImplementedError(
-            "Only single-reference and max-bandwidth interferograms are supported when"
-            " starting with compressed SLCs"
-        )
+    # TODO
+    raise NotImplementedError(
+        "Only single-reference interferograms are supported when"
+        " starting with compressed SLCs"
+    )
     # Say we had inputs like:
     #  compressed_2_3 , slc_4, slc_5, slc_6
     # but the compressed one was referenced to "1"
@@ -234,8 +234,8 @@ def _create_ifgs(
     # If we requested max-bw-2 interferograms, we want
     # (1, 4), (1, 5), (4, 5), (4, 6), (5, 6)
     # (the same as though we had normal SLCs (1, 4, 5, 6) )
-
-    return ifg_file_list
+    #
+    # return ifg_file_list
 
 
 def _get_reference_date_idx(
