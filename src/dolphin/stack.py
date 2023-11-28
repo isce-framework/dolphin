@@ -300,7 +300,11 @@ class CompressedSlcInfo(BaseModel):
             except json.JSONDecodeError:
                 cleaned[k] = v
         # Parse the date/file lists from the metadata
-        return cls.model_validate(cleaned)
+        out = cls.model_validate(cleaned)
+        # Overwrite the `output_folder` part- we may have moved it since
+        # writing the metadata
+        out.output_folder = Path(filename).parent
+        return out
 
     def __fspath__(self):
         return fspath(self.path)
@@ -348,10 +352,17 @@ class MiniStackPlanner(BaseStack):
             raise ValueError("Cannot create ministacks with size < 2")
 
         output_ministacks: list[MiniStackInfo] = []
+
+        # Start of with any compressed SLCs that are passed in
         compressed_slc_infos: list[CompressedSlcInfo] = []
+        for f in self.compressed_slc_file_list:
+            # Note: these must actually exist to be used!
+            compressed_slc_infos.append(CompressedSlcInfo.from_file_metadata(f))
 
         # Solve each ministack using the current chunk (and the previous compressed SLCs)
-        ministack_starts = range(0, len(self.file_list), ministack_size)
+        ministack_starts = range(
+            self.first_real_slc_idx, len(self.file_list), ministack_size
+        )
 
         for full_stack_idx in ministack_starts:
             cur_slice = slice(full_stack_idx, full_stack_idx + ministack_size)

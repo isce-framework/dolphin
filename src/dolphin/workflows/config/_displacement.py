@@ -101,14 +101,6 @@ class DisplacementWorkflow(WorkflowBase):
     unwrap_options: UnwrapOptions = Field(default_factory=UnwrapOptions)
     correction_options: CorrectionOptions = Field(default_factory=CorrectionOptions)
 
-    benchmark_log_dir: Optional[Path] = Field(
-        default=None,
-        description=(
-            "Path to directory to write CPU/Memory usage logs. If none passed, will"
-            " skip recording"
-        ),
-    )
-
     # internal helpers
     # Stores the list of directories to be created by the workflow
     model_config = ConfigDict(

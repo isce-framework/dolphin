@@ -5,7 +5,7 @@ import numpy.testing as npt
 import pytest
 from osgeo import gdal
 
-from dolphin._readers import VRTStack
+from dolphin._readers import VRTStack, _parse_vrt_file
 from dolphin.utils import _get_path_from_gdal_str
 
 # Note: uses the fixtures from conftest.py
@@ -157,3 +157,58 @@ def test_tiled_iter_blocks(tmp_path, tiled_file_list):
 
     blocks, slices = zip(*list(vrt_stack.iter_blocks(block_shape=(50, 100))))
     assert len(blocks) == len(slices) == 4
+
+
+@pytest.fixture
+def test_vrt():
+    return """<VRTDataset rasterXSize="128" rasterYSize="128">
+  <SRS dataAxisToSRSAxisMapping="1,2">PROJCS["WGS 84 / UTM zone 15N",GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AUTHORITY["EPSG","4326"]],PROJECTION["Transverse_Mercator"],PARAMETER["latitude_of_origin",0],PARAMETER["central_meridian",-93],PARAMETER["scale_factor",0.9996],PARAMETER["false_easting",500000],PARAMETER["false_northing",0],UNIT["metre",1],AXIS["Easting",EAST],AXIS["Northing",NORTH],AUTHORITY["EPSG","32615"]]</SRS>
+  <GeoTransform> -6.4500000000000000e+01,  1.0000000000000000e+00,  0.0000000000000000e+00,  6.6500000000000000e+01,  0.0000000000000000e+00, -1.0000000000000000e+00</GeoTransform>
+  <VRTRasterBand dataType="CFloat32" band="1">
+    <SimpleSource>
+      <SourceFilename relativeToVRT="0">compressed_20220101_20220104.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SrcRect xOff="0" yOff="0" xSize="128" ySize="128" />
+      <DstRect xOff="0" yOff="0" xSize="128" ySize="128" />
+    </SimpleSource>
+  </VRTRasterBand>
+  <VRTRasterBand dataType="CFloat32" band="1">
+    <SimpleSource>
+      <SourceFilename relativeToVRT="0">NETCDF:"t087_185684_iw2_20220102.h5":"//data/VV"</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SrcRect xOff="0" yOff="0" xSize="128" ySize="128" />
+      <DstRect xOff="0" yOff="0" xSize="128" ySize="128" />
+    </SimpleSource>
+  </VRTRasterBand>
+  <VRTRasterBand dataType="CFloat32" band="2">
+    <SimpleSource>
+      <SourceFilename relativeToVRT="0">NETCDF:"t087_185684_iw2_20220103.h5":"//data/VV"</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SrcRect xOff="0" yOff="0" xSize="128" ySize="128" />
+      <DstRect xOff="0" yOff="0" xSize="128" ySize="128" />
+    </SimpleSource>
+  </VRTRasterBand>
+  <VRTRasterBand dataType="CFloat32" band="3">
+    <SimpleSource>
+      <SourceFilename relativeToVRT="0">NETCDF:"t087_185684_iw2_20220104.h5":"//data/VV"</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SrcRect xOff="0" yOff="0" xSize="128" ySize="128" />
+      <DstRect xOff="0" yOff="0" xSize="128" ySize="128" />
+    </SimpleSource>
+  </VRTRasterBand>
+</VRTDataset>
+"""
+
+
+def test_parse_vrt(tmp_path, test_vrt):
+    with open(tmp_path / "t.vrt", "w") as f:
+        f.write(test_vrt)
+
+    filepaths, sds = _parse_vrt_file(tmp_path / "t.vrt")
+    assert filepaths == [
+        "compressed_20220101_20220104.tif",
+        "t087_185684_iw2_20220102.h5",
+        "t087_185684_iw2_20220103.h5",
+        "t087_185684_iw2_20220104.h5",
+    ]
+    assert sds == "data/VV"

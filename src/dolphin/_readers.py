@@ -12,6 +12,8 @@ from dolphin._dates import get_dates, sort_files_by_date
 from dolphin._types import Filename
 from dolphin.stack import logger
 
+__all__ = ["VRTStack"]
+
 
 class VRTStack:
     """Class for creating a virtual stack of raster files.
@@ -177,7 +179,7 @@ class VRTStack:
     @classmethod
     def from_vrt_file(cls, vrt_file, new_outfile=None, **kwargs):
         """Create a new VRTStack using an existing VRT file."""
-        file_list, subdataset = cls._parse_vrt_file(vrt_file)
+        file_list, subdataset = _parse_vrt_file(vrt_file)
         if new_outfile is None:
             # Point to the same, if none provided
             new_outfile = vrt_file
@@ -189,51 +191,6 @@ class VRTStack:
             write_file=False,
             **kwargs,
         )
-
-    @staticmethod
-    def _parse_vrt_file(vrt_file):
-        """Extract the filenames, and possible subdatasets, from a .vrt file.
-
-        Note that we are parsing the XML, not using `GetFilelist`, because the
-        function does not seem to work when using HDF5 files. E.g.
-
-            <SourceFilename ="1">NETCDF:20220111.nc:SLC/VV</SourceFilename>
-
-        This would not get added to the result of `GetFilelist`
-
-        Parameters
-        ----------
-        vrt_file : Filename
-            Path to the VRT file to read.
-
-        Returns
-        -------
-        filepaths
-        """
-        file_strings = []
-        with open(vrt_file) as f:
-            for line in f:
-                if "<SourceFilename" not in line:
-                    continue
-                # Get the middle part of < >filename</ >
-                fn = line.split(">")[1].strip().split("<")[0]
-                file_strings.append(fn)
-
-        testname = file_strings[0].upper()
-        if testname.startswith("HDF5:") or testname.startswith("NETCDF:"):
-            name_triplets = [name.split(":") for name in file_strings]
-            prefixes, filepaths, subdatasets = zip(*name_triplets)
-            # Remove quoting if it was present
-            filepaths = [f.replace('"', "").replace("'", "") for f in filepaths]
-            if len(set(subdatasets)) > 1:
-                raise NotImplementedError("Only 1 subdataset name is supported")
-            sds = (
-                subdatasets[0].replace('"', "").replace("'", "").lstrip("/")
-            )  # Only returning one subdataset name
-        else:
-            # If no prefix, the file_strings are actually paths
-            filepaths, sds = file_strings, None
-        return list(filepaths), sds
 
     def iter_blocks(
         self,
@@ -338,3 +295,51 @@ class VRTStack:
     @property
     def dtype(self):
         return io.get_raster_dtype(self._gdal_file_strings[0])
+
+
+def _parse_vrt_file(vrt_file):
+    """Extract the filenames, and possible subdatasets, from a .vrt file.
+
+    Assumes, if using HDFS/NetCDF files, that the subdataset is the same.
+
+    Note that we are parsing the XML, not using `GetFilelist`, because the
+    function does not seem to work when using HDF5 files. E.g.
+
+        <SourceFilename ="1">NETCDF:20220111.nc:SLC/VV</SourceFilename>
+
+    This would not get added to the result of `GetFilelist`
+
+    Parameters
+    ----------
+    vrt_file : Filename
+        Path to the VRT file to read.
+
+    Returns
+    -------
+    filepaths
+        List of filepaths to the SLCs
+    sds
+        Subdataset name, if using NetCDF/HDF5 files
+    """
+    file_strings = []
+    with open(vrt_file) as f:
+        for line in f:
+            if "<SourceFilename" not in line:
+                continue
+            # Get the middle part of < >filename</ >
+            fn = line.split(">")[1].strip().split("<")[0]
+            file_strings.append(fn)
+
+    sds = ""
+    filepaths = []
+    for name in file_strings:
+        if name.upper().startswith("HDF5:") or name.upper().startswith("NETCDF:"):
+            prefix, filepath, subdataset = name.split(":")
+            # Clean up subdataset
+            sds = subdataset.replace('"', "").replace("'", "").lstrip("/")
+            # Remove quoting if it was present
+            filepaths.append(filepath.replace('"', "").replace("'", ""))
+        else:
+            filepaths.append(name)
+
+    return filepaths, sds

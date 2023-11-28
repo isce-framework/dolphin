@@ -202,3 +202,23 @@ def test_ccslc_round_trip_metadata(ministack_planner, tmp_path):
     assert c2.real_slc_dates == ccslc.real_slc_dates
     # files will have turned to strings in the dump
     assert list(map(str, ccslc.real_slc_file_list)) == c2.real_slc_file_list
+
+
+def test_ccslc_moved(ministack_planner, tmp_path):
+    ministacks = ministack_planner.plan(3)
+    m = ministacks[1]
+    m.output_folder = tmp_path
+    ccslc = m.get_compressed_slc_info()
+    io.write_arr(arr=np.ones((2, 2)), output_name=ccslc.path)
+    ccslc.write_metadata()
+
+    other_path = tmp_path / "other"
+    other_path.mkdir()
+    new_name = other_path / ccslc.path.name
+    ccslc.path.rename(new_name)
+
+    c2 = CompressedSlcInfo.from_file_metadata(new_name)
+    assert c2.real_slc_dates == ccslc.real_slc_dates
+    assert list(map(str, ccslc.real_slc_file_list)) == c2.real_slc_file_list
+    # Only the `output_folder` should have changed
+    assert c2.output_folder == other_path

@@ -1,8 +1,8 @@
 """Combine estimated DS phases with PS phases to form interferograms."""
-
 from __future__ import annotations
 
 import itertools
+from dataclasses import dataclass
 from os import fspath
 from pathlib import Path
 from typing import Iterable, Literal, Optional, Sequence, Union
@@ -12,15 +12,16 @@ from numpy.typing import ArrayLike
 from osgeo import gdal
 from pydantic import BaseModel, Field, ValidationInfo, field_validator, model_validator
 
-import dolphin._dates
 from dolphin import io, utils
-from dolphin._dates import get_dates
+from dolphin._dates import DEFAULT_DATETIME_FORMAT, _format_date_pair, get_dates
 from dolphin._log import get_log
-from dolphin._types import Filename
+from dolphin._types import DateOrDatetime, Filename
 
 gdal.UseExceptions()
 
 logger = get_log(__name__)
+
+DEFAULT_SUFFIX = ".int.vrt"
 
 
 class VRTInterferogram(BaseModel, extra="allow"):
@@ -33,12 +34,12 @@ class VRTInterferogram(BaseModel, extra="allow"):
     sec_slc : Union[Path, str]
         Path to secondary SLC file
     path : Optional[Path], optional
-        Path to output interferogram. Defaults to Path('<date1>_<date2>.vrt'),
+        Path to output interferogram. Defaults to Path('<date1>_<date2>.int.vrt'),
         placed in the same directory as `ref_slc`.
     outdir : Optional[Path], optional
         Directory to place output interferogram. Defaults to the same directory as
         `ref_slc`. If only `outdir` is specified, the output interferogram will
-        be named '<date1>_<date2>.vrt', where the dates are parsed from the
+        be named '<date1>_<date2>.int.vrt', where the dates are parsed from the
         inputs. If `path` is specified, this is ignored.
     subdataset : Optional[str], optional
         Subdataset to use for the input files (if passing file paths
@@ -67,7 +68,7 @@ class VRTInterferogram(BaseModel, extra="allow"):
         description=(
             "Directory to place output interferogram. Defaults to the same"
             " directory as `ref_slc`. If only `outdir` is specified, the output"
-            " interferogram will be named '<date1>_<date2>.vrt', where the dates"
+            f" interferogram will be named '<date1>_<date2>{DEFAULT_SUFFIX}', where the dates"
             " are parsed from the inputs. If `path` is specified, this is ignored."
         ),
         validate_default=True,
@@ -75,13 +76,23 @@ class VRTInterferogram(BaseModel, extra="allow"):
     path: Optional[Path] = Field(
         None,
         description=(
-            "Path to output interferogram. Defaults to '<date1>_<date2>.vrt', where the"
-            " dates are parsed from the input files, placed in the same directory as"
-            " `ref_slc`."
+            f"Path to output interferogram. Defaults to '<date1>_<date2>{DEFAULT_SUFFIX}'"
+            ", where the dates are parsed from the input files, placed in the same "
+            "directory as `ref_slc`."
         ),
         validate_default=True,
     )
-    date_format: str = "%Y%m%d"
+    date_format: str = DEFAULT_DATETIME_FORMAT
+    ref_date: Optional[DateOrDatetime] = Field(
+        None,
+        description="Reference date of the interferogram. If not specified,"
+        "will be parsed from `ref_slc` using `date_format`.",
+    )
+    sec_date: Optional[DateOrDatetime] = Field(
+        None,
+        description="Secondary date of the interferogram. If not specified,"
+        "will be parsed from `sec_slc` using `date_format`.",
+    )
     write: bool = Field(True, description="Write the VRT file to disk")
 
     pixel_function: Literal["cmul", "mul"] = "cmul"
@@ -131,28 +142,13 @@ class VRTInterferogram(BaseModel, extra="allow"):
         return utils._get_path_from_gdal_str(ref_slc).parent
 
     @model_validator(mode="after")
-    def _form_path(self) -> "VRTInterferogram":
-        """Create the filename (if not provided) from the provided SLCs."""
-        ref_slc, sec_slc = self.ref_slc, self.sec_slc
+    def _parse_dates(self) -> "VRTInterferogram":
+        # Get the dates from the input files if not provided
+        if self.ref_date is None:
+            self.ref_date = get_dates(self.ref_slc, fmt=self.date_format)[0]
+        if self.sec_date is None:
+            self.sec_date = get_dates(self.sec_slc, fmt=self.date_format)[0]
 
-        fmt = self.date_format
-        date1 = get_dates(ref_slc, fmt=fmt)[0]
-        date2 = get_dates(sec_slc, fmt=fmt)[0]
-
-        if self.path is not None:
-            return self
-
-        if self.outdir is None:
-            # If outdir is not set, use the directory of the reference SLC
-            self.outdir = utils._get_path_from_gdal_str(ref_slc).parent
-
-        path = self.outdir / (
-            dolphin._dates._format_date_pair(date1, date2, fmt) + ".vrt"
-        )
-        if Path(path).exists():
-            logger.info(f"Removing {path}")
-            path.unlink()
-        self.path = path
         return self
 
     @model_validator(mode="after")
@@ -180,12 +176,29 @@ class VRTInterferogram(BaseModel, extra="allow"):
 
         return self
 
+    @model_validator(mode="after")
+    def _form_path(self) -> "VRTInterferogram":
+        """Create the filename (if not provided) from the provided SLCs."""
+        if self.path is not None:
+            return self
+
+        if self.outdir is None:
+            # If outdir is not set, use the directory of the reference SLC
+            self.outdir = utils._get_path_from_gdal_str(self.ref_slc).parent
+        assert self.ref_date is not None
+        assert self.sec_date is not None
+        date_str = _format_date_pair(self.ref_date, self.sec_date, fmt=self.date_format)
+        path = self.outdir / (date_str + DEFAULT_SUFFIX)
+        if Path(path).exists():
+            logger.info(f"Removing {path}")
+            path.unlink()
+        self.path = path
+        return self
+
     def __init__(self, **data):
         """Create a VRTInterferogram object and write the VRT file."""
         super().__init__(**data)
-        date1 = get_dates(self.ref_slc, fmt=self.date_format)[0]
-        date2 = get_dates(self.sec_slc, fmt=self.date_format)[0]
-        self.dates = (date1, date2)
+        self.dates = (self.ref_date, self.sec_date)
         if self.write:
             self._write_vrt()
 
@@ -228,15 +241,15 @@ class VRTInterferogram(BaseModel, extra="allow"):
             VRTInterferogram object.
 
         """
-        from dolphin._readers import VRTStack
+        from dolphin._readers import _parse_vrt_file
 
         # Use the parsing function
-        (ref_slc, sec_slc), subdataset = VRTStack._parse_vrt_file(path)
+        (ref_slc, sec_slc), subdataset = _parse_vrt_file(path)
         if subdataset is not None:
             ref_slc = io.format_nc_filename(ref_slc, subdataset)
             sec_slc = io.format_nc_filename(sec_slc, subdataset)
 
-        return cls.construct(
+        return cls.model_construct(
             ref_slc=ref_slc,
             sec_slc=sec_slc,
             path=Path(path).resolve(),
@@ -245,6 +258,7 @@ class VRTInterferogram(BaseModel, extra="allow"):
         )
 
 
+@dataclass
 class Network:
     """A network of interferograms from a list of SLCs.
 
@@ -252,104 +266,71 @@ class Network:
     ----------
     slc_list : list[Filename]
         list of SLCs to use to form interferograms.
-    slc_dates : list[datetime.date]
-        list of dates corresponding to the SLCs.
     ifg_list : list[tuple[Filename, Filename]]
         list of `VRTInterferogram`s created from the SLCs.
     max_bandwidth : int | None, optional
         Maximum number of SLCs to include in an interferogram, by index distance.
         Defaults to None.
-    max_temporal_baseline : Optional[float], optional
+    max_temporal_baseline : Optional[float], default = None
         Maximum temporal baseline to include in an interferogram, in days.
-        Defaults to None.
+    date_format : str, optional
+        Date format to use when parsing dates from the input files (for temporal baseline).
+        defaults to [`dolphin._dates.DEFAULT_DATETIME_FORMAT`][]
     reference_idx : int | None, optional
         Index of the SLC to use as the reference for all interferograms.
         Defaults to None.
+    indexes : Sequence[tuple[int, int]], optional
+        Manually list (ref_idx, sec_idx) pairs to use for interferograms.
+    subdataset : Optional[str], default = None
+        If passing NetCDF files in `slc_list, the subdataset of the image data
+        within the file.
+        Can also pass a sequence of one subdataset per entry in `slc_list`
+    write : bool
+        Whether to write the VRT files to disk. Defaults to True.
     """
 
-    def __init__(
-        self,
-        slc_list: Sequence[Filename],
-        outdir: Optional[Filename] = None,
-        max_bandwidth: int | None = None,
-        max_temporal_baseline: Optional[float] = None,
-        reference_idx: int | None = None,
-        indexes: Optional[Sequence[tuple[int, int]]] = None,
-        subdataset: Optional[Union[str, Sequence[str]]] = None,
-        write: bool = True,
-    ):
-        """Create a network of interferograms from a list of SLCs.
+    slc_list: Sequence[Filename]
+    outdir: Optional[Filename] = None
+    max_bandwidth: Optional[int] = None
+    max_temporal_baseline: Optional[float] = None
+    date_format: str = DEFAULT_DATETIME_FORMAT
+    reference_idx: Optional[int] = None
+    indexes: Optional[Sequence[tuple[int, int]]] = None
+    subdataset: Optional[Union[str, Sequence[str]]] = None
+    write: bool = True
 
-        Parameters
-        ----------
-        slc_list : list
-            list of SLCs to use to form interferograms
-        outdir : Optional[Filename], optional
-            Directory to write the VRT files to.
-            If not set, defaults to the directory of the reference SLC.
-        max_bandwidth : int | None, optional
-            Maximum number of SLCs to include in an interferogram, by index distance.
-            Defaults to None.
-        max_temporal_baseline : Optional[float]
-            Maximum temporal baseline to include in an interferogram, in days.
-            Defaults to None.
-        reference_idx : int | None
-            Index of the SLC to use as the reference for all interferograms.
-            Defaults to None.
-        indexes : Optional[Sequence[tuple[int, int]]]
-            list of (ref_idx, sec_idx) pairs to use to create interferograms.
-        subdataset : Optional[str]
-            If passing NetCDF files in `slc_list, the subdataset of the image data
-            within the file.
-            Can also pass a sequence of one subdataset per entry in `slc_list`
-            Defaults to None.
-        write : bool
-            Whether to write the VRT files to disk. Defaults to True.
-        """
-        self.slc_list = slc_list
-        self.slc_dates = [get_dates(f)[0] for f in slc_list]
-        self.slc_file_pairs = self._make_ifg_pairs(
-            self.slc_list,
-            max_bandwidth=max_bandwidth,
-            max_temporal_baseline=max_temporal_baseline,
-            reference_idx=reference_idx,
-            indexes=indexes,
-        )
-        # Save the parameters used to create the network
-        self.max_bandwidth = max_bandwidth
-        self.max_temporal_baseline = max_temporal_baseline
-        self.reference_idx = reference_idx
-        if subdataset is None or isinstance(subdataset, str):
-            self._slc_to_subdataset = {slc: subdataset for slc in slc_list}
+    def __post_init__(
+        self,
+        *args,
+        **kwargs,
+    ):
+        self.slc_file_pairs = self._make_ifg_pairs()
+
+        if self.subdataset is None or isinstance(self.subdataset, str):
+            self._slc_to_subdataset = {slc: self.subdataset for slc in self.slc_list}
         else:
             # We're passing a sequence
-            assert len(subdataset) == len(slc_list)
-            self._slc_to_subdataset = {slc: sd for slc, sd in zip(slc_list, subdataset)}
-        self._subdataset = subdataset
+            assert len(self.subdataset) == len(self.slc_list)
+            self._slc_to_subdataset = {
+                slc: sd for slc, sd in zip(self.slc_list, self.subdataset)
+            }
 
+        if self.outdir is None:
+            self.outdir = Path(self.slc_list[0]).parent
         # Create each VRT file
-        self.ifg_list: list[VRTInterferogram] = self._create_vrt_ifgs(
-            outdir=outdir, write=write
-        )
+        self.ifg_list: list[VRTInterferogram] = self._create_vrt_ifgs()
 
-    def _create_vrt_ifgs(
-        self, outdir: Optional[Filename] = Path.cwd(), write: bool = True
-    ) -> list[VRTInterferogram]:
-        """Write out a VRTInterferogram for each ifg.
-
-        Parameters
-        ----------
-        outdir : Path, optional
-            Directory to write the VRT files to.
-            By default, the directory of the first SLC.
-        write : bool, optional
-            Whether to write the VRT files to disk.
-        """
-        if outdir is None:
-            outdir = Path(self.slc_list[0]).parent
+    def _create_vrt_ifgs(self) -> list[VRTInterferogram]:
+        """Write out a VRTInterferogram for each ifg."""
         ifg_list: list[VRTInterferogram] = []
         for ref, sec in self._gdal_file_strings:
-            v = VRTInterferogram(ref_slc=ref, sec_slc=sec, outdir=outdir, write=write)
+            v = VRTInterferogram(
+                ref_slc=ref,
+                sec_slc=sec,
+                date_format=self.date_format,
+                outdir=self.outdir,
+                write=self.write,
+            )
             ifg_list.append(v)
         return ifg_list
 
@@ -381,47 +362,45 @@ class Network:
             f"reference_idx={self.reference_idx}"
         )
 
-    @staticmethod
-    def _make_ifg_pairs(
-        slc_list: Sequence[Filename],
-        max_bandwidth: int | None = None,
-        max_temporal_baseline: Optional[float] = None,
-        reference_idx: int | None = None,
-        indexes: Optional[Sequence[tuple[int, int]]] = None,
-    ) -> list[tuple]:
+    def _make_ifg_pairs(self) -> list[tuple]:
         """Form interferogram pairs from a list of SLC files sorted by date."""
-        if indexes is not None:
+        if self.indexes is not None:
             # Give the option to select exactly which interferograms to create
             return [
-                (slc_list[ref_idx], slc_list[sec_idx]) for ref_idx, sec_idx in indexes
+                (self.slc_list[ref_idx], self.slc_list[sec_idx])
+                for ref_idx, sec_idx in self.indexes
             ]
-        elif max_bandwidth is not None:
-            return Network._limit_by_bandwidth(slc_list, max_bandwidth)
-        elif max_temporal_baseline is not None:
-            return Network._limit_by_temporal_baseline(slc_list, max_temporal_baseline)
-        elif reference_idx is not None:
-            return Network._single_reference_network(slc_list, reference_idx)
+        elif self.max_bandwidth is not None:
+            return Network._limit_by_bandwidth(self.slc_list, self.max_bandwidth)
+        elif self.max_temporal_baseline is not None:
+            return Network._limit_by_temporal_baseline(
+                self.slc_list,
+                self.max_temporal_baseline,
+                date_format=self.date_format,
+            )
+        elif self.reference_idx is not None:
+            return Network._single_reference_network(self.slc_list, self.reference_idx)
         else:
             raise ValueError("No valid ifg list generation method specified")
 
     @staticmethod
     def _single_reference_network(
-        slc_file_list: Sequence[Filename], reference_idx=0
+        slc_list: Sequence[Filename], reference_idx=0
     ) -> list[tuple]:
         """Form a list of single-reference interferograms."""
-        if len(slc_file_list) < 2:
+        if len(slc_list) < 2:
             raise ValueError("Need at least two dates to make an interferogram list")
-        ref = slc_file_list[reference_idx]
-        ifgs = [tuple(sorted([ref, date])) for date in slc_file_list if date != ref]
+        ref = slc_list[reference_idx]
+        ifgs = [tuple(sorted([ref, date])) for date in slc_list if date != ref]
         return ifgs
 
     @staticmethod
-    def _limit_by_bandwidth(slc_file_list: Iterable[Filename], max_bandwidth: int):
+    def _limit_by_bandwidth(slc_list: Iterable[Filename], max_bandwidth: int):
         """Form a list of the "nearest-`max_bandwidth`" ifgs.
 
         Parameters
         ----------
-        slc_file_list : Iterable[Filename]
+        slc_list : Iterable[Filename]
             list of dates of SLCs
         max_bandwidth : int
             Largest allowed span of ifgs, by index distance, to include.
@@ -432,27 +411,30 @@ class Network:
         list
             Pairs of (date1, date2) ifgs
         """
-        slc_to_idx = {s: idx for idx, s in enumerate(slc_file_list)}
+        slc_to_idx = {s: idx for idx, s in enumerate(slc_list)}
         return [
             (a, b)
-            for (a, b) in Network._all_pairs(slc_file_list)
+            for (a, b) in Network._all_pairs(slc_list)
             if slc_to_idx[b] - slc_to_idx[a] <= max_bandwidth
         ]
 
     @staticmethod
     def _limit_by_temporal_baseline(
-        slc_file_list: Iterable[Filename],
+        slc_list: Iterable[Filename],
         max_temporal_baseline: Optional[float] = None,
+        date_format: str = DEFAULT_DATETIME_FORMAT,
     ):
         """Form a list of the ifgs limited to a maximum temporal baseline.
 
         Parameters
         ----------
-        slc_file_list : Iterable[Filename]
+        slc_list : Iterable[Filename]
             Iterable of input SLC files
         max_temporal_baseline : float, optional
             Largest allowed span of ifgs, by index distance, to include.
             max_bandwidth=1 will only include nearest-neighbor ifgs.
+        date_format : str, default = [`dolphin.DEFAULT_DATETIME_FORMAT`][]
+            Date format to use when parsing dates from the input files.
 
         Returns
         -------
@@ -464,8 +446,8 @@ class Network:
         ValueError
             If any of the input files have more than one date.
         """
-        ifg_strs = Network._all_pairs(slc_file_list)
-        slc_date_lists = [get_dates(f) for f in slc_file_list]
+        ifg_strs = Network._all_pairs(slc_list)
+        slc_date_lists = [get_dates(f, fmt=date_format) for f in slc_list]
         # Check we've got all single-date files
         if any(len(d) != 1 for d in slc_date_lists):
             raise ValueError(
@@ -548,3 +530,58 @@ def estimate_correlation_from_phase(
     # If the input was 0, the correlation is 0
     cor[zero_mask] = 0
     return cor
+
+
+def _create_vrt_conj(
+    filename: Filename, output_filename: Filename, is_relative: bool = False
+):
+    """Create a VRT raster of the conjugate of `filename`."""
+    xsize, ysize = io.get_raster_xysize(filename)
+    rel = "1" if is_relative else "0"
+
+    # See https://gdal.org/drivers/raster/vrt.html#default-pixel-functions
+    vrt_template = f"""\
+<VRTDataset rasterXSize="{xsize}" rasterYSize="{ysize}">
+    <VRTRasterBand dataType="CFloat32" band="1" subClass="VRTDerivedRasterBand">
+        <PixelFunctionType>conj</PixelFunctionType>
+        <SimpleSource>
+            <SourceFilename relativeToVRT="{rel}">{filename}</SourceFilename>
+        </SimpleSource>
+    </VRTRasterBand>
+</VRTDataset>
+    """
+    with open(output_filename, "w") as f:
+        f.write(vrt_template)
+    io.copy_projection(filename, output_filename)
+
+
+def convert_pl_to_ifg(
+    phase_linked_slc: Filename, reference_date: DateOrDatetime, output_dir: Filename
+) -> Path:
+    """Convert a phase-linked SLC to an interferogram by conjugating the phase.
+
+    The SLC has already been multiplied by the (conjugate) phase of a reference SLC,
+    so it only needs to be conjugated to put it in the form (ref * sec.conj()).
+
+    Parameters
+    ----------
+    phase_linked_slc : Filename
+        Path to phase-linked SLC file.
+    reference_date : DateOrDatetime
+        Reference date of the interferogram.
+    output_dir : Filename
+        Directory to place the renamed file.
+
+    Returns
+    -------
+    Path
+        Path to renamed file.
+    """
+    # The phase_linked_slc will be named with the secondary date.
+    # Make the output from that, plus the given reference date
+    secondary_date = get_dates(phase_linked_slc)[-1]
+    date_str = _format_date_pair(reference_date, secondary_date)
+    out_name = Path(output_dir) / f"{date_str}.int.vrt"
+    # Now make a VRT to do the .conj
+    _create_vrt_conj(phase_linked_slc, out_name)
+    return out_name
