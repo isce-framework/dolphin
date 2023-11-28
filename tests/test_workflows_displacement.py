@@ -134,3 +134,14 @@ def test_separate_workflow_runs(slc_file_list, tmp_path):
     all_ifgs_names = [f.name for f in all_ifgs]
     batched_names = [f.name for f in ifgs1 + ifgs2 + ifgs3]
     assert all_ifgs_names == batched_names
+
+    # Last, try one where we dont have the first CCSLC
+    # The metadata should still tell it what the reference date is,
+    # So the outputs should be the same
+    p3_b = tmp_path / Path("third")
+    files3_b = new_comp_slcs2 + file_batches[2]
+    run_displacement_stack(p3_b, files3_b)
+    ifgs3_b = sorted((p3_b / "interferograms/stitched").glob("*.int"))
+    assert len(ifgs3_b) == 10
+    # Names should be the same as the previous run
+    assert [f.name for f in ifgs3_b] == [f.name for f in ifgs3]
