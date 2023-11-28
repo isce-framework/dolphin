@@ -300,7 +300,11 @@ class CompressedSlcInfo(BaseModel):
             except json.JSONDecodeError:
                 cleaned[k] = v
         # Parse the date/file lists from the metadata
-        return cls.model_validate(cleaned)
+        out = cls.model_validate(cleaned)
+        # Overwrite the `output_folder` part- we may have moved it since
+        # writing the metadata
+        out.output_folder = Path(filename).parent
+        return out
 
     def __fspath__(self):
         return fspath(self.path)

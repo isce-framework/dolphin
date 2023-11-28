@@ -300,6 +300,8 @@ class VRTStack:
 def _parse_vrt_file(vrt_file):
     """Extract the filenames, and possible subdatasets, from a .vrt file.
 
+    Assumes, if using HDFS/NetCDF files, that the subdataset is the same.
+
     Note that we are parsing the XML, not using `GetFilelist`, because the
     function does not seem to work when using HDF5 files. E.g.
 
@@ -315,6 +317,9 @@ def _parse_vrt_file(vrt_file):
     Returns
     -------
     filepaths
+        List of filepaths to the SLCs
+    sds
+        Subdataset name, if using NetCDF/HDF5 files
     """
     file_strings = []
     with open(vrt_file) as f:
@@ -325,18 +330,16 @@ def _parse_vrt_file(vrt_file):
             fn = line.split(">")[1].strip().split("<")[0]
             file_strings.append(fn)
 
-    testname = file_strings[0].upper()
-    if testname.startswith("HDF5:") or testname.startswith("NETCDF:"):
-        name_triplets = [name.split(":") for name in file_strings]
-        prefixes, filepaths, subdatasets = zip(*name_triplets)
-        # Remove quoting if it was present
-        filepaths = [f.replace('"', "").replace("'", "") for f in filepaths]
-        if len(set(subdatasets)) > 1:
-            raise NotImplementedError("Only 1 subdataset name is supported")
-        sds = (
-            subdatasets[0].replace('"', "").replace("'", "").lstrip("/")
-        )  # Only returning one subdataset name
-    else:
-        # If no prefix, the file_strings are actually paths
-        filepaths, sds = file_strings, None
-    return list(filepaths), sds
+    sds = ""
+    filepaths = []
+    for name in file_strings:
+        if name.upper().startswith("HDF5:") or name.upper().startswith("NETCDF:"):
+            prefix, filepath, subdataset = name.split(":")
+            # Clean up subdataset
+            sds = subdataset.replace('"', "").replace("'", "").lstrip("/")
+            # Remove quoting if it was present
+            filepaths.append(filepath.replace('"', "").replace("'", ""))
+        else:
+            filepaths.append(name)
+
+    return filepaths, sds
