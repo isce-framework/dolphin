@@ -4,13 +4,14 @@ import datetime
 from pathlib import Path
 from typing import Optional, Sequence
 
+import numpy as np
 from opera_utils import make_nodata_mask
 
 from dolphin import _readers, interferogram, ps, stack
 from dolphin._dates import get_dates
 from dolphin._log import get_log, log_runtime
 
-from . import sequential
+from . import InterferogramNetworkType, sequential
 from .config import DisplacementWorkflow
 
 
@@ -107,8 +108,9 @@ def run(
     input_dates = _get_input_dates(
         input_file_list, is_compressed, cfg.input_options.cslc_date_fmt
     )
-    reference_date = _get_reference_date(input_file_list, is_compressed, input_dates)
-    reference_idx = 0  # Not sure when we wouldn't need this
+    reference_date, reference_idx = _get_reference_date_idx(
+        input_file_list, is_compressed, input_dates
+    )
 
     ministack_planner = stack.MiniStackPlanner(
         file_list=input_file_list,
@@ -162,54 +164,96 @@ def run(
     # ###################################################
 
     ifg_dir = cfg.interferogram_network._directory
-    ministack_planner.dates
     existing_ifgs = list(ifg_dir.glob("*.int.*"))
     if len(existing_ifgs) > 0:
         logger.info(f"Skipping interferogram step, {len(existing_ifgs)} exists")
         return existing_ifgs, comp_slc_file, tcorr_file, ps_looked_file
+    logger.info(f"Creating virtual interferograms from {len(phase_linked_slcs)} files")
 
-    pl_ifgs: list[Path] = []
+    ifg_file_list = _create_ifgs(cfg, phase_linked_slcs, is_compressed, reference_date)
+    return ifg_file_list, comp_slc_file, tcorr_file, ps_looked_file
+
+
+def _create_ifgs(
+    cfg: DisplacementWorkflow,
+    phase_linked_slcs: Sequence[Path],
+    is_compressed: Sequence[bool],
+    reference_date: datetime.datetime,
+) -> list[Path]:
+    ifg_dir = cfg.interferogram_network._directory
+    ifg_file_list: list[Path] = []
+    if not any(is_compressed):
+        # When no compressed SLCs were passed in to the config, we can direclty pass
+        # options to `Network` and get the ifg list
+        network = interferogram.Network(
+            slc_list=phase_linked_slcs,
+            reference_idx=cfg.interferogram_network.reference_idx,
+            max_bandwidth=cfg.interferogram_network.max_bandwidth,
+            max_temporal_baseline=cfg.interferogram_network.max_temporal_baseline,
+            indexes=cfg.interferogram_network.indexes,
+            outdir=ifg_dir,
+        )
+        if len(network.ifg_list) == 0:
+            raise ValueError("No interferograms were created")
+        ifg_file_list = [ifg.path for ifg in network.ifg_list]  # type: ignore
+        assert all(p is not None for p in ifg_file_list)
+
+        return ifg_file_list
+
+    # When we started with compressed SLCs, we need to do some extra work to get the
+    # interferograms we want.
+    # The total SLC phases we have to work with are
+    # 1. reference date (might be before any dates in the filenames)
+    # 2. the secondary of all phase-linked SLCs (which are the names of the files)
+
+    # To get the ifgs from the reference date to secondary(conj), this involves doing
+    # a `.conj()` on the phase-linked SLCs (which are currently `day1.conj() * day2`)
+    network_type = cfg.interferogram_network.network_type
     for f in phase_linked_slcs:
         p = interferogram.convert_pl_to_ifg(
             f, reference_date=reference_date, output_dir=ifg_dir
         )
-        pl_ifgs.append(p)
+        ifg_file_list.append(p)
 
-    # if cfg.interferogram_network.network_type == InterferogramNetworkType.SINGLE_REFERENCE:
-    # TO FIX THE MISSING IFG problem:
-    # Then if theres a network, i add those extra ones...
-    # This seems complicated to track both the normal case we've done, plus this
-    # compressed slc case
-    # TODO: make the network worth with a list of pl ifgs?
+    # If we're only wanting single-reference day-(reference) to day-k interferograms,
+    # these are all we need
+    if network_type == InterferogramNetworkType.SINGLE_REFERENCE:
+        return ifg_file_list
 
-    logger.info(f"Creating virtual interferograms from {len(phase_linked_slcs)} files")
-    network = interferogram.Network(
-        slc_list=phase_linked_slcs,
-        reference_idx=cfg.interferogram_network.reference_idx,
-        max_bandwidth=cfg.interferogram_network.max_bandwidth,
-        max_temporal_baseline=cfg.interferogram_network.max_temporal_baseline,
-        indexes=cfg.interferogram_network.indexes,
-        outdir=ifg_dir,
-    )
-    if len(network.ifg_list) == 0:
-        raise ValueError("No interferograms were created")
-    ifg_file_list: list[Path] = [ifg.path for ifg in network.ifg_list]  # type: ignore
-    assert all(p is not None for p in ifg_file_list)
+    # For other networks, we have to combine other ones formed from the `Network`
+    if network_type != InterferogramNetworkType.MAX_BANDWIDTH:
+        raise NotImplementedError(
+            "Only single-reference and max-bandwidth interferograms are supported when"
+            " starting with compressed SLCs"
+        )
+    # Say we had inputs like:
+    #  compressed_2_3 , slc_4, slc_5, slc_6
+    # but the compressed one was referenced to "1"
+    # There will be 3 PL outputs for days 4, 5, 6, referenced to day "1":
+    # (1, 4), (1, 5), (1, 6)
+    # If we requested max-bw-2 interferograms, we want
+    # (1, 4), (1, 5), (4, 5), (4, 6), (5, 6)
+    # (the same as though we had normal SLCs (1, 4, 5, 6) )
 
-    return ifg_file_list, comp_slc_file, tcorr_file, ps_looked_file
+    return ifg_file_list
 
 
-def _get_reference_date(
+def _get_reference_date_idx(
     input_file_list: Sequence[Path],
     is_compressed: Sequence[bool],
     input_dates: Sequence[Sequence[datetime.datetime]],
-) -> datetime.datetime:
+) -> tuple[datetime.datetime, int]:
     is_compressed = [f.name.startswith("compressed") for f in input_file_list]
     if not is_compressed[0]:
-        return input_dates[0][0]
-    # Otherwise we need to read the first Compressed SLC metadat to find it's reference date
-    comp_slc = stack.CompressedSlcInfo.from_file_metadata(input_file_list[0])
-    return comp_slc.reference_date
+        return input_dates[0][0], 0
+
+    # Otherwise use the last Compressed SLC as reference
+    reference_idx = np.where(is_compressed)[0][-1]
+    # read the Compressed SLC metadata to find it's reference date
+    comp_slc = stack.CompressedSlcInfo.from_file_metadata(
+        input_file_list[reference_idx]
+    )
+    return comp_slc.reference_date, reference_idx
 
 
 def _get_input_dates(
