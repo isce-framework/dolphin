@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import datetime
 from pathlib import Path
-from typing import Optional, Sequence
+from typing import Optional, Sequence, cast
 
 import numpy as np
 from opera_utils import make_nodata_mask
@@ -221,7 +221,26 @@ def _create_ifgs(
         return ifg_file_list
 
     # For other networks, we have to combine other ones formed from the `Network`
-    # TODO
+    if network_type == InterferogramNetworkType.MAX_BANDWIDTH:
+        max_b = cfg.interferogram_network.max_bandwidth
+        # Max bandwidth is easier because we just take the first `max_b` from `phase_linked_slcs`
+        # (which are the (ref_date, ...) interferograms),...
+        ifgs_ref_date = ifg_file_list[:max_b]
+        # ...then combine it with the results from the `Network`
+        # Manually specify the dates, which come from the names of `phase_linked_slcs`
+        secondary_dates = [get_dates(f)[0] for f in phase_linked_slcs]
+        network_rest = interferogram.Network(
+            slc_list=phase_linked_slcs,
+            max_bandwidth=max_b,
+            outdir=ifg_dir,
+            dates=secondary_dates,
+        )
+        # Using `cast` to assert that the paths are not None
+        ifgs_others = cast(list[Path], [ifg.path for ifg in network_rest.ifg_list])
+
+        return ifgs_ref_date + ifgs_others
+
+    # Other types: TODO
     raise NotImplementedError(
         "Only single-reference interferograms are supported when"
         " starting with compressed SLCs"

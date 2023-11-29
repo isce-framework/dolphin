@@ -291,3 +291,45 @@ def test_create_vrt_conj(tmp_path, slc_file_list_nc_wgs84):
     assert io.get_raster_xysize(out) == io.get_raster_xysize(infile)
     assert io.get_raster_crs(out) == io.get_raster_crs(infile)
     np.testing.assert_array_equal(io.load_gdal(out).conj(), io.load_gdal(infile))
+
+
+def test_network_manual_dates(four_slc_files):
+    Network(
+        four_slc_files,
+        max_bandwidth=1,
+        write=False,
+        dates=["20210101", "20210107", "20210101", "20210109"],
+    )
+
+
+def test_network_manual_wrong_len_dates(four_slc_files):
+    with pytest.raises(ValueError):
+        Network(
+            four_slc_files, max_bandwidth=1, write=False, dates=["20210101", "20210109"]
+        )
+
+
+def test_network_no_verify(tmpdir):
+    datestrs = ["20210101", "20210107", "20210108", "20210109"]
+    Network(
+        datestrs,
+        max_bandwidth=1,
+        write=False,
+        verify_slcs=False,
+    )
+
+
+def test_network_from_ifgs(tmp_path):
+    """Check that the `Network` can work when passing in ifgs"""
+    ifg_files = ["20210101_20210107", "202010101_20210108", "20210101_20210109"]
+    n = Network(
+        ifg_files,
+        max_bandwidth=10,
+        write=False,
+        verify_slcs=False,
+        dates=["2021-01-07", "2021-01-08", "2021-01-09"],
+    )
+    assert len(n.ifg_list) == 3
+    assert n.ifg_list[0].path.name == "20210107_20210108.int.vrt"
+    assert n.ifg_list[1].path.name == "20210107_20210109.int.vrt"
+    assert n.ifg_list[2].path.name == "20210108_20210109.int.vrt"
