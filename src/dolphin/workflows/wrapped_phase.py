@@ -235,6 +235,7 @@ def _create_ifgs(
             outdir=ifg_dir,
             dates=secondary_dates,
         )
+        # Using `cast` to assert that the paths are not None
         ifgs_others = cast(list[Path], [ifg.path for ifg in network_rest.ifg_list])
 
         return ifgs_ref_date + ifgs_others

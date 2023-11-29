@@ -6,13 +6,19 @@
 - `CompressedSlcInfo` class added to track the attributes of a compressed SLC file created during the workflow.
   - This has the `reference_date` as an attribute, which allows us to know what the base phase is even without starting from
     the first SLC in the stack (i.e. if we have limited the number of compressed SLCs)
+- Added better/more complete metadata to the compressed SLC Geotiff tags, including the phase reference date
+  - Before we were relying on the filename convention, which was not enough information
 - config: `phase_linking.max_compressed_slcs` to cap the number of compressed SLCs added during large-stack sequential workflows
+- `interferogram`: Add ability to specify manual dates for a `Network`/`VRTInterferogram`, which lets us re-interfere the phase-linking results
 
 **Changed**
 - Date functions have been moved from `dolphin.utils` to `dolphin._dates`. They are accessible at `dolphin.get_dates`, etc
 - `get_dates` now uses `datetime.datetime` instead of `datetime.date`.
   - This is to allow for more flexibility in the date parsing, and to allow for the use of `datetime.date` or `datetime.datetime` in the output filenames.
 - `VRTStack` has been moved to `_readers.py`. The minstack planning functions have been removed to focus the class on just reading input GDAL rasters.
+
+**Fixed**
+- When starting with Compressed SLCs in the list of input SLCs, the workflows will now recognize them, find the correct reference date, and form all the correct interferograms
 
 **Removed**
 - Extra subsetting functions from `VRTStack` have been removed, as they are not used in the workflow and the reimplmenent simple GDAL calls.
