@@ -1,4 +1,6 @@
-# [Unreleased](https://github.com/isce-framework/dolphin/compare/v0.6.1...main)
+# [Unreleased](https://github.com/isce-framework/dolphin/compare/v0.7.0...main)
+
+# [v0.7.0](https://github.com/isce-framework/dolphin/compare/v0.6.1...v0.7.0)
 
 **Added**
 - `MiniStackPlanner` and `MiniStackInfo` class which does the planning for how a large stack of SLCs will be processed in batches.
