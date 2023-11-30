@@ -60,18 +60,18 @@ class PsWorkflow(WorkflowBase):
             self.cslc_file_list = [p.resolve(strict=False) for p in self.cslc_file_list]
 
         work_dir = self.work_directory
+        # move the folders inside the work directory
+        ps_opts = self.ps_options
+        if ps_opts._directory.parent != work_dir:
+            ps_opts._directory = work_dir / ps_opts._directory
+        if not self.keep_paths_relative:
+            ps_opts._directory = ps_opts._directory.resolve(strict=False)
+
         # Track the directories that need to be created at start of workflow
         self._directory_list = [
             work_dir,
             self.ps_options._directory,
         ]
-        # move the folders inside the work directory
-        ps_opts = self.ps_options
-        if not ps_opts._directory.parent == work_dir:
-            ps_opts._directory = work_dir / ps_opts._directory
-        if not self.keep_paths_relative:
-            ps_opts._directory = ps_opts._directory.resolve(strict=False)
-
         # Add the output PS files we'll create to the `PS` directory, making
         # sure they're inside the work directory
         ps_opts._amp_dispersion_file = work_dir / ps_opts._amp_dispersion_file
