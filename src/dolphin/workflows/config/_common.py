@@ -176,15 +176,15 @@ class UnwrapOptions(BaseModel, extra="forbid"):
     )
     _directory: Path = PrivateAttr(Path("unwrapped"))
     unwrap_method: UnwrapMethod = UnwrapMethod.SNAPHU
-    ntiles: List[int] = Field(
-        [1, 1],
+    ntiles: tuple[int, int] = Field(
+        (1, 1),
         description=(
             "(for multiscale unwrapping) Number of tiles to split the unwrapping into"
             " (for multi-scale unwrapping)."
         ),
     )
-    downsample_factor: List[int] = Field(
-        [1, 1],
+    downsample_factor: tuple[int, int] = Field(
+        (1, 1),
         description=(
             "(for multiscale unwrapping) Extra multilook factor to use for the coarse"
             " unwrap."
