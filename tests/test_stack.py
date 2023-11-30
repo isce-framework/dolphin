@@ -222,3 +222,22 @@ def test_ccslc_moved(ministack_planner, tmp_path):
     assert list(map(str, ccslc.real_slc_file_list)) == c2.real_slc_file_list
     # Only the `output_folder` should have changed
     assert c2.output_folder == other_path
+
+
+def test_hit_max_compressed(slc_file_list, slc_date_list, is_compressed):
+    """Check the planning works even after going pased the max CCSLCs."""
+    is_compressed = [False] * len(slc_file_list)
+    ministack_planner = MiniStackPlanner(
+        file_list=slc_file_list,
+        dates=slc_date_list,
+        is_compressed=is_compressed,
+        output_folder=Path("fake_dir"),
+        max_num_compressed=3,
+    )
+    # Check we can get the compressed SLC info
+    ministacks = ministack_planner.plan(3)
+    assert len(ministacks[0].file_list) == 3
+    assert len(ministacks[1].file_list) == 4
+    assert len(ministacks[2].file_list) == 5
+    assert len(ministacks[3].file_list) == 6
+    assert all(len(m.file_list) == 6 for m in ministacks[3:-1])

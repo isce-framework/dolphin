@@ -376,7 +376,8 @@ class MiniStackPlanner(BaseStack):
             combined_files = cur_comp_slc_files + cur_files
 
             combined_dates = [
-                c.real_date_range for c in compressed_slc_infos
+                c.real_date_range
+                for c in compressed_slc_infos[-self.max_num_compressed :]
             ] + cur_dates
 
             num_ccslc = len(cur_comp_slc_files)
