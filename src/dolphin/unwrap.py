@@ -4,7 +4,7 @@ import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from os import fspath
 from pathlib import Path
-from typing import Optional, Union
+from typing import Optional, Sequence, Union
 
 import isce3
 import numpy as np
@@ -28,8 +28,8 @@ CONNCOMP_SUFFIX = ".unw.conncomp"
 
 @log_runtime
 def run(
-    ifg_filenames: list[Filename],
-    cor_filenames: list[Filename],
+    ifg_filenames: Sequence[Filename],
+    cor_filenames: Sequence[Filename],
     output_path: Filename,
     *,
     nlooks: float = 5,
@@ -48,9 +48,9 @@ def run(
 
     Parameters
     ----------
-    ifg_filenames : list[Filename]
+    ifg_filenames : Sequence[Filename]
         Paths to input interferograms.
-    cor_filenames : list[Filename]
+    cor_filenames : Sequence[Filename]
         Paths to input correlation files. Order must match `ifg_filenames`.
     output_path : Filename
         Path to output directory.
