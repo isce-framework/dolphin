@@ -27,7 +27,7 @@ from typing import Optional
 
 from rich.logging import RichHandler
 
-from dolphin._types import Filename
+from dolphin._types import Filename, P, T
 
 __all__ = ["get_log", "log_runtime"]
 
@@ -90,7 +90,7 @@ def setup_logging(debug: bool = False, root_name: str = "dolphin") -> None:
     logger.setLevel(log_level)
 
 
-def log_runtime(f: Callable) -> Callable:
+def log_runtime(f: Callable[P, T]) -> Callable[P, T]:
     """Decorate a function to time how long it takes to run.
 
     Usage
@@ -102,7 +102,7 @@ def log_runtime(f: Callable) -> Callable:
     logger = get_log(__name__)
 
     @wraps(f)
-    def wrapper(*args, **kwargs):
+    def wrapper(*args: P.args, **kwargs: P.kwargs):
         t1 = time.time()
 
         result = f(*args, **kwargs)
