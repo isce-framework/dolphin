@@ -417,6 +417,7 @@ def multiscale_unwrap(
     zero_where_masked: bool = True,
     unwrap_method: UnwrapMethod = UnwrapMethod.SNAPHU,
     unwrap_callback=None,  # type is `tophu.UnwrapCallback`
+    nodata: str | float | None = None,
     init_method: str = "mst",
     cost: str = "smooth",
     scratchdir: Optional[Filename] = None,
@@ -452,6 +453,9 @@ def multiscale_unwrap(
     unwrap_callback : tophu.UnwrapCallback
         Alternative to `unwrap_method`: directly provide a callable
         function usable in `tophu`. See [tophu.UnwrapCallback] docs for interface.
+    nodata : float | str, optional.
+        If providing `unwrap_callback`, provide the nodata value for your
+        unwrapping function.
     init_method : str, choices = {"mcf", "mst"}
         SNAPHU initialization method, by default "mst"
     cost : str, choices = {"smooth", "defo", "p-norm",}
@@ -476,11 +480,10 @@ def multiscale_unwrap(
         with rio.open(filename) as src:
             return src.crs, src.transform
 
-    if unwrap_callback is not None:
-        # Used to track if we can redirect logs or not
-        _user_gave_callback = True
-    else:
-        _user_gave_callback = False
+    def _get_cb_and_nodata(unwrap_method, unwrap_callback, nodata):
+        if unwrap_callback is not None:
+            # Pass through what the user gave
+            return unwrap_callback, nodata
         unwrap_method = UnwrapMethod(unwrap_method)
         if unwrap_method == UnwrapMethod.ICU:
             unwrap_callback = tophu.ICUUnwrap()
@@ -496,6 +499,12 @@ def multiscale_unwrap(
             nodata = 0
         else:
             raise ValueError(f"Unknown {unwrap_method = }")
+        return unwrap_callback, nodata
+
+    # Used to track if we can redirect logs or not
+    _user_gave_callback = unwrap_callback is not None
+    unwrap_callback, nodata = _get_cb_and_nodata(unwrap_method, unwrap_callback, nodata)
+    # Used to track if we can redirect logs or not
 
     (width, height) = io.get_raster_xysize(ifg_filename)
     crs, transform = _get_rasterio_crs_transform(ifg_filename)

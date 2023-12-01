@@ -180,6 +180,27 @@ def test_unwrap_multiscale(tmp_path, raster_100_by_200, corr_raster):
     assert conncomp_path.exists()
 
 
+@pytest.mark.skipif(
+    not TOPHU_INSTALLED, reason="tophu not installed for multiscale unwrapping"
+)
+def test_unwrap_multiscale_callback_given(tmp_path, raster_100_by_200, corr_raster):
+    unw_filename = tmp_path / "unwrapped.unw.tif"
+    unwrap_callback = tophu.ICUUnwrap()
+    out_path, conncomp_path = dolphin.unwrap.multiscale_unwrap(
+        ifg_filename=raster_100_by_200,
+        corr_filename=corr_raster,
+        unw_filename=unw_filename,
+        unwrap_callback=unwrap_callback,
+        nodata=0,
+        nlooks=1,
+        ntiles=(2, 2),
+        downsample_factor=(3, 3),
+        init_method="mst",
+    )
+    assert out_path.exists()
+    assert conncomp_path.exists()
+
+
 @pytest.mark.skipif(os.environ.get("NUMBA_DISABLE_JIT") == "1", reason="JIT disabled")
 def test_compute_phase_diffs():
     # test on a 2D array with no phase jumps > pi
