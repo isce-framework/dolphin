@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field, ValidationInfo, field_validator, model_va
 from dolphin import io, utils
 from dolphin._dates import DEFAULT_DATETIME_FORMAT, _format_date_pair, get_dates
 from dolphin._log import get_log
-from dolphin._types import DateOrDatetime, Filename
+from dolphin._types import DateOrDatetime, Filename, T
 
 gdal.UseExceptions()
 
@@ -102,6 +102,9 @@ class VRTInterferogram(BaseModel, extra="allow"):
     resolve_paths: bool = Field(
         True, description="Resolve paths of `ref_slc`/`sec_slc` when saving the VRT"
     )
+    use_relative: bool = Field(
+        False, description='If true, use `relativeToVRT="1" in the VRT'
+    )
     write: bool = Field(True, description="Write the VRT file to disk")
 
     pixel_function: Literal["cmul", "mul"] = "cmul"
@@ -110,10 +113,10 @@ class VRTInterferogram(BaseModel, extra="allow"):
     <VRTRasterBand dataType="CFloat32" band="1" subClass="VRTDerivedRasterBand">
         <PixelFunctionType>{pixel_function}</PixelFunctionType>
         <SimpleSource>
-            <SourceFilename relativeToVRT="0">{ref_slc}</SourceFilename>
+            <SourceFilename relativeToVRT="{rel}">{ref_slc}</SourceFilename>
         </SimpleSource>
         <SimpleSource>
-            <SourceFilename relativeToVRT="0">{sec_slc}</SourceFilename>
+            <SourceFilename relativeToVRT="{rel}">{sec_slc}</SourceFilename>
         </SimpleSource>
     </VRTRasterBand>
 </VRTDataset>
@@ -126,15 +129,6 @@ class VRTInterferogram(BaseModel, extra="allow"):
         # If we're using a subdataset, create a the GDAL-readable string
         gdal_str = io.format_nc_filename(v, subdataset)
 
-        # Then, if we passed a string like 'NETCDF:"file.nc":band', make sure
-        # the file is absolute
-        if ":" in str(gdal_str):
-            try:
-                gdal_str = str(utils._resolve_gdal_path(gdal_str))
-            except Exception:
-                # if the file had colons for some reason but
-                # it didn't match, just ignore
-                pass
         return gdal_str
 
     @field_validator("outdir")
@@ -167,30 +161,35 @@ class VRTInterferogram(BaseModel, extra="allow"):
         return self
 
     @model_validator(mode="after")
-    def _validate_files(self) -> "VRTInterferogram":
+    def _resolve_files(self) -> "VRTInterferogram":
         """Check that the inputs are the same size and geotransform."""
-        ref_slc = self.ref_slc
-        sec_slc = self.sec_slc
-        if not ref_slc or not sec_slc:
+        if not self.ref_slc or not self.sec_slc:
             # Skip validation if files are not set
             return self
+        if self.resolve_paths:
+            self.ref_slc = utils._resolve_gdal_path(self.ref_slc)  # type: ignore
+            self.sec_slc = utils._resolve_gdal_path(self.sec_slc)  # type: ignore
+        return self
+
+    @model_validator(mode="after")
+    def _validate_files(self) -> "VRTInterferogram":
         # Only run this check if we care to validate the readability
         if not self.verify_slcs:
             return self
 
-        ds1 = gdal.Open(fspath(ref_slc))
-        ds2 = gdal.Open(fspath(sec_slc))
+        ds1 = gdal.Open(fspath(self.ref_slc))
+        ds2 = gdal.Open(fspath(self.sec_slc))
         xsize, ysize = ds1.RasterXSize, ds1.RasterYSize
         xsize2, ysize2 = ds2.RasterXSize, ds2.RasterYSize
         if xsize != xsize2 or ysize != ysize2:
             raise ValueError(
-                f"Input files {ref_slc} and {sec_slc} are not the same size"
+                f"Input files {self.ref_slc} and {self.sec_slc} are not the same size"
             )
         gt1 = ds1.GetGeoTransform()
         gt2 = ds2.GetGeoTransform()
         if gt1 != gt2:
             raise ValueError(
-                f"Input files {ref_slc} and {sec_slc} have different GeoTransforms"
+                f"Input files {self.ref_slc} and {self.sec_slc} have different GeoTransforms"
             )
 
         return self
@@ -208,9 +207,6 @@ class VRTInterferogram(BaseModel, extra="allow"):
         assert self.sec_date is not None
         date_str = _format_date_pair(self.ref_date, self.sec_date, fmt=self.date_format)
         path = self.outdir / (date_str + DEFAULT_SUFFIX)
-        if Path(path).exists():
-            logger.info(f"Removing {path}")
-            path.unlink()
         self.path = path
         return self
 
@@ -219,9 +215,12 @@ class VRTInterferogram(BaseModel, extra="allow"):
         """Write out the VRT if requested."""
         if not self.write:
             return self
+        assert self.path is not None
+        if Path(self.path).exists():
+            logger.info(f"Removing {self.path}")
+            self.path.unlink()
 
         xsize, ysize = io.get_raster_xysize(self.ref_slc)
-        assert self.path is not None
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with open(self.path, "w") as f:
             f.write(
@@ -231,6 +230,7 @@ class VRTInterferogram(BaseModel, extra="allow"):
                     ref_slc=self.ref_slc,
                     sec_slc=self.sec_slc,
                     pixel_function=self.pixel_function,
+                    rel=self.use_relative,
                 )
             )
         io.copy_projection(self.ref_slc, self.path)
@@ -281,6 +281,10 @@ class VRTInterferogram(BaseModel, extra="allow"):
         )
 
 
+# Alias for the pairs of filenames in ifgs
+IfgPairT = tuple[Filename, Filename]
+
+
 @dataclass
 class Network:
     """A network of interferograms from a list of SLCs.
@@ -296,6 +300,11 @@ class Network:
         Defaults to None.
     max_temporal_baseline : Optional[float], default = None
         Maximum temporal baseline to include in an interferogram, in days.
+    include_annual : bool, default = False
+        Attempt to include annual pairs, in addition to the other type of network
+        requested. Will skip if no pairs exist within 365 +/- `buffer_days`
+    annual_buffer_days : float, default = 30
+        Search buffer for finding annual pairs, if `include_annual=True`
     date_format : str, optional
         Date format to use when parsing dates from the input files (only
         used if setting `max_temporal_baseline`).
@@ -323,12 +332,16 @@ class Network:
     outdir: Optional[Filename] = None
     max_bandwidth: Optional[int] = None
     max_temporal_baseline: Optional[float] = None
+    include_annual: bool = False
+    annual_buffer_days: float = 30
     date_format: str = DEFAULT_DATETIME_FORMAT
     dates: Optional[Sequence[DateOrDatetime]] = None
     reference_idx: Optional[int] = None
     indexes: Optional[Sequence[tuple[int, int]]] = None
     subdataset: Optional[Union[str, Sequence[str]]] = None
     verify_slcs: bool = True
+    resolve_paths: bool = True
+    use_relative: bool = False
     write: bool = True
 
     def __post_init__(
@@ -362,6 +375,36 @@ class Network:
         # Create each VRT file
         self.ifg_list: list[VRTInterferogram] = self._create_vrt_ifgs()
 
+    def _make_ifg_pairs(self) -> list[IfgPairT]:
+        """Form interferogram pairs from a list of SLC files sorted by date."""
+        assert self.dates is not None
+        if self.indexes is not None:
+            # Give the option to select exactly which interferograms to create
+            ifgs = [
+                (self.slc_list[ref_idx], self.slc_list[sec_idx])
+                for ref_idx, sec_idx in self.indexes
+            ]
+        elif self.max_bandwidth is not None:
+            ifgs = Network._limit_by_bandwidth(self.slc_list, self.max_bandwidth)
+        elif self.max_temporal_baseline is not None:
+            ifgs = Network._limit_by_temporal_baseline(
+                self.slc_list,
+                dates=self.dates,
+                max_temporal_baseline=self.max_temporal_baseline,
+            )
+        elif self.reference_idx is not None:
+            ifgs = Network._single_reference_network(self.slc_list, self.reference_idx)
+        else:
+            raise ValueError("No valid ifg list generation method specified")
+
+        if not self.include_annual:
+            return ifgs
+        # Add in the annual pairs, then re-sort
+        annual_ifgs = Network._find_annuals(
+            self.slc_list, self.dates, buffer_days=self.annual_buffer_days
+        )
+        return sorted(ifgs + annual_ifgs)
+
     def _create_vrt_ifgs(self) -> list[VRTInterferogram]:
         """Write out a VRTInterferogram for each ifg."""
         ifg_list: list[VRTInterferogram] = []
@@ -377,6 +420,8 @@ class Network:
                 ref_date=ref_date,
                 sec_date=sec_date,
                 verify_slcs=self.verify_slcs,
+                resolve_paths=self.resolve_paths,
+                use_relative=self.use_relative,
                 write=self.write,
             )
             ifg_list.append(v)
@@ -394,7 +439,7 @@ class Network:
             )
         return out
 
-    def _get_ifg_date_pairs(self):
+    def _get_ifg_date_pairs(self) -> list[tuple[DateOrDatetime, DateOrDatetime]]:
         date_pairs = []
         for slc1, slc2 in self.slc_file_pairs:
             d1 = self._slc_to_date[slc1]
@@ -418,31 +463,10 @@ class Network:
             f"reference_idx={self.reference_idx}"
         )
 
-    def _make_ifg_pairs(self) -> list[tuple]:
-        """Form interferogram pairs from a list of SLC files sorted by date."""
-        if self.indexes is not None:
-            # Give the option to select exactly which interferograms to create
-            return [
-                (self.slc_list[ref_idx], self.slc_list[sec_idx])
-                for ref_idx, sec_idx in self.indexes
-            ]
-        elif self.max_bandwidth is not None:
-            return Network._limit_by_bandwidth(self.slc_list, self.max_bandwidth)
-        elif self.max_temporal_baseline is not None:
-            return Network._limit_by_temporal_baseline(
-                self.slc_list,
-                self.max_temporal_baseline,
-                date_format=self.date_format,
-            )
-        elif self.reference_idx is not None:
-            return Network._single_reference_network(self.slc_list, self.reference_idx)
-        else:
-            raise ValueError("No valid ifg list generation method specified")
-
     @staticmethod
     def _single_reference_network(
         slc_list: Sequence[Filename], reference_idx=0
-    ) -> list[tuple]:
+    ) -> list[IfgPairT]:
         """Form a list of single-reference interferograms."""
         if len(slc_list) < 2:
             raise ValueError("Need at least two dates to make an interferogram list")
@@ -451,7 +475,9 @@ class Network:
         return ifgs
 
     @staticmethod
-    def _limit_by_bandwidth(slc_list: Iterable[Filename], max_bandwidth: int):
+    def _limit_by_bandwidth(
+        slc_list: Iterable[Filename], max_bandwidth: int
+    ) -> list[IfgPairT]:
         """Form a list of the "nearest-`max_bandwidth`" ifgs.
 
         Parameters
@@ -477,20 +503,20 @@ class Network:
     @staticmethod
     def _limit_by_temporal_baseline(
         slc_list: Iterable[Filename],
+        dates: Sequence[DateOrDatetime],
         max_temporal_baseline: Optional[float] = None,
-        date_format: str = DEFAULT_DATETIME_FORMAT,
-    ):
+    ) -> list[IfgPairT]:
         """Form a list of the ifgs limited to a maximum temporal baseline.
 
         Parameters
         ----------
         slc_list : Iterable[Filename]
             Iterable of input SLC files
+        dates: Sequence[DateOrDatetime]
+            Dates or Datetimes corresponding to `slc_list`
         max_temporal_baseline : float, optional
             Largest allowed span of ifgs, by index distance, to include.
             max_bandwidth=1 will only include nearest-neighbor ifgs.
-        date_format : str, default = [`dolphin.DEFAULT_DATETIME_FORMAT`][]
-            Date format to use when parsing dates from the input files.
 
         Returns
         -------
@@ -503,28 +529,49 @@ class Network:
             If any of the input files have more than one date.
         """
         ifg_strs = Network._all_pairs(slc_list)
-        slc_date_lists = [get_dates(f, fmt=date_format) for f in slc_list]
-        # Check we've got all single-date files
-        if any(len(d) != 1 for d in slc_date_lists):
-            raise ValueError(
-                "Cannot form ifgs from multiple dates by temporal baseline."
-            )
-        slc_dates = [d[0] for d in slc_date_lists]
-
-        ifg_dates = Network._all_pairs(slc_dates)
+        ifg_dates = Network._all_pairs(dates)
         baselines = [Network._temp_baseline(ifg) for ifg in ifg_dates]
         return [
             ifg for ifg, b in zip(ifg_strs, baselines) if b <= max_temporal_baseline
         ]
 
     @staticmethod
-    def _all_pairs(slclist):
-        """Create the list of all possible ifg pairs from slclist."""
-        return list(itertools.combinations(slclist, 2))
+    def _find_annuals(
+        slc_list: Iterable[Filename],
+        dates: Sequence[DateOrDatetime],
+        buffer_days: float = 30,
+    ) -> list[IfgPairT]:
+        """Pick out interferograms which are closest to 1 year in span.
+
+        We only want to pick 1 ifg per date, closest to a year, but we will skip
+        a date if it doesn't have an ifg of baseline 365 +/- `buffer_days`.
+        """
+        # keep track how far into ifg_list the last sar date was
+        date_to_date_pair: dict[
+            DateOrDatetime, tuple[DateOrDatetime, DateOrDatetime]
+        ] = {}
+        date_to_file: dict[DateOrDatetime, IfgPairT] = {}
+        slc_pairs = Network._all_pairs(slc_list)
+        date_pairs = Network._all_pairs(dates)
+        for ifg, date_pair in zip(slc_pairs, date_pairs):
+            early = date_pair[0]
+            baseline_days = Network._temp_baseline(date_pair)
+            if abs(baseline_days - 365) > buffer_days:
+                continue
+            dp = date_to_date_pair.get(early)
+            # Use this ifg as the annual if none exist, or if it's closer to 365
+            if dp is None or abs(baseline_days - 365) < Network._temp_baseline(dp):
+                date_to_file[early] = ifg
+        return list(sorted(date_to_file.values()))
 
     @staticmethod
-    def _temp_baseline(ifg_pair):
-        return (ifg_pair[1] - ifg_pair[0]).days
+    def _all_pairs(slc_list: Iterable[T]) -> list[tuple[T, T]]:
+        """Create the list of all possible ifg pairs from slc_list."""
+        return [(a, b) for (a, b) in itertools.combinations(slc_list, r=2)]
+
+    @staticmethod
+    def _temp_baseline(ifg_pair: tuple[DateOrDatetime, DateOrDatetime]):
+        return (ifg_pair[1] - ifg_pair[0]).total_seconds() / 86400
 
     def __len__(self):
         return len(self.ifg_list)

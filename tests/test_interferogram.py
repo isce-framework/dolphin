@@ -217,6 +217,23 @@ def test_limit_by_temporal_baseline(tmp_path, four_slc_files):
     ]
 
 
+def test_annual_ifgs():
+    dates = [
+        datetime(2021, 1, 1),
+        datetime(2021, 2, 1),
+        datetime(2022, 1, 4),
+        datetime(2022, 6, 1),
+    ]
+    slcs = [d.strftime("%Y%m%d") for d in dates]
+    assert Network._find_annuals(slcs, dates) == [
+        (slcs[0], slcs[2]),
+        (slcs[1], slcs[2]),
+    ]
+    assert Network._find_annuals(slcs, dates, buffer_days=10) == [(slcs[0], slcs[2])]
+
+    assert Network._find_annuals(slcs[1:], dates[1:], buffer_days=10) == []
+
+
 def test_manual_indexes(tmp_path, four_slc_files):
     n = Network(four_slc_files, indexes=[], outdir=tmp_path)
     assert _get_pair_stems(n.slc_file_pairs) == []
