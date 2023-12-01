@@ -70,6 +70,7 @@ def run(
     # PS selection
     # ###############
     ps_output = cfg.ps_options._output_file
+    ps_output.parent.mkdir(parents=True, exist_ok=True)
     if ps_output.exists():
         logger.info(f"Skipping making existing PS file {ps_output}")
     else:

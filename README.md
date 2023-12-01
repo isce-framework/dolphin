@@ -17,8 +17,6 @@ High resolution wrapped phase estimation for InSAR using combined PS/DS processi
 
 <!-- DeformatiOn Land surface Products in High resolution using INsar -->
 
-
-
 ## Install
 
 `dolphin` is available on conda:
@@ -27,12 +25,13 @@ High resolution wrapped phase estimation for InSAR using combined PS/DS processi
 # if mamba is not already installed: conda install -n base mamba
 mamba install -c conda-forge dolphin
 ```
-(Note: [using `mamba`](https://mamba.readthedocs.io/en/latest/mamba-installation.html#mamba-install) is recommended for conda-forge packages, but miniconda can also be used.)
 
+(Note: [using `mamba`](https://mamba.readthedocs.io/en/latest/mamba-installation.html#mamba-install) is recommended for conda-forge packages, but miniconda can also be used.)
 
 `dolphin` has the ability to unwrap interferograms using `isce3`'s python bindings to [SNAPHU](https://web.stanford.edu/group/radar/softwareandlinks/sw/snaphu/).
 It is also integrated with [`tophu`](https://github.com/isce-framework/tophu) to unwrap large interferograms in parallel tiles at multiple resolution.
 To install both dolphin and tophu through conda-forge, run
+
 ```bash
 mamba install -c conda-forge tophu dolphin
 ```
