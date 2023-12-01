@@ -14,7 +14,7 @@ from .config import DisplacementWorkflow
 @log_runtime
 def run(
     ifg_file_list: Sequence[Path],
-    tcorr_file_list: Sequence[Path],
+    temp_coh_file_list: Sequence[Path],
     ps_file_list: Sequence[Path],
     cfg: DisplacementWorkflow,
     debug: bool = False,
@@ -27,7 +27,7 @@ def run(
     ifg_file_list : Sequence[Path]
         Sequence of interferograms files.
         Separate bursts (if any) will be stitched together before unwrapping.
-    tcorr_file_list : Sequence[Path]
+    temp_coh_file_list : Sequence[Path]
         Sequence of paths to the burst-wise temporal coherence files.
     ps_file_list : Sequence[Path]
         Sequence of paths to the (looked) burst-wise ps mask files.
@@ -47,7 +47,7 @@ def run(
         list of Paths to connected component files created.
     interferometric_corr_paths : list[Path]
         list of Paths to interferometric correlation files created.
-    stitched_tcorr_file : Path
+    stitched_temp_coh_file : Path
         Path to temporal correlation file created.
     stitched_ps_file : Path
         Path to ps mask file created.
@@ -78,10 +78,10 @@ def run(
     )
 
     # Stitch the correlation files
-    stitched_tcorr_file = stitched_ifg_dir / "tcorr.tif"
+    stitched_temp_coh_file = stitched_ifg_dir / "temporal_coherence.tif"
     stitching.merge_images(
-        tcorr_file_list,
-        outfile=stitched_tcorr_file,
+        temp_coh_file_list,
+        outfile=stitched_temp_coh_file,
         driver="GTiff",
         out_bounds=cfg.output_options.bounds,
         out_bounds_epsg=cfg.output_options.bounds_epsg,
@@ -104,11 +104,11 @@ def run(
     # #####################################
     if not cfg.unwrap_options.run_unwrap:
         logger.info("Skipping unwrap step")
-        return [], [], [], stitched_tcorr_file, stitched_ps_file
+        return [], [], [], stitched_temp_coh_file, stitched_ps_file
 
     if cfg.mask_file is not None:
         # Check that the input mask is the same size as the ifgs:
-        if io.get_raster_xysize(cfg.mask_file) == stitched_tcorr_file:
+        if io.get_raster_xysize(cfg.mask_file) == stitched_temp_coh_file:
             logger.info(f"Using {cfg.mask_file} to mask during unwrapping")
             output_mask = cfg.mask_file
         else:
@@ -119,7 +119,7 @@ def run(
             else:
                 stitching.warp_to_match(
                     input_file=cfg.mask_file,
-                    match_file=stitched_tcorr_file,
+                    match_file=stitched_temp_coh_file,
                     output_file=output_mask,
                 )
     else:
@@ -156,7 +156,7 @@ def run(
         unwrapped_paths,
         conncomp_paths,
         interferometric_corr_paths,
-        stitched_tcorr_file,
+        stitched_temp_coh_file,
         stitched_ps_file,
     )
 

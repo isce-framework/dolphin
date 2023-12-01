@@ -31,14 +31,16 @@ def run(
 
     Returns
     -------
-    list[Path]
+    ifg_file_list : list[Path]
         list of Paths to virtual interferograms created.
-    Path
-        Path the final compressed SLC file created.
-    Path
-        Path to temporal correlation file created.
-        In the case of a single phase linking step, this is the one tcorr file.
-        In the case of sequential phase linking, this is the average tcorr file.
+    comp_slc_file : Path
+        Path to the final compressed SLC file created.
+    temp_coh_file : Path
+        Path to temporal coherence file created.
+        In the case of a single phase linking step, this is from one phase linking step.
+        In the case of sequential phase linking, this is the average of all ministacks.
+    ps_looked_file : Path
+        The multilooked boolean persistent scatterer file.
     """
     logger = get_log(debug=debug)
     work_dir = cfg.work_directory
@@ -127,7 +129,7 @@ def run(
     if len(phase_linked_slcs) > 0:
         logger.info(f"Skipping EVD step, {len(phase_linked_slcs)} files already exist")
         comp_slc_file = sorted(pl_path.glob("compressed*tif"))[-1]
-        tcorr_file = next(pl_path.glob("tcorr*tif"))
+        temp_coh_file = next(pl_path.glob("temporal_coherence*tif"))
     else:
         logger.info(f"Running sequential EMI step in {pl_path}")
 
@@ -138,7 +140,7 @@ def run(
         (
             phase_linked_slcs,
             comp_slcs,
-            tcorr_file,
+            temp_coh_file,
         ) = sequential.run_wrapped_phase_sequential(
             slc_vrt_file=vrt_stack.outfile,
             ministack_planner=ministack_planner,
@@ -168,11 +170,11 @@ def run(
     existing_ifgs = list(ifg_dir.glob("*.int.*"))
     if len(existing_ifgs) > 0:
         logger.info(f"Skipping interferogram step, {len(existing_ifgs)} exists")
-        return existing_ifgs, comp_slc_file, tcorr_file, ps_looked_file
+        return existing_ifgs, comp_slc_file, temp_coh_file, ps_looked_file
     logger.info(f"Creating virtual interferograms from {len(phase_linked_slcs)} files")
 
     ifg_file_list = _create_ifgs(cfg, phase_linked_slcs, is_compressed, reference_date)
-    return ifg_file_list, comp_slc_file, tcorr_file, ps_looked_file
+    return ifg_file_list, comp_slc_file, temp_coh_file, ps_looked_file
 
 
 def _create_ifgs(

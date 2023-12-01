@@ -46,4 +46,4 @@ def test_sequential_gtiff(tmp_path, slc_file_list, gpu_enabled):
     # Check that all the expected outputs are there
     assert len(list(output_folder.glob("2*.slc.tif"))) == 3
     assert len(list(output_folder.glob("compressed_*tif"))) == 1
-    assert len(list(output_folder.glob("tcorr_*tif"))) == 1
+    assert len(list(output_folder.glob("temporal_coherence*tif"))) == 1
