@@ -103,7 +103,7 @@ def run(
     pl_path = cfg.phase_linking._directory
     pl_path.mkdir(parents=True, exist_ok=True)
 
-    # Mark any files beinning with "compressed" as compressed
+    # Mark any files beginning with "compressed" as compressed
     is_compressed = [f.name.startswith("compressed") for f in input_file_list]
     input_dates = _get_input_dates(
         input_file_list, is_compressed, cfg.input_options.cslc_date_fmt
