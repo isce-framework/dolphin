@@ -59,6 +59,7 @@ def load_gdal(
     *,
     band: Optional[int] = None,
     subsample_factor: Union[int, tuple[int, int]] = 1,
+    overview: Optional[int] = None,
     rows: Optional[slice] = None,
     cols: Optional[slice] = None,
     masked: bool = False,
@@ -74,6 +75,9 @@ def load_gdal(
     subsample_factor : int or tuple[int, int], optional
         Subsample the data by this factor. Default is 1 (no subsampling).
         Uses nearest neighbor resampling.
+    overview: int, optional
+        If passed, will load an overview of the file.
+        Raster must have existing overviews, or ValueError is raised.
     rows : slice, optional
         Rows to load. Default is None (load all rows).
     cols : slice, optional
@@ -90,6 +94,18 @@ def load_gdal(
     """
     ds = gdal.Open(fspath(filename))
     nrows, ncols = ds.RasterYSize, ds.RasterXSize
+
+    if overview is not None:
+        # We can handle the overviews most easily
+        bnd = ds.GetRasterBand(band or 1)
+        ovr_count = bnd.GetOverviewCount()
+        if ovr_count > 0:
+            idx = ovr_count + overview if overview < 0 else overview
+            out = bnd.GetOverview(idx).ReadAsArray()
+            bnd = ds = None
+            return out
+        else:
+            logger.warning(f"Requested {overview = }, but none found for {filename}")
 
     # if rows or cols are not specified, load all rows/cols
     rows = slice(0, nrows) if rows in (None, slice(None)) else rows
