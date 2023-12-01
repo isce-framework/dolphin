@@ -67,8 +67,8 @@ def run_wrapped_phase_sequential(
 
     # list where each item is [output_slc_files] from a ministack
     output_slc_files: list[list] = []
-    # Each item is the tcorr file from a ministack
-    tcorr_files: list[Path] = []
+    # Each item is the temp_coh file from a ministack
+    temp_coh_files: list[Path] = []
 
     # function to check if a ministack has already been processed
     def already_processed(d: Path, search_ext: str = ".tif") -> bool:
@@ -119,34 +119,34 @@ def run_wrapped_phase_sequential(
                 gpu_enabled=gpu_enabled,
             )
 
-        cur_output_files, cur_comp_slc_file, tcorr_file = _get_outputs_from_folder(
+        cur_output_files, cur_comp_slc_file, temp_coh_file = _get_outputs_from_folder(
             cur_output_folder
         )
         output_slc_files.append(cur_output_files)
-        tcorr_files.append(tcorr_file)
+        temp_coh_files.append(temp_coh_file)
 
     ##############################################
 
     # Average the temporal coherence files in each ministack
-    # TODO: do we want to include the date span in this filename?
-    output_tcorr_file = output_folder / "tcorr_average.tif"
+    full_span = ministack_planner.real_slc_date_range_str
+    output_temp_coh_file = output_folder / f"temporal_coherence_average_{full_span}.tif"
     # we can pass the list of files to gdal_calc, which interprets it
     # as a multi-band file
-    if len(tcorr_files) > 1:
-        logger.info(f"Averaging temporal coherence files into: {output_tcorr_file}")
+    if len(temp_coh_files) > 1:
+        logger.info(f"Averaging temporal coherence files into: {output_temp_coh_file}")
         gdal_calc.Calc(
             NoDataValue=0,
             format="GTiff",
-            outfile=fspath(output_tcorr_file),
+            outfile=fspath(output_temp_coh_file),
             type="Float32",
             quiet=True,
             overwrite=True,
             creation_options=io.DEFAULT_TIFF_OPTIONS,
-            A=tcorr_files,
+            A=temp_coh_files,
             calc="numpy.nanmean(A, axis=0)",
         )
     else:
-        tcorr_files[0].rename(output_tcorr_file)
+        temp_coh_files[0].rename(output_temp_coh_file)
 
     # Combine the separate SLC output lists into a single list
     all_slc_files = list(chain.from_iterable(output_slc_files))
@@ -162,11 +162,11 @@ def run_wrapped_phase_sequential(
         p.rename(output_folder / p.name)
         comp_outputs.append(output_folder / p.name)
 
-    return pl_outputs, comp_outputs, output_tcorr_file
+    return pl_outputs, comp_outputs, output_temp_coh_file
 
 
 def _get_outputs_from_folder(output_folder: Path):
     cur_output_files = sorted(output_folder.glob("2*.slc.tif"))
     cur_comp_slc_file = next(output_folder.glob("compressed_*"))
-    tcorr_file = next(output_folder.glob("tcorr_*"))
-    return cur_output_files, cur_comp_slc_file, tcorr_file
+    temp_coh_file = next(output_folder.glob("temporal_coherence_*"))
+    return cur_output_files, cur_comp_slc_file, temp_coh_file

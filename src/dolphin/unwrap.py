@@ -416,6 +416,7 @@ def multiscale_unwrap(
     mask_file: Optional[Filename] = None,
     zero_where_masked: bool = True,
     unwrap_method: UnwrapMethod = UnwrapMethod.SNAPHU,
+    unwrap_callback=None,  # type is `tophu.UnwrapCallback`
     init_method: str = "mst",
     cost: str = "smooth",
     scratchdir: Optional[Filename] = None,
@@ -448,6 +449,9 @@ def multiscale_unwrap(
     unwrap_method : UnwrapMethod or str, optional, default = "snaphu"
         Choice of unwrapping algorithm to use.
         Choices: {"snaphu", "icu", "phass"}
+    unwrap_callback : tophu.UnwrapCallback
+        Alternative to `unwrap_method`: directly provide a callable
+        function usable in `tophu`. See [tophu.UnwrapCallback] docs for interface.
     init_method : str, choices = {"mcf", "mst"}
         SNAPHU initialization method, by default "mst"
     cost : str, choices = {"smooth", "defo", "p-norm",}
@@ -472,21 +476,26 @@ def multiscale_unwrap(
         with rio.open(filename) as src:
             return src.crs, src.transform
 
-    unwrap_method = UnwrapMethod(unwrap_method)
-    if unwrap_method == UnwrapMethod.ICU:
-        unwrap_callback = tophu.ICUUnwrap()
-        nodata = 0  # TODO: confirm this?
-    elif unwrap_method == UnwrapMethod.PHASS:
-        unwrap_callback = tophu.PhassUnwrap()
-        nodata = -10_000
-    elif unwrap_method == UnwrapMethod.SNAPHU:
-        unwrap_callback = tophu.SnaphuUnwrap(
-            cost=cost,
-            init_method=init_method,
-        )
-        nodata = 0
+    if unwrap_callback is not None:
+        # Used to track if we can redirect logs or not
+        _user_gave_callback = True
     else:
-        raise ValueError(f"Unknown {unwrap_method = }")
+        _user_gave_callback = False
+        unwrap_method = UnwrapMethod(unwrap_method)
+        if unwrap_method == UnwrapMethod.ICU:
+            unwrap_callback = tophu.ICUUnwrap()
+            nodata = 0  # TODO: confirm this?
+        elif unwrap_method == UnwrapMethod.PHASS:
+            unwrap_callback = tophu.PhassUnwrap()
+            nodata = -10_000
+        elif unwrap_method == UnwrapMethod.SNAPHU:
+            unwrap_callback = tophu.SnaphuUnwrap(
+                cost=cost,
+                init_method=init_method,
+            )
+            nodata = 0
+        else:
+            raise ValueError(f"Unknown {unwrap_method = }")
 
     (width, height) = io.get_raster_xysize(ifg_filename)
     crs, transform = _get_rasterio_crs_transform(ifg_filename)
@@ -530,7 +539,8 @@ def multiscale_unwrap(
         igram_rb = tophu.RasterBand(ifg_filename)
         coherence_rb = tophu.RasterBand(corr_filename)
 
-    if log_to_file:
+    if log_to_file and not _user_gave_callback:
+        # Note that if they gave an arbitrary callback, we dont know the logger
         _redirect_unwrapping_log(unw_filename, unwrap_method.value)
 
     tophu.multiscale_unwrap(

@@ -119,7 +119,9 @@ def run_wrapped_phase_single(
     start_end = ministack.real_slc_date_range_str
     output_files: list[OutputFile] = [
         OutputFile(output_folder / comp_slc_info.filename, np.complex64),
-        OutputFile(output_folder / f"tcorr_{start_end}.tif", np.float32, strides),
+        OutputFile(
+            output_folder / f"temporal_coherence_{start_end}.tif", np.float32, strides
+        ),
         OutputFile(output_folder / f"avg_coh_{start_end}.tif", np.uint16, strides),
         OutputFile(output_folder / f"shp_counts_{start_end}.tif", np.uint16, strides),
     ]
@@ -181,7 +183,7 @@ def run_wrapped_phase_single(
         # Run the phase linking process on the current ministack
         reference_idx = max(0, first_real_slc_idx - 1)
         try:
-            cur_mle_stack, tcorr, avg_coh = run_mle(
+            cur_mle_stack, temp_coh, avg_coh = run_mle(
                 cur_data,
                 half_window=half_window,
                 strides=strides,
@@ -210,7 +212,7 @@ def run_wrapped_phase_single(
 
         # Fill in the nan values with 0
         np.nan_to_num(cur_mle_stack, copy=False)
-        np.nan_to_num(tcorr, copy=False)
+        np.nan_to_num(temp_coh, copy=False)
 
         # Save each of the MLE estimates (ignoring those corresponding to
         # compressed SLCs indexes)
@@ -249,7 +251,7 @@ def run_wrapped_phase_single(
         )
 
         # All other outputs are strided (smaller in size)
-        out_datas = [tcorr, avg_coh, shp_counts]
+        out_datas = [temp_coh, avg_coh, shp_counts]
         for data, output_file in zip(out_datas, output_files[1:]):
             if data is None:  # May choose to skip some outputs, e.g. "avg_coh"
                 continue

@@ -89,7 +89,7 @@ def run(
         wrapped_phase_cfgs = [(b, cfg)]
 
     ifg_file_list: list[Path] = []
-    tcorr_file_list: list[Path] = []
+    temp_coh_file_list: list[Path] = []
     ps_file_list: list[Path] = []
     # The comp_slc tracking object is a dict, since we'll need to organize
     # multiple comp slcs by burst (they'll have the same filename)
@@ -115,10 +115,10 @@ def run(
         for fut in fut_to_burst:
             burst = fut_to_burst[fut]
 
-            cur_ifg_list, comp_slc, tcorr, ps_file = fut.result()
+            cur_ifg_list, comp_slc, temp_coh, ps_file = fut.result()
             ifg_file_list.extend(cur_ifg_list)
             comp_slc_dict[burst] = comp_slc
-            tcorr_file_list.append(tcorr)
+            temp_coh_file_list.append(temp_coh)
             ps_file_list.append(ps_file)
 
     # ###################################
@@ -128,11 +128,11 @@ def run(
         unwrapped_paths,
         conncomp_paths,
         spatial_corr_paths,
-        stitched_tcorr_file,
+        stitched_temp_coh_file,
         stitched_ps_file,
     ) = stitch_and_unwrap.run(
         ifg_file_list=ifg_file_list,
-        tcorr_file_list=tcorr_file_list,
+        temp_coh_file_list=temp_coh_file_list,
         ps_file_list=ps_file_list,
         cfg=cfg,
         debug=debug,
