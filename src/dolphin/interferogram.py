@@ -5,7 +5,7 @@ import itertools
 from dataclasses import dataclass
 from os import fspath
 from pathlib import Path
-from typing import Iterable, Literal, Optional, Sequence, Union
+from typing import Any, Iterable, Literal, Optional, Sequence, Union
 
 import numpy as np
 from numpy.typing import ArrayLike
@@ -346,8 +346,8 @@ class Network:
 
     def __post_init__(
         self,
-        *args,
-        **kwargs,
+        *args: Any,
+        **kwargs: Any,
     ):
         if self.subdataset is None or isinstance(self.subdataset, str):
             self._slc_to_subdataset = {slc: self.subdataset for slc in self.slc_list}
@@ -633,6 +633,54 @@ def estimate_correlation_from_phase(
     # If the input was 0, the correlation is 0
     cor[zero_mask] = 0
     return cor
+
+
+def estimate_interferometric_correlations(
+    ifg_paths: Sequence[Filename],
+    window_size: tuple[int, int],
+    out_driver: str = "ENVI",
+    out_suffix: str = ".cor",
+) -> list[Path]:
+    """Estimate correlations for a sequence of interferograms.
+
+    Will use the same filename base as inputs with a new suffix.
+
+    Parameters
+    ----------
+    ifg_paths : Sequence[Filename]
+        Paths to complex interferogram files.
+    window_size : tuple[int, int]
+        (row, column) size of window to use for estimate
+    out_driver : str, optional
+        Name of output GDAL driver, by default "ENVI"
+    out_suffix : str, optional
+        File suffix to use for correlation files, by default ".cor"
+
+    Returns
+    -------
+    list[Path]
+        Paths to newly written correlation files.
+    """
+    logger = get_log()
+
+    corr_paths: list[Path] = []
+    for ifg_path in ifg_paths:
+        cor_path = Path(ifg_path).with_suffix(out_suffix)
+        corr_paths.append(cor_path)
+        if cor_path.exists():
+            logger.info(f"Skipping existing interferometric correlation for {ifg_path}")
+            continue
+        ifg = io.load_gdal(ifg_path)
+        logger.info(f"Estimating correlation for {ifg_path}, writing to {cor_path}")
+        cor = estimate_correlation_from_phase(ifg, window_size=window_size)
+        io.write_arr(
+            arr=cor,
+            output_name=cor_path,
+            like_filename=ifg_path,
+            driver=out_driver,
+            options=io.DEFAULT_ENVI_OPTIONS,
+        )
+    return corr_paths
 
 
 def _create_vrt_conj(

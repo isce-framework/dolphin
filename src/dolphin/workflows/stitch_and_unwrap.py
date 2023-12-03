@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-import datetime
 from pathlib import Path
-from typing import Mapping, Sequence
+from typing import Sequence
 
 from dolphin import io, stitching, unwrap
 from dolphin._log import get_log, log_runtime
-from dolphin.interferogram import estimate_correlation_from_phase
+from dolphin.interferogram import estimate_interferometric_correlations
 
 from .config import DisplacementWorkflow
 
@@ -73,8 +72,9 @@ def run(
     )
 
     # Estimate the interferometric correlation from the stitched interferogram
-    interferometric_corr_paths = _estimate_interferometric_correlations(
-        date_to_ifg_path, window_size=cfg.phase_linking.half_window.to_looks()
+    interferometric_corr_paths = estimate_interferometric_correlations(
+        list(date_to_ifg_path.values()),
+        window_size=cfg.phase_linking.half_window.to_looks(),
     )
 
     # Stitch the correlation files
@@ -159,30 +159,3 @@ def run(
         stitched_temp_coh_file,
         stitched_ps_file,
     )
-
-
-def _estimate_interferometric_correlations(
-    date_to_ifg_path: Mapping[tuple[datetime.datetime, ...], Path],
-    window_size: tuple[int, int],
-) -> list[Path]:
-    logger = get_log()
-
-    corr_paths: list[Path] = []
-    for dates, ifg_path in date_to_ifg_path.items():
-        cor_path = ifg_path.with_suffix(".cor")
-        corr_paths.append(cor_path)
-        if cor_path.exists():
-            logger.info(f"Skipping existing interferometric correlation for {ifg_path}")
-            continue
-        ifg = io.load_gdal(ifg_path)
-        logger.info(f"Estimating interferometric correlation for {dates}...")
-        cor = estimate_correlation_from_phase(ifg, window_size=window_size)
-        logger.info(f"Writing interferometric correlation to {cor_path}")
-        io.write_arr(
-            arr=cor,
-            output_name=cor_path,
-            like_filename=ifg_path,
-            driver="ENVI",
-            options=io.DEFAULT_ENVI_OPTIONS,
-        )
-    return corr_paths
