@@ -491,6 +491,34 @@ def _reproject_bounds(bounds: Bbox, src_epsg: int, dst_epsg: int) -> Bbox:
     return bbox
 
 
+def get_transformed_bounds(filename: Filename, epsg_code: Optional[int] = None):
+    """Get the bounds of a raster, possibly in a different CRS.
+
+    Parameters
+    ----------
+    filename : str
+        Path to the raster file.
+    epsg_code : Optional[int]
+        EPSG code of the CRS to transform to.
+        If not provided, or the raster is already in the desired CRS,
+        the bounds will not be transformed.
+
+    Returns
+    -------
+    tuple
+        The bounds of the raster as (left, bottom, right, top)
+    """
+    bounds = io.get_raster_bounds(filename)
+    if epsg_code is None:
+        return bounds
+    from_epsg = io.get_raster_crs(filename=filename).to_epsg()
+    assert from_epsg is not None
+    if from_epsg == epsg_code:
+        return bounds
+
+    return _reproject_bounds(bounds, from_epsg, epsg_code)
+
+
 def _nodata_to_zero(
     infile: Filename,
     outfile: Optional[Filename] = None,
