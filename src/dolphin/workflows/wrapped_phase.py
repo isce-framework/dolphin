@@ -58,16 +58,6 @@ def run(
         outfile=cfg.work_directory / "slc_stack.vrt",
     )
 
-    # Make the nodata mask from the polygons, if we're using OPERA CSLCs
-    try:
-        nodata_mask_file = cfg.work_directory / "nodata_mask.tif"
-        make_nodata_mask(
-            vrt_stack.file_list, out_file=nodata_mask_file, buffer_pixels=200
-        )
-    except Exception as e:
-        logger.warning(f"Could not make nodata mask: {e}")
-        nodata_mask_file = None
-
     # ###############
     # PS selection
     # ###############
@@ -124,6 +114,19 @@ def run(
         reference_date=reference_date,
         reference_idx=reference_idx,
     )
+
+    # Make the nodata mask from the polygons, if we're using OPERA CSLCs
+    non_compressed_slcs = [
+        f for f, is_comp in zip(input_file_list, is_compressed) if not is_comp
+    ]
+    try:
+        nodata_mask_file = cfg.work_directory / "nodata_mask.tif"
+        make_nodata_mask(
+            non_compressed_slcs, out_file=nodata_mask_file, buffer_pixels=200
+        )
+    except Exception as e:
+        logger.warning(f"Could not make nodata mask: {e}")
+        nodata_mask_file = None
 
     phase_linked_slcs = list(pl_path.glob("2*.tif"))
     if len(phase_linked_slcs) > 0:
