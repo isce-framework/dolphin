@@ -733,6 +733,7 @@ def convert_pl_to_ifg(
     secondary_date = get_dates(phase_linked_slc)[-1]
     date_str = _format_date_pair(reference_date, secondary_date)
     out_name = Path(output_dir) / f"{date_str}.int.vrt"
+    out_name.parent.mkdir(parents=True, exist_ok=True)
     # Now make a VRT to do the .conj
     _create_vrt_conj(phase_linked_slc, out_name)
     return out_name

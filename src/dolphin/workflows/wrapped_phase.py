@@ -187,6 +187,7 @@ def _create_ifgs(
     reference_date: datetime.datetime,
 ) -> list[Path]:
     ifg_dir = cfg.interferogram_network._directory
+    ifg_dir.mkdir(parents=True, exist_ok=True)
     ifg_file_list: list[Path] = []
     if not any(is_compressed):
         # When no compressed SLCs were passed in to the config, we can direclty pass
