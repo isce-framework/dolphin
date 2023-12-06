@@ -30,8 +30,8 @@ def merge_by_date(
     output_dir: Filename = ".",
     driver: str = "ENVI",
     output_suffix: str = ".int",
-    out_nodata: Optional[Union[float, str]] = 0,
-    in_nodata: Optional[Union[float, str]] = None,
+    out_nodata: Optional[float] = 0,
+    in_nodata: Optional[float] = None,
     out_bounds: Optional[Bbox] = None,
     out_bounds_epsg: Optional[int] = None,
     options: Optional[Sequence[str]] = io.DEFAULT_ENVI_OPTIONS,
@@ -118,9 +118,9 @@ def merge_images(
     out_bounds_epsg: Optional[int] = None,
     strides: dict[str, int] = {"x": 1, "y": 1},
     driver: str = "ENVI",
-    out_nodata: Optional[Union[float, str]] = 0,
+    out_nodata: Optional[float] = 0,
     out_dtype: Optional[DTypeLike] = None,
-    in_nodata: Optional[Union[float, str]] = None,
+    in_nodata: Optional[float] = None,
     resample_alg: str = "lanczos",
     overwrite=False,
     options: Optional[Sequence[str]] = io.DEFAULT_ENVI_OPTIONS,
@@ -178,11 +178,12 @@ def merge_images(
     if len(file_list) == 1:
         logger.info("Only one image, no stitching needed")
         logger.info(f"Copying {file_list[0]} to {outfile} and zeroing nodata values.")
-        _nodata_to_zero(
+        _copy_set_nodata(
             file_list[0],
             outfile=outfile,
             driver=driver,
             creation_options=options,
+            out_nodata=out_nodata or 0,
         )
         return
 
@@ -519,15 +520,16 @@ def get_transformed_bounds(filename: Filename, epsg_code: Optional[int] = None):
     return _reproject_bounds(bounds, from_epsg, epsg_code)
 
 
-def _nodata_to_zero(
+def _copy_set_nodata(
     infile: Filename,
     outfile: Optional[Filename] = None,
     ext: Optional[str] = None,
     in_band: int = 1,
+    out_nodata: float = 0,
     driver="ENVI",
     creation_options=io.DEFAULT_ENVI_OPTIONS,
 ):
-    """Make a copy of infile and replace NaNs with 0."""
+    """Make a copy of infile and replace NaNs/input nodata with `out_nodata`."""
     in_p = Path(infile)
     if outfile is None:
         if ext is None:
@@ -544,10 +546,12 @@ def _nodata_to_zero(
     arr = bnd.ReadAsArray()
     # also make sure to replace NaNs, even if nodata is not set
     mask = np.logical_or(np.isnan(arr), arr == nodata)
-    arr[mask] = 0
+    arr[mask] = out_nodata
 
-    ds_out.GetRasterBand(1).WriteArray(arr)
-    ds_out = None
+    bnd1 = ds_out.GetRasterBand(1)
+    bnd1.WriteArray(arr)
+    bnd1.SetNoDataValue(out_nodata)
+    ds_out = bnd1 = None
 
     return outfile
 
