@@ -11,7 +11,7 @@ from dolphin import _readers, interferogram, ps, stack
 from dolphin._dates import get_dates
 from dolphin._log import get_log, log_runtime
 
-from . import InterferogramNetworkType, sequential
+from . import InterferogramNetwork, InterferogramNetworkType, sequential
 from .config import DisplacementWorkflow
 
 
@@ -169,36 +169,73 @@ def run(
     # Form interferograms from estimated wrapped phase
     # ###################################################
 
-    ifg_dir = cfg.interferogram_network._directory
-    existing_ifgs = list(ifg_dir.glob("*.int.*"))
+    ifg_network = cfg.interferogram_network
+    existing_ifgs = list(ifg_network._directory.glob("*.int.*"))
     if len(existing_ifgs) > 0:
         logger.info(f"Skipping interferogram step, {len(existing_ifgs)} exists")
         return existing_ifgs, comp_slc_file, temp_coh_file, ps_looked_file
     logger.info(f"Creating virtual interferograms from {len(phase_linked_slcs)} files")
 
-    ifg_file_list = _create_ifgs(cfg, phase_linked_slcs, is_compressed, reference_date)
+    ifg_file_list = create_ifgs(
+        ifg_network, phase_linked_slcs, any(is_compressed), reference_date
+    )
     return ifg_file_list, comp_slc_file, temp_coh_file, ps_looked_file
 
 
-def _create_ifgs(
-    cfg: DisplacementWorkflow,
+def create_ifgs(
+    interferogram_network: InterferogramNetwork,
     phase_linked_slcs: Sequence[Path],
-    is_compressed: Sequence[bool],
+    contained_compressed_slcs: bool,
     reference_date: datetime.datetime,
+    dry_run: bool = False,
 ) -> list[Path]:
-    ifg_dir = cfg.interferogram_network._directory
-    ifg_dir.mkdir(parents=True, exist_ok=True)
+    """Create the list of interferograms for the `phase_linked_slcs`.
+
+    Parameters
+    ----------
+    interferogram_network : InterferogramNetwork
+        Parameters to determine which ifgs to form.
+    phase_linked_slcs : Sequence[Path]
+        Paths to phase linked SLCs.
+    contained_compressed_slcs : bool
+        Flag indicating that the inputs to phase linking contained compressed SLCs.
+        Needed because the network must be handled differently if we started with
+        compressed SLCs.
+    reference_date : datetime.datetime
+        Date/datetime of the "base phase" for the `phase_linked_slcs`
+    dry_run : bool
+        Flag indicating that the ifgs should not be written to disk.
+        Default = False (ifgs will be created).
+
+    Returns
+    -------
+    list[Path]
+        List of output VRTInterferograms
+
+    Raises
+    ------
+    ValueError
+        If invalid parameters are passed which lead to 0 interferograms being formed
+    NotImplementedError
+        Currently raised for `InterferogramNetworkType`s besides single reference
+        or max-bandwidth
+    """
+    ifg_dir = interferogram_network._directory
+    if not dry_run:
+        ifg_dir.mkdir(parents=True, exist_ok=True)
     ifg_file_list: list[Path] = []
-    if not any(is_compressed):
+    if not contained_compressed_slcs:
         # When no compressed SLCs were passed in to the config, we can direclty pass
         # options to `Network` and get the ifg list
         network = interferogram.Network(
             slc_list=phase_linked_slcs,
-            reference_idx=cfg.interferogram_network.reference_idx,
-            max_bandwidth=cfg.interferogram_network.max_bandwidth,
-            max_temporal_baseline=cfg.interferogram_network.max_temporal_baseline,
-            indexes=cfg.interferogram_network.indexes,
+            reference_idx=interferogram_network.reference_idx,
+            max_bandwidth=interferogram_network.max_bandwidth,
+            max_temporal_baseline=interferogram_network.max_temporal_baseline,
+            indexes=interferogram_network.indexes,
             outdir=ifg_dir,
+            write=not dry_run,
+            verify_slcs=not dry_run,
         )
         if len(network.ifg_list) == 0:
             raise ValueError("No interferograms were created")
@@ -215,10 +252,10 @@ def _create_ifgs(
 
     # To get the ifgs from the reference date to secondary(conj), this involves doing
     # a `.conj()` on the phase-linked SLCs (which are currently `day1.conj() * day2`)
-    network_type = cfg.interferogram_network.network_type
+    network_type = interferogram_network.network_type
     for f in phase_linked_slcs:
         p = interferogram.convert_pl_to_ifg(
-            f, reference_date=reference_date, output_dir=ifg_dir
+            f, reference_date=reference_date, output_dir=ifg_dir, dry_run=dry_run
         )
         ifg_file_list.append(p)
 
@@ -229,7 +266,7 @@ def _create_ifgs(
 
     # For other networks, we have to combine other ones formed from the `Network`
     if network_type == InterferogramNetworkType.MAX_BANDWIDTH:
-        max_b = cfg.interferogram_network.max_bandwidth
+        max_b = interferogram_network.max_bandwidth
         # Max bandwidth is easier because we just take the first `max_b` from `phase_linked_slcs`
         # (which are the (ref_date, ...) interferograms),...
         ifgs_ref_date = ifg_file_list[:max_b]
@@ -241,6 +278,8 @@ def _create_ifgs(
             max_bandwidth=max_b,
             outdir=ifg_dir,
             dates=secondary_dates,
+            write=not dry_run,
+            verify_slcs=not dry_run,
         )
         # Using `cast` to assert that the paths are not None
         ifgs_others = cast(list[Path], [ifg.path for ifg in network_rest.ifg_list])
@@ -249,7 +288,7 @@ def _create_ifgs(
 
     # Other types: TODO
     raise NotImplementedError(
-        "Only single-reference interferograms are supported when"
+        "Only single-reference/max-bandwidth interferograms are supported when"
         " starting with compressed SLCs"
     )
     # Say we had inputs like:

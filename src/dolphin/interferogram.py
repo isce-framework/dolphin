@@ -707,7 +707,10 @@ def _create_vrt_conj(
 
 
 def convert_pl_to_ifg(
-    phase_linked_slc: Filename, reference_date: DateOrDatetime, output_dir: Filename
+    phase_linked_slc: Filename,
+    reference_date: DateOrDatetime,
+    output_dir: Filename,
+    dry_run: bool = False,
 ) -> Path:
     """Convert a phase-linked SLC to an interferogram by conjugating the phase.
 
@@ -722,6 +725,11 @@ def convert_pl_to_ifg(
         Reference date of the interferogram.
     output_dir : Filename
         Directory to place the renamed file.
+    dry_run : bool
+        Flag indicating that the new ifgs shouldn't be written to disk.
+        Default = False (the ifgs will be created/written to disk.)
+        `dry_run=True` is used to plan out which ifgs will be formed
+        before actually running the workflow.
 
     Returns
     -------
@@ -733,6 +741,8 @@ def convert_pl_to_ifg(
     secondary_date = get_dates(phase_linked_slc)[-1]
     date_str = _format_date_pair(reference_date, secondary_date)
     out_name = Path(output_dir) / f"{date_str}.int.vrt"
+    if dry_run:
+        return out_name
     out_name.parent.mkdir(parents=True, exist_ok=True)
     # Now make a VRT to do the .conj
     _create_vrt_conj(phase_linked_slc, out_name)
