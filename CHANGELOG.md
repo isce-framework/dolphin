@@ -5,6 +5,8 @@
 - Added ability to make annual ifgs in `Network`
 
 **Changed**
+- The output directory for interferograms is now just "interferograms/" instead of "interferograms/stiched"
+  - Even when stitching, the burst-wise interferograms would be in the named phase-linking subfolders.
 - Split apart the `dolphin.workflows.stitch_and_unwrap` module into `stitching_bursts` and `unwrapping`
 - Switched output filename from `tcorr` to `temporal_coherence` for the temporal coherence of phase linking.
   - Also added the date span to the `temporal_coherence` output name
