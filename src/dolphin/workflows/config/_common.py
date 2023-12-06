@@ -179,8 +179,7 @@ class UnwrapOptions(BaseModel, extra="forbid"):
     ntiles: tuple[int, int] = Field(
         (1, 1),
         description=(
-            "(for multiscale unwrapping) Number of tiles to split the unwrapping into"
-            " (for multi-scale unwrapping)."
+            "(`snaphu-py` or multiscale unwrapping) Number of tiles to split the inputs into"
         ),
     )
     downsample_factor: tuple[int, int] = Field(
@@ -188,6 +187,12 @@ class UnwrapOptions(BaseModel, extra="forbid"):
         description=(
             "(for multiscale unwrapping) Extra multilook factor to use for the coarse"
             " unwrap."
+        ),
+    )
+    tile_overlap: tuple[int, int] = Field(
+        (0, 0),
+        description=(
+            "(for use in `snaphu-py`) Amount of tile overlap (in pixels) along the (row, col) directions."
         ),
     )
     n_parallel_jobs: int = Field(
