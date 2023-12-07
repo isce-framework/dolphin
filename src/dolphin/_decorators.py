@@ -87,7 +87,10 @@ def atomic_output(
                 temp_path = tempfile.mkdtemp(dir=tmp_dir, prefix=prefix)
             else:
                 # Create a temporary file
-                _, temp_path = tempfile.mkstemp(dir=tmp_dir, prefix=prefix)
+                suffix = final_path.suffix
+                _, temp_path = tempfile.mkstemp(
+                    dir=tmp_dir, prefix=prefix, suffix=suffix
+                )
             logger.debug("Writing to temp file %s instead of %s", temp_path, final_path)
 
             try:

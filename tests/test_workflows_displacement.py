@@ -90,8 +90,8 @@ def test_stack_with_compressed(opera_slc_files, tmpdir):
 
         # Now the results should be the same (for the file names)
         # check the ifg folders
-        ifgs1 = sorted((p1 / "interferograms/stitched").glob("*.int"))
-        ifgs2 = sorted((p2 / "interferograms/stitched").glob("*.int"))
+        ifgs1 = sorted((p1 / "interferograms").glob("*.int"))
+        ifgs2 = sorted((p2 / "interferograms").glob("*.int"))
         assert len(ifgs1) > 0
         assert [f.name for f in ifgs1] == [f.name for f in ifgs2]
 
@@ -102,7 +102,7 @@ def test_separate_workflow_runs(slc_file_list, tmp_path):
     """
     p_all = tmp_path / "all"
     run_displacement_stack(p_all, slc_file_list, ministack_size=10)
-    all_ifgs = sorted((p_all / "interferograms/stitched").glob("*.int"))
+    all_ifgs = sorted((p_all / "interferograms").glob("*.int"))
     assert len(all_ifgs) == 29
 
     p1 = tmp_path / Path("first")
@@ -114,7 +114,7 @@ def test_separate_workflow_runs(slc_file_list, tmp_path):
     run_displacement_stack(p1, file_batches[0])
     new_comp_slcs1 = sorted((p1 / "linked_phase").glob("compressed_*"))
     assert len(new_comp_slcs1) == 1
-    ifgs1 = sorted((p1 / "interferograms/stitched").glob("*.int"))
+    ifgs1 = sorted((p1 / "interferograms").glob("*.int"))
     assert len(ifgs1) == 9
 
     p2 = tmp_path / Path("second")
@@ -122,13 +122,13 @@ def test_separate_workflow_runs(slc_file_list, tmp_path):
     run_displacement_stack(p2, files2)
     new_comp_slcs2 = sorted((p2 / "linked_phase").glob("compressed_*"))
     assert len(new_comp_slcs2) == 1
-    ifgs2 = sorted((p2 / "interferograms/stitched").glob("*.int"))
+    ifgs2 = sorted((p2 / "interferograms").glob("*.int"))
     assert len(ifgs2) == 10
 
     p3 = tmp_path / Path("third")
     files3 = new_comp_slcs1 + new_comp_slcs2 + file_batches[2]
     run_displacement_stack(p3, files3)
-    ifgs3 = sorted((p3 / "interferograms/stitched").glob("*.int"))
+    ifgs3 = sorted((p3 / "interferograms").glob("*.int"))
     assert len(ifgs3) == 10
 
     all_ifgs_names = [f.name for f in all_ifgs]
@@ -141,7 +141,7 @@ def test_separate_workflow_runs(slc_file_list, tmp_path):
     p3_b = tmp_path / Path("third")
     files3_b = new_comp_slcs2 + file_batches[2]
     run_displacement_stack(p3_b, files3_b)
-    ifgs3_b = sorted((p3_b / "interferograms/stitched").glob("*.int"))
+    ifgs3_b = sorted((p3_b / "interferograms").glob("*.int"))
     assert len(ifgs3_b) == 10
     # Names should be the same as the previous run
     assert [f.name for f in ifgs3_b] == [f.name for f in ifgs3]

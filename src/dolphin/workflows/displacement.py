@@ -14,9 +14,11 @@ from dolphin._background import DummyProcessPoolExecutor
 from dolphin._log import get_log, log_runtime
 from dolphin.utils import get_max_memory_usage, set_num_threads
 
-from . import stitch_and_unwrap, wrapped_phase
+from . import stitching_bursts, unwrapping, wrapped_phase
 from ._utils import _create_burst_cfg, _remove_dir_if_empty
 from .config import DisplacementWorkflow
+
+logger = get_log(__name__)
 
 
 @log_runtime
@@ -122,24 +124,51 @@ def run(
             ps_file_list.append(ps_file)
 
     # ###################################
-    # 2. Stitch and unwrap interferograms
+    # 2. Stitch burst-wise interferograms
     # ###################################
+
+    # TODO: figure out how best to pick the corr size
+    # Is there one best size? dependent on `half_window` or resolution?
+    # For now, just pick a reasonable size
+    corr_window_size = (11, 11)
     (
-        unwrapped_paths,
-        conncomp_paths,
-        spatial_corr_paths,
+        stitched_ifg_paths,
+        stitched_cor_paths,
         stitched_temp_coh_file,
         stitched_ps_file,
-    ) = stitch_and_unwrap.run(
+    ) = stitching_bursts.run(
         ifg_file_list=ifg_file_list,
         temp_coh_file_list=temp_coh_file_list,
         ps_file_list=ps_file_list,
-        cfg=cfg,
-        debug=debug,
-        unwrap_jobs=cfg.unwrap_options.n_parallel_jobs,
+        stitched_ifg_dir=cfg.interferogram_network._directory,
+        output_options=cfg.output_options,
+        file_date_fmt=cfg.input_options.cslc_date_fmt,
+        corr_window_size=corr_window_size,
     )
 
-    # Print the maximum memory usage for each worker
+    # ###################################
+    # 3. Unwrap stitched interferograms
+    # ###################################
+    if not cfg.unwrap_options.run_unwrap:
+        logger.info("Skipping unwrap step")
+        _print_summary(cfg)
+        return
+
+    row_looks, col_looks = cfg.phase_linking.half_window.to_looks()
+    nlooks = row_looks * col_looks
+    unwrapping.run(
+        ifg_file_list=stitched_ifg_paths,
+        cor_file_list=stitched_cor_paths,
+        nlooks=nlooks,
+        unwrap_options=cfg.unwrap_options,
+        mask_file=cfg.mask_file,
+    )
+
+    _print_summary(cfg)
+
+
+def _print_summary(cfg):
+    """Print the maximum memory usage and version info."""
     max_mem = get_max_memory_usage(units="GB")
     logger.info(f"Maximum memory usage: {max_mem:.2f} GB")
     logger.info(f"Config file dolphin version: {cfg._dolphin_version}")
