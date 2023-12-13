@@ -24,7 +24,7 @@ def estimate_tropospheric_delay(ifg_file_list: list[Path], slc_files: dict[datet
                                 tropo_package: str, tropo_model: str, tropo_delay_type: str,
                                 strides: dict[str, int] = {"x": 1, "y": 1}):
     
-   """
+    """
     Estimate the tropospheric delay corrections for each interferogram.
 
     Parameters
@@ -112,14 +112,14 @@ def estimate_tropospheric_delay(ifg_file_list: list[Path], slc_files: dict[datet
                 run_or_skip = 'run'
         if run_or_skip == 'skip':
             logger.info(
-                f"Tropospheric correction {os.path.basename(tropo_delay_product_name)} already exists, skipping"
+                f"Tropospheric correction for interferogram {ref_date}-{sec_date} already exists, skipping"
             )
             continue
 
-        reference_date = datetime.datetime.strptime(ref_date, '%Y%m%d').date()
-        secondary_date = datetime.datetime.strptime(sec_date, '%Y%m%d').date()
+        reference_date = (datetime.datetime.strptime(ref_date, '%Y%m%d'),)
+        secondary_date = (datetime.datetime.strptime(sec_date, '%Y%m%d'),)
+        
         if reference_date in troposphere_files.keys()  and secondary_date in troposphere_files.keys():
-            import pdb; pdb.set_trace()
             reference_time = oput.get_zero_doppler_time(slc_files[reference_date][0])
             secondary_time = oput.get_zero_doppler_time(slc_files[secondary_date][0])
             weather_model_params = {'reference_file':troposphere_files[reference_date],
@@ -138,7 +138,7 @@ def estimate_tropospheric_delay(ifg_file_list: list[Path], slc_files: dict[datet
       
         else:
             logger.warn(
-                f"Weather-model files do not exist for interferogram {reference_date}-{secondary_date}, skipping"
+                f"Weather-model files do not exist for interferogram {ref_date}-{sec_date}, skipping"
             )
     
     return
