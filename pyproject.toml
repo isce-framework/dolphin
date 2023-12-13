@@ -76,4 +76,6 @@ filterwarnings = [
   "error",
   # DeprecationWarning thrown in pkg_resources for older numba verions and llvmlite
   "ignore:.*pkg_resources.*",
+  # remove after https://github.com/conda-forge/h5py-feedstock/issues/122 is solved:
+  "ignore:h5py is running against HDF5.*:UserWarning",
 ]
