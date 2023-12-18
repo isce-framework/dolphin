@@ -260,19 +260,16 @@ def get_parser(subparser=None, subcommand_name="run"):
     )
     correction_group.add_argument(
         "--tropo-date-fmt",
-        type=str,
         default="%Y%m%d",
         help="Format of dates contained in weather-model filenames.",
     )
     correction_group.add_argument(
         "--tropo-package",
-        type=str,
         default="pyaps",
         help="Package to use for tropospheric correction. Choices are: pyaps, raider.",
     )
     correction_group.add_argument(
         "--tropo-model",
-        type=str,
         default="ERA5",
         help="source of the atmospheric model. Choices are: ERA5, ERAI, MERRA2, NARR, HRRR, GMAO, HRES",
     )
