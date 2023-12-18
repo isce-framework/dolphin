@@ -278,7 +278,6 @@ def get_parser(subparser=None, subcommand_name="run"):
     )
     correction_group.add_argument(
         "--tropo-delay_type",
-        type=str,
         default="comb",
         help="Tropospheric delay type to calculate, comb contains both wet and dry delays, Choices are: wet, dry, comb.",
     )
