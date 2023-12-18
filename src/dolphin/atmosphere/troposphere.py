@@ -13,6 +13,7 @@ import opera_utils as oput
 from dolphin._log import get_log
 from dolphin._types import Bbox, Filename
 from dolphin import io, stitching
+from dolphin._dates import get_dates, _format_date_pair
 logger = get_log(__name__)
 
 
@@ -60,8 +61,7 @@ def estimate_tropospheric_delay(ifg_file_list: list[Path], slc_files: dict[datet
     out_bounds = io.get_raster_bounds(ifg_file_list[0])
     
     # prepare geometry data
-    print('\n'+'-'*80)
-    print('Prepare geometry files...')
+    logger.info('Prepare geometry files...')
     geometry_dir = output_dir / "../../geometry"
     geometry_files = prepare_geometry(geometry_dir=geometry_dir,
                                       geo_files=geom_files, matching_file=ifg_file_list[0],
@@ -103,44 +103,44 @@ def estimate_tropospheric_delay(ifg_file_list: list[Path], slc_files: dict[datet
     wavelength = oput.get_radar_wavelength(slc_files[first_date][0])
     for ifg in ifg_file_list:
         
-        ref_date, sec_date = os.path.basename(fspath(ifg)).split('.')[0].split('_')
+        ref_date, sec_date = get_dates(ifg) 
         for delayt in tropo_delay_products:
-            tropo_delay_product_name = fspath(output_dir) + f'/{ref_date}_{sec_date}_tropoDelay_pyaps_{tropo_model}_LOS_{delayt}.tif'
+            tropo_delay_product_name = fspath(output_dir) + f'/{_format_date_pair(ref_date, sec_date)}_tropoDelay_pyaps_{tropo_model}_LOS_{delayt}.tif'
             if os.path.exists(tropo_delay_product_name):
                 run_or_skip = 'skip'
             else:
                 run_or_skip = 'run'
         if run_or_skip == 'skip':
             logger.info(
-                f"Tropospheric correction for interferogram {ref_date}-{sec_date} already exists, skipping"
+                f"Tropospheric correction for interferogram {_format_date_pair(ref_date, sec_date)} already exists, skipping"
             )
             continue
 
-        reference_date = (datetime.datetime.strptime(ref_date, '%Y%m%d'),)
-        secondary_date = (datetime.datetime.strptime(sec_date, '%Y%m%d'),)
-        
-        if reference_date in troposphere_files.keys()  and secondary_date in troposphere_files.keys():
-            reference_time = oput.get_zero_doppler_time(slc_files[reference_date][0])
-            secondary_time = oput.get_zero_doppler_time(slc_files[secondary_date][0])
-            weather_model_params = {'reference_file':troposphere_files[reference_date],
-                                    'secondary_file':troposphere_files[secondary_date],
-                                    'output_dir': output_dir,
-                                    'type':tropo_model.upper(),
-                                    'reference_time': reference_time,
-                                    'secondary_time': secondary_time,
-                                    'wavelength':wavelength}
-            troposphere_delay_datacube = tropo_run(tropo_delay_products=tropo_delay_products,
-                                                   grid=grid, weather_model_params=weather_model_params)
-            
-            
-            tropo_delay_2d = oput.compute_2d_delay(troposphere_delay_datacube, grid, geometry_files)
-            write_tropo(tropo_delay_2d, ifg, output_dir)
-      
-        else:
+        reference_date = (ref_date,)
+        secondary_date = (sec_date,)
+       
+        if reference_date not in troposphere_files.keys() or secondary_date not in troposphere_files.keys():
             logger.warn(
-                f"Weather-model files do not exist for interferogram {ref_date}-{sec_date}, skipping"
+                f"Weather-model files do not exist for interferogram {_format_date_pair(ref_date, sec_date)}, skipping"
             )
-    
+            continue
+        
+        reference_time = oput.get_zero_doppler_time(slc_files[reference_date][0])
+        secondary_time = oput.get_zero_doppler_time(slc_files[secondary_date][0])
+        weather_model_params = {'reference_file':troposphere_files[reference_date],
+                                'secondary_file':troposphere_files[secondary_date],
+                                'output_dir': output_dir,
+                                'type':tropo_model.upper(),
+                                'reference_time': reference_time,
+                                'secondary_time': secondary_time,
+                                'wavelength':wavelength}
+        troposphere_delay_datacube = tropo_run(tropo_delay_products=tropo_delay_products,
+                                                grid=grid, weather_model_params=weather_model_params)
+        
+        
+        tropo_delay_2d = oput.compute_2d_delay(troposphere_delay_datacube, grid, geometry_files)
+        write_tropo(tropo_delay_2d, ifg, output_dir)
+      
     return
 
 def prepare_geometry(geometry_dir: Path,
@@ -236,11 +236,11 @@ def write_tropo(tropo_2d: dict,
     out_dir : Path
         Output directory.
     """
-    dates = os.path.basename(inp_interferogram).split('.')[0]
-    os.makedirs(out_dir, exist_ok=True)
+    dates = inp_interferogram.stem 
+    out_dir.mkdir(exist_ok=True)
 
     for key, value in tropo_2d.items():
-        output = os.path.join(out_dir, f"{dates}_{key}.tif")
+        output = out_dir / f"{dates}_{key}.tif"
         io.write_arr(arr=value, output_name=output, like_filename=inp_interferogram) 
     return
 
