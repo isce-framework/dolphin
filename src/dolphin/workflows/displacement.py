@@ -199,7 +199,6 @@ def run(
             strides=cfg.output_options.strides,
         )
 
-
     # Print the maximum memory usage for each worker
     _print_summary(cfg)
 
