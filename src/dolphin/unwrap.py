@@ -579,7 +579,7 @@ def unwrap_snaphu_py(
     zero_where_masked: bool = True,
     nodata: str | float | None = None,
     init_method: str = "mst",
-):
+) -> tuple[Path, Path]:
     """Unwrap an interferogram using at multiple scales using `tophu`.
 
     Parameters
@@ -668,3 +668,5 @@ def unwrap_snaphu_py(
         corr.close()
         if mask is not None:
             mask.close()
+
+    return Path(unw_filename), Path(cc_filename)
