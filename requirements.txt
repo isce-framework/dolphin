@@ -11,3 +11,4 @@ scipy>=1.5
 shapely>=1.8
 threadpoolctl>=3.0
 pyaps3>=0.3
+opera-utils>=0.1.5

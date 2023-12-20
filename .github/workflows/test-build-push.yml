@@ -41,6 +41,7 @@ jobs:
               dask
               rasterio
               pyaps3>=0.3
+              opera-utils>=0.1.5
         exclude:  # TODO: Remove this once pymp is gone
           - os: macos-latest
             deps:
