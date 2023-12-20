@@ -19,6 +19,7 @@ def atomic_output(
     output_arg: str = "output_file",
     is_dir: bool = False,
     use_tmp: bool = False,
+    overwrite: bool = False,
 ) -> Callable:
     """Use a temporary file/directory for the `output_arg` until the function finishes.
 
@@ -43,6 +44,9 @@ def atomic_output(
         a random suffix added to the name to distinguish from actual output.
         If `True`, uses the `/tmp` directory (or wherever the default is
         for the `tempfile` module).
+    overwrite : bool, default = False
+        Overwrite an existing file.
+        If `False` raises `FileExistsError` if the file already exists.
 
     Returns
     -------
@@ -66,17 +70,17 @@ def atomic_output(
         @functools.wraps(func)
         def wrapper(*args, **kwargs) -> Any:
             # Extract the output file path
-            if output_arg in kwargs:
+            if kwargs.get(output_arg):
                 final_out_name = kwargs[output_arg]
             else:
                 raise FileExistsError(
-                    f"Argument {output_arg} not found in function {func.__name__}:"
+                    f"Argument {output_arg} not passed to function {func.__name__}:"
                     f" {kwargs}"
                 )
 
             final_path = Path(final_out_name)
             # Make sure the desired final output doesn't already exist
-            _raise_if_exists(final_path, is_dir=is_dir)
+            _raise_if_exists(final_path, is_dir=is_dir, overwrite=overwrite)
             # None means that tempfile will use /tmp
             tmp_dir = final_path.parent if not use_tmp else None
 
@@ -117,17 +121,27 @@ def atomic_output(
     return decorator
 
 
-def _raise_if_exists(final_path: Path, is_dir: bool):
+def _raise_if_exists(final_path: Path, is_dir: bool, overwrite: bool):
+    msg = f"{final_path} already exists"
     if final_path.exists():
-        err_msg = f"{final_path} already exists"
+        logger.debug(f"{final_path} already exists")
+        if overwrite:
+            if final_path.is_dir():
+                shutil.rmtree(final_path)
+            else:
+                final_path.unlink()
+            return
+
         if is_dir and final_path.is_dir():
+            # We can work with an empty directory
             try:
                 final_path.rmdir()
             except OSError as e:
                 err_msg = str(e)
-                if "Directory not empty" not in err_msg:
-                    raise e
+                if "Directory not empty" in err_msg:
+                    raise FileExistsError(msg)
                 else:
-                    raise FileExistsError(err_msg)
+                    # Some other error we don't know
+                    raise e
         else:
-            raise FileExistsError(err_msg)
+            raise FileExistsError(msg)
