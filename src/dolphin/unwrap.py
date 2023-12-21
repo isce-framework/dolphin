@@ -23,7 +23,7 @@ logger = get_log(__name__)
 
 gdal.UseExceptions()
 
-CONNCOMP_SUFFIX = ".unw.conncomp"
+CONNCOMP_SUFFIX = ".unw.conncomp.tif"
 
 
 @log_runtime
@@ -283,15 +283,14 @@ def unwrap(
         dtype=np.float32,
         options=opts,
     )
-    # Always use ENVI for conncomp
     conncomp_filename = str(unw_filename).replace(unw_suffix, CONNCOMP_SUFFIX)
     io.write_arr(
         arr=None,
         output_name=conncomp_filename,
-        driver="ENVI",
+        driver="GTiff",
         dtype=np.uint32,
         like_filename=ifg_filename,
-        options=io.DEFAULT_ENVI_OPTIONS,
+        options=io.DEFAULT_TIFF_OPTIONS,
     )
 
     if use_snaphu:
@@ -513,19 +512,19 @@ def multiscale_unwrap(
     conncomp_filename = str(unw_filename).replace(unw_suffix, CONNCOMP_SUFFIX)
 
     # SUFFIX=ADD
-    envi_options = dict(opt.lower().split("=") for opt in io.DEFAULT_ENVI_OPTIONS)
+    # Convert to something rasterio understands
+    gtiff_options = dict(opt.lower().split("=") for opt in io.DEFAULT_TIFF_OPTIONS)
     logger.debug(f"Saving conncomps to {conncomp_filename}")
     conncomp_rb = tophu.RasterBand(
         conncomp_filename,
         height=height,
         width=width,
         dtype=np.uint16,
-        driver="ENVI",
+        driver="GTiff",
         crs=crs,
         transform=transform,
-        **envi_options,
+        **gtiff_options,
     )
-    gtiff_options = dict(opt.lower().split("=") for opt in io.DEFAULT_TIFF_OPTIONS)
     unw_rb = tophu.RasterBand(
         unw_filename,
         height=height,
