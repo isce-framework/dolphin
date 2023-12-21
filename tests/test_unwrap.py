@@ -46,7 +46,9 @@ def test_unwrap_snaphu(tmp_path, raster_100_by_200, corr_raster):
         init_method="mst",
     )
     assert unw_path == unw_filename
-    assert str(conncomp_path) == str(unw_filename).replace(".unw.tif", ".unw.conncomp")
+    assert str(conncomp_path) == str(unw_filename).replace(
+        ".unw.tif", ".unw.conncomp.tif"
+    )
     assert io.get_raster_xysize(unw_filename) == io.get_raster_xysize(raster_100_by_200)
 
     # test other init_method
