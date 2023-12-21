@@ -10,6 +10,7 @@
 - Split apart the `dolphin.workflows.stitch_and_unwrap` module into `stitching_bursts` and `unwrapping`
 - Switched output filename from `tcorr` to `temporal_coherence` for the temporal coherence of phase linking.
   - Also added the date span to the `temporal_coherence` output name
+- The default extension for conncomps is now `.tif`. Use geotiffs instead of ENVI format
 
 
 # [v0.7.0](https://github.com/isce-framework/dolphin/compare/v0.6.1...v0.7.0)
