@@ -27,8 +27,10 @@ plugins:
         options:
           docstring_style: numpy
           members_order: alphabetical # source
+        import:
+        - https://docs.scipy.org/doc/scipy/objects.inv  # scipy doc objects
 - mkdocs-jupyter:
-    include: ["*.ipynb"]
+    include: ["docs/notebooks/*.ipynb"]
 
 markdown_extensions:
   - pymdownx.arithmatex:
