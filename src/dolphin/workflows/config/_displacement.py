@@ -1,12 +1,20 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, List, Optional
+from typing import Annotated, Any, List, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StringConstraints,
+    field_validator,
+    model_validator,
+)
 
 from dolphin._dates import get_dates, sort_files_by_date
 from dolphin._log import get_log
+from dolphin._types import TropoModel, TropoType
 
 from ._common import (
     InputOptions,
@@ -31,8 +39,6 @@ class CorrectionOptions(BaseModel, extra="forbid"):
     """Configuration for the auxillary phase corrections."""
 
     _atm_directory: Path = Path("atmosphere")
-    _tropo_directory = Path("atmosphere/troposphere")
-    _iono_directory = Path("atmosphere/ionosphere")
 
     troposphere_files: List[Path] = Field(
         default_factory=list,
@@ -46,21 +52,21 @@ class CorrectionOptions(BaseModel, extra="forbid"):
         description="Format of dates contained in weather-model filenames",
     )
 
-    tropo_package: str = Field(
+    tropo_package: Annotated[str, StringConstraints(to_lower=True)] = Field(
         "pyaps",
         description="Package to use for tropospheric correction. Choices are: pyaps, raider",
     )
 
-    tropo_model: str = Field(
-        "ERA5",
+    tropo_model: TropoModel = Field(
+        TropoModel.ERA5,
         description="source of the atmospheric model. Choices are:"
         "ERA5, ERAI, MERRA2, NARR, HRRR, GMAO, HRES",
     )
 
-    tropo_delay_type: str = Field(
-        "comb",
+    tropo_delay_type: TropoType = Field(
+        TropoType.COMB,
         description="Tropospheric delay type to calculate, comb contains both wet and dry delays."
-        "Choices are: wet, dry, comb",
+        "Choices are: wet, dry, comb, hydrostatic",
     )
 
     ionosphere_files: List[Path] = Field(
@@ -169,23 +175,6 @@ class DisplacementWorkflow(WorkflowBase):
         self.cslc_file_list = [
             Path(f) for f in sort_files_by_date(file_list, file_date_fmt=date_fmt)[0]
         ]
-
-        # # Check for tropospheric weather-model files
-        # tropo_file_list = self.troposphere_files
-        # correction_options = self.correction_options
-        # tropo_date_fmt = correction_options.tropo_date_fmt
-        # # Filter out files that don't have dates in the filename
-        # files_matching_date = [Path(f) for f in tropo_file_list if get_dates(f, fmt=tropo_date_fmt)]
-        # if len(files_matching_date) < len(tropo_file_list):
-        #     raise (
-        #         f"Found {len(files_matching_date)} weather-model files with dates like {tropo_date_fmt} in"
-        #         f" the filename out of {len(tropo_file_list)} files."
-        #     )
-
-        # # Coerce the file_list to a sorted list of Path objects
-        # self.troposphere_files = [
-        #     Path(f) for f in sort_files_by_date(tropo_file_list, file_date_fmt=tropo_date_fmt)[0]
-        # ]
 
         return self
 

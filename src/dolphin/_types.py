@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import datetime
 import sys
+from enum import Enum
 from os import PathLike
 from typing import TYPE_CHECKING, Tuple, TypeVar, Union
 
@@ -32,3 +33,45 @@ T = TypeVar("T")
 P = ParamSpec("P")
 
 DateOrDatetime = Union[datetime.datetime, datetime.date]
+
+
+class TropoModel(Enum):
+    """Enumeration representing different tropospheric models.
+
+    Attributes
+    ----------
+        ERA5 (str): ERA5 Tropospheric Model.
+        HRES (str): HRES Tropospheric Model.
+        ERAINT (str): ERAINT Tropospheric Model.
+        ERAI (str): ERAI Tropospheric Model.
+        MERRA (str): MERRA Tropospheric Model.
+        NARR (str): NARR Tropospheric Model.
+        HRRR (str): HRRR Tropospheric Model.
+        GMAO (str): GMAO Tropospheric Model.
+    """
+
+    ERA5 = "ERA5"
+    HRES = "HRES"
+    ERAINT = "ERAINT"
+    ERAI = "ERAI"
+    MERRA = "MERRA"
+    NARR = "NARR"
+    HRRR = "HRRR"
+    GMAO = "GMAO"
+
+
+class TropoType(Enum):
+    """Enumeration representing different tropospheric types.
+
+    Attributes
+    ----------
+        WET (str): Wet Tropospheric Type.
+        DRY (str): Dry Tropospheric Type.
+        HYDROSTATIC (str): Hydrostatic Tropospheric Type.
+        COMB (str): Combined Tropospheric Type.
+    """
+
+    WET = "wet"
+    DRY = "dry"
+    HYDROSTATIC = "hydrostatic"
+    COMB = "comb"

@@ -2,6 +2,7 @@
 h5py>=3.6
 numba>=0.54
 numpy>=1.20
+opera-utils>=0.1.5
 pydantic>=2.1
 pymp-pypi>=0.4.5
 pyproj>=3.3
@@ -10,5 +11,3 @@ ruamel_yaml>=0.15
 scipy>=1.5
 shapely>=1.8
 threadpoolctl>=3.0
-pyaps3>=0.3
-opera-utils>=0.1.5

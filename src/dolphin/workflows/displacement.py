@@ -178,11 +178,11 @@ def run(
     # ##############################################
 
     if cfg.correction_options.dem_file is None:
-        raise ValueError(
+        logger.warn(
             "DEM file is not given, skip estimating tropospheric corrections..."
         )
     else:
-        out_dir = cfg.work_directory / cfg.correction_options._tropo_directory
+        out_dir = cfg.work_directory / cfg.correction_options._atm_directory
         stitched_ifg_dir = cfg.interferogram_network._directory / "stitched"
         ifg_filenames = sorted(Path(stitched_ifg_dir).glob("*.int"))
         grouped_slc_files = group_by_date(cfg.cslc_file_list)

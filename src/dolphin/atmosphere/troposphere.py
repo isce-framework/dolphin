@@ -5,11 +5,10 @@ import os
 from dataclasses import dataclass
 from os import fspath
 from pathlib import Path
-from typing import Literal, Optional, Union
+from typing import Optional
 
 import numpy as np
 import opera_utils as oput
-import pyaps3 as pa
 from osgeo import gdal
 from pyproj import CRS
 from scipy.interpolate import RegularGridInterpolator
@@ -17,10 +16,9 @@ from scipy.interpolate import RegularGridInterpolator
 from dolphin import io, stitching
 from dolphin._dates import _format_date_pair, get_dates
 from dolphin._log import get_log
-from dolphin._types import Bbox, Filename
+from dolphin._types import Bbox, Filename, TropoModel, TropoType
 
 logger = get_log(__name__)
-
 
 ###########
 
@@ -39,10 +37,8 @@ class DelayParams:
         epsg (int): EPSG code for the coordinate reference system.
         geotransform (list[float]): Geotransformation parameters.
         wavelength (float): Radar wavelength.
-        tropo_model (Union[str, Literal["ERA5", "HRES", "ERAINT", "ERAI", "MERRA", "NARR", "HRRR", "GMAO"]]):
-            Tropospheric model.
-        delay_type (Union[str, Literal["wet", "dry", "hydrostatic", "comb"]]):
-            Type of tropospheric delay.
+        tropo_model (str): Tropospheric model.
+        delay_type (str): Type of tropospheric delay.
         reference_file (List[Filename]): List of reference files.
         secondary_file (List[Filename]): List of secondary files.
         interferogram (str): Interferogram identifier.
@@ -60,10 +56,8 @@ class DelayParams:
     epsg: int
     geotransform: list[float]
     wavelength: float
-    tropo_model: Union[
-        str, Literal["ERA5", "HRES", "ERAINT", "ERAI", "MERRA", "NARR", "HRRR", "GMAO"]
-    ]
-    delay_type: Union[str, Literal["wet", "dry", "hydrostatic", "comb"]]
+    tropo_model: str
+    delay_type: str
     reference_file: list[Filename]
     secondary_file: list[Filename]
     interferogram: str
@@ -80,8 +74,8 @@ def estimate_tropospheric_delay(
     dem_file: Optional[Path],
     output_dir: Path,
     tropo_package: str,
-    tropo_model: str,
-    tropo_delay_type: str,
+    tropo_model: TropoModel,
+    tropo_delay_type: TropoType,
     strides: dict[str, int] = {"x": 1, "y": 1},
 ):
     """Estimate the tropospheric delay corrections for each interferogram.
@@ -102,9 +96,9 @@ def estimate_tropospheric_delay(
         Output directory.
     tropo_package : str
         Troposphere processing package ('pyaps' or 'raider').
-    tropo_model : str
+    tropo_model : TropoModel
         Tropospheric model (ERA5, HRES, ...).
-    tropo_delay_type : str
+    tropo_delay_type : TropoType
         Tropospheric delay type ('wet', 'hydrostatic', 'comb').
     strides : Dict[str, int], optional
         Strides for resampling, by default {"x": 1, "y": 1}.
@@ -119,7 +113,7 @@ def estimate_tropospheric_delay(
 
     # prepare geometry data
     logger.info("Prepare geometry files...")
-    geometry_dir = output_dir / "../../geometry"
+    geometry_dir = output_dir / "geometry"
     geometry_files = prepare_geometry(
         geometry_dir=geometry_dir,
         geo_files=geom_files,
@@ -138,26 +132,27 @@ def estimate_tropospheric_delay(
     if tropo_package.lower() == "pyaps":
         tropo_run = compute_pyaps
     else:
-        tropo_run = comput_raider
+        tropo_run = compute_raider
 
     # comb is short for the summation of wet and dry components
-    if tropo_delay_type in ["wet", "hydrostatic", "comb"]:
-        if (tropo_delay_type == "hydrostatic") and (tropo_package == "raider"):
-            delay_type = "hydro"
-        elif (tropo_delay_type == "hydrostatic") and (tropo_package == "pyaps"):
-            delay_type = "dry"
-        else:
-            delay_type = tropo_delay_type
+    if (tropo_delay_type.value == "hydrostatic") and (tropo_package == "raider"):
+        delay_type = "hydro"
+    elif (tropo_delay_type.value == "hydrostatic") and (tropo_package == "pyaps"):
+        delay_type = "dry"
+    else:
+        delay_type = tropo_delay_type.value
 
+    output_tropo = output_dir / "troposphere"
+    output_tropo.mkdir(exist_ok=True)
     for ifg in ifg_file_list:
         ref_date, sec_date = get_dates(ifg)
 
         tropo_delay_product_name = (
-            fspath(output_dir)
-            + f"/{_format_date_pair(ref_date, sec_date)}_tropoDelay_pyaps_{tropo_model}_LOS_{delay_type}.tif"
+            fspath(output_tropo)
+            + f"/{_format_date_pair(ref_date, sec_date)}_tropoDelay_pyaps_{tropo_model.value}_LOS_{delay_type}.tif"
         )
 
-        if os.path.exists(tropo_delay_product_name):
+        if Path(tropo_delay_product_name).exists():
             logger.info(
                 f"Tropospheric correction for interferogram {_format_date_pair(ref_date, sec_date)} already exists, skipping"
             )
@@ -181,7 +176,7 @@ def estimate_tropospheric_delay(
             z_coordinates=tropo_height_levels,
             bounds=oput.get_snwe(epsg, out_bounds),
             epsg=epsg,
-            tropo_model=tropo_model,
+            tropo_model=tropo_model.value,
             delay_type=delay_type,
             wavelength=wavelength,
             shape=(ysize, xsize),
@@ -240,7 +235,7 @@ def prepare_geometry(
     Dict[str, Path]
         Dictionary of prepared geometry files.
     """
-    os.makedirs(geometry_dir, exist_ok=True)
+    geometry_dir.mkdir(exist_ok=True)
 
     stitched_geo_list = {}
 
@@ -298,6 +293,8 @@ def compute_pyaps(delay_parameters: DelayParams) -> np.ndarray:
     np.ndarray
        tropospheric delay datacube.
     """
+    import pyaps3 as pa
+
     # X and y for the entire datacube
     y_2d, x_2d = np.meshgrid(
         delay_parameters.y_coordinates, delay_parameters.x_coordinates, indexing="ij"
@@ -364,7 +361,7 @@ def compute_pyaps(delay_parameters: DelayParams) -> np.ndarray:
     return tropo_delay_datacube_masked
 
 
-def comput_raider(delay_parameters: DelayParams) -> np.ndarray:
+def compute_raider(delay_parameters: DelayParams) -> np.ndarray:
     """Compute tropospheric delay datacube using RAiDER.
 
     Parameters
@@ -429,7 +426,7 @@ def comput_raider(delay_parameters: DelayParams) -> np.ndarray:
     # Convert it to radians units
     tropo_delay_datacube = -tropo_delay * 4.0 * np.pi / delay_parameters.wavelength
 
-    # Create a maksed datacube that excludes the NaN values
+    # Create a masksed datacube that excludes the NaN values
     tropo_delay_datacube_masked = np.ma.masked_invalid(tropo_delay_datacube)
 
     # Interpolate to radar grid to keep its dimension consistent with other datacubes
