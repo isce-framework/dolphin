@@ -165,7 +165,7 @@ def estimate_tropospheric_delay(
             reference_date not in troposphere_files.keys()
             or secondary_date not in troposphere_files.keys()
         ):
-            logger.warn(
+            logger.warning(
                 f"Weather-model files do not exist for interferogram {_format_date_pair(ref_date, sec_date)}, skipping"
             )
             continue
