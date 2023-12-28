@@ -1,8 +1,40 @@
 from typing import Sequence
 
+import jax
+import jax.numpy as jnp
 import numpy as np
+from numpy.typing import ArrayLike
 
 from dolphin.utils import flatten
+
+
+@jax.jit
+def solve(
+    A: ArrayLike,
+    dphi: np.ndarray,
+) -> jax.Array:
+    """Solve the SBAS problem for a list of ifg pairs and phase differences.
+
+    Parameters
+    ----------
+    ifg_pairs : Sequence[tuple[int, int]]
+        List of ifg pairs representated as tuples of (index 1, index 2)
+    dphi : np.array 1D
+        The phase differences between the ifg pairs
+
+    Returns
+    -------
+    phi : np.array 1D
+        The estimated phase for each SAR acquisition
+    """
+    phi = jnp.linalg.lstsq(A, dphi, rcond=None)[0]
+    # Add 0 for the reference date to the front
+    return jnp.concatenate([jnp.array([0]), phi])
+
+
+# Vectorize the solve function to work on 2D and 3D arrays
+solve_2d = jax.vmap(solve, in_axes=(None, 1), out_axes=1)
+solve_3d = jax.vmap(solve_2d, in_axes=(None, 2), out_axes=2)
 
 
 def get_incidence_matrix(ifg_pairs: Sequence[tuple[int, int]]) -> np.ndarray:
@@ -38,41 +70,3 @@ def get_incidence_matrix(ifg_pairs: Sequence[tuple[int, int]]) -> np.ndarray:
             A[i, date_to_col[later]] = +1
 
     return A
-
-
-def build_B_matrix(ifg_pairs: Sequence[tuple[int, int]]) -> np.ndarray:
-    """Build the SBAS B (velocity coeff) matrix.
-
-    Parameters
-    ----------
-    ifg_pairs : Sequence[tuple[int, int]]
-        List of ifg pairs representated as tuples of (index 1, index 2)
-
-    Returns
-    -------
-    B : np.array 2D
-        2D array of the velocity coefficient matrix from the SBAS paper:
-                Bv = dphi
-        Each row corresponds to an ifg, each column to a SAR date
-        value will be t_k+1 - t_k for columns after the -1 in A,
-        up to and including the +1 entry
-    """
-    sar_dates = sorted(set(flatten(ifg_pairs)))
-    A = get_incidence_matrix(ifg_pairs)
-    B = np.zeros_like(A)
-    timediffs = np.diff(sar_dates)
-
-    for j, row in enumerate(A):
-        # if no -1 entry, start at index 0. Otherwise, add 1 to exclude the -1 index
-        start_idx = 0
-        for idx, item in enumerate(row):
-            if item == -1:
-                start_idx = idx + 1
-            elif item == 1:
-                end_idx = idx + 1
-
-        # Now only fill in the time diffs in the range from the early ifg index
-        # to the later ifg index
-        B[j][start_idx:end_idx] = timediffs[start_idx:end_idx]
-
-    return B
