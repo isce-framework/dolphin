@@ -35,6 +35,7 @@ def create_config(
     no_gpu: bool = False,
     ntiles: tuple[int, int] = (1, 1),
     downsample_factor: tuple[int, int] = (1, 1),
+    no_unwrap: bool = False,
     n_parallel_unwrap: int = 1,
     unwrap_method: UnwrapMethod = UnwrapMethod.SNAPHU,
     troposphere_files: list[str] = [],
@@ -83,6 +84,7 @@ def create_config(
             ntiles=ntiles,
             downsample_factor=downsample_factor,
             n_parallel_jobs=n_parallel_unwrap,
+            run_unwrap=not no_unwrap,
         ),
         correction_options=dict(
             troposphere_files=troposphere_files,
@@ -208,6 +210,9 @@ def get_parser(subparser=None, subcommand_name="run"):
 
     # Unwrap options
     unwrap_group = parser.add_argument_group("Unwrap options")
+    unwrap_group.add_argument(
+        "--no-unwrap", action="store_true", help="Skip running the unwrapping step."
+    )
     unwrap_group.add_argument(
         "--unwrap-method",
         choices=[m.value for m in UnwrapMethod],
