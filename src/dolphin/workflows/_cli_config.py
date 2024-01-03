@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Optional, Union
 
 from dolphin._types import TropoModel, TropoType
+
 from .config import (
     DisplacementWorkflow,
     InterferogramNetworkType,
@@ -41,8 +42,8 @@ def create_config(
     troposphere_files: list[str] = [],
     tropo_date_fmt: str = "%Y%m%d",
     tropo_package: str = "pyaps",
-    tropo_model: str = "ERA5",
-    tropo_delay_type: str = "comb",
+    tropo_model: TropoModel = TropoModel.ERA5,
+    tropo_delay_type: TropoType = TropoType.COMB,
     ionosphere_files: list[str] = [],
     geometry_files: list[str] = [],
     dem_file: Optional[str] = None,
@@ -271,13 +272,18 @@ def get_parser(subparser=None, subcommand_name="run"):
     )
     correction_group.add_argument(
         "--tropo-model",
-        default="ERA5",
-        help="source of the atmospheric model. Choices are: ERA5, ERAI, MERRA2, NARR, HRRR, GMAO, HRES",
+        "--tropo-model",
+        default=TropoModel.ERA5.value,
+        choices=[t.value for t in TropoType],
+        type=TropoModel,
+        help="source of the atmospheric model.",
     )
     correction_group.add_argument(
         "--tropo-delay_type",
-        default="comb",
-        help="Tropospheric delay type to calculate, comb contains both wet and dry delays, Choices are: wet, dry, comb.",
+        default=TropoType.COMB.value,
+        type=TropoType,
+        help="Tropospheric delay type to calculate, comb contains both wet and dry delays",
+        choices=[t.value for t in TropoType],
     )
     correction_group.add_argument(
         "--ionosphere-files",
