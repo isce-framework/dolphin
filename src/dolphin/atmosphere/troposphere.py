@@ -246,7 +246,7 @@ def prepare_geometry(
 
     for ds_name in datasets:
         outfile = geometry_dir / f"{ds_name}.tif"
-        print(f"Creating {outfile}")
+        logger.info(f"Creating {outfile}")
         stitched_geo_list[ds_name] = outfile
         ds_path = f"/data/{ds_name}"
         cur_files = [io.format_nc_filename(f, ds_name=ds_path) for f in geo_files]
@@ -270,8 +270,8 @@ def prepare_geometry(
     if dem_file:
         height_file = geometry_dir / "height.tif"
         stitched_geo_list["height"] = height_file
-        if not os.path.exists(height_file):
-            print(f"Creating {height_file}")
+        if not height_file.exists():
+            logger.info(f"Creating {height_file}")
             stitching.warp_to_match(
                 input_file=dem_file,
                 match_file=matching_file,
@@ -309,7 +309,7 @@ def compute_pyaps(delay_parameters: DelayParams) -> np.ndarray:
 
     tropo_delay_datacube_list = []
 
-    for indx, hgt in enumerate(delay_parameters.z_coordinates):
+    for hgt in delay_parameters.z_coordinates:
         dem_datacube = np.full(lat_datacube.shape, hgt)
 
         # Delay for the reference image
@@ -470,8 +470,8 @@ def compute_2d_delay(
 
     Returns
     -------
-    dict
-        Dictionary containing computed 2D delay.
+    np.ndarray
+        Computed 2D delay.
     """
     dem_file = geo_files["height"]
 
