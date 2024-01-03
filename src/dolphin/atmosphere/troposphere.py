@@ -27,45 +27,52 @@ __all__ = ["estimate_tropospheric_delay"]
 
 @dataclass
 class DelayParams:
-    """Parameters for estimating tropospheric delay corrections.
-
-    Attributes
-    ----------
-        x_coordinates (np.ndarray): X coordinates.
-        y_coordinates (np.ndarray): Y coordinates.
-        z_coordinates (np.ndarray): Z coordinates.
-        bounds (Bbox): Bounding box.
-        shape (tuple[int, int]): Shape of the data.
-        epsg (int): EPSG code for the coordinate reference system.
-        geotransform (list[float]): Geotransformation parameters.
-        wavelength (float): Radar wavelength.
-        tropo_model (str): Tropospheric model.
-        delay_type (str): Type of tropospheric delay.
-        reference_file (List[Filename]): List of reference files.
-        secondary_file (List[Filename]): List of secondary files.
-        interferogram (str): Interferogram identifier.
-        reference_time (datetime.datetime): Reference time.
-        secondary_time (datetime.datetime): Secondary time.
-        delay_datacube (Optional[np.ndarray]): Optional delay data cube.
-
-    """
+    """Parameters for estimating tropospheric delay corrections."""
 
     x_coordinates: np.ndarray
+    """Array of X coordinates."""
+
     y_coordinates: np.ndarray
+    """Array of Y coordinates."""
+
     z_coordinates: np.ndarray
+    """Array of Z coordinates."""
+
     bounds: Bbox
+    """ Bounding box of the data."""
+
     shape: tuple[int, int]
+    """Shape of the data, specified as a tuple of two integers."""
+
     epsg: int
+    """EPSG code for the coordinate reference system."""
+
     geotransform: list[float]
+    """Sequence of geotransformation parameters."""
+
     wavelength: float
+    """Radar wavelength."""
+
     tropo_model: str
+    """Model used for tropospheric correction."""
+
     delay_type: str
+    """Type of tropospheric delay."""
+
     reference_file: list[Filename]
+    """Sequence of filenames used as reference files."""
+
     secondary_file: list[Filename]
+    """Sequence of filenames used as secondary files."""
+
     interferogram: str
+    """Identifier for the interferogram."""
+
     reference_time: datetime.datetime
+    """The reference image time."""
+
     secondary_time: datetime.datetime
-    delay_datacube: Optional[np.ndarray] = None
+    """The secondary image time."""
 
 
 def estimate_tropospheric_delay(
@@ -190,9 +197,11 @@ def estimate_tropospheric_delay(
             interferogram=_format_date_pair(ref_date, sec_date),
         )
 
-        delay_parameters.delay_datacube = tropo_run(delay_parameters)
+        delay_datacube = tropo_run(delay_parameters)
 
-        tropo_delay_2d = compute_2d_delay(delay_parameters, geometry_files)
+        tropo_delay_2d = compute_2d_delay(
+            delay_parameters, delay_datacube, geometry_files
+        )
 
         # Write 2D tropospheric correction layer to disc
         io.write_arr(
@@ -456,7 +465,9 @@ def compute_raider(delay_parameters: DelayParams) -> np.ndarray:
 
 
 def compute_2d_delay(
-    delay_parameters: DelayParams, geo_files: dict[str, Path]
+    delay_parameters: DelayParams,
+    delay_datacube: np.ndarray,
+    geo_files: dict[str, Path],
 ) -> np.ndarray:
     """Compute 2D delay.
 
@@ -464,6 +475,9 @@ def compute_2d_delay(
     ----------
     delay_parameters : DelayParams
         dataclass containing tropospheric delay data.
+
+    delay_datacube : np.ndarray
+        delay datacube for the x,y,z coordinates in delay_parameters
 
     geo_files : dict[str, Path]
         Dictionary containing paths to geospatial files.
@@ -530,7 +544,7 @@ def compute_2d_delay(
             delay_parameters.y_coordinates,
             delay_parameters.x_coordinates,
         ),
-        delay_parameters.delay_datacube,
+        delay_datacube,
         method="linear",
         bounds_error=False,
     )
