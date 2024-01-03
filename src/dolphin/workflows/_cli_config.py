@@ -272,9 +272,8 @@ def get_parser(subparser=None, subcommand_name="run"):
     )
     correction_group.add_argument(
         "--tropo-model",
-        "--tropo-model",
         default=TropoModel.ERA5.value,
-        choices=[t.value for t in TropoType],
+        choices=[t.value for t in TropoModel],
         type=TropoModel,
         help="source of the atmospheric model.",
     )
