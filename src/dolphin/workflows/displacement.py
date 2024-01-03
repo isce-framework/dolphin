@@ -178,7 +178,7 @@ def run(
     # ##############################################
 
     if cfg.correction_options.dem_file is None:
-        logger.warn(
+        logger.warning(
             "DEM file is not given, skip estimating tropospheric corrections..."
         )
     else:
