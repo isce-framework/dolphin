@@ -355,10 +355,10 @@ def compute_pyaps(delay_parameters: DelayParams) -> np.ndarray:
             -(phs_ref - phs_second) * 4.0 * np.pi / delay_parameters.wavelength
         )
 
-        # Tropo delay datacube
-        tropo_delay_datacube = np.stack(tropo_delay_datacube_list)
-        # Create a maksed datacube that excludes the NaN values
-        tropo_delay_datacube_masked = np.ma.masked_invalid(tropo_delay_datacube)
+    # Tropo delay datacube
+    tropo_delay_datacube = np.stack(tropo_delay_datacube_list)
+    # Create a maksed datacube that excludes the NaN values
+    tropo_delay_datacube_masked = np.ma.masked_invalid(tropo_delay_datacube)
 
     return tropo_delay_datacube_masked
 

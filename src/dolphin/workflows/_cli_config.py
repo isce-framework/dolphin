@@ -7,6 +7,7 @@ from multiprocessing import cpu_count
 from pathlib import Path
 from typing import Optional, Union
 
+from dolphin._types import TropoModel, TropoType
 from .config import (
     DisplacementWorkflow,
     InterferogramNetworkType,
