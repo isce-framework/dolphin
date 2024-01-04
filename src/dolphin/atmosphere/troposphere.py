@@ -437,7 +437,7 @@ def compute_raider(delay_parameters: DelayParams) -> np.ndarray:
     # Convert it to radians units
     tropo_delay_datacube = -tropo_delay * 4.0 * np.pi / delay_parameters.wavelength
 
-    # Create a masksed datacube that excludes the NaN values
+    # Create a masked datacube that excludes the NaN values
     tropo_delay_datacube_masked = np.ma.masked_invalid(tropo_delay_datacube)
 
     # Interpolate to radar grid to keep its dimension consistent with other datacubes
