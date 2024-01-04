@@ -183,7 +183,7 @@ def run(
         )
     else:
         out_dir = cfg.work_directory / cfg.correction_options._atm_directory
-        stitched_ifg_dir = cfg.interferogram_network._directory / "stitched"
+        stitched_ifg_dir = cfg.interferogram_network._directory
         ifg_filenames = sorted(Path(stitched_ifg_dir).glob("*.int"))
         grouped_slc_files = group_by_date(cfg.cslc_file_list)
         estimate_tropospheric_delay(
