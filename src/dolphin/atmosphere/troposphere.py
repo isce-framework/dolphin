@@ -38,8 +38,8 @@ class DelayParams:
     z_coordinates: np.ndarray
     """Array of Z coordinates."""
 
-    bounds: Bbox
-    """ Bounding box of the data."""
+    SNWE: Bbox
+    """ Bounding box of the data in SNWE format of RAiDER/PYAPS."""
 
     shape: tuple[int, int]
     """Shape of the data, specified as a tuple of two integers."""
@@ -183,7 +183,7 @@ def estimate_tropospheric_delay(
             x_coordinates=xcoord,
             y_coordinates=ycoord,
             z_coordinates=tropo_height_levels,
-            bounds=oput.get_snwe(epsg, out_bounds),
+            SNWE=oput.get_snwe(epsg, out_bounds),
             epsg=epsg,
             tropo_model=tropo_model.value,
             delay_type=delay_type,
@@ -335,10 +335,7 @@ def compute_pyaps(delay_parameters: DelayParams) -> np.ndarray:
             Del=delay_parameters.delay_type,
         )
 
-        phs_ref = np.zeros(
-            (ref_aps_estimator.ny, ref_aps_estimator.nx), dtype=np.float32
-        )
-        ref_aps_estimator.getdelay(phs_ref)
+        phs_ref = ref_aps_estimator.getdelay()
 
         # Delay for the secondary image
         second_aps_estimator = pa.PyAPS(
@@ -354,10 +351,7 @@ def compute_pyaps(delay_parameters: DelayParams) -> np.ndarray:
             Del=delay_parameters.delay_type,
         )
 
-        phs_second = np.zeros(
-            (second_aps_estimator.ny, second_aps_estimator.nx), dtype=np.float32
-        )
-        second_aps_estimator.getdelay(phs_second)
+        phs_second = second_aps_estimator.getdelay()
 
         # Convert the delay in meters to radians
         tropo_delay_datacube_list.append(
@@ -392,7 +386,7 @@ def compute_raider(delay_parameters: DelayParams) -> np.ndarray:
     reference_weather_model_file = delay_parameters.reference_file
     secondary_weather_model_file = delay_parameters.secondary_file
 
-    aoi = BoundingBox(delay_parameters.bounds)
+    aoi = BoundingBox(delay_parameters.SNWE)
     aoi.xpts = delay_parameters.x_coordinates
     aoi.ypts = delay_parameters.y_coordinates
 
