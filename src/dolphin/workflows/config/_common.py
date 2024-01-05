@@ -16,6 +16,7 @@ from pydantic import (
 
 from dolphin import __version__ as _dolphin_version
 from dolphin._log import get_log
+from dolphin._types import Bbox
 from dolphin.io import DEFAULT_HDF5_OPTIONS, DEFAULT_TIFF_OPTIONS
 from dolphin.utils import get_cpu_count
 
@@ -293,6 +294,12 @@ class OutputOptions(BaseModel, extra="forbid"):
     )
 
     # validators
+    @field_validator("bounds", mode="after")
+    @classmethod
+    def _convert_bbox(cls, bounds):
+        if bounds:
+            return Bbox(*bounds)
+        return bounds
 
     @field_validator("strides")
     @classmethod
