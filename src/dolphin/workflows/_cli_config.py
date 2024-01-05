@@ -7,6 +7,8 @@ from multiprocessing import cpu_count
 from pathlib import Path
 from typing import Optional, Union
 
+from dolphin._types import TropoModel, TropoType
+
 from .config import (
     DisplacementWorkflow,
     InterferogramNetworkType,
@@ -39,6 +41,10 @@ def create_config(
     n_parallel_unwrap: int = 1,
     unwrap_method: UnwrapMethod = UnwrapMethod.SNAPHU,
     troposphere_files: list[str] = [],
+    tropo_date_fmt: str = "%Y%m%d",
+    tropo_package: str = "pyaps",
+    tropo_model: TropoModel = TropoModel.ERA5,
+    tropo_delay_type: TropoType = TropoType.COMB,
     ionosphere_files: list[str] = [],
     geometry_files: list[str] = [],
     dem_file: Optional[str] = None,
@@ -88,6 +94,10 @@ def create_config(
         ),
         correction_options=dict(
             troposphere_files=troposphere_files,
+            tropo_date_fmt=tropo_date_fmt,
+            tropo_package=tropo_package,
+            tropo_model=tropo_model,
+            tropo_delay_type=tropo_delay_type,
             ionosphere_files=ionosphere_files,
             geometry_files=geometry_files,
             dem_file=dem_file,
@@ -254,6 +264,30 @@ def get_parser(subparser=None, subcommand_name="run"):
         "--troposphere-files",
         nargs=argparse.ZERO_OR_MORE,
         help="List the paths of all troposphere files to include.",
+    )
+    correction_group.add_argument(
+        "--tropo-date-fmt",
+        default="%Y%m%d",
+        help="Format of dates contained in weather-model filenames.",
+    )
+    correction_group.add_argument(
+        "--tropo-package",
+        default="pyaps",
+        help="Package to use for tropospheric correction. Choices are: pyaps, raider.",
+    )
+    correction_group.add_argument(
+        "--tropo-model",
+        default=TropoModel.ERA5.value,
+        choices=[t.value for t in TropoModel],
+        type=TropoModel,
+        help="source of the atmospheric model.",
+    )
+    correction_group.add_argument(
+        "--tropo-delay_type",
+        default=TropoType.COMB.value,
+        type=TropoType,
+        help="Tropospheric delay type to calculate, comb contains both wet and dry delays",
+        choices=[t.value for t in TropoType],
     )
     correction_group.add_argument(
         "--ionosphere-files",
