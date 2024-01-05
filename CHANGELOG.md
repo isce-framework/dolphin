@@ -3,6 +3,8 @@
 **Added**
 - Ability to unwrap interferorgams with the [`snaphu-py`](https://github.com/isce-framework/snaphu-py) (not a required dependency)
 - Added ability to make annual ifgs in `Network`
+- Start of tropospheric corection support in `dolphin.atmosphere` using PyAPS and Raider packages
+- Expose the unwrap skipping with `dolphin config --no-unwrap`
 
 **Changed**
 - The output directory for interferograms is now just "interferograms/" instead of "interferograms/stiched"
