@@ -76,6 +76,12 @@ class CorrectionOptions(BaseModel, extra="forbid"):
             " Source is https://cddis.nasa.gov/archive/gnss/products/ionex/"
         ),
     )
+
+    iono_date_fmt: str = Field(
+        "%j0.%y",
+        description="Format of dates contained in weather-model filenames",
+    )
+
     geometry_files: List[Path] = Field(
         default_factory=list,
         description=(

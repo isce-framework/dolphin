@@ -520,7 +520,7 @@ def compute_2d_delay(
 
     los_east = io.load_gdal(geo_files["los_east"])
     los_north = io.load_gdal(geo_files["los_north"])
-    los_up = 1 - los_east**2 - los_north**2
+    los_up = np.sqrt(1 - los_east**2 - los_north**2)
 
     mask = los_east > 0
 

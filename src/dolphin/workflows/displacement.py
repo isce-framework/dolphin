@@ -12,7 +12,7 @@ from opera_utils import group_by_burst, group_by_date
 from dolphin import __version__
 from dolphin._background import DummyProcessPoolExecutor
 from dolphin._log import get_log, log_runtime
-from dolphin.atmosphere import estimate_tropospheric_delay
+from dolphin.atmosphere import estimate_ionospheric_delay, estimate_tropospheric_delay
 from dolphin.utils import get_max_memory_usage, set_num_threads
 
 from . import stitching_bursts, unwrapping, wrapped_phase
@@ -68,6 +68,14 @@ def run(
         )
     else:
         grouped_tropo_files = None
+
+    if len(cfg.correction_options.ionosphere_files) > 0:
+        grouped_iono_files = group_by_date(
+            cfg.correction_options.ionosphere_files,
+            file_date_fmt=cfg.correction_options.iono_date_fmt,
+        )
+    else:
+        grouped_iono_files = None
 
     # ######################################
     # 1. Burst-wise Wrapped phase estimation
@@ -177,15 +185,18 @@ def run(
     # 4. Estimate corrections for each interferogram
     # ##############################################
 
+    stitched_ifg_dir = cfg.interferogram_network._directory
+    ifg_filenames = sorted(Path(stitched_ifg_dir).glob("*.int"))
+    out_dir = cfg.work_directory / cfg.correction_options._atm_directory
+    out_dir.mkdir(exist_ok=True)
+    grouped_slc_files = group_by_date(cfg.cslc_file_list)
+
+    # Troposphere
     if cfg.correction_options.dem_file is None:
         logger.warning(
             "DEM file is not given, skip estimating tropospheric corrections..."
         )
     else:
-        out_dir = cfg.work_directory / cfg.correction_options._atm_directory
-        stitched_ifg_dir = cfg.interferogram_network._directory / "stitched"
-        ifg_filenames = sorted(Path(stitched_ifg_dir).glob("*.int"))
-        grouped_slc_files = group_by_date(cfg.cslc_file_list)
         estimate_tropospheric_delay(
             ifg_file_list=ifg_filenames,
             troposphere_files=grouped_tropo_files,
@@ -198,6 +209,16 @@ def run(
             tropo_delay_type=cfg.correction_options.tropo_delay_type,
             strides=cfg.output_options.strides,
         )
+
+    # Ionosphere
+    estimate_ionospheric_delay(
+        ifg_file_list=ifg_filenames,
+        slc_files=grouped_slc_files,
+        tec_files=grouped_iono_files,
+        geom_files=cfg.correction_options.geometry_files,
+        output_dir=out_dir,
+        strides=cfg.output_options.strides,
+    )
 
     # Print the maximum memory usage for each worker
     _print_summary(cfg)
