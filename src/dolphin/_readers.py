@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import mmap
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 from os import fspath
 from pathlib import Path
 from typing import Generator, Optional, Protocol, Sequence, runtime_checkable
@@ -17,69 +20,173 @@ __all__ = ["VRTStack"]
 
 
 @runtime_checkable
-class InputDataset(Protocol):
+class DatasetReader(Protocol):
     """An array-like interface for reading input datasets.
 
-    `InputDataset` defines the abstract interface that types must conform to in order
+    `DatasetReader` defines the abstract interface that types must conform to in order
     to be valid inputs to the ``snaphu.unwrap()`` function. Such objects must export
     NumPy-like `dtype`, `shape`, and `ndim` attributes and must support NumPy-style
     slice-based indexing.
 
     Note that this protol allows objects to be passed to `dask.array.from_array`
     which needs `.shape`, `.ndim`, `.dtype` and support numpy-style slicing.
-
-    See Also
-    --------
-    OutputDataset
     """
 
-    @property
-    def dtype(self) -> np.dtype:
-        """numpy.dtype : Data-type of the array's elements."""  # noqa: D403
+    dtype: np.dtype
+    """numpy.dtype : Data-type of the array's elements."""
 
-    @property
-    def shape(self) -> tuple[int, ...]:
-        """tuple of int : Tuple of array dimensions."""  # noqa: D403
+    shape: tuple[int, ...]
+    """tuple of int : Tuple of array dimensions."""
 
-    @property
-    def ndim(self) -> int:
-        """int : Number of array dimensions."""  # noqa: D403
+    ndim: int
+    """int : Number of array dimensions."""
 
-    def __getitem__(self, key: slice | tuple[slice, ...], /) -> ArrayLike:
+    def __getitem__(self, key: tuple[slice, ...], /) -> ArrayLike:
         """Read a block of data."""
+        ...
 
 
-@runtime_checkable
-class OutputDataset(Protocol):
-    """An array-like interface for writing output datasets.
+def _test_mm(filepath, shape, dtype):
+    with Path(filepath).open("rb") as f:
+        with mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ) as mm:
+            return np.frombuffer(mm, dtype=dtype).reshape(shape).shape
 
-    `OutputDataset` defines the abstract interface that types must conform to in order
-    to be valid outputs of the ``snaphu.unwrap()`` function. Such objects must export
-    NumPy-like `dtype`, `shape`, and `ndim` attributes and must support NumPy-style
-    slice-based indexing.
+
+@dataclass
+class BinaryFile(DatasetReader):
+    """A flat binary file for storing array data.
 
     See Also
     --------
-    InputDataset
+    HDF5Dataset
+    RasterBand
+
+    Notes
+    -----
+    This class does not store an open file object. Instead, the file is opened on-demand
+    for reading or writing and closed immediately after each read/write operation. This
+    allows multiple spawned processes to write to the file in coordination (as long as a
+    suitable mutex is used to guard file access.)
     """
 
-    @property
-    def dtype(self) -> np.dtype:
-        """numpy.dtype : Data-type of the array's elements."""  # noqa: D403
+    filepath: Path
+    """pathlib.Path : The file path."""
+
+    shape: tuple[int, ...]
+    dtype: np.dtype
+
+    def __post_init__(self):
+        self.filepath = Path(self.filepath)
+        if not self.filepath.exists():
+            raise FileNotFoundError(f"File {self.filepath} does not exist.")
+        self.dtype = np.dtype(self.dtype)
+        self.filepath = Path(self.filepath)
 
     @property
-    def shape(self) -> tuple[int, ...]:
-        """tuple of int : Tuple of array dimensions."""  # noqa: D403
-
-    @property
-    def ndim(self) -> int:
+    def ndim(self) -> int:  # type: ignore[override]
         """int : Number of array dimensions."""  # noqa: D403
+        return len(self.shape)
 
-    def __setitem__(self, key: slice | tuple[slice, ...], value: np.ndarray, /) -> None:
-        """Write a block of data."""
+    def __getitem__(self, key: tuple[slice, ...], /) -> np.ndarray:
+        with self.filepath.open("rb") as f:
+            # Memory-map the entire file.
+            with mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ) as mm:
+                # In order to safely close the memory-map, there can't be any dangling
+                # references to it, so we return a copy (not a view) of the requested
+                # data and decref the array object.
+                arr = np.frombuffer(mm, dtype=self.dtype).reshape(self.shape)
+                data = arr[key].copy()
+                del arr
+            return data
+
+    def __array__(self) -> np.ndarray:
+        return self[:,]
+
+    @classmethod
+    def from_gdal(cls, filename: Filename, band: int = 1) -> BinaryFile:
+        """Create a BinaryFile from a GDAL-readable file.
+
+        Parameters
+        ----------
+        filename : Filename
+            Path to the file to read.
+        band : int, optional
+            Band to read from the file, by default 1
+
+        Returns
+        -------
+        BinaryFile
+            The BinaryFile object.
+        """
+        import rasterio as rio
+
+        with rio.open(filename) as src:
+            dtype = src.dtypes[band - 1]
+            shape = src.shape
+        return cls(Path(filename), shape=shape, dtype=dtype)
 
 
-class VRTStack(InputDataset):
+@dataclass
+class BinaryStack(DatasetReader):
+    """A stack of binary files.
+
+    Parameters
+    ----------
+    file_list : list[Filename]
+        List of paths to files to read.
+    shape : tuple[int, int]
+        Shape of each file.
+    dtype : np.dtype
+        Data type of each file.
+    keep_open : bool, optional
+        Keep the files open for reading, by default False
+    """
+
+    file_list: Sequence[Filename]
+    shape_2d: tuple[int, int]
+    dtype: np.dtype
+    num_threads: int = 1
+
+    def __post_init__(self):
+        self.readers = [
+            BinaryFile(
+                f, shape=self.shape_2d, dtype=self.dtype, keep_open=self.keep_open
+            )
+            for f in self.file_list
+        ]
+
+    def __getitem__(self, key: tuple[slice, ...], /) -> np.ndarray:
+        # Check that it's a tuple of slices
+        if not (isinstance(key, tuple) and len(key) == 3):
+            raise TypeError("Index must be a tuple of 3 slices.")
+        # unpack the slices
+        bands, rows, cols = key
+        if isinstance(bands, slice):
+            # convert the bands to 0-indexed list
+            band_idxs = list(range(*bands.indices(len(self))))
+        elif isinstance(bands, int):
+            band_idxs = [bands]
+        else:
+            raise ValueError("Band index must be an integer or slice.")
+
+        # Get only the bands we need
+        if self.num_threads == 1:
+            return np.stack([self.readers[i][rows, cols] for i in band_idxs], axis=0)
+        else:
+            # test read 1
+            with ThreadPoolExecutor(max_workers=self.num_threads) as executor:
+                results = executor.map(lambda i: self.readers[i][rows, cols], band_idxs)
+            return np.stack(list(results), axis=0)
+
+    def __len__(self):
+        return len(self.file_list)
+
+    @property
+    def shape(self):
+        return (len(self), *self.shape_2d)
+
+
+class VRTStack(DatasetReader):
     """Class for creating a virtual stack of raster files.
 
     Attributes
