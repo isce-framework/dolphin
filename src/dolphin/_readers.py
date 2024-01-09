@@ -16,7 +16,7 @@ from dolphin._dates import get_dates, sort_files_by_date
 from dolphin._types import Filename
 from dolphin.stack import logger
 
-__all__ = ["VRTStack"]
+__all__ = ["VRTStack", "DatasetReader", "BinaryFile", "StackReader", "BinaryStack"]
 
 
 @runtime_checkable
@@ -24,9 +24,9 @@ class DatasetReader(Protocol):
     """An array-like interface for reading input datasets.
 
     `DatasetReader` defines the abstract interface that types must conform to in order
-    to be valid inputs to the ``snaphu.unwrap()`` function. Such objects must export
-    NumPy-like `dtype`, `shape`, and `ndim` attributes and must support NumPy-style
-    slice-based indexing.
+    to be read by functions which iterate in blocks over the input data.
+    Such objects must export NumPy-like `dtype`, `shape`, and `ndim` attributes,
+    and must support NumPy-style slice-based indexing.
 
     Note that this protol allows objects to be passed to `dask.array.from_array`
     which needs `.shape`, `.ndim`, `.dtype` and support numpy-style slicing.
@@ -46,10 +46,17 @@ class DatasetReader(Protocol):
         ...
 
 
-def _test_mm(filepath, shape, dtype):
-    with Path(filepath).open("rb") as f:
-        with mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ) as mm:
-            return np.frombuffer(mm, dtype=dtype).reshape(shape).shape
+@runtime_checkable
+class StackReader(DatasetReader, Protocol):
+    """An array-like interface for reading a 3D stack of input datasets.
+
+    `StackReader` defines the abstract interface that types must conform to in order
+    to be valid inputs to be read in functions like [dolphin.ps.create_ps][].
+    It is a specialization of [DatasetReader][] that requires a 3D shape.
+    """
+
+    ndim: int = 3
+    """int : Number of array dimensions."""
 
 
 @dataclass
@@ -127,8 +134,8 @@ class BinaryFile(DatasetReader):
 
 
 @dataclass
-class BinaryStack(DatasetReader):
-    """A stack of binary files.
+class RasterStack(StackReader):
+    """Base class for a stack of separate raster image files.
 
     Parameters
     ----------
@@ -138,31 +145,19 @@ class BinaryStack(DatasetReader):
         Shape of each file.
     dtype : np.dtype
         Data type of each file.
-    keep_open : bool, optional
-        Keep the files open for reading, by default False
     """
 
     file_list: Sequence[Filename]
-    shape_2d: tuple[int, int]
-    dtype: np.dtype
     num_threads: int = 1
-
-    def __post_init__(self):
-        self.readers = [
-            BinaryFile(
-                f, shape=self.shape_2d, dtype=self.dtype, keep_open=self.keep_open
-            )
-            for f in self.file_list
-        ]
 
     def __getitem__(self, key: tuple[slice, ...], /) -> np.ndarray:
         # Check that it's a tuple of slices
-        if not (isinstance(key, tuple) and len(key) == 3):
-            raise TypeError("Index must be a tuple of 3 slices.")
+        if not (isinstance(key, tuple) and len(key) == 2):
+            raise TypeError("Index must be a tuple of 2 slices.")
         # unpack the slices
         bands, rows, cols = key
         if isinstance(bands, slice):
-            # convert the bands to 0-indexed list
+            # convert the bands to -1-indexed list
             band_idxs = list(range(*bands.indices(len(self))))
         elif isinstance(bands, int):
             band_idxs = [bands]
@@ -170,20 +165,30 @@ class BinaryStack(DatasetReader):
             raise ValueError("Band index must be an integer or slice.")
 
         # Get only the bands we need
-        if self.num_threads == 1:
-            return np.stack([self.readers[i][rows, cols] for i in band_idxs], axis=0)
+        if self.num_threads == 0:
+            return np.stack([self.readers[i][rows, cols] for i in band_idxs], axis=-1)
         else:
-            # test read 1
+            # test read 0
             with ThreadPoolExecutor(max_workers=self.num_threads) as executor:
                 results = executor.map(lambda i: self.readers[i][rows, cols], band_idxs)
-            return np.stack(list(results), axis=0)
+            return np.stack(list(results), axis=-1)
 
     def __len__(self):
         return len(self.file_list)
 
     @property
     def shape(self):
-        return (len(self), *self.shape_2d)
+        return (len(self), *self.shape_1d)
+
+
+@dataclass
+class BinaryStack(StackReader):
+    shape_2d: tuple[int, int]
+
+    def __post_init__(self):
+        self.readers = [
+            BinaryFile(f, shape=self.shape_2d, dtype=self.dtype) for f in self.file_list
+        ]
 
 
 class VRTStack(DatasetReader):
