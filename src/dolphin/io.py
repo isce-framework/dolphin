@@ -340,7 +340,7 @@ def get_raster_bounds(
     left, top = _apply_gt(gt=gt, x=0, y=0)
     right, bottom = _apply_gt(gt=gt, x=xsize, y=ysize)
 
-    return (left, bottom, right, top)
+    return Bbox(left, bottom, right, top)
 
 
 def get_raster_metadata(filename: Filename, domain: str = ""):

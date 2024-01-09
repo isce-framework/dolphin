@@ -467,7 +467,7 @@ def get_combined_bounds_nodata(
         else:
             bounds = out_bounds  # type: ignore
     else:
-        bounds = min(xs), min(ys), max(xs), max(ys)
+        bounds = Bbox(min(xs), min(ys), max(xs), max(ys))
 
     if target_aligned_pixels:
         bounds = _align_bounds(bounds, res)
@@ -482,14 +482,14 @@ def _align_bounds(bounds: Iterable[float], res: tuple[float, float]):
     right = math.ceil(right / res[0]) * res[0]
     bottom = math.floor(bottom / res[1]) * res[1]
     top = math.ceil(top / res[1]) * res[1]
-    return (left, bottom, right, top)
+    return Bbox(left, bottom, right, top)
 
 
 def _reproject_bounds(bounds: Bbox, src_epsg: int, dst_epsg: int) -> Bbox:
     t = Transformer.from_crs(src_epsg, dst_epsg, always_xy=True)
     left, bottom, right, top = bounds
-    bbox: Bbox = (*t.transform(left, bottom), *t.transform(right, top))  # type: ignore
-    return bbox
+    b = (*t.transform(left, bottom), *t.transform(right, top))
+    return Bbox(*b)
 
 
 def get_transformed_bounds(filename: Filename, epsg_code: Optional[int] = None):
