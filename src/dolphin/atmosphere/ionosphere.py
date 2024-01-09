@@ -7,6 +7,8 @@ from pathlib import Path
 
 import numpy as np
 import opera_utils as oput
+from rasterio.crs import CRS
+from rasterio.warp import transform_bounds
 from scipy import interpolate
 
 from dolphin import io
@@ -61,7 +63,9 @@ def estimate_ionospheric_delay(
     bounds = io.get_raster_bounds(ifg_file_list[0])
 
     if epsg != 4326:
-        lalo_bounds = transform_bounds((CRS.from_epsg(epsg), CRS.from_epsg(4326), *bounds)
+        lalo_bounds = transform_bounds(
+            CRS.from_epsg(epsg), CRS.from_epsg(4326), *bounds
+        )
     else:
         lalo_bounds = bounds
 
@@ -288,27 +292,26 @@ def get_ionex_value(
     # interpolate between consecutive rotated TEC maps
     # reference: equation (3) in Schaer et al. (1998)
 
-    # prepare interpolation functions in advance to speed up
     ind0 = np.where((mins - utc_min) <= 0)[0][-1]
     ind1 = ind0 + 1
 
-    interpfs = []
-    for i in [ind0, ind1]:
-        interpfs.append(
-            interpolate.interp2d(
-                x=lons,
-                y=lats,
-                z=tec_maps[i, :, :],
-                kind="linear",
-            ),
-        )
-
-    # Linear interpolation in space/time with rotation along longitude direction,
-    # following Schaer et al. (1998)
     lon0 = lon + (utc_min - mins[ind0]) * 360.0 / (24.0 * 60.0)
     lon1 = lon + (utc_min - mins[ind1]) * 360.0 / (24.0 * 60.0)
-    tec_val0 = interpfs[0](lon0, lat)
-    tec_val1 = interpfs[1](lon1, lat)
+
+    tec_val0 = interpolate.griddata(
+        points=(lons.flatten(), lats.flatten()),
+        values=tec_maps[ind0, :, :].flatten(),
+        xi=(lon0, lat),
+        method="linear",
+    )
+
+    tec_val1 = interpolate.griddata(
+        points=(lons.flatten(), lats.flatten()),
+        values=tec_maps[ind1, :, :].flatten(),
+        xi=(lon1, lat),
+        method="linear",
+    )
+
     tec_val = (mins[ind1] - utc_min) / (mins[ind1] - mins[ind0]) * tec_val0
     +(utc_min - mins[ind0]) / (mins[ind1] - mins[ind0]) * tec_val1
 
@@ -380,4 +383,6 @@ def read_ionex(
             dtype=np.float32,
         )
 
-    return mins, lats, lons, tec_maps
+    lon_2d, lat_2d = np.meshgrid(lons, lats, indexing="ij")
+
+    return mins, lat_2d, lon_2d, tec_maps

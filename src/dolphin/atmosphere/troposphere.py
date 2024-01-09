@@ -5,12 +5,13 @@ import os
 from dataclasses import dataclass
 from os import fspath
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import numpy as np
 import opera_utils as oput
 from osgeo import gdal
-from pyproj import CRS
+from rasterio.crs import CRS
+from rasterio.warp import transform_bounds
 from scipy.interpolate import RegularGridInterpolator
 
 from dolphin import io, stitching
@@ -38,7 +39,7 @@ class DelayParams:
     z_coordinates: np.ndarray
     """Array of Z coordinates."""
 
-    SNWE: Bbox
+    SNWE: list[Any]
     """ Bounding box of the data in SNWE format of RAiDER/PYAPS."""
 
     shape: tuple[int, int]
@@ -120,6 +121,13 @@ def estimate_tropospheric_delay(
     epsg = crs.to_epsg()
     out_bounds = io.get_raster_bounds(ifg_file_list[0])
 
+    if epsg != 4326:
+        lalo_bounds = transform_bounds(
+            CRS.from_epsg(epsg), CRS.from_epsg(4326), *out_bounds
+        )
+    else:
+        lalo_bounds = out_bounds
+
     # prepare geometry data
     logger.info("Prepare geometry files...")
     geometry_dir = output_dir / "geometry"
@@ -183,7 +191,7 @@ def estimate_tropospheric_delay(
             x_coordinates=xcoord,
             y_coordinates=ycoord,
             z_coordinates=tropo_height_levels,
-            SNWE=oput.get_snwe(epsg, out_bounds),
+            SNWE=[lalo_bounds[1], lalo_bounds[3], lalo_bounds[0], lalo_bounds[2]],
             epsg=epsg,
             tropo_model=tropo_model.value,
             delay_type=delay_type,
