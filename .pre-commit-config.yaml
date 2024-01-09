@@ -24,7 +24,7 @@ repos:
     rev: v0.1.9
     hooks:
       - id: ruff
-        args: [--fix, --exit-non-zero-on-fix]
+        args: [--fix, --exit-non-zero-on-fix, --show-fixes]
       - id: ruff-format
 
   - repo: https://github.com/pre-commit/mirrors-mypy
@@ -35,11 +35,3 @@ repos:
         - types-pkg_resources
         - types-requests
         - "pydantic>=2.4"
-
-  - repo: https://github.com/PyCQA/pydocstyle
-    rev: "6.3.0"
-    hooks:
-      - id: pydocstyle
-        # https://github.com/PyCQA/pydocstyle/pull/608#issuecomment-1381168417
-        additional_dependencies: ['.[toml]']
-        exclude: tests
