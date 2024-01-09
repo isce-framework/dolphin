@@ -33,13 +33,13 @@ class DatasetReader(Protocol):
     """
 
     dtype: np.dtype
-    """numpy.dtype : Data-type of the array's elements."""
+    """numpy.dtype : Data-type of the array's elements."""  # noqa: D403
 
     shape: tuple[int, ...]
-    """tuple of int : Tuple of array dimensions."""
+    """tuple of int : Tuple of array dimensions."""  # noqa: D403
 
     ndim: int
-    """int : Number of array dimensions."""
+    """int : Number of array dimensions."""  # noqa: D403
 
     def __getitem__(self, key: tuple[slice, ...], /) -> ArrayLike:
         """Read a block of data."""
@@ -56,7 +56,10 @@ class StackReader(DatasetReader, Protocol):
     """
 
     ndim: int = 3
-    """int : Number of array dimensions."""
+    """int : Number of array dimensions."""  # noqa: D403
+
+    shape: tuple[int, int, int]
+    """tuple of int : Tuple of array dimensions."""
 
 
 @dataclass
@@ -77,10 +80,13 @@ class BinaryFile(DatasetReader):
     """
 
     filepath: Path
-    """pathlib.Path : The file path."""
+    """pathlib.Path : The file path."""  # noqa: D403
 
     shape: tuple[int, ...]
+    """tuple of int : Tuple of array dimensions."""  # noqa: D403
+
     dtype: np.dtype
+    """numpy.dtype : Data-type of the array's elements."""  # noqa: D403
 
     def __post_init__(self):
         self.filepath = Path(self.filepath)
@@ -148,12 +154,19 @@ class RasterStack(StackReader):
     """
 
     file_list: Sequence[Filename]
+    readers: Sequence[DatasetReader]
     num_threads: int = 1
 
     def __getitem__(self, key: tuple[slice, ...], /) -> np.ndarray:
         # Check that it's a tuple of slices
-        if not (isinstance(key, tuple) and len(key) == 2):
-            raise TypeError("Index must be a tuple of 2 slices.")
+        if not isinstance(key, tuple):
+            raise ValueError("Index must be a tuple of slices.")
+        if len(key) not in (1, 3):
+            raise ValueError("Index must be a tuple of 1 or 3 slices.")
+        # If only the band is passed (e.g. stack[0]), convert to (0, :, :)
+        if len(key) == 1:
+            key = (key[0], slice(None), slice(None))
+
         # unpack the slices
         bands, rows, cols = key
         if isinstance(bands, slice):
@@ -178,7 +191,7 @@ class RasterStack(StackReader):
 
     @property
     def shape(self):
-        return (len(self), *self.shape_1d)
+        return (len(self), *self.shape_2d)
 
 
 @dataclass
