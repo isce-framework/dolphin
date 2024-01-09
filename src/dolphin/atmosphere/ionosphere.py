@@ -61,7 +61,7 @@ def estimate_ionospheric_delay(
     bounds = io.get_raster_bounds(ifg_file_list[0])
 
     if epsg != 4326:
-        lalo_bounds = oput.reproject_bounds(bounds, epsg, 4326)
+        lalo_bounds = transform_bounds((CRS.from_epsg(epsg), CRS.from_epsg(4326), *bounds)
     else:
         lalo_bounds = bounds
 
