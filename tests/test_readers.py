@@ -7,6 +7,7 @@ from osgeo import gdal
 
 from dolphin._readers import (
     BinaryFile,
+    BinaryStackReader,
     VRTStack,
     _parse_vrt_file,
 )
@@ -46,7 +47,7 @@ def binary_file_list(tmp_path_factory, slc_stack):
     return files
 
 
-@pytest.fixture
+@pytest.fixture(scope="module")
 def binary_file(slc_stack, binary_file_list):
     f = BinaryFile(binary_file_list[0], shape=slc_stack[0].shape, dtype=slc_stack.dtype)
     assert f.shape == slc_stack[0].shape
@@ -58,6 +59,32 @@ def test_binary_file_read(binary_file, slc_stack):
     npt.assert_array_almost_equal(binary_file[()], slc_stack[0])
     # Check the reading of a subset
     npt.assert_array_almost_equal(binary_file[0:10, 0:10], slc_stack[0][0:10, 0:10])
+
+
+@pytest.fixture(scope="module")
+def binary_stack(slc_stack, binary_file_list):
+    s = BinaryStackReader.from_file_list(
+        binary_file_list, shape_2d=slc_stack[0].shape, dtype=slc_stack.dtype
+    )
+    assert s.shape == slc_stack.shape
+    assert len(s) == len(slc_stack) == len(binary_file_list)
+    assert s.ndim == 3
+    assert s.dtype == slc_stack.dtype
+    return s
+
+
+# Get combinations of slices
+slices_to_test = [slice(None), 1, slice(0, 10), slice(0, 10, 2)]
+
+
+@pytest.mark.parametrize("dslice", slices_to_test)
+@pytest.mark.parametrize("rslice", slices_to_test)
+@pytest.mark.parametrize("cslice", slices_to_test)
+def test_binary_stack_read(binary_stack, slc_stack, dslice, rslice, cslice):
+    s = binary_stack[dslice, rslice, cslice]
+    expected = slc_stack[dslice, rslice, cslice]
+    assert s.shape == expected.shape
+    npt.assert_array_almost_equal(s, expected)
 
 
 # #### VRT Tests ####

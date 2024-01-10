@@ -7,6 +7,7 @@ from os import fspath
 from pathlib import Path
 from typing import Generator, Optional, Protocol, Sequence, runtime_checkable
 
+import h5py
 import numpy as np
 from numpy.typing import ArrayLike
 from osgeo import gdal
@@ -20,7 +21,7 @@ __all__ = [
     "DatasetReader",
     "BinaryFile",
     "StackReader",
-    "BinaryStack",
+    "BinaryStackReader",
     "VRTStack",
 ]
 
@@ -146,55 +147,122 @@ class BinaryFile(DatasetReader):
 
 
 @dataclass
-class RasterStackReader(StackReader):
-    """Base class for a reader of separate raster image files.
+class HDF5Reader(DatasetReader):
+    """A Dataset in an HDF5 file.
 
-    Parameters
+    Attributes
     ----------
-    file_list : list[Filename]
-        List of paths to files to read.
-    shape : tuple[int, int]
-        Shape of each file.
-    dtype : np.dtype
-        Data type of each file.
+    filepath : pathlib.Path | str
+        Location of HDF5 file.
+    dset_name : str
+        Path to the dataset within the file.
+    chunks : tuple[int, ...], optional
+        Chunk shape of the dataset, or None if file is unchunked.
+    keep_open : bool, optional (default False)
+        If True, keep the HDF5 file handle open for faster reading.
 
+
+    See Also
+    --------
+    BinaryFile
+    RasterBand
+
+    Notes
+    -----
+    If `keep_open=True`, this class does not store an open file object.
+    Otherwise, the file is opened on-demand for reading or writing and closed
+    immediately after each read/write operation.
+    If passing the `HDF5Reader` to multiple spawned processes, it is recommended
+    to set `keep_open=False` and use a suitable mutex to guard file access.
     """
 
-    file_list: Sequence[Filename]
-    readers: Sequence[DatasetReader]
-    num_threads: int
+    filepath: Path
+    """pathlib.Path : The file path."""
+
+    dset_name: str
+    """str : The path to the dataset within the file."""
+
+    keep_open: bool = False
+
+    def __post_init__(self):
+        filepath = Path(self.filepath)
+
+        hf = h5py.File(filepath, "r")
+        dset = hf[self.dset_name]
+        self.shape = dset.shape
+        self.dtype = dset.dtype
+        self.chunks = dset.chunks
+        if self.keep_open:
+            self._hf = hf
+            self._dset = dset
+        else:
+            hf.close()
+
+    @property
+    def ndim(self) -> int:  # type: ignore[override]
+        """int : Number of array dimensions."""
+        return len(self.shape)
+
+    def __array__(self) -> np.ndarray:
+        return self[:,]
 
     def __getitem__(self, key: tuple[slice, ...], /) -> np.ndarray:
-        # Check that it's a tuple of slices
-        if not isinstance(key, tuple):
-            raise ValueError("Index must be a tuple of slices.")
-        if len(key) not in (1, 3):
-            raise ValueError("Index must be a tuple of 1 or 3 slices.")
-        # If only the band is passed (e.g. stack[0]), convert to (0, :, :)
-        if len(key) == 1:
-            key = (key[0], slice(None), slice(None))
+        if self.keep_open:
+            return self._dset[key]
 
-        # unpack the slices
-        bands, rows, cols = key
-        if isinstance(bands, slice):
-            # convert the bands to -1-indexed list
-            band_idxs = list(range(*bands.indices(len(self))))
-        elif isinstance(bands, int):
-            band_idxs = [bands]
-        else:
-            raise ValueError("Band index must be an integer or slice.")
+        with h5py.File(self.filepath, "r") as f:
+            dataset = f[self.dset_name]
+            return dataset[key]
 
-        # Get only the bands we need
-        if self.num_threads == 0:
-            return np.stack([self.readers[i][rows, cols] for i in band_idxs], axis=-1)
-        else:
-            # test read 0
-            with ThreadPoolExecutor(max_workers=self.num_threads) as executor:
-                results = executor.map(lambda i: self.readers[i][rows, cols], band_idxs)
-            return np.stack(list(results), axis=-1)
+
+def _read_3d(key, readers: Sequence[DatasetReader], num_threads: int = 1):
+    # Check that it's a tuple of slices
+    if not isinstance(key, tuple):
+        raise ValueError("Index must be a tuple of slices.")
+    if len(key) not in (1, 3):
+        raise ValueError("Index must be a tuple of 1 or 3 slices.")
+    # If only the band is passed (e.g. stack[0]), convert to (0, :, :)
+    if len(key) == 1:
+        key = (key[0], slice(None), slice(None))
+    # unpack the slices
+    bands, rows, cols = key
+    r_slice = slice(rows, rows + 1) if isinstance(rows, int) else rows
+    c_slice = slice(cols, cols + 1) if isinstance(cols, int) else cols
+
+    if isinstance(bands, slice):
+        # convert the bands to -1-indexed list
+        total_num_bands = len(readers)
+        band_idxs = list(range(*bands.indices(total_num_bands)))
+    elif isinstance(bands, int):
+        band_idxs = [bands]
+    else:
+        raise ValueError("Band index must be an integer or slice.")
+
+    # Get only the bands we need
+    if num_threads == 1:
+        out = np.stack([readers[i][r_slice, c_slice] for i in band_idxs], axis=0)
+    else:
+        with ThreadPoolExecutor(max_workers=num_threads) as executor:
+            results = executor.map(lambda i: readers[i][r_slice, c_slice], band_idxs)
+        out = np.stack(list(results), axis=0)
+    return np.squeeze(out)
+
+
+@dataclass
+class BinaryStackReader(StackReader):
+    file_list: Sequence[Filename]
+    readers: Sequence[DatasetReader]
+    num_threads: int = 1
+
+    def __getitem__(self, key: tuple[slice, ...], /) -> np.ndarray:
+        return _read_3d(key, self.readers, num_threads=self.num_threads)
 
     def __len__(self):
         return len(self.file_list)
+
+    @property
+    def shape_2d(self):
+        return self.readers[0].shape
 
     @property
     def shape(self):
@@ -204,14 +272,11 @@ class RasterStackReader(StackReader):
     def dtype(self):
         return self.readers[0].dtype
 
-
-@dataclass
-class BinaryStack(RasterStackReader):
     @classmethod
     def from_file_list(
         cls, file_list: Sequence[Filename], shape_2d: tuple[int, int], dtype: np.dtype
-    ) -> BinaryStack:
-        """Create a BinaryStack from a list of files.
+    ) -> BinaryStackReader:
+        """Create a BinaryStackReader from a list of files.
 
         Parameters
         ----------
@@ -224,11 +289,11 @@ class BinaryStack(RasterStackReader):
 
         Returns
         -------
-        BinaryStack
-            The BinaryStack object.
+        BinaryStackReader
+            The BinaryStackReader object.
         """
         readers = [BinaryFile(Path(f), shape=shape_2d, dtype=dtype) for f in file_list]
-        return cls(file_list, readers, num_threads=1)
+        return cls(file_list=file_list, readers=readers, num_threads=1)
 
     @classmethod
     def from_gdal(
@@ -236,8 +301,8 @@ class BinaryStack(RasterStackReader):
         file_list: Sequence[Filename],
         band: int = 1,
         num_threads: int = 1,
-    ) -> BinaryStack:
-        """Create a BinaryStack from a list of GDAL-readable files.
+    ) -> BinaryStackReader:
+        """Create a BinaryStackReader from a list of GDAL-readable files.
 
         Parameters
         ----------
@@ -248,8 +313,8 @@ class BinaryStack(RasterStackReader):
 
         Returns
         -------
-        BinaryStack
-            The BinaryStack object.
+        BinaryStackReader
+            The BinaryStackReader object.
         """
         import rasterio as rio
 
@@ -272,7 +337,77 @@ class BinaryStack(RasterStackReader):
         )
 
 
-class VRTStack(DatasetReader):
+@dataclass
+class HDF5StackReader(StackReader):
+    """A stack of datasets in an HDF5 file.
+
+    See Also
+    --------
+    BinaryStackReader
+    StackReader
+
+    Notes
+    -----
+    If `keep_open=True`, this class does not store an open file object.
+    Otherwise, the file is opened on-demand for reading or writing and closed
+    immediately after each read/write operation.
+    If passing the `HDF5StackReader` to multiple spawned processes, it is recommended
+    to set `keep_open=False` and use a suitable mutex to guard file access.
+    """
+
+    file_list: Sequence[Filename]
+    readers: Sequence[DatasetReader]
+    num_threads: int = 1
+
+    def __getitem__(self, key: tuple[slice, ...], /) -> np.ndarray:
+        return _read_3d(key, self.readers, num_threads=self.num_threads)
+
+    def __len__(self):
+        return len(self.file_list)
+
+    @property
+    def shape(self):
+        return (len(self), *self.shape_2d)
+
+    @property
+    def dtype(self):
+        return self.readers[0].dtype
+
+    @classmethod
+    def from_file_list(
+        cls,
+        file_list: Sequence[Filename],
+        dset_names=str | Sequence[str],
+        keep_open: bool = False,
+    ) -> HDF5StackReader:
+        """Create a HDF5StackReader from a list of files.
+
+        Parameters
+        ----------
+        file_list : Sequence[Filename]
+            List of paths to the files to read.
+        dset_names : str | Sequence[str]
+            Name of the dataset to read from each file.
+            If a single string, will be used for all files.
+        keep_open : bool, optional (default False)
+            If True, keep the HDF5 file handles open for faster reading.
+
+        Returns
+        -------
+        HDF5StackReader
+            The HDF5StackReader object.
+        """
+        if isinstance(dset_names, str):
+            dset_names = [dset_names] * len(file_list)
+
+        readers = [
+            HDF5Reader(Path(f), dset_name=dn, keep_open=keep_open)
+            for (f, dn) in zip(file_list, dset_names)
+        ]
+        return cls(file_list, readers, num_threads=1)
+
+
+class VRTStack(StackReader):
     """Class for creating a virtual stack of raster files.
 
     Attributes
