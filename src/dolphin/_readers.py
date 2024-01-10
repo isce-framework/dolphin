@@ -452,53 +452,6 @@ class BaseStackReader(StackReader):
     def dtype(self):
         return self.readers[0].dtype
 
-    def iter_blocks(
-        self,
-        overlaps: tuple[int, int] = (0, 0),
-        block_shape: tuple[int, int] = (512, 512),
-        skip_empty: bool = True,
-        nodata_mask: Optional[np.ndarray] = None,
-        show_progress: bool = True,
-    ) -> Generator[tuple[np.ndarray, tuple[slice, slice]], None, None]:
-        """Iterate over blocks of the stack.
-
-        Loads all images for one window at a time into memory, while eagerly
-        fetching the next block in the background.
-
-        Parameters
-        ----------
-        overlaps : tuple[int, int], optional
-            Pixels to overlap each block by (rows, cols)
-            By default (0, 0)
-        block_shape : tuple[int, int], optional
-            2D shape of blocks to load at a time.
-            Loads all dates/bands at a time with this shape.
-        skip_empty : bool, optional (default True)
-            Skip blocks that are entirely empty (all NaNs)
-        nodata_mask : bool, optional
-            Optional mask indicating nodata values. If provided, will skip
-            blocks that are entirely nodata.
-            1s are the nodata values, 0s are valid data.
-        show_progress : bool, default=True
-            If true, displays a `rich` ProgressBar.
-
-        Yields
-        ------
-        tuple[np.ndarray, tuple[slice, slice]]
-            Iterator of (data, (slice(row_start, row_stop), slice(col_start, col_stop))
-
-        """
-        loader = EagerLoader(
-            self,
-            block_shape=block_shape,
-            overlaps=overlaps,
-            nodata_mask=nodata_mask,
-            nodata_value=self.nodata_value,
-            skip_empty=skip_empty,
-            show_progress=show_progress,
-        )
-        yield from loader.iter_blocks()
-
 
 @dataclass
 class BinaryStackReader(BaseStackReader):
@@ -885,52 +838,6 @@ class VRTStack(StackReader):
             write_file=False,
             **kwargs,
         )
-
-    def iter_blocks(
-        self,
-        overlaps: tuple[int, int] = (0, 0),
-        block_shape: tuple[int, int] = (512, 512),
-        skip_empty: bool = True,
-        nodata_mask: Optional[np.ndarray] = None,
-        show_progress: bool = True,
-    ) -> Generator[tuple[np.ndarray, tuple[slice, slice]], None, None]:
-        """Iterate over blocks of the stack.
-
-        Loads all images for one window at a time into memory, while eagerly
-        fetching the next block in the background.
-
-        Parameters
-        ----------
-        overlaps : tuple[int, int], optional
-            Pixels to overlap each block by (rows, cols)
-            By default (0, 0)
-        block_shape : tuple[int, int], optional
-            2D shape of blocks to load at a time.
-            Loads all dates/bands at a time with this shape.
-        skip_empty : bool, optional (default True)
-            Skip blocks that are entirely empty (all NaNs)
-        nodata_mask : bool, optional
-            Optional mask indicating nodata values. If provided, will skip
-            blocks that are entirely nodata.
-            1s are the nodata values, 0s are valid data.
-        show_progress : bool, default=True
-            If true, displays a `rich` ProgressBar.
-
-        Yields
-        ------
-        tuple[np.ndarray, tuple[slice, slice]]
-            Iterator of (data, (slice(row_start, row_stop), slice(col_start, col_stop))
-
-        """
-        loader = EagerLoader(
-            self,
-            block_shape=block_shape,
-            overlaps=overlaps,
-            nodata_mask=nodata_mask,
-            skip_empty=skip_empty,
-            show_progress=show_progress,
-        )
-        yield from loader.iter_blocks()
 
     @property
     def shape(self):
