@@ -49,7 +49,7 @@ class DatasetReader(Protocol):
     ndim: int
     """int : Number of array dimensions."""  # noqa: D403
 
-    def __getitem__(self, key: tuple[slice, ...], /) -> ArrayLike:
+    def __getitem__(self, key: tuple[slice | int, ...], /) -> ArrayLike:
         """Read a block of data."""
         ...
 
@@ -108,7 +108,7 @@ class BinaryFile(DatasetReader):
         """int : Number of array dimensions."""  # noqa: D403
         return len(self.shape)
 
-    def __getitem__(self, key: tuple[slice, ...], /) -> np.ndarray:
+    def __getitem__(self, key: tuple[slice | int, ...], /) -> np.ndarray:
         with self.filepath.open("rb") as f:
             # Memory-map the entire file.
             with mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ) as mm:
@@ -205,13 +205,19 @@ class HDF5Reader(DatasetReader):
     def __array__(self) -> np.ndarray:
         return self[:,]
 
-    def __getitem__(self, key: tuple[slice, ...], /) -> np.ndarray:
+    def __getitem__(self, key: tuple[slice | int, ...], /) -> np.ndarray:
         if self.keep_open:
             return self._dset[key]
 
         with h5py.File(self.filepath, "r") as f:
             dataset = f[self.dset_name]
             return dataset[key]
+
+
+def _ensure_slices(rows: slice | int, cols: slice | int) -> tuple[slice, slice]:
+    r_slice = slice(rows, rows + 1) if isinstance(rows, int) else rows
+    c_slice = slice(cols, cols + 1) if isinstance(cols, int) else cols
+    return r_slice, c_slice
 
 
 @dataclass
@@ -296,16 +302,25 @@ class RasterReader(DatasetReader):
     def __array__(self) -> np.ndarray:
         return self[:, :]
 
-    def __getitem__(self, key: tuple[slice, ...], /) -> np.ndarray:
-        window = rio.windows.Window.from_slices(
-            *key,
+    def __getitem__(self, key: tuple[slice | int, ...], /) -> np.ndarray:
+        import rasterio.windows
+
+        r_slice, c_slice = _ensure_slices(*key)
+        window = rasterio.windows.Window.from_slices(
+            r_slice,
+            c_slice,
             height=self.shape[0],
             width=self.shape[1],
         )
         if self.keep_open:
-            return self._src.read(self.band, window=window)
+            out = self._src.read(self.band, window=window)
+
         with rio.open(self.filepath) as src:
-            return src.read(self.band, window=window)
+            out = src.read(self.band, window=window)
+        # Note that Rasterio doesn't use the `step` of a slice, so we need to
+        # manually slice the output array.
+        r_step, c_step = r_slice.step or 1, c_slice.step or 1
+        return out[::r_step, ::c_step]
 
 
 def _read_3d(key, readers: Sequence[DatasetReader], num_threads: int = 1):
@@ -319,8 +334,8 @@ def _read_3d(key, readers: Sequence[DatasetReader], num_threads: int = 1):
         key = (key[0], slice(None), slice(None))
     # unpack the slices
     bands, rows, cols = key
-    r_slice = slice(rows, rows + 1) if isinstance(rows, int) else rows
-    c_slice = slice(cols, cols + 1) if isinstance(cols, int) else cols
+    # convert the rows/cols to slices
+    r_slice, c_slice = _ensure_slices(rows, cols)
 
     if isinstance(bands, slice):
         # convert the bands to -1-indexed list
@@ -342,12 +357,14 @@ def _read_3d(key, readers: Sequence[DatasetReader], num_threads: int = 1):
 
 
 @dataclass
-class BinaryStackReader(StackReader):
+class BaseStackReader(StackReader):
+    """Base class for stack readers."""
+
     file_list: Sequence[Filename]
     readers: Sequence[DatasetReader]
     num_threads: int = 1
 
-    def __getitem__(self, key: tuple[slice, ...], /) -> np.ndarray:
+    def __getitem__(self, key: tuple[slice | int, ...], /) -> np.ndarray:
         return _read_3d(key, self.readers, num_threads=self.num_threads)
 
     def __len__(self):
@@ -364,6 +381,13 @@ class BinaryStackReader(StackReader):
     @property
     def dtype(self):
         return self.readers[0].dtype
+
+
+@dataclass
+class BinaryStackReader(BaseStackReader):
+    file_list: Sequence[Filename]
+    readers: Sequence[BinaryFile]
+    num_threads: int = 1
 
     @classmethod
     def from_file_list(
@@ -429,7 +453,7 @@ class BinaryStackReader(StackReader):
 
 
 @dataclass
-class HDF5StackReader(StackReader):
+class HDF5StackReader(BaseStackReader):
     """A stack of datasets in an HDF5 file.
 
     See Also
@@ -445,24 +469,6 @@ class HDF5StackReader(StackReader):
     If passing the `HDF5StackReader` to multiple spawned processes, it is recommended
     to set `keep_open=False`.
     """
-
-    file_list: Sequence[Filename]
-    readers: Sequence[DatasetReader]
-    num_threads: int = 1
-
-    def __getitem__(self, key: tuple[slice, ...], /) -> np.ndarray:
-        return _read_3d(key, self.readers, num_threads=self.num_threads)
-
-    def __len__(self):
-        return len(self.file_list)
-
-    @property
-    def shape(self):
-        return (len(self), *self.shape_2d)
-
-    @property
-    def dtype(self):
-        return self.readers[0].dtype
 
     @classmethod
     def from_file_list(
@@ -499,7 +505,7 @@ class HDF5StackReader(StackReader):
 
 
 @dataclass
-class RasterStackReader(StackReader):
+class RasterStackReader(BaseStackReader):
     """A stack of datasets for any GDAL-readable rasters.
 
     See Also
@@ -514,29 +520,11 @@ class RasterStackReader(StackReader):
     immediately after each read/write operation.
     """
 
-    file_list: Sequence[Filename]
-    readers: Sequence[DatasetReader]
-    num_threads: int = 1
-
-    def __getitem__(self, key: tuple[slice, ...], /) -> np.ndarray:
-        return _read_3d(key, self.readers, num_threads=self.num_threads)
-
-    def __len__(self):
-        return len(self.file_list)
-
-    @property
-    def shape(self):
-        return (len(self), *self.shape_2d)
-
-    @property
-    def dtype(self):
-        return self.readers[0].dtype
-
     @classmethod
     def from_file_list(
         cls,
         file_list: Sequence[Filename],
-        bands=int | Sequence[int],
+        bands: int | Sequence[int] = 1,
         keep_open: bool = False,
     ) -> RasterStackReader:
         """Create a RasterStackReader from a list of files.
@@ -548,6 +536,7 @@ class RasterStackReader(StackReader):
         bands : int | Sequence[int]
             Band to read from each file.
             If a single int, will be used for all files.
+            Default = 1.
         keep_open : bool, optional (default False)
             If True, keep the rasterio file handles open for faster reading.
 
@@ -556,7 +545,7 @@ class RasterStackReader(StackReader):
         RasterStackReader
             The RasterStackReader object.
         """
-        if isinstance(bands, str):
+        if isinstance(bands, int):
             bands = [bands] * len(file_list)
 
         readers = [

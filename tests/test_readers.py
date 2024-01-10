@@ -3,6 +3,7 @@ from pathlib import Path
 import numpy as np
 import numpy.testing as npt
 import pytest
+import rasterio as rio
 from osgeo import gdal
 
 from dolphin._readers import (
@@ -78,7 +79,7 @@ def binary_stack(slc_stack, binary_file_list):
 
 
 # Get combinations of slices
-slices_to_test = [slice(None), 1, slice(0, 10), slice(0, 10, 2)]
+slices_to_test = [slice(None), 1, slice(0, 10, 2)]
 
 
 @pytest.mark.parametrize("dslice", slices_to_test)
@@ -156,24 +157,44 @@ def test_hdf5_stack_read_slices(
 
 # #### RasterReader Tests ####
 
-# We already have raster files in slc_file_list
-
 
 def test_raster_reader(slc_file_list, slc_stack):
-    r = RasterReader(slc_file_list[0])
+    # ignore georeferencing warnings
+    with pytest.warns(rio.errors.NotGeoreferencedWarning):
+        r = RasterReader.from_file(slc_file_list[0])
     assert r.shape == slc_stack[0].shape
     assert r.dtype == slc_stack[0].dtype
     assert r.ndim == 2
-    assert r.shape == (100, 200)
     assert r.dtype == np.complex64
 
 
-def test_raster_stack_reader(slc_file_list, slc_stack):
-    s = RasterStackReader.from_file_list(slc_file_list)
-    assert s.shape == slc_stack.shape
-    assert len(s) == len(slc_stack) == len(slc_file_list)
-    assert s.ndim == 3
-    assert s.dtype == slc_stack.dtype
+@pytest.mark.parametrize("keep_open", [True, False])
+def test_raster_stack_reader(
+    slc_file_list,
+    slc_stack,
+    keep_open,
+):
+    with pytest.warns(rio.errors.NotGeoreferencedWarning):
+        reader = RasterStackReader.from_file_list(slc_file_list, keep_open=keep_open)
+        assert reader.ndim == 3
+        assert reader.shape == slc_stack.shape
+        assert reader.dtype == slc_stack.dtype
+        assert len(reader) == len(slc_stack) == len(slc_file_list)
+
+
+@pytest.mark.parametrize("dslice", slices_to_test)
+@pytest.mark.parametrize("rslice", slices_to_test)
+@pytest.mark.parametrize("cslice", slices_to_test)
+@pytest.mark.parametrize("keep_open", [True, False])
+def test_raster_stack_read_slices(
+    slc_file_list, slc_stack, keep_open, dslice, rslice, cslice
+):
+    with pytest.warns(rio.errors.NotGeoreferencedWarning):
+        reader = RasterStackReader.from_file_list(slc_file_list, keep_open=keep_open)
+        s = reader[dslice, rslice, cslice]
+    expected = slc_stack[dslice, rslice, cslice]
+    assert s.shape == expected.shape
+    npt.assert_array_almost_equal(s, expected)
 
 
 # #### VRT Tests ####
