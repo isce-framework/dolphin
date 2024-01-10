@@ -479,7 +479,7 @@ class HDF5StackReader(BaseStackReader):
     def from_file_list(
         cls,
         file_list: Sequence[Filename],
-        dset_names=str | Sequence[str],
+        dset_names: str | Sequence[str],
         keep_open: bool = False,
         num_threads: int = 1,
     ) -> HDF5StackReader:
