@@ -7,7 +7,7 @@ import rasterio as rio
 from osgeo import gdal
 
 from dolphin._readers import (
-    BinaryFile,
+    BinaryReader,
     BinaryStackReader,
     HDF5Reader,
     HDF5StackReader,
@@ -19,6 +19,9 @@ from dolphin._readers import (
 from dolphin.utils import _get_path_from_gdal_str
 
 # Note: uses the fixtures from conftest.py
+
+# Get combinations of slices
+slices_to_test = [slice(None), 1, slice(0, 10, 2)]
 
 
 @pytest.fixture(scope="module")
@@ -53,43 +56,44 @@ def binary_file_list(tmp_path_factory, slc_stack):
 
 
 @pytest.fixture
-def binary_file(slc_stack, binary_file_list):
-    f = BinaryFile(binary_file_list[0], shape=slc_stack[0].shape, dtype=slc_stack.dtype)
+def binary_reader(slc_stack, binary_file_list):
+    f = BinaryReader(
+        binary_file_list[0], shape=slc_stack[0].shape, dtype=slc_stack.dtype
+    )
     assert f.shape == slc_stack[0].shape
     assert f.dtype == slc_stack[0].dtype
     return f
 
 
-def test_binary_file_read(binary_file, slc_stack):
-    npt.assert_array_almost_equal(binary_file[()], slc_stack[0])
-    # Check the reading of a subset
-    npt.assert_array_almost_equal(binary_file[0:10, 0:10], slc_stack[0][0:10, 0:10])
+class TestBinary:
+    def test_binary_file_read(self, binary_reader, slc_stack):
+        npt.assert_array_almost_equal(binary_reader[()], slc_stack[0])
+        # Check the reading of a subset
+        npt.assert_array_almost_equal(
+            binary_reader[0:10, 0:10], slc_stack[0][0:10, 0:10]
+        )
 
+    @pytest.fixture(scope="module")
+    def binary_stack(self, slc_stack, binary_file_list):
+        s = BinaryStackReader.from_file_list(
+            binary_file_list, shape_2d=slc_stack[0].shape, dtype=slc_stack.dtype
+        )
+        assert s.shape == slc_stack.shape
+        assert len(s) == len(slc_stack) == len(binary_file_list)
+        assert s.ndim == 3
+        assert s.dtype == slc_stack.dtype
+        return s
 
-@pytest.fixture(scope="module")
-def binary_stack(slc_stack, binary_file_list):
-    s = BinaryStackReader.from_file_list(
-        binary_file_list, shape_2d=slc_stack[0].shape, dtype=slc_stack.dtype
-    )
-    assert s.shape == slc_stack.shape
-    assert len(s) == len(slc_stack) == len(binary_file_list)
-    assert s.ndim == 3
-    assert s.dtype == slc_stack.dtype
-    return s
-
-
-# Get combinations of slices
-slices_to_test = [slice(None), 1, slice(0, 10, 2)]
-
-
-@pytest.mark.parametrize("dslice", slices_to_test)
-@pytest.mark.parametrize("rslice", slices_to_test)
-@pytest.mark.parametrize("cslice", slices_to_test)
-def test_binary_stack_read_slices(binary_stack, slc_stack, dslice, rslice, cslice):
-    s = binary_stack[dslice, rslice, cslice]
-    expected = slc_stack[dslice, rslice, cslice]
-    assert s.shape == expected.shape
-    npt.assert_array_almost_equal(s, expected)
+    @pytest.mark.parametrize("dslice", slices_to_test)
+    @pytest.mark.parametrize("rslice", slices_to_test)
+    @pytest.mark.parametrize("cslice", slices_to_test)
+    def test_binary_stack_read_slices(
+        self, binary_stack, slc_stack, dslice, rslice, cslice
+    ):
+        s = binary_stack[dslice, rslice, cslice]
+        expected = slc_stack[dslice, rslice, cslice]
+        assert s.shape == expected.shape
+        npt.assert_array_almost_equal(s, expected)
 
 
 # #### HDF5 Tests ####
@@ -121,44 +125,42 @@ def hdf5_reader(hdf5_file_list, slc_stack):
     return r
 
 
-def test_hdf5_reader_read(hdf5_reader, slc_stack):
-    npt.assert_array_almost_equal(hdf5_reader[()], slc_stack[0])
-    # Check the reading of a subset
-    npt.assert_array_almost_equal(hdf5_reader[0:10, 0:10], slc_stack[0][0:10, 0:10])
+class TestHDF5:
+    def test_hdf5_reader_read(self, hdf5_reader, slc_stack):
+        npt.assert_array_almost_equal(hdf5_reader[()], slc_stack[0])
+        # Check the reading of a subset
+        npt.assert_array_almost_equal(hdf5_reader[0:10, 0:10], slc_stack[0][0:10, 0:10])
 
+    @pytest.mark.parametrize("keep_open", [True, False])
+    def hdf5_stack(self, hdf5_file_list, slc_stack, keep_open):
+        s = HDF5StackReader.from_file_list(
+            hdf5_file_list, dset_names="data", keep_open=keep_open
+        )
+        assert s.shape == slc_stack.shape
+        assert len(s) == len(slc_stack) == len(hdf5_file_list)
+        assert s.ndim == 3
+        assert s.dtype == slc_stack.dtype
+        return s
 
-@pytest.mark.parametrize("keep_open", [True, False])
-def hdf5_stack(hdf5_file_list, slc_stack, keep_open):
-    s = HDF5StackReader.from_file_list(
-        hdf5_file_list, dset_names="data", keep_open=keep_open
-    )
-    assert s.shape == slc_stack.shape
-    assert len(s) == len(slc_stack) == len(hdf5_file_list)
-    assert s.ndim == 3
-    assert s.dtype == slc_stack.dtype
-    return s
-
-
-@pytest.mark.parametrize("dslice", slices_to_test)
-@pytest.mark.parametrize("rslice", slices_to_test)
-@pytest.mark.parametrize("cslice", slices_to_test)
-@pytest.mark.parametrize("keep_open", [True, False])
-def test_hdf5_stack_read_slices(
-    hdf5_file_list, slc_stack, keep_open, dslice, rslice, cslice
-):
-    reader = HDF5StackReader.from_file_list(
-        hdf5_file_list, dset_names="data", keep_open=keep_open
-    )
-    s = reader[dslice, rslice, cslice]
-    expected = slc_stack[dslice, rslice, cslice]
-    assert s.shape == expected.shape
-    npt.assert_array_almost_equal(s, expected)
+    @pytest.mark.parametrize("dslice", slices_to_test)
+    @pytest.mark.parametrize("rslice", slices_to_test)
+    @pytest.mark.parametrize("cslice", slices_to_test)
+    @pytest.mark.parametrize("keep_open", [True, False])
+    def test_hdf5_stack_read_slices(
+        self, hdf5_file_list, slc_stack, keep_open, dslice, rslice, cslice
+    ):
+        reader = HDF5StackReader.from_file_list(
+            hdf5_file_list, dset_names="data", keep_open=keep_open
+        )
+        s = reader[dslice, rslice, cslice]
+        expected = slc_stack[dslice, rslice, cslice]
+        assert s.shape == expected.shape
+        npt.assert_array_almost_equal(s, expected)
 
 
 # #### RasterReader Tests ####
-
-
-def test_raster_reader(slc_file_list, slc_stack):
+@pytest.fixture
+def raster_reader(slc_file_list, slc_stack):
     # ignore georeferencing warnings
     with pytest.warns(rio.errors.NotGeoreferencedWarning):
         r = RasterReader.from_file(slc_file_list[0])
@@ -168,33 +170,51 @@ def test_raster_reader(slc_file_list, slc_stack):
     assert r.dtype == np.complex64
 
 
-@pytest.mark.parametrize("keep_open", [True, False])
-def test_raster_stack_reader(
-    slc_file_list,
-    slc_stack,
-    keep_open,
-):
-    with pytest.warns(rio.errors.NotGeoreferencedWarning):
-        reader = RasterStackReader.from_file_list(slc_file_list, keep_open=keep_open)
-        assert reader.ndim == 3
-        assert reader.shape == slc_stack.shape
-        assert reader.dtype == slc_stack.dtype
-        assert len(reader) == len(slc_stack) == len(slc_file_list)
+class TestRaster:
+    @pytest.mark.parametrize("keep_open", [True, False])
+    def test_raster_stack_reader(
+        self,
+        slc_file_list,
+        slc_stack,
+        keep_open,
+    ):
+        with pytest.warns(rio.errors.NotGeoreferencedWarning):
+            reader = RasterStackReader.from_file_list(
+                slc_file_list, keep_open=keep_open
+            )
+            assert reader.ndim == 3
+            assert reader.shape == slc_stack.shape
+            assert reader.dtype == slc_stack.dtype
+            assert len(reader) == len(slc_stack) == len(slc_file_list)
+
+    @pytest.mark.parametrize("dslice", slices_to_test)
+    @pytest.mark.parametrize("rslice", slices_to_test)
+    @pytest.mark.parametrize("cslice", slices_to_test)
+    @pytest.mark.parametrize("keep_open", [True, False])
+    def test_raster_stack_read_slices(
+        self, slc_file_list, slc_stack, keep_open, dslice, rslice, cslice
+    ):
+        with pytest.warns(rio.errors.NotGeoreferencedWarning):
+            reader = RasterStackReader.from_file_list(
+                slc_file_list, keep_open=keep_open
+            )
+            s = reader[dslice, rslice, cslice]
+        expected = slc_stack[dslice, rslice, cslice]
+        assert s.shape == expected.shape
+        npt.assert_array_almost_equal(s, expected)
 
 
-@pytest.mark.parametrize("dslice", slices_to_test)
-@pytest.mark.parametrize("rslice", slices_to_test)
-@pytest.mark.parametrize("cslice", slices_to_test)
-@pytest.mark.parametrize("keep_open", [True, False])
-def test_raster_stack_read_slices(
-    slc_file_list, slc_stack, keep_open, dslice, rslice, cslice
-):
-    with pytest.warns(rio.errors.NotGeoreferencedWarning):
-        reader = RasterStackReader.from_file_list(slc_file_list, keep_open=keep_open)
-        s = reader[dslice, rslice, cslice]
-    expected = slc_stack[dslice, rslice, cslice]
-    assert s.shape == expected.shape
-    npt.assert_array_almost_equal(s, expected)
+@pytest.mark.parametrize("rows", slices_to_test)
+@pytest.mark.parametrize("cols", slices_to_test)
+def test_ellipsis_reads(binary_reader, hdf5_reader, raster_reader, rows, cols):
+    # Test that the ellipsis works
+    assert binary_reader[...] is binary_reader[()]
+    assert hdf5_reader[...] is hdf5_reader[()]
+    assert raster_reader[...] is raster_reader[()]
+    # Test we can still do rows/cols with a leading ellipsis
+    npt.assert_array_equal(binary_reader[..., rows, cols], binary_reader[rows, cols])
+    npt.assert_array_equal(hdf5_reader[..., rows, cols], hdf5_reader[rows, cols])
+    npt.assert_array_equal(raster_reader[..., rows, cols], raster_reader[rows, cols])
 
 
 # #### VRT Tests ####
