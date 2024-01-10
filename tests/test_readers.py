@@ -8,6 +8,8 @@ from osgeo import gdal
 from dolphin._readers import (
     BinaryFile,
     BinaryStackReader,
+    HDF5Reader,
+    HDF5StackReader,
     VRTStack,
     _parse_vrt_file,
 )
@@ -47,7 +49,7 @@ def binary_file_list(tmp_path_factory, slc_stack):
     return files
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture
 def binary_file(slc_stack, binary_file_list):
     f = BinaryFile(binary_file_list[0], shape=slc_stack[0].shape, dtype=slc_stack.dtype)
     assert f.shape == slc_stack[0].shape
@@ -80,8 +82,71 @@ slices_to_test = [slice(None), 1, slice(0, 10), slice(0, 10, 2)]
 @pytest.mark.parametrize("dslice", slices_to_test)
 @pytest.mark.parametrize("rslice", slices_to_test)
 @pytest.mark.parametrize("cslice", slices_to_test)
-def test_binary_stack_read(binary_stack, slc_stack, dslice, rslice, cslice):
+def test_binary_stack_read_slices(binary_stack, slc_stack, dslice, rslice, cslice):
     s = binary_stack[dslice, rslice, cslice]
+    expected = slc_stack[dslice, rslice, cslice]
+    assert s.shape == expected.shape
+    npt.assert_array_almost_equal(s, expected)
+
+
+# #### HDF5 Tests ####
+
+
+@pytest.fixture(scope="module")
+def hdf5_file_list(tmp_path_factory, slc_stack):
+    """Flat binary files in the ENVI format."""
+    import h5py
+
+    tmp_path = tmp_path_factory.mktemp("data")
+
+    # Create a stack of binary files
+    files = []
+    for i, slc in enumerate(slc_stack):
+        f = tmp_path / f"test_{i}.h5"
+        with h5py.File(f, "w") as dst:
+            dst.create_dataset("data", data=slc)
+        files.append(f)
+
+    return files
+
+
+@pytest.fixture
+def hdf5_reader(hdf5_file_list, slc_stack):
+    r = HDF5Reader(hdf5_file_list[0], dset_name="data", keep_open=True)
+    assert r.shape == slc_stack[0].shape
+    assert r.dtype == slc_stack[0].dtype
+    return r
+
+
+def test_hdf5_reader_read(hdf5_reader, slc_stack):
+    npt.assert_array_almost_equal(hdf5_reader[()], slc_stack[0])
+    # Check the reading of a subset
+    npt.assert_array_almost_equal(hdf5_reader[0:10, 0:10], slc_stack[0][0:10, 0:10])
+
+
+@pytest.mark.parametrize("keep_open", [True, False])
+def hdf5_stack(hdf5_file_list, slc_stack, keep_open):
+    s = HDF5StackReader.from_file_list(
+        hdf5_file_list, dset_names="data", keep_open=keep_open
+    )
+    assert s.shape == slc_stack.shape
+    assert len(s) == len(slc_stack) == len(hdf5_file_list)
+    assert s.ndim == 3
+    assert s.dtype == slc_stack.dtype
+    return s
+
+
+@pytest.mark.parametrize("dslice", slices_to_test)
+@pytest.mark.parametrize("rslice", slices_to_test)
+@pytest.mark.parametrize("cslice", slices_to_test)
+@pytest.mark.parametrize("keep_open", [True, False])
+def test_hdf5_stack_read_slices(
+    hdf5_file_list, slc_stack, keep_open, dslice, rslice, cslice
+):
+    reader = HDF5StackReader.from_file_list(
+        hdf5_file_list, dset_names="data", keep_open=keep_open
+    )
+    s = reader[dslice, rslice, cslice]
     expected = slc_stack[dslice, rslice, cslice]
     assert s.shape == expected.shape
     npt.assert_array_almost_equal(s, expected)
