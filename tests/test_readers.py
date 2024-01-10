@@ -10,6 +10,8 @@ from dolphin._readers import (
     BinaryStackReader,
     HDF5Reader,
     HDF5StackReader,
+    RasterReader,
+    RasterStackReader,
     VRTStack,
     _parse_vrt_file,
 )
@@ -150,6 +152,28 @@ def test_hdf5_stack_read_slices(
     expected = slc_stack[dslice, rslice, cslice]
     assert s.shape == expected.shape
     npt.assert_array_almost_equal(s, expected)
+
+
+# #### RasterReader Tests ####
+
+# We already have raster files in slc_file_list
+
+
+def test_raster_reader(slc_file_list, slc_stack):
+    r = RasterReader(slc_file_list[0])
+    assert r.shape == slc_stack[0].shape
+    assert r.dtype == slc_stack[0].dtype
+    assert r.ndim == 2
+    assert r.shape == (100, 200)
+    assert r.dtype == np.complex64
+
+
+def test_raster_stack_reader(slc_file_list, slc_stack):
+    s = RasterStackReader.from_file_list(slc_file_list)
+    assert s.shape == slc_stack.shape
+    assert len(s) == len(slc_stack) == len(slc_file_list)
+    assert s.ndim == 3
+    assert s.dtype == slc_stack.dtype
 
 
 # #### VRT Tests ####
