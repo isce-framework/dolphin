@@ -16,7 +16,13 @@ from dolphin._dates import get_dates, sort_files_by_date
 from dolphin._types import Filename
 from dolphin.stack import logger
 
-__all__ = ["VRTStack", "DatasetReader", "BinaryFile", "StackReader", "BinaryStack"]
+__all__ = [
+    "DatasetReader",
+    "BinaryFile",
+    "StackReader",
+    "BinaryStack",
+    "VRTStack",
+]
 
 
 @runtime_checkable
@@ -140,8 +146,8 @@ class BinaryFile(DatasetReader):
 
 
 @dataclass
-class RasterStack(StackReader):
-    """Base class for a stack of separate raster image files.
+class RasterStackReader(StackReader):
+    """Base class for a reader of separate raster image files.
 
     Parameters
     ----------
@@ -151,11 +157,12 @@ class RasterStack(StackReader):
         Shape of each file.
     dtype : np.dtype
         Data type of each file.
+
     """
 
     file_list: Sequence[Filename]
     readers: Sequence[DatasetReader]
-    num_threads: int = 1
+    num_threads: int
 
     def __getitem__(self, key: tuple[slice, ...], /) -> np.ndarray:
         # Check that it's a tuple of slices
@@ -193,15 +200,76 @@ class RasterStack(StackReader):
     def shape(self):
         return (len(self), *self.shape_2d)
 
+    @property
+    def dtype(self):
+        return self.readers[0].dtype
+
 
 @dataclass
-class BinaryStack(StackReader):
-    shape_2d: tuple[int, int]
+class BinaryStack(RasterStackReader):
+    @classmethod
+    def from_file_list(
+        cls, file_list: Sequence[Filename], shape_2d: tuple[int, int], dtype: np.dtype
+    ) -> BinaryStack:
+        """Create a BinaryStack from a list of files.
 
-    def __post_init__(self):
-        self.readers = [
-            BinaryFile(f, shape=self.shape_2d, dtype=self.dtype) for f in self.file_list
-        ]
+        Parameters
+        ----------
+        file_list : Sequence[Filename]
+            List of paths to the files to read.
+        shape_2d : tuple[int, int]
+            Shape of each file.
+        dtype : np.dtype
+            Data type of each file.
+
+        Returns
+        -------
+        BinaryStack
+            The BinaryStack object.
+        """
+        readers = [BinaryFile(Path(f), shape=shape_2d, dtype=dtype) for f in file_list]
+        return cls(file_list, readers, num_threads=1)
+
+    @classmethod
+    def from_gdal(
+        cls,
+        file_list: Sequence[Filename],
+        band: int = 1,
+        num_threads: int = 1,
+    ) -> BinaryStack:
+        """Create a BinaryStack from a list of GDAL-readable files.
+
+        Parameters
+        ----------
+        file_list : Sequence[Filename]
+            List of paths to the files to read.
+        band : int, optional
+            Band to read from the file, by default 1
+
+        Returns
+        -------
+        BinaryStack
+            The BinaryStack object.
+        """
+        import rasterio as rio
+
+        readers = []
+        dtypes = set()
+        shapes = set()
+        for f in file_list:
+            with rio.open(f) as src:
+                dtypes.add(src.dtypes[band - 1])
+                shapes.add(src.shape)
+            if len(dtypes) > 1:
+                raise ValueError("All files must have the same data type.")
+            if len(shapes) > 1:
+                raise ValueError("All files must have the same shape.")
+            readers.append(BinaryFile.from_gdal(f, band=band))
+        return cls(
+            file_list=file_list,
+            readers=readers,
+            num_threads=num_threads,
+        )
 
 
 class VRTStack(DatasetReader):

@@ -5,10 +5,62 @@ import numpy.testing as npt
 import pytest
 from osgeo import gdal
 
-from dolphin._readers import VRTStack, _parse_vrt_file
+from dolphin._readers import (
+    BinaryFile,
+    VRTStack,
+    _parse_vrt_file,
+)
 from dolphin.utils import _get_path_from_gdal_str
 
 # Note: uses the fixtures from conftest.py
+
+
+@pytest.fixture(scope="module")
+def binary_file_list(tmp_path_factory, slc_stack):
+    """Flat binary files in the ENVI format."""
+    import rasterio as rio
+    from rasterio.errors import NotGeoreferencedWarning
+
+    shape = slc_stack[0].shape
+    dtype = slc_stack.dtype
+    tmp_path = tmp_path_factory.mktemp("data")
+
+    # Create a stack of binary files
+    files = []
+    for i, slc in enumerate(slc_stack):
+        f = tmp_path / f"test_{i}.bin"
+        # Ignore warning
+        with pytest.warns(NotGeoreferencedWarning):
+            with rio.open(
+                f,
+                "w",
+                driver="ENVI",
+                width=shape[1],
+                height=shape[0],
+                count=1,
+                dtype=dtype,
+            ) as dst:
+                dst.write(slc, 1)
+        files.append(f)
+
+    return files
+
+
+@pytest.fixture
+def binary_file(slc_stack, binary_file_list):
+    f = BinaryFile(binary_file_list[0], shape=slc_stack[0].shape, dtype=slc_stack.dtype)
+    assert f.shape == slc_stack[0].shape
+    assert f.dtype == slc_stack[0].dtype
+    return f
+
+
+def test_binary_file_read(binary_file, slc_stack):
+    npt.assert_array_almost_equal(binary_file[()], slc_stack[0])
+    # Check the reading of a subset
+    npt.assert_array_almost_equal(binary_file[0:10, 0:10], slc_stack[0][0:10, 0:10])
+
+
+# #### VRT Tests ####
 
 
 @pytest.fixture
