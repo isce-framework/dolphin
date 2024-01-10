@@ -22,6 +22,7 @@ from pyproj import CRS
 from dolphin._background import _DEFAULT_TIMEOUT, BackgroundReader, BackgroundWriter
 from dolphin._blocks import compute_out_shape, iter_blocks
 from dolphin._log import get_log
+from dolphin._readers import DatasetReader
 from dolphin._types import Bbox, Filename
 from dolphin.utils import gdal_to_numpy_type, numpy_to_gdal_type, progress
 
@@ -764,23 +765,24 @@ class EagerLoader(BackgroundReader):
 
     def __init__(
         self,
-        filename: Filename,
+        reader: DatasetReader,
         block_shape: tuple[int, int],
         overlaps: tuple[int, int] = (0, 0),
         skip_empty: bool = True,
+        nodata_value: Optional[float] = None,
         nodata_mask: Optional[ArrayLike] = None,
         queue_size: int = 1,
         timeout: float = _DEFAULT_TIMEOUT,
         show_progress: bool = True,
     ):
         super().__init__(nq=queue_size, timeout=timeout, name="EagerLoader")
-        self.filename = filename
+        self.reader = reader
         # Set up the generator of ((row_start, row_end), (col_start, col_end))
-        xsize, ysize = get_raster_xysize(filename)
         # convert the slice generator to a list so we have the size
+        nrows, ncols = self.reader.shape[-2:]
         self.slices = list(
             iter_blocks(
-                arr_shape=(ysize, xsize),
+                arr_shape=(nrows, ncols),
                 block_shape=block_shape,
                 overlaps=overlaps,
             )
@@ -789,14 +791,14 @@ class EagerLoader(BackgroundReader):
         self._skip_empty = skip_empty
         self._nodata_mask = nodata_mask
         self._block_shape = block_shape
-        self._nodata = get_raster_nodata(filename)
+        self._nodata = nodata_value
         self._show_progress = show_progress
         if self._nodata is None:
             self._nodata = np.nan
 
     def read(self, rows: slice, cols: slice) -> tuple[np.ndarray, tuple[slice, slice]]:
         logger.debug(f"EagerLoader reading {rows}, {cols}")
-        cur_block = load_gdal(self.filename, rows=rows, cols=cols)
+        cur_block = self.reader[rows, cols]
         return cur_block, (rows, cols)
 
     def iter_blocks(
@@ -834,48 +836,6 @@ class EagerLoader(BackgroundReader):
         self.notify_finished()
 
 
-def get_max_block_shape(
-    filename: Filename, nstack: int, max_bytes: float = 64e6
-) -> tuple[int, int]:
-    """Find a block shape to load from `filename` with memory size < `max_bytes`.
-
-    Attempts to get an integer number of chunks ("tiles" for geotiffs) from the
-    file to avoid partial tiles.
-
-    Parameters
-    ----------
-    filename : str
-        GDAL-readable file name containing 3D dataset.
-    nstack: int
-        Number of bands in dataset.
-    max_bytes : float, optional
-        Target size of memory (in Bytes) for each block.
-        Defaults to 64e6.
-
-    Returns
-    -------
-    tuple[int, int]:
-        (num_rows, num_cols) shape of blocks to load from `vrt_file`
-    """
-    chunk_cols, chunk_rows = get_raster_chunk_size(filename)
-    xsize, ysize = get_raster_xysize(filename)
-    # If it's written by line, load at least 16 lines at a time
-    chunk_cols = min(max(16, chunk_cols), xsize)
-    chunk_rows = min(max(16, chunk_rows), ysize)
-
-    ds = gdal.Open(fspath(filename))
-    shape = (ds.RasterYSize, ds.RasterXSize)
-    # get the size of the data type from the raster
-    nbytes = gdal_to_numpy_type(ds.GetRasterBand(1).DataType).itemsize
-    return _increment_until_max(
-        max_bytes=max_bytes,
-        file_chunk_size=[chunk_rows, chunk_cols],
-        shape=shape,
-        nstack=nstack,
-        bytes_per_pixel=nbytes,
-    )
-
-
 def get_raster_chunk_size(filename: Filename) -> list[int]:
     """Get size the raster's chunks on disk.
 
@@ -888,37 +848,3 @@ def get_raster_chunk_size(filename: Filename) -> list[int]:
             logger.warning(f"Warning: {filename} bands have different block shapes.")
             break
     return block_size
-
-
-def _increment_until_max(
-    max_bytes: float,
-    file_chunk_size: Sequence[int],
-    shape: tuple[int, int],
-    nstack: int,
-    bytes_per_pixel: int = 8,
-) -> tuple[int, int]:
-    """Find size of 3D chunk to load while staying at ~`max_bytes` bytes of RAM."""
-    chunk_rows, chunk_cols = file_chunk_size
-
-    # How many chunks can we fit in max_bytes?
-    chunks_per_block = max_bytes / (
-        (nstack * chunk_rows * chunk_cols) * bytes_per_pixel
-    )
-    num_chunks = [1, 1]
-    cur_block_shape = [chunk_rows, chunk_cols]
-
-    idx = 1  # start incrementing cols
-    while chunks_per_block > 1 and tuple(cur_block_shape) != tuple(shape):
-        # Alternate between adding a row and column chunk by flipping the idx
-        chunk_idx = idx % 2
-        nc = num_chunks[chunk_idx]
-        chunk_size = file_chunk_size[chunk_idx]
-
-        cur_block_shape[chunk_idx] = min(nc * chunk_size, shape[chunk_idx])
-
-        chunks_per_block = max_bytes / (
-            nstack * np.prod(cur_block_shape) * bytes_per_pixel
-        )
-        num_chunks[chunk_idx] += 1
-        idx += 1
-    return cur_block_shape[0], cur_block_shape[1]
