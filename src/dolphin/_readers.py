@@ -9,6 +9,7 @@ from typing import Generator, Optional, Protocol, Sequence, runtime_checkable
 
 import h5py
 import numpy as np
+import rasterio as rio
 from numpy.typing import ArrayLike
 from osgeo import gdal
 
@@ -76,7 +77,7 @@ class BinaryFile(DatasetReader):
     See Also
     --------
     HDF5Dataset
-    RasterBand
+    RasterReader
 
     Notes
     -----
@@ -138,8 +139,6 @@ class BinaryFile(DatasetReader):
         BinaryFile
             The BinaryFile object.
         """
-        import rasterio as rio
-
         with rio.open(filename) as src:
             dtype = src.dtypes[band - 1]
             shape = src.shape
@@ -165,7 +164,7 @@ class HDF5Reader(DatasetReader):
     See Also
     --------
     BinaryFile
-    RasterBand
+    RasterReader
 
     Notes
     -----
@@ -173,7 +172,7 @@ class HDF5Reader(DatasetReader):
     Otherwise, the file is opened on-demand for reading or writing and closed
     immediately after each read/write operation.
     If passing the `HDF5Reader` to multiple spawned processes, it is recommended
-    to set `keep_open=False` and use a suitable mutex to guard file access.
+    to set `keep_open=False` .
     """
 
     filepath: Path
@@ -213,6 +212,100 @@ class HDF5Reader(DatasetReader):
         with h5py.File(self.filepath, "r") as f:
             dataset = f[self.dset_name]
             return dataset[key]
+
+
+@dataclass
+class RasterReader(DatasetReader):
+    """A single raster band of a GDAL-compatible dataset.
+
+    See Also
+    --------
+    BinaryFile
+    HDF5Dataset
+
+    Notes
+    -----
+    If `keep_open=True`, this class does not store an open file object.
+    Otherwise, the file is opened on-demand for reading or writing and closed
+    immediately after each read/write operation.
+    If passing the `RasterReader` to multiple spawned processes, it is recommended
+    to set `keep_open=False` .
+    """
+
+    filepath: Filename
+    """Filename : The file path."""
+
+    band: int
+    """int : Band index (1-based)."""
+
+    driver: str
+    """str : Raster format driver name."""
+
+    crs: rio.crs.CRS
+    """rio.crs.CRS : The dataset's coordinate reference system."""
+
+    transform: rio.transform.Affine
+    """
+    rasterio.transform.Affine : The dataset's georeferencing transformation matrix.
+
+    This transform maps pixel row/column coordinates to coordinates in the dataset's
+    coordinate reference system.
+    """
+
+    shape: tuple[int, int]
+    dtype: np.dtype
+
+    keep_open: bool = False
+    """bool : If True, keep the rasterio file handle open for faster reading."""
+
+    @classmethod
+    def from_file(
+        cls,
+        filepath: Filename,
+        band: int = 1,
+        keep_open: bool = False,
+        **options,
+    ) -> RasterReader:
+        with rio.open(filepath, "r", **options) as src:
+            shape = (src.height, src.width)
+            dtype = np.dtype(src.dtypes[band - 1])
+            driver = src.driver
+            crs = src.crs
+            transform = src.transform
+
+            return cls(
+                filepath=filepath,
+                band=band,
+                driver=driver,
+                crs=crs,
+                transform=transform,
+                shape=shape,
+                dtype=dtype,
+                keep_open=keep_open,
+            )
+
+    def __post_init__(self):
+        if self.keep_open:
+            self._src = rio.open(self.filepath, "r")
+
+    @property
+    def ndim(self) -> int:  # type: ignore[override]
+        """int : Number of array dimensions."""
+        return 2
+
+    def __array__(self) -> np.ndarray:
+        return self[:, :]
+
+    def __getitem__(self, key: tuple[slice, ...], /) -> np.ndarray:
+        window = rio.windows.Window.from_slices(
+            *key,
+            height=self.shape[0],
+            width=self.shape[1],
+        )
+        if self.keep_open:
+            return self._src.read(self.band, window=window)
+        with rio.open(self.filepath) as src:
+            return src.read(self.band, window=window)
 
 
 def _read_3d(key, readers: Sequence[DatasetReader], num_threads: int = 1):
@@ -316,8 +409,6 @@ class BinaryStackReader(StackReader):
         BinaryStackReader
             The BinaryStackReader object.
         """
-        import rasterio as rio
-
         readers = []
         dtypes = set()
         shapes = set()
@@ -348,11 +439,11 @@ class HDF5StackReader(StackReader):
 
     Notes
     -----
-    If `keep_open=True`, this class does not store an open file object.
+    If `keep_open=True`, this class stores an open file object.
     Otherwise, the file is opened on-demand for reading or writing and closed
     immediately after each read/write operation.
     If passing the `HDF5StackReader` to multiple spawned processes, it is recommended
-    to set `keep_open=False` and use a suitable mutex to guard file access.
+    to set `keep_open=False`.
     """
 
     file_list: Sequence[Filename]
@@ -403,6 +494,74 @@ class HDF5StackReader(StackReader):
         readers = [
             HDF5Reader(Path(f), dset_name=dn, keep_open=keep_open)
             for (f, dn) in zip(file_list, dset_names)
+        ]
+        return cls(file_list, readers, num_threads=1)
+
+
+@dataclass
+class RasterStackReader(StackReader):
+    """A stack of datasets for any GDAL-readable rasters.
+
+    See Also
+    --------
+    BinaryStackReader
+    HDF5StackReader
+
+    Notes
+    -----
+    If `keep_open=True`, this class stores an open file object.
+    Otherwise, the file is opened on-demand for reading or writing and closed
+    immediately after each read/write operation.
+    """
+
+    file_list: Sequence[Filename]
+    readers: Sequence[DatasetReader]
+    num_threads: int = 1
+
+    def __getitem__(self, key: tuple[slice, ...], /) -> np.ndarray:
+        return _read_3d(key, self.readers, num_threads=self.num_threads)
+
+    def __len__(self):
+        return len(self.file_list)
+
+    @property
+    def shape(self):
+        return (len(self), *self.shape_2d)
+
+    @property
+    def dtype(self):
+        return self.readers[0].dtype
+
+    @classmethod
+    def from_file_list(
+        cls,
+        file_list: Sequence[Filename],
+        bands=int | Sequence[int],
+        keep_open: bool = False,
+    ) -> RasterStackReader:
+        """Create a RasterStackReader from a list of files.
+
+        Parameters
+        ----------
+        file_list : Sequence[Filename]
+            List of paths to the files to read.
+        bands : int | Sequence[int]
+            Band to read from each file.
+            If a single int, will be used for all files.
+        keep_open : bool, optional (default False)
+            If True, keep the rasterio file handles open for faster reading.
+
+        Returns
+        -------
+        RasterStackReader
+            The RasterStackReader object.
+        """
+        if isinstance(bands, str):
+            bands = [bands] * len(file_list)
+
+        readers = [
+            RasterReader.from_file(f, band=b, keep_open=keep_open)
+            for (f, b) in zip(file_list, bands)
         ]
         return cls(file_list, readers, num_threads=1)
 
