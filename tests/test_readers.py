@@ -362,11 +362,11 @@ def test_iter_blocks(vrt_stack):
     for b in blocks:
         assert b.shape == (len(vrt_stack), 5, 5)
 
-    loader = EagerLoader(reader=vrt_stack, block_shape=(3, 2))
+    loader = EagerLoader(reader=vrt_stack, block_shape=(5, 2))
     blocks, slices = zip(*list(loader.iter_blocks()))
-    assert len(blocks) == 10
+    assert len(blocks) == 5
     for b in blocks:
-        assert b.shape == (len(vrt_stack), 3, 2)
+        assert b.shape == (len(vrt_stack), 5, 2)
 
 
 def test_tiled_iter_blocks(tmp_path, tiled_file_list):
