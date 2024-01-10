@@ -197,28 +197,34 @@ def run(
             "DEM file is not given, skip estimating tropospheric corrections..."
         )
     else:
-        estimate_tropospheric_delay(
-            ifg_file_list=ifg_filenames,
-            troposphere_files=grouped_tropo_files,
-            slc_files=grouped_slc_files,
-            geom_files=cfg.correction_options.geometry_files,
-            dem_file=cfg.correction_options.dem_file,
-            output_dir=out_dir,
-            tropo_package=cfg.correction_options.tropo_package,
-            tropo_model=cfg.correction_options.tropo_model,
-            tropo_delay_type=cfg.correction_options.tropo_delay_type,
-            strides=cfg.output_options.strides,
-        )
+        if grouped_tropo_files:
+            estimate_tropospheric_delay(
+                ifg_file_list=ifg_filenames,
+                troposphere_files=grouped_tropo_files,
+                slc_files=grouped_slc_files,
+                geom_files=cfg.correction_options.geometry_files,
+                dem_file=cfg.correction_options.dem_file,
+                output_dir=out_dir,
+                tropo_package=cfg.correction_options.tropo_package,
+                tropo_model=cfg.correction_options.tropo_model,
+                tropo_delay_type=cfg.correction_options.tropo_delay_type,
+                strides=cfg.output_options.strides,
+            )
+        else:
+            logger.info("No weather model, skip tropospheric correction ...")
 
     # Ionosphere
-    estimate_ionospheric_delay(
-        ifg_file_list=ifg_filenames,
-        slc_files=grouped_slc_files,
-        tec_files=grouped_iono_files,
-        geom_files=cfg.correction_options.geometry_files,
-        output_dir=out_dir,
-        strides=cfg.output_options.strides,
-    )
+    if grouped_iono_files:
+        estimate_ionospheric_delay(
+            ifg_file_list=ifg_filenames,
+            slc_files=grouped_slc_files,
+            tec_files=grouped_iono_files,
+            geom_files=cfg.correction_options.geometry_files,
+            output_dir=out_dir,
+            strides=cfg.output_options.strides,
+        )
+    else:
+        logger.info("No TEC files, skip ionospheric correction ...")
 
     # Print the maximum memory usage for each worker
     _print_summary(cfg)
