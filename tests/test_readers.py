@@ -1,3 +1,4 @@
+import warnings
 from pathlib import Path
 
 import numpy as np
@@ -5,10 +6,12 @@ import numpy.testing as npt
 import pytest
 import rasterio as rio
 from osgeo import gdal
+from rasterio.errors import NotGeoreferencedWarning
 
 from dolphin._readers import (
     BinaryReader,
     BinaryStackReader,
+    EagerLoader,
     HDF5Reader,
     HDF5StackReader,
     RasterReader,
@@ -22,6 +25,20 @@ from dolphin.utils import _get_path_from_gdal_str
 
 # Get combinations of slices
 slices_to_test = [slice(None), 1, slice(0, 10, 2)]
+
+
+# Filter rasterio georeferencing warnings
+@pytest.fixture(autouse=True)
+def suppress_not_georeferenced_warning():
+    """
+    Pytest fixture to suppress NotGeoreferencedWarning in tests.
+
+    This fixture automatically applies to all test functions in the module
+    where it's defined, suppressing the specified warning.
+    """
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", category=NotGeoreferencedWarning)
+        yield
 
 
 @pytest.fixture(scope="module")
@@ -168,6 +185,7 @@ def raster_reader(slc_file_list, slc_stack):
     assert r.dtype == slc_stack[0].dtype
     assert r.ndim == 2
     assert r.dtype == np.complex64
+    return r
 
 
 class TestRaster:
@@ -208,9 +226,9 @@ class TestRaster:
 @pytest.mark.parametrize("cols", slices_to_test)
 def test_ellipsis_reads(binary_reader, hdf5_reader, raster_reader, rows, cols):
     # Test that the ellipsis works
-    assert binary_reader[...] is binary_reader[()]
-    assert hdf5_reader[...] is hdf5_reader[()]
-    assert raster_reader[...] is raster_reader[()]
+    npt.assert_array_equal(binary_reader[...], binary_reader[()])
+    npt.assert_array_equal(hdf5_reader[...], hdf5_reader[()])
+    npt.assert_array_equal(raster_reader[...], raster_reader[()])
     # Test we can still do rows/cols with a leading ellipsis
     npt.assert_array_equal(binary_reader[..., rows, cols], binary_reader[rows, cols])
     npt.assert_array_equal(hdf5_reader[..., rows, cols], hdf5_reader[rows, cols])
@@ -337,22 +355,25 @@ def test_bad_sizes(slc_file_list, raster_10_by_20):
 
 
 def test_iter_blocks(vrt_stack):
-    blocks, slices = zip(*list(vrt_stack.iter_blocks(block_shape=(5, 5))))
+    loader = EagerLoader(reader=vrt_stack, block_shape=(5, 5))
+    blocks, slices = zip(*list(loader.iter_blocks()))
     # (5, 10) total shape, breaks into 5x5 blocks
     assert len(blocks) == 2
     for b in blocks:
         assert b.shape == (len(vrt_stack), 5, 5)
 
-    blocks, slices = zip(*list(vrt_stack.iter_blocks(block_shape=(1, 2))))
-    assert len(blocks) == 25
+    loader = EagerLoader(reader=vrt_stack, block_shape=(3, 2))
+    blocks, slices = zip(*list(loader.iter_blocks()))
+    assert len(blocks) == 10
     for b in blocks:
-        assert b.shape == (len(vrt_stack), 1, 2)
+        assert b.shape == (len(vrt_stack), 3, 2)
 
 
 def test_tiled_iter_blocks(tmp_path, tiled_file_list):
     outfile = tmp_path / "stack.vrt"
     vrt_stack = VRTStack(tiled_file_list, outfile=outfile)
-    blocks, slices = zip(*list(vrt_stack.iter_blocks(block_shape=(32, 32))))
+    loader = EagerLoader(reader=vrt_stack, block_shape=(32, 32))
+    blocks, slices = zip(*list(loader.iter_blocks()))
     # (100, 200) total shape, breaks into 32x32 blocks
     assert len(blocks) == len(slices) == 28
     for i, b in enumerate(blocks, start=1):
@@ -364,7 +385,8 @@ def test_tiled_iter_blocks(tmp_path, tiled_file_list):
             else:
                 assert b.shape == (len(vrt_stack), 32, 8)
 
-    blocks, slices = zip(*list(vrt_stack.iter_blocks(block_shape=(50, 100))))
+    loader = EagerLoader(reader=vrt_stack, block_shape=(50, 100))
+    blocks, slices = zip(*list(loader.iter_blocks()))
     assert len(blocks) == len(slices) == 4
 
 
@@ -421,3 +443,101 @@ def test_parse_vrt(tmp_path, test_vrt):
         "t087_185684_iw2_20220104.h5",
     ]
     assert sds == "data/VV"
+
+
+class TestEagerLoader:
+    def test_iter_blocks(self, tiled_raster_100_by_200):
+        # Try the whole raster
+        bs = (100, 200)
+        loader = EagerLoader(
+            reader=RasterReader.from_file(tiled_raster_100_by_200), block_shape=bs
+        )
+        # `list` should try to load all at once`
+        block_slice_tuples = list(loader.iter_blocks())
+        assert not loader._thread.is_alive()
+        assert len(block_slice_tuples) == 1
+        blocks, slices = zip(*list(block_slice_tuples))
+        assert blocks[0].shape == (100, 200)
+        rows, cols = slices[0]
+        assert rows == slice(0, 100)
+        assert cols == slice(0, 200)
+
+        # now one block at a time
+        bs = (32, 32)
+        reader = RasterReader.from_file(tiled_raster_100_by_200)
+        loader = EagerLoader(reader=reader, block_shape=bs)
+        blocks, slices = zip(*list(loader.iter_blocks()))
+
+        row_blocks = 100 // 32 + 1
+        col_blocks = 200 // 32 + 1
+        expected_num_blocks = row_blocks * col_blocks
+        assert len(blocks) == expected_num_blocks
+        assert blocks[0].shape == (32, 32)
+        # at the ends, the block_slice_tuples are smaller
+        assert blocks[6].shape == (32, 8)
+        assert blocks[-1].shape == (4, 8)
+
+    def test_iter_blocks_rowcols(self, tiled_raster_100_by_200):
+        # Block size that is a multiple of the raster size
+        reader = RasterReader.from_file(tiled_raster_100_by_200)
+        loader = EagerLoader(reader=reader, block_shape=(10, 20))
+        blocks, slices = zip(*list(loader.iter_blocks()))
+
+        assert blocks[0].shape == (10, 20)
+        for rs, cs in slices:
+            assert rs.stop - rs.start == 10
+            assert cs.stop - cs.start == 20
+        loader.notify_finished()
+
+        # Non-multiple block size
+        reader = RasterReader.from_file(tiled_raster_100_by_200)
+        loader = EagerLoader(reader=reader, block_shape=(32, 32))
+        blocks, slices = zip(*list(loader.iter_blocks()))
+        assert blocks[0].shape == (32, 32)
+        for b, (rs, cs) in zip(blocks, slices):
+            assert b.shape == (rs.stop - rs.start, cs.stop - cs.start)
+        loader.notify_finished()
+
+    def test_iter_nodata(
+        self,
+        raster_with_nan,
+        raster_with_nan_block,
+        raster_with_zero_block,
+        tiled_raster_100_by_200,
+    ):
+        # load one block at a time
+        bs = (100, 200)
+        reader = RasterReader.from_file(tiled_raster_100_by_200)
+        loader = EagerLoader(reader=reader, block_shape=bs)
+        blocks, slices = zip(*list(loader.iter_blocks()))
+        loader.notify_finished()
+
+        bs = (32, 32)
+        row_blocks = 100 // 32 + 1
+        col_blocks = 200 // 32 + 1
+        expected_num_blocks = row_blocks * col_blocks
+        loader = EagerLoader(reader=reader, block_shape=bs)
+        blocks, slices = zip(*list(loader.iter_blocks()))
+        assert len(blocks) == expected_num_blocks
+        assert blocks[0].shape == bs
+
+        # One nan should be fine, will get loaded
+        reader = RasterReader.from_file(raster_with_nan)
+        loader = EagerLoader(reader=reader, block_shape=bs)
+        blocks, slices = zip(*list(loader.iter_blocks()))
+        loader.notify_finished()
+        assert len(blocks) == expected_num_blocks
+
+        # Now check entire block for a skipped block
+        reader = RasterReader.from_file(raster_with_nan_block)
+        loader = EagerLoader(reader=reader, block_shape=bs)
+        blocks, slices = zip(*list(loader.iter_blocks()))
+        loader.notify_finished()
+        assert len(blocks) == expected_num_blocks - 1
+
+        # Now check entire block for a skipped block
+        reader = RasterReader.from_file(raster_with_zero_block)
+        loader = EagerLoader(reader=reader, block_shape=bs)
+        blocks, slices = zip(*list(loader.iter_blocks()))
+        loader.notify_finished()
+        assert len(blocks) == expected_num_blocks - 1

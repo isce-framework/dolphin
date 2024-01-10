@@ -6,7 +6,7 @@ import pytest
 
 import dolphin._blocks
 from dolphin import io
-from dolphin._readers import RasterReader, VRTStack
+from dolphin._readers import VRTStack
 
 
 def test_load(raster_100_by_200):
@@ -260,127 +260,6 @@ def test_save_block_cpx(raster_100_by_200, cpx_arr, tmpdir):
 def test_get_raster_block_sizes(raster_100_by_200, tiled_raster_100_by_200):
     assert io.get_raster_chunk_size(tiled_raster_100_by_200) == [32, 32]
     assert io.get_raster_chunk_size(raster_100_by_200) == [200, 1]
-
-
-def test_iter_blocks(tiled_raster_100_by_200):
-    # Try the whole raster
-    bs = (100, 200)
-    loader = io.EagerLoader(
-        reader=RasterReader.from_file(tiled_raster_100_by_200), block_shape=bs
-    )
-    # `list` should try to load all at once`
-    block_slice_tuples = list(loader.iter_blocks())
-    assert not loader._thread.is_alive()
-    assert len(block_slice_tuples) == 1
-    blocks, slices = zip(*list(block_slice_tuples))
-    assert blocks[0].shape == (100, 200)
-    rows, cols = slices[0]
-    assert rows == slice(0, 100)
-    assert cols == slice(0, 200)
-
-    # now one block at a time
-    max_bytes = 8 * 32 * 32
-    bs = io.get_max_block_shape(tiled_raster_100_by_200, 1, max_bytes=max_bytes)
-    loader = io.EagerLoader(filename=tiled_raster_100_by_200, block_shape=bs)
-    blocks, slices = zip(*list(loader.iter_blocks()))
-
-    row_blocks = 100 // 32 + 1
-    col_blocks = 200 // 32 + 1
-    expected_num_blocks = row_blocks * col_blocks
-    assert len(blocks) == expected_num_blocks
-    assert blocks[0].shape == (32, 32)
-    # at the ends, the block_slice_tuples are smaller
-    assert blocks[6].shape == (32, 8)
-    assert blocks[-1].shape == (4, 8)
-
-
-def test_iter_blocks_rowcols(tiled_raster_100_by_200):
-    # Block size that is a multiple of the raster size
-    loader = io.EagerLoader(filename=tiled_raster_100_by_200, block_shape=(10, 20))
-    blocks, slices = zip(*list(loader.iter_blocks()))
-
-    assert blocks[0].shape == (10, 20)
-    for rs, cs in slices:
-        assert rs.stop - rs.start == 10
-        assert cs.stop - cs.start == 20
-    loader.notify_finished()
-
-    # Non-multiple block size
-    loader = io.EagerLoader(filename=tiled_raster_100_by_200, block_shape=(32, 32))
-    blocks, slices = zip(*list(loader.iter_blocks()))
-    assert blocks[0].shape == (32, 32)
-    for b, (rs, cs) in zip(blocks, slices):
-        assert b.shape == (rs.stop - rs.start, cs.stop - cs.start)
-    loader.notify_finished()
-
-
-def test_iter_nodata(
-    raster_with_nan,
-    raster_with_nan_block,
-    raster_with_zero_block,
-    tiled_raster_100_by_200,
-):
-    # load one block at a time
-    max_bytes = 8 * 32 * 32
-    bs = io.get_max_block_shape(tiled_raster_100_by_200, 1, max_bytes=max_bytes)
-    loader = io.EagerLoader(filename=tiled_raster_100_by_200, block_shape=bs)
-    blocks, slices = zip(*list(loader.iter_blocks()))
-    loader.notify_finished()
-
-    row_blocks = 100 // 32 + 1
-    col_blocks = 200 // 32 + 1
-    expected_num_blocks = row_blocks * col_blocks
-    assert len(blocks) == expected_num_blocks
-    assert blocks[0].shape == (32, 32)
-
-    # One nan should be fine, will get loaded
-    loader = io.EagerLoader(filename=raster_with_nan, block_shape=bs)
-    blocks, slices = zip(*list(loader.iter_blocks()))
-    loader.notify_finished()
-    assert len(blocks) == expected_num_blocks
-
-    # Now check entire block for a skipped block
-    loader = io.EagerLoader(filename=raster_with_nan_block, block_shape=bs)
-    blocks, slices = zip(*list(loader.iter_blocks()))
-    loader.notify_finished()
-    assert len(blocks) == expected_num_blocks - 1
-
-    # Now check entire block for a skipped block
-    loader = io.EagerLoader(filename=raster_with_zero_block, block_shape=bs)
-    blocks, slices = zip(*list(loader.iter_blocks()))
-    loader.notify_finished()
-    assert len(blocks) == expected_num_blocks - 1
-
-
-@pytest.mark.skip
-def test_iter_blocks_nodata_mask(tiled_raster_100_by_200):
-    # load one block at a time
-    max_bytes = 8 * 32 * 32
-    bs = io.get_max_block_shape(tiled_raster_100_by_200, 1, max_bytes=max_bytes)
-    blocks = list(io.iter_blocks(tiled_raster_100_by_200, bs, band=1))
-    row_blocks = 100 // 32 + 1
-    col_blocks = 200 // 32 + 1
-    expected_num_blocks = row_blocks * col_blocks
-    assert len(blocks) == expected_num_blocks
-
-    nodata_mask = np.zeros((100, 200), dtype=bool)
-    nodata_mask[:5, :5] = True
-    # non-full-block should still all be loaded nan should be fine, will get loaded
-    blocks = list(
-        io.iter_blocks(
-            tiled_raster_100_by_200, bs, skip_empty=True, nodata_mask=nodata_mask
-        )
-    )
-    assert len(blocks) == expected_num_blocks
-
-    nodata_mask[:32, :32] = True
-    # non-full-block should still all be loaded nan should be fine, will get loaded
-    blocks = list(
-        io.iter_blocks(
-            tiled_raster_100_by_200, bs, skip_empty=True, nodata_mask=nodata_mask
-        )
-    )
-    assert len(blocks) == expected_num_blocks - 1
 
 
 def test_format_nc_filename():

@@ -87,13 +87,12 @@ class StackReader(DatasetReader, Protocol):
     shape: tuple[int, int, int]
     """tuple of int : Tuple of array dimensions."""
 
-    @property
     def __len__(self) -> int:
         """int : Number of images in the stack."""
         return self.shape[0]
 
 
-def _mask_array(arr: np.ndarray, nodata_value: float | None) -> np.ndarray:
+def _mask_array(arr: np.ndarray, nodata_value: float | None) -> np.ma.MaskedArray:
     """Mask an array based on a nodata value."""
     if np.isnan(nodata_value):
         return np.ma.masked_invalid(arr)
@@ -126,7 +125,7 @@ class BinaryReader(DatasetReader):
     dtype: np.dtype
     """numpy.dtype : Data-type of the array's elements."""  # noqa: D403
 
-    nodata_value: Optional[float] = None
+    nodata: Optional[float] = None
     """Optional[float] : Value to use for nodata pixels."""
 
     def __post_init__(self):
@@ -150,14 +149,14 @@ class BinaryReader(DatasetReader):
                 arr = np.frombuffer(mm, dtype=self.dtype).reshape(self.shape)
                 data = arr[key].copy()
                 del arr
-        return _mask_array(data, self.nodata_value) if self.masked else data
+        return _mask_array(data, self.nodata) if self.masked else data
 
     def __array__(self) -> np.ndarray:
         return self[:,]
 
     @classmethod
     def from_gdal(
-        cls, filename: Filename, band: int = 1, nodata_value: Optional[float] = None
+        cls, filename: Filename, band: int = 1, nodata: Optional[float] = None
     ) -> BinaryReader:
         """Create a BinaryReader from a GDAL-readable file.
 
@@ -167,7 +166,7 @@ class BinaryReader(DatasetReader):
             Path to the file to read.
         band : int, optional
             Band to read from the file, by default 1
-        nodata_value : float, optional
+        nodata : float, optional
             Value to use for nodata pixels, by default None
             If None passed, will search for a nodata value in the file.
 
@@ -184,7 +183,7 @@ class BinaryReader(DatasetReader):
             Path(filename),
             shape=shape,
             dtype=dtype,
-            nodata_value=nodata_value or nodata,
+            nodata=nodata or nodata,
         )
 
 
@@ -224,7 +223,7 @@ class HDF5Reader(DatasetReader):
     dset_name: str
     """str : The path to the dataset within the file."""
 
-    nodata_value: Optional[float] = None
+    nodata: Optional[float] = None
     """Optional[float] : Value to use for nodata pixels.
 
     If None, looks for `_FillValue` or `missing_value` attributes on the dataset.
@@ -241,10 +240,10 @@ class HDF5Reader(DatasetReader):
         self.shape = dset.shape
         self.dtype = dset.dtype
         self.chunks = dset.chunks
-        if self.nodata_value is None:
-            self.nodata_value = dset.attrs.get("_FillValue", None)
-            if self.nodata_value is None:
-                self.nodata_value = dset.attrs.get("missing_value", None)
+        if self.nodata is None:
+            self.nodata = dset.attrs.get("_FillValue", None)
+            if self.nodata is None:
+                self.nodata = dset.attrs.get("missing_value", None)
         if self.keep_open:
             self._hf = hf
             self._dset = dset
@@ -265,7 +264,7 @@ class HDF5Reader(DatasetReader):
         else:
             with h5py.File(self.filepath, "r") as f:
                 data = f[self.dset_name][key]
-        return _mask_array(data, self.nodata_value) if self.masked else data
+        return _mask_array(data, self.nodata) if self.masked else data
 
 
 def _ensure_slices(rows: Index, cols: Index) -> tuple[slice, slice]:
@@ -321,18 +320,21 @@ class RasterReader(DatasetReader):
     shape: tuple[int, int]
     dtype: np.dtype
 
-    nodata_value: Optional[float] = None
+    nodata: Optional[float] = None
     """Optional[float] : Value to use for nodata pixels."""
 
     keep_open: bool = False
     """bool : If True, keep the rasterio file handle open for faster reading."""
+
+    chunks: Optional[tuple[int, int]] = None
+    """Optional[tuple[int, int]] : Chunk shape of the dataset, or None if file is unchunked."""
 
     @classmethod
     def from_file(
         cls,
         filepath: Filename,
         band: int = 1,
-        nodata_value: Optional[float] = None,
+        nodata: Optional[float] = None,
         keep_open: bool = False,
         **options,
     ) -> RasterReader:
@@ -341,8 +343,9 @@ class RasterReader(DatasetReader):
             dtype = np.dtype(src.dtypes[band - 1])
             driver = src.driver
             crs = src.crs
-            nodata_value = nodata_value or src.nodatavals[band - 1]
+            nodata = nodata or src.nodatavals[band - 1]
             transform = src.transform
+            chunks = src.block_shapes[band - 1]
 
             return cls(
                 filepath=filepath,
@@ -352,8 +355,9 @@ class RasterReader(DatasetReader):
                 transform=transform,
                 shape=shape,
                 dtype=dtype,
-                nodata_value=nodata_value,
+                nodata=nodata,
                 keep_open=keep_open,
+                chunks=chunks,
             )
 
     def __post_init__(self):
@@ -371,6 +375,9 @@ class RasterReader(DatasetReader):
     def __getitem__(self, key: tuple[Index, ...], /) -> np.ndarray:
         import rasterio.windows
 
+        if key is ... or key == ():
+            key = (slice(None), slice(None))
+
         if not isinstance(key, tuple):
             raise ValueError("Index must be a tuple of slices or integers.")
 
@@ -386,7 +393,7 @@ class RasterReader(DatasetReader):
 
         with rio.open(self.filepath) as src:
             out = src.read(self.band, window=window)
-        out_masked = _mask_array(out, self.nodata_value) if self.masked else out
+        out_masked = _mask_array(out, self.nodata) if self.masked else out
         # Note that Rasterio doesn't use the `step` of a slice, so we need to
         # manually slice the output array.
         r_step, c_step = r_slice.step or 1, c_slice.step or 1
@@ -425,6 +432,8 @@ def _read_3d(
         with ThreadPoolExecutor(max_workers=num_threads) as executor:
             results = executor.map(lambda i: readers[i][r_slice, c_slice], band_idxs)
         out = np.stack(list(results), axis=0)
+
+    # TODO: Do i want a "keep_dims" option to not collapse singleton dimensions?
     return np.squeeze(out)
 
 
@@ -435,7 +444,7 @@ class BaseStackReader(StackReader):
     file_list: Sequence[Filename]
     readers: Sequence[DatasetReader]
     num_threads: int = 1
-    nodata_value: Optional[float] = None
+    nodata: Optional[float] = None
 
     def __getitem__(self, key: tuple[Index, ...], /) -> np.ndarray:
         return _read_3d(key, self.readers, num_threads=self.num_threads)
@@ -486,7 +495,7 @@ class BinaryStackReader(BaseStackReader):
         file_list: Sequence[Filename],
         band: int = 1,
         num_threads: int = 1,
-        nodata_value: Optional[float] = None,
+        nodata: Optional[float] = None,
     ) -> BinaryStackReader:
         """Create a BinaryStackReader from a list of GDAL-readable files.
 
@@ -498,7 +507,7 @@ class BinaryStackReader(BaseStackReader):
             Band to read from the file, by default 1
         num_threads : int, optional (default 1)
             Number of threads to use for reading.
-        nodata_value : float, optional
+        nodata : float, optional
             Manually set value to use for nodata pixels, by default None
             If None passed, will search for a nodata value in the file.
 
@@ -523,7 +532,7 @@ class BinaryStackReader(BaseStackReader):
             file_list=file_list,
             readers=readers,
             num_threads=num_threads,
-            nodata_value=nodata_value,
+            nodata=nodata,
         )
 
 
@@ -552,7 +561,7 @@ class HDF5StackReader(BaseStackReader):
         dset_names: str | Sequence[str],
         keep_open: bool = False,
         num_threads: int = 1,
-        nodata_value: Optional[float] = None,
+        nodata: Optional[float] = None,
     ) -> HDF5StackReader:
         """Create a HDF5StackReader from a list of files.
 
@@ -567,7 +576,7 @@ class HDF5StackReader(BaseStackReader):
             If True, keep the HDF5 file handles open for faster reading.
         num_threads : int, optional (default 1)
             Number of threads to use for reading.
-        nodata_value : float, optional
+        nodata : float, optional
             Manually set value to use for nodata pixels, by default None
             If None passed, will search for a nodata value in the file.
 
@@ -580,19 +589,15 @@ class HDF5StackReader(BaseStackReader):
             dset_names = [dset_names] * len(file_list)
 
         readers = [
-            HDF5Reader(
-                Path(f), dset_name=dn, keep_open=keep_open, nodata_value=nodata_value
-            )
+            HDF5Reader(Path(f), dset_name=dn, keep_open=keep_open, nodata=nodata)
             for (f, dn) in zip(file_list, dset_names)
         ]
         # Check if nodata values were found in the files
-        nds = set([r.nodata_value for r in readers])
+        nds = set([r.nodata for r in readers])
         if len(nds) == 1:
-            nodata_value = nds.pop()
+            nodata = nds.pop()
 
-        return cls(
-            file_list, readers, num_threads=num_threads, nodata_value=nodata_value
-        )
+        return cls(file_list, readers, num_threads=num_threads, nodata=nodata)
 
 
 @dataclass
@@ -618,7 +623,7 @@ class RasterStackReader(BaseStackReader):
         bands: int | Sequence[int] = 1,
         keep_open: bool = False,
         num_threads: int = 1,
-        nodata_value: Optional[float] = None,
+        nodata: Optional[float] = None,
     ) -> RasterStackReader:
         """Create a RasterStackReader from a list of files.
 
@@ -634,7 +639,7 @@ class RasterStackReader(BaseStackReader):
             If True, keep the rasterio file handles open for faster reading.
         num_threads : int, optional (default 1)
             Number of threads to use for reading.
-        nodata_value : float, optional
+        nodata : float, optional
             Manually set value to use for nodata pixels, by default None
 
         Returns
@@ -650,12 +655,10 @@ class RasterStackReader(BaseStackReader):
             for (f, b) in zip(file_list, bands)
         ]
         # Check if nodata values were found in the files
-        nds = set([r.nodata_value for r in readers])
+        nds = set([r.nodata for r in readers])
         if len(nds) == 1:
-            nodata_value = nds.pop()
-        return cls(
-            file_list, readers, num_threads=num_threads, nodata_value=nodata_value
-        )
+            nodata = nds.pop()
+        return cls(file_list, readers, num_threads=num_threads, nodata=nodata)
 
 
 class VRTStack(StackReader):
@@ -985,6 +988,8 @@ class EagerLoader(BackgroundReader):
                 overlaps=overlaps,
             )
         )
+        if nodata_value is None:
+            nodata_value = getattr(reader, "nodata", None)
         self._queue_size = queue_size
         self._skip_empty = skip_empty
         self._nodata_mask = nodata_mask
@@ -1023,10 +1028,10 @@ class EagerLoader(BackgroundReader):
 
                 # Otherwise look at the actual block we loaded
                 if np.isnan(self._nodata):
-                    block_nodata = np.isnan(cur_block)
+                    block_is_nodata = np.isnan(cur_block)
                 else:
-                    block_nodata = cur_block == self._nodata
-                if np.all(block_nodata):
+                    block_is_nodata = cur_block == self._nodata
+                if np.all(block_is_nodata):
                     logger.debug("Skipping block since it was all nodata")
                     continue
                 yield cur_block, (rows, cols)

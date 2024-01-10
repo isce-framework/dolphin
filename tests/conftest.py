@@ -223,12 +223,12 @@ def raster_10_by_20(tmp_path, tiled_raster_100_by_200):
 
 
 @pytest.fixture
-def raster_with_nan(tmpdir, tiled_raster_100_by_200):
+def raster_with_nan(tmp_path, tiled_raster_100_by_200):
     # Raster with one nan pixel
     start_arr = load_gdal(tiled_raster_100_by_200)
     nan_arr = start_arr.copy()
     nan_arr[0, 0] = np.nan
-    output_name = tmpdir / "with_one_nan.tif"
+    output_name = tmp_path / "with_one_nan.tif"
     write_arr(
         arr=nan_arr,
         like_filename=tiled_raster_100_by_200,
@@ -239,9 +239,9 @@ def raster_with_nan(tmpdir, tiled_raster_100_by_200):
 
 
 @pytest.fixture
-def raster_with_nan_block(tmpdir, tiled_raster_100_by_200):
+def raster_with_nan_block(tmp_path, tiled_raster_100_by_200):
     # One full block of 32x32 is nan
-    output_name = tmpdir / "with_nans.tif"
+    output_name = tmp_path / "with_nans.tif"
     nan_arr = load_gdal(tiled_raster_100_by_200)
     nan_arr[:32, :32] = np.nan
     write_arr(
@@ -254,9 +254,9 @@ def raster_with_nan_block(tmpdir, tiled_raster_100_by_200):
 
 
 @pytest.fixture
-def raster_with_zero_block(tmpdir, tiled_raster_100_by_200):
+def raster_with_zero_block(tmp_path, tiled_raster_100_by_200):
     # One full block of 32x32 is nan
-    output_name = tmpdir / "with_zeros.tif"
+    output_name = tmp_path / "with_zeros.tif"
     out_arr = load_gdal(tiled_raster_100_by_200)
     out_arr[:] = 1.0
 
