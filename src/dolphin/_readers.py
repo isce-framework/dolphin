@@ -39,7 +39,7 @@ __all__ = [
 if TYPE_CHECKING:
     from builtins import ellipsis
 
-Index = ellipsis | slice | int
+    Index = ellipsis | slice | int
 
 
 @runtime_checkable
@@ -881,6 +881,8 @@ class VRTStack(StackReader):
             if n < 0:
                 n = len(self) + n
             return self.read_stack(band=n + 1, rows=rows, cols=cols)
+        elif n is ...:
+            n = slice(None)
 
         bands = list(range(1, 1 + len(self)))[n]
         if len(bands) == len(self):
