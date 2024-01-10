@@ -1,10 +1,9 @@
 import jax.numpy as jnp
-import itertools
 import numpy as np
 import pytest
 import troposim.igrams
+
 from dolphin import timeseries
-from dolphin.interferogram import Network
 
 
 @pytest.fixture(scope="module")
