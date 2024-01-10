@@ -14,6 +14,13 @@ logger = get_log(__name__)
 
 _DEFAULT_TIMEOUT = 0.5
 
+__all__ = [
+    "BackgroundWorker",
+    "BackgroundReader",
+    "BackgroundWriter",
+    "DummyProcessPoolExecutor",
+]
+
 
 class BackgroundWorker(abc.ABC):
     """Base class for doing work in a background thread.

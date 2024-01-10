@@ -6,7 +6,7 @@ import pytest
 
 import dolphin._blocks
 from dolphin import io
-from dolphin._readers import VRTStack
+from dolphin._readers import RasterReader, VRTStack
 
 
 def test_load(raster_100_by_200):
@@ -262,44 +262,12 @@ def test_get_raster_block_sizes(raster_100_by_200, tiled_raster_100_by_200):
     assert io.get_raster_chunk_size(raster_100_by_200) == [200, 1]
 
 
-def test_get_max_block_shape(raster_100_by_200, tiled_raster_100_by_200):
-    # for io.get_max_block_shape, the rasters are 8 bytes per pixel
-    # if we have 1 GB, the whole raster should fit in memory
-    bs = io.get_max_block_shape(tiled_raster_100_by_200, nstack=1, max_bytes=1e9)
-    assert bs == (100, 200)
-
-    # for untiled, the block size is one line
-    bs = io.get_max_block_shape(raster_100_by_200, nstack=1, max_bytes=0)
-    # The function forces at least 16 lines to be read at a time
-    assert bs == (16, 200)
-    bs = io.get_max_block_shape(raster_100_by_200, nstack=1, max_bytes=8 * 17 * 200)
-    assert bs == (32, 200)
-
-    # Pretend we have a stack of 10 images
-    nstack = 10
-    # one tile should be 8 * 32 * 32 * 10 = 81920 bytes
-    bytes_per_tile = 8 * 32 * 32 * nstack
-    bs = io.get_max_block_shape(
-        tiled_raster_100_by_200, nstack, max_bytes=bytes_per_tile
-    )
-    assert bs == (32, 32)
-
-    # with a little more, we should get 2 tiles
-    bs = io.get_max_block_shape(
-        tiled_raster_100_by_200, nstack, max_bytes=1 + bytes_per_tile
-    )
-    assert bs == (32, 64)
-
-    bs = io.get_max_block_shape(
-        tiled_raster_100_by_200, nstack, max_bytes=4 * bytes_per_tile
-    )
-    assert bs == (64, 64)
-
-
 def test_iter_blocks(tiled_raster_100_by_200):
     # Try the whole raster
-    bs = io.get_max_block_shape(tiled_raster_100_by_200, 1, max_bytes=1e9)
-    loader = io.EagerLoader(filename=tiled_raster_100_by_200, block_shape=bs)
+    bs = (100, 200)
+    loader = io.EagerLoader(
+        reader=RasterReader.from_file(tiled_raster_100_by_200), block_shape=bs
+    )
     # `list` should try to load all at once`
     block_slice_tuples = list(loader.iter_blocks())
     assert not loader._thread.is_alive()

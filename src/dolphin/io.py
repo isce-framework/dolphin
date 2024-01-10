@@ -11,7 +11,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from os import fspath
 from pathlib import Path
-from typing import Any, Generator, Mapping, Optional, Sequence, Union
+from typing import Any, Mapping, Optional, Sequence, Union
 
 import h5py
 import numpy as np
@@ -19,12 +19,11 @@ from numpy.typing import ArrayLike, DTypeLike
 from osgeo import gdal
 from pyproj import CRS
 
-from dolphin._background import _DEFAULT_TIMEOUT, BackgroundReader, BackgroundWriter
-from dolphin._blocks import compute_out_shape, iter_blocks
+from dolphin._background import BackgroundWriter
+from dolphin._blocks import compute_out_shape
 from dolphin._log import get_log
-from dolphin._readers import DatasetReader
 from dolphin._types import Bbox, Filename
-from dolphin.utils import gdal_to_numpy_type, numpy_to_gdal_type, progress
+from dolphin.utils import gdal_to_numpy_type, numpy_to_gdal_type
 
 gdal.UseExceptions()
 
@@ -32,7 +31,7 @@ __all__ = [
     "load_gdal",
     "write_arr",
     "write_block",
-    "EagerLoader",
+    "Writer",
 ]
 
 
@@ -721,6 +720,20 @@ class FileInfo:
         )
 
 
+def get_raster_chunk_size(filename: Filename) -> list[int]:
+    """Get size the raster's chunks on disk.
+
+    This is called blockXsize, blockYsize by GDAL.
+    """
+    ds = gdal.Open(fspath(filename))
+    block_size = ds.GetRasterBand(1).GetBlockSize()
+    for i in range(2, ds.RasterCount + 1):
+        if block_size != ds.GetRasterBand(i).GetBlockSize():
+            logger.warning(f"Warning: {filename} bands have different block shapes.")
+            break
+    return block_size
+
+
 class Writer(BackgroundWriter):
     """Class to write data to files in a background thread."""
 
@@ -729,7 +742,7 @@ class Writer(BackgroundWriter):
             super().__init__(nq=max_queue, name="Writer", **kwargs)
         else:
             # Don't start a background thread. Just synchronously write data
-            self.queue_write = lambda *args: write_block(*args)  # type: ignore
+            setattr(self, "queue_write", self.write)
 
     def write(
         self, data: ArrayLike, filename: Filename, row_start: int, col_start: int
@@ -758,93 +771,3 @@ class Writer(BackgroundWriter):
     def num_queued(self):
         """Number of items waiting in the queue to be written."""
         return self._work_queue.qsize()
-
-
-class EagerLoader(BackgroundReader):
-    """Class to pre-fetch data chunks in a background thread."""
-
-    def __init__(
-        self,
-        reader: DatasetReader,
-        block_shape: tuple[int, int],
-        overlaps: tuple[int, int] = (0, 0),
-        skip_empty: bool = True,
-        nodata_value: Optional[float] = None,
-        nodata_mask: Optional[ArrayLike] = None,
-        queue_size: int = 1,
-        timeout: float = _DEFAULT_TIMEOUT,
-        show_progress: bool = True,
-    ):
-        super().__init__(nq=queue_size, timeout=timeout, name="EagerLoader")
-        self.reader = reader
-        # Set up the generator of ((row_start, row_end), (col_start, col_end))
-        # convert the slice generator to a list so we have the size
-        nrows, ncols = self.reader.shape[-2:]
-        self.slices = list(
-            iter_blocks(
-                arr_shape=(nrows, ncols),
-                block_shape=block_shape,
-                overlaps=overlaps,
-            )
-        )
-        self._queue_size = queue_size
-        self._skip_empty = skip_empty
-        self._nodata_mask = nodata_mask
-        self._block_shape = block_shape
-        self._nodata = nodata_value
-        self._show_progress = show_progress
-        if self._nodata is None:
-            self._nodata = np.nan
-
-    def read(self, rows: slice, cols: slice) -> tuple[np.ndarray, tuple[slice, slice]]:
-        logger.debug(f"EagerLoader reading {rows}, {cols}")
-        cur_block = self.reader[rows, cols]
-        return cur_block, (rows, cols)
-
-    def iter_blocks(
-        self,
-    ) -> Generator[tuple[np.ndarray, tuple[slice, slice]], None, None]:
-        # Queue up all slices to the work queue
-        queued_slices = []
-        for rows, cols in self.slices:
-            # Skip queueing a read if all nodata
-            if self._skip_empty and self._nodata_mask is not None:
-                logger.debug("Checking nodata mask")
-                if self._nodata_mask[rows, cols].all():
-                    logger.debug("Skipping!")
-                    continue
-            self.queue_read(rows, cols)
-            queued_slices.append((rows, cols))
-
-        s_iter = range(len(queued_slices))
-        desc = f"Processing {self._block_shape} sized blocks..."
-        with progress(dummy=not self._show_progress) as p:
-            for _ in p.track(s_iter, description=desc):
-                cur_block, (rows, cols) = self.get_data()
-                logger.debug(f"got data for {rows, cols}: {cur_block.shape}")
-
-                # Otherwise look at the actual block we loaded
-                if np.isnan(self._nodata):
-                    block_nodata = np.isnan(cur_block)
-                else:
-                    block_nodata = cur_block == self._nodata
-                if np.all(block_nodata):
-                    logger.debug("Skipping block since it was all nodata")
-                    continue
-                yield cur_block, (rows, cols)
-
-        self.notify_finished()
-
-
-def get_raster_chunk_size(filename: Filename) -> list[int]:
-    """Get size the raster's chunks on disk.
-
-    This is called blockXsize, blockYsize by GDAL.
-    """
-    ds = gdal.Open(fspath(filename))
-    block_size = ds.GetRasterBand(1).GetBlockSize()
-    for i in range(2, ds.RasterCount + 1):
-        if block_size != ds.GetRasterBand(i).GetBlockSize():
-            logger.warning(f"Warning: {filename} bands have different block shapes.")
-            break
-    return block_size

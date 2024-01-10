@@ -5,7 +5,14 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from os import fspath
 from pathlib import Path
-from typing import Generator, Optional, Protocol, Sequence, runtime_checkable
+from typing import (
+    TYPE_CHECKING,
+    Generator,
+    Optional,
+    Protocol,
+    Sequence,
+    runtime_checkable,
+)
 
 import h5py
 import numpy as np
@@ -14,17 +21,25 @@ from numpy.typing import ArrayLike
 from osgeo import gdal
 
 from dolphin import io, utils
+from dolphin._background import _DEFAULT_TIMEOUT, BackgroundReader
+from dolphin._blocks import iter_blocks
 from dolphin._dates import get_dates, sort_files_by_date
 from dolphin._types import Filename
 from dolphin.stack import logger
+from dolphin.utils import progress
 
 __all__ = [
     "DatasetReader",
-    "BinaryFile",
+    "BinaryReader",
     "StackReader",
     "BinaryStackReader",
     "VRTStack",
 ]
+
+if TYPE_CHECKING:
+    from builtins import ellipsis
+
+Index = ellipsis | slice | int
 
 
 @runtime_checkable
@@ -49,7 +64,10 @@ class DatasetReader(Protocol):
     ndim: int
     """int : Number of array dimensions."""  # noqa: D403
 
-    def __getitem__(self, key: tuple[slice | int, ...], /) -> ArrayLike:
+    masked: bool = False
+    """bool : If True, return a masked array with the nodata values masked out."""
+
+    def __getitem__(self, key: tuple[Index, ...], /) -> ArrayLike:
         """Read a block of data."""
         ...
 
@@ -69,9 +87,21 @@ class StackReader(DatasetReader, Protocol):
     shape: tuple[int, int, int]
     """tuple of int : Tuple of array dimensions."""
 
+    @property
+    def __len__(self) -> int:
+        """int : Number of images in the stack."""
+        return self.shape[0]
+
+
+def _mask_array(arr: np.ndarray, nodata_value: float | None) -> np.ndarray:
+    """Mask an array based on a nodata value."""
+    if np.isnan(nodata_value):
+        return np.ma.masked_invalid(arr)
+    return np.ma.masked_equal(arr, nodata_value)
+
 
 @dataclass
-class BinaryFile(DatasetReader):
+class BinaryReader(DatasetReader):
     """A flat binary file for storing array data.
 
     See Also
@@ -96,19 +126,21 @@ class BinaryFile(DatasetReader):
     dtype: np.dtype
     """numpy.dtype : Data-type of the array's elements."""  # noqa: D403
 
+    nodata_value: Optional[float] = None
+    """Optional[float] : Value to use for nodata pixels."""
+
     def __post_init__(self):
         self.filepath = Path(self.filepath)
         if not self.filepath.exists():
             raise FileNotFoundError(f"File {self.filepath} does not exist.")
         self.dtype = np.dtype(self.dtype)
-        self.filepath = Path(self.filepath)
 
     @property
     def ndim(self) -> int:  # type: ignore[override]
         """int : Number of array dimensions."""  # noqa: D403
         return len(self.shape)
 
-    def __getitem__(self, key: tuple[slice | int, ...], /) -> np.ndarray:
+    def __getitem__(self, key: tuple[Index, ...], /) -> np.ndarray:
         with self.filepath.open("rb") as f:
             # Memory-map the entire file.
             with mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ) as mm:
@@ -118,14 +150,16 @@ class BinaryFile(DatasetReader):
                 arr = np.frombuffer(mm, dtype=self.dtype).reshape(self.shape)
                 data = arr[key].copy()
                 del arr
-            return data
+        return _mask_array(data, self.nodata_value) if self.masked else data
 
     def __array__(self) -> np.ndarray:
         return self[:,]
 
     @classmethod
-    def from_gdal(cls, filename: Filename, band: int = 1) -> BinaryFile:
-        """Create a BinaryFile from a GDAL-readable file.
+    def from_gdal(
+        cls, filename: Filename, band: int = 1, nodata_value: Optional[float] = None
+    ) -> BinaryReader:
+        """Create a BinaryReader from a GDAL-readable file.
 
         Parameters
         ----------
@@ -133,16 +167,25 @@ class BinaryFile(DatasetReader):
             Path to the file to read.
         band : int, optional
             Band to read from the file, by default 1
+        nodata_value : float, optional
+            Value to use for nodata pixels, by default None
+            If None passed, will search for a nodata value in the file.
 
         Returns
         -------
-        BinaryFile
-            The BinaryFile object.
+        BinaryReader
+            The BinaryReader object.
         """
         with rio.open(filename) as src:
             dtype = src.dtypes[band - 1]
             shape = src.shape
-        return cls(Path(filename), shape=shape, dtype=dtype)
+            nodata = src.nodatavals[band - 1]
+        return cls(
+            Path(filename),
+            shape=shape,
+            dtype=dtype,
+            nodata_value=nodata_value or nodata,
+        )
 
 
 @dataclass
@@ -163,7 +206,7 @@ class HDF5Reader(DatasetReader):
 
     See Also
     --------
-    BinaryFile
+    BinaryReader
     RasterReader
 
     Notes
@@ -181,7 +224,14 @@ class HDF5Reader(DatasetReader):
     dset_name: str
     """str : The path to the dataset within the file."""
 
+    nodata_value: Optional[float] = None
+    """Optional[float] : Value to use for nodata pixels.
+
+    If None, looks for `_FillValue` or `missing_value` attributes on the dataset.
+    """
+
     keep_open: bool = False
+    """bool : If True, keep the HDF5 file handle open for faster reading."""
 
     def __post_init__(self):
         filepath = Path(self.filepath)
@@ -191,6 +241,10 @@ class HDF5Reader(DatasetReader):
         self.shape = dset.shape
         self.dtype = dset.dtype
         self.chunks = dset.chunks
+        if self.nodata_value is None:
+            self.nodata_value = dset.attrs.get("_FillValue", None)
+            if self.nodata_value is None:
+                self.nodata_value = dset.attrs.get("missing_value", None)
         if self.keep_open:
             self._hf = hf
             self._dset = dset
@@ -205,19 +259,25 @@ class HDF5Reader(DatasetReader):
     def __array__(self) -> np.ndarray:
         return self[:,]
 
-    def __getitem__(self, key: tuple[slice | int, ...], /) -> np.ndarray:
+    def __getitem__(self, key: tuple[Index, ...], /) -> np.ndarray:
         if self.keep_open:
-            return self._dset[key]
+            data = self._dset[key]
+        else:
+            with h5py.File(self.filepath, "r") as f:
+                data = f[self.dset_name][key]
+        return _mask_array(data, self.nodata_value) if self.masked else data
 
-        with h5py.File(self.filepath, "r") as f:
-            dataset = f[self.dset_name]
-            return dataset[key]
 
+def _ensure_slices(rows: Index, cols: Index) -> tuple[slice, slice]:
+    def _parse(key: Index):
+        if isinstance(key, int):
+            return slice(key, key + 1)
+        elif key is ...:
+            return slice(None)
+        else:
+            return key
 
-def _ensure_slices(rows: slice | int, cols: slice | int) -> tuple[slice, slice]:
-    r_slice = slice(rows, rows + 1) if isinstance(rows, int) else rows
-    c_slice = slice(cols, cols + 1) if isinstance(cols, int) else cols
-    return r_slice, c_slice
+    return _parse(rows), _parse(cols)
 
 
 @dataclass
@@ -226,8 +286,8 @@ class RasterReader(DatasetReader):
 
     See Also
     --------
-    BinaryFile
-    HDF5Dataset
+    BinaryReader
+    HDF5
 
     Notes
     -----
@@ -261,6 +321,9 @@ class RasterReader(DatasetReader):
     shape: tuple[int, int]
     dtype: np.dtype
 
+    nodata_value: Optional[float] = None
+    """Optional[float] : Value to use for nodata pixels."""
+
     keep_open: bool = False
     """bool : If True, keep the rasterio file handle open for faster reading."""
 
@@ -269,6 +332,7 @@ class RasterReader(DatasetReader):
         cls,
         filepath: Filename,
         band: int = 1,
+        nodata_value: Optional[float] = None,
         keep_open: bool = False,
         **options,
     ) -> RasterReader:
@@ -277,6 +341,7 @@ class RasterReader(DatasetReader):
             dtype = np.dtype(src.dtypes[band - 1])
             driver = src.driver
             crs = src.crs
+            nodata_value = nodata_value or src.nodatavals[band - 1]
             transform = src.transform
 
             return cls(
@@ -287,6 +352,7 @@ class RasterReader(DatasetReader):
                 transform=transform,
                 shape=shape,
                 dtype=dtype,
+                nodata_value=nodata_value,
                 keep_open=keep_open,
             )
 
@@ -302,13 +368,13 @@ class RasterReader(DatasetReader):
     def __array__(self) -> np.ndarray:
         return self[:, :]
 
-    def __getitem__(self, key: tuple[slice | int, ...], /) -> np.ndarray:
+    def __getitem__(self, key: tuple[Index, ...], /) -> np.ndarray:
         import rasterio.windows
 
         if not isinstance(key, tuple):
             raise ValueError("Index must be a tuple of slices or integers.")
 
-        r_slice, c_slice = _ensure_slices(*key)
+        r_slice, c_slice = _ensure_slices(*key[-2:])
         window = rasterio.windows.Window.from_slices(
             r_slice,
             c_slice,
@@ -320,13 +386,16 @@ class RasterReader(DatasetReader):
 
         with rio.open(self.filepath) as src:
             out = src.read(self.band, window=window)
+        out_masked = _mask_array(out, self.nodata_value) if self.masked else out
         # Note that Rasterio doesn't use the `step` of a slice, so we need to
         # manually slice the output array.
         r_step, c_step = r_slice.step or 1, c_slice.step or 1
-        return out[::r_step, ::c_step]
+        return out_masked[::r_step, ::c_step].squeeze()
 
 
-def _read_3d(key, readers: Sequence[DatasetReader], num_threads: int = 1):
+def _read_3d(
+    key: tuple[Index, ...], readers: Sequence[DatasetReader], num_threads: int = 1
+):
     # Check that it's a tuple of slices
     if not isinstance(key, tuple):
         raise ValueError("Index must be a tuple of slices.")
@@ -366,12 +435,10 @@ class BaseStackReader(StackReader):
     file_list: Sequence[Filename]
     readers: Sequence[DatasetReader]
     num_threads: int = 1
+    nodata_value: Optional[float] = None
 
-    def __getitem__(self, key: tuple[slice | int, ...], /) -> np.ndarray:
+    def __getitem__(self, key: tuple[Index, ...], /) -> np.ndarray:
         return _read_3d(key, self.readers, num_threads=self.num_threads)
-
-    def __len__(self):
-        return len(self.file_list)
 
     @property
     def shape_2d(self):
@@ -379,19 +446,62 @@ class BaseStackReader(StackReader):
 
     @property
     def shape(self):
-        return (len(self), *self.shape_2d)
+        return (len(self.file_list), *self.shape_2d)
 
     @property
     def dtype(self):
         return self.readers[0].dtype
 
+    def iter_blocks(
+        self,
+        overlaps: tuple[int, int] = (0, 0),
+        block_shape: tuple[int, int] = (512, 512),
+        skip_empty: bool = True,
+        nodata_mask: Optional[np.ndarray] = None,
+        show_progress: bool = True,
+    ) -> Generator[tuple[np.ndarray, tuple[slice, slice]], None, None]:
+        """Iterate over blocks of the stack.
+
+        Loads all images for one window at a time into memory, while eagerly
+        fetching the next block in the background.
+
+        Parameters
+        ----------
+        overlaps : tuple[int, int], optional
+            Pixels to overlap each block by (rows, cols)
+            By default (0, 0)
+        block_shape : tuple[int, int], optional
+            2D shape of blocks to load at a time.
+            Loads all dates/bands at a time with this shape.
+        skip_empty : bool, optional (default True)
+            Skip blocks that are entirely empty (all NaNs)
+        nodata_mask : bool, optional
+            Optional mask indicating nodata values. If provided, will skip
+            blocks that are entirely nodata.
+            1s are the nodata values, 0s are valid data.
+        show_progress : bool, default=True
+            If true, displays a `rich` ProgressBar.
+
+        Yields
+        ------
+        tuple[np.ndarray, tuple[slice, slice]]
+            Iterator of (data, (slice(row_start, row_stop), slice(col_start, col_stop))
+
+        """
+        loader = EagerLoader(
+            self,
+            block_shape=block_shape,
+            overlaps=overlaps,
+            nodata_mask=nodata_mask,
+            nodata_value=self.nodata_value,
+            skip_empty=skip_empty,
+            show_progress=show_progress,
+        )
+        yield from loader.iter_blocks()
+
 
 @dataclass
 class BinaryStackReader(BaseStackReader):
-    file_list: Sequence[Filename]
-    readers: Sequence[BinaryFile]
-    num_threads: int = 1
-
     @classmethod
     def from_file_list(
         cls, file_list: Sequence[Filename], shape_2d: tuple[int, int], dtype: np.dtype
@@ -412,7 +522,9 @@ class BinaryStackReader(BaseStackReader):
         BinaryStackReader
             The BinaryStackReader object.
         """
-        readers = [BinaryFile(Path(f), shape=shape_2d, dtype=dtype) for f in file_list]
+        readers = [
+            BinaryReader(Path(f), shape=shape_2d, dtype=dtype) for f in file_list
+        ]
         return cls(file_list=file_list, readers=readers, num_threads=1)
 
     @classmethod
@@ -421,6 +533,7 @@ class BinaryStackReader(BaseStackReader):
         file_list: Sequence[Filename],
         band: int = 1,
         num_threads: int = 1,
+        nodata_value: Optional[float] = None,
     ) -> BinaryStackReader:
         """Create a BinaryStackReader from a list of GDAL-readable files.
 
@@ -432,6 +545,9 @@ class BinaryStackReader(BaseStackReader):
             Band to read from the file, by default 1
         num_threads : int, optional (default 1)
             Number of threads to use for reading.
+        nodata_value : float, optional
+            Manually set value to use for nodata pixels, by default None
+            If None passed, will search for a nodata value in the file.
 
         Returns
         -------
@@ -449,11 +565,12 @@ class BinaryStackReader(BaseStackReader):
                 raise ValueError("All files must have the same data type.")
             if len(shapes) > 1:
                 raise ValueError("All files must have the same shape.")
-            readers.append(BinaryFile.from_gdal(f, band=band))
+            readers.append(BinaryReader.from_gdal(f, band=band))
         return cls(
             file_list=file_list,
             readers=readers,
             num_threads=num_threads,
+            nodata_value=nodata_value,
         )
 
 
@@ -482,6 +599,7 @@ class HDF5StackReader(BaseStackReader):
         dset_names: str | Sequence[str],
         keep_open: bool = False,
         num_threads: int = 1,
+        nodata_value: Optional[float] = None,
     ) -> HDF5StackReader:
         """Create a HDF5StackReader from a list of files.
 
@@ -496,6 +614,9 @@ class HDF5StackReader(BaseStackReader):
             If True, keep the HDF5 file handles open for faster reading.
         num_threads : int, optional (default 1)
             Number of threads to use for reading.
+        nodata_value : float, optional
+            Manually set value to use for nodata pixels, by default None
+            If None passed, will search for a nodata value in the file.
 
         Returns
         -------
@@ -506,10 +627,19 @@ class HDF5StackReader(BaseStackReader):
             dset_names = [dset_names] * len(file_list)
 
         readers = [
-            HDF5Reader(Path(f), dset_name=dn, keep_open=keep_open)
+            HDF5Reader(
+                Path(f), dset_name=dn, keep_open=keep_open, nodata_value=nodata_value
+            )
             for (f, dn) in zip(file_list, dset_names)
         ]
-        return cls(file_list, readers, num_threads=num_threads)
+        # Check if nodata values were found in the files
+        nds = set([r.nodata_value for r in readers])
+        if len(nds) == 1:
+            nodata_value = nds.pop()
+
+        return cls(
+            file_list, readers, num_threads=num_threads, nodata_value=nodata_value
+        )
 
 
 @dataclass
@@ -535,6 +665,7 @@ class RasterStackReader(BaseStackReader):
         bands: int | Sequence[int] = 1,
         keep_open: bool = False,
         num_threads: int = 1,
+        nodata_value: Optional[float] = None,
     ) -> RasterStackReader:
         """Create a RasterStackReader from a list of files.
 
@@ -550,6 +681,8 @@ class RasterStackReader(BaseStackReader):
             If True, keep the rasterio file handles open for faster reading.
         num_threads : int, optional (default 1)
             Number of threads to use for reading.
+        nodata_value : float, optional
+            Manually set value to use for nodata pixels, by default None
 
         Returns
         -------
@@ -563,7 +696,13 @@ class RasterStackReader(BaseStackReader):
             RasterReader.from_file(f, band=b, keep_open=keep_open)
             for (f, b) in zip(file_list, bands)
         ]
-        return cls(file_list, readers, num_threads=num_threads)
+        # Check if nodata values were found in the files
+        nds = set([r.nodata_value for r in readers])
+        if len(nds) == 1:
+            nodata_value = nds.pop()
+        return cls(
+            file_list, readers, num_threads=num_threads, nodata_value=nodata_value
+        )
 
 
 class VRTStack(StackReader):
@@ -757,7 +896,8 @@ class VRTStack(StackReader):
     ) -> Generator[tuple[np.ndarray, tuple[slice, slice]], None, None]:
         """Iterate over blocks of the stack.
 
-        Loads all images for one window at a time into memory.
+        Loads all images for one window at a time into memory, while eagerly
+        fetching the next block in the background.
 
         Parameters
         ----------
@@ -782,15 +922,15 @@ class VRTStack(StackReader):
             Iterator of (data, (slice(row_start, row_stop), slice(col_start, col_stop))
 
         """
-        self._loader = io.EagerLoader(
-            self.outfile,
+        loader = EagerLoader(
+            self,
             block_shape=block_shape,
             overlaps=overlaps,
             nodata_mask=nodata_mask,
             skip_empty=skip_empty,
             show_progress=show_progress,
         )
-        yield from self._loader.iter_blocks()
+        yield from loader.iter_blocks()
 
     @property
     def shape(self):
@@ -907,3 +1047,79 @@ def _parse_vrt_file(vrt_file):
             filepaths.append(name)
 
     return filepaths, sds
+
+
+class EagerLoader(BackgroundReader):
+    """Class to pre-fetch data chunks in a background thread."""
+
+    def __init__(
+        self,
+        reader: DatasetReader,
+        block_shape: tuple[int, int],
+        overlaps: tuple[int, int] = (0, 0),
+        skip_empty: bool = True,
+        nodata_value: Optional[float] = None,
+        nodata_mask: Optional[ArrayLike] = None,
+        queue_size: int = 1,
+        timeout: float = _DEFAULT_TIMEOUT,
+        show_progress: bool = True,
+    ):
+        super().__init__(nq=queue_size, timeout=timeout, name="EagerLoader")
+        self.reader = reader
+        # Set up the generator of ((row_start, row_end), (col_start, col_end))
+        # convert the slice generator to a list so we have the size
+        nrows, ncols = self.reader.shape[-2:]
+        self.slices = list(
+            iter_blocks(
+                arr_shape=(nrows, ncols),
+                block_shape=block_shape,
+                overlaps=overlaps,
+            )
+        )
+        self._queue_size = queue_size
+        self._skip_empty = skip_empty
+        self._nodata_mask = nodata_mask
+        self._block_shape = block_shape
+        self._nodata = nodata_value
+        self._show_progress = show_progress
+        if self._nodata is None:
+            self._nodata = np.nan
+
+    def read(self, rows: slice, cols: slice) -> tuple[np.ndarray, tuple[slice, slice]]:
+        logger.debug(f"EagerLoader reading {rows}, {cols}")
+        cur_block = self.reader[..., rows, cols]
+        return cur_block, (rows, cols)
+
+    def iter_blocks(
+        self,
+    ) -> Generator[tuple[np.ndarray, tuple[slice, slice]], None, None]:
+        # Queue up all slices to the work queue
+        queued_slices = []
+        for rows, cols in self.slices:
+            # Skip queueing a read if all nodata
+            if self._skip_empty and self._nodata_mask is not None:
+                logger.debug("Checking nodata mask")
+                if self._nodata_mask[rows, cols].all():
+                    logger.debug("Skipping!")
+                    continue
+            self.queue_read(rows, cols)
+            queued_slices.append((rows, cols))
+
+        s_iter = range(len(queued_slices))
+        desc = f"Processing {self._block_shape} sized blocks..."
+        with progress(dummy=not self._show_progress) as p:
+            for _ in p.track(s_iter, description=desc):
+                cur_block, (rows, cols) = self.get_data()
+                logger.debug(f"got data for {rows, cols}: {cur_block.shape}")
+
+                # Otherwise look at the actual block we loaded
+                if np.isnan(self._nodata):
+                    block_nodata = np.isnan(cur_block)
+                else:
+                    block_nodata = cur_block == self._nodata
+                if np.all(block_nodata):
+                    logger.debug("Skipping block since it was all nodata")
+                    continue
+                yield cur_block, (rows, cols)
+
+        self.notify_finished()
