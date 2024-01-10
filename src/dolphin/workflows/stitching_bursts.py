@@ -6,6 +6,7 @@ from typing import Sequence
 
 from dolphin import stitching
 from dolphin._log import get_log, log_runtime
+from dolphin._types import Bbox
 from dolphin.interferogram import estimate_interferometric_correlations
 
 from .config import OutputOptions
@@ -59,12 +60,13 @@ def run(
     stitched_ifg_dir.mkdir(exist_ok=True, parents=True)
     # Also preps for snaphu, which needs binary format with no nans
     logger.info("Stitching interferograms by date.")
+    out_bounds = Bbox(*output_options.bounds) if output_options.bounds else None
     date_to_ifg_path = stitching.merge_by_date(
         image_file_list=ifg_file_list,  # type: ignore
         file_date_fmt=file_date_fmt,
         output_dir=stitched_ifg_dir,
         output_suffix=".int",
-        out_bounds=output_options.bounds,
+        out_bounds=out_bounds,
         out_bounds_epsg=output_options.bounds_epsg,
     )
     stitched_ifg_paths = list(date_to_ifg_path.values())
@@ -80,7 +82,7 @@ def run(
         temp_coh_file_list,
         outfile=stitched_temp_coh_file,
         driver="GTiff",
-        out_bounds=output_options.bounds,
+        out_bounds=out_bounds,
         out_bounds_epsg=output_options.bounds_epsg,
     )
 
@@ -92,7 +94,7 @@ def run(
         out_nodata=255,
         driver="GTiff",
         resample_alg="nearest",
-        out_bounds=output_options.bounds,
+        out_bounds=out_bounds,
         out_bounds_epsg=output_options.bounds_epsg,
     )
 

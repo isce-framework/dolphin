@@ -7,11 +7,12 @@ from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 from pprint import pformat
 
-from opera_utils import group_by_burst
+from opera_utils import group_by_burst, group_by_date
 
 from dolphin import __version__
 from dolphin._background import DummyProcessPoolExecutor
 from dolphin._log import get_log, log_runtime
+from dolphin.atmosphere import estimate_tropospheric_delay
 from dolphin.utils import get_max_memory_usage, set_num_threads
 
 from . import stitching_bursts, unwrapping, wrapped_phase
@@ -59,6 +60,14 @@ def run(
         grouped_amp_mean_files = group_by_burst(cfg.amplitude_mean_files)
     else:
         grouped_amp_mean_files = defaultdict(list)
+
+    if len(cfg.correction_options.troposphere_files) > 0:
+        grouped_tropo_files = group_by_date(
+            cfg.correction_options.troposphere_files,
+            file_date_fmt=cfg.correction_options.tropo_date_fmt,
+        )
+    else:
+        grouped_tropo_files = None
 
     # ######################################
     # 1. Burst-wise Wrapped phase estimation
@@ -164,6 +173,33 @@ def run(
         mask_file=cfg.mask_file,
     )
 
+    # ##############################################
+    # 4. Estimate corrections for each interferogram
+    # ##############################################
+
+    if cfg.correction_options.dem_file is None:
+        logger.warning(
+            "DEM file is not given, skip estimating tropospheric corrections..."
+        )
+    else:
+        out_dir = cfg.work_directory / cfg.correction_options._atm_directory
+        stitched_ifg_dir = cfg.interferogram_network._directory
+        ifg_filenames = sorted(Path(stitched_ifg_dir).glob("*.int"))
+        grouped_slc_files = group_by_date(cfg.cslc_file_list)
+        estimate_tropospheric_delay(
+            ifg_file_list=ifg_filenames,
+            troposphere_files=grouped_tropo_files,
+            slc_files=grouped_slc_files,
+            geom_files=cfg.correction_options.geometry_files,
+            dem_file=cfg.correction_options.dem_file,
+            output_dir=out_dir,
+            tropo_package=cfg.correction_options.tropo_package,
+            tropo_model=cfg.correction_options.tropo_model,
+            tropo_delay_type=cfg.correction_options.tropo_delay_type,
+            strides=cfg.output_options.strides,
+        )
+
+    # Print the maximum memory usage for each worker
     _print_summary(cfg)
 
 
