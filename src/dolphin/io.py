@@ -180,10 +180,11 @@ def format_nc_filename(filename: Filename, ds_name: Optional[str] = None) -> str
         If `ds_name` is not provided for a .h5 or .nc file.
     """
     # If we've already formatted the filename, return it
-    if str(filename).startswith("NETCDF:") or str(filename).startswith("HDF5:"):
-        return str(filename)
+    fname_clean = fspath(filename).lstrip('"').lstrip("'").rstrip('"').rstrip("'")
+    if fname_clean.startswith("NETCDF:") or fname_clean.startswith("HDF5:"):
+        return fspath(filename)
 
-    if not (fspath(filename).endswith(".nc") or fspath(filename).endswith(".h5")):
+    if not (fname_clean.endswith(".nc") or fname_clean.endswith(".h5")):
         return fspath(filename)
 
     # Now we're definitely dealing with an HDF5/NetCDF file

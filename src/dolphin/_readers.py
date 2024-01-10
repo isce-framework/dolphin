@@ -305,6 +305,9 @@ class RasterReader(DatasetReader):
     def __getitem__(self, key: tuple[slice | int, ...], /) -> np.ndarray:
         import rasterio.windows
 
+        if not isinstance(key, tuple):
+            raise ValueError("Index must be a tuple of slices or integers.")
+
         r_slice, c_slice = _ensure_slices(*key)
         window = rasterio.windows.Window.from_slices(
             r_slice,
@@ -427,6 +430,8 @@ class BinaryStackReader(BaseStackReader):
             List of paths to the files to read.
         band : int, optional
             Band to read from the file, by default 1
+        num_threads : int, optional (default 1)
+            Number of threads to use for reading.
 
         Returns
         -------
@@ -476,6 +481,7 @@ class HDF5StackReader(BaseStackReader):
         file_list: Sequence[Filename],
         dset_names=str | Sequence[str],
         keep_open: bool = False,
+        num_threads: int = 1,
     ) -> HDF5StackReader:
         """Create a HDF5StackReader from a list of files.
 
@@ -488,6 +494,8 @@ class HDF5StackReader(BaseStackReader):
             If a single string, will be used for all files.
         keep_open : bool, optional (default False)
             If True, keep the HDF5 file handles open for faster reading.
+        num_threads : int, optional (default 1)
+            Number of threads to use for reading.
 
         Returns
         -------
@@ -501,7 +509,7 @@ class HDF5StackReader(BaseStackReader):
             HDF5Reader(Path(f), dset_name=dn, keep_open=keep_open)
             for (f, dn) in zip(file_list, dset_names)
         ]
-        return cls(file_list, readers, num_threads=1)
+        return cls(file_list, readers, num_threads=num_threads)
 
 
 @dataclass
@@ -526,6 +534,7 @@ class RasterStackReader(BaseStackReader):
         file_list: Sequence[Filename],
         bands: int | Sequence[int] = 1,
         keep_open: bool = False,
+        num_threads: int = 1,
     ) -> RasterStackReader:
         """Create a RasterStackReader from a list of files.
 
@@ -539,6 +548,8 @@ class RasterStackReader(BaseStackReader):
             Default = 1.
         keep_open : bool, optional (default False)
             If True, keep the rasterio file handles open for faster reading.
+        num_threads : int, optional (default 1)
+            Number of threads to use for reading.
 
         Returns
         -------
@@ -552,7 +563,7 @@ class RasterStackReader(BaseStackReader):
             RasterReader.from_file(f, band=b, keep_open=keep_open)
             for (f, b) in zip(file_list, bands)
         ]
-        return cls(file_list, readers, num_threads=1)
+        return cls(file_list, readers, num_threads=num_threads)
 
 
 class VRTStack(StackReader):
@@ -595,6 +606,7 @@ class VRTStack(StackReader):
         write_file: bool = True,
         fail_on_overwrite: bool = False,
         skip_size_check: bool = False,
+        num_threads: int = 1,
     ):
         if Path(outfile).exists() and write_file:
             if fail_on_overwrite:
@@ -606,12 +618,14 @@ class VRTStack(StackReader):
             else:
                 logger.info(f"Overwriting {outfile}")
 
-        files: list[Filename] = [Path(f) for f in file_list]
+        # files: list[Filename] = [Path(f) for f in file_list]
         self._use_abs_path = use_abs_path
         if use_abs_path:
-            files = [utils._resolve_gdal_path(p) for p in files]
+            files = [utils._resolve_gdal_path(p) for p in file_list]
+        else:
+            files = list(file_list)
         # Extract the date/datetimes from the filenames
-        dates = [get_dates(f, fmt=file_date_fmt) for f in files]
+        dates = [get_dates(f, fmt=file_date_fmt) for f in file_list]
         if sort_files:
             files, dates = sort_files_by_date(  # type: ignore
                 files, file_date_fmt=file_date_fmt
@@ -620,6 +634,7 @@ class VRTStack(StackReader):
         # Save the attributes
         self.file_list = files
         self.dates = dates
+        self.num_threads = num_threads
 
         self.outfile = Path(outfile).resolve()
         # Assumes that all files use the same subdataset (if NetCDF)
@@ -825,9 +840,20 @@ class VRTStack(StackReader):
             # This will use gdal's ds.ReadAsRaster, no iteration needed
             data = self.read_stack(band=None, rows=rows, cols=cols)
         else:
-            data = np.stack(
-                [self.read_stack(band=i, rows=rows, cols=cols) for i in bands], axis=0
-            )
+            # Get only the bands we need
+            if self.num_threads == 1:
+                # out = np.stack([readers[i][r_slice, c_slice] for i in band_idxs], axis=0)
+                data = np.stack(
+                    [self.read_stack(band=i, rows=rows, cols=cols) for i in bands],
+                    axis=0,
+                )
+            else:
+                with ThreadPoolExecutor(max_workers=self.num_threads) as executor:
+                    results = executor.map(
+                        lambda i: self.read_stack(band=i, rows=rows, cols=cols), bands
+                    )
+                data = np.stack(list(results), axis=0)
+
         return data.squeeze()
 
     @property
