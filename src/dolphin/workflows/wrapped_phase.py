@@ -74,7 +74,8 @@ def run(
             existing_amp = existing_disp = None
 
         ps.create_ps(
-            slc_vrt_file=vrt_stack.outfile,
+            reader=vrt_stack,
+            like_filename=vrt_stack.outfile,
             output_file=ps_output,
             output_amp_mean_file=cfg.ps_options._amp_mean_file,
             output_amp_dispersion_file=cfg.ps_options._amp_dispersion_file,

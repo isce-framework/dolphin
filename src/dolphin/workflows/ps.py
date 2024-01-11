@@ -88,10 +88,11 @@ def run(
 
     logger.info(f"Creating persistent scatterer file {ps_output}")
     dolphin.ps.create_ps(
-        slc_vrt_file=vrt_stack.outfile,
+        reader=vrt_stack,
         output_file=output_file_list[0],
         output_amp_mean_file=output_file_list[1],
         output_amp_dispersion_file=output_file_list[2],
+        like_filename=vrt_stack.outfile,
         amp_dispersion_threshold=cfg.ps_options.amp_dispersion_threshold,
         block_shape=cfg.worker_settings.block_shape,
     )
