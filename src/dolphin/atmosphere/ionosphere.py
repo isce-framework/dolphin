@@ -332,6 +332,8 @@ def read_ionex(
     -------
     mins: np.ndarray
         1D np.ndarray in size of (num_map), time of the day in minutes
+        (TEC maps are produced every few minute based on their predefined resolution, 
+        num_map is the the number of TEC maps produced in a day)
     lats: np.ndarray
         1D np.ndarray in size of (num_lat), latitude  in degrees
     lons: np.ndarray
