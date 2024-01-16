@@ -67,7 +67,7 @@ def estimate_ionospheric_delay(
             CRS.from_epsg(epsg), CRS.from_epsg(4326), *bounds
         )
     else:
-        lalo_bounds = bounds
+        left, bottom, right, top = bounds
 
     # Frame center latitude and longitude
     latc = (top + bottom) / 2
