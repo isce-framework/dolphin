@@ -31,10 +31,10 @@ EARTH_RADIUS = 6371.0088e3  # km
 
 
 def estimate_ionospheric_delay(
-    ifg_file_list: list[Path],
-    slc_files: dict[tuple[datetime.datetime], list[Filename]],
-    tec_files: dict[tuple[datetime.datetime], list[Filename]],
-    geom_files: list[Path],
+    ifg_file_list: Sequence[Path],
+    slc_files: Mapping[tuple[datetime.datetime], Sequence[Filename]],
+    tec_files: Mapping[tuple[datetime.datetime], Sequence[Filename]],
+    geom_files: Sequence[Path],
     output_dir: Path,
     strides: dict[str, int] = {"x": 1, "y": 1},
 ):
@@ -63,15 +63,15 @@ def estimate_ionospheric_delay(
     bounds = io.get_raster_bounds(ifg_file_list[0])
 
     if epsg != 4326:
-        lalo_bounds = transform_bounds(
+        left, bottom, right, top = transform_bounds(
             CRS.from_epsg(epsg), CRS.from_epsg(4326), *bounds
         )
     else:
-        lalo_bounds = bounds
+        left, bottom, right, top = bounds
 
     # Frame center latitude and longitude
-    latc = (lalo_bounds[1] + lalo_bounds[3]) / 2
-    lonc = (lalo_bounds[1] + lalo_bounds[3]) / 2
+    latc = (top + bottom) / 2
+    lonc = (left + right) / 2
 
     # prepare geometry data
     logger.info("Prepare geometry files...")
