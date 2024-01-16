@@ -39,7 +39,7 @@ class DelayParams:
     z_coordinates: np.ndarray
     """Array of Z coordinates."""
 
-    SNWE: list[Any]
+    SNWE: tuple[float, float, float, float]
     """ Bounding box of the data in SNWE format of RAiDER/PYAPS."""
 
     shape: tuple[int, int]
