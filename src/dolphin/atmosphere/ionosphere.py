@@ -4,6 +4,7 @@ import datetime
 import re
 from os import fspath
 from pathlib import Path
+from typing import Mapping, Sequence
 
 import numpy as np
 import opera_utils as oput
@@ -332,7 +333,7 @@ def read_ionex(
     -------
     mins: np.ndarray
         1D np.ndarray in size of (num_map), time of the day in minutes
-        (TEC maps are produced every few minute based on their predefined resolution, 
+        (TEC maps are produced every few minute based on their predefined resolution,
         num_map is the the number of TEC maps produced in a day)
     lats: np.ndarray
         1D np.ndarray in size of (num_lat), latitude  in degrees

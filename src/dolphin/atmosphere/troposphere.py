@@ -5,7 +5,7 @@ import os
 from dataclasses import dataclass
 from os import fspath
 from pathlib import Path
-from typing import Any, Optional
+from typing import Mapping, Optional, Sequence
 
 import numpy as np
 import opera_utils as oput
@@ -60,10 +60,10 @@ class DelayParams:
     delay_type: str
     """Type of tropospheric delay."""
 
-    reference_file: list[Filename]
+    reference_file: Sequence[Filename]
     """Sequence of filenames used as reference files."""
 
-    secondary_file: list[Filename]
+    secondary_file: Sequence[Filename]
     """Sequence of filenames used as secondary files."""
 
     interferogram: str
@@ -77,10 +77,10 @@ class DelayParams:
 
 
 def estimate_tropospheric_delay(
-    ifg_file_list: list[Path],
-    slc_files: dict[tuple[datetime.datetime], list[Filename]],
-    troposphere_files: dict[tuple[datetime.datetime], list[Filename]],
-    geom_files: list[Path],
+    ifg_file_list: Sequence[Path],
+    slc_files: Mapping[tuple[datetime.datetime], Sequence[Filename]],
+    troposphere_files: Mapping[tuple[datetime.datetime], Sequence[Filename]],
+    geom_files: Sequence[Path],
     dem_file: Optional[Path],
     output_dir: Path,
     tropo_package: str,
@@ -92,13 +92,13 @@ def estimate_tropospheric_delay(
 
     Parameters
     ----------
-    ifg_file_list : list[Path]
+    ifg_file_list : Sequence[Path]
         List of interferogram files.
-    slc_files : Dict[datetime.date, list[Filename]]
+    slc_files : Mapping[tuple[datetime.datetime], Sequence[Filename]]
         Dictionary of SLC files indexed by date.
-    troposphere_files : Dict[datetime.date, list[Filename]]
+    troposphere_files : Mapping[tuple[datetime.datetime], Sequence[Filename]]
         Dictionary of troposphere files indexed by date.
-    geom_files : list[Path]
+    geom_files : Sequence[Path]
         List of geometry files.
     dem_file : Optional[Path]
         DEM file.
@@ -122,11 +122,11 @@ def estimate_tropospheric_delay(
     out_bounds = io.get_raster_bounds(ifg_file_list[0])
 
     if epsg != 4326:
-        lalo_bounds = transform_bounds(
+        left, bottom, right, top = transform_bounds(
             CRS.from_epsg(epsg), CRS.from_epsg(4326), *out_bounds
         )
     else:
-        lalo_bounds = out_bounds
+        left, bottom, right, top = out_bounds
 
     # prepare geometry data
     logger.info("Prepare geometry files...")
@@ -191,7 +191,7 @@ def estimate_tropospheric_delay(
             x_coordinates=xcoord,
             y_coordinates=ycoord,
             z_coordinates=tropo_height_levels,
-            SNWE=[lalo_bounds[1], lalo_bounds[3], lalo_bounds[0], lalo_bounds[2]],
+            SNWE=(bottom, top, left, right),
             epsg=epsg,
             tropo_model=tropo_model.value,
             delay_type=delay_type,
@@ -223,7 +223,7 @@ def estimate_tropospheric_delay(
 
 def prepare_geometry(
     geometry_dir: Path,
-    geo_files: list[Path],
+    geo_files: Sequence[Path],
     matching_file: Path,
     dem_file: Optional[Path],
     epsg: int,
