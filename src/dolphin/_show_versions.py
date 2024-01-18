@@ -12,8 +12,6 @@ import platform
 import sys
 from typing import Optional
 
-import opera_utils
-
 import dolphin
 
 __all__ = ["show_versions"]
@@ -56,6 +54,8 @@ def _get_opera_info() -> dict[str, Optional[str]]:
     dict
         dolphin / opera module information
     """
+    import opera_utils
+
     blob = {
         "dolphin": dolphin.__version__,
         "opera_utils": opera_utils.__version__,
