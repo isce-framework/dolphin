@@ -18,12 +18,12 @@ import h5py
 import numpy as np
 import rasterio as rio
 from numpy.typing import ArrayLike
+from opera_utils._dates import get_dates, sort_files_by_date
 from osgeo import gdal
 
 from dolphin import io, utils
 from dolphin._background import _DEFAULT_TIMEOUT, BackgroundReader
 from dolphin._blocks import iter_blocks
-from dolphin._dates import get_dates, sort_files_by_date
 from dolphin._types import Filename
 from dolphin.stack import logger
 from dolphin.utils import progress
@@ -687,7 +687,7 @@ class VRTStack(StackReader):
         in every images. Used for skipping the loading of these pixels.
     file_date_fmt : str, optional (default = "%Y%m%d")
         Format string for parsing the dates from the filenames.
-        Passed to [dolphin._dates.get_dates][].
+        Passed to [opera_utils._dates.get_dates][].
     """
 
     def __init__(

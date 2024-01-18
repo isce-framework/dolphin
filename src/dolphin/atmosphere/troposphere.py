@@ -9,14 +9,15 @@ from typing import Optional
 
 import numpy as np
 import opera_utils as oput
+from opera_utils import get_dates
 from osgeo import gdal
 from pyproj import CRS
 from scipy.interpolate import RegularGridInterpolator
 
 from dolphin import io, stitching
-from dolphin._dates import _format_date_pair, get_dates
 from dolphin._log import get_log
 from dolphin._types import Bbox, Filename, TropoModel, TropoType
+from dolphin.utils import _format_date_pair
 
 logger = get_log(__name__)
 

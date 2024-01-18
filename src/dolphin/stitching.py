@@ -1,5 +1,4 @@
 """stitching.py: utilities for combining interferograms into larger images."""
-
 from __future__ import annotations
 
 import math
@@ -12,14 +11,14 @@ from typing import Iterable, Optional, Sequence, Union
 
 import numpy as np
 from numpy.typing import DTypeLike
+from opera_utils import group_by_date
 from osgeo import gdal, osr
 from pyproj import Transformer
 
-import dolphin._dates
 from dolphin import io, utils
-from dolphin._dates import DEFAULT_DATETIME_FORMAT, group_by_date
 from dolphin._log import get_log
 from dolphin._types import Bbox, Filename
+from dolphin.io import DEFAULT_DATETIME_FORMAT
 
 logger = get_log(__name__)
 
@@ -86,7 +85,7 @@ def merge_by_date(
     for dates, cur_images in grouped_images.items():
         logger.info(f"{dates}: Stitching {len(cur_images)} images.")
         if len(dates) == 2:
-            date_str = dolphin._dates._format_date_pair(*dates)
+            date_str = utils._format_date_pair(*dates)
         elif len(dates) == 1:
             date_str = dates[0].strftime(file_date_fmt)
         else:
