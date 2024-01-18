@@ -13,6 +13,7 @@ theme:
 plugins:
 - search
 # plugin suggestions from here: https://mkdocstrings.github.io/recipes/
+- autorefs
 - gen-files:
     scripts:
     - docs/gen_ref_pages.py

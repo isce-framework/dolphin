@@ -273,15 +273,15 @@ class OutputOptions(BaseModel, extra="forbid"):
         ),
         validate_default=True,
     )
-    bounds: Optional[Bbox] = Field(
+    bounds: Optional[Tuple[float, float, float, float]] = Field(
         None,
         description=(
-            "Area of interest: (left, bottom, right, top) longitude/latitude "
-            "e.g. `bbox=(-150.2,65.0,-150.1,65.5)`"
+            "Area of interest: [left, bottom, right, top] coordinates. "
+            "e.g. `bbox=[-150.2,65.0,-150.1,65.5]`"
         ),
     )
     bounds_epsg: int = Field(
-        4326, description="EPSG code for the `bounds`, if specified."
+        4326, description="EPSG code for the `bounds` coordinates, if specified."
     )
 
     hdf5_creation_options: dict = Field(
@@ -294,6 +294,12 @@ class OutputOptions(BaseModel, extra="forbid"):
     )
 
     # validators
+    @field_validator("bounds", mode="after")
+    @classmethod
+    def _convert_bbox(cls, bounds):
+        if bounds:
+            return Bbox(*bounds)
+        return bounds
 
     @field_validator("strides")
     @classmethod

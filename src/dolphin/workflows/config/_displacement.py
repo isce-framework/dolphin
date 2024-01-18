@@ -1,12 +1,20 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, List, Optional
+from typing import Annotated, Any, List, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StringConstraints,
+    field_validator,
+    model_validator,
+)
 
 from dolphin._dates import get_dates, sort_files_by_date
 from dolphin._log import get_log
+from dolphin._types import TropoModel, TropoType
 
 from ._common import (
     InputOptions,
@@ -30,12 +38,37 @@ logger = get_log(__name__)
 class CorrectionOptions(BaseModel, extra="forbid"):
     """Configuration for the auxillary phase corrections."""
 
+    _atm_directory: Path = Path("atmosphere")
+
     troposphere_files: List[Path] = Field(
         default_factory=list,
         description=(
             "List of weather-model files (one per date) for tropospheric corrections"
         ),
     )
+
+    tropo_date_fmt: str = Field(
+        "%Y%m%d",
+        description="Format of dates contained in weather-model filenames",
+    )
+
+    tropo_package: Annotated[str, StringConstraints(to_lower=True)] = Field(
+        "pyaps",
+        description="Package to use for tropospheric correction. Choices are: pyaps, raider",
+    )
+
+    tropo_model: TropoModel = Field(
+        TropoModel.ERA5,
+        description="source of the atmospheric model. Choices are:"
+        "ERA5, ERAI, MERRA2, NARR, HRRR, GMAO, HRES",
+    )
+
+    tropo_delay_type: TropoType = Field(
+        TropoType.COMB,
+        description="Tropospheric delay type to calculate, comb contains both wet and dry delays."
+        "Choices are: wet, dry, comb, hydrostatic",
+    )
+
     ionosphere_files: List[Path] = Field(
         default_factory=list,
         description=(
@@ -114,7 +147,7 @@ class DisplacementWorkflow(WorkflowBase):
     )
 
     @model_validator(mode="after")
-    def _check_slc_files_exist(self) -> "DisplacementWorkflow":
+    def _check_input_files_exist(self) -> "DisplacementWorkflow":
         file_list = self.cslc_file_list
         if not file_list:
             raise ValueError("Must specify list of input SLC files.")
@@ -142,6 +175,7 @@ class DisplacementWorkflow(WorkflowBase):
         self.cslc_file_list = [
             Path(f) for f in sort_files_by_date(file_list, file_date_fmt=date_fmt)[0]
         ]
+
         return self
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:

@@ -1,5 +1,4 @@
 """Find the persistent scatterers in a stack of SLCS."""
-
 from __future__ import annotations
 
 import shutil
@@ -14,7 +13,7 @@ from osgeo import gdal
 
 from dolphin import io, utils
 from dolphin._log import get_log
-from dolphin._readers import VRTStack
+from dolphin._readers import EagerLoader, StackReader
 from dolphin._types import Filename
 
 gdal.UseExceptions()
@@ -28,10 +27,11 @@ FILE_DTYPES = PsFileOptions(np.uint8, np.float32, np.float32)
 
 def create_ps(
     *,
-    slc_vrt_file: Filename,
+    reader: StackReader,
     output_file: Filename,
     output_amp_mean_file: Filename,
     output_amp_dispersion_file: Filename,
+    like_filename: Filename,
     amp_dispersion_threshold: float = 0.25,
     existing_amp_mean_file: Optional[Filename] = None,
     existing_amp_dispersion_file: Optional[Filename] = None,
@@ -44,14 +44,16 @@ def create_ps(
 
     Parameters
     ----------
-    slc_vrt_file : Filename
-        The VRT file pointing to the stack of SLCs.
+    reader : StackReader
+        A dataset reader for the 3D SLC stack.
     output_file : Filename
         The output PS file (dtype: Byte)
     output_amp_dispersion_file : Filename
         The output amplitude dispersion file.
     output_amp_mean_file : Filename
         The output mean amplitude file.
+    like_filename : Filename
+        The filename to use for the output files' spatial reference.
     amp_dispersion_threshold : float, optional
         The threshold for the amplitude dispersion. Default is 0.25.
     existing_amp_mean_file : Optional[Filename], optional
@@ -91,29 +93,28 @@ def create_ps(
     for fn, dtype, nodata in zip(file_list, FILE_DTYPES, NODATA_VALUES):
         io.write_arr(
             arr=None,
-            like_filename=slc_vrt_file,
+            like_filename=like_filename,
             output_name=fn,
             nbands=1,
             dtype=dtype,
             nodata=nodata,
         )
 
-    vrt_stack = VRTStack.from_vrt_file(slc_vrt_file)
-
     # Initialize the intermediate arrays for the calculation
-    magnitude = np.zeros((len(vrt_stack), *block_shape), dtype=np.float32)
+    magnitude = np.zeros((reader.shape[0], *block_shape), dtype=np.float32)
 
     skip_empty = nodata_mask is None
 
     writer = io.Writer()
     # Make the generator for the blocks
-    block_gen = vrt_stack.iter_blocks(
+    block_gen = EagerLoader(
+        reader,
         block_shape=block_shape,
-        skip_empty=skip_empty,
         nodata_mask=nodata_mask,
+        skip_empty=skip_empty,
         show_progress=show_progress,
     )
-    for cur_data, (rows, cols) in block_gen:
+    for cur_data, (rows, cols) in block_gen.iter_blocks():
         cur_rows, cur_cols = cur_data.shape[-2:]
 
         if not (np.all(cur_data == 0) or np.all(np.isnan(cur_data))):
