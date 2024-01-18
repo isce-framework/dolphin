@@ -30,10 +30,15 @@ from dolphin.utils import progress
 
 __all__ = [
     "DatasetReader",
-    "BinaryReader",
     "StackReader",
+    "BinaryReader",
     "BinaryStackReader",
+    "HDF5Reader",
+    "HDF5StackReader",
+    "RasterReader",
+    "RasterStackReader",
     "VRTStack",
+    "EagerLoader",
 ]
 
 if TYPE_CHECKING:

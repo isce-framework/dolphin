@@ -12,6 +12,9 @@
 - The `VRTStack` no longer has an `.iter_blocks` method
   - This has been replaced with creating an `EagerLoader` directly and passing it to the `reader` argument
 
+**Dependencies**
+- Added `rasterio>=1.3`
+
 # [v0.8.0](https://github.com/isce-framework/dolphin/compare/v0.7.0...v0.8.0)
 
 **Added**
