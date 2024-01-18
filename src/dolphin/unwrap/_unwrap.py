@@ -165,7 +165,7 @@ def unwrap(
     ntiles: Union[int, tuple[int, int]] = 1,
     scratchdir: Optional[Filename] = None,
 ) -> tuple[Path, Path]:
-    """Unwrap a single interferogram using isce3's SNAPHU/ICU bindings.
+    """Unwrap a single interferogram using isce3's bindings.
 
     Parameters
     ----------

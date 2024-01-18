@@ -61,29 +61,18 @@ def test_unwrap_snaphu(tmp_path, raster_100_by_200, corr_raster):
     )
 
 
-def test_unwrap_icu(tmp_path, raster_100_by_200, corr_raster):
-    unw_filename = tmp_path / "icu_unwrapped.unw.tif"
+@pytest.mark.parametrize("method", [UnwrapMethod.ICU, UnwrapMethod.PHASS])
+def test_unwrap_methods(tmp_path, raster_100_by_200, corr_raster, method):
+    unw_filename = tmp_path / f"{method.value}_unwrapped.unw.tif"
     dolphin.unwrap.unwrap(
         ifg_filename=raster_100_by_200,
         corr_filename=corr_raster,
         unw_filename=unw_filename,
         nlooks=1,
-        unwrap_method=UnwrapMethod.ICU,
+        unwrap_method=method,
     )
 
 
-def test_unwrap_phass(tmp_path, raster_100_by_200, corr_raster):
-    unw_filename = tmp_path / "phass_unwrapped.unw.tif"
-    dolphin.unwrap.unwrap(
-        ifg_filename=raster_100_by_200,
-        corr_filename=corr_raster,
-        unw_filename=unw_filename,
-        nlooks=1,
-        unwrap_method=UnwrapMethod.PHASS,
-    )
-
-
-# Skip this on mac, since snaphu doesn't run on mac
 def test_unwrap_logfile(tmp_path, raster_100_by_200, corr_raster):
     unw_filename = tmp_path / "unwrapped.unw.tif"
     dolphin.unwrap.unwrap(
@@ -119,7 +108,7 @@ def list_of_ifgs(tmp_path, raster_100_by_200):
 @pytest.mark.parametrize("unw_suffix", [".unw", ".unw.tif"])
 def test_run(list_of_ifgs, corr_raster, unw_suffix):
     ifg_path = list_of_ifgs[0].parent
-    out_files, conncomp_files = dolphin.unwrap.run(
+    dolphin.unwrap.run(
         ifg_filenames=list_of_ifgs,
         cor_filenames=[corr_raster] * len(list_of_ifgs),
         output_path=ifg_path,
