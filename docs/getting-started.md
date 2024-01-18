@@ -1,6 +1,5 @@
 ## Install
 
-
 `dolphin` is available on conda-forge:
 
 ```bash
@@ -126,3 +125,6 @@ mkdocs serve
 ```
 then open http://localhost:8000 in your browser.
 Creating new files or updating existing files will automatically trigger a rebuild of the documentation while `mkdocs serve` is running.
+
+For citations, use the notation `[@Ansari2018EfficientPhaseEstimation]` to refer to a Bibtex key in `docs/references.bib`  (e.g. [@Ansari2018EfficientPhaseEstimation]).
+This can be done in either a markdown file, or in a docstring.

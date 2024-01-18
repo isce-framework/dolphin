@@ -1,4 +1,6 @@
+# For citations:
 # mkdocs requirements
+git+https://github.com/bobmyhill/mdx_bib
 mkdocs
 mkdocs-gen-files
 mkdocs-jupyter
