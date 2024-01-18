@@ -1,5 +1,8 @@
 # [Unreleased](https://github.com/isce-framework/dolphin/compare/v0.9.0...main)
 
+**Removed**
+- the `_dates` module has been removed in favor of using `opera_utils._dates`
+
 # [v0.9.0](https://github.com/isce-framework/dolphin/compare/v0.8.0...v0.9.0)
 
 **Added**

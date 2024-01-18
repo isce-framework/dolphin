@@ -9,11 +9,11 @@ from typing import Any, Iterable, Literal, Optional, Sequence, Union
 
 import numpy as np
 from numpy.typing import ArrayLike
+from opera_utils import get_dates
 from osgeo import gdal
 from pydantic import BaseModel, Field, ValidationInfo, field_validator, model_validator
 
 from dolphin import io, utils
-from dolphin._dates import DEFAULT_DATETIME_FORMAT, _format_date_pair, get_dates
 from dolphin._log import get_log
 from dolphin._types import DateOrDatetime, Filename, T
 
@@ -86,7 +86,7 @@ class VRTInterferogram(BaseModel, extra="allow"):
         validate_default=True,
     )
     date_format: str = Field(
-        DEFAULT_DATETIME_FORMAT,
+        io.DEFAULT_DATETIME_FORMAT,
         description="datetime format used to parse SLC filenames",
     )
     ref_date: Optional[DateOrDatetime] = Field(
@@ -205,7 +205,9 @@ class VRTInterferogram(BaseModel, extra="allow"):
             self.outdir = utils._get_path_from_gdal_str(self.ref_slc).parent
         assert self.ref_date is not None
         assert self.sec_date is not None
-        date_str = _format_date_pair(self.ref_date, self.sec_date, fmt=self.date_format)
+        date_str = utils._format_date_pair(
+            self.ref_date, self.sec_date, fmt=self.date_format
+        )
         path = self.outdir / (date_str + DEFAULT_SUFFIX)
         self.path = path
         return self
@@ -308,7 +310,7 @@ class Network:
     date_format : str, optional
         Date format to use when parsing dates from the input files (only
         used if setting `max_temporal_baseline`).
-        defaults to [`dolphin._dates.DEFAULT_DATETIME_FORMAT`][]
+        defaults to '%Y%m%d'.
     dates: Sequence[DateOrDatetime], optional
         Alternative to `date_format`: manually specify the date/datetime of each item in
         `slc_list` instead of parsing the name.
@@ -334,7 +336,7 @@ class Network:
     max_temporal_baseline: Optional[float] = None
     include_annual: bool = False
     annual_buffer_days: float = 30
-    date_format: str = DEFAULT_DATETIME_FORMAT
+    date_format: str = io.DEFAULT_DATETIME_FORMAT
     dates: Optional[Sequence[DateOrDatetime]] = None
     reference_idx: Optional[int] = None
     indexes: Optional[Sequence[tuple[int, int]]] = None
@@ -739,7 +741,7 @@ def convert_pl_to_ifg(
     # The phase_linked_slc will be named with the secondary date.
     # Make the output from that, plus the given reference date
     secondary_date = get_dates(phase_linked_slc)[-1]
-    date_str = _format_date_pair(reference_date, secondary_date)
+    date_str = utils._format_date_pair(reference_date, secondary_date)
     out_name = Path(output_dir) / f"{date_str}.int.vrt"
     if dry_run:
         return out_name
