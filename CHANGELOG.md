@@ -1,4 +1,16 @@
-# [Unreleased](https://github.com/isce-framework/dolphin/compare/v0.8.0...main)
+# [Unreleased](https://github.com/isce-framework/dolphin/compare/v0.9.0...main)
+
+# [v0.9.0](https://github.com/isce-framework/dolphin/compare/v0.8.0...v0.9.0)
+
+**Added**
+- `DatasetReader` and `StackReader` protocols for reading in data from different sources
+  - `DatasetReader` is for reading in a single dataset, like one raster image.
+  - `StackReader` is for reading in a stack of datasets, like a stack of SLCs.
+  - Implementations of these have been done for flat binary files (`BinaryReader`), HDF5 files (`HDF5Reader`), and GDAL rasters (`RasterReader`).
+
+**Changed**
+- The `VRTStack` no longer has an `.iter_blocks` method
+  - This has been replaced with creating an `EagerLoader` directly and passing it to the `reader` argument
 
 # [v0.8.0](https://github.com/isce-framework/dolphin/compare/v0.7.0...v0.8.0)
 

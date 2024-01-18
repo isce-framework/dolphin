@@ -61,7 +61,8 @@ def test_create_ps(tmp_path, vrt_stack):
     amp_dispersion_file = tmp_path / "amp_disp.tif"
     amp_mean_file = tmp_path / "amp_mean.tif"
     dolphin.ps.create_ps(
-        slc_vrt_file=vrt_stack.outfile,
+        reader=vrt_stack,
+        like_filename=vrt_stack.outfile,
         output_amp_dispersion_file=amp_dispersion_file,
         output_amp_mean_file=amp_mean_file,
         output_file=ps_mask_file,
@@ -92,12 +93,12 @@ def test_multilook_ps_file(tmp_path, vrt_stack):
     amp_dispersion_file = tmp_path / "amp_disp.tif"
     amp_mean_file = tmp_path / "amp_mean.tif"
     dolphin.ps.create_ps(
-        slc_vrt_file=vrt_stack.outfile,
+        reader=vrt_stack,
+        like_filename=vrt_stack.outfile,
         output_amp_dispersion_file=amp_dispersion_file,
         output_amp_mean_file=amp_mean_file,
         output_file=ps_mask_file,
     )
-
     output_file = dolphin.ps.multilook_ps_mask(
         strides={"x": 5, "y": 3}, ps_mask_file=ps_mask_file
     )

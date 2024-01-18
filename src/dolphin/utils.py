@@ -115,15 +115,15 @@ def _get_path_from_gdal_str(name: Filename) -> Path:
 
 def _resolve_gdal_path(gdal_str: Filename) -> Filename:
     """Resolve the file portion of a gdal-openable string to an absolute path."""
-    s = str(gdal_str)
+    s_clean = str(gdal_str).lstrip('"').lstrip("'").rstrip('"').rstrip("'")
     prefixes = ["DERIVED_SUBDATASET", "NETCDF", "HDF"]
-    is_gdal_str = any(s.upper().startswith(pre) for pre in prefixes)
-    file_part = str(_get_path_from_gdal_str(gdal_str))
+    is_gdal_str = any(s_clean.upper().startswith(pre) for pre in prefixes)
+    file_part = str(_get_path_from_gdal_str(s_clean))
 
     # strip quotes to add back in after
     file_part = file_part.strip('"').strip("'")
     file_part_resolved = Path(file_part).resolve()
-    resolved = s.replace(file_part, str(file_part_resolved))
+    resolved = s_clean.replace(file_part, str(file_part_resolved))
     return Path(resolved) if not is_gdal_str else resolved
 
 
