@@ -196,3 +196,112 @@ def test_sort_files_by_date_compressed_first():
         "slc_20210101.tif",
     ]
     assert sorted_dates == expected_dates
+
+
+def test_sort_by_date_different_fmt():
+    # Check that it works with different date formats
+    files = [
+        "slc_2020-03-03.tif",
+        "slc_2021-01-01.tif",
+        "slc_2019-01-01.tif",
+        "slc_2018-01-01.tif",
+    ]
+    expected_dates = [
+        [datetime.datetime(2018, 1, 1)],
+        [datetime.datetime(2019, 1, 1)],
+        [datetime.datetime(2020, 3, 3)],
+        [datetime.datetime(2021, 1, 1)],
+    ]
+    expected_files = sorted(files)
+
+    sorted_files, sorted_dates = _dates.sort_files_by_date(files)
+    assert sorted_files == expected_files
+    assert sorted_dates == expected_dates
+
+    # Check that it works with different date formats
+    files = [
+        "slc_2020-03-03_2021-01-01.tif",
+        "slc_2020-03-03_2022-01-01.tif",
+        "slc_2019-01-01_2020-03-03.tif",
+        "slc_2018-01-01_2021-01-01.tif",
+    ]
+    expected_dates = [
+        [datetime.datetime(2018, 1, 1), datetime.datetime(2021, 1, 1)],
+        [datetime.datetime(2019, 1, 1), datetime.datetime(2020, 3, 3)],
+        [datetime.datetime(2020, 3, 3), datetime.datetime(2021, 1, 1)],
+        [datetime.datetime(2020, 3, 3), datetime.datetime(2022, 1, 1)],
+    ]
+    expected_files = sorted(files)
+
+    sorted_files, sorted_dates = _dates.sort_files_by_date(files)
+    assert sorted_files == expected_files
+    assert sorted_dates == expected_dates
+
+
+def test_group_by_date():
+    files = [
+        "slc_20200303.tif",
+        "slc_a_20210101.tif",
+        "slc_20190101.tif",
+        "slc_b_20210101.tif",
+    ]
+
+    date_to_file = _dates.group_by_date(files)
+
+    expected_dict = {
+        (datetime.datetime(2019, 1, 1),): ["slc_20190101.tif"],
+        (datetime.datetime(2020, 3, 3),): ["slc_20200303.tif"],
+        (datetime.datetime(2021, 1, 1),): ["slc_a_20210101.tif", "slc_b_20210101.tif"],
+    }
+
+    assert date_to_file == expected_dict
+
+
+def test_group_by_date_ifgs():
+    files = [
+        "ifg_20200303_20210101.tif",
+        "ifg_20200303_20220101.tif",
+        "ifg_a_20190101_20200303.tif",
+        "ifg_b_20190101_20200303.tif",
+    ]
+
+    # dict[tuple[datetime, ...], list[str]
+    date_to_file = _dates.group_by_date(files)
+
+    expected_dict = {
+        (datetime.datetime(2019, 1, 1), datetime.datetime(2020, 3, 3)): [
+            "ifg_a_20190101_20200303.tif",
+            "ifg_b_20190101_20200303.tif",
+        ],
+        (datetime.datetime(2020, 3, 3), datetime.datetime(2021, 1, 1)): [
+            "ifg_20200303_20210101.tif"
+        ],
+        (datetime.datetime(2020, 3, 3), datetime.datetime(2022, 1, 1)): [
+            "ifg_20200303_20220101.tif"
+        ],
+    }
+
+    assert date_to_file == expected_dict
+
+
+def test_group_by_date_different_fmt():
+    files = [
+        "slc_2020-03-03.tif",
+        "slc_2019-01-01.tif",
+        "slc_a_2021-01-01.tif",
+        "slc_4_2021-01-01.tif",
+    ]
+
+    expected_dict = {
+        (datetime.datetime(2019, 1, 1),): ["slc_2019-01-01.tif"],
+        (datetime.datetime(2020, 3, 3),): ["slc_2020-03-03.tif"],
+        (datetime.datetime(2021, 1, 1),): [
+            "slc_4_2021-01-01.tif",
+            "slc_a_2021-01-01.tif",
+        ],
+    }
+
+    date_to_file = _dates.group_by_date(files, file_date_fmt="%Y-%m-%d")
+    assert date_to_file == expected_dict
+
+    assert _dates.group_by_date(files) != expected_dict
