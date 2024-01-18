@@ -196,6 +196,7 @@ def mle_stack(
     Will use cupy if available, (and if the input is a GPU array).
     Otherwise, uses numpy (for CPU version).
 
+
     Parameters
     ----------
     C_arrays : ndarray, shape = (rows, cols, nslc, nslc)
@@ -203,7 +204,7 @@ def mle_stack(
         (e.g. from [dolphin.phase_link.covariance.estimate_stack_covariance_cpu][])
     use_evd : bool, default = False
         Use eigenvalue decomposition on the covariance matrix instead of
-        the EMI algorithm.
+        the EMI algorithm of [@Ansari2018EfficientPhaseEstimation].
     beta : float, optional
         The regularization parameter for inverting Gamma = |C|
         The regularization is applied as (1 - beta) * Gamma + beta * I
@@ -219,13 +220,6 @@ def mle_stack(
     -------
     ndarray, shape = (nslc, rows, cols)
         The estimated linked phase, same shape as the input slcs (possibly multilooked)
-
-    References
-    ----------
-        [1] Ansari, H., De Zan, F., & Bamler, R. (2018). Efficient phase
-        estimation for interferogram stacks. IEEE Transactions on
-        Geoscience and Remote Sensing, 56(7), 4109-4125.
-
     """
     xp = get_array_module(C_arrays)
     # estimate the wrapped phase based on the EMI paper

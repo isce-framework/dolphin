@@ -29,11 +29,15 @@ plugins:
           docstring_style: numpy
           members_order: alphabetical # source
 - mkdocs-jupyter:
-    include: ["*.ipynb"]
+    include: ["docs/notebooks/*.ipynb"]
 
 markdown_extensions:
   - pymdownx.arithmatex:
       generic: true
+  - footnotes
+  - mdx_bib:
+      bibtex_file: docs/references.bib
+      order: 'unsorted'
 
 extra_javascript:
   - javascripts/mathjax.js

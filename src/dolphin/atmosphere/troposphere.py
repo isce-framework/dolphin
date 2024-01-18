@@ -302,7 +302,7 @@ def compute_pyaps(delay_parameters: DelayParams) -> np.ndarray:
     Returns
     -------
     np.ndarray
-       tropospheric delay datacube.
+        tropospheric delay datacube.
     """
     import pyaps3 as pa
 
@@ -377,7 +377,7 @@ def compute_raider(delay_parameters: DelayParams) -> np.ndarray:
     Returns
     -------
     np.ndarray
-       tropospheric delay datacube.
+        tropospheric delay datacube.
     """
     from RAiDER.delay import tropo_delay as raider_tropo_delay
     from RAiDER.llreader import BoundingBox
