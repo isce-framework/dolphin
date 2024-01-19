@@ -13,7 +13,8 @@ from rasterio.warp import transform_bounds
 from scipy import interpolate
 
 from dolphin import io
-from dolphin._dates import _format_date_pair, get_dates
+from opera_utils import get_dates
+from dolphin.io import _format_date_pair
 from dolphin._log import get_log
 from dolphin._types import Filename
 
@@ -91,7 +92,7 @@ def estimate_ionospheric_delay(
     los_east = io.load_gdal(geometry_files["los_east"])
     los_north = io.load_gdal(geometry_files["los_north"])
     inc_angle = np.arccos(np.sqrt(1 - los_east**2 - los_north**2)) * 180 / np.pi
-    iono_inc_angle = incidence_angle_ground2iono(inc_angle)
+    iono_inc_angle = incidence_angle_ground_to_iono(inc_angle)
 
     # frequency
     first_date = next(iter(slc_files))
@@ -119,14 +120,14 @@ def estimate_ionospheric_delay(
         reference_date = (ref_date,)
         secondary_date = (sec_date,)
 
-        reference_vtec = read_vtec(
+        reference_vtec = read_zenith_tec(
             slc_file=slc_files[reference_date][0],
             tec_file=tec_files[reference_date][0],
             lat=latc,
             lon=lonc,
         )
 
-        secondary_vtec = read_vtec(
+        secondary_vtec = read_zenith_tec(
             slc_file=slc_files[secondary_date][0],
             tec_file=tec_files[secondary_date][0],
             lat=latc,
@@ -152,7 +153,7 @@ def estimate_ionospheric_delay(
     return
 
 
-def incidence_angle_ground2iono(inc_angle, iono_height=450e3):
+def incidence_angle_ground_to_iono(inc_angle: ArrayLike, iono_height: float=450e3):
     """Calibrate the incidence angle of LOS vector on the ground surface to the ionosphere shell.
 
     Equation (11) in Yunjun et al. (2022, TGRS)
@@ -174,19 +175,18 @@ def incidence_angle_ground2iono(inc_angle, iono_height=450e3):
     if isinstance(inc_angle, np.ndarray):
         inc_angle[inc_angle == 0] = np.nan
 
-    # deg -> rad & copy to avoid changing input variable
-    inc_angle = np.array(inc_angle) * np.pi / 180
+    # convert degrees to radians
+    inc_angle_rad = inc_angle * np.pi / 180
 
-    # calculation
     inc_angle_iono = np.arcsin(
-        EARTH_RADIUS * np.sin(inc_angle) / (EARTH_RADIUS + iono_height)
+        EARTH_RADIUS * np.sin(inc_angle_rad) / (EARTH_RADIUS + iono_height)
     )
     inc_angle_iono *= 180.0 / np.pi
 
     return inc_angle_iono
 
 
-def read_vtec(slc_file: Filename, tec_file: Filename, lat: float, lon: float) -> float:
+def read_zenith_tec(slc_file: Filename, tec_file: Filename, lat: float, lon: float) -> float:
     """Read and interpolate zenith TEC for the latitude and longitude of scene center.
 
     Parameters
