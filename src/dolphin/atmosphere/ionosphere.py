@@ -171,10 +171,6 @@ def incidence_angle_ground_to_iono(inc_angle: ArrayLike, iono_height: float=450e
     np.ndarray
         incidence angle on the iono shell in degrees
     """
-    # ignore nodata in inc_angle
-    if isinstance(inc_angle, np.ndarray):
-        inc_angle[inc_angle == 0] = np.nan
-
     # convert degrees to radians
     inc_angle_rad = inc_angle * np.pi / 180
 
