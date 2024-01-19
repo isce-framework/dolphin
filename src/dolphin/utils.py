@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime
 import math
 import resource
 import sys
@@ -16,6 +17,8 @@ from rich.progress import MofNCompleteColumn, Progress, SpinnerColumn, TimeElaps
 
 from dolphin._log import get_log
 from dolphin._types import Filename
+
+DateOrDatetime = Union[datetime.date, datetime.datetime]
 
 gdal.UseExceptions()
 logger = get_log(__name__)
@@ -550,3 +553,7 @@ def get_cpu_count():
 def flatten(list_of_lists: Iterable[Iterable[Any]]) -> chain[Any]:
     """Flatten one level of a nested iterable."""
     return chain.from_iterable(list_of_lists)
+
+
+def _format_date_pair(start: DateOrDatetime, end: DateOrDatetime, fmt="%Y%m%d") -> str:
+    return f"{start.strftime(fmt)}_{end.strftime(fmt)}"

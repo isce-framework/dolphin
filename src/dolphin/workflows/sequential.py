@@ -1,10 +1,6 @@
 """Estimate wrapped phase using batches of ministacks.
 
-References
-----------
-    [1] Ansari, H., De Zan, F., & Bamler, R. (2017). Sequential estimator: Toward
-    efficient InSAR time series analysis. IEEE Transactions on Geoscience and
-    Remote Sensing, 55(10), 5637-5652.
+Initially based on [@Ansari2017SequentialEstimatorEfficient].
 """
 
 from __future__ import annotations

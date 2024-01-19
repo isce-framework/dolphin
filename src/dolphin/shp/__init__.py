@@ -30,6 +30,9 @@ def estimate_neighbors(
 ) -> np.ndarray:
     """Estimate the statistically similar neighbors of each pixel.
 
+    GLRT method on the [@Parizzi2011AdaptiveInSARStack].
+    Assumes Rayleigh distributed amplitudes ([@Siddiqui1962ProblemsConnectedRayleigh]).
+
     Parameters
     ----------
     halfwin_rowcol : Tuple[int, int]

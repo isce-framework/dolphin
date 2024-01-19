@@ -9,15 +9,16 @@ from typing import Mapping, Optional, Sequence
 
 import numpy as np
 import opera_utils as oput
+from opera_utils import get_dates
 from osgeo import gdal
 from rasterio.crs import CRS
 from rasterio.warp import transform_bounds
 from scipy.interpolate import RegularGridInterpolator
 
 from dolphin import io, stitching
-from dolphin._dates import _format_date_pair, get_dates
 from dolphin._log import get_log
 from dolphin._types import Bbox, Filename, TropoModel, TropoType
+from dolphin.utils import _format_date_pair
 
 logger = get_log(__name__)
 
@@ -310,7 +311,7 @@ def compute_pyaps(delay_parameters: DelayParams) -> np.ndarray:
     Returns
     -------
     np.ndarray
-       tropospheric delay datacube.
+        tropospheric delay datacube.
     """
     import pyaps3 as pa
 
@@ -385,7 +386,7 @@ def compute_raider(delay_parameters: DelayParams) -> np.ndarray:
     Returns
     -------
     np.ndarray
-       tropospheric delay datacube.
+        tropospheric delay datacube.
     """
     from RAiDER.delay import tropo_delay as raider_tropo_delay
     from RAiDER.llreader import BoundingBox

@@ -32,7 +32,8 @@ def estimate_neighbors(
 ):
     """Estimate the number of neighbors based on the GLRT.
 
-    Assumes Rayleigh distributed amplitudes, based on the method described [1]_.
+    Based on the method described in [@Parizzi2011AdaptiveInSARStack].
+    Assumes Rayleigh distributed amplitudes ([@Siddiqui1962ProblemsConnectedRayleigh])
 
     Parameters
     ----------
@@ -73,12 +74,6 @@ def estimate_neighbors(
             `[dolphin.io.compute_out_shape][]`
             `window_rows = 2 * halfwin_rowcol[0] + 1`
             `window_cols = 2 * halfwin_rowcol[1] + 1`
-
-    References
-    ----------
-        [1] Parizzi and Brcic, 2011, "Adaptive InSAR Stack Multilooking Exploiting
-        Amplitude Statistics"
-        [2] Siddiqui, M. M. (1962). Some problems connected with Rayleigh distributions.
     """
     half_row, half_col = halfwin_rowcol
     rows, cols = mean.shape
