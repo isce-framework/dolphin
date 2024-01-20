@@ -215,7 +215,6 @@ def merge_images(
         target_aligned_pixels=target_aligned_pixels,
         out_bounds=out_bounds,
         out_bounds_epsg=out_bounds_epsg,
-        # strides=strides,
     )
     (xmin, ymin, xmax, ymax) = bounds
     proj_win = (xmin, ymax, xmax, ymin)  # ul_lr = ulx, uly, lrx, lry
