@@ -103,32 +103,41 @@ def test_merge_images(tmp_path, shifted_slc_files, shifted_slc_bounds):
     outfile = tmp_path / "stitched.tif"
     stitching.merge_images(shifted_slc_files, outfile, target_aligned_pixels=False)
 
-    assert io.get_raster_bounds(outfile) == shifted_slc_bounds
+    b = io.get_raster_bounds(outfile)
+    assert b == shifted_slc_bounds
 
     # The target aligned pixels option makes the bounds a multiple of dx/dy
     # which is 1.0/1.0 here
     outfile = tmp_path / "stitched_tap.tif"
-    expected_bounds_tap = Bbox(-6.0, -5.0, 9.0, 10.0)
-    stitching.merge_images(shifted_slc_files, outfile)
+    # Now the top/bottom must divide by 3, and left/right divide by 2
+    stitching.merge_images(shifted_slc_files, outfile, target_aligned_pixels=True)
 
-    assert io.get_raster_bounds(outfile) == expected_bounds_tap
+    b = io.get_raster_bounds(outfile)
+    expected_bounds_tap = Bbox(-6.0, -5.0, 9.0, 10.0)
+    assert b == expected_bounds_tap
 
 
 def test_merge_images_strided(tmp_path, shifted_slc_files, shifted_slc_bounds):
     strides = {"x": 2, "y": 3}
     outfile = tmp_path / "stitched.tif"
     stitching.merge_images(
-        shifted_slc_files, outfile, target_aligned_pixels=False, strides=strides
+        shifted_slc_files,
+        outfile,
+        target_aligned_pixels=False,
+        out_bounds=shifted_slc_bounds,
+        strides=strides,
     )
 
-    assert io.get_raster_bounds(outfile) == shifted_slc_bounds
+    b = io.get_raster_bounds(outfile)
+    assert b == shifted_slc_bounds
 
     # The target aligned pixels option makes the bounds a multiple of dx/dy
     # which is 1.0/1.0 here
     outfile = tmp_path / "stitched_tap.tif"
-    expected_bounds_tap = Bbox(-6.0, -5.0, 9.0, 10.0)
+    expected_bounds_tap = Bbox(-6.0, -6.0, 10.0, 12.0)
     stitching.merge_images(
         shifted_slc_files, outfile, target_aligned_pixels=True, strides=strides
     )
 
-    assert io.get_raster_bounds(outfile) == expected_bounds_tap
+    b = io.get_raster_bounds(outfile)
+    assert b == expected_bounds_tap
