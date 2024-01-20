@@ -252,6 +252,7 @@ def merge_images(
         srcDS=fspath(merge_output),
         projWin=proj_win,
         resampleAlg=resample_alg,
+        format=driver,
     )
 
     temp_dir.cleanup()
