@@ -1,5 +1,4 @@
 """stitching.py: utilities for combining interferograms into larger images."""
-
 from __future__ import annotations
 
 import math
@@ -12,14 +11,14 @@ from typing import Iterable, Optional, Sequence, Union
 
 import numpy as np
 from numpy.typing import DTypeLike
+from opera_utils import group_by_date
 from osgeo import gdal, osr
 from pyproj import Transformer
 
-import dolphin._dates
 from dolphin import io, utils
-from dolphin._dates import DEFAULT_DATETIME_FORMAT, group_by_date
 from dolphin._log import get_log
 from dolphin._types import Bbox, Filename
+from dolphin.io import DEFAULT_DATETIME_FORMAT
 
 logger = get_log(__name__)
 
@@ -86,7 +85,7 @@ def merge_by_date(
     for dates, cur_images in grouped_images.items():
         logger.info(f"{dates}: Stitching {len(cur_images)} images.")
         if len(dates) == 2:
-            date_str = dolphin._dates._format_date_pair(*dates)
+            date_str = utils._format_date_pair(*dates)
         elif len(dates) == 1:
             date_str = dates[0].strftime(file_date_fmt)
         else:
@@ -122,7 +121,7 @@ def merge_images(
     out_dtype: Optional[DTypeLike] = None,
     in_nodata: Optional[float] = None,
     resample_alg: str = "lanczos",
-    overwrite=False,
+    overwrite: bool = False,
     options: Optional[Sequence[str]] = io.DEFAULT_ENVI_OPTIONS,
     create_only: bool = False,
 ) -> None:
@@ -143,6 +142,9 @@ def merge_images(
         if provided, forces the output image bounds to
             (left, bottom, right, top).
         Otherwise, computes from the outside of all input images.
+        Note that using `resample_alg='nearest'` may result in bounds not
+        equaling the exact `out_bounds` due to the nearest-neighbor
+        resampling algorithm in GDAL.
     out_bounds_epsg: Optional[int]
         EPSG code for the `out_bounds`.
         If not provided, assumed to match the projections of `file_list`.
@@ -192,17 +194,17 @@ def merge_images(
     # If not, warp them to the most common projection using VRT files in a tempdir
     temp_dir = tempfile.TemporaryDirectory()
 
+    tmp_path = Path(temp_dir.name)
     if strides is not None and strides["x"] > 1 and strides["y"] > 1:
         file_list = get_downsampled_vrts(
             file_list,
             strides=strides,
-            dirname=Path(temp_dir.name),
+            dirname=tmp_path,
         )
 
     warped_file_list = warp_to_projection(
         file_list,
-        # temp_dir,
-        dirname=Path(temp_dir.name),
+        dirname=tmp_path,
         projection=projection,
         resample_alg=resample_alg,
     )
@@ -213,27 +215,17 @@ def merge_images(
         target_aligned_pixels=target_aligned_pixels,
         out_bounds=out_bounds,
         out_bounds_epsg=out_bounds_epsg,
-        strides=strides,
     )
     (xmin, ymin, xmax, ymax) = bounds
+    proj_win = (xmin, ymax, xmax, ymin)  # ul_lr = ulx, uly, lrx, lry
 
     # Write out the files for gdal_merge using the --optfile flag
-    optfile = Path(temp_dir.name) / "file_list.txt"
+    optfile = tmp_path / "file_list.txt"
     optfile.write_text("\n".join(map(str, warped_file_list)))
-    args = [
-        "gdal_merge.py",
-        "-o",
-        outfile,
-        "--optfile",
-        optfile,
-        "-of",
-        driver,
-        "-ul_lr",
-        xmin,
-        ymax,
-        xmax,
-        ymin,
-    ]
+    suffix = Path(outfile).suffix
+    merge_output = (tmp_path / "merged").with_suffix(suffix)
+    args = ["gdal_merge.py", "-o", merge_output, "--optfile", optfile, "-of", driver]
+
     if out_nodata is not None:
         args.extend(["-a_nodata", str(out_nodata)])
     if in_nodata is not None or combined_nodata is not None:
@@ -253,6 +245,15 @@ def merge_images(
     arg_list = [str(a) for a in args]
     logger.info(f"Running {' '.join(arg_list)}")
     subprocess.check_call(arg_list)
+
+    # Now clip to
+    gdal.Translate(
+        destName=fspath(outfile),
+        srcDS=fspath(merge_output),
+        projWin=proj_win,
+        resampleAlg=resample_alg,
+        format=driver,
+    )
 
     temp_dir.cleanup()
 
@@ -290,6 +291,7 @@ def get_downsampled_vrts(
         warped_fn = Path(dirname) / _get_temp_filename(fn, idx, "_downsampled")
         logger.debug(f"Downsampling {fn} by {strides}")
         warped_files.append(warped_fn)
+        left, bottom, right, top = io.get_raster_bounds(fn)
         gdal.Translate(
             fspath(warped_fn),
             fspath(fn),
@@ -297,6 +299,7 @@ def get_downsampled_vrts(
             resampleAlg="nearest",  # nearest neighbor for resampling
             xRes=res[0] * strides["x"],
             yRes=res[1] * strides["y"],
+            projWin=(left, top, right, bottom),
         )
 
     return warped_files

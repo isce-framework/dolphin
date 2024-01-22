@@ -56,6 +56,11 @@ ignore = [
   "PLR",  # Pylint Refactor
 ]
 
+[tool.ruff.per-file-ignores]
+"**/__init__.py" = ["F403"]
+"test/**" = ["D"]
+
+
 [tool.ruff.lint]
 # Enable the isort rules.
 extend-select = ["I"]
@@ -72,10 +77,6 @@ known_first_party = ["dolphin"]
 python_version = "3.10"
 ignore_missing_imports = true
 plugins = ["pydantic.mypy"]
-
-[tool.ruff.per-file-ignores]
-"**/__init__.py" = ["F401"]
-"test/**" = ["D"]
 
 
 [tool.pytest.ini_options]

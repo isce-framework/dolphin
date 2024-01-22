@@ -10,9 +10,10 @@ from typing import Optional, Sequence
 import numpy as np
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-import dolphin._dates
 from dolphin._log import get_log
 from dolphin._types import DateOrDatetime, Filename
+from dolphin.io import DEFAULT_DATETIME_FORMAT
+from dolphin.utils import _format_date_pair
 
 logger = get_log(__name__)
 
@@ -32,7 +33,7 @@ class BaseStack(BaseModel):
         ...,
         description="List of date sequences, one for each SLC in the ministack. "
         "Each item is a list/tuple of datetime.date or datetime.datetime objects, "
-        "as returned by [dolphin._dates.get_dates][].",
+        "as returned by [opera_utils._dates.get_dates][].",
     )
     is_compressed: list[bool] = Field(
         ...,
@@ -48,7 +49,7 @@ class BaseStack(BaseModel):
         validate_default=True,
     )
     file_date_fmt: str = Field(
-        dolphin.DEFAULT_DATETIME_FORMAT,
+        DEFAULT_DATETIME_FORMAT,
         description="Format string for the dates/datetimes in the ministack filenames.",
     )
     output_folder: Path = Field(
@@ -104,9 +105,7 @@ class BaseStack(BaseModel):
 
         Includes both compressed + normal SLCs in the range.
         """
-        return dolphin._dates._format_date_pair(
-            *self.full_date_range, fmt=self.file_date_fmt
-        )
+        return _format_date_pair(*self.full_date_range, fmt=self.file_date_fmt)
 
     @property
     def first_real_slc_idx(self) -> int:
@@ -124,9 +123,7 @@ class BaseStack(BaseModel):
     @property
     def real_slc_date_range_str(self) -> str:
         """Date range of the real SLCs in the ministack."""
-        return dolphin._dates._format_date_pair(
-            *self.real_slc_date_range, fmt=self.file_date_fmt
-        )
+        return _format_date_pair(*self.real_slc_date_range, fmt=self.file_date_fmt)
 
     @property
     def compressed_slc_file_list(self) -> list[Filename]:
@@ -149,7 +146,7 @@ class BaseStack(BaseModel):
                 s = d[0].strftime(self.file_date_fmt)
             else:
                 # Compressed SLCs will have 2 dates in the name marking the start and end
-                s = dolphin._dates._format_date_pair(d[0], d[1], fmt=self.file_date_fmt)
+                s = _format_date_pair(d[0], d[1], fmt=self.file_date_fmt)
             date_strs.append(s)
         return date_strs
 
@@ -173,8 +170,7 @@ class CompressedSlcInfo(BaseModel):
     real_slc_dates: list[datetime] = Field(
         ...,
         description="List of date sequences, one for each SLC in the ministack. "
-        "Each item is a list/tuple of datetime.date or datetime.datetime objects, "
-        "as returned by [dolphin._dates.get_dates][].",
+        "Each item is a list/tuple of datetime.date or datetime.datetime objects.",
     )
     compressed_slc_file_list: list[Filename] = Field(
         ...,
@@ -190,7 +186,7 @@ class CompressedSlcInfo(BaseModel):
         validate_default=True,
     )
     file_date_fmt: str = Field(
-        dolphin.DEFAULT_DATETIME_FORMAT,
+        DEFAULT_DATETIME_FORMAT,
         description="Format string for the dates/datetimes in the ministack filenames.",
     )
     output_folder: Path = Field(
@@ -239,9 +235,7 @@ class CompressedSlcInfo(BaseModel):
     @property
     def filename(self) -> str:
         """The filename of the compressed SLC for this ministack."""
-        date_str = dolphin._dates._format_date_pair(
-            *self.real_date_range, fmt=self.file_date_fmt
-        )
+        date_str = _format_date_pair(*self.real_date_range, fmt=self.file_date_fmt)
         name = f"compressed_{date_str}.tif"
         return name
 
@@ -392,7 +386,7 @@ class MiniStackPlanner(BaseStack):
                 reference_idx = 0
 
             # Make the current ministack output folder using the start/end dates
-            new_date_str = dolphin._dates._format_date_pair(
+            new_date_str = _format_date_pair(
                 cur_dates[0][0], cur_dates[-1][-1], fmt=self.file_date_fmt
             )
             cur_output_folder = self.output_folder / new_date_str

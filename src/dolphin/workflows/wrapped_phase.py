@@ -5,10 +5,9 @@ from pathlib import Path
 from typing import Optional, Sequence, cast
 
 import numpy as np
-from opera_utils import make_nodata_mask
+from opera_utils import get_dates, make_nodata_mask
 
 from dolphin import _readers, interferogram, ps, stack
-from dolphin._dates import get_dates
 from dolphin._log import get_log, log_runtime
 
 from . import InterferogramNetwork, InterferogramNetworkType, sequential

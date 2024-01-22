@@ -345,3 +345,50 @@ def opera_slc_files_official(tmp_path) -> list[Path]:
             file_list.append(Path(fname))
 
     return file_list
+
+
+@pytest.fixture()
+def opera_static_files_official(tmp_path) -> list[Path]:
+    base = "OPERA_L2_CSLC-S1-STATIC"
+    ending = "20140403_S1A_v1.0.h5"
+
+    d = tmp_path / "input_static_layers"
+    d.mkdir()
+    file_list = []
+
+    b_id = 24520
+    for i in range(5):
+        burst_id = f"T012-{b_id:06d}-IW1"
+        fname = d / f"{base}_{burst_id}_{ending}"
+        create_static_layer_h5(fname)
+        file_list.append(Path(fname))
+
+    return file_list
+
+
+def create_static_layer_h5(filename):
+    import h5py
+    from pyproj import CRS
+
+    with h5py.File(filename, "w") as f:
+        grp = f.create_group("/data")
+        shape = (4965, 19878)  # Adjust shape as needed
+
+        # Create datasets with specified values
+        grp.create_dataset("layover_shadow_mask", shape, dtype=np.uint16)
+        grp.create_dataset(
+            "los_east", shape, dtype=np.float32, data=0.7 * np.ones(shape)
+        )
+        grp.create_dataset(
+            "los_north", shape, dtype=np.float32, data=-0.11 * np.ones(shape)
+        )
+        grp.create_dataset("projection", data=32615)
+        grp["projection"].attrs.update(CRS.from_epsg(32615).to_cf())
+        dx, dy = 5, -10
+        x0, y0 = 246362.5, 3422995.0
+        xs = np.arange(x0, x0 + shape[1] * dx, dx)
+        ys = np.arange(y0, y0 + shape[0] * dy, dy)
+        grp.create_dataset("x_coordinates", (shape[1],), dtype=np.float32, data=xs)
+        grp.create_dataset("x_spacing", data=dx)
+        grp.create_dataset("y_coordinates", (shape[0],), dtype=np.float32, data=ys)
+        grp.create_dataset("y_spacing", data=abs(dy))

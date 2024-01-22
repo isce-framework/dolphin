@@ -11,6 +11,13 @@ from typing import Iterator, Optional
 # 2. map the current output pixels to their input locations (using strides)
 # 3. pad the input block (using half window)
 
+__all__ = [
+    "BlockIndices",
+    "BlockManager",
+    "compute_out_shape",
+    "iter_blocks",
+]
+
 
 @dataclass(frozen=True)
 class BlockIndices:
