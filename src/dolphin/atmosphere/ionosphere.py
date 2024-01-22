@@ -8,15 +8,16 @@ from typing import Mapping, Sequence
 
 import numpy as np
 import opera_utils as oput
+from numpy.typing import ArrayLike
+from opera_utils import get_dates
 from rasterio.crs import CRS
 from rasterio.warp import transform_bounds
 from scipy import interpolate
 
 from dolphin import io
-from opera_utils import get_dates
-from dolphin.io import _format_date_pair
 from dolphin._log import get_log
 from dolphin._types import Filename
+from dolphin.utils import _format_date_pair
 
 from .troposphere import prepare_geometry
 
@@ -153,7 +154,7 @@ def estimate_ionospheric_delay(
     return
 
 
-def incidence_angle_ground_to_iono(inc_angle: ArrayLike, iono_height: float=450e3):
+def incidence_angle_ground_to_iono(inc_angle: ArrayLike, iono_height: float = 450e3):
     """Calibrate the incidence angle of LOS vector on the ground surface to the ionosphere shell.
 
     Equation (11) in Yunjun et al. (2022, TGRS)
@@ -186,7 +187,9 @@ def incidence_angle_ground_to_iono(inc_angle: ArrayLike, iono_height: float=450e
     return inc_angle_iono
 
 
-def read_zenith_tec(slc_file: Filename, tec_file: Filename, lat: float, lon: float) -> float:
+def read_zenith_tec(
+    slc_file: Filename, tec_file: Filename, lat: float, lon: float
+) -> float:
     """Read and interpolate zenith TEC for the latitude and longitude of scene center.
 
     Parameters
