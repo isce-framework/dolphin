@@ -39,6 +39,7 @@ class CorrectionOptions(BaseModel, extra="forbid"):
     """Configuration for the auxillary phase corrections."""
 
     _atm_directory: Path = Path("atmosphere")
+    _iono_date_fmt: list[str] = list(("%j0.%y", "%Y%j0000"))
 
     troposphere_files: list[Path] = Field(
         default_factory=list,
@@ -74,14 +75,6 @@ class CorrectionOptions(BaseModel, extra="forbid"):
         description=(
             "List of GNSS-derived TEC maps for ionospheric corrections (one per date)."
             " Source is https://cddis.nasa.gov/archive/gnss/products/ionex/"
-        ),
-    )
-
-    iono_date_fmt: list[str] = Field(
-        list(("%j0.%y", "%Y%j0000")),
-        description=(
-            "list of the formats of dates contained in TEC maps"
-            "TEC maps might have different naming conventions"
         ),
     )
 

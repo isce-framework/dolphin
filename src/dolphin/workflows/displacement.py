@@ -75,7 +75,7 @@ def run(
 
     grouped_iono_files: Mapping[tuple[datetime], Sequence[str | PathLike[str]]] = {}
     if len(cfg.correction_options.ionosphere_files) > 0:
-        for fmt in cfg.correction_options.iono_date_fmt:
+        for fmt in cfg.correction_options._iono_date_fmt:
             group_iono = group_by_date(
                 cfg.correction_options.ionosphere_files,
                 file_date_fmt=fmt,
