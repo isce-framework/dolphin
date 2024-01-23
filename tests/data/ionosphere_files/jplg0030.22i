@@ -1,64 +1,64 @@
      1.0            IONOSPHERE MAPS     GPS                 IONEX VERSION / TYPE
-GIM V3.0            JPL - GNISD         06-jan-2022 02:36   PGM / RUN BY / DATE 
-JPL'S GLOBAL IONOSPHERE MAPS YEAR 2022 DAY 003              COMMENT             
-Global Ionospheric Maps (GIM) are generated on an hourly    DESCRIPTION         
-and daily basis at JPL using data from up to 100 GPS sites  DESCRIPTION         
-of the IGS and others institutions.                         DESCRIPTION         
-The vertical TEC is modeled in a solar-geomagnetic          DESCRIPTION         
-reference frame using bi-cubic splines on a spherical grid. DESCRIPTION         
-A Kalman filter is used to solve simultaneously for         DESCRIPTION         
-instrumental biases and VTEC on the grid (as stochastic     DESCRIPTION         
-parameters).                                                DESCRIPTION         
-Contact Address:  gpsiono@cobra.jpl.nasa.gov .              DESCRIPTION         
-  2022     1     3     0     0     0                        EPOCH OF FIRST MAP  
-  2022     1     4     0     0     0                        EPOCH OF LAST MAP   
-  7200                                                      INTERVAL            
-    13                                                      # OF MAPS IN FILE   
-  NONE                                                      MAPPING FUNCTION    
-    10.0                                                    ELEVATION CUTOFF    
-One-way carrier phase leveled to code                       OBSERVABLES USED    
-   170                                                      # OF STATIONS       
-    31                                                      # OF SATELLITES     
-  6371.0                                                    BASE RADIUS         
-     2                                                      MAP DIMENSION       
-   450.0 450.0   0.0                                        HGT1 / HGT2 / DHGT  
-    87.5 -87.5  -2.5                                        LAT1 / LAT2 / DLAT  
-  -180.0 180.0   5.0                                        LON1 / LON2 / DLON  
-    -1                                                      EXPONENT            
-TEC/RMS values in 0.1 TECU; 9999, if no value available     COMMENT             
-DIFFERENTIAL CODE BIASES                                    START OF AUX DATA   
-    01    -6.843     0.004                                  PRN / BIAS / RMS    
-    02     7.718     0.004                                  PRN / BIAS / RMS    
-    03    -4.738     0.004                                  PRN / BIAS / RMS    
-    04    -0.668     0.004                                  PRN / BIAS / RMS    
-    05     3.508     0.004                                  PRN / BIAS / RMS    
-    06    -6.212     0.004                                  PRN / BIAS / RMS    
-    07     3.543     0.004                                  PRN / BIAS / RMS    
-    08    -6.843     0.004                                  PRN / BIAS / RMS    
-    09    -4.422     0.004                                  PRN / BIAS / RMS    
-    10    -5.194     0.004                                  PRN / BIAS / RMS    
-    11     2.034     0.004                                  PRN / BIAS / RMS    
-    12     4.350     0.004                                  PRN / BIAS / RMS    
-    13     3.788     0.004                                  PRN / BIAS / RMS    
-    14     1.578     0.004                                  PRN / BIAS / RMS    
-    15     3.262     0.004                                  PRN / BIAS / RMS    
-    16     3.192     0.004                                  PRN / BIAS / RMS    
-    17     3.613     0.004                                  PRN / BIAS / RMS    
-    18     1.788     0.004                                  PRN / BIAS / RMS    
-    19     6.490     0.004                                  PRN / BIAS / RMS    
-    20     1.859     0.000                                  PRN / BIAS / RMS    
-    21     2.946     0.004                                  PRN / BIAS / RMS    
-    22     7.438     0.007                                  PRN / BIAS / RMS    
-    23     1.929     0.004                                  PRN / BIAS / RMS    
-    24    -5.370     0.004                                  PRN / BIAS / RMS    
-    25    -7.299     0.004                                  PRN / BIAS / RMS    
-    26    -8.141     0.004                                  PRN / BIAS / RMS    
-    27    -4.703     0.004                                  PRN / BIAS / RMS    
-    28     3.788     0.007                                  PRN / BIAS / RMS    
-    29     2.806     0.004                                  PRN / BIAS / RMS    
-    30    -6.177     0.004                                  PRN / BIAS / RMS    
-    31     4.876     0.004                                  PRN / BIAS / RMS    
-    32    -3.896     0.004                                  PRN / BIAS / RMS    
+GIM V3.0            JPL - GNISD         06-jan-2022 02:36   PGM / RUN BY / DATE
+JPL'S GLOBAL IONOSPHERE MAPS YEAR 2022 DAY 003              COMMENT
+Global Ionospheric Maps (GIM) are generated on an hourly    DESCRIPTION
+and daily basis at JPL using data from up to 100 GPS sites  DESCRIPTION
+of the IGS and others institutions.                         DESCRIPTION
+The vertical TEC is modeled in a solar-geomagnetic          DESCRIPTION
+reference frame using bi-cubic splines on a spherical grid. DESCRIPTION
+A Kalman filter is used to solve simultaneously for         DESCRIPTION
+instrumental biases and VTEC on the grid (as stochastic     DESCRIPTION
+parameters).                                                DESCRIPTION
+Contact Address:  gpsiono@cobra.jpl.nasa.gov .              DESCRIPTION
+  2022     1     3     0     0     0                        EPOCH OF FIRST MAP
+  2022     1     4     0     0     0                        EPOCH OF LAST MAP
+  7200                                                      INTERVAL
+    13                                                      # OF MAPS IN FILE
+  NONE                                                      MAPPING FUNCTION
+    10.0                                                    ELEVATION CUTOFF
+One-way carrier phase leveled to code                       OBSERVABLES USED
+   170                                                      # OF STATIONS
+    31                                                      # OF SATELLITES
+  6371.0                                                    BASE RADIUS
+     2                                                      MAP DIMENSION
+   450.0 450.0   0.0                                        HGT1 / HGT2 / DHGT
+    87.5 -87.5  -2.5                                        LAT1 / LAT2 / DLAT
+  -180.0 180.0   5.0                                        LON1 / LON2 / DLON
+    -1                                                      EXPONENT
+TEC/RMS values in 0.1 TECU; 9999, if no value available     COMMENT
+DIFFERENTIAL CODE BIASES                                    START OF AUX DATA
+    01    -6.843     0.004                                  PRN / BIAS / RMS
+    02     7.718     0.004                                  PRN / BIAS / RMS
+    03    -4.738     0.004                                  PRN / BIAS / RMS
+    04    -0.668     0.004                                  PRN / BIAS / RMS
+    05     3.508     0.004                                  PRN / BIAS / RMS
+    06    -6.212     0.004                                  PRN / BIAS / RMS
+    07     3.543     0.004                                  PRN / BIAS / RMS
+    08    -6.843     0.004                                  PRN / BIAS / RMS
+    09    -4.422     0.004                                  PRN / BIAS / RMS
+    10    -5.194     0.004                                  PRN / BIAS / RMS
+    11     2.034     0.004                                  PRN / BIAS / RMS
+    12     4.350     0.004                                  PRN / BIAS / RMS
+    13     3.788     0.004                                  PRN / BIAS / RMS
+    14     1.578     0.004                                  PRN / BIAS / RMS
+    15     3.262     0.004                                  PRN / BIAS / RMS
+    16     3.192     0.004                                  PRN / BIAS / RMS
+    17     3.613     0.004                                  PRN / BIAS / RMS
+    18     1.788     0.004                                  PRN / BIAS / RMS
+    19     6.490     0.004                                  PRN / BIAS / RMS
+    20     1.859     0.000                                  PRN / BIAS / RMS
+    21     2.946     0.004                                  PRN / BIAS / RMS
+    22     7.438     0.007                                  PRN / BIAS / RMS
+    23     1.929     0.004                                  PRN / BIAS / RMS
+    24    -5.370     0.004                                  PRN / BIAS / RMS
+    25    -7.299     0.004                                  PRN / BIAS / RMS
+    26    -8.141     0.004                                  PRN / BIAS / RMS
+    27    -4.703     0.004                                  PRN / BIAS / RMS
+    28     3.788     0.007                                  PRN / BIAS / RMS
+    29     2.806     0.004                                  PRN / BIAS / RMS
+    30    -6.177     0.004                                  PRN / BIAS / RMS
+    31     4.876     0.004                                  PRN / BIAS / RMS
+    32    -3.896     0.004                                  PRN / BIAS / RMS
       ABPO                    -1.648     0.014              STATION / BIAS / RMS
       AIRA                   -16.911     0.014              STATION / BIAS / RMS
       ALBH                     5.966     0.011              STATION / BIAS / RMS
@@ -258,9 +258,9 @@ DIFFERENTIAL CODE BIASES                                    START OF AUX DATA
       YSSK                     3.124     0.014              STATION / BIAS / RMS
       ZAMB                    -2.525     0.014              STATION / BIAS / RMS
       ZECK                     8.352     0.011              STATION / BIAS / RMS
-DIFFERENTIAL CODE BIASES                                    END OF AUX DATA     
-                                                            END OF HEADER       
-     1                                                      START OF TEC MAP    
+DIFFERENTIAL CODE BIASES                                    END OF AUX DATA
+                                                            END OF HEADER
+     1                                                      START OF TEC MAP
   2022     1     3     0     0     0                        EPOCH OF CURRENT MAP
     87.5-180.0 180.0   5.0 450.0                            LAT/LON1/LON2/DLON/H
    47   47   48   48   48   48   48   48   48   48   48   48   47   47   47   46
@@ -688,8 +688,8 @@ DIFFERENTIAL CODE BIASES                                    END OF AUX DATA
    95   94   93   92   91   91   90   90   89   89   89   89   89   89   89   89
    90   90   91   91   92   92   93   93   94   94   95   95   96   96   97   97
    98   98   99   99  100  100  101  101  102
-     1                                                      END OF TEC MAP      
-     2                                                      START OF TEC MAP    
+     1                                                      END OF TEC MAP
+     2                                                      START OF TEC MAP
   2022     1     3     2     0     0                        EPOCH OF CURRENT MAP
     87.5-180.0 180.0   5.0 450.0                            LAT/LON1/LON2/DLON/H
    44   44   44   45   45   45   45   45   45   45   44   44   44   44   43   43
@@ -1117,8 +1117,8 @@ DIFFERENTIAL CODE BIASES                                    END OF AUX DATA
   100  100  100  101  101  102  102  103  104  104  105  105  106  107  107  108
   109  109  110  110  111  111  112  112  112  113  113  113  113  113  114  114
   113  113  113  113  113  113  112  112  112
-     2                                                      END OF TEC MAP      
-     3                                                      START OF TEC MAP    
+     2                                                      END OF TEC MAP
+     3                                                      START OF TEC MAP
   2022     1     3     4     0     0                        EPOCH OF CURRENT MAP
     87.5-180.0 180.0   5.0 450.0                            LAT/LON1/LON2/DLON/H
    41   41   41   41   41   41   41   41   41   41   41   41   40   40   40   40
@@ -1546,8 +1546,8 @@ DIFFERENTIAL CODE BIASES                                    END OF AUX DATA
   117  117  117  117  117  117  118  118  119  119  120  120  121  121  122  123
   123  124  125  125  126  126  127  127  128  128  128  128  129  129  129  129
   129  128  128  128  128  128  127  127  126
-     3                                                      END OF TEC MAP      
-     4                                                      START OF TEC MAP    
+     3                                                      END OF TEC MAP
+     4                                                      START OF TEC MAP
   2022     1     3     6     0     0                        EPOCH OF CURRENT MAP
     87.5-180.0 180.0   5.0 450.0                            LAT/LON1/LON2/DLON/H
    39   39   39   39   39   39   39   39   39   39   39   38   38   38   38   37
@@ -1975,8 +1975,8 @@ DIFFERENTIAL CODE BIASES                                    END OF AUX DATA
   107  107  107  108  109  109  110  111  112  113  114  115  116  117  118  119
   120  121  122  123  125  126  127  128  129  130  131  132  132  133  134  134
   134  135  135  135  135  134  134  133  133
-     4                                                      END OF TEC MAP      
-     5                                                      START OF TEC MAP    
+     4                                                      END OF TEC MAP
+     5                                                      START OF TEC MAP
   2022     1     3     8     0     0                        EPOCH OF CURRENT MAP
     87.5-180.0 180.0   5.0 450.0                            LAT/LON1/LON2/DLON/H
    35   35   36   36   36   37   37   37   37   37   37   37   37   37   37   36
@@ -2404,8 +2404,8 @@ DIFFERENTIAL CODE BIASES                                    END OF AUX DATA
    97   98   99  100  101  102  103  104  105  106  107  109  110  111  112  114
   115  116  117  119  120  121  122  123  125  126  126  127  128  129  129  130
   130  130  130  130  129  129  128  127  126
-     5                                                      END OF TEC MAP      
-     6                                                      START OF TEC MAP    
+     5                                                      END OF TEC MAP
+     6                                                      START OF TEC MAP
   2022     1     3    10     0     0                        EPOCH OF CURRENT MAP
     87.5-180.0 180.0   5.0 450.0                            LAT/LON1/LON2/DLON/H
    42   42   41   41   41   41   41   41   41   40   40   40   40   40   39   39
@@ -2833,8 +2833,8 @@ DIFFERENTIAL CODE BIASES                                    END OF AUX DATA
    84   85   85   86   87   88   89   90   90   91   92   93   93   94   94   95
    95   95   96   96   96   96   96   96   96   96   96   96   96   96   95   95
    95   95   94   94   93   93   92   92   91
-     6                                                      END OF TEC MAP      
-     7                                                      START OF TEC MAP    
+     6                                                      END OF TEC MAP
+     7                                                      START OF TEC MAP
   2022     1     3    12     0     0                        EPOCH OF CURRENT MAP
     87.5-180.0 180.0   5.0 450.0                            LAT/LON1/LON2/DLON/H
    32   32   31   31   31   31   30   30   30   30   30   30   30   30   30   30
@@ -3262,8 +3262,8 @@ DIFFERENTIAL CODE BIASES                                    END OF AUX DATA
   112  112  113  113  114  114  114  115  115  115  115  115  115  115  115  115
   115  114  114  114  113  113  112  112  111  111  110  110  109  109  108  108
   108  107  107  107  106  106  106  106  105
-     7                                                      END OF TEC MAP      
-     8                                                      START OF TEC MAP    
+     7                                                      END OF TEC MAP
+     8                                                      START OF TEC MAP
   2022     1     3    14     0     0                        EPOCH OF CURRENT MAP
     87.5-180.0 180.0   5.0 450.0                            LAT/LON1/LON2/DLON/H
    32   32   32   32   32   32   32   32   33   33   33   33   33   33   33   33
@@ -3691,8 +3691,8 @@ DIFFERENTIAL CODE BIASES                                    END OF AUX DATA
   112  113  113  114  114  114  115  115  115  115  116  116  116  116  116  115
   115  115  115  115  115  114  114  114  114  114  113  113  113  113  113  113
   112  112  112  112  112  112  112  112  112
-     8                                                      END OF TEC MAP      
-     9                                                      START OF TEC MAP    
+     8                                                      END OF TEC MAP
+     9                                                      START OF TEC MAP
   2022     1     3    16     0     0                        EPOCH OF CURRENT MAP
     87.5-180.0 180.0   5.0 450.0                            LAT/LON1/LON2/DLON/H
    31   31   31   32   32   32   32   32   32   33   33   33   33   33   33   33
@@ -4120,8 +4120,8 @@ DIFFERENTIAL CODE BIASES                                    END OF AUX DATA
   118  118  117  117  117  117  117  117  117  117  117  117  117  117  117  117
   117  117  117  117  117  117  117  117  117  117  117  117  117  117  116  116
   116  116  116  116  116  116  116  116  116
-     9                                                      END OF TEC MAP      
-    10                                                      START OF TEC MAP    
+     9                                                      END OF TEC MAP
+    10                                                      START OF TEC MAP
   2022     1     3    18     0     0                        EPOCH OF CURRENT MAP
     87.5-180.0 180.0   5.0 450.0                            LAT/LON1/LON2/DLON/H
    44   44   44   44   44   44   44   44   44   44   44   44   43   43   43   43
@@ -4549,8 +4549,8 @@ DIFFERENTIAL CODE BIASES                                    END OF AUX DATA
   106  106  105  105  105  104  104  103  103  103  102  102  102  102  101  101
   101  101  101  101  101  101  101  101  101  101  101  101  101  101  101  101
   102  102  102  102  103  103  103  104  104
-    10                                                      END OF TEC MAP      
-    11                                                      START OF TEC MAP    
+    10                                                      END OF TEC MAP
+    11                                                      START OF TEC MAP
   2022     1     3    20     0     0                        EPOCH OF CURRENT MAP
     87.5-180.0 180.0   5.0 450.0                            LAT/LON1/LON2/DLON/H
    58   59   59   59   59   59   59   60   60   60   59   59   59   59   59   58
@@ -4978,8 +4978,8 @@ DIFFERENTIAL CODE BIASES                                    END OF AUX DATA
   122  121  121  120  120  119  118  118  117  117  116  116  115  115  114  114
   114  113  113  112  112  112  111  111  111  111  110  110  110  110  110  110
   110  111  111  111  112  112  113  114  114
-    11                                                      END OF TEC MAP      
-    12                                                      START OF TEC MAP    
+    11                                                      END OF TEC MAP
+    12                                                      START OF TEC MAP
   2022     1     3    22     0     0                        EPOCH OF CURRENT MAP
     87.5-180.0 180.0   5.0 450.0                            LAT/LON1/LON2/DLON/H
    53   53   54   54   54   54   55   55   55   54   54   54   53   53   52   52
@@ -5407,8 +5407,8 @@ DIFFERENTIAL CODE BIASES                                    END OF AUX DATA
   124  123  122  121  120  120  119  118  117  116  116  115  115  114  114  113
   113  112  112  112  111  111  111  111  110  110  110  110  110  110  110  110
   110  111  111  111  112  113  113  114  115
-    12                                                      END OF TEC MAP      
-    13                                                      START OF TEC MAP    
+    12                                                      END OF TEC MAP
+    13                                                      START OF TEC MAP
   2022     1     4     0     0     0                        EPOCH OF CURRENT MAP
     87.5-180.0 180.0   5.0 450.0                            LAT/LON1/LON2/DLON/H
    45   45   46   46   46   46   47   47   47   46   46   46   46   45   45   45
@@ -5836,8 +5836,8 @@ DIFFERENTIAL CODE BIASES                                    END OF AUX DATA
   105  104  103  103  102  101  101  100  100   99   99   99   98   98   98   98
    99   99   99  100  100  101  101  102  102  103  104  104  105  105  106  107
   107  108  108  109  110  110  111  111  112
-    13                                                      END OF TEC MAP      
-     1                                                      START OF RMS MAP    
+    13                                                      END OF TEC MAP
+     1                                                      START OF RMS MAP
   2022     1     3     0     0     0                        EPOCH OF CURRENT MAP
     87.5-180.0 180.0   5.0 450.0                            LAT/LON1/LON2/DLON/H
    23   23   23   23   23   23   23   23   23   24   24   24   24   24   24   24
@@ -6265,8 +6265,8 @@ DIFFERENTIAL CODE BIASES                                    END OF AUX DATA
     8    8    8    8    8    8    8    8    8    8    8    8    8   22   22   22
    22   22   22   22   22   22   22   22   22   22   22   22   22   22   22   23
    23   23   23   23   23   23   23   23   23
-     1                                                      END OF RMS MAP      
-     2                                                      START OF RMS MAP    
+     1                                                      END OF RMS MAP
+     2                                                      START OF RMS MAP
   2022     1     3     2     0     0                        EPOCH OF CURRENT MAP
     87.5-180.0 180.0   5.0 450.0                            LAT/LON1/LON2/DLON/H
    23   23   23   24   24   24   24   24   24   24   24   24   24   24   24   24
@@ -6694,8 +6694,8 @@ DIFFERENTIAL CODE BIASES                                    END OF AUX DATA
     8    8    8    8    8    8    8   22   22   22   22   22   22   22   22   22
    22   22   22   22   22   22   22   22   22   23   23   23   23   23   23   23
    23   23   23   23   23   23   23   23   23
-     2                                                      END OF RMS MAP      
-     3                                                      START OF RMS MAP    
+     2                                                      END OF RMS MAP
+     3                                                      START OF RMS MAP
   2022     1     3     4     0     0                        EPOCH OF CURRENT MAP
     87.5-180.0 180.0   5.0 450.0                            LAT/LON1/LON2/DLON/H
    24   24   24   24   24   24   24   24   24   24   24   24   24   24   24    8
@@ -7123,8 +7123,8 @@ DIFFERENTIAL CODE BIASES                                    END OF AUX DATA
     8   22   22   22   22   22   22   22   22   22   22   22   22   22   22   22
    22   22   22   23   23   23   23   23   23   23   23   23   23   23   23   23
    23   23   23   23   23   24   24   24   24
-     3                                                      END OF RMS MAP      
-     4                                                      START OF RMS MAP    
+     3                                                      END OF RMS MAP
+     4                                                      START OF RMS MAP
   2022     1     3     6     0     0                        EPOCH OF CURRENT MAP
     87.5-180.0 180.0   5.0 450.0                            LAT/LON1/LON2/DLON/H
    24   24   24   24   24   24   24   24   24    8    8    8    8    8    8    8
@@ -7552,8 +7552,8 @@ DIFFERENTIAL CODE BIASES                                    END OF AUX DATA
    22   22   22   22   22   22   22   22   22   22   22   22   22   23   23   23
    23   23   23   23   23   23   23   23   23   23   23   23   23   23   23   24
    24   24   24   24   24   24   24   24   24
-     4                                                      END OF RMS MAP      
-     5                                                      START OF RMS MAP    
+     4                                                      END OF RMS MAP
+     5                                                      START OF RMS MAP
   2022     1     3     8     0     0                        EPOCH OF CURRENT MAP
     87.5-180.0 180.0   5.0 450.0                            LAT/LON1/LON2/DLON/H
    24   24   24    8    8    8    8    8    8    8    8    8    8    8    8    8
@@ -7981,8 +7981,8 @@ DIFFERENTIAL CODE BIASES                                    END OF AUX DATA
    22   22   22   22   22   22   22   23   23   23   23   23   23   23   23   23
    23   23   23   23   23   23   23   23   23   24   24   24   24   24   24   24
    24   24   24   24   24   24   24   24   24
-     5                                                      END OF RMS MAP      
-     6                                                      START OF RMS MAP    
+     5                                                      END OF RMS MAP
+     6                                                      START OF RMS MAP
   2022     1     3    10     0     0                        EPOCH OF CURRENT MAP
     87.5-180.0 180.0   5.0 450.0                            LAT/LON1/LON2/DLON/H
     8    8    8    8    8    8    8    8    8    8    8    8    8    8    8   22
@@ -8410,8 +8410,8 @@ DIFFERENTIAL CODE BIASES                                    END OF AUX DATA
    22   23   23   23   23   23   23   23   23   23   23   23   23   23   23   23
    23   23   23   24   24   24   24   24   24   24   24   24   24   24   24   24
    24   24   24   24   24    8    8    8    8
-     6                                                      END OF RMS MAP      
-     7                                                      START OF RMS MAP    
+     6                                                      END OF RMS MAP
+     7                                                      START OF RMS MAP
   2022     1     3    12     0     0                        EPOCH OF CURRENT MAP
     87.5-180.0 180.0   5.0 450.0                            LAT/LON1/LON2/DLON/H
     8    8    8    8    8    8    8    8    8   22   22   22   22   22   22   22
@@ -8839,8 +8839,8 @@ DIFFERENTIAL CODE BIASES                                    END OF AUX DATA
    23   23   23   23   23   23   23   23   23   23   23   23   23   24   24   24
    24   24   24   24   24   24   24   24   24   24   24   24   24   24   24    8
     8    8    8    8    8    8    8    8    8
-     7                                                      END OF RMS MAP      
-     8                                                      START OF RMS MAP    
+     7                                                      END OF RMS MAP
+     8                                                      START OF RMS MAP
   2022     1     3    14     0     0                        EPOCH OF CURRENT MAP
     87.5-180.0 180.0   5.0 450.0                            LAT/LON1/LON2/DLON/H
     8    8    8   22   22   22   22   22   22   22   22   22   22   22   22   22
@@ -9268,8 +9268,8 @@ DIFFERENTIAL CODE BIASES                                    END OF AUX DATA
    23   23   23   23   23   23   23   24   24   24   24   24   24   24   24   24
    24   24   24   24   24   24   24   24   24    8    8    8    8    8    8    8
     8    8    8    8    8    8    8    8    8
-     8                                                      END OF RMS MAP      
-     9                                                      START OF RMS MAP    
+     8                                                      END OF RMS MAP
+     9                                                      START OF RMS MAP
   2022     1     3    16     0     0                        EPOCH OF CURRENT MAP
     87.5-180.0 180.0   5.0 450.0                            LAT/LON1/LON2/DLON/H
    22   22   22   22   22   22   22   22   22   22   22   22   22   22   22   23
@@ -9697,8 +9697,8 @@ DIFFERENTIAL CODE BIASES                                    END OF AUX DATA
    23   24   24   24   24   24   24   24   24   24   24   24   24   24   24   24
    24   24   24    8    8    8    8    8    8    8    8    8    8    8    8    8
     8    8    8    8    8   22   22   22   22
-     9                                                      END OF RMS MAP      
-    10                                                      START OF RMS MAP    
+     9                                                      END OF RMS MAP
+    10                                                      START OF RMS MAP
   2022     1     3    18     0     0                        EPOCH OF CURRENT MAP
     87.5-180.0 180.0   5.0 450.0                            LAT/LON1/LON2/DLON/H
    22   22   22   22   22   22   22   22   22   23   23   23   23   23   23   23
@@ -10126,8 +10126,8 @@ DIFFERENTIAL CODE BIASES                                    END OF AUX DATA
    24   24   24   24   24   24   24   24   24   24   24   24   24    8    8    8
     8    8    8    8    8    8    8    8    8    8    8    8    8    8    8   22
    22   22   22   22   22   22   22   22   22
-    10                                                      END OF RMS MAP      
-    11                                                      START OF RMS MAP    
+    10                                                      END OF RMS MAP
+    11                                                      START OF RMS MAP
   2022     1     3    20     0     0                        EPOCH OF CURRENT MAP
     87.5-180.0 180.0   5.0 450.0                            LAT/LON1/LON2/DLON/H
    22   22   22   23   23   23   23   23   23   23   23   23   23   23   23   23
@@ -10555,8 +10555,8 @@ DIFFERENTIAL CODE BIASES                                    END OF AUX DATA
    24   24   24   24   24   24   24    8    8    8    8    8    8    8    8    8
     8    8    8    8    8    8    8    8    8   22   22   22   22   22   22   22
    22   22   22   22   22   22   22   22   22
-    11                                                      END OF RMS MAP      
-    12                                                      START OF RMS MAP    
+    11                                                      END OF RMS MAP
+    12                                                      START OF RMS MAP
   2022     1     3    22     0     0                        EPOCH OF CURRENT MAP
     87.5-180.0 180.0   5.0 450.0                            LAT/LON1/LON2/DLON/H
    23   23   23   23   23   23   23   23   23   23   23   23   23   23   23   24
@@ -10984,8 +10984,8 @@ DIFFERENTIAL CODE BIASES                                    END OF AUX DATA
    24    8    8    8    8    8    8    8    8    8    8    8    8    8    8    8
     8    8    8   22   22   22   22   22   22   22   22   22   22   22   22   22
    22   22   22   22   22   23   23   23   23
-    12                                                      END OF RMS MAP      
-    13                                                      START OF RMS MAP    
+    12                                                      END OF RMS MAP
+    13                                                      START OF RMS MAP
   2022     1     4     0     0     0                        EPOCH OF CURRENT MAP
     87.5-180.0 180.0   5.0 450.0                            LAT/LON1/LON2/DLON/H
    23   23   23   23   23   23   23   23   23   24   24   24   24   24   24   24
@@ -11413,5 +11413,5 @@ DIFFERENTIAL CODE BIASES                                    END OF AUX DATA
     8    8    8    8    8    8    8    8    8    8    8    8    8   22   22   22
    22   22   22   22   22   22   22   22   22   22   22   22   22   22   22   23
    23   23   23   23   23   23   23   23   23
-    13                                                      END OF RMS MAP      
-                                                            END OF FILE         
+    13                                                      END OF RMS MAP
+                                                            END OF FILE
