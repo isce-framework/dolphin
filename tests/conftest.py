@@ -392,3 +392,32 @@ def create_static_layer_h5(filename):
         grp.create_dataset("x_spacing", data=dx)
         grp.create_dataset("y_coordinates", (shape[0],), dtype=np.float32, data=ys)
         grp.create_dataset("y_spacing", data=abs(dy))
+
+
+@pytest.fixture()
+def weather_model_files():
+    data_dir = Path("tests/data")
+    with open(data_dir / "weather_model_files.txt", "r") as f:
+        file_list = f.readlines()
+    return file_list
+
+
+@pytest.fixture()
+def tec_files():
+    data_dir = Path("tests/data")
+    with open(data_dir / "tec_files.txt", "r") as f:
+        file_list = f.readlines()
+    return file_list
+
+
+@pytest.fixture()
+def dem_file(tmp_path, slc_stack):
+    fname = tmp_path / "dem.tif"
+    shape = slc_stack.shape
+    dem = np.random.rand(shape[-2], shape[-1]) + 1000
+    # Write to a file
+    driver = gdal.GetDriverByName("GTiff")
+    ds = driver.Create(str(fname), shape[-1], shape[-2], 1, gdal.GDT_Float32)
+    ds.GetRasterBand(1).WriteArray(dem)
+    ds = None
+    return fname
