@@ -16,10 +16,8 @@ from scipy import interpolate
 
 from dolphin import io
 from dolphin._log import get_log
-from dolphin._types import Filename
+from dolphin._types import Bbox, Filename
 from dolphin.utils import _format_date_pair
-
-from .troposphere import prepare_geometry
 
 logger = get_log(__name__)
 
@@ -37,9 +35,10 @@ def estimate_ionospheric_delay(
     ifg_file_list: Sequence[Path],
     slc_files: Mapping[tuple[datetime.datetime], Sequence[Filename]],
     tec_files: Mapping[tuple[datetime.datetime], Sequence[Filename]],
-    geom_files: Sequence[Path],
+    geom_files: dict[str, Path],
     output_dir: Path,
-    strides: dict[str, int] = {"x": 1, "y": 1},
+    epsg: int,
+    bounds: Bbox,
 ):
     """Estimate the range delay caused by ionosphere for each interferogram.
 
@@ -52,19 +51,14 @@ def estimate_ionospheric_delay(
     tec_files : Dict[datetime.date, list[Filename]]
         Dictionary of TEC files indexed by date.
     geom_files : list[Path]
-        List of geometry files.
+        Dictionary of geometry files with height and incidence angle/(los_east and los_north).
     output_dir : Path
         Output directory.
-    strides : Dict[str, int], optional
-        Strides for resampling, by default {"x": 1, "y": 1}.
+    epsg : int
+        the EPSG code of the input data
+    bounds : Bbox
+        Output bounds.
     """
-    # Read geogrid data
-    # xsize, ysize = io.get_raster_xysize(ifg_file_list[0])
-    crs = io.get_raster_crs(ifg_file_list[0])
-    epsg = crs.to_epsg()
-
-    bounds = io.get_raster_bounds(ifg_file_list[0])
-
     if epsg != 4326:
         left, bottom, right, top = transform_bounds(
             CRS.from_epsg(epsg), CRS.from_epsg(4326), *bounds
@@ -76,23 +70,16 @@ def estimate_ionospheric_delay(
     latc = (top + bottom) / 2
     lonc = (left + right) / 2
 
-    # prepare geometry data
-    logger.info("Prepare geometry files...")
-    geometry_dir = output_dir / "geometry"
-    geometry_files = prepare_geometry(
-        geometry_dir=geometry_dir,
-        geo_files=geom_files,
-        dem_file=None,
-        matching_file=ifg_file_list[0],
-        epsg=epsg,
-        out_bounds=bounds,
-        strides=strides,
-    )
-
     # Read the incidence angle
-    los_east = io.load_gdal(geometry_files["los_east"])
-    los_north = io.load_gdal(geometry_files["los_north"])
-    inc_angle = np.arccos(np.sqrt(1 - los_east**2 - los_north**2)) * 180 / np.pi
+    if "lost_east" in geom_files.keys():
+        # ISCE3 geocoded products
+        los_east = io.load_gdal(geom_files["los_east"])
+        los_north = io.load_gdal(geom_files["los_north"])
+        inc_angle = np.arccos(np.sqrt(1 - los_east**2 - los_north**2)) * 180 / np.pi
+    else:
+        # ISCE2 radar coordinate
+        inc_angle = io.load_gdal(geom_files["incidence_angle"])
+
     iono_inc_angle = incidence_angle_ground_to_iono(inc_angle)
 
     # frequency
@@ -135,10 +122,10 @@ def estimate_ionospheric_delay(
             lon=lonc,
         )
 
-        range_delay_reference = vtec2range_delay(
+        range_delay_reference = vtec_to_range_delay(
             reference_vtec, iono_inc_angle, freq, obs_type="phase"
         )
-        range_delay_secondary = vtec2range_delay(
+        range_delay_secondary = vtec_to_range_delay(
             secondary_vtec, iono_inc_angle, freq, obs_type="phase"
         )
 
@@ -212,7 +199,7 @@ def read_zenith_tec(
     return vtec
 
 
-def vtec2range_delay(
+def vtec_to_range_delay(
     vtec: float, inc_angle: np.ndarray, freq: float, obs_type: str = "phase"
 ):
     """Calculate/predict the range delay in SAR from TEC in zenith direction.

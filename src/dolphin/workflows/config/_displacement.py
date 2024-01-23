@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Annotated, Any, List, Optional
+from typing import Annotated, Any, Optional
 
 from opera_utils._dates import get_dates, sort_files_by_date
 from pydantic import (
@@ -40,7 +40,7 @@ class CorrectionOptions(BaseModel, extra="forbid"):
 
     _atm_directory: Path = Path("atmosphere")
 
-    troposphere_files: List[Path] = Field(
+    troposphere_files: list[Path] = Field(
         default_factory=list,
         description=(
             "List of weather-model files (one per date) for tropospheric corrections"
@@ -69,7 +69,7 @@ class CorrectionOptions(BaseModel, extra="forbid"):
         "Choices are: wet, dry, comb, hydrostatic",
     )
 
-    ionosphere_files: List[Path] = Field(
+    ionosphere_files: list[Path] = Field(
         default_factory=list,
         description=(
             "List of GNSS-derived TEC maps for ionospheric corrections (one per date)."
@@ -77,12 +77,15 @@ class CorrectionOptions(BaseModel, extra="forbid"):
         ),
     )
 
-    iono_date_fmt: str = Field(
-        "%j0.%y",
-        description="Format of dates contained in weather-model filenames",
+    iono_date_fmt: list[str] = Field(
+        list(("%j0.%y", "%Y%j0000")),
+        description=(
+            "list of the formats of dates contained in TEC maps"
+            "TEC maps might have different naming conventions"
+        ),
     )
 
-    geometry_files: List[Path] = Field(
+    geometry_files: list[Path] = Field(
         default_factory=list,
         description=(
             "Line-of-sight geometry files for each burst/SLC stack area, for use in"
@@ -107,7 +110,7 @@ class DisplacementWorkflow(WorkflowBase):
 
     # Paths to input/output files
     input_options: InputOptions = Field(default_factory=InputOptions)
-    cslc_file_list: List[Path] = Field(
+    cslc_file_list: list[Path] = Field(
         default_factory=list,
         description=(
             "list of CSLC files, or newline-delimited file "
@@ -118,14 +121,14 @@ class DisplacementWorkflow(WorkflowBase):
 
     # Options for each step in the workflow
     ps_options: PsOptions = Field(default_factory=PsOptions)
-    amplitude_dispersion_files: List[Path] = Field(
+    amplitude_dispersion_files: list[Path] = Field(
         default_factory=list,
         description=(
             "Paths to existing Amplitude Dispersion file (1 per SLC region) for PS"
             " update calculation. If none provided, computed using the input SLC stack."
         ),
     )
-    amplitude_mean_files: List[Path] = Field(
+    amplitude_mean_files: list[Path] = Field(
         default_factory=list,
         description=(
             "Paths to an existing Amplitude Mean files (1 per SLC region) for PS update"

@@ -8,7 +8,7 @@ import warnings
 from itertools import chain
 from multiprocessing import cpu_count
 from pathlib import Path
-from typing import Any, Iterable, Optional, Union
+from typing import Any, Iterable, Optional, Sequence, Union
 
 import numpy as np
 from numpy.typing import ArrayLike, DTypeLike
@@ -16,7 +16,7 @@ from osgeo import gdal, gdal_array, gdalconst
 from rich.progress import MofNCompleteColumn, Progress, SpinnerColumn, TimeElapsedColumn
 
 from dolphin._log import get_log
-from dolphin._types import Filename
+from dolphin._types import Bbox, Filename
 
 DateOrDatetime = Union[datetime.date, datetime.datetime]
 
@@ -557,3 +557,110 @@ def flatten(list_of_lists: Iterable[Iterable[Any]]) -> chain[Any]:
 
 def _format_date_pair(start: DateOrDatetime, end: DateOrDatetime, fmt="%Y%m%d") -> str:
     return f"{start.strftime(fmt)}_{end.strftime(fmt)}"
+
+
+def prepare_geometry(
+    geometry_dir: Path,
+    geo_files: Sequence[Path],
+    matching_file: Path,
+    dem_file: Optional[Path],
+    epsg: int,
+    out_bounds: Bbox,
+    strides: dict[str, int] = {"x": 1, "y": 1},
+) -> dict[str, Path]:
+    """Prepare geometry files.
+
+    Parameters
+    ----------
+    geometry_dir : Path
+        Output directory for geometry files.
+    geo_files : list[Path]
+        list of geometry files.
+    matching_file : Path
+        Matching file.
+    dem_file : Optional[Path]
+        DEM file.
+    epsg : int
+        EPSG code.
+    out_bounds : Bbox
+        Output bounds.
+    strides : Dict[str, int], optional
+        Strides for resampling, by default {"x": 1, "y": 1}.
+
+    Returns
+    -------
+    Dict[str, Path]
+        Dictionary of prepared geometry files.
+    """
+    from dolphin import stitching
+    from dolphin.io import format_nc_filename
+
+    geometry_dir.mkdir(exist_ok=True)
+
+    stitched_geo_list = {}
+
+    if geo_files[0].name.endswith(".h5"):
+        # ISCE3 geocoded SLCs
+        datasets = ["los_east", "los_north"]
+
+        for ds_name in datasets:
+            outfile = geometry_dir / f"{ds_name}.tif"
+            logger.info(f"Creating {outfile}")
+            stitched_geo_list[ds_name] = outfile
+            ds_path = f"/data/{ds_name}"
+            cur_files = [format_nc_filename(f, ds_name=ds_path) for f in geo_files]
+
+            no_data = 0
+
+            stitching.merge_images(
+                cur_files,
+                outfile=outfile,
+                driver="GTiff",
+                out_bounds=out_bounds,
+                out_bounds_epsg=epsg,
+                in_nodata=no_data,
+                out_nodata=no_data,
+                target_aligned_pixels=True,
+                strides=strides,
+                overwrite=False,
+            )
+
+        if dem_file:
+            height_file = geometry_dir / "height.tif"
+            stitched_geo_list["height"] = height_file
+            if not height_file.exists():
+                logger.info(f"Creating {height_file}")
+                stitching.warp_to_match(
+                    input_file=dem_file,
+                    match_file=matching_file,
+                    output_file=height_file,
+                    resample_alg="cubic",
+                )
+    else:
+        # ISCE2 radar coordinates
+        dsets = {
+            "hgt.rdr": "height",
+            "incLocal.rdr": "incidence_angle",
+            "lat.rdr": "latitude",
+            "lon.rdr": "longitude",
+        }
+
+        for geo_file in geo_files:
+            if geo_file.stem in dsets.keys():
+                out_name = dsets[geo_file.stem]
+            elif geo_file.name in dsets.keys():
+                out_name = dsets[geo_file.name]
+                continue
+
+            out_file = geometry_dir / (out_name + ".tif")
+            stitched_geo_list[out_name] = out_file
+            logger.info(f"Creating {out_file}")
+
+            stitching.warp_to_match(
+                input_file=geo_file,
+                match_file=matching_file,
+                output_file=out_file,
+                resample_alg="cubic",
+            )
+
+    return stitched_geo_list
