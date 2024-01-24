@@ -146,14 +146,7 @@ def run_wrapped_phase_single(
         strides=strides,
         half_window=half_window,
     )
-    # block_gen = vrt.iter_blocks(
-    #     block_shape=block_shape,
-    #     overlaps=overlaps,
-    #     skip_empty=True,
-    #     nodata_mask=nodata_mask,
-    #     show_progress=show_progress,
-    # )
-    # for cur_data, (rows, cols) in block_gen:
+
     blocks = list(block_manager.iter_blocks())
     logger.info(f"Iterating over {block_shape} blocks, {len(blocks)} total")
     for (
@@ -163,7 +156,7 @@ def run_wrapped_phase_single(
         (in_no_pad_rows, in_no_pad_cols),
     ) in blocks:
         logger.debug(f"{out_rows = }, {out_cols = }, {in_rows = }, {in_no_pad_rows = }")
-        cur_data = vrt.read_stack(rows=in_rows, cols=in_cols)
+        cur_data = vrt[:, in_rows, in_cols]
         if np.all(cur_data == 0):
             continue
         cur_data = cur_data.astype(np.complex64)
