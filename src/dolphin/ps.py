@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import shutil
 import warnings
-from enum import Enum
 from pathlib import Path
 from typing import Optional
 
@@ -20,21 +19,9 @@ gdal.UseExceptions()
 
 logger = get_log(__name__)
 
+NODATA_VALUES = {"ps": 255, "amp_dispersion": 0.0, "amp_mean": 0.0}
 
-class NodataValues(Enum):
-    """Nodata values for the PS files."""
-
-    PS: int = 255
-    AMP_DISPERSION: float = 0
-    AMP_MEAN: float = 0
-
-
-class FileDtypes(Enum):
-    """Dtypes for the PS files."""
-
-    PS: np.dtype = np.uint8
-    AMP_DISPERSION: np.dtype = np.float32
-    AMP_MEAN: np.dtype = np.float32
+FILE_DTYPES = {"ps": np.uint8, "amp_dispersion": np.float32, "amp_mean": np.float32}
 
 
 def create_ps(
@@ -102,16 +89,17 @@ def create_ps(
     # Otherwise, we need to calculate the PS files from the SLC stack
     # Initialize the output files with zeros
     file_list = [output_file, output_amp_dispersion_file, output_amp_mean_file]
-    for fn, dtype, nodata in zip(file_list, FileDtypes, NodataValues):
+    for fn, dtype, nodata in zip(
+        file_list, FILE_DTYPES.values(), NODATA_VALUES.values()
+    ):
         io.write_arr(
             arr=None,
             like_filename=like_filename,
             output_name=fn,
             nbands=1,
-            dtype=dtype.value,
-            nodata=nodata.value,
+            dtype=dtype,
+            nodata=nodata,
         )
-
     # Initialize the intermediate arrays for the calculation
     magnitude = np.zeros((reader.shape[0], *block_shape), dtype=np.float32)
 
@@ -140,18 +128,23 @@ def create_ps(
 
             # Use the UInt8 type for the PS to save.
             # For invalid pixels, set to max Byte value
-            ps = ps.astype(FileDtypes.PS)
-            ps[amp_disp == 0] = NodataValues.PS
+            ps = ps.astype(FILE_DTYPES["ps"])
+            ps[amp_disp == 0] = NODATA_VALUES["ps"]
         else:
             # Fill the block with nodata
-            ps = np.ones((cur_rows, cur_cols), dtype=FileDtypes.PS) * NodataValues.PS
+            ps = (
+                np.ones((cur_rows, cur_cols), dtype=FILE_DTYPES["ps"])
+                * NODATA_VALUES["ps"]
+            )
             mean = np.full(
-                (cur_rows, cur_cols), NodataValues.AMP_MEAN, dtype=FileDtypes.AMP_MEAN
+                (cur_rows, cur_cols),
+                NODATA_VALUES["amp_mean"],
+                dtype=FILE_DTYPES["amp_mean"],
             )
             amp_disp = np.full(
                 (cur_rows, cur_cols),
-                NodataValues.AMP_DISPERSION,
-                dtype=FileDtypes.AMP_DISPERSION,
+                NODATA_VALUES["amp_dispersion"],
+                dtype=FILE_DTYPES["amp_dispersion"],
             )
 
         # Write amp dispersion and the mean blocks
@@ -254,12 +247,12 @@ def _use_existing_files(
     ps = amp_disp < amp_dispersion_threshold
     ps = ps.astype(np.uint8)
     # Set the PS nodata value to the max uint8 value
-    ps[(amp_disp == 0) | amp_disp.mask] = NodataValues.PS
+    ps[(amp_disp == 0) | amp_disp.mask] = NODATA_VALUES["ps"]
     io.write_arr(
         arr=ps,
         like_filename=existing_amp_dispersion_file,
         output_name=output_file,
-        nodata=NodataValues.PS.value,
+        nodata=NODATA_VALUES["ps"],
     )
     # Copy the existing amp mean file/amp dispersion file
     shutil.copy(existing_amp_dispersion_file, output_amp_dispersion_file)
