@@ -3,7 +3,7 @@ from __future__ import annotations
 import glob
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Optional
 
 from pydantic import (
     BaseModel,
@@ -128,7 +128,7 @@ class InterferogramNetwork(BaseModel, extra="forbid"):
         description="Maximum temporal baseline of interferograms.",
         gt=0,
     )
-    indexes: Optional[List[Tuple[int, int]]] = Field(
+    indexes: Optional[list[tuple[int, int]]] = Field(
         None,
         description=(
             "For manual-index network: list of (ref_idx, sec_idx) defining the"
@@ -139,16 +139,17 @@ class InterferogramNetwork(BaseModel, extra="forbid"):
 
     # validation
     @model_validator(mode="after")
-    def _check_network_type(self) -> "InterferogramNetwork":
+    def _check_network_type(self) -> InterferogramNetwork:
         ref_idx = self.reference_idx
         max_bw = self.max_bandwidth
         max_tb = self.max_temporal_baseline
         # Check if more than one has been set:
         if sum([ref_idx is not None, max_bw is not None, max_tb is not None]) > 1:
-            raise ValueError(
+            msg = (
                 "Only one of `reference_idx`, `max_bandwidth`, or"
                 " `max_temporal_baseline` can be set."
             )
+            raise ValueError(msg)
         if max_tb is not None:
             self.network_type = InterferogramNetworkType.MAX_TEMPORAL_BASELINE
             return self
@@ -179,9 +180,11 @@ class UnwrapOptions(BaseModel, extra="forbid"):
     ntiles: tuple[int, int] = Field(
         (1, 1),
         description=(
-            "(`snaphu-py` or multiscale unwrapping) Number of tiles to split the inputs into"
+            "(`snaphu-py` or multiscale unwrapping) Number of tiles to split "
+            "the inputs into"
         ),
     )
+
     downsample_factor: tuple[int, int] = Field(
         (1, 1),
         description=(
@@ -192,7 +195,8 @@ class UnwrapOptions(BaseModel, extra="forbid"):
     tile_overlap: tuple[int, int] = Field(
         (0, 0),
         description=(
-            "(for use in `snaphu-py`) Amount of tile overlap (in pixels) along the (row, col) directions."
+            "(for use in `snaphu-py`) Amount of tile overlap (in pixels) along the"
+            " (row, col) directions."
         ),
     )
     n_parallel_jobs: int = Field(
@@ -235,7 +239,7 @@ class WorkerSettings(BaseModel, extra="forbid"):
             " for wrapped-phase-estimation."
         ),
     )
-    block_shape: Tuple[int, int] = Field(
+    block_shape: tuple[int, int] = Field(
         (512, 512),
         description="Size (rows, columns) of blocks of data to load at a time.",
     )
@@ -257,13 +261,13 @@ class InputOptions(BaseModel, extra="forbid"):
 class OutputOptions(BaseModel, extra="forbid"):
     """Options for the output size/format/compressions."""
 
-    output_resolution: Optional[Dict[str, int]] = Field(
+    output_resolution: Optional[dict[str, int]] = Field(
         # {"x": 20, "y": 20},
         # TODO: how to get a blank "x" and "y" in the schema printed instead of nothing?
         None,
         description="Output (x, y) resolution (in units of input data)",
     )
-    strides: Dict[str, int] = Field(
+    strides: dict[str, int] = Field(
         {"x": 1, "y": 1},
         description=(
             "Alternative to specifying output resolution: Specify the (x, y) strides"
@@ -273,7 +277,7 @@ class OutputOptions(BaseModel, extra="forbid"):
         ),
         validate_default=True,
     )
-    bounds: Optional[Tuple[float, float, float, float]] = Field(
+    bounds: Optional[tuple[float, float, float, float]] = Field(
         None,
         description=(
             "Area of interest: [left, bottom, right, top] coordinates. "
@@ -288,7 +292,7 @@ class OutputOptions(BaseModel, extra="forbid"):
         DEFAULT_HDF5_OPTIONS,
         description="Options for `create_dataset` with h5py.",
     )
-    gtiff_creation_options: List[str] = Field(
+    gtiff_creation_options: list[str] = Field(
         list(DEFAULT_TIFF_OPTIONS),
         description="GDAL creation options for GeoTIFF files",
     )
@@ -307,27 +311,32 @@ class OutputOptions(BaseModel, extra="forbid"):
         """Compute the output resolution from the strides."""
         resolution = info.data.get("output_resolution")
         if strides is not None and resolution is not None:
-            raise ValueError("Cannot specify both strides and output_resolution.")
+            msg = "Cannot specify both strides and output_resolution."
+            raise ValueError(msg)
         elif strides is None and resolution is None:
-            raise ValueError("Must specify either strides or output_resolution.")
+            msg = "Must specify either strides or output_resolution."
+            raise ValueError(msg)
 
         # Check that the dict has the correct keys
         if strides is not None:
-            if not set(strides.keys()) == {"x", "y"}:
-                raise ValueError("Strides must be a dict with keys 'x' and 'y'")
+            if set(strides.keys()) != {"x", "y"}:
+                msg = "Strides must be a dict with keys 'x' and 'y'"
+                raise ValueError(msg)
             # and that the strides are integers
-            if not all([isinstance(v, int) for v in strides.values()]):
-                raise ValueError("Strides must be integers")
+            if not all(isinstance(v, int) for v in strides.values()):
+                msg = "Strides must be integers"
+                raise ValueError(msg)
         if resolution is not None:
-            if not set(resolution.keys()) == {"x", "y"}:
-                raise ValueError("Resolution must be a dict with keys 'x' and 'y'")
+            if set(resolution.keys()) != {"x", "y"}:
+                msg = "Resolution must be a dict with keys 'x' and 'y'"
+                raise ValueError(msg)
             # and that the resolution is valid, > 0. Can be int or float
-            if any([v <= 0 for v in resolution.values()]):
-                raise ValueError("Resolutions must be > 0")
+            if any(v <= 0 for v in resolution.values()):
+                msg = "Resolutions must be > 0"
+                raise ValueError(msg)
             # TODO: compute strides from resolution
-            raise NotImplementedError(
-                "output_resolution not yet implemented. Use `strides`."
-            )
+            msg = "output_resolution not yet implemented. Use `strides`."
+            raise NotImplementedError(msg)
         return strides
 
 
@@ -346,7 +355,7 @@ class WorkflowBase(YamlModel):
         ),
     )
     work_directory: Path = Field(
-        Path("."),
+        Path(),
         description="Name of sub-directory to use for writing output files",
         validate_default=True,
     )
@@ -371,7 +380,7 @@ class WorkflowBase(YamlModel):
     _dolphin_version: str = PrivateAttr(_dolphin_version)
     # internal helpers
     # Stores the list of directories to be created by the workflow
-    _directory_list: List[Path] = PrivateAttr(default_factory=list)
+    _directory_list: list[Path] = PrivateAttr(default_factory=list)
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         """After validation, set up properties for use during workflow run."""
@@ -390,7 +399,7 @@ class WorkflowBase(YamlModel):
             d.mkdir(parents=True, exist_ok=True)
 
 
-def _read_file_list_or_glob(cls, value):
+def _read_file_list_or_glob(cls, value):  # noqa: ARG001:
     """Check if the input file list is a glob pattern or a text file.
 
     If it's a text file, read the lines and return a list of Path objects.
@@ -426,8 +435,7 @@ def _read_file_list_or_glob(cls, value):
             parent = v_path.parent
             return [parent / f if not f.is_absolute() else f for f in filenames]
         else:
-            raise ValueError(
-                f"Input file list {v_path} does not exist or is not a file."
-            )
+            msg = f"Input file list {v_path} does not exist or is not a file."
+            raise ValueError(msg)
 
     return list(value)

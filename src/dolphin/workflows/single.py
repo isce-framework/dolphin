@@ -5,6 +5,7 @@ References
     .. [1] Mirzaee, Sara, Falk Amelung, and Heresh Fattahi. "Non-linear phase
     linking using joined distributed and persistent scatterers." Computers &
     Geosciences (2022): 105291.
+
 """
 
 from __future__ import annotations
@@ -46,7 +47,7 @@ def run_wrapped_phase_single(
     ministack: MiniStackInfo,
     output_folder: Filename,
     half_window: dict,
-    strides: dict = {"x": 1, "y": 1},
+    strides: Optional[dict] = None,
     reference_idx: int = 0,
     beta: float = 0.01,
     use_evd: bool = False,
@@ -60,13 +61,15 @@ def run_wrapped_phase_single(
     block_shape: tuple[int, int] = (1024, 1024),
     n_workers: int = 1,
     gpu_enabled: bool = True,
-    show_progress: bool = False,
+    # show_progress: bool = False,
 ):
     """Estimate wrapped phase for one ministack.
 
     Output files will all be placed in the provided `output_folder`.
     """
     # TODO: extract common stuff between here and sequential
+    if strides is None:
+        strides = {"x": 1, "y": 1}
     output_folder = Path(output_folder)
     vrt = VRTStack.from_vrt_file(slc_vrt_file)
     input_slc_files = ministack.file_list
@@ -328,7 +331,7 @@ def setup_output_folder(
     driver: str = "GTiff",
     dtype="complex64",
     like_filename: Optional[Filename] = None,
-    strides: dict[str, int] = {"y": 1, "x": 1},
+    strides: Optional[dict[str, int]] = None,
     nodata: Optional[float] = 0,
     output_folder: Optional[Path] = None,
 ) -> list[Path]:
@@ -363,6 +366,8 @@ def setup_output_folder(
     list[Path]
         list of saved empty files for the outputs of phase linking
     """
+    if strides is None:
+        strides = {"y": 1, "x": 1}
     if output_folder is None:
         output_folder = ministack.output_folder
     # Note: DONT use the ministack.output_folder here, since that will

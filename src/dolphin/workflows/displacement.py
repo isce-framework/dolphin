@@ -52,7 +52,7 @@ def run(
     except ValueError as e:
         # Make sure it's not some other ValueError
         if "Could not parse burst id" not in str(e):
-            raise e
+            raise
         # Otherwise, we have SLC files which are not OPERA burst files
         grouped_slc_files = {"": cfg.cslc_file_list}
 
@@ -111,7 +111,7 @@ def run(
     else:
         # grab the only key (either a burst, or "") and use that
         cfg.create_dir_tree()
-        b = list(grouped_slc_files.keys())[0]
+        b = next(iter(grouped_slc_files.keys()))
         wrapped_phase_cfgs = [(b, cfg)]
 
     ifg_file_list: list[Path] = []
@@ -216,7 +216,7 @@ def run(
         )
 
         # Troposphere
-        if "height" not in frame_geometry_files.keys():
+        if "height" not in frame_geometry_files:
             logger.warning(
                 "DEM file is not given, skip estimating tropospheric corrections..."
             )

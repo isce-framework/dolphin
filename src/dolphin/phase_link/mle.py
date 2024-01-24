@@ -2,8 +2,7 @@ from __future__ import annotations
 
 import logging
 import warnings
-from collections import namedtuple
-from typing import Optional
+from typing import NamedTuple, Optional
 
 import numpy as np
 import pymp
@@ -17,18 +16,24 @@ logger = logging.getLogger(__name__)
 class PhaseLinkRuntimeError(Exception):
     """Exception raised while running the MLE solver."""
 
-    pass
 
+class MleOutput(NamedTuple):
+    """Output of the MLE solver."""
 
-MleOutput = namedtuple(
-    "MleOutput", ["mle_est", "temp_coh", "avg_coh"], defaults=[None, None, None]
-)
+    mle_est: np.ndarray
+    """Estimated linked phase."""
+
+    temp_coh: np.ndarray
+    """Temporal coherence."""
+
+    avg_coh: np.ndarray | None = None
+    """Average coherence across dates for each SLC."""
 
 
 def run_mle(
     slc_stack: np.ndarray,
     half_window: dict[str, int],
-    strides: dict[str, int] = {"x": 1, "y": 1},
+    strides: Optional[dict[str, int]] = None,
     use_evd: bool = False,
     beta: float = 0.01,
     reference_idx: int = 0,
@@ -97,6 +102,8 @@ def run_mle(
     from ._mle_cpu import run_cpu as _run_cpu
     from ._mle_gpu import run_gpu as _run_gpu
 
+    if strides is None:
+        strides = {"x": 1, "y": 1}
     _, rows, cols = slc_stack.shape
     # Common pre-processing for both CPU and GPU versions:
 
@@ -117,10 +124,11 @@ def run_mle(
 
     # Make sure we also are ignoring pixels which are nans for all SLCs
     if nodata_mask.shape != (rows, cols) or ps_mask.shape != (rows, cols):
-        raise ValueError(
+        msg = (
             f"nodata_mask.shape={nodata_mask.shape}, ps_mask.shape={ps_mask.shape},"
             f" but != SLC (rows, cols) {rows, cols}"
         )
+        raise ValueError(msg)
     # for any area that has nans in the SLC stack, mark it as nodata
     nodata_mask |= np.any(np.isnan(slc_stack), axis=0)
     # Make sure the PS mask didn't have extra burst borders that are nodata here
@@ -318,9 +326,8 @@ def _check_all_nans(slc_stack: np.ndarray):
     # Check that there are no SLCS which are all nans:
     bad_slc_idxs = np.where(np.all(nans, axis=(1, 2)))[0]
     if bad_slc_idxs.size > 0:
-        raise PhaseLinkRuntimeError(
-            f"slc_stack[{bad_slc_idxs}] out of {len(slc_stack)} are all NaNs."
-        )
+        msg = f"slc_stack[{bad_slc_idxs}] out of {len(slc_stack)} are all NaNs."
+        raise PhaseLinkRuntimeError(msg)
 
 
 def _fill_ps_pixels(

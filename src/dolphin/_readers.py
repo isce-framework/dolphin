@@ -61,13 +61,13 @@ class DatasetReader(Protocol):
     """
 
     dtype: np.dtype
-    """numpy.dtype : Data-type of the array's elements."""  # noqa: D403
+    """numpy.dtype : Data-type of the array's elements."""
 
     shape: tuple[int, ...]
-    """tuple of int : Tuple of array dimensions."""  # noqa: D403
+    """tuple of int : Tuple of array dimensions."""
 
     ndim: int
-    """int : Number of array dimensions."""  # noqa: D403
+    """int : Number of array dimensions."""
 
     masked: bool = False
     """bool : If True, return a masked array with the nodata values masked out."""
@@ -87,13 +87,13 @@ class StackReader(DatasetReader, Protocol):
     """
 
     ndim: int = 3
-    """int : Number of array dimensions."""  # noqa: D403
+    """int : Number of array dimensions."""
 
     shape: tuple[int, int, int]
     """tuple of int : Tuple of array dimensions."""
 
     def __len__(self) -> int:
-        """int : Number of images in the stack."""
+        """Int : Number of images in the stack."""
         return self.shape[0]
 
 
@@ -122,13 +122,13 @@ class BinaryReader(DatasetReader):
     """
 
     filepath: Path
-    """pathlib.Path : The file path."""  # noqa: D403
+    """pathlib.Path : The file path."""
 
     shape: tuple[int, ...]
-    """tuple of int : Tuple of array dimensions."""  # noqa: D403
+    """tuple of int : Tuple of array dimensions."""
 
     dtype: np.dtype
-    """numpy.dtype : Data-type of the array's elements."""  # noqa: D403
+    """numpy.dtype : Data-type of the array's elements."""
 
     nodata: Optional[float] = None
     """Optional[float] : Value to use for nodata pixels."""
@@ -136,7 +136,8 @@ class BinaryReader(DatasetReader):
     def __post_init__(self):
         self.filepath = Path(self.filepath)
         if not self.filepath.exists():
-            raise FileNotFoundError(f"File {self.filepath} does not exist.")
+            msg = f"File {self.filepath} does not exist."
+            raise FileNotFoundError(msg)
         self.dtype = np.dtype(self.dtype)
 
     @property
@@ -145,7 +146,7 @@ class BinaryReader(DatasetReader):
         return len(self.shape)
 
     def __getitem__(self, key: tuple[Index, ...], /) -> np.ndarray:
-        with self.filepath.open("rb") as f:
+        with self.filepath.open("rb") as f:  # noqa: SIM117
             # Memory-map the entire file.
             with mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ) as mm:
                 # In order to safely close the memory-map, there can't be any dangling
@@ -257,7 +258,7 @@ class HDF5Reader(DatasetReader):
 
     @property
     def ndim(self) -> int:  # type: ignore[override]
-        """int : Number of array dimensions."""
+        """Int : Number of array dimensions."""
         return len(self.shape)
 
     def __array__(self) -> np.ndarray:
@@ -332,7 +333,7 @@ class RasterReader(DatasetReader):
     """bool : If True, keep the rasterio file handle open for faster reading."""
 
     chunks: Optional[tuple[int, int]] = None
-    """Optional[tuple[int, int]] : Chunk shape of the dataset, or None if file is unchunked."""
+    """Optional[tuple[int, int]] : Chunk shape of the dataset, or None if unchunked."""
 
     @classmethod
     def from_file(
@@ -371,7 +372,7 @@ class RasterReader(DatasetReader):
 
     @property
     def ndim(self) -> int:  # type: ignore[override]
-        """int : Number of array dimensions."""
+        """Int : Number of array dimensions."""
         return 2
 
     def __array__(self) -> np.ndarray:
@@ -384,7 +385,8 @@ class RasterReader(DatasetReader):
             key = (slice(None), slice(None))
 
         if not isinstance(key, tuple):
-            raise ValueError("Index must be a tuple of slices or integers.")
+            msg = "Index must be a tuple of slices or integers."
+            raise TypeError(msg)
 
         r_slice, c_slice = _ensure_slices(*key[-2:])
         window = rasterio.windows.Window.from_slices(
@@ -410,9 +412,11 @@ def _read_3d(
 ):
     # Check that it's a tuple of slices
     if not isinstance(key, tuple):
-        raise ValueError("Index must be a tuple of slices.")
+        msg = "Index must be a tuple of slices."
+        raise TypeError(msg)
     if len(key) not in (1, 3):
-        raise ValueError("Index must be a tuple of 1 or 3 slices.")
+        msg = "Index must be a tuple of 1 or 3 slices."
+        raise TypeError(msg)
     # If only the band is passed (e.g. stack[0]), convert to (0, :, :)
     if len(key) == 1:
         key = (key[0], slice(None), slice(None))
@@ -428,7 +432,8 @@ def _read_3d(
     elif isinstance(bands, int):
         band_idxs = [bands]
     else:
-        raise ValueError("Band index must be an integer or slice.")
+        msg = "Band index must be an integer or slice."
+        raise TypeError(msg)
 
     # Get only the bands we need
     if num_threads == 1:
@@ -529,9 +534,11 @@ class BinaryStackReader(BaseStackReader):
                 dtypes.add(src.dtypes[band - 1])
                 shapes.add(src.shape)
             if len(dtypes) > 1:
-                raise ValueError("All files must have the same data type.")
+                msg = "All files must have the same data type."
+                raise ValueError(msg)
             if len(shapes) > 1:
-                raise ValueError("All files must have the same shape.")
+                msg = "All files must have the same shape."
+                raise ValueError(msg)
             readers.append(BinaryReader.from_gdal(f, band=band))
         return cls(
             file_list=file_list,
@@ -598,7 +605,7 @@ class HDF5StackReader(BaseStackReader):
             for (f, dn) in zip(file_list, dset_names)
         ]
         # Check if nodata values were found in the files
-        nds = set([r.nodata for r in readers])
+        nds = {r.nodata for r in readers}
         if len(nds) == 1:
             nodata = nds.pop()
 
@@ -660,7 +667,7 @@ class RasterStackReader(BaseStackReader):
             for (f, b) in zip(file_list, bands)
         ]
         # Check if nodata values were found in the files
-        nds = set([r.nodata for r in readers])
+        nds = {r.nodata for r in readers}
         if len(nds) == 1:
             nodata = nds.pop()
         return cls(file_list, readers, num_threads=num_threads, nodata=nodata)
@@ -710,11 +717,12 @@ class VRTStack(StackReader):
     ):
         if Path(outfile).exists() and write_file:
             if fail_on_overwrite:
-                raise FileExistsError(
+                msg = (
                     f"Output file {outfile} already exists. "
                     "Please delete or specify a different output file. "
                     "To create from an existing VRT, use the `from_vrt_file` method."
                 )
+                raise FileExistsError(msg)
             else:
                 logger.info(f"Overwriting {outfile}")
 
@@ -727,9 +735,7 @@ class VRTStack(StackReader):
         # Extract the date/datetimes from the filenames
         dates = [get_dates(f, fmt=file_date_fmt) for f in file_list]
         if sort_files:
-            files, dates = sort_files_by_date(  # type: ignore
-                files, file_date_fmt=file_date_fmt
-            )
+            files, dates = sort_files_by_date(files, file_date_fmt=file_date_fmt)
 
         # Save the attributes
         self.file_list = files
@@ -774,8 +780,8 @@ class VRTStack(StackReader):
                 chunk_size = io.get_raster_chunk_size(filename)
                 # chunks in a vrt have a min of 16, max of 2**14=16384
                 # https://github.com/OSGeo/gdal/blob/2530defa1e0052827bc98696e7806037a6fec86e/frmts/vrt/vrtrasterband.cpp#L339
-                if any([b < 16 for b in chunk_size]) or any(
-                    [b > 16384 for b in chunk_size]
+                if any(b < 16 for b in chunk_size) or any(
+                    b > 16384 for b in chunk_size
                 ):
                     chunk_str = ""
                 else:
@@ -899,7 +905,6 @@ class VRTStack(StackReader):
         else:
             # Get only the bands we need
             if self.num_threads == 1:
-                # out = np.stack([readers[i][r_slice, c_slice] for i in band_idxs], axis=0)
                 data = np.stack(
                     [self.read_stack(band=i, rows=rows, cols=cols) for i in bands],
                     axis=0,

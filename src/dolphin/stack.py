@@ -37,15 +37,18 @@ class BaseStack(BaseModel):
     )
     is_compressed: list[bool] = Field(
         ...,
-        description="List of booleans indicating whether each SLC is compressed or real.",
+        description="List of booleans indicating whether each "
+        "SLC is compressed or real.",
     )
     reference_date: datetime = Field(
         _DUMMY_DATE,
-        description="Reference date to be used for understanding output interferograms. "
-        "Note that this may be different from `dates[reference_idx]` if the ministack "
-        "starts with a compressed SLC which has an earlier 'base phase', which "
-        "is used as the phase linking references. "
-        "It will propagate across ministacks when we always use `reference_idx=0`.",
+        description=(
+            "Reference date to be used for understanding output interferograms. "
+            "Note that this may be different from `dates[reference_idx]` if the"
+            " ministack starts with a compressed SLC which has an earlier 'base phase',"
+            " which is used as the phase linking references. "
+            "It will propagate across ministacks when we always use `reference_idx=0`."
+        ),
         validate_default=True,
     )
     file_date_fmt: str = Field(
@@ -53,7 +56,7 @@ class BaseStack(BaseModel):
         description="Format string for the dates/datetimes in the ministack filenames.",
     )
     output_folder: Path = Field(
-        Path(""),
+        Path(),
         description="Folder/location where ministack will write outputs to.",
     )
     reference_idx: int = Field(
@@ -71,19 +74,18 @@ class BaseStack(BaseModel):
     @model_validator(mode="after")
     def _check_lengths(self):
         if len(self.file_list) == 0:
-            raise ValueError("Cannot create empty ministack")
+            msg = "Cannot create empty ministack"
+            raise ValueError(msg)
         elif len(self.file_list) == 1:
-            warnings.warn("Creating ministack with only one SLC")
-        if not len(self.file_list) == len(self.is_compressed):
+            warnings.warn("Creating ministack with only one SLC", stacklevel=2)
+        if len(self.file_list) != len(self.is_compressed):
             lengths = f"{len(self.file_list)} and {len(self.is_compressed)}"
-            raise ValueError(
-                f"file_list and is_compressed must be the same length: Got {lengths}"
-            )
-        if not len(self.dates) == len(self.file_list):
+            msg = f"file_list and is_compressed must be the same length: Got {lengths}"
+            raise ValueError(msg)
+        if len(self.dates) != len(self.file_list):
             lengths = f"{len(self.dates)} and {len(self.file_list)}"
-            raise ValueError(
-                f"dates and file_list must be the same length. Got {lengths}"
-            )
+            msg = f"dates and file_list must be the same length. Got {lengths}"
+            raise ValueError(msg)
         return self
 
     @model_validator(mode="after")
@@ -112,8 +114,9 @@ class BaseStack(BaseModel):
         """Index of the first real SLC in the ministack."""
         try:
             return np.where(~np.array(self.is_compressed))[0][0]
-        except IndexError:
-            raise ValueError("No real SLCs in ministack")
+        except IndexError as e:
+            msg = "No real SLCs in ministack"
+            raise ValueError(msg) from e
 
     @property
     def real_slc_date_range(self) -> tuple[DateOrDatetime, DateOrDatetime]:
@@ -145,7 +148,7 @@ class BaseStack(BaseModel):
                 # normal SLC files will have a single date
                 s = d[0].strftime(self.file_date_fmt)
             else:
-                # Compressed SLCs will have 2 dates in the name marking the start and end
+                # Compressed SLCs will have 2 dates in name marking the start / end
                 s = _format_date_pair(d[0], d[1], fmt=self.file_date_fmt)
             date_strs.append(s)
         return date_strs
@@ -178,7 +181,7 @@ class CompressedSlcInfo(BaseModel):
     )
     reference_date: datetime = Field(
         _DUMMY_DATE,
-        description="Reference date to be used for understanding output interferograms. "
+        description="Reference date for understanding output interferograms. "
         "Note that this may be different from `dates[reference_idx]` if the ministack "
         "starts with a compressed SLC which has an earlier 'base phase', which "
         "is used as the phase linking references. "
@@ -190,7 +193,7 @@ class CompressedSlcInfo(BaseModel):
         description="Format string for the dates/datetimes in the ministack filenames.",
     )
     output_folder: Path = Field(
-        Path(""),
+        Path(),
         description="Folder/location where ministack will write outputs to.",
     )
 
@@ -207,9 +210,8 @@ class CompressedSlcInfo(BaseModel):
                 if isinstance(item, str):
                     out.append(item)
                 elif len(item) > 1:
-                    raise ValueError(
-                        f"Cannot pass multiple dates for a compressed SLC. Got {item}"
-                    )
+                    msg = f"Cannot pass multiple dates for a compressed SLC. Got {item}"
+                    raise ValueError(msg)
                 else:
                     out.append(item[0])
             else:
@@ -220,11 +222,13 @@ class CompressedSlcInfo(BaseModel):
     def _check_lengths(self):
         rlen = len(self.real_slc_file_list)
         clen = len(self.real_slc_dates)
-        if not rlen == clen:
+        if rlen != clen:
             lengths = f"{rlen} and {clen}"
-            raise ValueError(
-                f"real_slc_file_list and real_slc_dates must be the same length. Got {lengths}"
+            msg = (
+                "real_slc_file_list and real_slc_dates must be the same length. "
+                f"Got {lengths}"
             )
+            raise ValueError(msg)
         return self
 
     @property
@@ -236,8 +240,7 @@ class CompressedSlcInfo(BaseModel):
     def filename(self) -> str:
         """The filename of the compressed SLC for this ministack."""
         date_str = _format_date_pair(*self.real_date_range, fmt=self.file_date_fmt)
-        name = f"compressed_{date_str}.tif"
-        return name
+        return f"compressed_{date_str}.tif"
 
     @property
     def path(self) -> Path:
@@ -261,7 +264,8 @@ class CompressedSlcInfo(BaseModel):
 
         out = self.path if output_file is None else Path(output_file)
         if not out.exists():
-            raise FileNotFoundError(f"Must create {out} before writing metadata")
+            msg = f"Must create {out} before writing metadata"
+            raise FileNotFoundError(msg)
 
         set_raster_metadata(
             out,
@@ -284,7 +288,8 @@ class CompressedSlcInfo(BaseModel):
             else:
                 break
         else:
-            raise ValueError(f"Could not find metadata in {filename}")
+            msg = f"Could not find metadata in {filename}"
+            raise ValueError(msg)
         # GDAL can write it weirdly and mess up the JSON
         cleaned = {}
         for k, v in gdal_md.items():
@@ -343,7 +348,8 @@ class MiniStackPlanner(BaseStack):
     def plan(self, ministack_size: int) -> list[MiniStackInfo]:
         """Create a list of ministacks to be processed."""
         if ministack_size < 2:
-            raise ValueError("Cannot create ministacks with size < 2")
+            msg = "Cannot create ministacks with size < 2"
+            raise ValueError(msg)
 
         output_ministacks: list[MiniStackInfo] = []
 
@@ -353,7 +359,7 @@ class MiniStackPlanner(BaseStack):
             # Note: these must actually exist to be used!
             compressed_slc_infos.append(CompressedSlcInfo.from_file_metadata(f))
 
-        # Solve each ministack using the current chunk (and the previous compressed SLCs)
+        # Solve each ministack using current chunk (and the previous compressed SLCs)
         ministack_starts = range(
             self.first_real_slc_idx, len(self.file_list), ministack_size
         )

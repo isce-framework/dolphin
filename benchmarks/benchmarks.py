@@ -1,5 +1,4 @@
 import numpy as np
-
 from dolphin import shp
 from dolphin.phase_link import covariance, mle, simulate
 

@@ -72,7 +72,7 @@ def gaussian_filter_nan(
         Size of filter kernel. passed into `gaussian_filter`
     mode : str, default = "constant"
         Boundary mode for `[scipy.ndimage.gaussian_filter][]`
-    **filter_kwargs : Any
+    **kwargs : Any
         Passed into `[scipy.ndimage.gaussian_filter][]`
 
     Returns

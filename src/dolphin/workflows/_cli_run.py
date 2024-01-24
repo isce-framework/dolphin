@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 import argparse
 from typing import TYPE_CHECKING, Any, Optional, Sequence
 
@@ -34,15 +33,16 @@ def get_parser(
     subparser: Optional[_SubparserType] = None, subcommand_name: str = "run"
 ) -> argparse.ArgumentParser:
     """Set up the command line interface."""
-    metadata = dict(
-        description="Run a displacement workflow",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-    )
+    metadata = {
+        "description": "Run a displacement workflow",
+        "formatter_class": argparse.ArgumentDefaultsHelpFormatter,
+    }
     if subparser:
         # Used by the subparser to make a nested command line interface
-        parser = subparser.add_parser(subcommand_name, **metadata)  # type: ignore
+        parser = subparser.add_parser(subcommand_name, **metadata)  # type: ignore[arg-type]
+
     else:
-        parser = argparse.ArgumentParser(**metadata)  # type: ignore
+        parser = argparse.ArgumentParser(**metadata)  # type: ignore[arg-type]
 
     parser.add_argument(
         "config_file",

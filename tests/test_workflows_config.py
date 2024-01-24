@@ -15,7 +15,7 @@ def test_half_window_defaults():
     hw = config.HalfWindow()
     assert hw.x == 11
     assert hw.y == 5
-    assert hw.model_dump() == dict(x=11, y=5)
+    assert hw.model_dump() == {"x": 11, "y": 5}
 
 
 def test_half_window_to_looks():
@@ -88,12 +88,12 @@ def test_outputs_defaults():
     opts = config.OutputOptions()
     assert opts.output_resolution is None
     assert opts.strides == {"x": 1, "y": 1}
-    assert opts.hdf5_creation_options == dict(
-        chunks=[128, 128],
-        compression="gzip",
-        compression_opts=4,
-        shuffle=True,
-    )
+    assert opts.hdf5_creation_options == {
+        "chunks": [128, 128],
+        "compression": "gzip",
+        "compression_opts": 4,
+        "shuffle": True,
+    }
 
 
 def test_worker_settings_defaults():
@@ -279,7 +279,7 @@ def test_input_opera_cslc(tmp_path, slc_stack):
         file_list.append(Path(fname))
 
     opts = config.DisplacementWorkflow(
-        cslc_file_list=file_list, input_options=dict(subdataset="/data/VV")
+        cslc_file_list=file_list, input_options={"subdataset": "/data/VV"}
     )
     assert opts.cslc_file_list == file_list
     assert opts.input_options.subdataset == "/data/VV"
@@ -301,7 +301,7 @@ def test_config_displacement_workflow_defaults(dir_with_1_slc):
     assert c.output_options == config.OutputOptions()
     assert c.worker_settings == config.WorkerSettings()
     assert c.input_options == config.InputOptions(subdataset="data")
-    assert c.work_directory == Path(".").resolve()
+    assert c.work_directory == Path().resolve()
 
     # Check the defaults for the sub-configs, where the folders
     # should have been moved to the working directory
@@ -345,7 +345,7 @@ def test_config_create_dir_tree(tmpdir, slc_file_list_nc):
         assert c.unwrap_options._directory.exists()
 
         # Check that the working directory is created
-        assert Path(".").exists()
+        assert Path().exists()
 
         for d in c._directory_list:
             assert d.exists()

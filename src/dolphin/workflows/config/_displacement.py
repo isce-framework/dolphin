@@ -39,7 +39,7 @@ class CorrectionOptions(BaseModel, extra="forbid"):
     """Configuration for the auxillary phase corrections."""
 
     _atm_directory: Path = Path("atmosphere")
-    _iono_date_fmt: list[str] = list(("%j0.%y", "%Y%j0000"))
+    _iono_date_fmt: list[str] = ["%j0.%y", "%Y%j0000"]
 
     troposphere_files: list[Path] = Field(
         default_factory=list,
@@ -55,19 +55,17 @@ class CorrectionOptions(BaseModel, extra="forbid"):
 
     tropo_package: Annotated[str, StringConstraints(to_lower=True)] = Field(
         "pyaps",
-        description="Package to use for tropospheric correction. Choices are: pyaps, raider",
+        description="Package for tropospheric correction. Choices: pyaps, raider",
     )
 
     tropo_model: TropoModel = Field(
-        TropoModel.ERA5,
-        description="source of the atmospheric model. Choices are:"
-        "ERA5, ERAI, MERRA2, NARR, HRRR, GMAO, HRES",
+        TropoModel.ERA5, description="source of the atmospheric model."
     )
 
     tropo_delay_type: TropoType = Field(
         TropoType.COMB,
-        description="Tropospheric delay type to calculate, comb contains both wet and dry delays."
-        "Choices are: wet, dry, comb, hydrostatic",
+        description="Tropospheric delay type to calculate, comb contains both wet "
+        "and dry delays.",
     )
 
     ionosphere_files: list[Path] = Field(
@@ -149,29 +147,30 @@ class DisplacementWorkflow(WorkflowBase):
     )
 
     @model_validator(mode="after")
-    def _check_input_files_exist(self) -> "DisplacementWorkflow":
+    def _check_input_files_exist(self) -> DisplacementWorkflow:
         file_list = self.cslc_file_list
         if not file_list:
-            raise ValueError("Must specify list of input SLC files.")
+            msg = "Must specify list of input SLC files."
+            raise ValueError(msg)
 
         input_options = self.input_options
         date_fmt = input_options.cslc_date_fmt
         # Filter out files that don't have dates in the filename
         files_matching_date = [Path(f) for f in file_list if get_dates(f, fmt=date_fmt)]
         if len(files_matching_date) < len(file_list):
-            raise ValueError(
+            msg = (
                 f"Found {len(files_matching_date)} files with dates like {date_fmt} in"
                 f" the filename out of {len(file_list)} files."
             )
+            raise ValueError(msg)
 
         ext = file_list[0].suffix
         # If they're HDF5/NetCDF files, we need to check that the subdataset exists
         if ext in [".h5", ".nc"]:
             subdataset = input_options.subdataset
             if subdataset is None:
-                raise ValueError(
-                    "Must provide subdataset name for input NetCDF/HDF5 files."
-                )
+                msg = "Must provide subdataset name for input NetCDF/HDF5 files."
+                raise ValueError(msg)
 
         # Coerce the file_list to a sorted list of Path objects
         self.cslc_file_list = [
@@ -200,7 +199,7 @@ class DisplacementWorkflow(WorkflowBase):
             "unwrap_options",
         ]:
             opts = getattr(self, step)
-            if not opts._directory.parent == work_dir:
+            if opts._directory.parent != work_dir:
                 opts._directory = work_dir / opts._directory
             if not self.keep_paths_relative:
                 opts._directory = opts._directory.resolve(strict=False)

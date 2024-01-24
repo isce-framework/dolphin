@@ -23,18 +23,18 @@ def test_block_indices_create():
 
 def test_compute_out_size():
     strides = {"x": 1, "y": 1}
-    assert (6, 6) == compute_out_shape((6, 6), strides)
+    assert compute_out_shape((6, 6), strides) == (6, 6)
 
     strides = {"x": 3, "y": 3}
-    assert (2, 2) == compute_out_shape((6, 6), strides)
+    assert compute_out_shape((6, 6), strides) == (2, 2)
 
     # 1,2 more in each direction shouldn't change it
-    assert (2, 2) == compute_out_shape((7, 7), strides)
-    assert (2, 2) == compute_out_shape((8, 8), strides)
+    assert compute_out_shape((7, 7), strides) == (2, 2)
+    assert compute_out_shape((8, 8), strides) == (2, 2)
 
     # 1,2 fewer should bump down to 1
-    assert (1, 1) == compute_out_shape((5, 5), strides)
-    assert (1, 1) == compute_out_shape((4, 4), strides)
+    assert compute_out_shape((5, 5), strides) == (1, 1)
+    assert compute_out_shape((4, 4), strides) == (1, 1)
 
 
 def test_iter_blocks():

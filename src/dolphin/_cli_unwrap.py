@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 import argparse
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -13,23 +12,23 @@ else:
 
 def get_parser(subparser=None, subcommand_name="unwrap") -> argparse.ArgumentParser:
     """Set up the command line interface."""
-    metadata = dict(
-        description="Create a configuration file for a displacement workflow.",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    metadata = {
+        "description": "Create a configuration file for a displacement workflow.",
+        "formatter_class": argparse.ArgumentDefaultsHelpFormatter,
         # https://docs.python.org/3/library/argparse.html#fromfile-prefix-chars
-        fromfile_prefix_chars="@",
-    )
+        "fromfile_prefix_chars": "@",
+    }
     if subparser:
         # Used by the subparser to make a nested command line interface
         parser = subparser.add_parser(subcommand_name, **metadata)
     else:
-        parser = argparse.ArgumentParser(**metadata)  # type: ignore
+        parser = argparse.ArgumentParser(**metadata)  # type: ignore[arg-type]
 
     # parser._action_groups.pop()
     parser.add_argument(
         "-o",
         "--output-path",
-        default=Path("."),
+        default=Path(),
         help="Path to output directory to store results",
     )
     # Get Inputs from the command line

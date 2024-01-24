@@ -114,7 +114,6 @@ class BackgroundWorker(abc.ABC):
     @abc.abstractmethod
     def process(self, *args, **kw):
         """User-defined task to operate in background thread."""
-        pass
 
     def queue_work(self, *args, **kw):
         """Add a job to the work queue to be executed.
@@ -123,7 +122,8 @@ class BackgroundWorker(abc.ABC):
         Same input interface as `process`.
         """
         if self._finished_event.is_set():
-            raise RuntimeError("Attempted to queue_work after notify_finished!")
+            msg = "Attempted to queue_work after notify_finished!"
+            raise RuntimeError(msg)
         self._work_queue.put((args, kw))
 
     def get_result(self):
@@ -137,10 +137,11 @@ class BackgroundWorker(abc.ABC):
                 result = self._results_queue.get(timeout=self.timeout)
                 self._results_queue.task_done()
                 break
-            except Empty:
+            except Empty as e:
                 logger.debug(f"{self.name} get_result timed out, checking if done")
                 if self._finished_event.is_set():
-                    raise RuntimeError("Attempted to get_result after notify_finished!")
+                    msg = "Attempted to get_result after notify_finished!"
+                    raise RuntimeError(msg) from e
                 continue
         return result
 
@@ -201,7 +202,6 @@ class BackgroundWriter(BackgroundWorker):
     @abc.abstractmethod
     def write(self, *args, **kw):
         """User-defined method for writing data."""
-        pass
 
 
 class BackgroundReader(BackgroundWorker):
@@ -259,7 +259,6 @@ class BackgroundReader(BackgroundWorker):
     @abc.abstractmethod
     def read(self, *args, **kw):
         """User-defined method for reading a chunk of data."""
-        pass
 
 
 class DummyProcessPoolExecutor(Executor):

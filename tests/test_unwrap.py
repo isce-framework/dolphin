@@ -10,7 +10,7 @@ from dolphin import io
 from dolphin.workflows import UnwrapMethod
 
 try:
-    import tophu  # noqa
+    import tophu
 
     TOPHU_INSTALLED = True
 except ImportError:
@@ -22,7 +22,7 @@ pytestmark = pytest.mark.filterwarnings(
 )
 
 
-@pytest.fixture
+@pytest.fixture()
 def corr_raster(raster_100_by_200):
     # Make a correlation raster of all 1s in the same directory as the raster
     d = Path(raster_100_by_200).parent
@@ -87,7 +87,7 @@ def test_unwrap_logfile(tmp_path, raster_100_by_200, corr_raster):
     assert Path(logfile_name).exists()
 
 
-@pytest.fixture
+@pytest.fixture()
 def list_of_ifgs(tmp_path, raster_100_by_200):
     ifg_list = []
     for i in range(3):
@@ -120,7 +120,7 @@ def test_run(list_of_ifgs, corr_raster, unw_suffix):
     )
 
 
-@pytest.fixture
+@pytest.fixture()
 def list_of_gtiff_ifgs(tmp_path, raster_100_by_200):
     ifg_list = []
     for i in range(3):

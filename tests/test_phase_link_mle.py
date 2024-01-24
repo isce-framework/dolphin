@@ -9,7 +9,7 @@ from dolphin.phase_link._mle_cpu import run_cpu
 from dolphin.phase_link._mle_gpu import run_gpu
 from dolphin.utils import gpu_is_available
 
-GPU_AVAILABLE = gpu_is_available() and not (os.environ.get("NUMBA_DISABLE_JIT") == "1")
+GPU_AVAILABLE = gpu_is_available() and os.environ.get("NUMBA_DISABLE_JIT") != "1"
 NUM_ACQ = 30
 simulate._seed(1234)
 
