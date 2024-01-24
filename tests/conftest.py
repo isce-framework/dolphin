@@ -356,9 +356,7 @@ def opera_static_files_official(tmp_path) -> list[Path]:
     d.mkdir()
     file_list = []
 
-    b_id = 24520
-    for i in range(5):
-        burst_id = f"T012-{b_id:06d}-IW1"
+    for burst_id in ["T087-185683-IW2", "T087-185684-IW2"]:
         fname = d / f"{base}_{burst_id}_{ending}"
         create_static_layer_h5(fname)
         file_list.append(Path(fname))
@@ -375,15 +373,26 @@ def create_static_layer_h5(filename):
         shape = (4965, 19878)  # Adjust shape as needed
 
         # Create datasets with specified values
-        grp.create_dataset("layover_shadow_mask", shape, dtype=np.uint16)
-        grp.create_dataset(
-            "los_east", shape, dtype=np.float32, data=0.7 * np.ones(shape)
+        dsets = []
+        dsets.append(grp.create_dataset("layover_shadow_mask", shape, dtype=np.uint16))
+        dsets.append(
+            grp.create_dataset(
+                "los_east", shape, dtype=np.float32, data=0.7 * np.ones(shape)
+            )
         )
-        grp.create_dataset(
-            "los_north", shape, dtype=np.float32, data=-0.11 * np.ones(shape)
+        dsets.append(
+            grp.create_dataset(
+                "los_north", shape, dtype=np.float32, data=-0.11 * np.ones(shape)
+            )
         )
-        grp.create_dataset("projection", data=32615)
-        grp["projection"].attrs.update(CRS.from_epsg(32615).to_cf())
+        dsets.append(grp.create_dataset("projection", data=32615))
+
+        crs_wkt = CRS.from_epsg(32615).to_wkt()
+        for ds in dsets:
+            ds.attrs.update(CRS.from_epsg(32615).to_cf())
+            crs_attrs = {"crs_wkt": crs_wkt, "spatial_ref": crs_wkt}
+            ds.attrs.update(crs_attrs)
+
         dx, dy = 5, -10
         x0, y0 = 246362.5, 3422995.0
         xs = np.arange(x0, x0 + shape[1] * dx, dx)

@@ -87,6 +87,7 @@ def create_test_nc(
     # CF 1.7+ requires this attribute to be named "crs_wkt"
     # spatial_ref is old GDAL way. Using that for testing only.
     srs_ds.attrs[srs_name] = crs.to_wkt()
+    srs_ds.attrs["crs_wkt"] = crs.to_wkt()
 
     srs_ds.attrs.update(crs.to_cf())
 
