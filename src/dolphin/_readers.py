@@ -56,7 +56,7 @@ class DatasetReader(Protocol):
     Such objects must export NumPy-like `dtype`, `shape`, and `ndim` attributes,
     and must support NumPy-style slice-based indexing.
 
-    Note that this protol allows objects to be passed to `dask.array.from_array`
+    Note that this protocol allows objects to be passed to `dask.array.from_array`
     which needs `.shape`, `.ndim`, `.dtype` and support numpy-style slicing.
     """
 
@@ -68,9 +68,6 @@ class DatasetReader(Protocol):
 
     ndim: int
     """int : Number of array dimensions."""
-
-    masked: bool = False
-    """bool : If True, return a masked array with the nodata values masked out."""
 
     def __getitem__(self, key: tuple[Index, ...], /) -> ArrayLike:
         """Read a block of data."""
@@ -155,7 +152,7 @@ class BinaryReader(DatasetReader):
                 arr = np.frombuffer(mm, dtype=self.dtype).reshape(self.shape)
                 data = arr[key].copy()
                 del arr
-        return _mask_array(data, self.nodata) if self.masked else data
+        return _mask_array(data, self.nodata) if self.nodata is not None else data
 
     def __array__(self) -> np.ndarray:
         return self[:,]
@@ -270,7 +267,7 @@ class HDF5Reader(DatasetReader):
         else:
             with h5py.File(self.filepath, "r") as f:
                 data = f[self.dset_name][key]
-        return _mask_array(data, self.nodata) if self.masked else data
+        return _mask_array(data, self.nodata) if self.nodata is not None else data
 
 
 def _ensure_slices(rows: Index, cols: Index) -> tuple[slice, slice]:
@@ -400,7 +397,7 @@ class RasterReader(DatasetReader):
 
         with rio.open(self.filepath) as src:
             out = src.read(self.band, window=window)
-        out_masked = _mask_array(out, self.nodata) if self.masked else out
+        out_masked = _mask_array(out, self.nodata) if self.nodata is not None else out
         # Note that Rasterio doesn't use the `step` of a slice, so we need to
         # manually slice the output array.
         r_step, c_step = r_slice.step or 1, c_slice.step or 1
@@ -815,24 +812,6 @@ class VRTStack(StackReader):
         """
         return [io.format_nc_filename(f, self.subdataset) for f in self.file_list]
 
-    def read_stack(
-        self,
-        band: Optional[int] = None,
-        subsample_factor: int = 1,
-        rows: Optional[slice] = None,
-        cols: Optional[slice] = None,
-        masked: bool = False,
-    ):
-        """Read in the SLC stack."""
-        return io.load_gdal(
-            self.outfile,
-            band=band,
-            subsample_factor=subsample_factor,
-            rows=rows,
-            cols=cols,
-            masked=masked,
-        )
-
     def __fspath__(self):
         # Allows os.fspath() to work on the object, enabling rasterio.open()
         return fspath(self.outfile)
@@ -878,6 +857,10 @@ class VRTStack(StackReader):
     def ndim(self):
         return 3
 
+    @property
+    def dtype(self):
+        return io.get_raster_dtype(self._gdal_file_strings[0])
+
     def __getitem__(self, index):
         if isinstance(index, int):
             if index < 0:
@@ -918,9 +901,23 @@ class VRTStack(StackReader):
 
         return data.squeeze()
 
-    @property
-    def dtype(self):
-        return io.get_raster_dtype(self._gdal_file_strings[0])
+    def read_stack(
+        self,
+        band: Optional[int] = None,
+        subsample_factor: int = 1,
+        rows: Optional[slice] = None,
+        cols: Optional[slice] = None,
+        masked: bool = False,
+    ):
+        """Read in the SLC stack."""
+        return io.load_gdal(
+            self.outfile,
+            band=band,
+            subsample_factor=subsample_factor,
+            rows=rows,
+            cols=cols,
+            masked=masked,
+        )
 
 
 def _parse_vrt_file(vrt_file):
