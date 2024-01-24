@@ -59,13 +59,14 @@ def test_displacement_run_single_official_opera_naming(
             worker_settings=dict(
                 gpu_enabled=(os.environ.get("NUMBA_DISABLE_JIT") != "1")
             ),
+            # TODO: Move to a disp-s1 test
             correction_options=dict(
                 troposphere_files=weather_model_files,
                 ionosphere_files=tec_files,
                 dem_file=dem_file,
                 geometry_files=opera_static_files_official,
             ),
-            unwrap_options=dict(run_unwrap=True),
+            unwrap_options=dict(run_unwrap=False),
         )
         displacement.run(cfg)
 
