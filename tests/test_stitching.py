@@ -25,7 +25,7 @@ def shifted_slc_files(tmp_path):
 
 
 @pytest.fixture()
-def shifted_slc_bounds(tmp_path):
+def shifted_slc_bounds():
     return Bbox(-5.5, -4.5, 8.5, 9.5)
 
 

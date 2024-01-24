@@ -138,7 +138,7 @@ def slc_file_list_nc_with_sds(tmp_path, slc_stack, slc_date_list):
 
 @pytest.fixture(scope="session")
 def C_truth():
-    C, truth = simulate.simulate_C(
+    C, truth = simulate.simulate_coh(
         num_acq=NUM_ACQ,
         Tau0=72,
         gamma_inf=0.95,
