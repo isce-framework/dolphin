@@ -58,7 +58,7 @@ P = ParamSpec("P")
 DateOrDatetime = Union[datetime.datetime, datetime.date]
 
 
-class TropoModel(Enum):
+class TropoModel(str, Enum):
     """Enumeration representing different tropospheric models."""
 
     ERA5 = "ERA5"
@@ -71,7 +71,7 @@ class TropoModel(Enum):
     GMAO = "GMAO"
 
 
-class TropoType(Enum):
+class TropoType(str, Enum):
     """Type of tropospheric delay."""
 
     WET = "wet"

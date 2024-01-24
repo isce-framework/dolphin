@@ -1,0 +1,3 @@
+data/troposphere_files/ERA5_N17_N22_W159_W147_20220101_14.grb
+data/troposphere_files/ERA5_N17_N22_W159_W147_20220102_14.grb
+data/troposphere_files/ERA5_N17_N22_W159_W147_20220103_14.grb

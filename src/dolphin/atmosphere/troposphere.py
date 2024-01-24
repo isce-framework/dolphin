@@ -5,16 +5,17 @@ import os
 from dataclasses import dataclass
 from os import fspath
 from pathlib import Path
-from typing import Optional
+from typing import Mapping, Sequence
 
 import numpy as np
 import opera_utils as oput
 from opera_utils import get_dates
 from osgeo import gdal
-from pyproj import CRS
+from rasterio.crs import CRS
+from rasterio.warp import transform_bounds
 from scipy.interpolate import RegularGridInterpolator
 
-from dolphin import io, stitching
+from dolphin import io
 from dolphin._log import get_log
 from dolphin._types import Bbox, Filename, TropoModel, TropoType
 from dolphin.utils import _format_date_pair
@@ -39,7 +40,7 @@ class DelayParams:
     z_coordinates: np.ndarray
     """Array of Z coordinates."""
 
-    SNWE: Bbox
+    SNWE: tuple[float, float, float, float]
     """ Bounding box of the data in SNWE format of RAiDER/PYAPS."""
 
     shape: tuple[int, int]
@@ -60,10 +61,10 @@ class DelayParams:
     delay_type: str
     """Type of tropospheric delay."""
 
-    reference_file: list[Filename]
+    reference_file: Sequence[Filename]
     """Sequence of filenames used as reference files."""
 
-    secondary_file: list[Filename]
+    secondary_file: Sequence[Filename]
     """Sequence of filenames used as secondary files."""
 
     interferogram: str
@@ -77,31 +78,29 @@ class DelayParams:
 
 
 def estimate_tropospheric_delay(
-    ifg_file_list: list[Path],
-    slc_files: dict[tuple[datetime.datetime], list[Filename]],
-    troposphere_files: dict[tuple[datetime.datetime], list[Filename]],
-    geom_files: list[Path],
-    dem_file: Optional[Path],
+    ifg_file_list: Sequence[Path],
+    slc_files: Mapping[tuple[datetime.datetime], Sequence[Filename]],
+    troposphere_files: Mapping[tuple[datetime.datetime], Sequence[Filename]],
+    geom_files: dict[str, Path],
     output_dir: Path,
     tropo_package: str,
     tropo_model: TropoModel,
     tropo_delay_type: TropoType,
-    strides: dict[str, int] = {"x": 1, "y": 1},
+    epsg: int,
+    bounds: Bbox,
 ):
     """Estimate the tropospheric delay corrections for each interferogram.
 
     Parameters
     ----------
-    ifg_file_list : list[Path]
+    ifg_file_list : Sequence[Path]
         List of interferogram files.
-    slc_files : Dict[datetime.date, list[Filename]]
+    slc_files : Mapping[tuple[datetime.datetime], Sequence[Filename]]
         Dictionary of SLC files indexed by date.
-    troposphere_files : Dict[datetime.date, list[Filename]]
+    troposphere_files : Mapping[tuple[datetime.datetime], Sequence[Filename]]
         Dictionary of troposphere files indexed by date.
-    geom_files : list[Path]
-        List of geometry files.
-    dem_file : Optional[Path]
-        DEM file.
+    geom_files : dict[str, Path]
+        Dictionary of geometry files with height and incidence angle/(los_east and los_north)..
     output_dir : Path
         Output directory.
     tropo_package : str
@@ -110,29 +109,22 @@ def estimate_tropospheric_delay(
         Tropospheric model (ERA5, HRES, ...).
     tropo_delay_type : TropoType
         Tropospheric delay type ('wet', 'hydrostatic', 'comb').
-    strides : Dict[str, int], optional
-        Strides for resampling, by default {"x": 1, "y": 1}.
+    epsg : int
+        the EPSG code of the input data
+    bounds : Bbox
+        Output bounds.
     """
     # Read geogrid data
     xsize, ysize = io.get_raster_xysize(ifg_file_list[0])
-    crs = io.get_raster_crs(ifg_file_list[0])
     gt = io.get_raster_gt(ifg_file_list[0])
     ycoord, xcoord = oput.create_yx_arrays(gt, (ysize, xsize))  # 500 m spacing
-    epsg = crs.to_epsg()
-    out_bounds = io.get_raster_bounds(ifg_file_list[0])
 
-    # prepare geometry data
-    logger.info("Prepare geometry files...")
-    geometry_dir = output_dir / "geometry"
-    geometry_files = prepare_geometry(
-        geometry_dir=geometry_dir,
-        geo_files=geom_files,
-        matching_file=ifg_file_list[0],
-        dem_file=dem_file,
-        epsg=epsg,
-        out_bounds=out_bounds,
-        strides=strides,
-    )
+    if epsg != 4326:
+        left, bottom, right, top = transform_bounds(
+            CRS.from_epsg(epsg), CRS.from_epsg(4326), *bounds
+        )
+    else:
+        left, bottom, right, top = bounds
 
     tropo_height_levels = np.concatenate(([-100], np.arange(0, 9000, 500)))
 
@@ -184,7 +176,7 @@ def estimate_tropospheric_delay(
             x_coordinates=xcoord,
             y_coordinates=ycoord,
             z_coordinates=tropo_height_levels,
-            SNWE=oput.get_snwe(epsg, out_bounds),
+            SNWE=(bottom, top, left, right),
             epsg=epsg,
             tropo_model=tropo_model.value,
             delay_type=delay_type,
@@ -200,9 +192,7 @@ def estimate_tropospheric_delay(
 
         delay_datacube = tropo_run(delay_parameters)
 
-        tropo_delay_2d = compute_2d_delay(
-            delay_parameters, delay_datacube, geometry_files
-        )
+        tropo_delay_2d = compute_2d_delay(delay_parameters, delay_datacube, geom_files)
 
         # Write 2D tropospheric correction layer to disc
         io.write_arr(
@@ -212,84 +202,6 @@ def estimate_tropospheric_delay(
         )
 
     return
-
-
-def prepare_geometry(
-    geometry_dir: Path,
-    geo_files: list[Path],
-    matching_file: Path,
-    dem_file: Optional[Path],
-    epsg: int,
-    out_bounds: Bbox,
-    strides: dict[str, int] = {"x": 1, "y": 1},
-) -> dict[str, Path]:
-    """Prepare geometry files.
-
-    Parameters
-    ----------
-    geometry_dir : Path
-        Output directory for geometry files.
-    geo_files : list[Path]
-        list of geometry files.
-    matching_file : Path
-        Matching file.
-    dem_file : Optional[Path]
-        DEM file.
-    epsg : int
-        EPSG code.
-    out_bounds : Bbox
-        Output bounds.
-    strides : Dict[str, int], optional
-        Strides for resampling, by default {"x": 1, "y": 1}.
-
-    Returns
-    -------
-    Dict[str, Path]
-        Dictionary of prepared geometry files.
-    """
-    geometry_dir.mkdir(exist_ok=True)
-
-    stitched_geo_list = {}
-
-    # local_incidence_angle needed by anyone?
-    datasets = ["los_east", "los_north"]
-
-    for ds_name in datasets:
-        outfile = geometry_dir / f"{ds_name}.tif"
-        logger.info(f"Creating {outfile}")
-        stitched_geo_list[ds_name] = outfile
-        ds_path = f"/data/{ds_name}"
-        cur_files = [io.format_nc_filename(f, ds_name=ds_path) for f in geo_files]
-
-        no_data = 0
-
-        stitching.merge_images(
-            cur_files,
-            outfile=outfile,
-            driver="GTiff",
-            out_bounds=out_bounds,
-            out_bounds_epsg=epsg,
-            in_nodata=no_data,
-            out_nodata=no_data,
-            target_aligned_pixels=True,
-            strides=strides,
-            resample_alg="nearest",
-            overwrite=False,
-        )
-
-    if dem_file:
-        height_file = geometry_dir / "height.tif"
-        stitched_geo_list["height"] = height_file
-        if not height_file.exists():
-            logger.info(f"Creating {height_file}")
-            stitching.warp_to_match(
-                input_file=dem_file,
-                match_file=matching_file,
-                output_file=height_file,
-                resample_alg="cubic",
-            )
-
-    return stitched_geo_list
 
 
 def compute_pyaps(delay_parameters: DelayParams) -> np.ndarray:
@@ -519,9 +431,14 @@ def compute_2d_delay(
 
     dem = target_ds.ReadAsArray()
 
-    los_east = io.load_gdal(geo_files["los_east"])
-    los_north = io.load_gdal(geo_files["los_north"])
-    los_up = 1 - los_east**2 - los_north**2
+    if "los_east" in geo_files.keys():
+        # ISCE3 geocoded products
+        los_east = io.load_gdal(geo_files["los_east"])
+        los_north = io.load_gdal(geo_files["los_north"])
+        los_up = np.sqrt(1 - los_east**2 - los_north**2)
+    else:
+        # ISCE2 radar coordinate
+        los_up = np.cos(np.deg2rad(io.load_gdal(geo_files["incidence_angle"])))
 
     mask = los_east > 0
 
