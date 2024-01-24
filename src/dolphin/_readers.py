@@ -1044,3 +1044,27 @@ class EagerLoader(BackgroundReader):
                 yield cur_block, (rows, cols)
 
         self.notify_finished()
+
+
+@runtime_checkable
+class DatasetWriter(Protocol):
+    """An array-like interface for writing output datasets.
+
+    `DatasetWriter` defines the abstract interface that types must conform to in order
+    to be used by functions which write outputs in blocks.
+    Such objects must export NumPy-like `dtype`, `shape`, and `ndim` attributes,
+    and must support NumPy-style slice-based indexing for setting data..
+    """
+
+    dtype: np.dtype
+    """numpy.dtype : Data-type of the array's elements."""
+
+    shape: tuple[int, ...]
+    """tuple of int : Tuple of array dimensions."""
+
+    ndim: int
+    """int : Number of array dimensions."""
+
+    def __getitem__(self, key: tuple[Index, ...], /) -> ArrayLike:
+        """Read a block of data."""
+        ...
