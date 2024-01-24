@@ -634,8 +634,8 @@ def estimate_correlation_from_phase(
 def estimate_interferometric_correlations(
     ifg_paths: Sequence[Filename],
     window_size: tuple[int, int],
-    out_driver: str = "ENVI",
-    out_suffix: str = ".cor",
+    out_driver: str = "GTiff",
+    out_suffix: str = ".cor.tif",
 ) -> list[Path]:
     """Estimate correlations for a sequence of interferograms.
 
@@ -648,9 +648,9 @@ def estimate_interferometric_correlations(
     window_size : tuple[int, int]
         (row, column) size of window to use for estimate
     out_driver : str, optional
-        Name of output GDAL driver, by default "ENVI"
+        Name of output GDAL driver, by default "GTiff"
     out_suffix : str, optional
-        File suffix to use for correlation files, by default ".cor"
+        File suffix to use for correlation files, by default ".cor.tif"
 
     Returns
     -------
