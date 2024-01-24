@@ -131,7 +131,7 @@ def four_slc_files(slc_file_list):
 
 def _get_pair_stems(slc_file_pairs):
     return [
-        (a.stem.replace(".slc.tif", ""), b.stem.replace(".slc.tif", ""))
+        (a.stem.strip(".slc.tif"), b.stem.strip(".slc.tif"))  # noqa: B005
         for a, b in slc_file_pairs
     ]
 

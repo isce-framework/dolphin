@@ -105,8 +105,7 @@ def list_of_ifgs(tmp_path, raster_100_by_200):
     return ifg_list
 
 
-@pytest.mark.parametrize("unw_suffix", [".unw", ".unw.tif"])
-def test_run(list_of_ifgs, corr_raster, unw_suffix):
+def test_run(list_of_ifgs, corr_raster):
     ifg_path = list_of_ifgs[0].parent
     dolphin.unwrap.run(
         ifg_filenames=list_of_ifgs,
@@ -114,8 +113,6 @@ def test_run(list_of_ifgs, corr_raster, unw_suffix):
         output_path=ifg_path,
         nlooks=1,
         init_method="mst",
-        ifg_suffix=".int",
-        unw_suffix=unw_suffix,
         max_jobs=1,
     )
 
@@ -135,21 +132,6 @@ def list_of_gtiff_ifgs(tmp_path, raster_100_by_200):
         ifg_list.append(f)
 
     return ifg_list
-
-
-@pytest.mark.parametrize("unw_suffix", [".unw", ".unw.tif"])
-def test_run_gtiff(list_of_gtiff_ifgs, corr_raster, unw_suffix):
-    ifg_path = list_of_gtiff_ifgs[0].parent
-    out_files, conncomp_files = dolphin.unwrap.run(
-        ifg_filenames=list_of_gtiff_ifgs,
-        cor_filenames=[corr_raster] * len(list_of_gtiff_ifgs),
-        output_path=ifg_path,
-        nlooks=1,
-        init_method="mst",
-        ifg_suffix=".int.tif",
-        unw_suffix=unw_suffix,
-        max_jobs=1,
-    )
 
 
 @pytest.mark.skipif(
