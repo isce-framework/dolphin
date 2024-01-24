@@ -27,13 +27,13 @@ def merge_by_date(
     image_file_list: Iterable[Filename],
     file_date_fmt: str = DEFAULT_DATETIME_FORMAT,
     output_dir: Filename = ".",
-    driver: str = "ENVI",
-    output_suffix: str = ".int",
+    driver: str = "GTiff",
+    output_suffix: str = ".int.tif",
     out_nodata: Optional[float] = 0,
     in_nodata: Optional[float] = None,
     out_bounds: Optional[Bbox] = None,
     out_bounds_epsg: Optional[int] = None,
-    options: Optional[Sequence[str]] = io.DEFAULT_ENVI_OPTIONS,
+    options: Optional[Sequence[str]] = io.DEFAULT_TIFF_OPTIONS,
     overwrite: bool = False,
 ) -> dict[tuple[datetime, ...], Path]:
     """Group images from the same datetime and merge into one image per datetime.
@@ -62,7 +62,8 @@ def merge_by_date(
         EPSG code for the `out_bounds`.
         If not provided, assumed to match the projections of `file_list`.
     options : Optional[Sequence[str]]
-        Driver-specific creation options passed to GDAL. Default is ["SUFFIX=ADD"]
+        Driver-specific creation options passed to GDAL.
+        Default is [dolphin.io.DEFAULT_TIFF_OPTIONS][].
     overwrite : bool
         Overwrite existing files. Default is False.
 
@@ -117,13 +118,13 @@ def merge_images(
     out_bounds: Optional[Bbox] = None,
     out_bounds_epsg: Optional[int] = None,
     strides: Optional[dict[str, int]] = None,
-    driver: str = "ENVI",
+    driver: str = "GTiff",
     out_nodata: Optional[float] = 0,
     out_dtype: Optional[DTypeLike] = None,
     in_nodata: Optional[float] = None,
     resample_alg: str = "lanczos",
     overwrite: bool = False,
-    options: Optional[Sequence[str]] = io.DEFAULT_ENVI_OPTIONS,
+    options: Optional[Sequence[str]] = io.DEFAULT_TIFF_OPTIONS,
     create_only: bool = False,
 ) -> None:
     """Combine multiple SLC images on the same date into one image.
@@ -152,7 +153,7 @@ def merge_images(
     strides : dict[str, int]
         subsample factor: {"x": x strides, "y": y strides}
     driver : str
-        GDAL driver to use for output file. Default is ENVI.
+        GDAL driver to use for output file. Default is GTiff.
     out_nodata : Optional[float | str]
         Nodata value to use for output file. Default is 0.
     out_dtype : Optional[DTypeLike]
@@ -166,7 +167,8 @@ def merge_images(
     overwrite : bool
         Overwrite existing files. Default is False.
     options : Optional[Sequence[str]]
-        Driver-specific creation options passed to GDAL. Default is ["SUFFIX=ADD"]
+        Driver-specific creation options passed to GDAL.
+        Default is [dolphin.io.DEFAULT_TIFF_OPTIONS][].
     create_only : bool
         If True, creates an empty output file, does not write data. Default is False.
     """
