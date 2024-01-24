@@ -65,7 +65,7 @@ def test_displacement_run_single_official_opera_naming(
                 dem_file=dem_file,
                 geometry_files=opera_static_files_official,
             ),
-            unwrap_options=dict(run_unwrap=False),
+            unwrap_options=dict(run_unwrap=True),
         )
         displacement.run(cfg)
 
