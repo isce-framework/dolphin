@@ -29,6 +29,7 @@ from ._common import (
 
 __all__ = [
     "DisplacementWorkflow",
+    "CorrectionOptions",
 ]
 
 logger = get_log(__name__)

@@ -362,8 +362,12 @@ class MiniStackPlanner(BaseStack):
             cur_slice = slice(full_stack_idx, full_stack_idx + ministack_size)
             cur_files = list(self.file_list[cur_slice]).copy()
             cur_dates = list(self.dates[cur_slice]).copy()
-
-            comp_slc_files = [c.path for c in compressed_slc_infos]
+            
+            # Read compressed*.tif files and if they do not exist use the compressed*.h5
+            # *.h5 files are inputs for disp-s1
+            comp_slc_files = [c.path for c in compressed_slc_infos if c.path.exists()]
+            if len(comp_slc_files) == 0:
+                comp_slc_files = self.compressed_slc_file_list
             # Add the existing compressed SLC files to the start, but
             # limit the num comp slcs `max_num_compressed`
             cur_comp_slc_files = comp_slc_files[-self.max_num_compressed :]
