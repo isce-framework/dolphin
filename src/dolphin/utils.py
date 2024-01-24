@@ -91,7 +91,8 @@ def numpy_to_gdal_type(np_dtype: DTypeLike) -> int:
         return gdalconst.GDT_Byte
     gdal_code = gdal_array.NumericTypeCodeToGDALTypeCode(np_dtype)
     if gdal_code is None:
-        raise TypeError(f"dtype {np_dtype} not supported by GDAL.")
+        msg = f"dtype {np_dtype} not supported by GDAL."
+        raise TypeError(msg)
     return gdal_code
 
 
@@ -294,7 +295,8 @@ def _make_dims_multiples(arr, row_looks, col_looks, how="cutoff"):
             )
         return arr
     else:
-        raise ValueError(f"Invalid edge strategy: {how}")
+        msg = f"Invalid edge strategy: {how}"
+        raise ValueError(msg)
 
 
 def upsample_nearest(
@@ -413,7 +415,8 @@ def get_max_memory_usage(units: str = "GB", children: bool = True) -> float:
     elif units.lower().startswith("byte"):
         factor = 1.0
     else:
-        raise ValueError(f"Unknown units: {units}")
+        msg = f"Unknown units: {units}"
+        raise ValueError(msg)
     if sys.platform.startswith("linux"):
         # on linux, ru_maxrss is in kilobytes, while on mac, ru_maxrss is in bytes
         factor /= 1e3
@@ -425,8 +428,9 @@ def get_gpu_memory(pid: Optional[int] = None, gpu_id: int = 0) -> float:
     """Get the memory usage (in GiB) of the GPU for the current pid."""
     try:
         from pynvml.smi import nvidia_smi
-    except ImportError:
-        raise ImportError("Please install pynvml through pip or conda")
+    except ImportError as e:
+        msg = "Please install pynvml through pip or conda"
+        raise ImportError(msg) from e
 
     def get_mem(process):
         used_mem = process["used_memory"] if process else 0
@@ -471,9 +475,11 @@ def moving_window_mean(
     if isinstance(size, int):
         size = (size, size)
     if len(size) != 2:
-        raise ValueError("size must be a single int or a tuple of 2 ints")
+        msg = "size must be a single int or a tuple of 2 ints"
+        raise ValueError(msg)
     if size[0] % 2 == 0 or size[1] % 2 == 0:
-        raise ValueError("size must be odd in both dimensions")
+        msg = "size must be odd in both dimensions"
+        raise ValueError(msg)
 
     row_size, col_size = size
     row_pad = row_size // 2
@@ -532,7 +538,7 @@ def get_cpu_count():
     ----------
     1. https://github.com/joblib/loky/issues/111
     2. https://github.com/conan-io/conan/blob/982a97041e1ece715d157523e27a14318408b925/conans/client/tools/oss.py#L27 # noqa
-    """
+    """  # noqa: E501
 
     def get_cpu_quota():
         return int(Path("/sys/fs/cgroup/cpu/cpu.cfs_quota_us").read_text())
@@ -566,7 +572,7 @@ def prepare_geometry(
     dem_file: Optional[Path],
     epsg: int,
     out_bounds: Bbox,
-    strides: dict[str, int] = {"x": 1, "y": 1},
+    strides: Optional[dict[str, int]] = None,
 ) -> dict[str, Path]:
     """Prepare geometry files.
 
@@ -595,6 +601,8 @@ def prepare_geometry(
     from dolphin import stitching
     from dolphin.io import format_nc_filename
 
+    if strides is None:
+        strides = {"x": 1, "y": 1}
     geometry_dir.mkdir(exist_ok=True)
 
     stitched_geo_list = {}
@@ -646,9 +654,9 @@ def prepare_geometry(
         }
 
         for geo_file in geo_files:
-            if geo_file.stem in dsets.keys():
+            if geo_file.stem in dsets:
                 out_name = dsets[geo_file.stem]
-            elif geo_file.name in dsets.keys():
+            elif geo_file.name in dsets:
                 out_name = dsets[geo_file.name]
                 continue
 

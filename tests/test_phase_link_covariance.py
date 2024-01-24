@@ -9,7 +9,7 @@ from dolphin._blocks import compute_out_shape
 from dolphin.phase_link import covariance, simulate
 from dolphin.utils import gpu_is_available, take_looks
 
-GPU_AVAILABLE = gpu_is_available() and not (os.environ.get("NUMBA_DISABLE_JIT") == "1")
+GPU_AVAILABLE = gpu_is_available() and os.environ.get("NUMBA_DISABLE_JIT") != "1"
 NUM_ACQ = 30
 simulate._seed(1234)
 
@@ -45,7 +45,7 @@ def slcs(shape=(10, 100, 100)):
     return np.random.rand(*shape) + 1j * np.random.rand(*shape)
 
 
-@pytest.fixture
+@pytest.fixture()
 def expected_cov(slcs, looks=(5, 5)):
     return get_expected_cov(slcs, looks)
 
@@ -57,7 +57,7 @@ def test_coh_mat_single(slcs, expected_cov, looks=(5, 5)):
     expected_looked_size = tuple(
         floor(size / look) for size, look in zip((rows, cols), looks)
     )
-    assert expected_cov.shape == (expected_looked_size + (num_slc, num_slc))
+    assert expected_cov.shape == ((*expected_looked_size, num_slc, num_slc))
 
     r_looks, c_looks = looks
     for r in range(expected_looked_size[0]):

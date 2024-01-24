@@ -13,27 +13,27 @@ NUM_ACQ = 10
 
 # Note: uses the fixtures from conftest.py
 # Use a smaller subset for these tests
-@pytest.fixture
+@pytest.fixture()
 def files(slc_file_list):
     return slc_file_list[:NUM_ACQ]
 
 
-@pytest.fixture
+@pytest.fixture()
 def files_nc(slc_file_list_nc):
     return slc_file_list_nc[:NUM_ACQ]
 
 
-@pytest.fixture
+@pytest.fixture()
 def dates(slc_date_list):
     return slc_date_list[:NUM_ACQ]
 
 
-@pytest.fixture
+@pytest.fixture()
 def is_compressed(files):
     return [False] * len(files[:NUM_ACQ])
 
 
-@pytest.fixture
+@pytest.fixture()
 def date_lists(dates):
     # To mimic what we get back from running `get_dates` on a list of files
     return [[d] for d in dates]
@@ -79,7 +79,7 @@ def test_create_ministack_dates(files, dates, is_compressed):
     ]
 
 
-@pytest.fixture
+@pytest.fixture()
 def ministack(files, date_lists, is_compressed):
     return MiniStackInfo(
         file_list=files,
@@ -146,7 +146,7 @@ def run_ministack_planner(files, date_lists, is_compressed):
 
         assert ms.output_folder == expected_out_folders[idx]
 
-    assert all([ms.reference_date == datetime(2022, 1, 1) for ms in ms_list])
+    assert all(ms.reference_date == datetime(2022, 1, 1) for ms in ms_list)
 
 
 def test_ministack_planner_gtiff(files, date_lists, is_compressed):
@@ -158,7 +158,7 @@ def test_ministack_planner_nc(files_nc, date_lists, is_compressed):
     run_ministack_planner(files_nc, date_lists, is_compressed)
 
 
-@pytest.fixture
+@pytest.fixture()
 def ministack_planner(files, date_lists, is_compressed):
     return MiniStackPlanner(
         file_list=files,

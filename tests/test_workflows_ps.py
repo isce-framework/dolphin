@@ -20,10 +20,10 @@ def test_ps_workflow_run(opera_slc_files_official: list[Path], tmpdir):
     with tmpdir.as_cwd():
         cfg = config.PsWorkflow(
             cslc_file_list=file_list,
-            input_options=dict(subdataset="/data/VV"),
-            worker_settings=dict(
-                gpu_enabled=(os.environ.get("NUMBA_DISABLE_JIT") != "1")
-            ),
+            input_options={"subdataset": "/data/VV"},
+            worker_settings={
+                "gpu_enabled": (os.environ.get("NUMBA_DISABLE_JIT") != "1")
+            },
         )
         ps.run(cfg)
 
@@ -46,11 +46,11 @@ def test_ps_workflow_multi_burst(opera_slc_files_official: list[Path], tmpdir):
     with tmpdir.as_cwd():
         cfg = config.PsWorkflow(
             cslc_file_list=opera_slc_files_official,
-            input_options=dict(subdataset="/data/VV"),
-            worker_settings=dict(
-                gpu_enabled=(os.environ.get("NUMBA_DISABLE_JIT") != "1")
-            ),
-            log_file=Path(".") / "dolphin_ps.log",
+            input_options={"subdataset": "/data/VV"},
+            worker_settings={
+                "gpu_enabled": (os.environ.get("NUMBA_DISABLE_JIT") != "1")
+            },
+            log_file=Path() / "dolphin_ps.log",
         )
         with pytest.raises(NotImplementedError):
             ps.run(cfg)

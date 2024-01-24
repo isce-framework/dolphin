@@ -45,13 +45,13 @@ DEFAULT_TIFF_OPTIONS = (
     f"BLOCKYSIZE={DEFAULT_TILE_SIZE[0]}",
 )
 DEFAULT_ENVI_OPTIONS = ("SUFFIX=ADD",)
-DEFAULT_HDF5_OPTIONS = dict(
+DEFAULT_HDF5_OPTIONS = {
     # https://docs.h5py.org/en/stable/high/dataset.html#filter-pipeline
-    chunks=DEFAULT_TILE_SIZE,
-    compression="gzip",
-    compression_opts=4,
-    shuffle=True,
-)
+    "chunks": DEFAULT_TILE_SIZE,
+    "compression": "gzip",
+    "compression_opts": 4,
+    "shuffle": True,
+}
 logger = get_log(__name__)
 
 
@@ -64,7 +64,7 @@ def load_gdal(
     rows: Optional[slice] = None,
     cols: Optional[slice] = None,
     masked: bool = False,
-):
+) -> np.ndarray | np.ma.MaskedArray:
     """Load a gdal file into a numpy array.
 
     Parameters
@@ -89,7 +89,7 @@ def load_gdal(
 
     Returns
     -------
-    arr : np.ndarray
+    arr : np.ndarray or np.ma.MaskedArray
         Array of shape (bands, y, x) or (y, x) if `band` is specified,
         where y = height // subsample_factor and x = width // subsample_factor.
     """
@@ -105,8 +105,7 @@ def load_gdal(
             out = bnd.GetOverview(idx).ReadAsArray()
             bnd = ds = None
             return out
-        else:
-            logger.warning(f"Requested {overview = }, but none found for {filename}")
+        logger.warning(f"Requested {overview = }, but none found for {filename}")
 
     # if rows or cols are not specified, load all rows/cols
     rows = slice(0, nrows) if rows in (None, slice(None)) else rows
@@ -125,10 +124,11 @@ def load_gdal(
     col_stop = min(cols.stop, ncols)
     xsize, ysize = int(col_stop - cols.start), int(row_stop - rows.start)
     if xsize <= 0 or ysize <= 0:
-        raise IndexError(
+        msg = (
             f"Invalid row/col slices: {rows}, {cols} for file {filename} of size"
             f" {nrows}x{ncols}"
         )
+        raise IndexError(msg)
     nrows_out, ncols_out = (
         ysize // subsample_factor[0],
         xsize // subsample_factor[1],
@@ -182,15 +182,16 @@ def format_nc_filename(filename: Filename, ds_name: Optional[str] = None) -> str
     """
     # If we've already formatted the filename, return it
     fname_clean = fspath(filename).lstrip('"').lstrip("'").rstrip('"').rstrip("'")
-    if fname_clean.startswith("NETCDF:") or fname_clean.startswith("HDF5:"):
+    if fname_clean.startswith(("NETCDF:", "HDF5:")):
         return fspath(filename)
 
-    if not (fname_clean.endswith(".nc") or fname_clean.endswith(".h5")):
+    if not (fname_clean.endswith((".nc", ".h5"))):
         return fspath(filename)
 
     # Now we're definitely dealing with an HDF5/NetCDF file
     if ds_name is None:
-        raise ValueError("Must provide dataset name for HDF5/NetCDF files")
+        msg = "Must provide dataset name for HDF5/NetCDF files"
+        raise ValueError(msg)
 
     return f'NETCDF:"{filename}":"//{ds_name.lstrip("/")}"'
 
@@ -200,7 +201,8 @@ def _assert_images_same_size(files):
     with ThreadPoolExecutor(5) as executor:
         sizes = list(executor.map(get_raster_xysize, files))
     if len(set(sizes)) > 1:
-        raise ValueError(f"Not files have same raster (x, y) size:\n{set(sizes)}")
+        msg = f"Not files have same raster (x, y) size:\n{set(sizes)}"
+        raise ValueError(msg)
 
 
 def copy_projection(src_file: Filename, dst_file: Filename) -> None:
@@ -251,8 +253,7 @@ def get_raster_nodata(filename: Filename, band: int = 1) -> Optional[float]:
         Nodata value, or None if not found.
     """
     ds = gdal.Open(fspath(filename))
-    nodata = ds.GetRasterBand(band).GetNoDataValue()
-    return nodata
+    return ds.GetRasterBand(band).GetNoDataValue()
 
 
 def get_raster_crs(filename: Filename) -> CRS:
@@ -269,8 +270,7 @@ def get_raster_crs(filename: Filename) -> CRS:
         CRS.
     """
     ds = gdal.Open(fspath(filename))
-    crs = CRS.from_wkt(ds.GetProjection())
-    return crs
+    return CRS.from_wkt(ds.GetProjection())
 
 
 def get_raster_gt(filename: Filename) -> list[float]:
@@ -287,8 +287,7 @@ def get_raster_gt(filename: Filename) -> list[float]:
         6 floats representing a GDAL Geotransform.
     """
     ds = gdal.Open(fspath(filename))
-    gt = ds.GetGeoTransform()
-    return gt
+    return ds.GetGeoTransform()
 
 
 def get_raster_dtype(filename: Filename) -> np.dtype:
@@ -305,8 +304,7 @@ def get_raster_dtype(filename: Filename) -> np.dtype:
         Data type.
     """
     ds = gdal.Open(fspath(filename))
-    dt = gdal_to_numpy_type(ds.GetRasterBand(1).DataType)
-    return dt
+    return gdal_to_numpy_type(ds.GetRasterBand(1).DataType)
 
 
 def get_raster_driver(filename: Filename) -> str:
@@ -323,8 +321,7 @@ def get_raster_driver(filename: Filename) -> str:
         Driver name.
     """
     ds = gdal.Open(fspath(filename))
-    driver = ds.GetDriver().ShortName
-    return driver
+    return ds.GetDriver().ShortName
 
 
 def get_raster_bounds(
@@ -333,7 +330,8 @@ def get_raster_bounds(
     """Get the (left, bottom, right, top) bounds of the image."""
     if ds is None:
         if filename is None:
-            raise ValueError("Must provide either `filename` or `ds`")
+            msg = "Must provide either `filename` or `ds`"
+            raise ValueError(msg)
         ds = gdal.Open(fspath(filename))
 
     gt = ds.GetGeoTransform()
@@ -361,8 +359,7 @@ def get_raster_metadata(filename: Filename, domain: str = ""):
         Dictionary of metadata.
     """
     ds = gdal.Open(fspath(filename))
-    md = ds.GetMetadata(domain)
-    return md
+    return ds.GetMetadata(domain)
 
 
 def set_raster_metadata(
@@ -447,7 +444,7 @@ def write_arr(
     geotransform: Optional[Sequence[float]] = None,
     strides: Optional[dict[str, int]] = None,
     projection: Optional[Any] = None,
-    nodata: Optional[Union[float, str]] = None,
+    nodata: Optional[float] = None,
 ):
     """Save an array to `output_name`.
 
@@ -485,7 +482,7 @@ def write_arr(
         Projection to save. Default is the projection of like_filename.
         Possible values are anything parse-able by ``pyproj.CRS.from_user_input``
         (including EPSG ints, WKT strings, PROJ strings, etc.)
-    nodata : float or str, optional
+    nodata : float, optional
         Nodata value to save.
         Default is the nodata of band 1 of `like_filename` (if provided), or None.
 
@@ -574,7 +571,8 @@ def write_block(
     # filename must be pre-made
     filename = Path(filename)
     if not filename.exists():
-        raise ValueError(f"File {filename} does not exist")
+        msg = f"File {filename} does not exist"
+        raise ValueError(msg)
 
     if filename.suffix in (".h5", ".hdf5", ".nc"):
         _write_hdf5(cur_block, filename, row_start, col_start)
@@ -619,7 +617,7 @@ class FileInfo:
     xsize: int
     dtype: DTypeLike
     gdal_dtype: int
-    nodata: Optional[Union[str, float]]
+    nodata: Optional[float]
     driver: str
     options: Optional[list]
     projection: Optional[str]
@@ -640,7 +638,7 @@ class FileInfo:
         geotransform: Optional[Sequence[float]] = None,
         strides: Optional[dict[str, int]] = None,
         projection: Optional[Any] = None,
-        nodata: Optional[Union[float, str]] = None,
+        nodata: Optional[float] = None,
     ) -> FileInfo:
         if like_filename is not None:
             ds_like = gdal.Open(fspath(like_filename))
@@ -669,7 +667,8 @@ class FileInfo:
                 gdal_dtype = ds_like.GetRasterBand(1).DataType
 
         if any(v is None for v in (xsize, ysize, gdal_dtype)):
-            raise ValueError("Must specify either `arr` or `like_filename`")
+            msg = "Must specify either `arr` or `like_filename`"
+            raise ValueError(msg)
         assert gdal_dtype is not None
 
         if nodata is None and ds_like is not None:
@@ -689,7 +688,8 @@ class FileInfo:
                 driver = "GTiff"
             else:
                 if not ds_like:
-                    raise ValueError("Must specify `driver` if `like_filename` is None")
+                    msg = "Must specify `driver` if `like_filename` is None"
+                    raise ValueError(msg)
                 driver = ds_like.GetDriver().ShortName
         if options is None and driver == "GTiff":
             options = list(DEFAULT_TIFF_OPTIONS)
@@ -738,12 +738,12 @@ def get_raster_chunk_size(filename: Filename) -> list[int]:
 class Writer(BackgroundWriter):
     """Class to write data to files in a background thread."""
 
-    def __init__(self, max_queue: int = 0, debug: bool = False, **kwargs):
+    def __init__(self, max_queue: int = 0, debug: bool = False, **kwargs):  # noqa: D107
         if debug is False:
             super().__init__(nq=max_queue, name="Writer", **kwargs)
         else:
             # Don't start a background thread. Just synchronously write data
-            setattr(self, "queue_write", self.write)
+            self.queue_write = self.write  # type: ignore[assignment]
 
     def write(
         self, data: ArrayLike, filename: Filename, row_start: int, col_start: int

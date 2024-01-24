@@ -81,7 +81,7 @@ def simulate_neighborhood_stack(
 
 
 @njit(cache=True)
-def simulate_C(
+def simulate_coh(
     num_acq=50,
     gamma_inf=0.1,
     gamma0=0.999,

@@ -32,7 +32,7 @@ def run_wrapped_phase_sequential(
     ministack_planner: MiniStackPlanner,
     ministack_size: int,
     half_window: dict,
-    strides: dict = {"x": 1, "y": 1},
+    strides: Optional[dict] = None,
     mask_file: Optional[Filename] = None,
     ps_mask_file: Optional[Filename] = None,
     amp_mean_file: Optional[Filename] = None,
@@ -47,14 +47,14 @@ def run_wrapped_phase_sequential(
     gpu_enabled: bool = True,
 ) -> tuple[list[Path], list[Path], Path]:
     """Estimate wrapped phase using batches of ministacks."""
+    if strides is None:
+        strides = {"x": 1, "y": 1}
     output_folder = ministack_planner.output_folder
     output_folder.mkdir(parents=True, exist_ok=True)
     ministacks = ministack_planner.plan(ministack_size)
 
     v_all = VRTStack.from_vrt_file(slc_vrt_file)
-    logger.info(
-        f"Full file range for {v_all}: from {v_all.file_list[0]} to {v_all.file_list[-1]}"
-    )
+    logger.info(f"Full file range: {v_all.file_list[0]} to {v_all.file_list[-1]}")
     logger.info(f"Output folder: {output_folder}")
     logger.info(f"Number of ministacks of size {ministack_size}: {len(ministacks)}")
 

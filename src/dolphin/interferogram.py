@@ -71,15 +71,15 @@ class VRTInterferogram(BaseModel, extra="allow"):
         description=(
             "Directory to place output interferogram. Defaults to the same"
             " directory as `ref_slc`. If only `outdir` is specified, the output"
-            f" interferogram will be named '<date1>_<date2>{DEFAULT_SUFFIX}', where the dates"
-            " are parsed from the inputs. If `path` is specified, this is ignored."
+            f" interferogram will be named '<date1>_<date2>{DEFAULT_SUFFIX}', where the"
+            " dates are parsed from the inputs. If `path` is specified, this is ignored"
         ),
         validate_default=True,
     )
     path: Optional[Path] = Field(
         None,
         description=(
-            f"Path to output interferogram. Defaults to '<date1>_<date2>{DEFAULT_SUFFIX}'"
+            f"Path to output interferogram. Defaults to <date1>_<date2>{DEFAULT_SUFFIX}"
             ", where the dates are parsed from the input files, placed in the same "
             "directory as `ref_slc`."
         ),
@@ -127,9 +127,7 @@ class VRTInterferogram(BaseModel, extra="allow"):
     def _check_gdal_string(cls, v: Union[Path, str], info: ValidationInfo):
         subdataset = info.data.get("subdataset")
         # If we're using a subdataset, create a the GDAL-readable string
-        gdal_str = io.format_nc_filename(v, subdataset)
-
-        return gdal_str
+        return io.format_nc_filename(v, subdataset)
 
     @field_validator("outdir")
     @classmethod
@@ -141,38 +139,36 @@ class VRTInterferogram(BaseModel, extra="allow"):
         return utils._get_path_from_gdal_str(ref_slc).parent
 
     @model_validator(mode="after")
-    def _parse_dates(self) -> "VRTInterferogram":
+    def _parse_dates(self) -> VRTInterferogram:
         # Get the dates from the input files if not provided
         if self.ref_date is None:
             d = get_dates(self.ref_slc, fmt=self.date_format)
             if not d:
-                raise ValueError(
-                    f"No dates found in '{self.ref_slc}' like {self.date_format}"
-                )
+                msg = f"No dates found in '{self.ref_slc}' like {self.date_format}"
+                raise ValueError(msg)
             self.ref_date = d[0]
         if self.sec_date is None:
             d = get_dates(self.sec_slc, fmt=self.date_format)
             if not d:
-                raise ValueError(
-                    f"No dates found in '{self.sec_slc}' like {self.date_format}"
-                )
+                msg = f"No dates found in '{self.sec_slc}' like {self.date_format}"
+                raise ValueError(msg)
             self.sec_date = d[0]
 
         return self
 
     @model_validator(mode="after")
-    def _resolve_files(self) -> "VRTInterferogram":
+    def _resolve_files(self) -> VRTInterferogram:
         """Check that the inputs are the same size and geotransform."""
         if not self.ref_slc or not self.sec_slc:
             # Skip validation if files are not set
             return self
         if self.resolve_paths:
-            self.ref_slc = utils._resolve_gdal_path(self.ref_slc)  # type: ignore
-            self.sec_slc = utils._resolve_gdal_path(self.sec_slc)  # type: ignore
+            self.ref_slc = utils._resolve_gdal_path(self.ref_slc)  # type: ignore[assignment]
+            self.sec_slc = utils._resolve_gdal_path(self.sec_slc)  # type: ignore[assignment]
         return self
 
     @model_validator(mode="after")
-    def _validate_files(self) -> "VRTInterferogram":
+    def _validate_files(self) -> VRTInterferogram:
         # Only run this check if we care to validate the readability
         if not self.verify_slcs:
             return self
@@ -182,20 +178,18 @@ class VRTInterferogram(BaseModel, extra="allow"):
         xsize, ysize = ds1.RasterXSize, ds1.RasterYSize
         xsize2, ysize2 = ds2.RasterXSize, ds2.RasterYSize
         if xsize != xsize2 or ysize != ysize2:
-            raise ValueError(
-                f"Input files {self.ref_slc} and {self.sec_slc} are not the same size"
-            )
+            msg = f"Input files {self.ref_slc} and {self.sec_slc} are not the same size"
+            raise ValueError(msg)
         gt1 = ds1.GetGeoTransform()
         gt2 = ds2.GetGeoTransform()
         if gt1 != gt2:
-            raise ValueError(
-                f"Input files {self.ref_slc} and {self.sec_slc} have different GeoTransforms"
-            )
+            msg = f"{self.ref_slc} and {self.sec_slc} have different GeoTransforms"
+            raise ValueError(msg)
 
         return self
 
     @model_validator(mode="after")
-    def _form_path(self) -> "VRTInterferogram":
+    def _form_path(self) -> VRTInterferogram:
         """Create the filename (if not provided) from the provided SLCs."""
         if self.path is not None:
             return self
@@ -213,7 +207,7 @@ class VRTInterferogram(BaseModel, extra="allow"):
         return self
 
     @model_validator(mode="after")
-    def _write_vrt(self) -> "VRTInterferogram":
+    def _write_vrt(self) -> VRTInterferogram:
         """Write out the VRT if requested."""
         if not self.write:
             return self
@@ -243,16 +237,16 @@ class VRTInterferogram(BaseModel, extra="allow"):
         return io.load_gdal(self.path)
 
     @property
-    def shape(self):
+    def shape(self):  # noqa: D102
         xsize, ysize = io.get_raster_xysize(self.path)
         return (ysize, xsize)
 
     @property
-    def dates(self):
+    def dates(self):  # noqa: D102
         return (self.ref_date, self.sec_date)
 
     @classmethod
-    def from_vrt_file(cls, path: Filename) -> "VRTInterferogram":
+    def from_vrt_file(cls, path: Filename) -> VRTInterferogram:
         """Load a VRTInterferogram from an existing VRT file.
 
         Parameters
@@ -356,9 +350,7 @@ class Network:
         else:
             # We're passing a sequence
             assert len(self.subdataset) == len(self.slc_list)
-            self._slc_to_subdataset = {
-                slc: sd for slc, sd in zip(self.slc_list, self.subdataset)
-            }
+            self._slc_to_subdataset = dict(zip(self.slc_list, self.subdataset))
 
         if self.outdir is None:
             self.outdir = Path(self.slc_list[0]).parent
@@ -368,8 +360,9 @@ class Network:
             # Use the first one we find in the name
             self.dates = [get_dates(f, fmt=self.date_format)[0] for f in self.slc_list]
         if len(self.dates) != len(self.slc_list):
-            raise ValueError(f"{len(self.dates) = }, but {len(self.slc_list) = }")
-        self._slc_to_date = {slc: d for slc, d in zip(self.slc_list, self.dates)}
+            msg = f"{len(self.dates) = }, but {len(self.slc_list) = }"
+            raise ValueError(msg)
+        self._slc_to_date = dict(zip(self.slc_list, self.dates))
 
         # Run the appropriate network creation based on the options we passed
         self.slc_file_pairs = self._make_ifg_pairs()
@@ -397,7 +390,8 @@ class Network:
         elif self.reference_idx is not None:
             ifgs = Network._single_reference_network(self.slc_list, self.reference_idx)
         else:
-            raise ValueError("No valid ifg list generation method specified")
+            msg = "No valid ifg list generation method specified"
+            raise ValueError(msg)
 
         if not self.include_annual:
             return ifgs
@@ -471,10 +465,10 @@ class Network:
     ) -> list[IfgPairT]:
         """Form a list of single-reference interferograms."""
         if len(slc_list) < 2:
-            raise ValueError("Need at least two dates to make an interferogram list")
+            msg = "Need at least two dates to make an interferogram list"
+            raise ValueError(msg)
         ref = slc_list[reference_idx]
-        ifgs = [tuple(sorted([ref, date])) for date in slc_list if date != ref]
-        return ifgs
+        return [tuple(sorted([ref, date])) for date in slc_list if date != ref]
 
     @staticmethod
     def _limit_by_bandwidth(
@@ -564,12 +558,12 @@ class Network:
             # Use this ifg as the annual if none exist, or if it's closer to 365
             if dp is None or abs(baseline_days - 365) < Network._temp_baseline(dp):
                 date_to_file[early] = ifg
-        return list(sorted(date_to_file.values()))
+        return sorted(date_to_file.values())
 
     @staticmethod
     def _all_pairs(slc_list: Iterable[T]) -> list[tuple[T, T]]:
         """Create the list of all possible ifg pairs from slc_list."""
-        return [(a, b) for (a, b) in itertools.combinations(slc_list, r=2)]
+        return list(itertools.combinations(slc_list, r=2))
 
     @staticmethod
     def _temp_baseline(ifg_pair: tuple[DateOrDatetime, DateOrDatetime]):

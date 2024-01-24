@@ -25,7 +25,7 @@ _get_slices = njit(_get_slices)
 def estimate_stack_covariance_cpu(
     slc_stack: np.ndarray,
     half_window: dict[str, int],
-    strides: dict[str, int] = {"x": 1, "y": 1},
+    strides: Optional[dict[str, int]] = None,
     neighbor_arrays: Optional[np.ndarray] = None,
     n_workers=1,
 ):
@@ -59,8 +59,11 @@ def estimate_stack_covariance_cpu(
     ValueError
         If `slc_stack` is not complex data.
     """
+    if strides is None:
+        strides = {"x": 1, "y": 1}
     if not np.iscomplexobj(slc_stack):
-        raise ValueError("The SLC stack must be complex.")
+        msg = "The SLC stack must be complex."
+        raise ValueError(msg)
     # Get the dimensions
     nslc, rows, cols = slc_stack.shape
     dtype = slc_stack.dtype
@@ -155,7 +158,7 @@ def coh_mat_single(slc_samples, cov_mat=None, neighbor_mask=None, do_shp: bool =
 
             # check if either had 0 good pixels
             a_prod = a1 * a2
-            if abs(a_prod) < 1e-6:
+            if abs(a_prod) < 1e-6:  # noqa: SIM108
                 cov = 0.0 + 0.0j
             else:
                 # cov = np.nansum(c1 * np.conjugate(c2)) / np.sqrt(a_prod)
@@ -268,10 +271,10 @@ def _save_coherence_matrices(
         chunks = (10, 10, nslc, nslc)
 
     if not compression_opts:
-        compression_opts = dict(
-            compression="lzf",
-            shuffle=True,
-        )
+        compression_opts = {
+            "compression": "lzf",
+            "shuffle": True,
+        }
     compression_opts["chunks"] = chunks
 
     with h5py.File(filename, "w") as f:

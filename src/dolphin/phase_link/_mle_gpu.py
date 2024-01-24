@@ -16,7 +16,7 @@ from .mle import MleOutput, mle_stack
 def run_gpu(
     slc_stack: np.ndarray,
     half_window: dict[str, int],
-    strides: dict[str, int] = {"x": 1, "y": 1},
+    strides: Optional[dict[str, int]] = None,
     use_evd: bool = False,
     beta: float = 0.01,
     reference_idx: int = 0,
@@ -61,6 +61,8 @@ def run_gpu(
     calc_average_coh : bool, default=False
         If requested, the average of each row of the covariance matrix is computed
         for the purposes of finding the best reference (highest coherence) date
+    **kwargs : dict, optional
+        Additional keyword arguments not used by CPU version.
 
     Returns
     -------
@@ -71,6 +73,8 @@ def run_gpu(
     """
     import cupy as cp
 
+    if strides is None:
+        strides = {"x": 1, "y": 1}
     num_slc, rows, cols = slc_stack.shape
 
     # Can't use dict in numba kernels, so pass the values as a tuple

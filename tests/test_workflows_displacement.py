@@ -22,17 +22,17 @@ def test_displacement_run_single(
     with tmpdir.as_cwd():
         cfg = config.DisplacementWorkflow(
             cslc_file_list=opera_slc_files,
-            input_options=dict(subdataset="/data/VV"),
-            interferogram_network=dict(
-                network_type=config.InterferogramNetworkType.MANUAL_INDEX,
-                indexes=[(0, -1)],
-            ),
-            phase_linking=dict(
-                ministack_size=500,
-            ),
-            worker_settings=dict(
-                gpu_enabled=(os.environ.get("NUMBA_DISABLE_JIT") != "1")
-            ),
+            input_options={"subdataset": "/data/VV"},
+            interferogram_network={
+                "network_type": config.InterferogramNetworkType.MANUAL_INDEX,
+                "indexes": [(0, -1)],
+            },
+            phase_linking={
+                "ministack_size": 500,
+            },
+            worker_settings={
+                "gpu_enabled": (os.environ.get("NUMBA_DISABLE_JIT") != "1")
+            },
         )
         displacement.run(cfg)
 
@@ -48,25 +48,25 @@ def test_displacement_run_single_official_opera_naming(
     with tmpdir.as_cwd():
         cfg = config.DisplacementWorkflow(
             cslc_file_list=opera_slc_files_official,
-            input_options=dict(subdataset="/data/VV"),
-            interferogram_network=dict(
-                network_type=config.InterferogramNetworkType.MANUAL_INDEX,
-                indexes=[(0, -1)],
-            ),
-            phase_linking=dict(
-                ministack_size=500,
-            ),
-            worker_settings=dict(
-                gpu_enabled=(os.environ.get("NUMBA_DISABLE_JIT") != "1")
-            ),
+            input_options={"subdataset": "/data/VV"},
+            interferogram_network={
+                "network_type": config.InterferogramNetworkType.MANUAL_INDEX,
+                "indexes": [(0, -1)],
+            },
+            phase_linking={
+                "ministack_size": 500,
+            },
+            worker_settings={
+                "gpu_enabled": (os.environ.get("NUMBA_DISABLE_JIT") != "1")
+            },
             # TODO: Move to a disp-s1 test
-            correction_options=dict(
-                troposphere_files=weather_model_files,
-                ionosphere_files=tec_files,
-                dem_file=dem_file,
-                geometry_files=opera_static_files_official,
-            ),
-            unwrap_options=dict(run_unwrap=False),
+            correction_options={
+                "troposphere_files": weather_model_files,
+                "ionosphere_files": tec_files,
+                "dem_file": dem_file,
+                "geometry_files": opera_static_files_official,
+            },
+            unwrap_options={"run_unwrap": False},
         )
         displacement.run(cfg)
 
@@ -76,14 +76,14 @@ def run_displacement_stack(
 ):
     cfg = config.DisplacementWorkflow(
         cslc_file_list=file_list,
-        input_options=dict(subdataset="/data/VV"),
+        input_options={"subdataset": "/data/VV"},
         work_directory=path,
-        phase_linking=dict(
-            ministack_size=ministack_size,
-        ),
-        worker_settings=dict(gpu_enabled=(os.environ.get("NUMBA_DISABLE_JIT") != "1")),
-        unwrap_options=dict(run_unwrap=run_unwrap),
-        log_file=Path(".") / "dolphin.log",
+        phase_linking={
+            "ministack_size": ministack_size,
+        },
+        worker_settings={"gpu_enabled": (os.environ.get("NUMBA_DISABLE_JIT") != "1")},
+        unwrap_options={"run_unwrap": run_unwrap},
+        log_file=Path() / "dolphin.log",
     )
     displacement.run(cfg)
 

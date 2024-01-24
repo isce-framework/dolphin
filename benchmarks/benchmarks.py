@@ -1,5 +1,4 @@
 import numpy as np
-
 from dolphin import shp
 from dolphin.phase_link import covariance, mle, simulate
 
@@ -12,7 +11,7 @@ SHAPE = (512, 512)
 def _make_slc_samples():
     """Create some sample SLC data."""
     # Make it as large as the biggest test
-    cov_mat, _ = simulate.simulate_C(
+    cov_mat, _ = simulate.simulate_coh(
         num_acq=30,
         Tau0=72,
         gamma_inf=0.3,

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 from pathlib import Path
 
 from dolphin._log import get_log
@@ -28,7 +29,5 @@ def _create_burst_cfg(
 
 
 def _remove_dir_if_empty(d: Path) -> None:
-    try:
+    with contextlib.suppress(OSError):
         d.rmdir()
-    except OSError:
-        pass

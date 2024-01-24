@@ -12,8 +12,7 @@ else:
     from typing_extensions import ParamSpec
 
 # Some classes are declared as generic in stubs, but not at runtime.
-# In Python 3.9 and earlier, os.PathLike is not subscriptable, results in a runtime error
-# https://stackoverflow.com/questions/71077499/typeerror-abcmeta-object-is-not-subscriptable
+# In Python 3.9 and earlier, os.PathLike is not subscriptable, results in runtime error
 if TYPE_CHECKING:
     PathLikeStr = PathLike[str]
 else:

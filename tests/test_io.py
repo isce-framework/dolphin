@@ -17,7 +17,7 @@ def test_load(raster_100_by_200):
 def test_get_raster_xysize(raster_100_by_200):
     arr = io.load_gdal(raster_100_by_200)
     assert arr.shape == (100, 200)
-    assert (200, 100) == io.get_raster_xysize(raster_100_by_200)
+    assert io.get_raster_xysize(raster_100_by_200) == (200, 100)
 
 
 def test_load_1_slice(raster_100_by_200):
@@ -209,7 +209,7 @@ def test_save_block(raster_100_by_200, tmpdir):
     npt.assert_array_almost_equal(block_loaded2, arr)
 
 
-@pytest.fixture
+@pytest.fixture()
 def cpx_arr(shape=(100, 200)):
     rng = np.random.default_rng()
     arr = rng.normal(size=shape) + 1j * rng.normal(size=shape)

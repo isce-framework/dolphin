@@ -69,12 +69,6 @@ def test_sequential_gtiff(tmp_path, slc_file_list, gpu_enabled):
         npt.assert_allclose(layer, expected, atol=1e-3)
 
 
-# @pytest.mark.parametrize(
-#     "half_window", [{"x": 1, "y": 1}, {"x": 2, "y": 2}, {"x": 3, "y": 2}]
-# )
-# @pytest.mark.parametrize(
-#     "strides", [{"x": 1, "y": 1}, {"x": 1, "y": 2}, {"x": 2, "y": 2}, {"x": 3, "y": 2}]
-# )
 # Input is only (5, 10) so we can't use a larger window.
 @pytest.mark.parametrize(
     "half_window, strides",

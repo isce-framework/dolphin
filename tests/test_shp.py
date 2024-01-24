@@ -197,7 +197,7 @@ def test_shp_statistics(method, alpha, strides):
     nbox = shape[1] * shape[2] - 1
     shp_frac = shp_counts.mean() / nbox
     tol_pct = 3
-    assert 100 * np.abs((shp_frac - (1 - alpha))) < tol_pct
+    assert 100 * np.abs(shp_frac - (1 - alpha)) < tol_pct
 
 
 def test_remove_unconnected():

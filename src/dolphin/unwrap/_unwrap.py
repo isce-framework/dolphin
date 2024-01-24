@@ -41,7 +41,6 @@ def run(
     downsample_factor: Union[int, tuple[int, int]] = 1,
     scratchdir: Optional[Filename] = None,
     overwrite: bool = False,
-    **kwargs,
 ) -> tuple[list[Path], list[Path]]:
     """Run snaphu on all interferograms in a directory.
 
@@ -87,14 +86,16 @@ def run(
 
     """
     if len(cor_filenames) != len(ifg_filenames):
-        raise ValueError(
+        msg = (
             "Number of correlation files does not match number of interferograms."
             f" Found {len(cor_filenames)} correlation files and"
             f" {len(ifg_filenames)} interferograms."
         )
+        raise ValueError(msg)
 
     if init_method.lower() not in ("mcf", "mst"):
-        raise ValueError(f"Invalid init_method {init_method}")
+        msg = f"Invalid init_method {init_method}"
+        raise ValueError(msg)
 
     output_path = Path(output_path)
 
@@ -248,14 +249,12 @@ def unwrap(
     shape = io.get_raster_xysize(ifg_filename)[::-1]
     corr_shape = io.get_raster_xysize(corr_filename)[::-1]
     if shape != corr_shape:
-        raise ValueError(
-            f"correlation {corr_shape} and interferogram {shape} shapes don't match"
-        )
+        msg = f"correlation {corr_shape} and interferogram {shape} shapes don't match"
+        raise ValueError(msg)
     mask_shape = io.get_raster_xysize(mask_file)[::-1] if mask_file else None
     if mask_file and shape != mask_shape:
-        raise ValueError(
-            f"Mask {mask_shape} and interferogram {shape} shapes don't match"
-        )
+        msg = f"Mask {mask_shape} and interferogram {shape} shapes don't match"
+        raise ValueError(msg)
 
     ifg_raster = Raster(fspath(ifg_filename))
     corr_raster = Raster(fspath(corr_filename))

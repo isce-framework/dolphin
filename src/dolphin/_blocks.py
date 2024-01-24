@@ -92,9 +92,11 @@ slice(90, 190, None)), (slice(90, 180, None), slice(180, 250, None))]
 
     # Check we're not moving backwards with the overlap:
     if row_overlap >= height and height != total_rows:
-        raise ValueError(f"{row_overlap = } must be less than block height {height}")
+        msg = f"{row_overlap = } must be less than block height {height}"
+        raise ValueError(msg)
     if col_overlap >= width and width != total_cols:
-        raise ValueError(f"{col_overlap = } must be less than block width {width}")
+        msg = f"{col_overlap = } must be less than block width {width}"
+        raise ValueError(msg)
 
     # Set up the iterating indices
     cur_row = start_row_offset
@@ -181,9 +183,11 @@ def pad_block(in_block: BlockIndices, margins: tuple[int, int]) -> BlockIndices:
     r_margin, c_margin = margins
     r_slice, c_slice = in_block
     if r_slice.start - r_margin < 0:
-        raise ValueError(f"{r_slice = }, but {r_margin = }")
+        msg = f"{r_slice = }, but {r_margin = }"
+        raise ValueError(msg)
     if c_slice.start - c_margin < 0:
-        raise ValueError(f"{c_slice = }, but {c_margin = }")
+        msg = f"{c_slice = }, but {c_margin = }"
+        raise ValueError(msg)
     return BlockIndices(
         max(r_slice.start - r_margin, 0),
         r_slice.stop + r_margin,
@@ -273,7 +277,7 @@ class BlockManager:
         output_block : BlockIndices
             The current slices for the output raster
         trimming_block : BlockIndices
-            The slices to use on a processed output block to remove nodata border pixels.
+            Slices to use on a processed output block to remove nodata border pixels.
             These may be relative (e.g. slice(1, -1)), not absolute like `output_block`.
         input_block : BlockIndices
             Slices used to load the full-res input data
@@ -330,5 +334,4 @@ class BlockManager:
         return BlockIndices(row_nodata, row_end, col_nodata, col_end)
 
     def _get_out_nodata_size(self, direction: str) -> int:
-        nodata_size = round(self.half_window[direction] / self.strides[direction])
-        return nodata_size
+        return round(self.half_window[direction] / self.strides[direction])
