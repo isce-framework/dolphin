@@ -3,6 +3,4 @@
 from dolphin._version import version as __version__
 
 from ._log import *
-from ._blocks import *
 from ._show_versions import *
-from .io import *

@@ -5,6 +5,8 @@ import math
 import resource
 import sys
 import warnings
+from collections.abc import Callable
+from concurrent.futures import Executor, Future
 from itertools import chain
 from multiprocessing import cpu_count
 from pathlib import Path
@@ -16,7 +18,7 @@ from osgeo import gdal, gdal_array, gdalconst
 from rich.progress import MofNCompleteColumn, Progress, SpinnerColumn, TimeElapsedColumn
 
 from dolphin._log import get_log
-from dolphin._types import Bbox, Filename
+from dolphin._types import Bbox, Filename, P, T
 
 DateOrDatetime = Union[datetime.date, datetime.datetime]
 
@@ -730,3 +732,21 @@ def compute_out_shape(
     rows, cols = shape
     rs, cs = strides["y"], strides["x"]
     return (rows // rs, cols // cs)
+
+
+class DummyProcessPoolExecutor(Executor):
+    """Dummy ProcessPoolExecutor for to avoid forking for single_job purposes."""
+
+    def __init__(self, max_workers: Optional[int] = None, **kwargs):  # noqa: D107
+        self._max_workers = max_workers
+
+    def submit(  # noqa: D102
+        self, fn: Callable[P, T], /, *args: P.args, **kwargs: P.kwargs
+    ) -> Future[T]:
+        future: Future = Future()
+        result = fn(*args, **kwargs)
+        future.set_result(result)
+        return future
+
+    def shutdown(self, wait: bool = True, cancel_futures: bool = True):  # noqa: D102
+        pass

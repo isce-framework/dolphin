@@ -18,11 +18,11 @@ import numpy as np
 from numpy.typing import DTypeLike
 
 from dolphin import io, shp
-from dolphin._blocks import BlockManager
 from dolphin._decorators import atomic_output
 from dolphin._log import get_log
 from dolphin._readers import VRTStack
 from dolphin._types import Filename
+from dolphin.io import BlockManager
 from dolphin.phase_link import PhaseLinkRuntimeError, compress, run_mle
 from dolphin.stack import MiniStackInfo
 
