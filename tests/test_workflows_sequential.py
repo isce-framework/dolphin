@@ -4,7 +4,7 @@ import pytest
 from dolphin import io, stack
 from dolphin.io import _readers
 from dolphin.phase_link import mle, simulate
-from dolphin.utils import gpu_is_available
+from dolphin.utils import compute_out_shape, gpu_is_available
 from dolphin.workflows import sequential
 
 GPU_AVAILABLE = gpu_is_available()
@@ -24,6 +24,9 @@ def test_sequential_gtiff(tmp_path, slc_file_list):
 
     half_window = {"x": cols // 2, "y": rows // 2}
     strides = {"x": 1, "y": 1}
+    out_shape = compute_out_shape((rows, cols), strides=strides)
+    if not all(out_shape):
+        pytest.skip(f"Output shape = {out_shape}")
     output_folder = tmp_path / "sequential"
     ms_size = 10
     ms_planner = stack.MiniStackPlanner(
@@ -45,8 +48,6 @@ def test_sequential_gtiff(tmp_path, slc_file_list):
         shp_method="rect",
         shp_alpha=None,
         shp_nslc=None,
-        # n_workers=4,
-        # gpu_enabled=gpu_enabled,
     )
 
     assert len(list(output_folder.glob("2*.slc.tif"))) == vrt_stack.shape[0]
@@ -82,6 +83,12 @@ def test_sequential_nc(tmp_path, slc_file_list_nc, half_window, strides):
     """Check various strides/windows/ministacks with a NetCDF input stack."""
     vrt_file = tmp_path / "slc_stack.vrt"
     v = _readers.VRTStack(slc_file_list_nc, outfile=vrt_file, subdataset="data")
+
+    _, rows, cols = v.shape
+    out_shape = compute_out_shape((rows, cols), strides=strides)
+    if not all(out_shape):
+        pytest.skip(f"Output shape = {out_shape}")
+
     ms_planner = stack.MiniStackPlanner(
         file_list=slc_file_list_nc,
         dates=v.dates,

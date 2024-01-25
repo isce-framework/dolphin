@@ -6,17 +6,19 @@ Contains for CPU and GPU versions (which will not be available if no GPU).
 from __future__ import annotations
 
 from functools import partial
-from typing import Optional, Union
+from typing import Optional
 
 import jax.numpy as jnp
 import numpy as np
 from jax import Array, jit, lax, vmap
 from jax.typing import ArrayLike
 
-from dolphin._types import Filename, HalfWindow, Strides
+from dolphin._types import HalfWindow, Strides
 from dolphin.utils import compute_out_shape
 
 DEFAULT_STRIDES = Strides(1, 1)
+
+__all__ = ["estimate_stack_covariance", "coh_mat_single"]
 
 
 @partial(jit, static_argnames=["half_window", "strides"])
@@ -56,11 +58,29 @@ def estimate_stack_covariance(
     if not np.iscomplexobj(slc_stack):
         msg = "The SLC stack must be complex."
         raise ValueError(msg)
-    # Get the dimensions
-    nslc, rows, cols = slc_stack.shape
+    if neighbor_arrays is None:
+        rows, cols = slc_stack.shape[1:]
+        full_window = (2 * half_window.y + 1, 2 * half_window.x + 1)
+        neighbor_arrays = jnp.ones((rows, cols, *full_window), dtype=bool)
+    return estimate_stack_covariance_t(
+        jnp.moveaxis(slc_stack, 0, -1), half_window, strides, neighbor_arrays
+    )
 
-    row_strides, col_strides = strides
-    half_col, half_row = half_window
+
+@partial(jit, static_argnames=["half_window", "strides"])
+def estimate_stack_covariance_t(
+    slc_stack_reshaped: ArrayLike,
+    half_window: HalfWindow,
+    strides: Strides = DEFAULT_STRIDES,
+    neighbor_arrays: Optional[np.ndarray] = None,
+) -> Array:
+    """Estimate the linked phase at all pixels of `slc_stack_reshaped`."""
+    rows, cols, nslc = slc_stack_reshaped.shape
+
+    row_strides = strides.y
+    col_strides = strides.x
+    half_row = half_window.y
+    half_col = half_window.x
 
     out_rows, out_cols = compute_out_shape(
         (rows, cols), {"x": col_strides, "y": row_strides}
@@ -69,11 +89,6 @@ def estimate_stack_covariance(
     in_r_start = row_strides // 2
     in_c_start = col_strides // 2
 
-    padded_slc_stack = slc_stack
-    out_r_indices, out_c_indices = jnp.meshgrid(
-        jnp.arange(out_rows), jnp.arange(out_cols), indexing="ij"
-    )
-
     if neighbor_arrays is None:
         neighbor_arrays = jnp.ones(
             (out_rows, out_cols, 2 * half_window[0] + 1, 2 * half_window[1] + 1),
@@ -81,102 +96,97 @@ def estimate_stack_covariance(
         )
 
     def _process_row_col(out_r, out_c):
-        """Get slices for and process one pixel's window."""
+        """Get slices for, and process, one pixel's window."""
         in_r = in_r_start + out_r * row_strides
         in_c = in_c_start + out_c * col_strides
-        slc_window = _get_stack_window(padded_slc_stack, in_r, in_c, half_row, half_col)
-        slc_samples = slc_window.reshape(nslc, -1)
+        # Get a 3D slice, size (row_window, col_window, nslc)
+        slc_window = _get_stack_window_t(
+            slc_stack_reshaped, in_r, in_c, half_row, half_col
+        )
+        # Reshape to be (num_samples, nslc)
+        slc_samples = slc_window.reshape(-1, nslc)
         cur_neighbors = neighbor_arrays[out_r, out_c, :, :]
         neighbor_mask = cur_neighbors.ravel()
 
-        return coh_mat_single(slc_samples, neighbor_mask=neighbor_mask)
+        return coh_mat_single_t(slc_samples, neighbor_mask=neighbor_mask)
 
+    # Now make a 2D grid of indices to access all output pixels
+    out_r_indices, out_c_indices = jnp.meshgrid(
+        jnp.arange(out_rows), jnp.arange(out_cols), indexing="ij"
+    )
+
+    # Create the vectorized function in 2d
     _process_2d = vmap(_process_row_col)
+    # Then in 3d
     _process_3d = vmap(_process_2d)
     return _process_3d(out_r_indices, out_c_indices)
 
 
-def _get_stack_window(
-    padded_stack: ArrayLike, r: int, c: int, half_row: int, half_col: int
+def _get_stack_window_t(
+    stack: ArrayLike, r: int, c: int, half_row: int, half_col: int
 ) -> Array:
-    """Dynamically slice the stack at (r, c) with size (2*half_row+1, 2*half_col+1)."""
+    """Dynamically slice the stack at (r, c) with size (2*half_row+1, 2*half_col+1).
+
+    Expected shape of `stack` is (rows, cols, nslc).
+    """
     # https://jax.readthedocs.io/en/latest/notebooks/Common_Gotchas_in_JAX.html#non-array-inputs-numpy-vs-jax
     # Note: out of bounds indexing for JAX clamps to the nearest value
     # This is fine as we want to trim the borders anyway, so we don't need the
     # extra checks in utils._get_slices
 
     # Center the slice on (r, c), so we need the starts to move up/left
-    start_indices = (0, r - half_row, c - half_col)
-    # start_indices = (0, r, c)
-    slice_sizes = (padded_stack.shape[0], 2 * half_row + 1, 2 * half_col + 1)
-    return lax.dynamic_slice(padded_stack, start_indices, slice_sizes)
+    # The upper bound on `clamp` isn't used meaningless here
+    r0 = lax.clamp(0, r - half_row, r)
+    c0 = lax.clamp(0, c - half_col, c)
+    start_indices = (r0, c0, 0)
+
+    # Note: we can't clamp the size using a max size,
+    # TypeError: Shapes must be 1D sequences of concrete values of integer type,
+    # got  Traced<ShapedArray(int32[],  ...
+    rsize = 2 * half_row + 1
+    csize = 2 * half_col + 1
+    dsize = stack.shape[-1]
+    slice_sizes = (rsize, csize, dsize)
+    return lax.dynamic_slice(stack, start_indices, slice_sizes)
 
 
+@jit
 def coh_mat_single(
     slc_samples: ArrayLike, neighbor_mask: Optional[ArrayLike] = None
 ) -> Array:
-    """Given (n_slc, n_samps) SLC samples, estimate the coherence matrix."""
-    _, nsamps = slc_samples.shape
+    """Given (n_slc, n_samps) SLC samples, get the (nslc, nslc) coherence matrix.
+
+    Note this requires `slc_samples` to be transposed from `coh_mat_single`.
+    """
+    return coh_mat_single_t(jnp.moveaxis(slc_samples, 0, -1), neighbor_mask)
+
+
+@jit
+def coh_mat_single_t(
+    slc_samples: ArrayLike, neighbor_mask: Optional[ArrayLike] = None
+) -> Array:
+    """Given (n_samps, nslc) SLC samples, get the (nslc, nslc) coherence matrix.
+
+    Note this requires `slc_samples` to be transposed from `coh_mat_single`.
+    """
+    nsamps, _ = slc_samples.shape
 
     if neighbor_mask is None:
         neighbor_mask = jnp.ones(nsamps, dtype=jnp.bool_)
     valid_samples_mask = ~jnp.isnan(slc_samples)
-    combined_mask = valid_samples_mask & neighbor_mask[None, :]
+    combined_mask = valid_samples_mask & neighbor_mask[:, None]
 
     # Mask the slc samples
     masked_slc = jnp.where(combined_mask, slc_samples, 0)
 
     # Compute cross-correlation
-    numer = jnp.dot(masked_slc, jnp.conj(masked_slc.T))
+    numer = jnp.dot(masked_slc.T, jnp.conj(masked_slc))
 
     # Compute auto-correlations
-    a1 = jnp.sum(jnp.abs(masked_slc) ** 2, axis=-1)
-    a2 = a1[:, None]
+    a1 = jnp.sum(jnp.abs(masked_slc) ** 2, axis=0)
+    a2 = a1[None, :]
 
     # Compute covariance matrix
     cov_mat = numer / jnp.sqrt(a1 * a2)
 
     return cov_mat
-
-
-def _save_coherence_matrices(
-    filename: Filename,
-    C: np.ndarray,
-    chunks: Union[None, tuple[int, ...], str, bool] = None,
-    **compression_opts,
-):
-    import h5py
-
-    if chunks is None:
-        nslc = C.shape[-1]
-        chunks = (10, 10, nslc, nslc)
-
-    if not compression_opts:
-        compression_opts = {
-            "compression": "lzf",
-            "shuffle": True,
-        }
-    compression_opts["chunks"] = chunks
-
-    with h5py.File(filename, "w") as f:
-        # Create datasets for dimensions
-        y_dim = f.create_dataset("y", data=np.arange(C.shape[0]))
-        x_dim = f.create_dataset("x", data=np.arange(C.shape[1]))
-        slc1_dim = f.create_dataset("slc1", data=np.arange(C.shape[2]))
-        slc2_dim = f.create_dataset("slc2", data=np.arange(C.shape[3]))
-
-        # Create the main dataset and set dimensions as attributes
-        # f.require_dataset(name="data", shape=shape)
-        data_dset = f.create_dataset(
-            "data",
-            # Save only the upper triangle
-            # Quantize as a uint8 so that coherence = DN / 255
-            data=(255 * np.triu(C)).astype("uint8"),
-            **compression_opts,
-        )
-        # Set dimension scales for each dimension in the main dataset
-        dims = [y_dim, x_dim, slc1_dim, slc2_dim]
-        labels = ["y", "x", "slc1", "slc2"]
-        for i, (dim, label) in enumerate(zip(dims, labels)):
-            data_dset.dims[i].attach_scale(dim)
-            data_dset.dims[i].label = label

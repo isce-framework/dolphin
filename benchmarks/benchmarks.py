@@ -8,14 +8,35 @@ from opera_utils import get_dates
 from osgeo import gdal
 
 from dolphin import io, shp
+from dolphin._types import HalfWindow, Strides
 from dolphin.phase_link import covariance, mle, simulate
 from dolphin.stack import MiniStackPlanner
 from dolphin.workflows import sequential
 
 # Shared for all tests
-HALF_WINDOW = {"x": 11, "y": 5}
-STRIDES = {"x": 6, "y": 3}
+HALF_WINDOW = HalfWindow(11, 5)
+STRIDES = Strides(3, 6)
+HALF_WINDOW_DICT = {"x": HALF_WINDOW.x, "y": HALF_WINDOW.y}
+STRIDES_DICT = {"x": STRIDES.x, "y": STRIDES.y}
+
 SHAPE = (512, 512)
+
+# monkeypatch the old names for single covariance computation
+if hasattr(covariance, "estimate_stack_covariance_cpu"):
+    # The old one wants a dict for half window/strides
+
+    def f(slc_stack, half_window, strides, neighbor_arrays):
+        half_window_dict = {"x": half_window.x, "y": half_window.y}
+        strides_dict = {"x": strides.x, "y": strides.y}
+
+        return covariance.estimate_stack_covariance_cpu(
+            slc_stack,
+            half_window=half_window_dict,
+            strides=strides_dict,
+            neighbor_arrays=neighbor_arrays,
+        )
+
+    covariance.estimate_stack_covariance = f
 
 
 def _make_slc_samples(shape=SHAPE):

@@ -226,7 +226,10 @@ def run_wrapped_phase_single(
             writer.queue_write(img, f, out_rows.start, out_cols.start)
 
         # Get the SHP counts for each pixel (if not using Rect window)
-        shp_counts = np.sum(neighbor_arrays, axis=(-2, -1))
+        if neighbor_arrays is None:
+            shp_counts = np.zeros(cur_mle_stack.shape[-2:], dtype=np.int16)
+        else:
+            shp_counts = np.sum(neighbor_arrays, axis=(-2, -1))
 
         # Get the inner portion of the full-res SLC data
         trim_full_col = slice(

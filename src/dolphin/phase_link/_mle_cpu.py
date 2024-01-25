@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Optional
 
 import numpy as np
+from jax import Array
 from jax.typing import ArrayLike
 
 from dolphin._log import get_log
@@ -104,7 +105,7 @@ def run_cpu(
     return MleOutput(mle_est, temp_coh, avg_coh)
 
 
-def decimate(arr: ArrayLike, strides: Strides) -> ArrayLike:
+def decimate(arr: ArrayLike, strides: Strides) -> Array:
     """Decimate an array by strides in the x and y directions.
 
     Output will match [`io.compute_out_shape`][dolphin.io.compute_out_shape]

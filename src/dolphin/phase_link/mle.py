@@ -6,6 +6,7 @@ from typing import NamedTuple, Optional
 
 import numpy as np
 import pymp
+from jax import Array
 from scipy.linalg import eigh
 
 from dolphin._types import HalfWindow, Strides
@@ -21,13 +22,13 @@ class PhaseLinkRuntimeError(Exception):
 class MleOutput(NamedTuple):
     """Output of the MLE solver."""
 
-    mle_est: np.ndarray
+    mle_est: Array
     """Estimated linked phase."""
 
-    temp_coh: np.ndarray
+    temp_coh: Array
     """Temporal coherence."""
 
-    avg_coh: np.ndarray | None = None
+    avg_coh: Array | None = None
     """Average coherence across dates for each SLC."""
 
 
