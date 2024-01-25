@@ -1,3 +1,4 @@
+import time
 import warnings
 
 import numpy as np
@@ -73,6 +74,8 @@ class TestBackgroundRasterWriter:
         w = BackgroundRasterWriter(slc_file_list[0])
         rows, cols = slice(0, 5), slice(0, 10)
         w[rows, cols] = data
+        # Make sure we dont write too late
+        time.sleep(0.2)
         w.close()
         assert w._thread.is_alive() is False
 
