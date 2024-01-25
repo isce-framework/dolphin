@@ -671,6 +671,9 @@ class RasterStackReader(BaseStackReader):
         return cls(file_list, readers, num_threads=num_threads, nodata=nodata)
 
 
+# Masked versions of each of the 2D/3D readers
+
+
 class VRTStack(StackReader):
     """Class for creating a virtual stack of raster files.
 
@@ -1044,13 +1047,21 @@ class EagerLoader(BackgroundReader):
                 logger.debug(f"got data for {rows, cols}: {cur_block.shape}")
 
                 # Otherwise look at the actual block we loaded
-                if np.isnan(self._nodata):
-                    block_is_nodata = np.isnan(cur_block)
-                else:
-                    block_is_nodata = cur_block == self._nodata
-                if np.all(block_is_nodata):
-                    logger.debug("Skipping block since it was all nodata")
-                    continue
+                if self._skip_empty:
+                    if (
+                        isinstance(cur_block, np.ma.MaskedArray)
+                        and cur_block.mask.all()
+                    ):
+                        continue
+                    if np.isnan(self._nodata):
+                        block_is_nodata = np.isnan(cur_block)
+                    else:
+                        block_is_nodata = cur_block == self._nodata
+                    if np.all(block_is_nodata):
+                        logger.debug(
+                            f"Skipping block {rows}, {cols} since it was all nodata"
+                        )
+                        continue
                 yield cur_block, (rows, cols)
 
         self.notify_finished()

@@ -64,5 +64,6 @@ class TestRasterWriter:
 
 
 class TestBackgroundRasterWriter:
-    def test_init(slc_file_list):
-        BackgroundRasterWriter(slc_file_list[0])
+    def test_init(self, slc_file_list):
+        brw = BackgroundRasterWriter(slc_file_list[0])
+        brw.notify_finished()
