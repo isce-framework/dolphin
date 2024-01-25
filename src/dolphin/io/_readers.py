@@ -119,7 +119,7 @@ class BinaryReader(DatasetReader):
     suitable mutex is used to guard file access.)
     """
 
-    filepath: Path
+    filename: Path
     """pathlib.Path : The file path."""
 
     shape: tuple[int, ...]
@@ -132,9 +132,9 @@ class BinaryReader(DatasetReader):
     """Optional[float] : Value to use for nodata pixels."""
 
     def __post_init__(self):
-        self.filepath = Path(self.filepath)
-        if not self.filepath.exists():
-            msg = f"File {self.filepath} does not exist."
+        self.filename = Path(self.filename)
+        if not self.filename.exists():
+            msg = f"File {self.filename} does not exist."
             raise FileNotFoundError(msg)
         self.dtype = np.dtype(self.dtype)
 
@@ -144,7 +144,7 @@ class BinaryReader(DatasetReader):
         return len(self.shape)
 
     def __getitem__(self, key: tuple[Index, ...], /) -> np.ndarray:
-        with self.filepath.open("rb") as f:  # noqa: SIM117
+        with self.filename.open("rb") as f:  # noqa: SIM117
             # Memory-map the entire file.
             with mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ) as mm:
                 # In order to safely close the memory-map, there can't be any dangling
@@ -197,7 +197,7 @@ class HDF5Reader(DatasetReader):
 
     Attributes
     ----------
-    filepath : pathlib.Path | str
+    filename : pathlib.Path | str
         Location of HDF5 file.
     dset_name : str
         Path to the dataset within the file.
@@ -221,7 +221,7 @@ class HDF5Reader(DatasetReader):
     to set `keep_open=False` .
     """
 
-    filepath: Path
+    filename: Path
     """pathlib.Path : The file path."""
 
     dset_name: str
@@ -237,9 +237,9 @@ class HDF5Reader(DatasetReader):
     """bool : If True, keep the HDF5 file handle open for faster reading."""
 
     def __post_init__(self):
-        filepath = Path(self.filepath)
+        filename = Path(self.filename)
 
-        hf = h5py.File(filepath, "r")
+        hf = h5py.File(filename, "r")
         dset = hf[self.dset_name]
         self.shape = dset.shape
         self.dtype = dset.dtype
@@ -266,7 +266,7 @@ class HDF5Reader(DatasetReader):
         if self.keep_open:
             data = self._dset[key]
         else:
-            with h5py.File(self.filepath, "r") as f:
+            with h5py.File(self.filename, "r") as f:
                 data = f[self.dset_name][key]
         return _mask_array(data, self.nodata) if self.nodata is not None else data
 
@@ -301,7 +301,7 @@ class RasterReader(DatasetReader):
     to set `keep_open=False` .
     """
 
-    filepath: Filename
+    filename: Filename
     """Filename : The file path."""
 
     band: int
@@ -336,13 +336,13 @@ class RasterReader(DatasetReader):
     @classmethod
     def from_file(
         cls,
-        filepath: Filename,
+        filename: Filename,
         band: int = 1,
         nodata: Optional[float] = None,
         keep_open: bool = False,
         **options,
     ) -> RasterReader:
-        with rio.open(filepath, "r", **options) as src:
+        with rio.open(filename, "r", **options) as src:
             shape = (src.height, src.width)
             dtype = np.dtype(src.dtypes[band - 1])
             driver = src.driver
@@ -352,7 +352,7 @@ class RasterReader(DatasetReader):
             chunks = src.block_shapes[band - 1]
 
             return cls(
-                filepath=filepath,
+                filename=filename,
                 band=band,
                 driver=driver,
                 crs=crs,
@@ -366,7 +366,7 @@ class RasterReader(DatasetReader):
 
     def __post_init__(self):
         if self.keep_open:
-            self._src = rio.open(self.filepath, "r")
+            self._src = rio.open(self.filename, "r")
 
     @property
     def ndim(self) -> int:  # type: ignore[override]
@@ -396,7 +396,7 @@ class RasterReader(DatasetReader):
         if self.keep_open:
             out = self._src.read(self.band, window=window)
 
-        with rio.open(self.filepath) as src:
+        with rio.open(self.filename) as src:
             out = src.read(self.band, window=window)
         out_masked = _mask_array(out, self.nodata) if self.nodata is not None else out
         # Note that Rasterio doesn't use the `step` of a slice, so we need to
@@ -958,11 +958,11 @@ def _parse_vrt_file(vrt_file):
     filepaths = []
     for name in file_strings:
         if name.upper().startswith("HDF5:") or name.upper().startswith("NETCDF:"):
-            prefix, filepath, subdataset = name.split(":")
+            prefix, filename, subdataset = name.split(":")
             # Clean up subdataset
             sds = subdataset.replace('"', "").replace("'", "").lstrip("/")
             # Remove quoting if it was present
-            filepaths.append(filepath.replace('"', "").replace("'", ""))
+            filepaths.append(filename.replace('"', "").replace("'", ""))
         else:
             filepaths.append(name)
 
