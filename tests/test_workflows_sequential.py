@@ -16,8 +16,7 @@ pytestmark = pytest.mark.filterwarnings(
 )
 
 
-@pytest.mark.parametrize("gpu_enabled", [True, False])
-def test_sequential_gtiff(tmp_path, slc_file_list, gpu_enabled):
+def test_sequential_gtiff(tmp_path, slc_file_list):
     """Run through the sequential estimation with a GeoTIFF stack."""
     vrt_file = tmp_path / "slc_stack.vrt"
     vrt_stack = _readers.VRTStack(slc_file_list, outfile=vrt_file)
@@ -46,8 +45,8 @@ def test_sequential_gtiff(tmp_path, slc_file_list, gpu_enabled):
         shp_method="rect",
         shp_alpha=None,
         shp_nslc=None,
-        n_workers=4,
-        gpu_enabled=gpu_enabled,
+        # n_workers=4,
+        # gpu_enabled=gpu_enabled,
     )
 
     assert len(list(output_folder.glob("2*.slc.tif"))) == vrt_stack.shape[0]
@@ -60,7 +59,7 @@ def test_sequential_gtiff(tmp_path, slc_file_list, gpu_enabled):
         slc_stack,
         half_window=half_window,
         strides=strides,
-        gpu_enabled=gpu_enabled,
+        # gpu_enabled=gpu_enabled,
     )
 
     # Check that the sequential output matches the MLE estimates.
@@ -102,8 +101,8 @@ def test_sequential_nc(tmp_path, slc_file_list_nc, half_window, strides):
         shp_method="rect",
         shp_alpha=None,
         shp_nslc=None,
-        n_workers=4,
-        gpu_enabled=False,
+        # n_workers=4,
+        # gpu_enabled=False,
     )
 
 
@@ -136,6 +135,6 @@ def test_sequential_ministack_sizes(tmp_path, slc_file_list_nc, ministack_size):
         shp_method="rect",
         shp_alpha=None,
         shp_nslc=None,
-        n_workers=4,
-        gpu_enabled=False,
+        # n_workers=4,
+        # gpu_enabled=False,
     )

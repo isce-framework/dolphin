@@ -3,9 +3,10 @@ from __future__ import annotations
 from typing import Optional
 
 import numpy as np
+from jax.typing import ArrayLike
 
 from dolphin._log import get_log
-from dolphin.utils import decimate
+from dolphin._types import HalfWindow, Strides
 
 from . import covariance, metrics
 from .mle import MleOutput, mle_stack
@@ -15,8 +16,8 @@ logger = get_log(__name__)
 
 def run_cpu(
     slc_stack: np.ndarray,
-    half_window: dict[str, int],
-    strides: Optional[dict[str, int]] = None,
+    half_window: HalfWindow,
+    strides: Strides,
     use_evd: bool = False,
     beta: float = 0.01,
     reference_idx: int = 0,
@@ -32,12 +33,12 @@ def run_cpu(
     ----------
     slc_stack : np.ndarray
         The SLC stack, with shape (n_slc, n_rows, n_cols)
-    half_window : dict[str, int]
-        The half window size as {"x": half_win_x, "y": half_win_y}
+    half_window : HalfWindow, or tuple[int, int]
+        A (named) tuple of (y, x) sizes for the half window.
         The full window size is 2 * half_window + 1 for x, y.
-    strides : dict[str, int], optional
-        The (x, y) strides (in pixels) to use for the sliding window.
-        By default {"x": 1, "y": 1}
+    strides : tuple[int, int], optional
+        The (y, x) strides (in pixels) to use for the sliding window.
+        By default (1, 1)
     use_evd : bool, default = False
         Use eigenvalue decomposition on the covariance matrix instead of
         the EMI algorithm.
@@ -67,14 +68,11 @@ def run_cpu(
     temp_coh : np.ndarray[np.float32]
         The temporal coherence at each pixel, shape (n_rows, n_cols)
     """
-    if strides is None:
-        strides = {"x": 1, "y": 1}
     C_arrays = covariance.estimate_stack_covariance(
         slc_stack,
         half_window,
         strides,
         neighbor_arrays=neighbor_arrays,
-        n_workers=n_workers,
     )
 
     output_phase = mle_stack(
@@ -104,3 +102,30 @@ def run_cpu(
         mle_est *= np.abs(slcs_decimated)
 
     return MleOutput(mle_est, temp_coh, avg_coh)
+
+
+def decimate(arr: ArrayLike, strides: Strides) -> ArrayLike:
+    """Decimate an array by strides in the x and y directions.
+
+    Output will match [`io.compute_out_shape`][dolphin.io.compute_out_shape]
+
+    Parameters
+    ----------
+    arr : ArrayLike
+        2D or 3D array to decimate.
+    strides : dict[str, int]
+        The strides in the x and y directions.
+
+    Returns
+    -------
+    ArrayLike
+        The decimated array.
+
+    """
+    ys, xs = strides
+    rows, cols = arr.shape[-2:]
+    start_r = ys // 2
+    start_c = xs // 2
+    end_r = (rows // ys) * ys + 1
+    end_c = (cols // xs) * xs + 1
+    return arr[..., start_r:end_r:ys, start_c:end_c:xs]

@@ -6,16 +6,18 @@ from typing import Optional
 import numpy as np
 from numba import cuda
 
-from dolphin.utils import compute_out_shape, decimate
+from dolphin._types import HalfWindow, Strides
+from dolphin.utils import compute_out_shape
 
 from . import covariance, metrics
+from ._mle_cpu import decimate
 from .mle import MleOutput, mle_stack
 
 
 def run_gpu(
     slc_stack: np.ndarray,
-    half_window: dict[str, int],
-    strides: Optional[dict[str, int]] = None,
+    half_window: HalfWindow,
+    strides: Strides,
     use_evd: bool = False,
     beta: float = 0.01,
     reference_idx: int = 0,
@@ -72,15 +74,13 @@ def run_gpu(
     """
     import cupy as cp
 
-    if strides is None:
-        strides = {"x": 1, "y": 1}
+    raise NotImplementedError("GPU version not yet implemented")
+
     num_slc, rows, cols = slc_stack.shape
 
-    # Can't use dict in numba kernels, so pass the values as a tuple
-    halfwin_rowcol = (half_window["y"], half_window["x"])
-    strides_rowcol = (strides["y"], strides["x"])
-
-    out_rows, out_cols = compute_out_shape((rows, cols), strides)
+    out_rows, out_cols = compute_out_shape(
+        (rows, cols), {"x": strides.x, "y": strides.y}
+    )
 
     # Copy the read-only data to the device
     d_slc_stack = cuda.to_device(slc_stack)
@@ -105,8 +105,8 @@ def run_gpu(
 
     covariance.estimate_stack_covariance_gpu[blocks, threads_per_block](
         d_slc_stack,
-        halfwin_rowcol,
-        strides_rowcol,
+        half_window,
+        strides,
         d_neighbor_arrays,
         d_C_arrays,
         do_shp,

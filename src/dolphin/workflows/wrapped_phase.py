@@ -161,8 +161,8 @@ def run(
             shp_alpha=cfg.phase_linking.shp_alpha,
             shp_nslc=shp_nslc,
             block_shape=cfg.worker_settings.block_shape,
-            n_workers=cfg.worker_settings.n_workers,
-            gpu_enabled=cfg.worker_settings.gpu_enabled,
+            # n_workers=cfg.worker_settings.n_workers,
+            # gpu_enabled=cfg.worker_settings.gpu_enabled,
         )
         comp_slc_file = comp_slcs[-1]
 

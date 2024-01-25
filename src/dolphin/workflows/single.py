@@ -19,7 +19,7 @@ from numpy.typing import DTypeLike
 from dolphin import io, shp
 from dolphin._decorators import atomic_output
 from dolphin._log import get_log
-from dolphin._types import Filename
+from dolphin._types import Filename, HalfWindow, Strides
 from dolphin.io import BlockManager, EagerLoader, VRTStack
 from dolphin.phase_link import PhaseLinkRuntimeError, compress, run_mle
 from dolphin.stack import MiniStackInfo
@@ -57,8 +57,6 @@ def run_wrapped_phase_single(
     shp_alpha: float = 0.05,
     shp_nslc: Optional[int] = None,
     block_shape: tuple[int, int] = (1024, 1024),
-    n_workers: int = 1,
-    gpu_enabled: bool = True,
     # show_progress: bool = False,
 ):
     """Estimate wrapped phase for one ministack.
@@ -190,8 +188,8 @@ def run_wrapped_phase_single(
         try:
             cur_mle_stack, temp_coh, avg_coh = run_mle(
                 cur_data,
-                half_window=half_window,
-                strides=strides,
+                half_window=HalfWindow(y=yhalf, x=xhalf),
+                strides=Strides(y=strides["y"], x=strides["x"]),
                 use_evd=use_evd,
                 beta=beta,
                 reference_idx=reference_idx,
@@ -199,8 +197,6 @@ def run_wrapped_phase_single(
                 ps_mask=ps_mask[in_rows, in_cols],
                 neighbor_arrays=neighbor_arrays,
                 avg_mag=amp_mean[in_rows, in_cols] if amp_mean is not None else None,
-                n_workers=n_workers,
-                gpu_enabled=gpu_enabled,
             )
         except PhaseLinkRuntimeError as e:
             # note: this is a warning instead of info, since it should

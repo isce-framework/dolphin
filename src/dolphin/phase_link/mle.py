@@ -8,7 +8,8 @@ import numpy as np
 import pymp
 from scipy.linalg import eigh
 
-from dolphin.utils import get_array_module, gpu_is_available, take_looks
+from dolphin._types import HalfWindow, Strides
+from dolphin.utils import get_array_module, take_looks
 
 logger = logging.getLogger(__name__)
 
@@ -30,10 +31,13 @@ class MleOutput(NamedTuple):
     """Average coherence across dates for each SLC."""
 
 
+DEFAULT_STRIDES = Strides(1, 1)
+
+
 def run_mle(
     slc_stack: np.ndarray,
-    half_window: dict[str, int],
-    strides: Optional[dict[str, int]] = None,
+    half_window: HalfWindow,
+    strides: Strides = DEFAULT_STRIDES,
     use_evd: bool = False,
     beta: float = 0.01,
     reference_idx: int = 0,
@@ -42,9 +46,6 @@ def run_mle(
     neighbor_arrays: Optional[np.ndarray] = None,
     avg_mag: Optional[np.ndarray] = None,
     use_slc_amp: bool = True,
-    n_workers: int = 1,
-    gpu_enabled: bool = False,
-    # ) -> tuple[np.ndarray, np.ndarray]:
 ) -> MleOutput:
     """Estimate the linked phase for a stack using the MLE estimator.
 
@@ -52,12 +53,12 @@ def run_mle(
     ----------
     slc_stack : np.ndarray
         The SLC stack, with shape (n_images, n_rows, n_cols)
-    half_window : dict[str, int]
-        The half window size as {"x": half_win_x, "y": half_win_y}
+    half_window : HalfWindow, or tuple[int, int]
+        A (named) tuple of (y, x) sizes for the half window.
         The full window size is 2 * half_window + 1 for x, y.
-    strides : dict[str, int], optional
-        The (x, y) strides (in pixels) to use for the sliding window.
-        By default {"x": 1, "y": 1}
+    strides : tuple[int, int], optional
+        The (y, x) strides (in pixels) to use for the sliding window.
+        By default (1, 1)
     use_evd : bool, default = False
         Use eigenvalue decomposition on the covariance matrix instead of
         the EMI algorithm.
@@ -86,11 +87,6 @@ def run_mle(
     use_slc_amp : bool, optional
         Whether to use the SLC amplitude when outputting the MLE estimate,
         or to set the SLC amplitude to 1.0. By default True.
-    n_workers : int, optional
-        The number of workers to use for (CPU version) multiprocessing.
-        If 1 (default), no multiprocessing is used.
-    gpu_enabled : bool, optional
-        If False, do not use the GPU, even if it is available.
 
     Returns
     -------
@@ -101,10 +97,7 @@ def run_mle(
     If `calc_average_coh` is True, `avg_coh` will also be returned.
     """
     from ._mle_cpu import run_cpu as _run_cpu
-    from ._mle_gpu import run_gpu as _run_gpu
 
-    if strides is None:
-        strides = {"x": 1, "y": 1}
     _, rows, cols = slc_stack.shape
     # Common pre-processing for both CPU and GPU versions:
 
@@ -142,37 +135,21 @@ def run_mle(
     slc_stack_masked = slc_stack.copy()
     slc_stack_masked[:, ignore_mask] = np.nan
 
-    #######################################
-    if not gpu_enabled or not gpu_is_available():
-        # mle_est, temp_coh, avg_coh = _run_cpu(
-        mle_out = _run_cpu(
-            slc_stack=slc_stack_masked,
-            half_window=half_window,
-            strides=strides,
-            use_evd=use_evd,
-            beta=beta,
-            reference_idx=reference_idx,
-            neighbor_arrays=neighbor_arrays,
-            use_slc_amp=use_slc_amp,
-            n_workers=n_workers,
-        )
-    else:
-        # mle_est, temp_coh, avg_coh = _run_gpu(
-        mle_out = _run_gpu(
-            slc_stack=slc_stack_masked,
-            half_window=half_window,
-            strides=strides,
-            use_evd=use_evd,
-            beta=beta,
-            reference_idx=reference_idx,
-            neighbor_arrays=neighbor_arrays,
-            use_slc_amp=use_slc_amp,
-            # is it worth passing the blocks-per-grid?
-        )
+    # mle_est, temp_coh, avg_coh = _run_cpu(
+    mle_out = _run_cpu(
+        slc_stack=slc_stack_masked,
+        half_window=half_window,
+        strides=strides,
+        use_evd=use_evd,
+        beta=beta,
+        reference_idx=reference_idx,
+        neighbor_arrays=neighbor_arrays,
+        use_slc_amp=use_slc_amp,
+    )
 
     # Get the smaller, looked versions of the masks
     # We zero out nodata if all pixels within the window had nodata
-    mask_looked = take_looks(nodata_mask, strides["y"], strides["x"], func_type="all")
+    mask_looked = take_looks(nodata_mask, *strides, func_type="all")
     # Set no data pixels to np.nan
     mle_out.temp_coh[mask_looked] = np.nan
 
@@ -336,7 +313,7 @@ def _fill_ps_pixels(
     temp_coh: np.ndarray,
     slc_stack: np.ndarray,
     ps_mask: np.ndarray,
-    strides: dict[str, int],
+    strides: Strides,
     avg_mag: np.ndarray,
     reference_idx: int = 0,
     use_max_ps: bool = False,
@@ -355,8 +332,8 @@ def _fill_ps_pixels(
         The original SLC stack, with shape (n_images, n_rows, n_cols)
     ps_mask : ndarray, shape = (rows, cols)
         Boolean mask of pixels marking persistent scatterers (PS).
-    strides : dict
-        The look window strides
+    strides : Strides
+        The decimation (y, x) factors
     avg_mag : np.ndarray, optional
         The average magnitude of the SLC stack, used to to find the brightest
         PS pixels to fill within each look window.
@@ -384,16 +361,14 @@ def _fill_ps_pixels(
     # null out all the non-PS pixels when finding the brightest PS pixels
     mag[~ps_mask] = np.nan
     # For ps_mask, we set to True if any pixels within the window were PS
-    ps_mask_looked = take_looks(
-        ps_mask, strides["y"], strides["x"], func_type="any", edge_strategy="pad"
-    )
+    ps_mask_looked = take_looks(ps_mask, *strides, func_type="any", edge_strategy="pad")
     # make sure it's the same size as the MLE result/temp_coh after padding
     ps_mask_looked = ps_mask_looked[: mle_est.shape[1], : mle_est.shape[2]]
 
     if use_max_ps:
         print("Using max PS pixel to fill in MLE estimate")
         # Get the indices of the brightest pixels within each look window
-        slc_r_idxs, slc_c_idxs = _get_max_idxs(mag, strides["y"], strides["x"])
+        slc_r_idxs, slc_c_idxs = _get_max_idxs(mag, *strides)
         # we're only filling where there are PS pixels
         ref = np.exp(-1j * np.angle(slc_stack[reference_idx][slc_r_idxs, slc_c_idxs]))
         for i in range(len(slc_stack)):
@@ -411,7 +386,7 @@ def _fill_ps_pixels(
 
 
 def _get_avg_ps(
-    slc_stack: np.ndarray, ps_mask: np.ndarray, strides: dict
+    slc_stack: np.ndarray, ps_mask: np.ndarray, strides: Strides
 ) -> np.ndarray:
     # First, set all non-PS pixels to NaN
     slc_stack_nanned = slc_stack.copy()
@@ -423,8 +398,7 @@ def _get_avg_ps(
     # Then, take the average of all PS pixels within each look window
     return take_looks(
         slc_stack_nanned,
-        strides["y"],
-        strides["x"],
+        *strides,
         func_type="nanmean",
         edge_strategy="pad",
     )
