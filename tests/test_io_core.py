@@ -5,7 +5,7 @@ import numpy.testing as npt
 import pytest
 
 from dolphin import io
-from dolphin._readers import VRTStack
+from dolphin.io import VRTStack
 from dolphin.utils import compute_out_shape
 
 

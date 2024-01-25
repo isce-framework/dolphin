@@ -260,7 +260,7 @@ class VRTInterferogram(BaseModel, extra="allow"):
             VRTInterferogram object.
 
         """
-        from dolphin._readers import _parse_vrt_file
+        from dolphin.io._readers import _parse_vrt_file
 
         # Use the parsing function
         (ref_slc, sec_slc), subdataset = _parse_vrt_file(path)

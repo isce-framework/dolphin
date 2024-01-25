@@ -8,7 +8,7 @@ import rasterio as rio
 from osgeo import gdal
 from rasterio.errors import NotGeoreferencedWarning
 
-from dolphin._readers import (
+from dolphin.io._readers import (
     BinaryReader,
     BinaryStackReader,
     EagerLoader,

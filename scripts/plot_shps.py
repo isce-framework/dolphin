@@ -7,7 +7,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib import patches
 
-from dolphin import _readers, shp
+from dolphin import shp
+from dolphin.io import VRTStack
 
 
 def plot_shps(
@@ -27,7 +28,7 @@ def plot_shps(
     Click on a pixel to see the neighborhood map.
     """
     if isinstance(slc_stack, str):
-        slc_stack = _readers.VRTStack(slc_stack, write_file=False)
+        slc_stack = VRTStack(slc_stack, write_file=False)
     if display_arr is None:
         display_arr = mean
     if shp_nslc is None:

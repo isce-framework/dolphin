@@ -22,11 +22,12 @@ from opera_utils._dates import get_dates, sort_files_by_date
 from osgeo import gdal
 
 from dolphin import io, utils
-from dolphin._background import _DEFAULT_TIMEOUT, BackgroundReader
 from dolphin._types import Filename
 from dolphin.io._blocks import iter_blocks
 from dolphin.stack import logger
 from dolphin.utils import progress
+
+from ._background import _DEFAULT_TIMEOUT, BackgroundReader
 
 __all__ = [
     "DatasetReader",

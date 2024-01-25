@@ -14,8 +14,8 @@ from osgeo_utils import gdal_calc
 
 from dolphin import io
 from dolphin._log import get_log
-from dolphin._readers import VRTStack
 from dolphin._types import Filename
+from dolphin.io import VRTStack
 from dolphin.stack import MiniStackPlanner
 
 from .config import ShpMethod

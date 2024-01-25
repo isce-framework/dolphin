@@ -12,8 +12,9 @@ import numpy as np
 import rasterio
 from numpy.typing import ArrayLike, DTypeLike
 
-from dolphin._background import BackgroundWriter
 from dolphin._types import Filename
+
+from ._background import BackgroundWriter
 
 __all__ = [
     "DatasetWriter",

@@ -12,8 +12,8 @@ from osgeo import gdal
 
 from dolphin import io, utils
 from dolphin._log import get_log
-from dolphin._readers import EagerLoader, StackReader
 from dolphin._types import Filename
+from dolphin.io import EagerLoader, StackReader
 
 gdal.UseExceptions()
 

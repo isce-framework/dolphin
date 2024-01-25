@@ -7,8 +7,9 @@ from typing import Optional, Sequence, cast
 import numpy as np
 from opera_utils import get_dates, make_nodata_mask
 
-from dolphin import _readers, interferogram, ps, stack
+from dolphin import interferogram, ps, stack
 from dolphin._log import get_log, log_runtime
+from dolphin.io import VRTStack
 
 from . import InterferogramNetwork, InterferogramNetworkType, sequential
 from .config import DisplacementWorkflow
@@ -51,7 +52,7 @@ def run(
     # Make a VRT pointing to the input SLC files
     # #############################################
     subdataset = cfg.input_options.subdataset
-    vrt_stack = _readers.VRTStack(
+    vrt_stack = VRTStack(
         input_file_list,
         subdataset=subdataset,
         outfile=cfg.work_directory / "slc_stack.vrt",
