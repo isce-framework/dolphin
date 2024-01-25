@@ -561,8 +561,28 @@ def flatten(list_of_lists: Iterable[Iterable[Any]]) -> chain[Any]:
     return chain.from_iterable(list_of_lists)
 
 
-def _format_date_pair(start: DateOrDatetime, end: DateOrDatetime, fmt="%Y%m%d") -> str:
+def format_date_pair(start: DateOrDatetime, end: DateOrDatetime, fmt="%Y%m%d") -> str:
+    """Format a date pair into a string.
+
+    Parameters
+    ----------
+    start : DateOrDatetime
+        First date or datetime
+    end : DateOrDatetime
+        Second date or datetime
+    fmt : str, optional
+        `datetime` formatter pattern, by default "%Y%m%d"
+
+    Returns
+    -------
+    str
+        Formatted date pair.
+    """
     return f"{start.strftime(fmt)}_{end.strftime(fmt)}"
+
+
+# Keep alias for now, but deprecate
+_format_date_pair = format_date_pair
 
 
 def prepare_geometry(
@@ -672,3 +692,41 @@ def prepare_geometry(
             )
 
     return stitched_geo_list
+
+
+def compute_out_shape(
+    shape: tuple[int, int], strides: dict[str, int]
+) -> tuple[int, int]:
+    """Calculate the output size for an input `shape` and row/col `strides`.
+
+    Parameters
+    ----------
+    shape : tuple[int, int]
+        Input size: (rows, cols)
+    strides : dict[str, int]
+        {"x": x strides, "y": y strides}
+
+    Returns
+    -------
+    out_shape : tuple[int, int]
+        Size of output after striding
+
+    Notes
+    -----
+    If there is not a full window (of size `strides`), the end
+    will get cut off rather than padded with a partial one.
+    This should match the output size of `[dolphin.utils.take_looks][]`.
+
+    As a 1D example, in array of size 6 with `strides`=3 along this dim,
+    we could expect the pixels to be centered on indexes
+    `[1, 4]`.
+
+        [ 0  1  2   3  4  5]
+
+    So the output size would be 2, since we have 2 full windows.
+    If the array size was 7 or 8, we would have 2 full windows and 1 partial,
+    so the output size would still be 2.
+    """
+    rows, cols = shape
+    rs, cs = strides["y"], strides["x"]
+    return (rows // rs, cols // cs)

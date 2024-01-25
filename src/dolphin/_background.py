@@ -199,6 +199,11 @@ class BackgroundWriter(BackgroundWorker):
     def process(self, *args, **kw):
         self.write(*args, **kw)
 
+    @property
+    def num_queued(self):
+        """Number of items waiting in the queue to be written."""
+        return self._work_queue.qsize()
+
     @abc.abstractmethod
     def write(self, *args, **kw):
         """User-defined method for writing data."""

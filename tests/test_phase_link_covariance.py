@@ -5,9 +5,8 @@ import numpy as np
 import numpy.testing as npt
 import pytest
 
-from dolphin._blocks import compute_out_shape
 from dolphin.phase_link import covariance, simulate
-from dolphin.utils import gpu_is_available, take_looks
+from dolphin.utils import compute_out_shape, gpu_is_available, take_looks
 
 GPU_AVAILABLE = gpu_is_available() and os.environ.get("NUMBA_DISABLE_JIT") != "1"
 NUM_ACQ = 30

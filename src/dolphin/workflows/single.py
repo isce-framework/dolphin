@@ -247,10 +247,8 @@ def run_wrapped_phase_single(
         )
 
         # All other outputs are strided (smaller in size)
-        out_datas = [temp_coh, avg_coh, shp_counts]
+        out_datas = [temp_coh, shp_counts]
         for data, output_file in zip(out_datas, output_files[1:]):
-            if data is None:  # May choose to skip some outputs, e.g. "avg_coh"
-                continue
             writer.queue_write(
                 data[trimmed_rows, trimmed_cols],
                 output_file.filename,

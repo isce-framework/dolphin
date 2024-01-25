@@ -19,10 +19,9 @@ from numpy.typing import ArrayLike, DTypeLike
 from osgeo import gdal
 from pyproj import CRS
 
-from dolphin._blocks import compute_out_shape
 from dolphin._log import get_log
 from dolphin._types import Bbox, Filename
-from dolphin.utils import gdal_to_numpy_type, numpy_to_gdal_type
+from dolphin.utils import compute_out_shape, gdal_to_numpy_type, numpy_to_gdal_type
 
 gdal.UseExceptions()
 
