@@ -6,8 +6,9 @@ from pprint import pformat
 import opera_utils
 
 import dolphin.ps
-from dolphin import __version__, _readers
+from dolphin import __version__
 from dolphin._log import get_log, log_runtime
+from dolphin.io import VRTStack
 from dolphin.utils import get_max_memory_usage
 
 from .config import PsWorkflow
@@ -69,7 +70,7 @@ def run(
     # Make a VRT pointing to the input SLC files
     # #############################################
     subdataset = cfg.input_options.subdataset
-    vrt_stack = _readers.VRTStack(
+    vrt_stack = VRTStack(
         input_file_list,
         subdataset=subdataset,
         outfile=cfg.work_directory / "slc_stack.vrt",

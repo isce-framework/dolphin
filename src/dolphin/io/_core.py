@@ -7,7 +7,6 @@ wrapper functions to write/iterate over blocks of large raster files.
 from __future__ import annotations
 
 import math
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from os import fspath
 from pathlib import Path
@@ -19,19 +18,35 @@ from numpy.typing import ArrayLike, DTypeLike
 from osgeo import gdal
 from pyproj import CRS
 
-from dolphin._background import BackgroundWriter
-from dolphin._blocks import compute_out_shape
 from dolphin._log import get_log
 from dolphin._types import Bbox, Filename
-from dolphin.utils import gdal_to_numpy_type, numpy_to_gdal_type
+from dolphin.utils import compute_out_shape, gdal_to_numpy_type, numpy_to_gdal_type
 
 gdal.UseExceptions()
+logger = get_log(__name__)
 
 __all__ = [
     "load_gdal",
     "write_arr",
     "write_block",
-    "Writer",
+    "format_nc_filename",
+    "copy_projection",
+    "get_raster_xysize",
+    "get_raster_crs",
+    "get_raster_bounds",
+    "get_raster_nodata",
+    "get_raster_bounds",
+    "get_raster_dtype",
+    "get_raster_metadata",
+    "get_raster_gt",
+    "get_raster_driver",
+    "get_raster_chunk_size",
+    "set_raster_metadata",
+    "DEFAULT_ENVI_OPTIONS",
+    "DEFAULT_DATETIME_FORMAT",
+    "DEFAULT_HDF5_OPTIONS",
+    "DEFAULT_TIFF_OPTIONS",
+    "DEFAULT_TILE_SIZE",
 ]
 
 
@@ -52,7 +67,6 @@ DEFAULT_HDF5_OPTIONS = {
     "compression_opts": 4,
     "shuffle": True,
 }
-logger = get_log(__name__)
 
 
 def load_gdal(
@@ -194,15 +208,6 @@ def format_nc_filename(filename: Filename, ds_name: Optional[str] = None) -> str
         raise ValueError(msg)
 
     return f'NETCDF:"{filename}":"//{ds_name.lstrip("/")}"'
-
-
-def _assert_images_same_size(files):
-    """Ensure all files are the same size."""
-    with ThreadPoolExecutor(5) as executor:
-        sizes = list(executor.map(get_raster_xysize, files))
-    if len(set(sizes)) > 1:
-        msg = f"Not files have same raster (x, y) size:\n{set(sizes)}"
-        raise ValueError(msg)
 
 
 def copy_projection(src_file: Filename, dst_file: Filename) -> None:
@@ -733,42 +738,3 @@ def get_raster_chunk_size(filename: Filename) -> list[int]:
             logger.warning(f"Warning: {filename} bands have different block shapes.")
             break
     return block_size
-
-
-class Writer(BackgroundWriter):
-    """Class to write data to files in a background thread."""
-
-    def __init__(self, max_queue: int = 0, debug: bool = False, **kwargs):  # noqa: D107
-        if debug is False:
-            super().__init__(nq=max_queue, name="Writer", **kwargs)
-        else:
-            # Don't start a background thread. Just synchronously write data
-            self.queue_write = self.write  # type: ignore[assignment]
-
-    def write(
-        self, data: ArrayLike, filename: Filename, row_start: int, col_start: int
-    ):
-        """Write out an ndarray to a subset of the pre-made `filename`.
-
-        Parameters
-        ----------
-        data : ArrayLike
-            2D or 3D data array to save.
-        filename : Filename
-            list of output files to save to, or (if cur_block is 2D) a single file.
-        row_start : int
-            Row index to start writing at.
-        col_start : int
-            Column index to start writing at.
-
-        Raises
-        ------
-        ValueError
-            If length of `output_files` does not match length of `cur_block`.
-        """
-        write_block(data, filename, row_start, col_start)
-
-    @property
-    def num_queued(self):
-        """Number of items waiting in the queue to be written."""
-        return self._work_queue.qsize()

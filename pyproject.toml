@@ -87,16 +87,17 @@ ignore = [
   "PLR",  # Pylint Refactor
   "PTH123", # `open()` should be replaced by `Path.open()`
   "PTH207", # "Replace `glob` with `Path.glob` or `Path.rglob`
+  "ISC001", # The following rules may cause conflicts when used with the formatter
 ]
 
 exclude = [
   "scripts",
-  "benchmarks"
 ]
 
 [tool.ruff.per-file-ignores]
 "**/__init__.py" = ["F403"]
 "tests/**" = ["D", "N", "PTH"]
+"benchmarks/**" = ["D", "N", "PTH", "RUF", "ARG002"]
 
 [tool.ruff.lint.flake8-unused-arguments]
 # Whether to allow unused variadic arguments, like *args and **kwargs.

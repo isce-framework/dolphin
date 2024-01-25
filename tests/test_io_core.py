@@ -4,9 +4,9 @@ import numpy as np
 import numpy.testing as npt
 import pytest
 
-import dolphin._blocks
 from dolphin import io
-from dolphin._readers import VRTStack
+from dolphin.io import VRTStack
+from dolphin.utils import compute_out_shape
 
 
 def test_load(raster_100_by_200):
@@ -154,7 +154,7 @@ def test_write_metadata(raster_100_by_200, tmpdir):
 def test_save_strided(raster_100_by_200, tmpdir):
     save_name = tmpdir / "same_size.tif"
     strides = {"x": 1, "y": 1}
-    out_shape = dolphin._blocks.compute_out_shape((100, 200), strides)
+    out_shape = compute_out_shape((100, 200), strides)
     assert out_shape == (100, 200)
     io.write_arr(
         arr=None,
@@ -168,7 +168,7 @@ def test_save_strided(raster_100_by_200, tmpdir):
 
     save_name2 = tmpdir / "smaller_size.tif"
     strides = {"x": 2, "y": 4}
-    out_shape = dolphin._blocks.compute_out_shape((100, 200), strides)
+    out_shape = compute_out_shape((100, 200), strides)
     assert out_shape == (25, 100)
     io.write_arr(
         arr=None,

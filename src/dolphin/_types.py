@@ -14,6 +14,9 @@ else:
 # Some classes are declared as generic in stubs, but not at runtime.
 # In Python 3.9 and earlier, os.PathLike is not subscriptable, results in runtime error
 if TYPE_CHECKING:
+    from builtins import ellipsis
+
+    Index = ellipsis | slice | int
     PathLikeStr = PathLike[str]
 else:
     PathLikeStr = PathLike

@@ -13,11 +13,15 @@ from typing import Mapping, Sequence
 from opera_utils import group_by_burst, group_by_date
 
 from dolphin import __version__
-from dolphin._background import DummyProcessPoolExecutor
 from dolphin._log import get_log, log_runtime
 from dolphin.atmosphere import estimate_ionospheric_delay, estimate_tropospheric_delay
 from dolphin.io import get_raster_bounds, get_raster_crs
-from dolphin.utils import get_max_memory_usage, prepare_geometry, set_num_threads
+from dolphin.utils import (
+    DummyProcessPoolExecutor,
+    get_max_memory_usage,
+    prepare_geometry,
+    set_num_threads,
+)
 
 from . import stitching_bursts, unwrapping, wrapped_phase
 from ._utils import _create_burst_cfg, _remove_dir_if_empty

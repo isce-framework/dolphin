@@ -1,14 +1,10 @@
 from __future__ import annotations
 
 import abc
-from collections.abc import Callable
-from concurrent.futures import Executor, Future
 from queue import Empty, Full, Queue
 from threading import Event, Thread, main_thread
-from typing import Optional
 
 from dolphin._log import get_log
-from dolphin._types import P, T
 
 logger = get_log(__name__)
 
@@ -18,7 +14,6 @@ __all__ = [
     "BackgroundWorker",
     "BackgroundReader",
     "BackgroundWriter",
-    "DummyProcessPoolExecutor",
 ]
 
 
@@ -199,6 +194,11 @@ class BackgroundWriter(BackgroundWorker):
     def process(self, *args, **kw):
         self.write(*args, **kw)
 
+    @property
+    def num_queued(self):
+        """Number of items waiting in the queue to be written."""
+        return self._work_queue.qsize()
+
     @abc.abstractmethod
     def write(self, *args, **kw):
         """User-defined method for writing data."""
@@ -259,21 +259,3 @@ class BackgroundReader(BackgroundWorker):
     @abc.abstractmethod
     def read(self, *args, **kw):
         """User-defined method for reading a chunk of data."""
-
-
-class DummyProcessPoolExecutor(Executor):
-    """Dummy ProcessPoolExecutor for to avoid forking for single_job purposes."""
-
-    def __init__(self, max_workers: Optional[int] = None, **kwargs):
-        self._max_workers = max_workers
-
-    def submit(
-        self, fn: Callable[P, T], /, *args: P.args, **kwargs: P.kwargs
-    ) -> Future[T]:
-        future: Future = Future()
-        result = fn(*args, **kwargs)
-        future.set_result(result)
-        return future
-
-    def shutdown(self, wait: bool = True, cancel_futures: bool = True):
-        pass

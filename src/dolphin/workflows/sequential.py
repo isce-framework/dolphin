@@ -14,8 +14,8 @@ from osgeo_utils import gdal_calc
 
 from dolphin import io
 from dolphin._log import get_log
-from dolphin._readers import VRTStack
 from dolphin._types import Filename
+from dolphin.io import VRTStack
 from dolphin.stack import MiniStackPlanner
 
 from .config import ShpMethod
@@ -39,7 +39,7 @@ def run_wrapped_phase_sequential(
     amp_dispersion_file: Optional[Filename] = None,
     shp_method: ShpMethod = ShpMethod.NONE,
     shp_alpha: float = 0.05,
-    shp_nslc: Optional[int],
+    shp_nslc: Optional[int] = None,
     use_evd: bool = False,
     beta: float = 0.01,
     block_shape: tuple[int, int] = (512, 512),
@@ -91,7 +91,7 @@ def run_wrapped_phase_sequential(
 
             # Currently: we are always using the first SLC as the reference,
             # even if this is a compressed SLC.
-            # Will need to change this if we want to accomodate the original
+            # Will need to change this if we want to accommodate the original
             # Sequential Estimator+Datum Adjustment method.
             reference_idx = 0
             run_wrapped_phase_single(

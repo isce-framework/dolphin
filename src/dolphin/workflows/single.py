@@ -7,7 +7,6 @@ References
     Geosciences (2022): 105291.
 
 """
-
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -18,11 +17,10 @@ import numpy as np
 from numpy.typing import DTypeLike
 
 from dolphin import io, shp
-from dolphin._blocks import BlockManager
 from dolphin._decorators import atomic_output
 from dolphin._log import get_log
-from dolphin._readers import VRTStack
 from dolphin._types import Filename
+from dolphin.io import BlockManager, EagerLoader, VRTStack
 from dolphin.phase_link import PhaseLinkRuntimeError, compress, run_mle
 from dolphin.stack import MiniStackInfo
 
@@ -103,7 +101,7 @@ def run_wrapped_phase_single(
     logger.info(msg)
 
     # Create the background writer for this ministack
-    writer = io.Writer(debug=False)
+    writer = io.GdalWriter(debug=False)
 
     logger.info(f"Total stack size (in pixels): {vrt.shape}")
     # Set up the output folder with empty files to write into
@@ -146,15 +144,15 @@ def run_wrapped_phase_single(
         strides=strides,
         half_window=half_window,
     )
-    # block_gen = vrt.iter_blocks(
-    #     block_shape=block_shape,
-    #     overlaps=overlaps,
-    #     skip_empty=True,
-    #     nodata_mask=nodata_mask,
-    #     show_progress=show_progress,
-    # )
-    # for cur_data, (rows, cols) in block_gen:
-    blocks = list(block_manager.iter_blocks())
+    loader = EagerLoader(reader=vrt, block_shape=block_shape)
+    blocks = []
+    # Queue all input slices, skip ones that are all nodata
+    for out, trimmed, (in_rows, in_cols), padded in block_manager.iter_blocks():
+        if nodata_mask[in_rows, in_cols].all():
+            continue
+        loader.queue_read(in_rows, in_cols)
+        blocks.append((out, trimmed, (in_rows, in_cols), padded))
+
     logger.info(f"Iterating over {block_shape} blocks, {len(blocks)} total")
     for (
         (out_rows, out_cols),
@@ -163,9 +161,13 @@ def run_wrapped_phase_single(
         (in_no_pad_rows, in_no_pad_cols),
     ) in blocks:
         logger.debug(f"{out_rows = }, {out_cols = }, {in_rows = }, {in_no_pad_rows = }")
-        cur_data = vrt.read_stack(rows=in_rows, cols=in_cols)
-        if np.all(cur_data == 0):
+
+        # cur_data = vrt[:, in_rows, in_cols]
+        cur_data, (read_rows, read_cols) = loader.get_data()
+        if np.all(cur_data == 0) or np.isnan(cur_data).all():
             continue
+        assert read_rows == in_rows and read_cols == in_cols
+
         cur_data = cur_data.astype(np.complex64)
 
         if shp_method == "ks":

@@ -1,7 +1,8 @@
 import numpy.testing as npt
 import pytest
 
-from dolphin import _readers, io, stack
+from dolphin import io, stack
+from dolphin.io import _readers
 from dolphin.phase_link import mle, simulate
 from dolphin.utils import gpu_is_available
 from dolphin.workflows import sequential

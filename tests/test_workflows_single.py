@@ -1,6 +1,7 @@
 import pytest
 
-from dolphin import _readers, stack
+from dolphin import stack
+from dolphin.io import _readers
 from dolphin.phase_link import simulate
 from dolphin.utils import gpu_is_available
 from dolphin.workflows import single

@@ -11,10 +11,9 @@ import numpy as np
 from isce3.unwrap import ICU, snaphu
 
 from dolphin import io
-from dolphin._background import DummyProcessPoolExecutor
 from dolphin._log import get_log, log_runtime
 from dolphin._types import Filename
-from dolphin.utils import full_suffix, progress
+from dolphin.utils import DummyProcessPoolExecutor, full_suffix, progress
 from dolphin.workflows import UnwrapMethod
 
 from ._constants import CONNCOMP_SUFFIX, UNW_SUFFIX

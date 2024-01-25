@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Iterator, Optional
 
+from dolphin.utils import compute_out_shape
+
 # 1. iterate without overlap over output, decimated array
 #   - Start with an offset, shrink the size, both by `half_window//strides`
 #   - since we want every one wot be full, just skipping the incomplete blocks
@@ -14,7 +16,6 @@ from typing import Iterator, Optional
 __all__ = [
     "BlockIndices",
     "BlockManager",
-    "compute_out_shape",
     "iter_blocks",
 ]
 
@@ -194,44 +195,6 @@ def pad_block(in_block: BlockIndices, margins: tuple[int, int]) -> BlockIndices:
         max(c_slice.start - c_margin, 0),
         c_slice.stop + c_margin,
     )
-
-
-def compute_out_shape(
-    shape: tuple[int, int], strides: dict[str, int]
-) -> tuple[int, int]:
-    """Calculate the output size for an input `shape` and row/col `strides`.
-
-    Parameters
-    ----------
-    shape : tuple[int, int]
-        Input size: (rows, cols)
-    strides : dict[str, int]
-        {"x": x strides, "y": y strides}
-
-    Returns
-    -------
-    out_shape : tuple[int, int]
-        Size of output after striding
-
-    Notes
-    -----
-    If there is not a full window (of size `strides`), the end
-    will get cut off rather than padded with a partial one.
-    This should match the output size of `[dolphin.utils.take_looks][]`.
-
-    As a 1D example, in array of size 6 with `strides`=3 along this dim,
-    we could expect the pixels to be centered on indexes
-    `[1, 4]`.
-
-        [ 0  1  2   3  4  5]
-
-    So the output size would be 2, since we have 2 full windows.
-    If the array size was 7 or 8, we would have 2 full windows and 1 partial,
-    so the output size would still be 2.
-    """
-    rows, cols = shape
-    rs, cs = strides["y"], strides["x"]
-    return (rows // rs, cols // cs)
 
 
 @dataclass

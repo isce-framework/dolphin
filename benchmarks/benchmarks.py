@@ -1,6 +1,16 @@
+import datetime
+import shutil
+import subprocess
+from pathlib import Path
+
 import numpy as np
-from dolphin import shp
+from opera_utils import get_dates
+from osgeo import gdal
+
+from dolphin import io, shp
 from dolphin.phase_link import covariance, mle, simulate
+from dolphin.stack import MiniStackPlanner
+from dolphin.workflows import sequential
 
 # Shared for all tests
 HALF_WINDOW = {"x": 11, "y": 5}
@@ -8,7 +18,7 @@ STRIDES = {"x": 6, "y": 3}
 SHAPE = (512, 512)
 
 
-def _make_slc_samples():
+def _make_slc_samples(shape=SHAPE):
     """Create some sample SLC data."""
     # Make it as large as the biggest test
     cov_mat, _ = simulate.simulate_coh(
@@ -20,7 +30,7 @@ def _make_slc_samples():
         signal_std=0.01,
     )
     return simulate.simulate_neighborhood_stack(
-        cov_mat, neighbor_samples=np.prod(SHAPE)
+        cov_mat, neighbor_samples=np.prod(shape)
     )
 
 
@@ -107,4 +117,80 @@ class ShpBenchmark:
             var=self.amp_variance,
             nslc=30,
             method=shp.ShpMethod.GLRT,
+        )
+
+
+def _make_slc_stack(out_path: Path, shape: tuple[int, int, int] = (10, 1024, 1024)):
+    sigma = 0.5
+    slc_stack = np.random.normal(0, sigma, size=shape) + 1j * np.random.normal(
+        0, sigma, size=shape
+    )
+    slc_stack = slc_stack.astype(np.complex64)
+
+    start_date = datetime.datetime(2022, 1, 1)
+    slc_date_list = []
+    dt = datetime.timedelta(days=1)
+    for i in range(len(slc_stack)):
+        slc_date_list.append(start_date + i * dt)
+
+    shape = slc_stack.shape
+    # Write to a file
+    driver = gdal.GetDriverByName("GTiff")
+    out_path.mkdir(exist_ok=True)
+    name_template = out_path / "{date}.slc.tif"
+
+    file_list = []
+    for cur_date, cur_slc in zip(slc_date_list, slc_stack):
+        fname = str(name_template).format(date=cur_date.strftime("%Y%m%d"))
+        file_list.append(Path(fname))
+        ds = driver.Create(fname, shape[-1], shape[-2], 1, gdal.GDT_CFloat32)
+        ds.GetRasterBand(1).WriteArray(cur_slc)
+        ds = None
+
+    return file_list, slc_date_list
+
+
+class SingleMinistackBenchmark:
+    """Benchmark block-by-block phase linking on a stack of rasters."""
+
+    def setup_cache(self):
+        _make_slc_stack(Path("slcs"))
+
+    def setup(self):
+        # TODO: If we change the dates/size, we'll need a way to remove the last run
+        output_folder = Path("pl")
+        if output_folder.exists():
+            shutil.rmtree(output_folder, ignore_errors=True)
+
+        output_folder.mkdir()
+        v_file = output_folder / "stack.vrt"
+
+        subprocess.run("vmtouch -e .", shell=True)  # noqa: PLW1510
+        self.slc_file_list = sorted(Path("slcs").glob("20*.slc.tif"))
+        assert (
+            len(self.slc_file_list) > 0
+        ), f"No SLC files found: {list(Path('slcs').glob('*'))}"
+        self.dates = [get_dates(f) for f in self.slc_file_list]
+
+        io.VRTStack(self.slc_file_list, outfile=Path("pl") / "stack.vrt")
+        self.v_file = v_file
+
+    def time_single_ministack(self):
+        ministack_planner = MiniStackPlanner(
+            file_list=self.slc_file_list,
+            dates=self.dates,
+            is_compressed=[False] * len(self.slc_file_list),
+            output_folder=Path("pl"),
+        )
+        # We're using "sequential", but just making it one ministack
+        ministack_size = len(self.slc_file_list)
+        sequential.run_wrapped_phase_sequential(
+            slc_vrt_file=self.v_file,
+            ministack_planner=ministack_planner,
+            ministack_size=ministack_size,
+            half_window=HALF_WINDOW,
+            strides=STRIDES,
+            block_shape=(512, 512),
+            # use_evd=cfg.phase_linking.use_evd,
+            # n_workers=cfg.worker_settings.n_workers,
         )

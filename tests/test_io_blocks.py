@@ -1,15 +1,14 @@
 import numpy as np
 import pytest
 
-from dolphin._blocks import (
+from dolphin.io._blocks import (
     BlockIndices,
     BlockManager,
     dilate_block,
     get_slice_length,
     iter_blocks,
 )
-from dolphin.io import compute_out_shape
-from dolphin.utils import upsample_nearest
+from dolphin.utils import compute_out_shape, upsample_nearest
 
 
 def test_block_indices_create():

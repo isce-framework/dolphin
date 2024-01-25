@@ -98,6 +98,7 @@ def run_mle(
         The estimated linked phase, with shape (n_images, n_rows, n_cols)
     temp_coh : np.ndarray[np.float32]
         The temporal coherence at each pixel, shape (n_rows, n_cols)
+    If `calc_average_coh` is True, `avg_coh` will also be returned.
     """
     from ._mle_cpu import run_cpu as _run_cpu
     from ._mle_gpu import run_gpu as _run_gpu
