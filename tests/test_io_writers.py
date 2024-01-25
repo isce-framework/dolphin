@@ -1,4 +1,3 @@
-import time
 import warnings
 
 import numpy as np
@@ -67,7 +66,13 @@ class TestRasterWriter:
 class TestBackgroundRasterWriter:
     def test_init(self, slc_file_list):
         brw = BackgroundRasterWriter(slc_file_list[0])
+        with rio.open(slc_file_list[0]) as src:
+            assert brw.shape == src.shape
+            assert brw.dtype == src.dtypes[0]
+        assert brw.ndim == 2
+        assert brw.closed is False
         brw.close()
+        assert brw.closed is True
 
     def test_write(self, slc_file_list):
         data = np.random.randn(5, 10)
@@ -75,7 +80,6 @@ class TestBackgroundRasterWriter:
         rows, cols = slice(0, 5), slice(0, 10)
         w[rows, cols] = data
         # Make sure we dont write too late
-        time.sleep(0.2)
         w.close()
         assert w._thread.is_alive() is False
 

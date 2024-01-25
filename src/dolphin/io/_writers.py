@@ -251,6 +251,7 @@ class BackgroundRasterWriter(BackgroundWriter):
             # Don't start a background thread. Just synchronously write data
             self.queue_write = self.write  # type: ignore[assignment]
         self._raster = RasterWriter(filename, **kwargs)
+        self.filename = filename
 
     def write(self, key: tuple[Index, ...], value: np.ndarray):
         """Write out an ndarray to a subset of the pre-made `filename`.
@@ -263,7 +264,7 @@ class BackgroundRasterWriter(BackgroundWriter):
         value : np.ndarray
             The block of data to write.
         """
-        self[key] = value
+        self._raster[key] = value
 
     def __setitem__(self, key: tuple[Index, ...], value: np.ndarray, /) -> None:
         self.queue_write(key, value)
@@ -272,6 +273,23 @@ class BackgroundRasterWriter(BackgroundWriter):
         """Close the underlying dataset and stop the background thread."""
         self._raster.close()
         self.notify_finished()
+
+    @property
+    def closed(self) -> bool:
+        """bool : True if the dataset is closed."""  # noqa: D403
+        return self._raster.closed
+
+    @property
+    def shape(self):
+        return self._raster.shape
+
+    @property
+    def dtype(self) -> np.dtype:
+        return self._raster.dtype
+
+    @property
+    def ndim(self) -> int:
+        return self._raster.ndim
 
     def __enter__(self):
         return self
