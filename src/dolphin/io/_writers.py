@@ -23,7 +23,7 @@ from ._background import BackgroundWriter
 __all__ = [
     "DatasetWriter",
     "RasterWriter",
-    "Writer",
+    "GdalWriter",
 ]
 
 if TYPE_CHECKING:
@@ -239,7 +239,7 @@ class RasterWriter(DatasetWriter, AbstractContextManager["RasterWriter"]):
             return dataset.write(value, self.band, window=window)
 
 
-class BackgroundRasterWriter(BackgroundWriter, RasterWriter):
+class BackgroundRasterWriter(BackgroundWriter):
     """Class to write data to files in a background thread."""
 
     def __init__(
@@ -268,9 +268,20 @@ class BackgroundRasterWriter(BackgroundWriter, RasterWriter):
     def __setitem__(self, key: tuple[Index, ...], value: np.ndarray, /) -> None:
         self.queue_write(key, value)
 
+    def close(self):
+        """Close the underlying dataset and stop the background thread."""
+        self._raster.close()
+        self.notify_finished()
 
-class Writer(BackgroundWriter):
-    """Class to write data to files in a background thread."""
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):  # type: ignore[no-untyped-def]
+        self.close()
+
+
+class GdalWriter(BackgroundWriter):
+    """Class to write data to files in a background thread using `gdal` bindings."""
 
     def __init__(self, max_queue: int = 0, debug: bool = False, **kwargs):
         if debug is False:

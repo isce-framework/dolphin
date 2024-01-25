@@ -105,7 +105,7 @@ def create_ps(
 
     skip_empty = nodata_mask is None
 
-    writer = io.Writer()
+    writer = io.GdalWriter()
     # Make the generator for the blocks
     block_gen = EagerLoader(
         reader,

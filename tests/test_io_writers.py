@@ -66,4 +66,25 @@ class TestRasterWriter:
 class TestBackgroundRasterWriter:
     def test_init(self, slc_file_list):
         brw = BackgroundRasterWriter(slc_file_list[0])
-        brw.notify_finished()
+        brw.close()
+
+    def test_write(self, slc_file_list):
+        data = np.random.randn(5, 10)
+        w = BackgroundRasterWriter(slc_file_list[0])
+        rows, cols = slice(0, 5), slice(0, 10)
+        w[rows, cols] = data
+        w.close()
+        assert w._thread.is_alive() is False
+
+        assert np.allclose(load_gdal(slc_file_list[0], rows=rows, cols=cols), data)
+
+    def test_context_manager(self, slc_file_list):
+        rows, cols = slice(0, 5), slice(0, 10)
+        data = np.random.randn(5, 10)
+        with BackgroundRasterWriter(slc_file_list[0]) as w:
+            w[rows, cols] = data
+            assert w.closed is False
+
+        assert w.closed is True
+        assert w._thread.is_alive() is False
+        assert np.allclose(load_gdal(slc_file_list[0], rows=rows, cols=cols), data)

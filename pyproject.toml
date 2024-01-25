@@ -92,12 +92,12 @@ ignore = [
 
 exclude = [
   "scripts",
-  "benchmarks"
 ]
 
 [tool.ruff.per-file-ignores]
 "**/__init__.py" = ["F403"]
 "tests/**" = ["D", "N", "PTH"]
+"benchmarks/**" = ["D", "N", "PTH", "RUF", "ARG002"]
 
 [tool.ruff.lint.flake8-unused-arguments]
 # Whether to allow unused variadic arguments, like *args and **kwargs.
