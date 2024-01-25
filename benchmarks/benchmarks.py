@@ -56,12 +56,12 @@ class CovarianceBenchmark:
         covariance.coh_mat_single(self.slc_samples[:, :200])
 
     def time_covariance_stack(self, nslc):
-        covariance.estimate_stack_covariance_cpu(
+        covariance.estimate_stack_covariance(
             self.slc_stack, half_window=HALF_WINDOW, strides=STRIDES
         )
 
     def peakmem_covariance_stack(self, nslc):
-        covariance.estimate_stack_covariance_cpu(
+        covariance.estimate_stack_covariance(
             self.slc_stack, half_window=HALF_WINDOW, strides=STRIDES
         )
 

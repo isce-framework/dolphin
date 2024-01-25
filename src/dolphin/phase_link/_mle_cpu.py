@@ -69,7 +69,7 @@ def run_cpu(
     """
     if strides is None:
         strides = {"x": 1, "y": 1}
-    C_arrays = covariance.estimate_stack_covariance_cpu(
+    C_arrays = covariance.estimate_stack_covariance(
         slc_stack,
         half_window,
         strides,

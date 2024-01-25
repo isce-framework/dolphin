@@ -16,7 +16,7 @@ def estimate_temp_coh(est, C_arrays):
         If est.shape = (nslc,) (a single pixel), will be reshaped to (nslc, 1, 1)
     C_arrays : np.ndarray or cupy.ndarray, shape = (rows, cols, nslc, nslc)
         The sample covariance matrix at each pixel
-        (e.g. from [dolphin.phase_link.covariance.estimate_stack_covariance_cpu][]).
+        (e.g. from [dolphin.phase_link.covariance.estimate_stack_covariance][]).
         If one covariance matrix is passed (C_arrays.shape = (nslc, nslc)),
         will be reshaped to (1, 1, nslc, nslc)
 

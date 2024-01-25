@@ -210,7 +210,7 @@ def mle_stack(
     ----------
     C_arrays : ndarray, shape = (rows, cols, nslc, nslc)
         The sample covariance matrix at each pixel
-        (e.g. from [dolphin.phase_link.covariance.estimate_stack_covariance_cpu][])
+        (e.g. from [dolphin.phase_link.covariance.estimate_stack_covariance][])
     use_evd : bool, default = False
         Use eigenvalue decomposition on the covariance matrix instead of
         the EMI algorithm of [@Ansari2018EfficientPhaseEstimation].
