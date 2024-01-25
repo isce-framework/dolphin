@@ -7,7 +7,6 @@ wrapper functions to write/iterate over blocks of large raster files.
 from __future__ import annotations
 
 import math
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from os import fspath
 from pathlib import Path
@@ -24,12 +23,14 @@ from dolphin._types import Bbox, Filename
 from dolphin.utils import compute_out_shape, gdal_to_numpy_type, numpy_to_gdal_type
 
 gdal.UseExceptions()
+logger = get_log(__name__)
 
 __all__ = [
     "load_gdal",
     "write_arr",
     "write_block",
     "format_nc_filename",
+    "copy_projection",
     "get_raster_xysize",
     "get_raster_crs",
     "get_raster_bounds",
@@ -40,6 +41,12 @@ __all__ = [
     "get_raster_gt",
     "get_raster_driver",
     "get_raster_chunk_size",
+    "set_raster_metadata",
+    "DEFAULT_ENVI_OPTIONS",
+    "DEFAULT_DATETIME_FORMAT",
+    "DEFAULT_HDF5_OPTIONS",
+    "DEFAULT_TIFF_OPTIONS",
+    "DEFAULT_TILE_SIZE",
 ]
 
 
@@ -60,7 +67,6 @@ DEFAULT_HDF5_OPTIONS = {
     "compression_opts": 4,
     "shuffle": True,
 }
-logger = get_log(__name__)
 
 
 def load_gdal(
@@ -202,15 +208,6 @@ def format_nc_filename(filename: Filename, ds_name: Optional[str] = None) -> str
         raise ValueError(msg)
 
     return f'NETCDF:"{filename}":"//{ds_name.lstrip("/")}"'
-
-
-def _assert_images_same_size(files):
-    """Ensure all files are the same size."""
-    with ThreadPoolExecutor(5) as executor:
-        sizes = list(executor.map(get_raster_xysize, files))
-    if len(set(sizes)) > 1:
-        msg = f"Not files have same raster (x, y) size:\n{set(sizes)}"
-        raise ValueError(msg)
 
 
 def copy_projection(src_file: Filename, dst_file: Filename) -> None:

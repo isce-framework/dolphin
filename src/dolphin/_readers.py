@@ -744,7 +744,7 @@ class VRTStack(StackReader):
         self.subdataset = subdataset
 
         if not skip_size_check:
-            io._assert_images_same_size(self._gdal_file_strings)
+            _assert_images_same_size(self._gdal_file_strings)
 
         # Use the first file in the stack to get size, transform info
         ds = gdal.Open(fspath(self._gdal_file_strings[0]))
@@ -966,6 +966,15 @@ def _parse_vrt_file(vrt_file):
             filepaths.append(name)
 
     return filepaths, sds
+
+
+def _assert_images_same_size(files):
+    """Ensure all files are the same size."""
+    with ThreadPoolExecutor(5) as executor:
+        sizes = list(executor.map(io.get_raster_xysize, files))
+    if len(set(sizes)) > 1:
+        msg = f"Not files have same raster (x, y) size:\n{set(sizes)}"
+        raise ValueError(msg)
 
 
 class EagerLoader(BackgroundReader):

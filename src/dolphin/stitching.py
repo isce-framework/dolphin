@@ -235,7 +235,7 @@ def merge_images(
         ndv = str(in_nodata) if in_nodata is not None else str(combined_nodata)
         args.extend(["-n", ndv])
     if out_dtype is not None:
-        out_gdal_dtype = gdal.GetDataTypeName(io.numpy_to_gdal_type(out_dtype))
+        out_gdal_dtype = gdal.GetDataTypeName(utils.numpy_to_gdal_type(out_dtype))
         args.extend(["-ot", out_gdal_dtype])
     if target_aligned_pixels:
         args.append("-tap")
