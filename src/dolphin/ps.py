@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import shutil
 import warnings
-from collections import namedtuple
 from pathlib import Path
 from typing import Optional
 
@@ -14,23 +13,24 @@ from osgeo import gdal
 from dolphin import io, utils
 from dolphin._log import get_log
 from dolphin._types import Filename
-from dolphin.stack import VRTStack
+from dolphin.io import EagerLoader, StackReader
 
 gdal.UseExceptions()
 
 logger = get_log(__name__)
 
-PsFileOptions = namedtuple("PsFileOptions", ["ps", "amp_dispersion", "amp_mean"])
-NODATA_VALUES = PsFileOptions(255, 0, 0)
-FILE_DTYPES = PsFileOptions(np.uint8, np.float32, np.float32)
+NODATA_VALUES = {"ps": 255, "amp_dispersion": 0.0, "amp_mean": 0.0}
+
+FILE_DTYPES = {"ps": np.uint8, "amp_dispersion": np.float32, "amp_mean": np.float32}
 
 
 def create_ps(
     *,
-    slc_vrt_file: Filename,
+    reader: StackReader,
     output_file: Filename,
     output_amp_mean_file: Filename,
     output_amp_dispersion_file: Filename,
+    like_filename: Filename,
     amp_dispersion_threshold: float = 0.25,
     existing_amp_mean_file: Optional[Filename] = None,
     existing_amp_dispersion_file: Optional[Filename] = None,
@@ -43,14 +43,16 @@ def create_ps(
 
     Parameters
     ----------
-    slc_vrt_file : Filename
-        The VRT file pointing to the stack of SLCs.
+    reader : StackReader
+        A dataset reader for the 3D SLC stack.
     output_file : Filename
         The output PS file (dtype: Byte)
     output_amp_dispersion_file : Filename
         The output amplitude dispersion file.
     output_amp_mean_file : Filename
         The output mean amplitude file.
+    like_filename : Filename
+        The filename to use for the output files' spatial reference.
     amp_dispersion_threshold : float, optional
         The threshold for the amplitude dispersion. Default is 0.25.
     existing_amp_mean_file : Optional[Filename], optional
@@ -87,32 +89,32 @@ def create_ps(
     # Otherwise, we need to calculate the PS files from the SLC stack
     # Initialize the output files with zeros
     file_list = [output_file, output_amp_dispersion_file, output_amp_mean_file]
-    for fn, dtype, nodata in zip(file_list, FILE_DTYPES, NODATA_VALUES):
+    for fn, dtype, nodata in zip(
+        file_list, FILE_DTYPES.values(), NODATA_VALUES.values()
+    ):
         io.write_arr(
             arr=None,
-            like_filename=slc_vrt_file,
+            like_filename=like_filename,
             output_name=fn,
             nbands=1,
             dtype=dtype,
             nodata=nodata,
         )
-
-    vrt_stack = VRTStack.from_vrt_file(slc_vrt_file)
-
     # Initialize the intermediate arrays for the calculation
-    magnitude = np.zeros((len(vrt_stack), *block_shape), dtype=np.float32)
+    magnitude = np.zeros((reader.shape[0], *block_shape), dtype=np.float32)
 
     skip_empty = nodata_mask is None
 
-    writer = io.Writer()
+    writer = io.GdalWriter()
     # Make the generator for the blocks
-    block_gen = vrt_stack.iter_blocks(
+    block_gen = EagerLoader(
+        reader,
         block_shape=block_shape,
-        skip_empty=skip_empty,
         nodata_mask=nodata_mask,
+        skip_empty=skip_empty,
         show_progress=show_progress,
     )
-    for cur_data, (rows, cols) in block_gen:
+    for cur_data, (rows, cols) in block_gen.iter_blocks():
         cur_rows, cur_cols = cur_data.shape[-2:]
 
         if not (np.all(cur_data == 0) or np.all(np.isnan(cur_data))):
@@ -126,18 +128,23 @@ def create_ps(
 
             # Use the UInt8 type for the PS to save.
             # For invalid pixels, set to max Byte value
-            ps = ps.astype(FILE_DTYPES.ps)
-            ps[amp_disp == 0] = NODATA_VALUES.ps
+            ps = ps.astype(FILE_DTYPES["ps"])
+            ps[amp_disp == 0] = NODATA_VALUES["ps"]
         else:
             # Fill the block with nodata
-            ps = np.ones((cur_rows, cur_cols), dtype=FILE_DTYPES.ps) * NODATA_VALUES.ps
+            ps = (
+                np.ones((cur_rows, cur_cols), dtype=FILE_DTYPES["ps"])
+                * NODATA_VALUES["ps"]
+            )
             mean = np.full(
-                (cur_rows, cur_cols), NODATA_VALUES.amp_mean, dtype=FILE_DTYPES.amp_mean
+                (cur_rows, cur_cols),
+                NODATA_VALUES["amp_mean"],
+                dtype=FILE_DTYPES["amp_mean"],
             )
             amp_disp = np.full(
                 (cur_rows, cur_cols),
-                NODATA_VALUES.amp_dispersion,
-                dtype=FILE_DTYPES.amp_dispersion,
+                NODATA_VALUES["amp_dispersion"],
+                dtype=FILE_DTYPES["amp_dispersion"],
             )
 
         # Write amp dispersion and the mean blocks
@@ -202,7 +209,8 @@ def calc_ps_block(
     there is a higher false positive risk for these edge pixels.
     """
     if np.iscomplexobj(stack_mag):
-        raise ValueError("The input `stack_mag` must be real-valued.")
+        msg = "The input `stack_mag` must be real-valued."
+        raise ValueError(msg)
 
     if min_count is None:
         min_count = int(0.9 * stack_mag.shape[0])
@@ -239,12 +247,12 @@ def _use_existing_files(
     ps = amp_disp < amp_dispersion_threshold
     ps = ps.astype(np.uint8)
     # Set the PS nodata value to the max uint8 value
-    ps[(amp_disp == 0) | amp_disp.mask] = NODATA_VALUES.ps
+    ps[(amp_disp == 0) | amp_disp.mask] = NODATA_VALUES["ps"]
     io.write_arr(
         arr=ps,
         like_filename=existing_amp_dispersion_file,
         output_name=output_file,
-        nodata=NODATA_VALUES.ps,
+        nodata=NODATA_VALUES["ps"],
     )
     # Copy the existing amp mean file/amp dispersion file
     shutil.copy(existing_amp_dispersion_file, output_amp_dispersion_file)

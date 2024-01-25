@@ -1,12 +1,21 @@
 # dolphin
 [![Pytest and build docker image](https://github.com/isce-framework/dolphin/actions/workflows/test-build-push.yml/badge.svg?branch=main)](https://github.com/isce-framework/dolphin/actions/workflows/test-build-push.yml)
 [![pre-commit.ci status](https://results.pre-commit.ci/badge/github/isce-framework/dolphin/main.svg)](https://results.pre-commit.ci/latest/github/isce-framework/dolphin/main)
+[![Conda-Forge][conda-badge]][conda-link]
+<!-- [![PyPI version][pypi-version]][pypi-link] -->
+<!-- [![PyPI platforms][pypi-platforms]][pypi-link] -->
+
+<!-- prettier-ignore-start -->
+[conda-badge]:              https://img.shields.io/conda/vn/conda-forge/dolphin
+[conda-link]:               https://github.com/conda-forge/dolphin-feedstock
+[pypi-link]:                https://pypi.org/project/dolphin/
+[pypi-platforms]:           https://img.shields.io/pypi/pyversions/dolphin
+[pypi-version]:             https://img.shields.io/pypi/v/dolphin
+<!-- prettier-ignore-end -->
 
 High resolution wrapped phase estimation for InSAR using combined PS/DS processing.
 
 <!-- DeformatiOn Land surface Products in High resolution using INsar -->
-
-
 
 ## Install
 
@@ -16,12 +25,13 @@ High resolution wrapped phase estimation for InSAR using combined PS/DS processi
 # if mamba is not already installed: conda install -n base mamba
 mamba install -c conda-forge dolphin
 ```
-(Note: [using `mamba`](https://mamba.readthedocs.io/en/latest/mamba-installation.html#mamba-install) is recommended for conda-forge packages, but miniconda can also be used.)
 
+(Note: [using `mamba`](https://mamba.readthedocs.io/en/latest/mamba-installation.html#mamba-install) is recommended for conda-forge packages, but miniconda can also be used.)
 
 `dolphin` has the ability to unwrap interferograms using `isce3`'s python bindings to [SNAPHU](https://web.stanford.edu/group/radar/softwareandlinks/sw/snaphu/).
 It is also integrated with [`tophu`](https://github.com/isce-framework/tophu) to unwrap large interferograms in parallel tiles at multiple resolution.
 To install both dolphin and tophu through conda-forge, run
+
 ```bash
 mamba install -c conda-forge tophu dolphin
 ```

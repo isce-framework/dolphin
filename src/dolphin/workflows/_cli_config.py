@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 from __future__ import annotations
 
 import argparse
@@ -7,7 +6,14 @@ from multiprocessing import cpu_count
 from pathlib import Path
 from typing import Optional, Union
 
-from .config import InterferogramNetworkType, ShpMethod, UnwrapMethod, Workflow
+from dolphin._types import TropoModel, TropoType
+
+from .config import (
+    DisplacementWorkflow,
+    InterferogramNetworkType,
+    ShpMethod,
+    UnwrapMethod,
+)
 
 
 def create_config(
@@ -16,7 +22,7 @@ def create_config(
     slc_files: Optional[list[str]] = None,
     subdataset: Optional[str] = None,
     keep_paths_relative: bool = False,
-    work_directory: Optional[Path] = Path("."),
+    work_directory: Optional[Path] = Path(),
     mask_file: Optional[str] = None,
     ministack_size: Optional[int] = 15,
     half_window_size: tuple[int, int] = (11, 5),
@@ -30,68 +36,88 @@ def create_config(
     no_gpu: bool = False,
     ntiles: tuple[int, int] = (1, 1),
     downsample_factor: tuple[int, int] = (1, 1),
+    no_unwrap: bool = False,
     n_parallel_unwrap: int = 1,
     unwrap_method: UnwrapMethod = UnwrapMethod.SNAPHU,
-    troposphere_files: list[str] = [],
-    ionosphere_files: list[str] = [],
-    geometry_files: list[str] = [],
+    troposphere_files: Optional[list[str]] = None,
+    tropo_date_fmt: str = "%Y%m%d",
+    tropo_package: str = "pyaps",
+    tropo_model: TropoModel = TropoModel.ERA5,
+    tropo_delay_type: TropoType = TropoType.COMB,
+    ionosphere_files: Optional[list[str]] = None,
+    geometry_files: Optional[list[str]] = None,
     dem_file: Optional[str] = None,
     single_update: bool = False,
     log_file: Optional[Path] = None,
-    amplitude_mean_files: list[str] = [],
-    amplitude_dispersion_files: list[str] = [],
+    amplitude_mean_files: Optional[list[str]] = None,
+    amplitude_dispersion_files: Optional[list[str]] = None,
 ):
     """Create a config for a displacement workflow."""
+    if amplitude_dispersion_files is None:
+        amplitude_dispersion_files = []
+    if amplitude_mean_files is None:
+        amplitude_mean_files = []
+    if geometry_files is None:
+        geometry_files = []
+    if ionosphere_files is None:
+        ionosphere_files = []
+    if troposphere_files is None:
+        troposphere_files = []
     if single_update:
         # create only one interferogram from the first and last SLC images
-        interferogram_network = dict(
-            network_type=InterferogramNetworkType.MANUAL_INDEX,
-            indexes=[(0, -1)],
-        )
+        interferogram_network = {
+            "network_type": InterferogramNetworkType.MANUAL_INDEX,
+            "indexes": [(0, -1)],
+        }
         # Override the ministack size so that only one phase linking is run
         ministack_size = 1000
     else:
         interferogram_network = {}  # Use default
 
-    cfg = Workflow(
+    cfg = DisplacementWorkflow(
         cslc_file_list=slc_files,
         work_directory=work_directory,
         keep_paths_relative=keep_paths_relative,
         mask_file=mask_file,
-        input_options=dict(
-            subdataset=subdataset,
-        ),
+        input_options={
+            "subdataset": subdataset,
+        },
         interferogram_network=interferogram_network,
-        output_options=dict(
-            strides={"x": strides[0], "y": strides[1]},
-        ),
-        phase_linking=dict(
-            ministack_size=ministack_size,
-            half_window={"x": half_window_size[0], "y": half_window_size[1]},
-            shp_method=shp_method,
-        ),
-        ps_options=dict(
-            amp_dispersion_threshold=amp_dispersion_threshold,
-        ),
-        unwrap_options=dict(
-            unwrap_method=unwrap_method,
-            ntiles=ntiles,
-            downsample_factor=downsample_factor,
-            n_parallel_jobs=n_parallel_unwrap,
-        ),
-        correction_options=dict(
-            troposphere_files=troposphere_files,
-            ionosphere_files=ionosphere_files,
-            geometry_files=geometry_files,
-            dem_file=dem_file,
-        ),
-        worker_settings=dict(
-            block_shape=block_shape,
-            n_parallel_bursts=n_parallel_bursts,
-            n_workers=n_workers,
-            threads_per_worker=threads_per_worker,
-            gpu_enabled=(not no_gpu),
-        ),
+        output_options={
+            "strides": {"x": strides[0], "y": strides[1]},
+        },
+        phase_linking={
+            "ministack_size": ministack_size,
+            "half_window": {"x": half_window_size[0], "y": half_window_size[1]},
+            "shp_method": shp_method,
+        },
+        ps_options={
+            "amp_dispersion_threshold": amp_dispersion_threshold,
+        },
+        unwrap_options={
+            "unwrap_method": unwrap_method,
+            "ntiles": ntiles,
+            "downsample_factor": downsample_factor,
+            "n_parallel_jobs": n_parallel_unwrap,
+            "run_unwrap": not no_unwrap,
+        },
+        correction_options={
+            "troposphere_files": troposphere_files,
+            "tropo_date_fmt": tropo_date_fmt,
+            "tropo_package": tropo_package,
+            "tropo_model": tropo_model,
+            "tropo_delay_type": tropo_delay_type,
+            "ionosphere_files": ionosphere_files,
+            "geometry_files": geometry_files,
+            "dem_file": dem_file,
+        },
+        worker_settings={
+            "block_shape": block_shape,
+            "n_parallel_bursts": n_parallel_bursts,
+            "n_workers": n_workers,
+            "threads_per_worker": threads_per_worker,
+            "gpu_enabled": (not no_gpu),
+        },
         log_file=log_file,
         amplitude_mean_files=amplitude_mean_files,
         amplitude_dispersion_files=amplitude_dispersion_files,
@@ -100,18 +126,18 @@ def create_config(
     if outfile == "-":  # Write to stdout
         cfg.to_yaml(sys.stdout)
     else:
-        print(f"Saving configuration to {str(outfile)}", file=sys.stderr)
+        print(f"Saving configuration to {outfile!s}", file=sys.stderr)
         cfg.to_yaml(outfile)
 
 
 def get_parser(subparser=None, subcommand_name="run"):
     """Set up the command line interface."""
-    metadata = dict(
-        description="Create a configuration file for a displacement workflow.",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    metadata = {
+        "description": "Create a configuration file for a displacement workflow.",
+        "formatter_class": argparse.ArgumentDefaultsHelpFormatter,
         # https://docs.python.org/3/library/argparse.html#fromfile-prefix-chars
-        fromfile_prefix_chars="@",
-    )
+        "fromfile_prefix_chars": "@",
+    }
     if subparser:
         # Used by the subparser to make a nested command line interface
         parser = subparser.add_parser(subcommand_name, **metadata)
@@ -204,6 +230,9 @@ def get_parser(subparser=None, subcommand_name="run"):
     # Unwrap options
     unwrap_group = parser.add_argument_group("Unwrap options")
     unwrap_group.add_argument(
+        "--no-unwrap", action="store_true", help="Skip running the unwrapping step."
+    )
+    unwrap_group.add_argument(
         "--unwrap-method",
         choices=[m.value for m in UnwrapMethod],
         default=UnwrapMethod.SNAPHU,
@@ -244,6 +273,30 @@ def get_parser(subparser=None, subcommand_name="run"):
         "--troposphere-files",
         nargs=argparse.ZERO_OR_MORE,
         help="List the paths of all troposphere files to include.",
+    )
+    correction_group.add_argument(
+        "--tropo-date-fmt",
+        default="%Y%m%d",
+        help="Format of dates contained in weather-model filenames.",
+    )
+    correction_group.add_argument(
+        "--tropo-package",
+        default="pyaps",
+        help="Package to use for tropospheric correction. Choices are: pyaps, raider.",
+    )
+    correction_group.add_argument(
+        "--tropo-model",
+        default=TropoModel.ERA5.value,
+        choices=[t.value for t in TropoModel],
+        type=TropoModel,
+        help="source of the atmospheric model.",
+    )
+    correction_group.add_argument(
+        "--tropo-delay_type",
+        default=TropoType.COMB.value,
+        type=TropoType,
+        help="Tropospheric delay type: comb contains both wet and dry delays",
+        choices=[t.value for t in TropoType],
     )
     correction_group.add_argument(
         "--ionosphere-files",
@@ -287,7 +340,7 @@ def get_parser(subparser=None, subcommand_name="run"):
     worker_group.add_argument(
         "--work-directory",
         type=Path,
-        default=Path(".").resolve(),
+        default=Path().resolve(),
         help="Path to directory to store intermediate/output files.",
     )
     worker_group.add_argument(

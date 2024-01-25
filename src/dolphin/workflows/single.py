@@ -1,10 +1,11 @@
-"""Estimate wrapped phase for one updated SLC using the online algorithm.
+"""Estimate wrapped phase for one ministack of SLCs.
 
 References
 ----------
     .. [1] Mirzaee, Sara, Falk Amelung, and Heresh Fattahi. "Non-linear phase
     linking using joined distributed and persistent scatterers." Computers &
     Geosciences (2022): 105291.
+
 """
 from __future__ import annotations
 
@@ -14,16 +15,16 @@ from typing import Optional
 
 import numpy as np
 from numpy.typing import DTypeLike
-from osgeo import gdal
 
-from dolphin import io, shp, utils
-from dolphin._blocks import BlockManager
+from dolphin import io, shp
+from dolphin._decorators import atomic_output
 from dolphin._log import get_log
 from dolphin._types import Filename
+from dolphin.io import BlockManager, EagerLoader, VRTStack
 from dolphin.phase_link import PhaseLinkRuntimeError, compress, run_mle
-from dolphin.stack import VRTStack
+from dolphin.stack import MiniStackInfo
 
-from ._enums import ShpMethod
+from .config import ShpMethod
 
 logger = get_log(__name__)
 
@@ -37,12 +38,14 @@ class OutputFile:
     strides: Optional[dict[str, int]] = None
 
 
+@atomic_output(output_arg="output_folder", is_dir=True)
 def run_wrapped_phase_single(
     *,
     slc_vrt_file: Filename,
+    ministack: MiniStackInfo,
     output_folder: Filename,
     half_window: dict,
-    strides: dict = {"x": 1, "y": 1},
+    strides: Optional[dict] = None,
     reference_idx: int = 0,
     beta: float = 0.01,
     use_evd: bool = False,
@@ -56,96 +59,70 @@ def run_wrapped_phase_single(
     block_shape: tuple[int, int] = (1024, 1024),
     n_workers: int = 1,
     gpu_enabled: bool = True,
-    show_progress: bool = False,
-) -> tuple[list[Path], Path, Path]:
-    """Estimate wrapped phase for one ministack."""
+    # show_progress: bool = False,
+):
+    """Estimate wrapped phase for one ministack.
+
+    Output files will all be placed in the provided `output_folder`.
+    """
     # TODO: extract common stuff between here and sequential
+    if strides is None:
+        strides = {"x": 1, "y": 1}
     output_folder = Path(output_folder)
     vrt = VRTStack.from_vrt_file(slc_vrt_file)
-    input_slc_files = vrt.file_list
-    input_slc_dates = vrt.dates
+    input_slc_files = ministack.file_list
+    assert len(input_slc_files) == vrt.shape[0]
 
     # If we are using a different number of SLCs for the amplitude data,
     # we should note that for the SHP finding algorithms
     if shp_nslc is None:
         shp_nslc = len(input_slc_files)
 
-    logger.info(f"{vrt}: from {vrt.file_list[0]} to {vrt.file_list[-1]}")
+    logger.info(f"{vrt}: from {ministack.dates[0]} {ministack.file_list[-1]}")
 
     nrows, ncols = vrt.shape[-2:]
-    if mask_file is not None:
-        # The mask file will by 0s at invalid data, 1s at good
-        nodata_mask = io.load_gdal(mask_file, masked=True).astype(bool).filled(False)
-        # invert the mask so 1s are the missing data pixels
-        nodata_mask = ~nodata_mask
-        # check middle pixel
-        if nodata_mask[nrows // 2, ncols // 2]:
-            logger.warning(f"{mask_file} is True at {nrows//2, ncols//2}")
-            logger.warning("Proceeding without the nodata mask.")
-            nodata_mask = np.zeros((nrows, ncols), dtype=bool)
-    else:
-        nodata_mask = np.zeros((nrows, ncols), dtype=bool)
 
-    if ps_mask_file is not None:
-        ps_mask = io.load_gdal(ps_mask_file, masked=True)
-        # Fill the nodata values with false
-        ps_mask = ps_mask.astype(bool).filled(False)
-    else:
-        ps_mask = np.zeros_like(nodata_mask)
-
-    if amp_mean_file is not None and amp_dispersion_file is not None:
-        # Note: have to fill, since numba (as of 0.57) can't do masked arrays
-        amp_mean = io.load_gdal(amp_mean_file, masked=True).filled(np.nan)
-        amp_dispersion = io.load_gdal(amp_dispersion_file, masked=True).filled(np.nan)
-        # convert back to variance from dispersion: amp_disp = std_dev / mean
-        amp_variance = (amp_dispersion * amp_mean) ** 2
-    else:
-        amp_mean = amp_variance = None
-    amp_stack = None
+    nodata_mask = _get_nodata_mask(mask_file, nrows, ncols)
+    ps_mask = _get_ps_mask(ps_mask_file, nrows, ncols)
+    amp_mean, amp_variance = _get_amp_mean_variance(amp_mean_file, amp_dispersion_file)
+    amp_stack: Optional[np.ndarray] = None
 
     xhalf, yhalf = half_window["x"], half_window["y"]
 
     # If we were passed any compressed SLCs in `input_slc_files`,
     # then we want that index for when we create new compressed SLCs.
     # We skip the old compressed SLCs to create new ones
-    first_non_comp_idx = 0
-    for filename in input_slc_files:
-        if not Path(filename).name.startswith("compressed"):
-            break
-        first_non_comp_idx += 1
-
-    # Make the output folder using the start/end dates
-    d0 = input_slc_dates[first_non_comp_idx][0]
-    d1 = input_slc_dates[-1][0]
-    start_end = io._format_date_pair(d0, d1)
+    first_real_slc_idx = ministack.first_real_slc_idx
 
     msg = (
-        f"Processing {len(input_slc_files) - first_non_comp_idx} SLCs +"
-        f" {first_non_comp_idx} compressed SLCs. "
+        f"Processing {len(input_slc_files) - first_real_slc_idx} SLCs +"
+        f" {first_real_slc_idx} compressed SLCs. "
     )
     logger.info(msg)
 
     # Create the background writer for this ministack
-    writer = io.Writer(debug=False)
+    writer = io.GdalWriter(debug=False)
 
-    logger.info(
-        f"{vrt}: from {Path(vrt.file_list[first_non_comp_idx]).name} to"
-        f" {Path(vrt.file_list[-1]).name}"
-    )
     logger.info(f"Total stack size (in pixels): {vrt.shape}")
     # Set up the output folder with empty files to write into
     phase_linked_slc_files = setup_output_folder(
-        vrt,
+        ministack=ministack,
         driver="GTiff",
-        start_idx=first_non_comp_idx,
         strides=strides,
         output_folder=output_folder,
+        like_filename=vrt.outfile,
         nodata=0,
     )
 
+    comp_slc_info = ministack.get_compressed_slc_info()
+
+    # Use the real-SLC date range for output file naming
+    start_end = ministack.real_slc_date_range_str
     output_files: list[OutputFile] = [
-        OutputFile(output_folder / f"compressed_{start_end}.tif", np.complex64),
-        OutputFile(output_folder / f"tcorr_{start_end}.tif", np.float32, strides),
+        OutputFile(output_folder / comp_slc_info.filename, np.complex64),
+        OutputFile(
+            output_folder / f"temporal_coherence_{start_end}.tif", np.float32, strides
+        ),
         OutputFile(output_folder / f"avg_coh_{start_end}.tif", np.uint16, strides),
         OutputFile(output_folder / f"shp_counts_{start_end}.tif", np.uint16, strides),
     ]
@@ -167,15 +144,15 @@ def run_wrapped_phase_single(
         strides=strides,
         half_window=half_window,
     )
-    # block_gen = vrt.iter_blocks(
-    #     block_shape=block_shape,
-    #     overlaps=overlaps,
-    #     skip_empty=True,
-    #     nodata_mask=nodata_mask,
-    #     show_progress=show_progress,
-    # )
-    # for cur_data, (rows, cols) in block_gen:
-    blocks = list(block_manager.iter_blocks())
+    loader = EagerLoader(reader=vrt, block_shape=block_shape)
+    blocks = []
+    # Queue all input slices, skip ones that are all nodata
+    for out, trimmed, (in_rows, in_cols), padded in block_manager.iter_blocks():
+        if nodata_mask[in_rows, in_cols].all():
+            continue
+        loader.queue_read(in_rows, in_cols)
+        blocks.append((out, trimmed, (in_rows, in_cols), padded))
+
     logger.info(f"Iterating over {block_shape} blocks, {len(blocks)} total")
     for (
         (out_rows, out_cols),
@@ -184,9 +161,13 @@ def run_wrapped_phase_single(
         (in_no_pad_rows, in_no_pad_cols),
     ) in blocks:
         logger.debug(f"{out_rows = }, {out_cols = }, {in_rows = }, {in_no_pad_rows = }")
-        cur_data = vrt.read_stack(rows=in_rows, cols=in_cols)
-        if np.all(cur_data == 0):
+
+        # cur_data = vrt[:, in_rows, in_cols]
+        cur_data, (read_rows, read_cols) = loader.get_data()
+        if np.all(cur_data == 0) or np.isnan(cur_data).all():
             continue
+        assert read_rows == in_rows and read_cols == in_cols
+
         cur_data = cur_data.astype(np.complex64)
 
         if shp_method == "ks":
@@ -204,13 +185,10 @@ def run_wrapped_phase_single(
             amp_stack=amp_stack,
             method=shp_method,
         )
-        # # Run the phase linking process on the current ministack
-        # TODO: Currently trying to use the latest-in-time compressed SLC as
-        # the reference (and we're assuming all compressed SLCs have the
-        # same "base phase")
-        reference_idx = max(0, first_non_comp_idx - 1)
+        # Run the phase linking process on the current ministack
+        reference_idx = max(0, first_real_slc_idx - 1)
         try:
-            cur_mle_stack, tcorr, avg_coh = run_mle(
+            cur_mle_stack, temp_coh, avg_coh = run_mle(
                 cur_data,
                 half_window=half_window,
                 strides=strides,
@@ -239,14 +217,14 @@ def run_wrapped_phase_single(
 
         # Fill in the nan values with 0
         np.nan_to_num(cur_mle_stack, copy=False)
-        np.nan_to_num(tcorr, copy=False)
+        np.nan_to_num(temp_coh, copy=False)
 
         # Save each of the MLE estimates (ignoring those corresponding to
         # compressed SLCs indexes)
-        assert len(cur_mle_stack[first_non_comp_idx:]) == len(phase_linked_slc_files)
+        assert len(cur_mle_stack[first_real_slc_idx:]) == len(phase_linked_slc_files)
 
         for img, f in zip(
-            cur_mle_stack[first_non_comp_idx:, trimmed_rows, trimmed_cols],
+            cur_mle_stack[first_real_slc_idx:, trimmed_rows, trimmed_cols],
             phase_linked_slc_files,
         ):
             writer.queue_write(img, f, out_rows.start, out_cols.start)
@@ -263,8 +241,8 @@ def run_wrapped_phase_single(
         )
         # Compress the ministack using only the non-compressed SLCs
         cur_comp_slc = compress(
-            cur_data[first_non_comp_idx:, trim_full_row, trim_full_col],
-            cur_mle_stack[first_non_comp_idx:, trimmed_rows, trimmed_cols],
+            cur_data[first_real_slc_idx:, trim_full_row, trim_full_col],
+            cur_mle_stack[first_real_slc_idx:, trimmed_rows, trimmed_cols],
         )
 
         # ### Save results ###
@@ -278,7 +256,7 @@ def run_wrapped_phase_single(
         )
 
         # All other outputs are strided (smaller in size)
-        out_datas = [tcorr, avg_coh, shp_counts]
+        out_datas = [temp_coh, avg_coh, shp_counts]
         for data, output_file in zip(out_datas, output_files[1:]):
             if data is None:  # May choose to skip some outputs, e.g. "avg_coh"
                 continue
@@ -294,62 +272,68 @@ def run_wrapped_phase_single(
     writer.notify_finished()
     logger.info(f"Finished ministack of size {vrt.shape}.")
 
-    comp_slc_file, tcorr_file = output_files[0:2]
+    written_comp_slc = output_files[0]
 
-    input_compressed_files = input_slc_files[:first_non_comp_idx]
-    input_real_slc_files = input_slc_files[first_non_comp_idx:]
-    _save_compressed_metadata(
-        comp_slc_file.filename, input_real_slc_files, input_compressed_files
-    )
-    # TODO: what would make most sense to return here?
-    # return phase_linked_slc_files, comp_slc_file, tcorr_file
-    return phase_linked_slc_files, comp_slc_file.filename, tcorr_file.filename
+    ccslc_info = ministack.get_compressed_slc_info()
+    ccslc_info.write_metadata(output_file=written_comp_slc.filename)
+    # TODO: Does it make sense to return anything from this?
+    # or just allow user to search through the `output_folder` they provided?
 
 
-def _save_compressed_metadata(
-    comp_slc_file: Path,
-    input_real_slc_files: list[Filename],
-    input_compressed_files: list[Filename],
-):
-    """Save metadata about the compressed SLCs.
+def _get_nodata_mask(
+    mask_file: Optional[Filename],
+    nrows: int,
+    ncols: int,
+) -> np.ndarray:
+    if mask_file is not None:
+        # The mask file will by -2s at invalid data, 1s at good
+        nodata_mask = io.load_gdal(mask_file, masked=True).astype(bool).filled(False)
+        # invert the mask so -1s are the missing data pixels
+        nodata_mask = ~nodata_mask
+        # check middle pixel
+        if nodata_mask[nrows // 2, ncols // 2]:
+            logger.warning(f"{mask_file} is True at {nrows//2, ncols//2}")
+            logger.warning("Proceeding without the nodata mask.")
+            nodata_mask = np.zeros((nrows, ncols), dtype=bool)
+    else:
+        nodata_mask = np.zeros((nrows, ncols), dtype=bool)
+    return nodata_mask
 
-    The filenames will be stored in GDAL metadata as a list of strings, separated
-    by commas, saved into the "DOLPHIN" domain.
 
-    Parameters
-    ----------
-    comp_slc_file : Path
-        Path to the compressed SLC file
-    input_real_slc_files : list[Path]
-        List of input SLC files that were used to create the compressed SLC
-    input_compressed_files : list[Path]
-        List of input compressed SLC files that were used in the ministack
-        which produced the phase linking result used the compressed SLCs.
-        Note that these were not included in the dot product, but were used
-        by the phase linking optimization.
-    """
-    comp_ds = gdal.Open(str(comp_slc_file), gdal.GA_Update)
-    real_names = [utils._get_path_from_gdal_str(p).name for p in input_real_slc_files]
-    comp_ds.SetMetadataItem(
-        "input_real_slc_files",
-        ",".join(map(str, real_names)),
-        "DOLPHIN",
-    )
-    comp_names = [utils._get_path_from_gdal_str(p).name for p in input_compressed_files]
-    comp_ds.SetMetadataItem(
-        "input_compressed_slc_files",
-        ",".join(map(str, comp_names)),
-        "DOLPHIN",
-    )
-    comp_ds.FlushCache()
+def _get_ps_mask(
+    ps_mask_file: Optional[Filename], nrows: int, ncols: int
+) -> np.ndarray:
+    if ps_mask_file is not None:
+        ps_mask = io.load_gdal(ps_mask_file, masked=True)
+        # Fill the nodata values with false
+        ps_mask = ps_mask.astype(bool).filled(False)
+    else:
+        ps_mask = np.zeros((nrows, ncols), dtype=bool)
+    return ps_mask
+
+
+def _get_amp_mean_variance(
+    amp_mean_file: Optional[Filename],
+    amp_dispersion_file: Optional[Filename],
+) -> tuple[np.ndarray, np.ndarray]:
+    if amp_mean_file is not None and amp_dispersion_file is not None:
+        # Note: have to fill, since numba (as of 0.57) can't do masked arrays
+        amp_mean = io.load_gdal(amp_mean_file, masked=True).filled(np.nan)
+        amp_dispersion = io.load_gdal(amp_dispersion_file, masked=True).filled(np.nan)
+        # convert back to variance from dispersion: amp_disp = std_dev / mean
+        amp_variance = (amp_dispersion * amp_mean) ** 2
+    else:
+        amp_mean = amp_variance = None
+
+    return amp_mean, amp_variance
 
 
 def setup_output_folder(
-    vrt_stack,
+    ministack: MiniStackInfo,
     driver: str = "GTiff",
     dtype="complex64",
-    start_idx: int = 0,
-    strides: dict[str, int] = {"y": 1, "x": 1},
+    like_filename: Optional[Filename] = None,
+    strides: Optional[dict[str, int]] = None,
     nodata: Optional[float] = 0,
     output_folder: Optional[Path] = None,
 ) -> list[Path]:
@@ -360,16 +344,15 @@ def setup_output_folder(
 
     Parameters
     ----------
-    vrt_stack : VRTStack
-        object containing the current stack of SLCs
+    ministack : MiniStackInfo
+        [dolphin.stack.MiniStackInfo][] object for the current batch of SLCs
     driver : str, optional
         Name of GDAL driver, by default "GTiff"
     dtype : str, optional
         Numpy datatype of output files, by default "complex64"
-    start_idx : int, optional
-        Index of vrt_stack to begin making output files.
-        This should match the ministack index to avoid re-creating the
-        past compressed SLCs.
+    like_filename : Filename, optional
+        Filename to use for getting the shape/GDAL metadata of the output files.
+        If None, will use the first SLC in `vrt_stack`
     strides : dict[str, int], optional
         Strides to use when creating the empty files, by default {"y": 1, "x": 1}
         Larger strides will create smaller output files, computed using
@@ -385,18 +368,17 @@ def setup_output_folder(
     list[Path]
         list of saved empty files for the outputs of phase linking
     """
+    if strides is None:
+        strides = {"y": 1, "x": 1}
     if output_folder is None:
-        output_folder = vrt_stack.outfile.parent
+        output_folder = ministack.output_folder
+    # Note: DONT use the ministack.output_folder here, since that will
+    # be the tempdir made by @atomic_output
+    # # output_folder = Path(ministack.output_folder)
+    output_folder.mkdir(exist_ok=True, parents=True)
 
-    date_strs: list[str] = []
-    for d in vrt_stack.dates[start_idx:]:
-        if len(d) == 1:
-            # normal SLC files will have a single date
-            s = d[0].strftime(io.DEFAULT_DATETIME_FORMAT)
-        else:
-            # Compressed SLCs will have 2 dates in the name marking the start and end
-            s = io._format_date_pair(d[0], d[1])
-        date_strs.append(s)
+    start_idx = ministack.first_real_slc_idx
+    date_strs = ministack.get_date_str_list()[start_idx:]
 
     phase_linked_slc_files = []
     for filename in date_strs:
@@ -405,7 +387,7 @@ def setup_output_folder(
 
         io.write_arr(
             arr=None,
-            like_filename=vrt_stack.outfile,
+            like_filename=like_filename,
             output_name=output_path,
             driver=driver,
             nbands=1,

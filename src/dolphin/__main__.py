@@ -1,4 +1,5 @@
 """Main module to provide command line interface to the workflows."""
+
 import sys
 
 from .cli import main

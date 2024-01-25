@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+import datetime
 import os
 from pathlib import Path
 
@@ -8,7 +11,9 @@ from osgeo import gdal
 
 # https://numba.readthedocs.io/en/stable/user/threading-layer.html#example-of-limiting-the-number-of-threads
 if not os.environ.get("NUMBA_NUM_THREADS"):
-    os.environ["NUMBA_NUM_THREADS"] = str(min(os.cpu_count(), 16))  # type: ignore
+    os.environ["NUMBA_NUM_THREADS"] = str(min(os.cpu_count(), 16))  # type: ignore[type-var]
+
+from opera_utils import OPERA_DATASET_NAME
 
 from dolphin.io import load_gdal, write_arr
 from dolphin.phase_link import simulate
@@ -17,7 +22,7 @@ NUM_ACQ = 30
 
 
 # https://github.com/pytest-dev/pytest/issues/667#issuecomment-112206152
-@pytest.fixture
+@pytest.fixture()
 def random():
     np.random.seed(1234)
     simulate._seed(1234)
@@ -30,25 +35,35 @@ def slc_stack():
     data = np.random.normal(0, sigma, size=shape) + 1j * np.random.normal(
         0, sigma, size=shape
     )
-    data = data.astype(np.complex64)
-    return data
+    return data.astype(np.complex64)
 
 
 @pytest.fixture()
-def slc_file_list(tmp_path, slc_stack):
+def slc_date_list(slc_stack):
+    start_date = datetime.datetime(2022, 1, 1)
+    out = []
+    dt = datetime.timedelta(days=1)
+    for i in range(len(slc_stack)):
+        out.append(start_date + i * dt)
+
+    return out
+
+
+@pytest.fixture()
+def slc_file_list(tmp_path, slc_stack, slc_date_list):
     shape = slc_stack.shape
     # Write to a file
     driver = gdal.GetDriverByName("GTiff")
-    start_date = 20220101
     d = tmp_path / "gtiff"
     d.mkdir()
     name_template = d / "{date}.slc.tif"
+
     file_list = []
-    for i in range(shape[0]):
-        fname = str(name_template).format(date=str(start_date + i))
+    for cur_date, cur_slc in zip(slc_date_list, slc_stack):
+        fname = str(name_template).format(date=cur_date.strftime("%Y%m%d"))
         file_list.append(Path(fname))
         ds = driver.Create(fname, shape[-1], shape[-2], 1, gdal.GDT_CFloat32)
-        ds.GetRasterBand(1).WriteArray(slc_stack[i])
+        ds.GetRasterBand(1).WriteArray(cur_slc)
         ds = None
 
     # Write the list of SLC files to a text file
@@ -58,16 +73,15 @@ def slc_file_list(tmp_path, slc_stack):
 
 
 @pytest.fixture()
-def slc_file_list_nc(tmp_path, slc_stack):
+def slc_file_list_nc(tmp_path, slc_stack, slc_date_list):
     """Save the slc stack as a series of NetCDF files."""
-    start_date = 20220101
     d = tmp_path / "32615"
     d.mkdir()
     name_template = d / "{date}.nc"
     file_list = []
-    for i in range(len(slc_stack)):
-        fname = str(name_template).format(date=str(start_date + i))
-        create_test_nc(fname, epsg=32615, subdir="/", data=slc_stack[i])
+    for cur_date, cur_slc in zip(slc_date_list, slc_stack):
+        fname = str(name_template).format(date=cur_date.strftime("%Y%m%d"))
+        create_test_nc(fname, epsg=32615, subdir="/", data=cur_slc)
         assert 'AUTHORITY["EPSG","32615"]]' in gdal.Open(fname).GetProjection()
         file_list.append(Path(fname))
 
@@ -78,17 +92,16 @@ def slc_file_list_nc(tmp_path, slc_stack):
 
 
 @pytest.fixture()
-def slc_file_list_nc_wgs84(tmp_path, slc_stack):
+def slc_file_list_nc_wgs84(tmp_path, slc_stack, slc_date_list):
     """Make one with lat/lon as the projection system."""
 
-    start_date = 20220101
     d = tmp_path / "wgs84"
     d.mkdir()
     name_template = d / "{date}.nc"
     file_list = []
-    for i in range(len(slc_stack)):
-        fname = str(name_template).format(date=str(start_date + i))
-        create_test_nc(fname, epsg=4326, subdir="/", data=slc_stack[i])
+    for cur_date, cur_slc in zip(slc_date_list, slc_stack):
+        fname = str(name_template).format(date=cur_date.strftime("%Y%m%d"))
+        create_test_nc(fname, epsg=4326, subdir="/", data=cur_slc)
         assert 'AUTHORITY["EPSG","4326"]]' in gdal.Open(fname).GetProjection()
         file_list.append(Path(fname))
 
@@ -98,19 +111,18 @@ def slc_file_list_nc_wgs84(tmp_path, slc_stack):
 
 
 @pytest.fixture()
-def slc_file_list_nc_with_sds(tmp_path, slc_stack):
+def slc_file_list_nc_with_sds(tmp_path, slc_stack, slc_date_list):
     """Save NetCDF files with multiple valid datsets."""
-    start_date = 20220101
     d = tmp_path / "nc_with_sds"
     name_template = d / "{date}.nc"
     d.mkdir()
     file_list = []
     subdirs = ["/data", "/data2"]
     ds_name = "VV"
-    for i in range(len(slc_stack)):
-        fname = str(name_template).format(date=str(start_date + i))
+    for cur_date, cur_slc in zip(slc_date_list, slc_stack):
+        fname = str(name_template).format(date=cur_date.strftime("%Y%m%d"))
         create_test_nc(
-            fname, epsg=32615, subdir=subdirs, data_ds_name=ds_name, data=slc_stack[i]
+            fname, epsg=32615, subdir=subdirs, data_ds_name=ds_name, data=cur_slc
         )
         # just point to one of them
         file_list.append(f"NETCDF:{fname}:{subdirs[0]}/{ds_name}")
@@ -126,7 +138,7 @@ def slc_file_list_nc_with_sds(tmp_path, slc_stack):
 
 @pytest.fixture(scope="session")
 def C_truth():
-    C, truth = simulate.simulate_C(
+    C, truth = simulate.simulate_coh(
         num_acq=NUM_ACQ,
         Tau0=72,
         gamma_inf=0.95,
@@ -137,7 +149,7 @@ def C_truth():
     return C, truth
 
 
-@pytest.fixture
+@pytest.fixture()
 def slc_samples(C_truth):
     C, _ = C_truth
     ns = 11 * 11
@@ -147,7 +159,7 @@ def slc_samples(C_truth):
 # General utils on loading data/attributes
 
 
-@pytest.fixture
+@pytest.fixture()
 def raster_100_by_200(tmp_path):
     ysize, xsize = 100, 200
     # Create a test raster
@@ -163,7 +175,7 @@ def raster_100_by_200(tmp_path):
     return filename
 
 
-@pytest.fixture
+@pytest.fixture()
 def tiled_raster_100_by_200(tmp_path):
     ysize, xsize = 100, 200
     tile_size = [32, 32]
@@ -189,7 +201,7 @@ def tiled_raster_100_by_200(tmp_path):
     return filename
 
 
-@pytest.fixture
+@pytest.fixture()
 def tiled_file_list(tiled_raster_100_by_200):
     tmp_path = tiled_raster_100_by_200.parent
     outname2 = tmp_path / "20220102test.tif"
@@ -209,13 +221,13 @@ def raster_10_by_20(tmp_path, tiled_raster_100_by_200):
     return outname2
 
 
-@pytest.fixture
-def raster_with_nan(tmpdir, tiled_raster_100_by_200):
+@pytest.fixture()
+def raster_with_nan(tmp_path, tiled_raster_100_by_200):
     # Raster with one nan pixel
     start_arr = load_gdal(tiled_raster_100_by_200)
     nan_arr = start_arr.copy()
     nan_arr[0, 0] = np.nan
-    output_name = tmpdir / "with_one_nan.tif"
+    output_name = tmp_path / "with_one_nan.tif"
     write_arr(
         arr=nan_arr,
         like_filename=tiled_raster_100_by_200,
@@ -225,10 +237,10 @@ def raster_with_nan(tmpdir, tiled_raster_100_by_200):
     return output_name
 
 
-@pytest.fixture
-def raster_with_nan_block(tmpdir, tiled_raster_100_by_200):
+@pytest.fixture()
+def raster_with_nan_block(tmp_path, tiled_raster_100_by_200):
     # One full block of 32x32 is nan
-    output_name = tmpdir / "with_nans.tif"
+    output_name = tmp_path / "with_nans.tif"
     nan_arr = load_gdal(tiled_raster_100_by_200)
     nan_arr[:32, :32] = np.nan
     write_arr(
@@ -240,10 +252,10 @@ def raster_with_nan_block(tmpdir, tiled_raster_100_by_200):
     return output_name
 
 
-@pytest.fixture
-def raster_with_zero_block(tmpdir, tiled_raster_100_by_200):
+@pytest.fixture()
+def raster_with_zero_block(tmp_path, tiled_raster_100_by_200):
     # One full block of 32x32 is nan
-    output_name = tmpdir / "with_zeros.tif"
+    output_name = tmp_path / "with_zeros.tif"
     out_arr = load_gdal(tiled_raster_100_by_200)
     out_arr[:] = 1.0
 
@@ -255,3 +267,163 @@ def raster_with_zero_block(tmpdir, tiled_raster_100_by_200):
         nodata=0,
     )
     return output_name
+
+
+# For displacement/workflow tests
+
+
+@pytest.fixture()
+def opera_slc_files(tmp_path) -> list[Path]:
+    """Save the slc stack as a series of NetCDF files."""
+    start_date = 20220101
+    shape = (4, 128, 128)
+    slc_stack = (np.random.rand(*shape) + 1j * np.random.rand(*shape)).astype(
+        np.complex64
+    )
+
+    d = tmp_path / "input_slcs"
+    d.mkdir()
+    file_list = []
+
+    *group_parts, ds_name = OPERA_DATASET_NAME.split("/")
+    group = "/".join(group_parts)
+    for burst_id in ["t087_185683_iw2", "t087_185684_iw2"]:
+        for i in range(len(slc_stack)):
+            fname = d / f"{burst_id}_{start_date + i}.h5"
+            yoff = i * shape[0] / 2
+            create_test_nc(
+                fname,
+                epsg=32615,
+                data_ds_name=ds_name,
+                # The "dummy" is so that two datasets are created in the file
+                # otherwise GDAL doesn't respect the NETCDF:file:/path/to/nested/data
+                subdir=[group, "dummy"],
+                data=slc_stack[i],
+                yoff=yoff,
+            )
+            file_list.append(Path(fname))
+
+    return file_list
+
+
+@pytest.fixture()
+def opera_slc_files_official(tmp_path) -> list[Path]:
+    base = "OPERA_L2_CSLC-S1"
+    ending = "20230101T100506Z_S1A_VV_v1.0"
+    # expected = {
+    # "t087_185678_iw2": [
+    # Path(f"{base}_T087-185678-IW2_20180210T232711Z_{ending}"),
+    start = datetime.datetime(2022, 1, 1, 1, 2, 3)
+    dt = datetime.timedelta(days=1)
+    shape = (4, 128, 128)
+    slc_stack = (np.random.rand(*shape) + 1j * np.random.rand(*shape)).astype(
+        np.complex64
+    )
+
+    d = tmp_path / "input_slcs"
+    d.mkdir()
+    file_list = []
+
+    *group_parts, ds_name = OPERA_DATASET_NAME.split("/")
+    group = "/".join(group_parts)
+    for burst_id in ["T087-185683-IW2", "T087-185684-IW2"]:
+        for i in range(len(slc_stack)):
+            date_str = (start + i * dt).strftime("%Y%m%dT%H%M%S")
+            fname = d / f"{base}_{burst_id}_{date_str}_{ending}.h5"
+            yoff = i * shape[0] / 2
+            create_test_nc(
+                fname,
+                epsg=32615,
+                data_ds_name=ds_name,
+                # The "dummy" is so that two datasets are created in the file
+                # otherwise GDAL doesn't respect the NETCDF:file:/path/to/nested/data
+                subdir=[group, "corrections"],
+                data=slc_stack[i],
+                yoff=yoff,
+            )
+            file_list.append(Path(fname))
+
+    return file_list
+
+
+@pytest.fixture()
+def opera_static_files_official(tmp_path) -> list[Path]:
+    base = "OPERA_L2_CSLC-S1-STATIC"
+    ending = "20140403_S1A_v1.0.h5"
+
+    d = tmp_path / "input_static_layers"
+    d.mkdir()
+    file_list = []
+
+    for burst_id in ["T087-185683-IW2", "T087-185684-IW2"]:
+        fname = d / f"{base}_{burst_id}_{ending}"
+        create_static_layer_h5(fname)
+        file_list.append(Path(fname))
+
+    return file_list
+
+
+def create_static_layer_h5(filename):
+    import h5py
+    from pyproj import CRS
+
+    with h5py.File(filename, "w") as f:
+        grp = f.create_group("/data")
+        shape = (4965, 19878)  # Adjust shape as needed
+
+        # Create datasets with specified values
+        dsets = []
+        dsets.append(grp.create_dataset("layover_shadow_mask", shape, dtype=np.uint16))
+        dsets.append(
+            grp.create_dataset(
+                "los_east", shape, dtype=np.float32, data=0.7 * np.ones(shape)
+            )
+        )
+        dsets.append(
+            grp.create_dataset(
+                "los_north", shape, dtype=np.float32, data=-0.11 * np.ones(shape)
+            )
+        )
+        dsets.append(grp.create_dataset("projection", data=32615))
+
+        crs_wkt = CRS.from_epsg(32615).to_wkt()
+        for ds in dsets:
+            ds.attrs.update(CRS.from_epsg(32615).to_cf())
+            crs_attrs = {"crs_wkt": crs_wkt, "spatial_ref": crs_wkt}
+            ds.attrs.update(crs_attrs)
+
+        dx, dy = 5, -10
+        x0, y0 = 246362.5, 3422995.0
+        xs = np.arange(x0, x0 + shape[1] * dx, dx)
+        ys = np.arange(y0, y0 + shape[0] * dy, dy)
+        grp.create_dataset("x_coordinates", (shape[1],), dtype=np.float32, data=xs)
+        grp.create_dataset("x_spacing", data=dx)
+        grp.create_dataset("y_coordinates", (shape[0],), dtype=np.float32, data=ys)
+        grp.create_dataset("y_spacing", data=abs(dy))
+
+
+@pytest.fixture()
+def weather_model_files():
+    data_dir = Path("tests/data")
+    with open(data_dir / "weather_model_files.txt") as f:
+        return f.readlines()
+
+
+@pytest.fixture()
+def tec_files():
+    data_dir = Path("tests/data")
+    with open(data_dir / "tec_files.txt") as f:
+        return f.readlines()
+
+
+@pytest.fixture()
+def dem_file(tmp_path, slc_stack):
+    fname = tmp_path / "dem.tif"
+    shape = slc_stack.shape
+    dem = np.random.rand(shape[-2], shape[-1]) + 1000
+    # Write to a file
+    driver = gdal.GetDriverByName("GTiff")
+    ds = driver.Create(str(fname), shape[-1], shape[-2], 1, gdal.GDT_Float32)
+    ds.GetRasterBand(1).WriteArray(dem)
+    ds = None
+    return fname

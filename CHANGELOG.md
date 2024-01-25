@@ -1,4 +1,117 @@
-# [Unreleased](https://github.com/isce-framework/dolphin/compare/v0.5.1...main)
+# [Unreleased](https://github.com/isce-framework/dolphin/compare/v0.11.0...main)
+
+**Added**
+- Added `DatasetWriter` protocol
+- Added `RasterWriter` and `BackgroundRasterWriter` implementations of this protocol
+
+**Changed**
+- Internal module organization, including grouping IO modules into `dolphin.io` subpackage
+- Renamed `io.Writer` to `io.GdalWriter` to distinguish from `RasterWriter`
+
+
+# [v0.11.0](https://github.com/isce-framework/dolphin/compare/v0.10.0...v0.11.0) - 2023-01-24
+
+**Added**
+- Added ionospheric correction in `dolphin.atmosphere.ionosphere`
+  - Included in `DisplacementWorkflow` if TEC files are provided
+
+
+# [v0.10.0](https://github.com/isce-framework/dolphin/compare/v0.9.0...v0.10.0) - 2024-01-22
+
+**Added**
+- Create `dolphin.unwrap` subpackage to split out unwrapping calls, and post-processing modules.
+
+**Removed**
+- the `_dates` module has been removed in favor of using `opera_utils._dates`
+
+**Fixed**
+- `stitching.merge_images` will now give consistent sizes for provided bounds when `strides` is given
+
+# [v0.9.0](https://github.com/isce-framework/dolphin/compare/v0.8.0...v0.9.0) - 2024-01-10
+
+**Added**
+- `DatasetReader` and `StackReader` protocols for reading in data from different sources
+  - `DatasetReader` is for reading in a single dataset, like one raster image.
+  - `StackReader` is for reading in a stack of datasets, like a stack of SLCs.
+  - Implementations of these have been done for flat binary files (`BinaryReader`), HDF5 files (`HDF5Reader`), and GDAL rasters (`RasterReader`).
+
+**Changed**
+- The `VRTStack` no longer has an `.iter_blocks` method
+  - This has been replaced with creating an `EagerLoader` directly and passing it to the `reader` argument
+
+**Dependencies**
+- Added `rasterio>=1.3`
+
+# [v0.8.0](https://github.com/isce-framework/dolphin/compare/v0.7.0...v0.8.0) - 2024-01-05
+
+**Added**
+- Ability to unwrap interferograms with the [`snaphu-py`](https://github.com/isce-framework/snaphu-py) (not a required dependency)
+- Added ability to make annual ifgs in `Network`
+- Start of tropospheric corection support in `dolphin.atmosphere` using PyAPS and Raider packages
+- Expose the unwrap skipping with `dolphin config --no-unwrap`
+
+**Changed**
+- The output directory for interferograms is now just "interferograms/" instead of "interferograms/stiched"
+  - Even when stitching, the burst-wise interferograms would be in the named phase-linking subfolders.
+- Split apart the `dolphin.workflows.stitch_and_unwrap` module into `stitching_bursts` and `unwrapping`
+- Switched output filename from `tcorr` to `temporal_coherence` for the temporal coherence of phase linking.
+  - Also added the date span to the `temporal_coherence` output name
+- The default extension for conncomps is now `.tif`. Use geotiffs instead of ENVI format for connected components.
+- Using ruff instead of pydocstyle due to archived repo
+
+# [v0.7.0](https://github.com/isce-framework/dolphin/compare/v0.6.1...v0.7.0) - 2023-11-29
+
+**Added**
+- `MiniStackPlanner` and `MiniStackInfo` class which does the planning for how a large stack of SLCs will be processed in batches.
+  - Previously this was done at run time in `sequential.py`. We want to separate that out to view the plan in advance/allow us to dispatch the work to multiple machines.
+- `CompressedSlcInfo` class added to track the attributes of a compressed SLC file created during the workflow.
+  - This has the `reference_date` as an attribute, which allows us to know what the base phase is even without starting from
+    the first SLC in the stack (i.e. if we have limited the number of compressed SLCs)
+- Added better/more complete metadata to the compressed SLC Geotiff tags, including the phase reference date
+  - Before we were relying on the filename convention, which was not enough information
+- config: `phase_linking.max_compressed_slcs` to cap the number of compressed SLCs added during large-stack sequential workflows
+- `interferogram`: Add ability to specify manual dates for a `Network`/`VRTInterferogram`, which lets us re-interfere the phase-linking results
+
+**Changed**
+- Date functions have been moved from `dolphin.utils` to `dolphin._dates`. They are accessible at `dolphin.get_dates`, etc
+- `get_dates` now uses `datetime.datetime` instead of `datetime.date`.
+  - This is to allow for more flexibility in the date parsing, and to allow for the use of `datetime.date` or `datetime.datetime` in the output filenames.
+- `VRTStack` has been moved to `_readers.py`. The minstack planning functions have been removed to focus the class on just reading input GDAL rasters.
+
+**Fixed**
+- When starting with Compressed SLCs in the list of input SLCs, the workflows will now recognize them, find the correct reference date, and form all the correct interferograms
+
+**Removed**
+- Extra subsetting functions from `VRTStack` have been removed, as they are not used in the workflow and the reimplmenent simple GDAL calls.
+- `CPURecorder` and `GPURecorder` have been removed to simplify code. May be moved to separate repo.
+
+# [v0.6.1](https://github.com/isce-framework/dolphin/compare/v0.6.0...v0.6.1) - 2023-11-13
+
+**Removed**
+- `dolphin.opera_utils` now lives in the separate package
+
+**Dependencies**
+- Added `opera_utils`
+
+# [v0.6.0](https://github.com/isce-framework/dolphin/compare/v0.5.1...v0.6.0) - 2023-11-07
+
+**Added**
+- `opera_utils.get_missing_data_options` to parse the full list of SLCs and return possible subsets which have the same dates used for all Burst IDs
+- `PsWorkflow` class for running just the PS estimation workflow
+- `asv` benchmark setup to measure runtime across versions
+- `@atomic_output` decorator for long running write processes, to avoid partially-written output files
+
+**Changed**
+- removed `minimum_images` as an argument from `opera_utils.group_by_burst`. Checking for too-few images now must be done by the caller
+- `opera_utils.group_by_burst` now matches the official product name more robustly, but still returns the lowered version of the burst ID.
+- The `s1_disp` workflow has been renamed to `displacement`, since it is not specific to Sentinel-1.
+- The configuration was refactored to enable smaller workflow
+  - The `Workflow` config class has been renamed to `DisplacementWorkflow`.
+  - A `PsWorkflow` config class has been added for the PS estimation workflow.
+  - A `WorkflowBase` encompasses some of the common configuration options.
+
+**Maintenance**
+- `ruff` has replaced `isort`/`black`/`flake8` in the pre-commit checks
 
 # [v0.5.1](https://github.com/isce-framework/dolphin/compare/v0.5.0...v0.5.1) - 2023-10-10
 

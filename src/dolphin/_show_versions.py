@@ -4,6 +4,7 @@ Adapted from `rasterio.show_versions`,
 which was adapted from `sklearn.utils._show_versions`
 which was adapted from `pandas.show_versions`
 """
+
 from __future__ import annotations
 
 import importlib
@@ -53,13 +54,15 @@ def _get_opera_info() -> dict[str, Optional[str]]:
     dict
         dolphin / opera module information
     """
-    blob = {
+    import opera_utils
+
+    return {
         "dolphin": dolphin.__version__,
+        "opera_utils": opera_utils.__version__,
         # optionals
         "isce3": _get_version("isce3"),
         "tophu": _get_version("tophu"),
     }
-    return blob
 
 
 def _get_deps_info() -> dict[str, Optional[str]]:

@@ -1,24 +1,26 @@
 from __future__ import annotations
 
 import datetime
-import itertools
 import math
-import re
 import resource
 import sys
 import warnings
+from collections.abc import Callable
+from concurrent.futures import Executor, Future
+from itertools import chain
 from multiprocessing import cpu_count
 from pathlib import Path
-from typing import Iterable, Optional, Union
+from typing import Any, Iterable, Optional, Sequence, Union
 
 import numpy as np
-from numba import njit
 from numpy.typing import ArrayLike, DTypeLike
 from osgeo import gdal, gdal_array, gdalconst
 from rich.progress import MofNCompleteColumn, Progress, SpinnerColumn, TimeElapsedColumn
 
 from dolphin._log import get_log
-from dolphin._types import Filename
+from dolphin._types import Bbox, Filename, P, T
+
+DateOrDatetime = Union[datetime.date, datetime.datetime]
 
 gdal.UseExceptions()
 logger = get_log(__name__)
@@ -91,7 +93,8 @@ def numpy_to_gdal_type(np_dtype: DTypeLike) -> int:
         return gdalconst.GDT_Byte
     gdal_code = gdal_array.NumericTypeCodeToGDALTypeCode(np_dtype)
     if gdal_code is None:
-        raise TypeError(f"dtype {np_dtype} not supported by GDAL.")
+        msg = f"dtype {np_dtype} not supported by GDAL."
+        raise TypeError(msg)
     return gdal_code
 
 
@@ -100,44 +103,6 @@ def gdal_to_numpy_type(gdal_type: Union[str, int]) -> np.dtype:
     if isinstance(gdal_type, str):
         gdal_type = gdal.GetDataTypeByName(gdal_type)
     return np.dtype(gdal_array.GDALTypeCodeToNumericTypeCode(gdal_type))
-
-
-def get_dates(filename: Filename, fmt: str = "%Y%m%d") -> list[datetime.date]:
-    """Search for dates in the stem of `filename` matching `fmt`.
-
-    Excludes dates that are not in the stem of `filename` (in the directories).
-
-    Parameters
-    ----------
-    filename : str or PathLike
-        Filename to search for dates.
-    fmt : str, optional
-        Format of date to search for. Default is "%Y%m%d".
-
-    Returns
-    -------
-    list[datetime.date]
-        list of dates found in the stem of `filename` matching `fmt`.
-
-    Examples
-    --------
-    >>> get_dates("/path/to/20191231.slc.tif")
-    [datetime.date(2019, 12, 31)]
-    >>> get_dates("S1A_IW_SLC__1SDV_20191231T000000_20191231T000000_032123_03B8F1_1C1D.nc")
-    [datetime.date(2019, 12, 31), datetime.date(2019, 12, 31)]
-    >>> get_dates("/not/a/date_named_file.tif")
-    []
-    """  # noqa: E501
-    path = _get_path_from_gdal_str(filename)
-    pattern = _date_format_to_regex(fmt)
-    date_list = re.findall(pattern, path.stem)
-    if not date_list:
-        return []
-    return [_parse_date(d, fmt) for d in date_list]
-
-
-def _parse_date(datestr: str, fmt: str = "%Y%m%d") -> datetime.date:
-    return datetime.datetime.strptime(datestr, fmt).date()
 
 
 def _get_path_from_gdal_str(name: Filename) -> Path:
@@ -156,146 +121,18 @@ def _get_path_from_gdal_str(name: Filename) -> Path:
 
 def _resolve_gdal_path(gdal_str: Filename) -> Filename:
     """Resolve the file portion of a gdal-openable string to an absolute path."""
-    s = str(gdal_str)
+    s_clean = str(gdal_str).lstrip('"').lstrip("'").rstrip('"').rstrip("'")
     prefixes = ["DERIVED_SUBDATASET", "NETCDF", "HDF"]
-    is_gdal_str = any(s.upper().startswith(pre) for pre in prefixes)
-    file_part = str(_get_path_from_gdal_str(gdal_str))
+    is_gdal_str = any(s_clean.upper().startswith(pre) for pre in prefixes)
+    file_part = str(_get_path_from_gdal_str(s_clean))
 
     # strip quotes to add back in after
     file_part = file_part.strip('"').strip("'")
     file_part_resolved = Path(file_part).resolve()
-    resolved = s.replace(file_part, str(file_part_resolved))
+    resolved = s_clean.replace(file_part, str(file_part_resolved))
     return Path(resolved) if not is_gdal_str else resolved
 
 
-def _date_format_to_regex(date_format):
-    r"""Convert a python date format string to a regular expression.
-
-    Useful for Year, month, date date formats.
-
-    Parameters
-    ----------
-    date_format : str
-        Date format string, e.g. "%Y%m%d"
-
-    Returns
-    -------
-    re.Pattern
-        Regular expression that matches the date format string.
-
-    Examples
-    --------
-    >>> pat2 = _date_format_to_regex("%Y%m%d").pattern
-    >>> pat2 == re.compile(r'\d{4}\d{2}\d{2}').pattern
-    True
-    >>> pat = _date_format_to_regex("%Y-%m-%d").pattern
-    >>> pat == re.compile(r'\d{4}\-\d{2}\-\d{2}').pattern
-    True
-    """
-    # Escape any special characters in the date format string
-    date_format = re.escape(date_format)
-
-    # Replace each format specifier with a regular expression that matches it
-    date_format = date_format.replace("%Y", r"\d{4}")
-    date_format = date_format.replace("%m", r"\d{2}")
-    date_format = date_format.replace("%d", r"\d{2}")
-
-    # Return the resulting regular expression
-    return re.compile(date_format)
-
-
-def sort_files_by_date(
-    files: Iterable[Filename], file_date_fmt: str = "%Y%m%d"
-) -> tuple[list[Filename], list[list[datetime.date]]]:
-    """Sort a list of files by date.
-
-    If some files have multiple dates, the files with the most dates are sorted
-    first. Within each group of files with the same number of dates, the files
-    with the earliest dates are sorted first.
-
-    The multi-date files are placed first so that compressed SLCs are sorted
-    before the individual SLCs that make them up.
-
-    Parameters
-    ----------
-    files : Iterable[Filename]
-        list of files to sort.
-    file_date_fmt : str, optional
-        Datetime format passed to `strptime`, by default "%Y%m%d"
-
-    Returns
-    -------
-    file_list : list[Filename]
-        list of files sorted by date.
-    dates : list[list[datetime.date,...]]
-        Sorted list, where each entry has all the dates from the corresponding file.
-    """
-
-    def sort_key(file_date_tuple):
-        # Key for sorting:
-        # To sort the files with the most dates first (the compressed SLCs which
-        # span a date range), sort the longer date lists first.
-        # Then, within each group of dates of the same length, use the date/dates
-        _, dates = file_date_tuple
-        try:
-            return (-len(dates), dates)
-        except TypeError:
-            return (-1, dates)
-
-    file_date_tuples = [(f, get_dates(f, fmt=file_date_fmt)) for f in files]
-    file_dates = sorted([fd_tuple for fd_tuple in file_date_tuples], key=sort_key)
-
-    # Unpack the sorted pairs with new sorted values
-    file_list, dates = zip(*file_dates)  # type: ignore
-    return list(file_list), list(dates)
-
-
-def group_by_date(
-    file_list: Iterable[Filename], file_date_fmt: Optional[str] = None
-) -> dict[tuple[datetime.date, ...], list[Filename]]:
-    """Combine files by date into a dict.
-
-    Parameters
-    ----------
-    file_list: Iterable[Filename]
-        Path to folder containing files with dates in the filename.
-    file_date_fmt: str
-        Format of the date in the filename.
-        Default is [dolphin.io.DEFAULT_DATETIME_FORMAT][]
-
-    Returns
-    -------
-    dict
-        key is a list of dates in the filenames.
-        Value is a list of Paths on that date.
-        E.g.:
-        {(datetime.date(2017, 10, 13),
-          [Path(...)
-            Path(...),
-            ...]),
-         (datetime.date(2017, 10, 25),
-          [Path(...)
-            Path(...),
-            ...]),
-        }
-    """
-    if file_date_fmt is None:
-        import dolphin.io
-
-        file_date_fmt = dolphin.io.DEFAULT_DATETIME_FORMAT
-    sorted_file_list, _ = sort_files_by_date(file_list, file_date_fmt=file_date_fmt)
-
-    # Now collapse into groups, sorted by the date
-    grouped_images = {
-        dates: list(g)
-        for dates, g in itertools.groupby(
-            sorted_file_list, key=lambda x: tuple(get_dates(x))
-        )
-    }
-    return grouped_images
-
-
-@njit
 def _get_slices(half_r: int, half_c: int, r: int, c: int, rows: int, cols: int):
     """Get the slices for the given pixel and half window size."""
     # Clamp min indexes to 0
@@ -460,7 +297,8 @@ def _make_dims_multiples(arr, row_looks, col_looks, how="cutoff"):
             )
         return arr
     else:
-        raise ValueError(f"Invalid edge strategy: {how}")
+        msg = f"Invalid edge strategy: {how}"
+        raise ValueError(msg)
 
 
 def upsample_nearest(
@@ -579,7 +417,8 @@ def get_max_memory_usage(units: str = "GB", children: bool = True) -> float:
     elif units.lower().startswith("byte"):
         factor = 1.0
     else:
-        raise ValueError(f"Unknown units: {units}")
+        msg = f"Unknown units: {units}"
+        raise ValueError(msg)
     if sys.platform.startswith("linux"):
         # on linux, ru_maxrss is in kilobytes, while on mac, ru_maxrss is in bytes
         factor /= 1e3
@@ -591,8 +430,9 @@ def get_gpu_memory(pid: Optional[int] = None, gpu_id: int = 0) -> float:
     """Get the memory usage (in GiB) of the GPU for the current pid."""
     try:
         from pynvml.smi import nvidia_smi
-    except ImportError:
-        raise ImportError("Please install pynvml through pip or conda")
+    except ImportError as e:
+        msg = "Please install pynvml through pip or conda"
+        raise ImportError(msg) from e
 
     def get_mem(process):
         used_mem = process["used_memory"] if process else 0
@@ -637,9 +477,11 @@ def moving_window_mean(
     if isinstance(size, int):
         size = (size, size)
     if len(size) != 2:
-        raise ValueError("size must be a single int or a tuple of 2 ints")
+        msg = "size must be a single int or a tuple of 2 ints"
+        raise ValueError(msg)
     if size[0] % 2 == 0 or size[1] % 2 == 0:
-        raise ValueError("size must be odd in both dimensions")
+        msg = "size must be odd in both dimensions"
+        raise ValueError(msg)
 
     row_size, col_size = size
     row_pad = row_size // 2
@@ -698,7 +540,7 @@ def get_cpu_count():
     ----------
     1. https://github.com/joblib/loky/issues/111
     2. https://github.com/conan-io/conan/blob/982a97041e1ece715d157523e27a14318408b925/conans/client/tools/oss.py#L27 # noqa
-    """
+    """  # noqa: E501
 
     def get_cpu_quota():
         return int(Path("/sys/fs/cgroup/cpu/cpu.cfs_quota_us").read_text())
@@ -711,6 +553,200 @@ def get_cpu_count():
         cfs_period_us = get_cpu_period()
         if cfs_quota_us > 0 and cfs_period_us > 0:
             return int(math.ceil(cfs_quota_us / cfs_period_us))
-    except:
+    except Exception:
         pass
     return cpu_count()
+
+
+def flatten(list_of_lists: Iterable[Iterable[Any]]) -> chain[Any]:
+    """Flatten one level of a nested iterable."""
+    return chain.from_iterable(list_of_lists)
+
+
+def format_date_pair(start: DateOrDatetime, end: DateOrDatetime, fmt="%Y%m%d") -> str:
+    """Format a date pair into a string.
+
+    Parameters
+    ----------
+    start : DateOrDatetime
+        First date or datetime
+    end : DateOrDatetime
+        Second date or datetime
+    fmt : str, optional
+        `datetime` formatter pattern, by default "%Y%m%d"
+
+    Returns
+    -------
+    str
+        Formatted date pair.
+    """
+    return f"{start.strftime(fmt)}_{end.strftime(fmt)}"
+
+
+# Keep alias for now, but deprecate
+_format_date_pair = format_date_pair
+
+
+def prepare_geometry(
+    geometry_dir: Path,
+    geo_files: Sequence[Path],
+    matching_file: Path,
+    dem_file: Optional[Path],
+    epsg: int,
+    out_bounds: Bbox,
+    strides: Optional[dict[str, int]] = None,
+) -> dict[str, Path]:
+    """Prepare geometry files.
+
+    Parameters
+    ----------
+    geometry_dir : Path
+        Output directory for geometry files.
+    geo_files : list[Path]
+        list of geometry files.
+    matching_file : Path
+        Matching file.
+    dem_file : Optional[Path]
+        DEM file.
+    epsg : int
+        EPSG code.
+    out_bounds : Bbox
+        Output bounds.
+    strides : Dict[str, int], optional
+        Strides for resampling, by default {"x": 1, "y": 1}.
+
+    Returns
+    -------
+    Dict[str, Path]
+        Dictionary of prepared geometry files.
+    """
+    from dolphin import stitching
+    from dolphin.io import format_nc_filename
+
+    if strides is None:
+        strides = {"x": 1, "y": 1}
+    geometry_dir.mkdir(exist_ok=True)
+
+    stitched_geo_list = {}
+
+    if geo_files[0].name.endswith(".h5"):
+        # ISCE3 geocoded SLCs
+        datasets = ["los_east", "los_north"]
+
+        for ds_name in datasets:
+            outfile = geometry_dir / f"{ds_name}.tif"
+            logger.info(f"Creating {outfile}")
+            stitched_geo_list[ds_name] = outfile
+            ds_path = f"/data/{ds_name}"
+            cur_files = [format_nc_filename(f, ds_name=ds_path) for f in geo_files]
+
+            no_data = 0
+
+            stitching.merge_images(
+                cur_files,
+                outfile=outfile,
+                driver="GTiff",
+                out_bounds=out_bounds,
+                out_bounds_epsg=epsg,
+                in_nodata=no_data,
+                out_nodata=no_data,
+                target_aligned_pixels=True,
+                strides=strides,
+                overwrite=False,
+            )
+
+        if dem_file:
+            height_file = geometry_dir / "height.tif"
+            stitched_geo_list["height"] = height_file
+            if not height_file.exists():
+                logger.info(f"Creating {height_file}")
+                stitching.warp_to_match(
+                    input_file=dem_file,
+                    match_file=matching_file,
+                    output_file=height_file,
+                    resample_alg="cubic",
+                )
+    else:
+        # ISCE2 radar coordinates
+        dsets = {
+            "hgt.rdr": "height",
+            "incLocal.rdr": "incidence_angle",
+            "lat.rdr": "latitude",
+            "lon.rdr": "longitude",
+        }
+
+        for geo_file in geo_files:
+            if geo_file.stem in dsets:
+                out_name = dsets[geo_file.stem]
+            elif geo_file.name in dsets:
+                out_name = dsets[geo_file.name]
+                continue
+
+            out_file = geometry_dir / (out_name + ".tif")
+            stitched_geo_list[out_name] = out_file
+            logger.info(f"Creating {out_file}")
+
+            stitching.warp_to_match(
+                input_file=geo_file,
+                match_file=matching_file,
+                output_file=out_file,
+                resample_alg="cubic",
+            )
+
+    return stitched_geo_list
+
+
+def compute_out_shape(
+    shape: tuple[int, int], strides: dict[str, int]
+) -> tuple[int, int]:
+    """Calculate the output size for an input `shape` and row/col `strides`.
+
+    Parameters
+    ----------
+    shape : tuple[int, int]
+        Input size: (rows, cols)
+    strides : dict[str, int]
+        {"x": x strides, "y": y strides}
+
+    Returns
+    -------
+    out_shape : tuple[int, int]
+        Size of output after striding
+
+    Notes
+    -----
+    If there is not a full window (of size `strides`), the end
+    will get cut off rather than padded with a partial one.
+    This should match the output size of `[dolphin.utils.take_looks][]`.
+
+    As a 1D example, in array of size 6 with `strides`=3 along this dim,
+    we could expect the pixels to be centered on indexes
+    `[1, 4]`.
+
+        [ 0  1  2   3  4  5]
+
+    So the output size would be 2, since we have 2 full windows.
+    If the array size was 7 or 8, we would have 2 full windows and 1 partial,
+    so the output size would still be 2.
+    """
+    rows, cols = shape
+    rs, cs = strides["y"], strides["x"]
+    return (rows // rs, cols // cs)
+
+
+class DummyProcessPoolExecutor(Executor):
+    """Dummy ProcessPoolExecutor for to avoid forking for single_job purposes."""
+
+    def __init__(self, max_workers: Optional[int] = None, **kwargs):  # noqa: D107
+        self._max_workers = max_workers
+
+    def submit(  # noqa: D102
+        self, fn: Callable[P, T], /, *args: P.args, **kwargs: P.kwargs
+    ) -> Future[T]:
+        future: Future = Future()
+        result = fn(*args, **kwargs)
+        future.set_result(result)
+        return future
+
+    def shutdown(self, wait: bool = True, cancel_futures: bool = True):  # noqa: D102
+        pass

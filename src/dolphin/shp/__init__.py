@@ -19,7 +19,7 @@ def estimate_neighbors(
     *,
     halfwin_rowcol: tuple[int, int],
     alpha: float,
-    strides: dict[str, int] = {"x": 1, "y": 1},
+    strides: Optional[dict[str, int]] = None,
     mean: Optional[ArrayLike] = None,
     var: Optional[ArrayLike] = None,
     nslc: Optional[int] = None,
@@ -29,6 +29,9 @@ def estimate_neighbors(
     prune_disconnected: bool = False,
 ) -> np.ndarray:
     """Estimate the statistically similar neighbors of each pixel.
+
+    GLRT method on the [@Parizzi2011AdaptiveInSARStack].
+    Assumes Rayleigh distributed amplitudes ([@Siddiqui1962ProblemsConnectedRayleigh]).
 
     Parameters
     ----------
@@ -69,6 +72,8 @@ def estimate_neighbors(
     """
     import numba
 
+    if strides is None:
+        strides = {"x": 1, "y": 1}
     logger.debug(f"NUMBA THREADS: {numba.get_num_threads()}")
     if method.lower() in (ShpMethod.KLD, ShpMethod.GLRT):
         if mean is None:
@@ -82,7 +87,8 @@ def estimate_neighbors(
     elif method.lower() == ShpMethod.GLRT:
         logger.debug("Estimating SHP neighbors using GLRT")
         if nslc is None:
-            raise ValueError("`nslc` must be provided for GLRT method")
+            msg = "`nslc` must be provided for GLRT method"
+            raise ValueError(msg)
         neighbor_arrays = _glrt.estimate_neighbors(
             mean=mean,
             var=var,
@@ -95,7 +101,8 @@ def estimate_neighbors(
     elif method.lower() == ShpMethod.KLD:
         logger.debug("Estimating SHP neighbors using KLD")
         if nslc is None:
-            raise ValueError("`nslc` must be provided for GLRT method")
+            msg = "`nslc` must be provided for GLRT method"
+            raise ValueError(msg)
         neighbor_arrays = _kld.estimate_neighbors(
             mean=mean,
             var=var,
@@ -107,7 +114,8 @@ def estimate_neighbors(
         )
     elif method.lower() == ShpMethod.KS:
         if amp_stack is None:
-            raise ValueError("amp_stack must be provided for KS method")
+            msg = "amp_stack must be provided for KS method"
+            raise ValueError(msg)
         logger.debug("Estimating SHP neighbors using KS test")
         neighbor_arrays = _ks.estimate_neighbors(
             amp_stack=amp_stack,
@@ -117,6 +125,7 @@ def estimate_neighbors(
             is_sorted=is_sorted,
         )
     else:
-        raise ValueError(f"SHP method {method} is not implemented")
+        msg = f"SHP method {method} is not implemented"
+        raise ValueError(msg)
 
     return neighbor_arrays

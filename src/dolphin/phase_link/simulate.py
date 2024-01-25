@@ -3,6 +3,7 @@
 Contains simple versions of MLE and EVD estimator to compare against the
 full CPU/GPU stack implementations.
 """
+
 import numpy as np
 import numpy.linalg as la
 from numba import njit
@@ -80,7 +81,7 @@ def simulate_neighborhood_stack(
 
 
 @njit(cache=True)
-def simulate_C(
+def simulate_coh(
     num_acq=50,
     gamma_inf=0.1,
     gamma0=0.999,

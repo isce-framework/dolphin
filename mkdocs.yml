@@ -13,6 +13,7 @@ theme:
 plugins:
 - search
 # plugin suggestions from here: https://mkdocstrings.github.io/recipes/
+- autorefs
 - gen-files:
     scripts:
     - docs/gen_ref_pages.py
@@ -27,12 +28,18 @@ plugins:
         options:
           docstring_style: numpy
           members_order: alphabetical # source
+        import:
+        - https://docs.scipy.org/doc/scipy/objects.inv  # scipy doc objects
 - mkdocs-jupyter:
-    include: ["*.ipynb"]
+    include: ["docs/notebooks/*.ipynb"]
 
 markdown_extensions:
   - pymdownx.arithmatex:
       generic: true
+  - footnotes
+  - mdx_bib:
+      bibtex_file: docs/references.bib
+      order: 'unsorted'
 
 extra_javascript:
   - javascripts/mathjax.js

@@ -1,14 +1,23 @@
 """Module for handling blocked/decimated input and output."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Iterator, Optional
+
+from dolphin.utils import compute_out_shape
 
 # 1. iterate without overlap over output, decimated array
 #   - Start with an offset, shrink the size, both by `half_window//strides`
 #   - since we want every one wot be full, just skipping the incomplete blocks
 # 2. map the current output pixels to their input locations (using strides)
 # 3. pad the input block (using half window)
+
+__all__ = [
+    "BlockIndices",
+    "BlockManager",
+    "iter_blocks",
+]
 
 
 @dataclass(frozen=True)
@@ -84,9 +93,11 @@ slice(90, 190, None)), (slice(90, 180, None), slice(180, 250, None))]
 
     # Check we're not moving backwards with the overlap:
     if row_overlap >= height and height != total_rows:
-        raise ValueError(f"{row_overlap = } must be less than block height {height}")
+        msg = f"{row_overlap = } must be less than block height {height}"
+        raise ValueError(msg)
     if col_overlap >= width and width != total_cols:
-        raise ValueError(f"{col_overlap = } must be less than block width {width}")
+        msg = f"{col_overlap = } must be less than block width {width}"
+        raise ValueError(msg)
 
     # Set up the iterating indices
     cur_row = start_row_offset
@@ -173,53 +184,17 @@ def pad_block(in_block: BlockIndices, margins: tuple[int, int]) -> BlockIndices:
     r_margin, c_margin = margins
     r_slice, c_slice = in_block
     if r_slice.start - r_margin < 0:
-        raise ValueError(f"{r_slice = }, but {r_margin = }")
+        msg = f"{r_slice = }, but {r_margin = }"
+        raise ValueError(msg)
     if c_slice.start - c_margin < 0:
-        raise ValueError(f"{c_slice = }, but {c_margin = }")
+        msg = f"{c_slice = }, but {c_margin = }"
+        raise ValueError(msg)
     return BlockIndices(
         max(r_slice.start - r_margin, 0),
         r_slice.stop + r_margin,
         max(c_slice.start - c_margin, 0),
         c_slice.stop + c_margin,
     )
-
-
-def compute_out_shape(
-    shape: tuple[int, int], strides: dict[str, int]
-) -> tuple[int, int]:
-    """Calculate the output size for an input `shape` and row/col `strides`.
-
-    Parameters
-    ----------
-    shape : tuple[int, int]
-        Input size: (rows, cols)
-    strides : dict[str, int]
-        {"x": x strides, "y": y strides}
-
-    Returns
-    -------
-    out_shape : tuple[int, int]
-        Size of output after striding
-
-    Notes
-    -----
-    If there is not a full window (of size `strides`), the end
-    will get cut off rather than padded with a partial one.
-    This should match the output size of `[dolphin.utils.take_looks][]`.
-
-    As a 1D example, in array of size 6 with `strides`=3 along this dim,
-    we could expect the pixels to be centered on indexes
-    `[1, 4]`.
-
-        [ 0  1  2   3  4  5]
-
-    So the output size would be 2, since we have 2 full windows.
-    If the array size was 7 or 8, we would have 2 full windows and 1 partial,
-    so the output size would still be 2.
-    """
-    rows, cols = shape
-    rs, cs = strides["y"], strides["x"]
-    return (rows // rs, cols // cs)
 
 
 @dataclass
@@ -265,7 +240,7 @@ class BlockManager:
         output_block : BlockIndices
             The current slices for the output raster
         trimming_block : BlockIndices
-            The slices to use on a processed output block to remove nodata border pixels.
+            Slices to use on a processed output block to remove nodata border pixels.
             These may be relative (e.g. slice(1, -1)), not absolute like `output_block`.
         input_block : BlockIndices
             Slices used to load the full-res input data
@@ -322,5 +297,4 @@ class BlockManager:
         return BlockIndices(row_nodata, row_end, col_nodata, col_end)
 
     def _get_out_nodata_size(self, direction: str) -> int:
-        nodata_size = round(self.half_window[direction] / self.strides[direction])
-        return nodata_size
+        return round(self.half_window[direction] / self.strides[direction])

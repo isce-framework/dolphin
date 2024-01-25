@@ -4,53 +4,50 @@ import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from os import fspath
 from pathlib import Path
-from typing import Optional, Union
+from typing import Optional, Sequence, Union
 
 import isce3
 import numpy as np
 from isce3.unwrap import ICU, snaphu
-from numba import njit, stencil
-from osgeo import gdal
 
 from dolphin import io
-from dolphin._background import DummyProcessPoolExecutor
 from dolphin._log import get_log, log_runtime
 from dolphin._types import Filename
-from dolphin.utils import full_suffix, progress
+from dolphin.utils import DummyProcessPoolExecutor, full_suffix, progress
 from dolphin.workflows import UnwrapMethod
+
+from ._constants import CONNCOMP_SUFFIX, UNW_SUFFIX
+from ._tophu import multiscale_unwrap
+from ._utils import _redirect_unwrapping_log, _zero_from_mask
 
 logger = get_log(__name__)
 
-gdal.UseExceptions()
-
-CONNCOMP_SUFFIX = ".unw.conncomp"
+__all__ = ["run", "unwrap"]
 
 
 @log_runtime
 def run(
-    ifg_filenames: list[Filename],
-    cor_filenames: list[Filename],
+    ifg_filenames: Sequence[Filename],
+    cor_filenames: Sequence[Filename],
     output_path: Filename,
     *,
     nlooks: float = 5,
     mask_file: Optional[Filename] = None,
     unwrap_method: UnwrapMethod = UnwrapMethod.SNAPHU,
     init_method: str = "mst",
-    unw_suffix: str = ".unw.tif",
     max_jobs: int = 1,
     ntiles: Union[int, tuple[int, int]] = 1,
     downsample_factor: Union[int, tuple[int, int]] = 1,
     scratchdir: Optional[Filename] = None,
     overwrite: bool = False,
-    **kwargs,
 ) -> tuple[list[Path], list[Path]]:
     """Run snaphu on all interferograms in a directory.
 
     Parameters
     ----------
-    ifg_filenames : list[Filename]
+    ifg_filenames : Sequence[Filename]
         Paths to input interferograms.
-    cor_filenames : list[Filename]
+    cor_filenames : Sequence[Filename]
         Paths to input correlation files. Order must match `ifg_filenames`.
     output_path : Filename
         Path to output directory.
@@ -64,8 +61,6 @@ def run(
         Choices: {"snaphu", "icu", "phass"}
     init_method : str, choices = {"mcf", "mst"}
         SNAPHU initialization method, by default "mst".
-    unw_suffix : str, optional, default = ".unw.tif"
-        unwrapped file suffix to use for creating/searching for existing files.
     max_jobs : int, optional, default = 1
         Maximum parallel processes.
     ntiles : int or tuple[int, int], optional, default = (1, 1)
@@ -90,19 +85,21 @@ def run(
 
     """
     if len(cor_filenames) != len(ifg_filenames):
-        raise ValueError(
+        msg = (
             "Number of correlation files does not match number of interferograms."
             f" Found {len(cor_filenames)} correlation files and"
             f" {len(ifg_filenames)} interferograms."
         )
+        raise ValueError(msg)
 
     if init_method.lower() not in ("mcf", "mst"):
-        raise ValueError(f"Invalid init_method {init_method}")
+        msg = f"Invalid init_method {init_method}"
+        raise ValueError(msg)
 
     output_path = Path(output_path)
 
     all_out_files = [
-        (output_path / Path(f).name).with_suffix(unw_suffix) for f in ifg_filenames
+        (output_path / Path(f).name).with_suffix(UNW_SUFFIX) for f in ifg_filenames
     ]
     in_files, out_files = [], []
     for inf, outf in zip(ifg_filenames, all_out_files):
@@ -148,7 +145,7 @@ def run(
                 fut.result()
 
     conncomp_files = [
-        Path(str(outf).replace(unw_suffix, CONNCOMP_SUFFIX)) for outf in all_out_files
+        Path(str(outf).replace(UNW_SUFFIX, CONNCOMP_SUFFIX)) for outf in all_out_files
     ]
     return all_out_files, conncomp_files
 
@@ -168,7 +165,7 @@ def unwrap(
     ntiles: Union[int, tuple[int, int]] = 1,
     scratchdir: Optional[Filename] = None,
 ) -> tuple[Path, Path]:
-    """Unwrap a single interferogram using isce3's SNAPHU/ICU bindings.
+    """Unwrap a single interferogram using isce3's bindings.
 
     Parameters
     ----------
@@ -251,19 +248,17 @@ def unwrap(
     shape = io.get_raster_xysize(ifg_filename)[::-1]
     corr_shape = io.get_raster_xysize(corr_filename)[::-1]
     if shape != corr_shape:
-        raise ValueError(
-            f"correlation {corr_shape} and interferogram {shape} shapes don't match"
-        )
+        msg = f"correlation {corr_shape} and interferogram {shape} shapes don't match"
+        raise ValueError(msg)
     mask_shape = io.get_raster_xysize(mask_file)[::-1] if mask_file else None
     if mask_file and shape != mask_shape:
-        raise ValueError(
-            f"Mask {mask_shape} and interferogram {shape} shapes don't match"
-        )
+        msg = f"Mask {mask_shape} and interferogram {shape} shapes don't match"
+        raise ValueError(msg)
 
     ifg_raster = Raster(fspath(ifg_filename))
     corr_raster = Raster(fspath(corr_filename))
     mask_raster = Raster(fspath(mask_file)) if mask_file else None
-    unw_suffix = full_suffix(unw_filename)
+    UNW_SUFFIX = full_suffix(unw_filename)
 
     # Get the driver based on the output file extension
     if Path(unw_filename).suffix == ".tif":
@@ -283,15 +278,14 @@ def unwrap(
         dtype=np.float32,
         options=opts,
     )
-    # Always use ENVI for conncomp
-    conncomp_filename = str(unw_filename).replace(unw_suffix, CONNCOMP_SUFFIX)
+    conncomp_filename = str(unw_filename).replace(UNW_SUFFIX, CONNCOMP_SUFFIX)
     io.write_arr(
         arr=None,
         output_name=conncomp_filename,
-        driver="ENVI",
+        driver="GTiff",
         dtype=np.uint32,
         like_filename=ifg_filename,
-        options=io.DEFAULT_ENVI_OPTIONS,
+        options=io.DEFAULT_TIFF_OPTIONS,
     )
 
     if use_snaphu:
@@ -341,208 +335,4 @@ def unwrap(
             corr_raster,
         )
     del unw_raster, conncomp_raster
-    return Path(unw_filename), Path(conncomp_filename)
-
-
-def _zero_from_mask(
-    ifg_filename: Filename, corr_filename: Filename, mask_filename: Filename
-) -> tuple[Path, Path]:
-    zeroed_ifg_file = Path(ifg_filename).with_suffix(".zeroed.tif")
-    zeroed_corr_file = Path(corr_filename).with_suffix(".zeroed.cor.tif")
-
-    mask = io.load_gdal(mask_filename)
-    for in_f, out_f in zip(
-        [ifg_filename, corr_filename], [zeroed_ifg_file, zeroed_corr_file]
-    ):
-        arr = io.load_gdal(in_f)
-        arr[mask == 0] = 0
-        logger.debug(f"Size: {arr.size}, {(arr != 0).sum()} non-zero pixels")
-        io.write_arr(
-            arr=arr,
-            output_name=out_f,
-            like_filename=corr_filename,
-        )
-    return zeroed_ifg_file, zeroed_corr_file
-
-
-@njit(nogil=True)
-def compute_phase_diffs(phase):
-    """Compute the total number phase jumps > pi between adjacent pixels.
-
-    If part of `phase` is known to be bad phase (e.g. over water),
-    the values should be set to zero or a masked array should be passed:
-
-        unwrapping_error(np.ma.masked_where(bad_area_mask, phase))
-
-
-    Parameters
-    ----------
-    phase : ArrayLike
-        Unwrapped interferogram phase.
-
-    Returns
-    -------
-    int
-        Total number of jumps exceeding pi.
-    """
-    return _compute_phase_diffs(phase)
-
-
-@stencil
-def _compute_phase_diffs(phase):
-    d1 = np.abs(phase[0, 0] - phase[0, 1]) / np.pi
-    d2 = np.abs(phase[0, 0] - phase[1, 0]) / np.pi
-    # Subtract 0.5 so that anything below 1 gets rounded to 0
-    return round(d1 - 0.5) + round(d2 - 0.5)
-
-
-def _redirect_unwrapping_log(unw_filename: Filename, method: str):
-    import journal
-
-    logfile = Path(unw_filename).with_suffix(".log")
-    journal.info(f"isce3.unwrap.{method}").device = journal.logfile(
-        fspath(logfile), "w"
-    )
-    logger.info(f"Logging unwrapping output to {logfile}")
-
-
-def multiscale_unwrap(
-    ifg_filename: Filename,
-    corr_filename: Filename,
-    unw_filename: Filename,
-    downsample_factor: tuple[int, int],
-    ntiles: tuple[int, int],
-    nlooks: float,
-    mask_file: Optional[Filename] = None,
-    zero_where_masked: bool = True,
-    unwrap_method: UnwrapMethod = UnwrapMethod.SNAPHU,
-    init_method: str = "mst",
-    cost: str = "smooth",
-    scratchdir: Optional[Filename] = None,
-    log_to_file: bool = True,
-) -> tuple[Path, Path]:
-    """Unwrap an interferogram using at multiple scales using `tophu`.
-
-    Parameters
-    ----------
-    ifg_filename : Filename
-        Path to input interferogram.
-    corr_filename : Filename
-        Path to input correlation file.
-    unw_filename : Filename
-        Path to output unwrapped phase file.
-    downsample_factor : tuple[int, int]
-        Downsample the interferograms by this factor to unwrap faster, then upsample
-    ntiles : tuple[int, int]
-        Number of tiles to split for full image into for high res unwrapping.
-        If `ntiles` is an int, will use `(ntiles, ntiles)`
-    nlooks : float
-        Effective number of looks used to form the input correlation data.
-    mask_file : Filename, optional
-        Path to binary byte mask file, by default None.
-        Assumes that 1s are valid pixels and 0s are invalid.
-    zero_where_masked : bool, optional
-        Set wrapped phase/correlation to 0 where mask is 0 before unwrapping.
-        If not mask is provided, this is ignored.
-        By default True.
-    unwrap_method : UnwrapMethod or str, optional, default = "snaphu"
-        Choice of unwrapping algorithm to use.
-        Choices: {"snaphu", "icu", "phass"}
-    init_method : str, choices = {"mcf", "mst"}
-        SNAPHU initialization method, by default "mst"
-    cost : str, choices = {"smooth", "defo", "p-norm",}
-        SNAPHU cost function, by default "smooth"
-    scratchdir : Filename, optional
-        Path to scratch directory to hold intermediate files.
-        If None, uses `tophu`'s `/tmp/...` default.
-    log_to_file : bool, optional
-        Redirect isce3's logging output to file, by default True
-
-    Returns
-    -------
-    unw_path : Path
-        Path to output unwrapped phase file.
-    conncomp_path : Path
-        Path to output connected component label file.
-    """
-    import rasterio as rio
-    import tophu
-
-    def _get_rasterio_crs_transform(filename: Filename):
-        with rio.open(filename) as src:
-            return src.crs, src.transform
-
-    unwrap_method = UnwrapMethod(unwrap_method)
-    if unwrap_method == UnwrapMethod.ICU:
-        unwrap_callback = tophu.ICUUnwrap()
-        nodata = 0  # TODO: confirm this?
-    elif unwrap_method == UnwrapMethod.PHASS:
-        unwrap_callback = tophu.PhassUnwrap()
-        nodata = -10_000
-    elif unwrap_method == UnwrapMethod.SNAPHU:
-        unwrap_callback = tophu.SnaphuUnwrap(
-            cost=cost,
-            init_method=init_method,
-        )
-        nodata = 0
-    else:
-        raise ValueError(f"Unknown {unwrap_method = }")
-
-    (width, height) = io.get_raster_xysize(ifg_filename)
-    crs, transform = _get_rasterio_crs_transform(ifg_filename)
-
-    unw_suffix = full_suffix(unw_filename)
-    conncomp_filename = str(unw_filename).replace(unw_suffix, CONNCOMP_SUFFIX)
-
-    # SUFFIX=ADD
-    envi_options = dict(opt.lower().split("=") for opt in io.DEFAULT_ENVI_OPTIONS)
-    logger.debug(f"Saving conncomps to {conncomp_filename}")
-    conncomp_rb = tophu.RasterBand(
-        conncomp_filename,
-        height=height,
-        width=width,
-        dtype=np.uint16,
-        driver="ENVI",
-        crs=crs,
-        transform=transform,
-        **envi_options,
-    )
-    gtiff_options = dict(opt.lower().split("=") for opt in io.DEFAULT_TIFF_OPTIONS)
-    unw_rb = tophu.RasterBand(
-        unw_filename,
-        height=height,
-        width=width,
-        dtype=np.float32,
-        crs=crs,
-        transform=transform,
-        nodata=nodata,
-        **gtiff_options,
-    )
-
-    if zero_where_masked and mask_file is not None:
-        logger.info(f"Zeroing phase/corr of pixels masked in {mask_file}")
-        zeroed_ifg_file, zeroed_corr_file = _zero_from_mask(
-            ifg_filename, corr_filename, mask_file
-        )
-        igram_rb = tophu.RasterBand(zeroed_ifg_file)
-        coherence_rb = tophu.RasterBand(zeroed_corr_file)
-    else:
-        igram_rb = tophu.RasterBand(ifg_filename)
-        coherence_rb = tophu.RasterBand(corr_filename)
-
-    if log_to_file:
-        _redirect_unwrapping_log(unw_filename, unwrap_method.value)
-
-    tophu.multiscale_unwrap(
-        unw_rb,
-        conncomp_rb,
-        igram_rb,
-        coherence_rb,
-        nlooks=nlooks,
-        unwrap_func=unwrap_callback,
-        downsample_factor=downsample_factor,
-        ntiles=ntiles,
-        scratchdir=scratchdir,
-    )
-
     return Path(unw_filename), Path(conncomp_filename)

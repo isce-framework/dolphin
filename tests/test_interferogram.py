@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import datetime
 from pathlib import Path
 
 import numpy as np
@@ -9,6 +9,7 @@ from dolphin import io, utils
 from dolphin.interferogram import (
     Network,
     VRTInterferogram,
+    _create_vrt_conj,
     estimate_correlation_from_phase,
 )
 
@@ -17,9 +18,9 @@ def test_derived_vrt_interferogram(slc_file_list):
     """Basic test that the VRT loads the same as S1 * S2.conj()."""
     ifg = VRTInterferogram(ref_slc=slc_file_list[0], sec_slc=slc_file_list[1])
 
-    assert "20220101_20220102.vrt" == ifg.path.name
+    assert ifg.path.name == "20220101_20220102.int.vrt"
     assert io.get_raster_xysize(ifg.path) == io.get_raster_xysize(slc_file_list[0])
-    assert ifg.dates == (date(2022, 1, 1), date(2022, 1, 2))
+    assert ifg.dates == (datetime(2022, 1, 1), datetime(2022, 1, 2))
 
     arr0 = io.load_gdal(slc_file_list[0])
     arr1 = io.load_gdal(slc_file_list[1])
@@ -28,12 +29,36 @@ def test_derived_vrt_interferogram(slc_file_list):
     npt.assert_allclose(ifg_arr, arr0 * arr1.conj(), rtol=1e-6)
 
 
+def test_specify_dates(slc_file_list):
+    ref_slc, sec_slc = slc_file_list[0:2]
+    ref_date, sec_date = datetime(2022, 1, 1), datetime(2022, 1, 2)
+    ifg = VRTInterferogram(ref_slc=ref_slc, sec_slc=sec_slc)
+    assert ifg.dates == (ref_date, sec_date)
+    assert ifg.path.name == "20220101_20220102.int.vrt"
+
+    # Check other dates don't fail or get overwritten
+    ref_date2 = datetime(2023, 2, 2)
+    sec_date2 = datetime(2023, 2, 3)
+    ifg = VRTInterferogram(
+        ref_slc=ref_slc, sec_slc=sec_slc, ref_date=ref_date2, sec_date=sec_date2
+    )
+    assert ifg.dates == (ref_date2, sec_date2)
+    assert ifg.path.name == "20230202_20230203.int.vrt"
+    # One at a time check
+    ifg = VRTInterferogram(ref_slc=ref_slc, sec_slc=sec_slc, ref_date=ref_date2)
+    assert ifg.dates == (ref_date2, sec_date)
+    assert ifg.path.name == "20230202_20220102.int.vrt"
+    ifg = VRTInterferogram(ref_slc=ref_slc, sec_slc=sec_slc, sec_date=sec_date2)
+    assert ifg.dates == (ref_date, sec_date2)
+    assert ifg.path.name == "20220101_20230203.int.vrt"
+
+
 def test_derived_vrt_interferogram_nc(slc_file_list_nc):
     ifg = VRTInterferogram(
         ref_slc=slc_file_list_nc[0], sec_slc=slc_file_list_nc[1], subdataset="data"
     )
 
-    assert "20220101_20220102.vrt" == ifg.path.name
+    assert ifg.path.name == "20220101_20220102.int.vrt"
     assert io.get_raster_xysize(ifg.path) == io.get_raster_xysize(slc_file_list_nc[0])
 
     arr0 = io.load_gdal(slc_file_list_nc[0])
@@ -49,7 +74,7 @@ def test_derived_vrt_interferogram_with_subdataset(slc_file_list_nc_with_sds):
         ref_slc=slc_file_list_nc_with_sds[0], sec_slc=slc_file_list_nc_with_sds[1]
     )
 
-    assert "20220101_20220102.vrt" == ifg.path.name
+    assert ifg.path.name == "20220101_20220102.int.vrt"
     assert io.get_raster_xysize(ifg.path) == io.get_raster_xysize(
         slc_file_list_nc_with_sds[0]
     )
@@ -80,12 +105,12 @@ def test_derived_vrt_interferogram_with_subdataset(slc_file_list_nc_with_sds):
 
 def test_derived_vrt_interferogram_outdir(tmp_path, slc_file_list):
     ifg = VRTInterferogram(ref_slc=slc_file_list[0], sec_slc=slc_file_list[1])
-    assert slc_file_list[0].parent / "20220101_20220102.vrt" == ifg.path
+    assert slc_file_list[0].parent / "20220101_20220102.int.vrt" == ifg.path
 
     ifg = VRTInterferogram(
         ref_slc=slc_file_list[0], sec_slc=slc_file_list[1], outdir=tmp_path
     )
-    assert tmp_path / "20220101_20220102.vrt" == ifg.path
+    assert tmp_path / "20220101_20220102.int.vrt" == ifg.path
 
 
 def test_derived_vrt_interferogram_outfile(tmpdir, slc_file_list):
@@ -98,7 +123,7 @@ def test_derived_vrt_interferogram_outfile(tmpdir, slc_file_list):
 
 
 # Use use four files for the tests below
-@pytest.fixture
+@pytest.fixture()
 def four_slc_files(slc_file_list):
     # starts on 20220101
     return slc_file_list[:4]
@@ -106,7 +131,8 @@ def four_slc_files(slc_file_list):
 
 def _get_pair_stems(slc_file_pairs):
     return [
-        (a.stem.strip(".slc.tif"), b.stem.strip(".slc.tif")) for a, b in slc_file_pairs
+        (a.stem.strip(".slc.tif"), b.stem.strip(".slc.tif"))  # noqa: B005
+        for a, b in slc_file_pairs
     ]
 
 
@@ -122,9 +148,9 @@ def test_single_reference_network(tmp_path, four_slc_files):
         ("20220101", "20220104"),
     ]
     # check the written out files:
-    assert Path(tmp_path / "20220101_20220102.vrt").exists()
-    assert Path(tmp_path / "20220101_20220103.vrt").exists()
-    assert Path(tmp_path / "20220101_20220104.vrt").exists()
+    assert Path(tmp_path / "20220101_20220102.int.vrt").exists()
+    assert Path(tmp_path / "20220101_20220103.int.vrt").exists()
+    assert Path(tmp_path / "20220101_20220104.int.vrt").exists()
 
     n = Network(four_slc_files, reference_idx=1, outdir=tmp_path)
     assert _get_pair_stems(n.slc_file_pairs) == [
@@ -132,9 +158,9 @@ def test_single_reference_network(tmp_path, four_slc_files):
         ("20220102", "20220103"),
         ("20220102", "20220104"),
     ]
-    assert Path(tmp_path / "20220101_20220102.vrt").exists()
-    assert Path(tmp_path / "20220102_20220103.vrt").exists()
-    assert Path(tmp_path / "20220102_20220104.vrt").exists()
+    assert Path(tmp_path / "20220101_20220102.int.vrt").exists()
+    assert Path(tmp_path / "20220102_20220103.int.vrt").exists()
+    assert Path(tmp_path / "20220102_20220104.int.vrt").exists()
 
 
 def test_limit_by_bandwidth(tmp_path, four_slc_files):
@@ -192,6 +218,23 @@ def test_limit_by_temporal_baseline(tmp_path, four_slc_files):
     ]
 
 
+def test_annual_ifgs():
+    dates = [
+        datetime(2021, 1, 1),
+        datetime(2021, 2, 1),
+        datetime(2022, 1, 4),
+        datetime(2022, 6, 1),
+    ]
+    slcs = [d.strftime("%Y%m%d") for d in dates]
+    assert Network._find_annuals(slcs, dates) == [
+        (slcs[0], slcs[2]),
+        (slcs[1], slcs[2]),
+    ]
+    assert Network._find_annuals(slcs, dates, buffer_days=10) == [(slcs[0], slcs[2])]
+
+    assert Network._find_annuals(slcs[1:], dates[1:], buffer_days=10) == []
+
+
 def test_manual_indexes(tmp_path, four_slc_files):
     n = Network(four_slc_files, indexes=[], outdir=tmp_path)
     assert _get_pair_stems(n.slc_file_pairs) == []
@@ -208,7 +251,7 @@ def test_manual_indexes(tmp_path, four_slc_files):
     ]
 
 
-@pytest.fixture
+@pytest.fixture()
 def expected_3x3_cor():
     # the edges will be less than 1 because of the windowing
     return np.array(
@@ -253,3 +296,58 @@ def test_correlation_from_phase_vrtinterferogram_input(window_size, slc_file_lis
     ifg = VRTInterferogram(ref_slc=slc_file_list[0], sec_slc=slc_file_list[1])
     estimate_correlation_from_phase(ifg, window_size)
     # just checking it loads and runs
+
+
+def test_create_vrt_conj(tmp_path, slc_file_list_nc_wgs84):
+    # create a VRTInterferogram
+    infile = io.format_nc_filename(slc_file_list_nc_wgs84[0], "data")
+    out = tmp_path / "test.vrt"
+    _create_vrt_conj(infile, output_filename=out)
+
+    assert out.exists()
+    assert io.get_raster_gt(out) == io.get_raster_gt(infile)
+    assert io.get_raster_xysize(out) == io.get_raster_xysize(infile)
+    assert io.get_raster_crs(out) == io.get_raster_crs(infile)
+    np.testing.assert_array_equal(io.load_gdal(out).conj(), io.load_gdal(infile))
+
+
+def test_network_manual_dates(four_slc_files):
+    Network(
+        four_slc_files,
+        max_bandwidth=1,
+        write=False,
+        dates=["20210101", "20210107", "20210101", "20210109"],
+    )
+
+
+def test_network_manual_wrong_len_dates(four_slc_files):
+    with pytest.raises(ValueError):
+        Network(
+            four_slc_files, max_bandwidth=1, write=False, dates=["20210101", "20210109"]
+        )
+
+
+def test_network_no_verify():
+    datestrs = ["20210101", "20210107", "20210108", "20210109"]
+    Network(
+        datestrs,
+        max_bandwidth=1,
+        write=False,
+        verify_slcs=False,
+    )
+
+
+def test_network_from_ifgs():
+    """Check that the `Network` can work when passing in ifgs"""
+    ifg_files = ["20210101_20210107", "202010101_20210108", "20210101_20210109"]
+    n = Network(
+        ifg_files,
+        max_bandwidth=10,
+        write=False,
+        verify_slcs=False,
+        dates=["2021-01-07", "2021-01-08", "2021-01-09"],
+    )
+    assert len(n.ifg_list) == 3
+    assert n.ifg_list[0].path.name == "20210107_20210108.int.vrt"
+    assert n.ifg_list[1].path.name == "20210107_20210109.int.vrt"
+    assert n.ifg_list[2].path.name == "20210108_20210109.int.vrt"

@@ -2,8 +2,7 @@ from __future__ import annotations
 
 import logging
 import warnings
-from collections import namedtuple
-from typing import Optional
+from typing import NamedTuple, Optional
 
 import numpy as np
 import pymp
@@ -17,18 +16,24 @@ logger = logging.getLogger(__name__)
 class PhaseLinkRuntimeError(Exception):
     """Exception raised while running the MLE solver."""
 
-    pass
 
+class MleOutput(NamedTuple):
+    """Output of the MLE solver."""
 
-MleOutput = namedtuple(
-    "MleOutput", ["mle_est", "temp_coh", "avg_coh"], defaults=[None, None, None]
-)
+    mle_est: np.ndarray
+    """Estimated linked phase."""
+
+    temp_coh: np.ndarray
+    """Temporal coherence."""
+
+    avg_coh: np.ndarray | None = None
+    """Average coherence across dates for each SLC."""
 
 
 def run_mle(
     slc_stack: np.ndarray,
     half_window: dict[str, int],
-    strides: dict[str, int] = {"x": 1, "y": 1},
+    strides: Optional[dict[str, int]] = None,
     use_evd: bool = False,
     beta: float = 0.01,
     reference_idx: int = 0,
@@ -93,10 +98,13 @@ def run_mle(
         The estimated linked phase, with shape (n_images, n_rows, n_cols)
     temp_coh : np.ndarray[np.float32]
         The temporal coherence at each pixel, shape (n_rows, n_cols)
+    If `calc_average_coh` is True, `avg_coh` will also be returned.
     """
     from ._mle_cpu import run_cpu as _run_cpu
     from ._mle_gpu import run_gpu as _run_gpu
 
+    if strides is None:
+        strides = {"x": 1, "y": 1}
     _, rows, cols = slc_stack.shape
     # Common pre-processing for both CPU and GPU versions:
 
@@ -117,10 +125,11 @@ def run_mle(
 
     # Make sure we also are ignoring pixels which are nans for all SLCs
     if nodata_mask.shape != (rows, cols) or ps_mask.shape != (rows, cols):
-        raise ValueError(
+        msg = (
             f"nodata_mask.shape={nodata_mask.shape}, ps_mask.shape={ps_mask.shape},"
             f" but != SLC (rows, cols) {rows, cols}"
         )
+        raise ValueError(msg)
     # for any area that has nans in the SLC stack, mark it as nodata
     nodata_mask |= np.any(np.isnan(slc_stack), axis=0)
     # Make sure the PS mask didn't have extra burst borders that are nodata here
@@ -186,7 +195,7 @@ def mle_stack(
     C_arrays,
     use_evd: bool = False,
     beta: float = 0.01,
-    reference_idx: float = 0,
+    reference_idx: int = 0,
     n_workers: int = 1,
 ):
     """Estimate the linked phase for a stack of covariance matrices.
@@ -196,6 +205,7 @@ def mle_stack(
     Will use cupy if available, (and if the input is a GPU array).
     Otherwise, uses numpy (for CPU version).
 
+
     Parameters
     ----------
     C_arrays : ndarray, shape = (rows, cols, nslc, nslc)
@@ -203,16 +213,14 @@ def mle_stack(
         (e.g. from [dolphin.phase_link.covariance.estimate_stack_covariance_cpu][])
     use_evd : bool, default = False
         Use eigenvalue decomposition on the covariance matrix instead of
-        the EMI algorithm.
+        the EMI algorithm of [@Ansari2018EfficientPhaseEstimation].
     beta : float, optional
         The regularization parameter for inverting Gamma = |C|
         The regularization is applied as (1 - beta) * Gamma + beta * I
         Default is 0.01.
     reference_idx : int, optional
         The index of the reference acquisition, by default 0
-        If the SLC stack from which `C_arrays` was computed contained
-        compressed SLCs at the stack, then this should be the index
-        of the first non-compressed SLC.
+        All outputs are multiplied by the conjugate of the data at this index.
     n_workers : int, optional
         The number of workers to use (CPU version) for the eigenvector problem.
         If 1 (default), no multiprocessing is used.
@@ -221,13 +229,6 @@ def mle_stack(
     -------
     ndarray, shape = (nslc, rows, cols)
         The estimated linked phase, same shape as the input slcs (possibly multilooked)
-
-    References
-    ----------
-        [1] Ansari, H., De Zan, F., & Bamler, R. (2018). Efficient phase
-        estimation for interferogram stacks. IEEE Transactions on
-        Geoscience and Remote Sensing, 56(7), 4109-4125.
-
     """
     xp = get_array_module(C_arrays)
     # estimate the wrapped phase based on the EMI paper
@@ -326,9 +327,8 @@ def _check_all_nans(slc_stack: np.ndarray):
     # Check that there are no SLCS which are all nans:
     bad_slc_idxs = np.where(np.all(nans, axis=(1, 2)))[0]
     if bad_slc_idxs.size > 0:
-        raise PhaseLinkRuntimeError(
-            f"slc_stack[{bad_slc_idxs}] out of {len(slc_stack)} are all NaNs."
-        )
+        msg = f"slc_stack[{bad_slc_idxs}] out of {len(slc_stack)} are all NaNs."
+        raise PhaseLinkRuntimeError(msg)
 
 
 def _fill_ps_pixels(

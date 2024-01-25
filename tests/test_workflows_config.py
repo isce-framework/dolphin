@@ -15,7 +15,7 @@ def test_half_window_defaults():
     hw = config.HalfWindow()
     assert hw.x == 11
     assert hw.y == 5
-    assert hw.model_dump() == dict(x=11, y=5)
+    assert hw.model_dump() == {"x": 11, "y": 5}
 
 
 def test_half_window_to_looks():
@@ -80,20 +80,20 @@ def test_unwrap_options_defaults():
     assert opts.unwrap_method == UnwrapMethod.SNAPHU
     assert opts.init_method == "mcf"
     assert opts._directory == Path("unwrapped")
-    assert opts.ntiles == [1, 1]
-    assert opts.downsample_factor == [1, 1]
+    assert opts.ntiles == (1, 1)
+    assert opts.downsample_factor == (1, 1)
 
 
 def test_outputs_defaults():
     opts = config.OutputOptions()
     assert opts.output_resolution is None
     assert opts.strides == {"x": 1, "y": 1}
-    assert opts.hdf5_creation_options == dict(
-        chunks=[128, 128],
-        compression="gzip",
-        compression_opts=4,
-        shuffle=True,
-    )
+    assert opts.hdf5_creation_options == {
+        "chunks": [128, 128],
+        "compression": "gzip",
+        "compression_opts": 4,
+        "shuffle": True,
+    }
 
 
 def test_worker_settings_defaults():
@@ -130,7 +130,7 @@ def dir_with_2_slcs(tmp_path, slc_file_list_nc):
 
 def test_inputs_defaults(dir_with_1_slc):
     # make a dummy file
-    opts = config.Workflow(
+    opts = config.DisplacementWorkflow(
         cslc_file_list=dir_with_1_slc / "slclist.txt",
         input_options={"subdataset": "data"},
     )
@@ -143,7 +143,7 @@ def test_inputs_defaults(dir_with_1_slc):
     assert opts.mask_file is None
 
     # check it's coerced to a list of Paths
-    opts2 = config.Workflow(
+    opts2 = config.DisplacementWorkflow(
         cslc_file_list=[str(opts.cslc_file_list[0])],
         input_options={"subdataset": "data"},
     )
@@ -154,19 +154,19 @@ def test_inputs_bad_filename(tmp_path):
     # make a dummy file
     bad_cslc_file = tmp_path / "nonexistent_slclist.txt"
     with pytest.raises(pydantic.ValidationError, match="does not exist"):
-        config.Workflow(cslc_file_list=bad_cslc_file)
+        config.DisplacementWorkflow(cslc_file_list=bad_cslc_file)
 
 
 def test_input_find_slcs(slc_file_list_nc):
     cslc_dir = Path(slc_file_list_nc[0]).parent
 
-    opts = config.Workflow(
+    opts = config.DisplacementWorkflow(
         cslc_file_list=slc_file_list_nc, input_options={"subdataset": "data"}
     )
     assert opts.cslc_file_list == slc_file_list_nc
     dict1 = opts.model_dump()
 
-    opts2 = config.Workflow(
+    opts2 = config.DisplacementWorkflow(
         cslc_file_list=cslc_dir / "slclist.txt", input_options={"subdataset": "data"}
     )
     dict2 = opts2.model_dump()
@@ -180,7 +180,7 @@ def test_input_relative_paths(tmpdir, slc_file_list_nc):
     with tmpdir.as_cwd():
         newfile = Path(slc_file_list_nc[0].name)
         shutil.copy(slc_file_list_nc[0], newfile)
-        opts = config.Workflow(
+        opts = config.DisplacementWorkflow(
             cslc_file_list=[newfile],
             input_options={"subdataset": "data"},
             keep_paths_relative=True,
@@ -192,7 +192,7 @@ def test_input_glob_pattern(slc_file_list_nc):
     cslc_dir = Path(slc_file_list_nc[0]).parent
     slc_glob = str(cslc_dir / "20*nc")
 
-    opts = config.Workflow(
+    opts = config.DisplacementWorkflow(
         cslc_file_list=slc_glob, input_options={"subdataset": "data"}
     )
     assert opts.cslc_file_list == slc_file_list_nc
@@ -202,13 +202,13 @@ def test_input_nc_missing_subdataset(slc_file_list_nc):
     cslc_dir = Path(slc_file_list_nc[0]).parent
 
     with pytest.raises(pydantic.ValidationError, match="Must provide subdataset name"):
-        config.Workflow(cslc_file_list=cslc_dir / "slclist.txt")
+        config.DisplacementWorkflow(cslc_file_list=cslc_dir / "slclist.txt")
 
 
 def test_input_slc_date_fmt(dir_with_2_slcs):
     expected_slcs = [Path(str(p)) for p in sorted(dir_with_2_slcs.glob("*.nc"))]
 
-    opts = config.Workflow(
+    opts = config.DisplacementWorkflow(
         cslc_file_list=expected_slcs, input_options={"subdataset": "data"}
     )
     assert opts.cslc_file_list == expected_slcs
@@ -218,7 +218,7 @@ def test_input_slc_date_fmt(dir_with_2_slcs):
     shutil.copy(expected_slcs[0], bad_date_slc)
     new_file_list = dir_with_2_slcs.glob("*.nc")
     with pytest.raises(pydantic.ValidationError):
-        opts = config.Workflow(
+        opts = config.DisplacementWorkflow(
             cslc_file_list=new_file_list, input_options={"subdataset": "data"}
         )
 
@@ -228,7 +228,7 @@ def test_input_slc_date_fmt(dir_with_2_slcs):
     shutil.copy(expected_slcs[1], slc_file2)
     new_file_list = dir_with_2_slcs.glob("2022-*.nc")
 
-    opts = config.Workflow(
+    opts = config.DisplacementWorkflow(
         cslc_file_list=new_file_list,
         input_options={"cslc_date_fmt": "%Y-%m-%d", "subdataset": "data"},
     )
@@ -237,7 +237,7 @@ def test_input_slc_date_fmt(dir_with_2_slcs):
     # Check that we can get slcs by passing empty string
     # Should match all created files
     all_file_list = list(dir_with_2_slcs.glob("*.nc"))
-    opts = config.Workflow(
+    opts = config.DisplacementWorkflow(
         cslc_file_list=all_file_list,
         input_options={"cslc_date_fmt": "", "subdataset": "data"},
     )
@@ -246,12 +246,12 @@ def test_input_slc_date_fmt(dir_with_2_slcs):
 
 def test_input_date_sort(dir_with_2_slcs):
     file_list = [Path(str(p)) for p in sorted(dir_with_2_slcs.glob("*.nc"))]
-    opts = config.Workflow(
+    opts = config.DisplacementWorkflow(
         cslc_file_list=file_list, input_options={"subdataset": "data"}
     )
     assert opts.cslc_file_list == file_list
 
-    opts = config.Workflow(
+    opts = config.DisplacementWorkflow(
         cslc_file_list=reversed(file_list), input_options={"subdataset": "data"}
     )
     assert opts.cslc_file_list == file_list
@@ -278,8 +278,8 @@ def test_input_opera_cslc(tmp_path, slc_stack):
         )
         file_list.append(Path(fname))
 
-    opts = config.Workflow(
-        cslc_file_list=file_list, input_options=dict(subdataset="/data/VV")
+    opts = config.DisplacementWorkflow(
+        cslc_file_list=file_list, input_options={"subdataset": "/data/VV"}
     )
     assert opts.cslc_file_list == file_list
     assert opts.input_options.subdataset == "/data/VV"
@@ -287,13 +287,13 @@ def test_input_opera_cslc(tmp_path, slc_stack):
 
 def test_input_cslc_empty():
     with pytest.raises(pydantic.ValidationError):
-        config.Workflow(cslc_file_list=None)
-        config.Workflow(cslc_file_list="")
-        config.Workflow(cslc_file_list=[])
+        config.DisplacementWorkflow(cslc_file_list=None)
+        config.DisplacementWorkflow(cslc_file_list="")
+        config.DisplacementWorkflow(cslc_file_list=[])
 
 
-def test_config_defaults(dir_with_1_slc):
-    c = config.Workflow(
+def test_config_displacement_workflow_defaults(dir_with_1_slc):
+    c = config.DisplacementWorkflow(
         cslc_file_list=dir_with_1_slc / "slclist.txt",
         input_options={"subdataset": "data"},
     )
@@ -301,7 +301,7 @@ def test_config_defaults(dir_with_1_slc):
     assert c.output_options == config.OutputOptions()
     assert c.worker_settings == config.WorkerSettings()
     assert c.input_options == config.InputOptions(subdataset="data")
-    assert c.work_directory == Path(".").resolve()
+    assert c.work_directory == Path().resolve()
 
     # Check the defaults for the sub-configs, where the folders
     # should have been moved to the working directory
@@ -334,17 +334,18 @@ def test_config_create_dir_tree(tmpdir, slc_file_list_nc):
     shutil.copy(slc_file_list_nc[0], tmpdir / fname0)
 
     with tmpdir.as_cwd():
-        c = config.Workflow(
+        c = config.DisplacementWorkflow(
             cslc_file_list=[fname0], input_options={"subdataset": "data"}
         )
         c.create_dir_tree()
+
         assert c.ps_options._directory.exists()
         assert c.interferogram_network._directory.exists()
         assert c.phase_linking._directory.exists()
         assert c.unwrap_options._directory.exists()
 
         # Check that the working directory is created
-        assert Path(".").exists()
+        assert Path().exists()
 
         for d in c._directory_list:
             assert d.exists()
@@ -352,51 +353,64 @@ def test_config_create_dir_tree(tmpdir, slc_file_list_nc):
 
 
 def test_config_roundtrip_dict(dir_with_1_slc):
-    c = config.Workflow(
+    c = config.DisplacementWorkflow(
         cslc_file_list=dir_with_1_slc / "slclist.txt",
         input_options={"subdataset": "data"},
     )
     c_dict = c.model_dump()
-    c2 = config.Workflow(**c_dict)
+    c2 = config.DisplacementWorkflow(**c_dict)
     assert c == c2
 
 
 def test_config_roundtrip_json(dir_with_1_slc):
-    c = config.Workflow(
+    c = config.DisplacementWorkflow(
         cslc_file_list=dir_with_1_slc / "slclist.txt",
         input_options={"subdataset": "data"},
     )
     c_json = c.model_dump_json()
-    c2 = config.Workflow.model_validate_json(c_json)
+    c2 = config.DisplacementWorkflow.model_validate_json(c_json)
     assert c == c2
 
 
 def test_config_roundtrip_yaml(tmp_path, dir_with_1_slc):
     outfile = tmp_path / "config.yaml"
-    c = config.Workflow(
+    c = config.DisplacementWorkflow(
         cslc_file_list=dir_with_1_slc / "slclist.txt",
         input_options={"subdataset": "data"},
     )
     c.to_yaml(outfile)
-    c2 = config.Workflow.from_yaml(outfile)
+    c2 = config.DisplacementWorkflow.from_yaml(outfile)
     assert c == c2
 
 
 def test_config_roundtrip_yaml_with_comments(tmp_path, dir_with_1_slc):
     outfile = tmp_path / "config.yaml"
-    c = config.Workflow(
+    c = config.DisplacementWorkflow(
         cslc_file_list=dir_with_1_slc / "slclist.txt",
         input_options={"subdataset": "data"},
     )
     c.to_yaml(outfile, with_comments=True)
-    c2 = config.Workflow.from_yaml(outfile)
+    c2 = config.DisplacementWorkflow.from_yaml(outfile)
     assert c == c2
 
 
 def test_config_print_yaml_schema(tmp_path, dir_with_1_slc):
     outfile = tmp_path / "empty_schema.yaml"
-    c = config.Workflow(
+    c = config.DisplacementWorkflow(
         cslc_file_list=dir_with_1_slc / "slclist.txt",
         input_options={"subdataset": "data"},
     )
     c.print_yaml_schema(outfile)
+
+
+def test_config_ps_workflow_defaults(dir_with_1_slc):
+    c = config.PsWorkflow(
+        cslc_file_list=dir_with_1_slc / "slclist.txt",
+        input_options={"subdataset": "data"},
+    )
+
+    assert c.input_options == config.InputOptions(subdataset="data")
+    # Need to compare `model_fields` because the new instance of `PsOptions`
+    assert c.output_options == config.OutputOptions()
+    # has different private directories
+    assert c.ps_options.model_fields == config.PsOptions().model_fields
