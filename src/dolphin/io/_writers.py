@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 from contextlib import AbstractContextManager
+from dataclasses import dataclass
 from typing import (
     TYPE_CHECKING,
+    Any,
+    Mapping,
     Protocol,
     TypeVar,
     runtime_checkable,
@@ -11,6 +14,7 @@ from typing import (
 import numpy as np
 import rasterio
 from numpy.typing import ArrayLike, DTypeLike
+from rasterio.windows import Window
 
 from dolphin._types import Filename
 
@@ -53,6 +57,7 @@ class DatasetWriter(Protocol):
 RasterT = TypeVar("RasterT", bound="RasterWriter")
 
 
+@dataclass
 class RasterWriter(DatasetWriter, AbstractContextManager["RasterWriter"]):
     """A single raster band in a GDAL-compatible dataset containing one or more bands.
 
@@ -70,6 +75,26 @@ class RasterWriter(DatasetWriter, AbstractContextManager["RasterWriter"]):
     ensure that the raster is closed upon exiting the context manager.
     """
 
+    filename: Filename
+    """str or Path : Path to the file to write."""
+    band: int = 1
+    """int : Band index in the file to write."""
+
+    def __post_init__(self) -> None:
+        # Open the dataset.
+        self.dataset = rasterio.open(self.filename, mode="r+")
+
+        # Check that `band` is a valid band index in the dataset.
+        nbands = self.dataset.count
+        if not (1 <= self.band <= nbands):
+            errmsg = (
+                f"band index {self.band} out of range: dataset contains {nbands} raster"
+                " band(s)"
+            )
+            raise IndexError(errmsg)
+
+        self.ndim = 2
+
     @classmethod
     def create(
         cls: type[RasterT],
@@ -81,7 +106,7 @@ class RasterWriter(DatasetWriter, AbstractContextManager["RasterWriter"]):
         crs: str | Mapping[str, str] | rasterio.crs.CRS | None = None,
         transform: rasterio.transform.Affine | None = None,
         *,
-        like: Raster | None = None,
+        like_filename: Filename | None = None,
         **kwargs: Any,
     ) -> RasterT:
         """Create a new single-band raster dataset.
@@ -117,7 +142,7 @@ class RasterWriter(DatasetWriter, AbstractContextManager["RasterWriter"]):
             Affine transformation mapping the pixel space to geographic space. If None,
             the geotransform of `like` will be used, if available, otherwise the default
             transform will be used. Defaults to None.
-        like : Raster or None, optional
+        like_filename : Raster or None, optional
             An optional reference raster. If not None, the new raster will be created
             with the same metadata (shape, data-type, driver, CRS/geotransform, etc) as
             the reference raster. All other arguments will override the corresponding
@@ -125,8 +150,9 @@ class RasterWriter(DatasetWriter, AbstractContextManager["RasterWriter"]):
         **kwargs : dict, optional
             Additional driver-specific creation options passed to `rasterio.open`.
         """
-        if like is not None:
-            kwargs = like.dataset.profile | kwargs
+        if like_filename is not None:
+            with rasterio.open(like_filename) as dataset:
+                kwargs = dataset.profile | kwargs
 
         if width is not None:
             kwargs["width"] = width
@@ -146,15 +172,10 @@ class RasterWriter(DatasetWriter, AbstractContextManager["RasterWriter"]):
         kwargs["count"] = 1
 
         # Create the new single-band dataset.
-        dataset = rasterio.open(fp, mode="w+", **kwargs)
+        with rasterio.open(fp, mode="w+", **kwargs):
+            pass
 
-        # XXX We need this gross hack in order to bypass calling `__init__` (which only
-        # supports opening existing datasets).
-        raster = cls.__new__(cls)
-        raster._dataset = dataset
-        raster._band = 1
-
-        return raster
+        return cls(fp, band=1)
 
     @property
     def dtype(self) -> np.dtype:
@@ -171,46 +192,8 @@ class RasterWriter(DatasetWriter, AbstractContextManager["RasterWriter"]):
         return self.dataset.width  # type: ignore[no-any-return]
 
     @property
-    def shape(self) -> tuple[int, int]:
+    def shape(self):
         return self.height, self.width
-
-    @property
-    def ndim(self) -> int:
-        return 2
-
-    @property
-    def dataset(self) -> rasterio.io.DatasetWriter:
-        """The underlying `rasterio` dataset."""
-        return self._dataset
-
-    @property
-    def band(self) -> int:
-        """int : Band index (1-based)."""  # noqa: D403
-        return self._band
-
-    @property
-    def mode(self) -> str:
-        """str : File access mode."""  # noqa: D403
-        return self.dataset.mode  # type: ignore[no-any-return]
-
-    @property
-    def driver(self) -> str:
-        """str : Raster format driver name."""  # noqa: D403
-        return self.dataset.driver  # type: ignore[no-any-return]
-
-    @property
-    def crs(self) -> rasterio.crs.CRS:
-        """rasterio.crs.CRS : The dataset's coordinate reference system."""
-        return self.dataset.crs
-
-    @property
-    def transform(self) -> rasterio.transform.Affine:
-        """rasterio.transform.Affine : dataset's georeferencing transformation matrix.
-
-        This transform maps pixel row/column coordinates to coordinates in the dataset's
-        coordinate reference system.
-        """
-        return self.dataset.transform
 
     @property
     def closed(self) -> bool:
@@ -228,70 +211,62 @@ class RasterWriter(DatasetWriter, AbstractContextManager["RasterWriter"]):
     def __exit__(self, exc_type, exc_value, traceback):  # type: ignore[no-untyped-def]
         self.close()
 
-    def __array__(self) -> np.ndarray:
-        return self.dataset.read(self.band)
-
-    def _window_from_slices(
-        self, key: slice | tuple[slice, ...]
-    ) -> rasterio.windows.Window:
+    def _window_from_slices(self, key: slice | tuple[slice, ...]) -> Window:
         if isinstance(key, slice):
             row_slice = key
             col_slice = slice(None)
         else:
             row_slice, col_slice = key
 
-        return rasterio.windows.Window.from_slices(
+        return Window.from_slices(
             row_slice, col_slice, height=self.height, width=self.width
         )
-
-    def __getitem__(self, key: slice | tuple[slice, ...], /) -> np.ndarray:
-        window = self._window_from_slices(key)
-        return self.dataset.read(self.band, window=window)
-
-    def __setitem__(self, key: slice | tuple[slice, ...], value: np.ndarray, /) -> None:
-        window = self._window_from_slices(key)
-        self.dataset.write(value, self.band, window=window)
 
     def __repr__(self) -> str:
         clsname = type(self).__name__
         return f"{clsname}(dataset={self.dataset!r}, band={self.band!r})"
 
+    def __setitem__(self, key: tuple[Index, ...], value: np.ndarray, /) -> None:
+        with rasterio.open(
+            self.filename,
+            "r+",
+        ) as dataset:
+            window = Window.from_slices(
+                *key,
+                height=dataset.height,
+                width=dataset.width,
+            )
+            return dataset.write(value, self.band, window=window)
 
-class RasterWriter(BackgroundWriter, RasterWriter):
+
+class BackgroundRasterWriter(BackgroundWriter, RasterWriter):
     """Class to write data to files in a background thread."""
 
-    def __init__(self, max_queue: int = 0, debug: bool = False, **kwargs):
+    def __init__(
+        self, filename: Filename, max_queue: int = 0, debug: bool = False, **kwargs
+    ):
         if debug is False:
             super().__init__(nq=max_queue, name="Writer", **kwargs)
         else:
             # Don't start a background thread. Just synchronously write data
             self.queue_write = self.write  # type: ignore[assignment]
+        self._raster = RasterWriter(filename, **kwargs)
 
-    def write(
-        self, data: ArrayLike, filename: Filename, row_start: int, col_start: int
-    ):
+    def write(self, key: tuple[Index, ...], value: np.ndarray):
         """Write out an ndarray to a subset of the pre-made `filename`.
 
         Parameters
         ----------
-        data : ArrayLike
-            2D or 3D data array to save.
-        filename : Filename
-            list of output files to save to, or (if cur_block is 2D) a single file.
-        row_start : int
-            Row index to start writing at.
-        col_start : int
-            Column index to start writing at.
+        key : tuple[Index,...]
+            The key of the data to write.
 
-        Raises
-        ------
-        ValueError
-            If length of `output_files` does not match length of `cur_block`.
+        value : np.ndarray
+            The block of data to write.
         """
-        write_block(data, filename, row_start, col_start)
+        self[key] = value
 
-    def __setitem__(self, key, value):
-        self.queue_write(value, key)
+    def __setitem__(self, key: tuple[Index, ...], value: np.ndarray, /) -> None:
+        self.queue_write(key, value)
 
 
 class Writer(BackgroundWriter):
