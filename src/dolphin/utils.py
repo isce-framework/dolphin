@@ -701,7 +701,8 @@ def compute_out_shape(shape: tuple[int, int], strides: Strides) -> tuple[int, in
     so the output size would still be 2.
     """
     rows, cols = shape
-    return (rows // strides.y, cols // strides.x)
+    rstride, cstride = strides
+    return (rows // rstride, cols // cstride)
 
 
 class DummyProcessPoolExecutor(Executor):

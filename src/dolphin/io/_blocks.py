@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Iterator, Optional
 
+from numpy.typing import ArrayLike
+
 from dolphin._types import HalfWindow, Strides
 from dolphin.utils import compute_out_shape
 
@@ -151,7 +153,17 @@ def unstride_center(decimated_index: int, stride: int) -> int:
     return decimated_index * stride + stride // 2
 
 
-def dilate_1d_slice(
+def unstride_slice(decimated_slice: slice, stride: int) -> slice:
+    full_res_start = unstride_center(decimated_slice.start, stride)
+    if decimated_slice.stop is not None:
+        last_decimated_idx = decimated_slice.stop - 1
+        full_res_end = unstride_center(last_decimated_idx, stride) + 1
+    else:
+        full_res_end = None
+    return slice(full_res_start, full_res_end)
+
+
+def _unstrided_full_cover(
     decimated_slice: slice,
     stride: int,
 ) -> slice:
@@ -170,22 +182,17 @@ def dilate_1d_slice(
         slice which covers the whole full-res region corresponding
         to `decimated_slice`
     """
-    full_res_start = unstride_center(decimated_slice.start, stride)
-    if decimated_slice.stop is None:
-        full_res_end = None
-    else:
-        full_res_end = stride * (decimated_slice.stop - 1)
-    return slice(full_res_start, full_res_end)
+    return slice(stride * decimated_slice.start, stride * decimated_slice.stop)
 
 
-def dilate_block(
+def unstride_block(
     decimated_block: BlockIndices,
     strides: Strides,
 ) -> BlockIndices:
-    """Grow slices in `BlockIndices` to fit a larger array.
+    """Grow slices in `BlockIndices` to undo a striding operation.
 
-    This is to undo the "stride"/decimation index changes, so we can go from
-    smaller, strided array indices to the original.
+    This is so we can go back from the smaller, strided/decimated grid
+    indices to the original, full-res grid indices.
 
     `decimated_block` is the smaller one which was made by taking `strides`
     from the larger block.
@@ -207,8 +214,8 @@ def dilate_block(
     """
     # Just treat each dim using the 1d function
     row_slice, col_slice = decimated_block
-    full_row_slice = dilate_1d_slice(row_slice, strides.y)
-    full_col_slice = dilate_1d_slice(col_slice, strides.x)
+    full_row_slice = unstride_slice(row_slice, strides.y)
+    full_col_slice = unstride_slice(col_slice, strides.x)
     return BlockIndices.from_slices(full_row_slice, full_col_slice)
 
 
@@ -256,11 +263,29 @@ def pad_block(in_block: BlockIndices, margins: tuple[int, int]) -> BlockIndices:
         msg = f"{c_slice = }, but {c_margin = }"
         raise ValueError(msg)
     return BlockIndices(
-        max(r_slice.start - r_margin, 0),
+        # max(r_slice.start - r_margin, 0),
+        r_slice.start - r_margin,
         r_slice.stop + r_margin,
-        max(c_slice.start - c_margin, 0),
+        # max(c_slice.start - c_margin, 0),
+        c_slice.start - c_margin,
         c_slice.stop + c_margin,
     )
+
+
+def _get_trimmed_full_res(
+    data: ArrayLike, in_block: BlockIndices, in_no_pad_block: BlockIndices
+) -> ArrayLike:
+    # Get the inner portion of the full-res SLC data
+    in_no_pad_rows, in_no_pad_cols = in_no_pad_block
+    in_rows, in_cols = in_block
+    trim_full_col = slice(
+        in_no_pad_cols.start - in_cols.start, in_no_pad_cols.stop - in_cols.stop
+    )
+    trim_full_row = slice(
+        in_no_pad_rows.start - in_rows.start, in_no_pad_rows.stop - in_rows.stop
+    )
+    # Compress the ministack using only the non-compressed SLCs
+    return data[..., trim_full_row, trim_full_col]
 
 
 @dataclass
@@ -299,7 +324,7 @@ class BlockManager:
         trimming_block = self.get_trimming_block()
         for out_block in self.iter_outputs():
             # First undo the stride/decimation factor
-            input_no_padding = dilate_block(out_block, strides=self.strides)
+            input_no_padding = unstride_block(out_block, strides=self.strides)
             input_block = pad_block(
                 input_no_padding, margins=(self.half_window.y, self.half_window.x)
             )

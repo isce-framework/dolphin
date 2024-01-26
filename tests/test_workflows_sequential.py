@@ -2,6 +2,8 @@ import numpy.testing as npt
 import pytest
 
 from dolphin import io, stack
+
+# from dolphin._types import HalfWindow, Strides
 from dolphin.io import _readers
 from dolphin.phase_link import mle, simulate
 from dolphin.utils import compute_out_shape, gpu_is_available
@@ -75,8 +77,11 @@ def test_sequential_gtiff(tmp_path, slc_file_list):
     "half_window, strides",
     [
         ({"x": 1, "y": 1}, {"x": 1, "y": 1}),
-        ({"x": 2, "y": 1}, {"x": 2, "y": 3}),
-        ({"x": 3, "y": 1}, {"x": 3, "y": 1}),
+        ({"x": 2, "y": 1}, {"x": 3, "y": 2}),
+        ({"x": 3, "y": 1}, {"x": 2, "y": 1}),
+        # (HalfWindow(1, 1), Strides(1, 1)),
+        # (HalfWindow(1, 2), Strides(2, 3)),
+        # (HalfWindow(1, 2), Strides(1, 3)),
     ],
 )
 def test_sequential_nc(tmp_path, slc_file_list_nc, half_window, strides):
@@ -85,7 +90,7 @@ def test_sequential_nc(tmp_path, slc_file_list_nc, half_window, strides):
     v = _readers.VRTStack(slc_file_list_nc, outfile=vrt_file, subdataset="data")
 
     _, rows, cols = v.shape
-    out_shape = compute_out_shape((rows, cols), strides=strides)
+    out_shape = compute_out_shape((rows, cols), strides=(strides["y"], strides["x"]))
     if not all(out_shape):
         pytest.skip(f"Output shape = {out_shape}")
 

@@ -1,3 +1,5 @@
+from typing import ClassVar
+
 import numpy as np
 import pytest
 
@@ -5,11 +7,11 @@ from dolphin._types import HalfWindow, Strides
 from dolphin.io._blocks import (
     BlockIndices,
     BlockManager,
-    dilate_1d_slice,
-    dilate_block,
     get_slice_length,
     iter_blocks,
+    unstride_block,
     unstride_center,
+    unstride_slice,
 )
 from dolphin.utils import compute_out_shape, upsample_nearest
 
@@ -111,82 +113,66 @@ def test_nonzero_block_size_with_margin():
     assert np.all(check_out[:, 1:-1] == 1)
 
 
-def test_unstride_center():
-    strides = [1, 2, 3, 4, 5, 6]
-    idx = 0
-    full_res_centers = [0, 1, 1, 2, 2, 3]
-    for stride, expected_center in zip(strides, full_res_centers):
-        assert unstride_center(idx, stride) == expected_center
+class TestUnstride:
+    full_res_centers: ClassVar = {
+        0: [0, 1, 1, 2, 2, 3],
+        1: [1, 3, 4, 6, 7, 9],
+        2: [2, 5, 7, 10, 12, 15],
+    }
 
-    idx = 1
-    full_res_centers = [1, 3, 4, 6, 7, 9]
-    for stride, expected_center in zip(strides, full_res_centers):
-        assert unstride_center(idx, stride) == expected_center
+    @pytest.fixture
+    def strides(self):
+        return [1, 2, 3, 4, 5, 6]
 
+    def test_unstride_center(self, strides):
+        idx = 0
+        for stride, expected_center in zip(strides, self.full_res_centers[0]):
+            assert unstride_center(idx, stride) == expected_center
 
-def test_dilate_1d():
-    strides = [1, 2, 3, 4, 5, 6]
-    decimated_slice = slice(0, 1)
-    for stride in strides:
-        expected_slice = slice(0, stride)
-        assert dilate_1d_slice(decimated_slice, stride) == expected_slice
+        idx = 1
+        for stride, expected_center in zip(strides, self.full_res_centers[1]):
+            assert unstride_center(idx, stride) == expected_center
 
-    decimated_slice = slice(1, 3)
-    expected = [
-        slice(1, 3),
-        slice(2, 6),
-        slice(3, 9),
-        slice(4, 12),
-        slice(5, 15),
-        slice(6, 18),
-    ]
-    for stride, expected_slice in zip(strides, expected):
-        assert dilate_1d_slice(decimated_slice, stride) == expected_slice
+        idx = 2
+        for stride, expected_center in zip(strides, self.full_res_centers[2]):
+            assert unstride_center(idx, stride) == expected_center
 
+    def unstride_slice(self):
+        assert unstride_slice(slice(0, 1), 1) == slice(0, 1)
+        assert unstride_slice(slice(0, 2), 2) == slice(1, 4)
+        assert unstride_slice(slice(1, 3), 5) == slice(7, 13)
 
-def test_dilate_block():
-    # Iterate over the output, decimated raster
-    out_blocks = list(iter_blocks((3, 5), (2, 2)))
-    assert out_blocks == [
-        BlockIndices(row_start=0, row_stop=2, col_start=0, col_stop=2),
-        BlockIndices(row_start=0, row_stop=2, col_start=2, col_stop=4),
-        BlockIndices(row_start=0, row_stop=2, col_start=4, col_stop=5),
-        BlockIndices(row_start=2, row_stop=3, col_start=0, col_stop=2),
-        BlockIndices(row_start=2, row_stop=3, col_start=2, col_stop=4),
-        BlockIndices(row_start=2, row_stop=3, col_start=4, col_stop=5),
-    ]
-    # Dilate each out block
-    strides = {"x": 1, "y": 1}
-    in_blocks = [dilate_block(b, strides=strides) for b in out_blocks]
-    assert in_blocks == out_blocks
+    def test_unstride_block(self):
+        # Iterate over the output, decimated raster
+        out_blocks = list(iter_blocks((3, 5), (2, 2)))
+        assert out_blocks == [
+            BlockIndices(row_start=0, row_stop=2, col_start=0, col_stop=2),
+            BlockIndices(row_start=0, row_stop=2, col_start=2, col_stop=4),
+            BlockIndices(row_start=0, row_stop=2, col_start=4, col_stop=5),
+            BlockIndices(row_start=2, row_stop=3, col_start=0, col_stop=2),
+            BlockIndices(row_start=2, row_stop=3, col_start=2, col_stop=4),
+            BlockIndices(row_start=2, row_stop=3, col_start=4, col_stop=5),
+        ]
+        # Dilate each out block
+        in_blocks = [unstride_block(b, strides=Strides(1, 1)) for b in out_blocks]
+        assert in_blocks == out_blocks
 
-    strides = {"x": 3, "y": 1}
-    in_blocks = [dilate_block(b, strides=strides) for b in out_blocks]
-    assert in_blocks == [
-        BlockIndices(row_start=0, row_stop=2, col_start=0, col_stop=6),
-        BlockIndices(row_start=0, row_stop=2, col_start=6, col_stop=12),
-        BlockIndices(row_start=0, row_stop=2, col_start=12, col_stop=15),
-        BlockIndices(row_start=2, row_stop=3, col_start=0, col_stop=6),
-        BlockIndices(row_start=2, row_stop=3, col_start=6, col_stop=12),
-        BlockIndices(row_start=2, row_stop=3, col_start=12, col_stop=15),
-    ]
+        in_blocks = [unstride_block(b, strides=Strides(1, 3)) for b in out_blocks]
+        assert in_blocks == [
+            BlockIndices(row_start=0, row_stop=2, col_start=0, col_stop=6),
+            BlockIndices(row_start=0, row_stop=2, col_start=6, col_stop=12),
+            BlockIndices(row_start=0, row_stop=2, col_start=12, col_stop=15),
+            BlockIndices(row_start=2, row_stop=3, col_start=0, col_stop=6),
+            BlockIndices(row_start=2, row_stop=3, col_start=6, col_stop=12),
+            BlockIndices(row_start=2, row_stop=3, col_start=12, col_stop=15),
+        ]
 
-
-def test_dilate_block_is_multiple():
-    # Iterate over the output, decimated raster
-    b = BlockIndices(0, 3, 0, 5)
-    strides = {"x": 3, "y": 3}
-    # the sizes should be multiples of 3
-    b_big = dilate_block(b, strides=strides)
-    check_arr = np.ones((100, 100))[tuple(b_big)]
-    assert check_arr.shape == (3 * 3, 5 * 3)
-
-
-def test_dilate_strided():
-    db = dilate_block(
-        BlockIndices(row_start=0, row_stop=3, col_start=0, col_stop=5), {"y": 2, "x": 2}
-    )
-    assert db == BlockIndices(row_start=1, row_stop=6, col_start=1, col_stop=10)
+    def test_dilate_strided(self):
+        db = unstride_block(
+            BlockIndices(row_start=0, row_stop=3, col_start=0, col_stop=5),
+            Strides(2, 2),
+        )
+        assert db == BlockIndices(row_start=1, row_stop=6, col_start=1, col_stop=10)
 
 
 def test_block_manager():
@@ -210,7 +196,7 @@ def test_block_manager():
 def test_block_manager_no_trim():
     # Check no stride version
     bm = BlockManager(
-        (5, 10), (100, 100), strides={"x": 3, "y": 3}, half_window={"x": 1, "y": 1}
+        (5, 10), (100, 100), strides=Strides(3, 3), half_window=HalfWindow(1, 1)
     )
 
     trimming_rows, trimming_cols = bm.get_trimming_block()
@@ -224,8 +210,8 @@ def test_block_manager_iter_outputs():
     bm = BlockManager(
         arr_shape=(nrows, ncols),
         block_shape=(17, 27),
-        strides={"x": xs, "y": xs},
-        half_window={"x": hx, "y": hy},
+        strides=Strides(ys, xs),
+        half_window=HalfWindow(hy, hx),
     )
 
     out_row_margin = hy // ys
@@ -287,6 +273,7 @@ def fake_process_blocks(
         in_data = full_res_data[in_rows, in_cols]
         out_data = _fake_process(in_data, strides, half_window)
 
+        # inner = _get_trimmed_full_res(out_arr, in_block, in_no_pad_block)
         data_trimmed = out_data[trimming_rows, trimming_cols]
         assert np.all(~np.isnan(data_trimmed))
         assert get_slice_length(out_rows) == data_trimmed.shape[0]

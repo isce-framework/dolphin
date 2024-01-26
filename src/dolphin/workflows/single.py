@@ -14,13 +14,13 @@ from pathlib import Path
 from typing import Optional
 
 import numpy as np
-from jax import Array
 from numpy.typing import DTypeLike
 
 from dolphin import io, shp
 from dolphin._log import get_log
 from dolphin._types import Filename, HalfWindow, Strides
 from dolphin.io import BlockIndices, BlockManager, EagerLoader, VRTStack
+from dolphin.io._blocks import _get_trimmed_full_res
 from dolphin.phase_link import PhaseLinkRuntimeError, compress, run_mle
 from dolphin.stack import MiniStackInfo
 
@@ -147,12 +147,12 @@ def run_wrapped_phase_single(
     loader = EagerLoader(reader=vrt, block_shape=block_shape)
     # Queue all input slices, skip ones that are all nodata
     blocks: list[tuple[BlockIndices, BlockIndices, BlockIndices, BlockIndices]] = []
-    for out, trimmed, in_block, padded in block_manager.iter_blocks():
+    for out, trimmed, in_block, no_pad in block_manager.iter_blocks():
         in_rows, in_cols = in_block
         if nodata_mask[in_rows, in_cols].all():
             continue
         loader.queue_read(in_rows, in_cols)
-        blocks.append((out, trimmed, in_block, padded))
+        blocks.append((out, trimmed, in_block, no_pad))
 
     logger.info(f"Iterating over {block_shape} blocks, {len(blocks)} total")
     for out_block, trimmed_block, in_block, in_no_pad_block in blocks:
@@ -274,22 +274,6 @@ def run_wrapped_phase_single(
     ccslc_info.write_metadata(output_file=written_comp_slc.filename)
     # TODO: Does it make sense to return anything from this?
     # or just allow user to search through the `output_folder` they provided?
-
-
-def _get_trimmed_full_res(
-    data: Array, in_block: BlockIndices, in_no_pad_block: BlockIndices
-) -> Array:
-    # Get the inner portion of the full-res SLC data
-    in_no_pad_rows, in_no_pad_cols = in_no_pad_block
-    in_rows, in_cols = in_block
-    trim_full_col = slice(
-        in_no_pad_cols.start - in_cols.start, in_no_pad_cols.stop - in_cols.stop
-    )
-    trim_full_row = slice(
-        in_no_pad_rows.start - in_rows.start, in_no_pad_rows.stop - in_rows.stop
-    )
-    # Compress the ministack using only the non-compressed SLCs
-    return data[..., trim_full_row, trim_full_col]
 
 
 def _get_nodata_mask(
