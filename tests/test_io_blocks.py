@@ -146,6 +146,13 @@ def test_dilate_block_is_multiple():
     assert check_arr.shape == (3 * 3, 5 * 3)
 
 
+def test_dilate_strided():
+    db = dilate_block(
+        BlockIndices(row_start=0, row_stop=3, col_start=0, col_stop=5), {"y": 2, "x": 2}
+    )
+    assert db == BlockIndices(row_start=1, row_stop=6, col_start=1, col_stop=10)
+
+
 def test_block_manager():
     # Check no stride version
     bm = BlockManager((5, 5), (2, 3))
