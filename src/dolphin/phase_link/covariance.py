@@ -180,11 +180,13 @@ def coh_mat_single_t(
     # Compute cross-correlation
     numer = jnp.dot(masked_slc.T, jnp.conj(masked_slc))
 
-    # Compute auto-correlations
-    a1 = jnp.sum(jnp.abs(masked_slc) ** 2, axis=0)
-    a2 = a1[None, :]
+    # Compute amplitudes so we normalize the covariance to a coherence matrix
+    # a1 is shape (nslc,)
+    amp_vec = jnp.sum(jnp.abs(masked_slc) ** 2, axis=0)
+    # Form outer product of amplitudes for each slc
+    power_mat = amp_vec[:, None] * amp_vec[None, :]
+    amp_mat = jnp.sqrt(power_mat)
 
-    # Compute covariance matrix
-    cov_mat = numer / jnp.sqrt(a1 * a2)
-
-    return cov_mat
+    # Compute coherence matrix
+    # Make the output 0 where the amplitudes are 0 (instead of nan/divide by 0)
+    return jnp.where(amp_mat > 1e-6, numer / amp_mat, 0 + 0j)

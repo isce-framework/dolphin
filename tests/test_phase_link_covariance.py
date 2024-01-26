@@ -21,10 +21,10 @@ pytestmark = pytest.mark.filterwarnings(
 
 # Make sure the GPU versions are correct by making simpler versions:
 def form_cov(slc1, slc2, looks):
-    num = take_looks(slc1 * slc2.conj(), *looks)
-    a1 = take_looks(slc1 * slc1.conj(), *looks)
-    a2 = take_looks(slc2 * slc2.conj(), *looks)
-    return num / np.sqrt(a1 * a2)
+    numerator = take_looks(slc1 * slc2.conj(), *looks)
+    amplitude1 = take_looks(slc1 * slc1.conj(), *looks)
+    amplitude2 = take_looks(slc2 * slc2.conj(), *looks)
+    return numerator / np.sqrt(amplitude1 * amplitude2)
 
 
 def get_expected_cov(slcs, looks):
@@ -69,18 +69,18 @@ def test_coh_mat_single(slcs, expected_cov, looks=(5, 5)):
             npt.assert_array_almost_equal(expected_cov[r, c, :, :], cur_C)
 
 
-def test_estimate_stack_covariance_cpu(slcs, expected_cov, looks=(5, 5)):
+def test_estimate_stack_covariance(slcs, expected_cov, looks=(5, 5)):
     # Check the full stack function
     r_looks, c_looks = looks
     half_window = HalfWindow(c_looks // 2, r_looks // 2)
     strides = Strides(c_looks, r_looks)
-    C1_cpu = covariance.estimate_stack_covariance(
+    C1 = covariance.estimate_stack_covariance(
         slcs, half_window=half_window, strides=strides
     )
-    npt.assert_array_almost_equal(expected_cov, C1_cpu)
+    npt.assert_array_almost_equal(expected_cov, C1)
 
 
-def test_estimate_stack_covariance_nans(slcs):
+def test_estimate_stack_covariance_nans_pixel(slcs):
     num_slc, _, _ = slcs.shape
 
     C = covariance.coh_mat_single(slcs.reshape(num_slc, -1))
@@ -91,23 +91,27 @@ def test_estimate_stack_covariance_nans(slcs):
     C_nan = covariance.coh_mat_single(slc_samples_nan)
     assert np.max(np.abs(C - C_nan)) < 0.01
 
+
+def test_estimate_stack_covariance_nans_image(slcs):
+    num_slc, _, _ = slcs.shape
     # Nans for an entire SLC
     slc_stack_nan = slcs.copy()
     slc_stack_nan[1, :, :] = np.nan
     slc_samples_nan = slc_stack_nan.reshape(num_slc, -1)
     # TODO: should we raise an error if we pass a dead SLC?
-    # with pytest.raises(ZeroDivisionError):
-    # The 2nd row, and whole 2nd col are all nans
-    assert np.isnan(covariance.coh_mat_single(slc_samples_nan)[:, 1]).all()
-    assert np.isnan(covariance.coh_mat_single(slc_samples_nan)[1, :]).all()
+    assert covariance.coh_mat_single(slc_samples_nan)[0, 1] == 0
+    assert covariance.coh_mat_single(slc_samples_nan)[1, 0] == 0
 
+
+def test_estimate_stack_covariance_all_nans(slcs):
+    num_slc, _, _ = slcs.shape
     # all nans should return an identity matrix (no correlation anywhere)
     slc_stack_nan = slcs.copy()
     slc_stack_nan[:, :, :] = np.nan
     slc_samples_nan = slc_stack_nan.reshape(num_slc, -1)
-    # TODO: do we want an identity matrix? Or for it to be nans?
-    # assert covariance.coh_mat_single(slc_samples_nan).sum() == num_slc
-    assert np.isnan(covariance.coh_mat_single(slc_samples_nan)).all()
+    # TODO: do we want an identity matrix? Or for it to be 0?
+    assert covariance.coh_mat_single(slc_samples_nan).sum() == 0
+    # assert np.isnan(covariance.coh_mat_single(slc_samples_nan)).all()
 
 
 def test_estimate_stack_covariance_neighbors(slcs):
@@ -137,6 +141,9 @@ def test_estimate_stack_covariance_neighbors(slcs):
         # Make sure this is different than the original
         npt.assert_allclose(C, C_neighbors)
 
+
+def test_estimate_stack_covariance_neighbors_masked(slcs):
+    num_slc, rows, cols = slcs.shape
     # Now mask an entire row
     slc_stack_nan = slcs.copy()
     slc_stack_nan[:, 0, :] = np.nan
@@ -144,6 +151,7 @@ def test_estimate_stack_covariance_neighbors(slcs):
     C_nan = covariance.coh_mat_single(slc_samples_nan)
 
     slc_samples = slcs.reshape(num_slc, -1)
+    neighbor_mask = np.ones(slc_samples.shape[1], dtype=np.bool_)
     neighbor_mask[:] = True
     neighbor_mask[:cols] = False
 
