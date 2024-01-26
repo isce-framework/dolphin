@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Iterator, Optional
 
+from dolphin._types import HalfWindow, Strides
 from dolphin.utils import compute_out_shape
 
 # 1. iterate without overlap over output, decimated array
@@ -32,6 +33,15 @@ class BlockIndices:
     def __iter__(self):
         return iter(
             (slice(self.row_start, self.row_stop), slice(self.col_start, self.col_stop))
+        )
+
+    @classmethod
+    def from_slices(cls, row_slice: slice, col_slice: slice) -> BlockIndices:
+        return cls(
+            row_start=row_slice.start,
+            row_stop=row_slice.stop,
+            col_start=col_slice.start,
+            col_stop=col_slice.stop,
         )
 
 
@@ -119,63 +129,87 @@ slice(90, 190, None)), (slice(90, 180, None), slice(180, 250, None))]
         cur_col = start_col_offset  # reset back to the starting offset
 
 
-def dilate_block(
-    in_block: BlockIndices,
-    strides: dict[str, int],
-) -> BlockIndices:
-    """Grow slices in `BlockIndices` to fit a larger array.
+def unstride_center(decimated_index: int, stride: int) -> int:
+    """Compute the inverse of a striding operation, finding the full-res area center.
 
-    This is to undo the "stride"/decimation index changes, so
-     we can go from smaller, strided array indices to the original.
-
-    Assumes in in_block is the smaller one which has been made
-    by taking `strides` from the larger block.
+    Note that for even strides, there are two valid centers;
+    we return the larger index. i.e. for `stride=2`, then
+        unstride_center(0, 2) = 1
 
     Parameters
     ----------
-    in_block : BlockIndices
+    decimated_index : int
+        Index from output, decimated array
+    stride : int
+        Striding/decimation factor
+
+    Returns
+    -------
+    int
+        Center of corresponding pixel in full-res array.
+    """
+    return decimated_index * stride + stride // 2
+
+
+def dilate_1d_slice(
+    decimated_slice: slice,
+    stride: int,
+) -> slice:
+    """Dilate a slice by a stride factor.
+
+    Parameters
+    ----------
+    decimated_slice : slice
+        Slice from output, decimated array
+    stride : int
+        Striding/decimation factor
+
+    Returns
+    -------
+    slice
+        slice which covers the whole full-res region corresponding
+        to `decimated_slice`
+    """
+    full_res_start = unstride_center(decimated_slice.start, stride)
+    if decimated_slice.stop is None:
+        full_res_end = None
+    else:
+        full_res_end = stride * (decimated_slice.stop - 1)
+    return slice(full_res_start, full_res_end)
+
+
+def dilate_block(
+    decimated_block: BlockIndices,
+    strides: Strides,
+) -> BlockIndices:
+    """Grow slices in `BlockIndices` to fit a larger array.
+
+    This is to undo the "stride"/decimation index changes, so we can go from
+    smaller, strided array indices to the original.
+
+    `decimated_block` is the smaller one which was made by taking `strides`
+    from the larger block.
+
+    First we translate the decimated indexes that are in the block to the
+    full-res region centers.
+
+    Parameters
+    ----------
+    decimated_block : BlockIndices
         Slices for an smaller, strided array.
-    strides : dict[str, int]
+    strides : tuple[int, int] or Strides(y, x)
         Decimation factor in x and y which was used for `in_block`
-        {'x': col_strides, 'y': row_strides}
 
     Returns
     -------
     BlockIndices
         Output slices for larger array
     """
-    row_strides, col_strides = strides["y"], strides["x"]
-    row_offset = row_strides // 2
-    col_offset = col_strides // 2
-    row_start = row_offset + in_block.row_start * row_strides
-    col_start = col_offset + in_block.col_start * col_strides
-    row_stop = None if in_block.row_stop is None else in_block.row_stop * row_strides
-    col_stop = None if in_block.col_stop is None else in_block.col_stop * col_strides
-    return BlockIndices(row_start, row_stop, col_start, col_stop)
-
-
-def shift_block(in_block: BlockIndices, row_shift: int, col_shift: int):
-    """Shift the slices in `BlockIndices` by the given amounts.
-
-    Parameters
-    ----------
-    in_block : BlockIndices
-        Slices for an array.
-    row_shift : int
-        Number of rows to shift by.
-    col_shift : int
-        Number of columns to shift by.
-
-    Returns
-    -------
-    BlockIndices
-        Output slices for shifted array
-    """
-    row_start = None if in_block.row_start is None else in_block.row_start + row_shift
-    col_start = None if in_block.col_start is None else in_block.col_start + col_shift
-    row_stop = None if in_block.row_stop is None else in_block.row_stop + row_shift
-    col_stop = None if in_block.col_stop is None else in_block.col_stop + col_shift
-    return BlockIndices(row_start, row_stop, col_start, col_stop)
+    # Just treat each dim using the 1d function
+    row_slice, col_slice = decimated_block
+    full_row_slice = dilate_1d_slice(row_slice, strides.y)
+    full_col_slice = dilate_1d_slice(col_slice, strides.x)
+    return BlockIndices.from_slices(full_row_slice, full_col_slice)
 
 
 def get_slice_length(s: slice, data_size: int = 1_000_000):
@@ -237,9 +271,9 @@ class BlockManager:
     """(row, col) of the full-res 2D image"""
     block_shape: tuple[int, int]
     """(row, col) size of each input block to operate on at one time"""
-    strides: dict[str, int] = field(default_factory=lambda: {"x": 1, "y": 1})
+    strides: Strides = field(default_factory=lambda: Strides(1, 1))
     """Decimation/downsampling factor in y/row and x/column direction"""
-    half_window: dict[str, int] = field(default_factory=lambda: {"x": 0, "y": 0})
+    half_window: HalfWindow = field(default_factory=lambda: HalfWindow(0, 0))
     """For multi-looking iterations, size of the (full-res) half window
     in y/row and x/column direction.
     Used to find `overlaps` between blocks and `start_offset`/`end_margin` for
@@ -267,12 +301,14 @@ class BlockManager:
             # First undo the stride/decimation factor
             input_no_padding = dilate_block(out_block, strides=self.strides)
             input_block = pad_block(
-                input_no_padding, margins=(self.half_window["y"], self.half_window["x"])
+                input_no_padding, margins=(self.half_window.y, self.half_window.x)
             )
             yield (out_block, trimming_block, input_block, input_no_padding)
 
     def _get_out_nodata_size(self, direction: str) -> int:
-        return round(self.half_window[direction] / self.strides[direction])
+        return round(
+            getattr(self.half_window, direction) / getattr(self.strides, direction)
+        )
 
     @property
     def output_shape(self) -> tuple[int, int]:
@@ -289,8 +325,8 @@ class BlockManager:
         Depends on the window size, and the strides.
         """
         return (
-            self.strides["y"] * self._get_out_nodata_size("y"),
-            self.strides["x"] * self._get_out_nodata_size("x"),
+            self.strides.y * self._get_out_nodata_size("y"),
+            self.strides.x * self._get_out_nodata_size("x"),
         )
 
     @property

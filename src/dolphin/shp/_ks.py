@@ -9,6 +9,7 @@ from numba import cuda
 from numpy.typing import ArrayLike
 
 from dolphin._log import get_log
+from dolphin._types import Strides
 from dolphin.utils import _get_slices, compute_out_shape
 
 from ._common import remove_unconnected
@@ -45,7 +46,7 @@ def estimate_neighbors(
     logger.debug(f"ecdf_dist_cutoff: {ecdf_dist_cutoff}")
 
     strides_rowcol = strides["y"], strides["x"]
-    out_rows, out_cols = compute_out_shape((rows, cols), strides)
+    out_rows, out_cols = compute_out_shape((rows, cols), Strides(*strides_rowcol))
     half_row, half_col = halfwin_rowcol
     is_shp = np.zeros(
         (out_rows, out_cols, 2 * half_row + 1, 2 * half_col + 1), dtype=np.bool_

@@ -18,7 +18,6 @@ from jax import Array
 from numpy.typing import DTypeLike
 
 from dolphin import io, shp
-from dolphin._decorators import atomic_output
 from dolphin._log import get_log
 from dolphin._types import Filename, HalfWindow, Strides
 from dolphin.io import BlockIndices, BlockManager, EagerLoader, VRTStack
@@ -39,7 +38,7 @@ class OutputFile:
     strides: Optional[dict[str, int]] = None
 
 
-@atomic_output(output_arg="output_folder", is_dir=True)
+# @atomic_output(output_arg="output_folder", is_dir=True)
 def run_wrapped_phase_single(
     *,
     slc_vrt_file: Filename,
@@ -67,6 +66,8 @@ def run_wrapped_phase_single(
     # TODO: extract common stuff between here and sequential
     if strides is None:
         strides = {"x": 1, "y": 1}
+    strides_tup = Strides(y=strides["y"], x=strides["x"])
+    half_window_tup = HalfWindow(y=half_window["y"], x=half_window["x"])
     output_folder = Path(output_folder)
     vrt = VRTStack.from_vrt_file(slc_vrt_file)
     input_slc_files = ministack.file_list
@@ -100,7 +101,7 @@ def run_wrapped_phase_single(
     logger.info(msg)
 
     # Create the background writer for this ministack
-    writer = io.GdalWriter(debug=False)
+    writer = io.GdalWriter(debug=True)
 
     logger.info(f"Total stack size (in pixels): {vrt.shape}")
     # Set up the output folder with empty files to write into
@@ -140,8 +141,8 @@ def run_wrapped_phase_single(
     block_manager = BlockManager(
         arr_shape=(nrows, ncols),
         block_shape=block_shape,
-        strides=strides,
-        half_window=half_window,
+        strides=strides_tup,
+        half_window=half_window_tup,
     )
     loader = EagerLoader(reader=vrt, block_shape=block_shape)
     # Queue all input slices, skip ones that are all nodata
@@ -189,8 +190,8 @@ def run_wrapped_phase_single(
         try:
             cur_mle_stack, temp_coh, avg_coh = run_mle(
                 cur_data,
-                half_window=HalfWindow(y=yhalf, x=xhalf),
-                strides=Strides(y=strides["y"], x=strides["x"]),
+                half_window=half_window_tup,
+                strides=strides_tup,
                 use_evd=use_evd,
                 beta=beta,
                 reference_idx=reference_idx,

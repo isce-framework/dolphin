@@ -82,9 +82,7 @@ def estimate_stack_covariance_t(
     half_row = half_window.y
     half_col = half_window.x
 
-    out_rows, out_cols = compute_out_shape(
-        (rows, cols), {"x": col_strides, "y": row_strides}
-    )
+    out_rows, out_cols = compute_out_shape((rows, cols), strides)
 
     in_r_start = row_strides // 2
     in_c_start = col_strides // 2

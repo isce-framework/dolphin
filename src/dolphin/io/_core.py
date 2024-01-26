@@ -19,7 +19,7 @@ from osgeo import gdal
 from pyproj import CRS
 
 from dolphin._log import get_log
-from dolphin._types import Bbox, Filename
+from dolphin._types import Bbox, Filename, Strides
 from dolphin.utils import compute_out_shape, gdal_to_numpy_type, numpy_to_gdal_type
 
 gdal.UseExceptions()
@@ -664,7 +664,9 @@ class FileInfo:
                 xsize, ysize = ds_like.RasterXSize, ds_like.RasterYSize
                 # If using strides, adjust the output shape
                 if strides is not None:
-                    ysize, xsize = compute_out_shape((ysize, xsize), strides)
+                    ysize, xsize = compute_out_shape(
+                        (ysize, xsize), Strides(strides["y"], strides["x"])
+                    )
 
             if dtype is not None:
                 gdal_dtype = numpy_to_gdal_type(dtype)

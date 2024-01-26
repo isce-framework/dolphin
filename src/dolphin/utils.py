@@ -18,7 +18,7 @@ from osgeo import gdal, gdal_array, gdalconst
 from rich.progress import MofNCompleteColumn, Progress, SpinnerColumn, TimeElapsedColumn
 
 from dolphin._log import get_log
-from dolphin._types import Bbox, Filename, P, T
+from dolphin._types import Bbox, Filename, P, Strides, T
 
 DateOrDatetime = Union[datetime.date, datetime.datetime]
 
@@ -669,17 +669,15 @@ def prepare_geometry(
     return stitched_geo_list
 
 
-def compute_out_shape(
-    shape: tuple[int, int], strides: dict[str, int]
-) -> tuple[int, int]:
+def compute_out_shape(shape: tuple[int, int], strides: Strides) -> tuple[int, int]:
     """Calculate the output size for an input `shape` and row/col `strides`.
 
     Parameters
     ----------
     shape : tuple[int, int]
         Input size: (rows, cols)
-    strides : dict[str, int]
-        {"x": x strides, "y": y strides}
+    strides : tuple[int, int]
+        (y strides, x strides)
 
     Returns
     -------
@@ -703,8 +701,7 @@ def compute_out_shape(
     so the output size would still be 2.
     """
     rows, cols = shape
-    rs, cs = strides["y"], strides["x"]
-    return (rows // rs, cols // cs)
+    return (rows // strides.y, cols // strides.x)
 
 
 class DummyProcessPoolExecutor(Executor):

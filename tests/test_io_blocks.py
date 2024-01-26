@@ -1,12 +1,15 @@
 import numpy as np
 import pytest
 
+from dolphin._types import HalfWindow, Strides
 from dolphin.io._blocks import (
     BlockIndices,
     BlockManager,
+    dilate_1d_slice,
     dilate_block,
     get_slice_length,
     iter_blocks,
+    unstride_center,
 )
 from dolphin.utils import compute_out_shape, upsample_nearest
 
@@ -21,10 +24,10 @@ def test_block_indices_create():
 
 
 def test_compute_out_size():
-    strides = {"x": 1, "y": 1}
+    strides = Strides(1, 1)
     assert compute_out_shape((6, 6), strides) == (6, 6)
 
-    strides = {"x": 3, "y": 3}
+    strides = Strides(3, 3)
     assert compute_out_shape((6, 6), strides) == (2, 2)
 
     # 1,2 more in each direction shouldn't change it
@@ -106,6 +109,39 @@ def test_nonzero_block_size_with_margin():
         assert get_slice_length(cs) > 0
         check_out[rs, cs] += 1
     assert np.all(check_out[:, 1:-1] == 1)
+
+
+def test_unstride_center():
+    strides = [1, 2, 3, 4, 5, 6]
+    idx = 0
+    full_res_centers = [0, 1, 1, 2, 2, 3]
+    for stride, expected_center in zip(strides, full_res_centers):
+        assert unstride_center(idx, stride) == expected_center
+
+    idx = 1
+    full_res_centers = [1, 3, 4, 6, 7, 9]
+    for stride, expected_center in zip(strides, full_res_centers):
+        assert unstride_center(idx, stride) == expected_center
+
+
+def test_dilate_1d():
+    strides = [1, 2, 3, 4, 5, 6]
+    decimated_slice = slice(0, 1)
+    for stride in strides:
+        expected_slice = slice(0, stride)
+        assert dilate_1d_slice(decimated_slice, stride) == expected_slice
+
+    decimated_slice = slice(1, 3)
+    expected = [
+        slice(1, 3),
+        slice(2, 6),
+        slice(3, 9),
+        slice(4, 12),
+        slice(5, 15),
+        slice(6, 18),
+    ]
+    for stride, expected_slice in zip(strides, expected):
+        assert dilate_1d_slice(decimated_slice, stride) == expected_slice
 
 
 def test_dilate_block():
@@ -201,12 +237,12 @@ def test_block_manager_iter_outputs():
         assert col_slice.stop < ncols - out_col_margin
 
 
-def _fake_process(in_arr, strides, half_window):
+def _fake_process(in_arr, strides: Strides, half_window: HalfWindow):
     """Dummy processing which has same nodata pattern as `phase_link.run_mle`."""
     nrows, ncols = in_arr.shape
-    row_half, col_half = half_window["y"], half_window["x"]
-    rs, cs = strides["y"], strides["x"]
-    out_nrows, out_ncols = compute_out_shape(in_arr.shape, strides=strides)
+    row_half, col_half = half_window.y, half_window.x
+    rs, cs = strides.y, strides.x
+    out_nrows, out_ncols = compute_out_shape(in_arr.shape, strides=Strides(rs, cs))
     out = np.ones((out_nrows, out_ncols))
     for out_r in range(out_nrows):
         for out_c in range(out_ncols):
@@ -226,7 +262,9 @@ def _fake_process(in_arr, strides, half_window):
     return out
 
 
-def fake_process_blocks(in_shape, half_window, strides, block_shape):
+def fake_process_blocks(
+    in_shape, half_window: HalfWindow, strides: Strides, block_shape
+):
     out_shape = compute_out_shape(in_shape, strides)
 
     # full_res_data = np.random.randn(*in_shape) + 1j * np.random.randn(*in_shape)
@@ -263,7 +301,7 @@ def fake_process_blocks(in_shape, half_window, strides, block_shape):
         out_full_res[in_no_pad_rows, in_no_pad_cols] = out_upsampled
 
     # Now check the inner part, away from the expected border of zeros
-    out_row_margin, out_col_margin = bm._out_margin
+    out_row_margin, out_col_margin = bm.output_margin
     inner = (
         slice(out_row_margin, -out_row_margin),
         slice(out_col_margin, -out_col_margin),
@@ -274,11 +312,9 @@ def fake_process_blocks(in_shape, half_window, strides, block_shape):
 
 @pytest.mark.parametrize("in_shape", [(100, 200), (101, 201)])
 @pytest.mark.parametrize(
-    "half_window", [{"x": 1, "y": 1}, {"x": 3, "y": 1}, {"x": 3, "y": 3}]
+    "half_window", [HalfWindow(x=1, y=1), HalfWindow(x=3, y=1), HalfWindow(x=3, y=3)]
 )
-@pytest.mark.parametrize(
-    "strides", [{"x": 1, "y": 1}, {"x": 3, "y": 1}, {"x": 3, "y": 3}]
-)
+@pytest.mark.parametrize("strides", [Strides(1, 1), Strides(1, 3), Strides(3, 3)])
 @pytest.mark.parametrize("block_shape", [(15, 15), (20, 30), (17, 27)])
 def test_block_manager_fake_process(in_shape, half_window, strides, block_shape):
     fake_process_blocks(in_shape, half_window, strides, block_shape)
@@ -286,6 +322,6 @@ def test_block_manager_fake_process(in_shape, half_window, strides, block_shape)
 
 def test_failing_block_params():
     # Extra test from real-data params
-    half_window, strides = {"x": 11, "y": 5}, {"x": 6, "y": 3}
+    half_window, strides = HalfWindow(x=11, y=5), Strides(6, 3)
     in_shape, block_shape = (2050, 4050), (1024, 1024)
     fake_process_blocks(in_shape, half_window, strides, block_shape)
