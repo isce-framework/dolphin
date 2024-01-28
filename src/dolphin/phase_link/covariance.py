@@ -14,14 +14,14 @@ from jax import Array, jit, lax, vmap
 from jax.typing import ArrayLike
 
 from dolphin._types import HalfWindow, Strides
-from dolphin.utils import compute_out_shape
+from dolphin.io._blocks import get_output_size
 
 DEFAULT_STRIDES = Strides(1, 1)
 
 __all__ = ["estimate_stack_covariance", "coh_mat_single"]
 
 
-@partial(jit, static_argnames=["half_window", "strides"])
+# @partial(jit, static_argnames=["half_window", "strides"])
 def estimate_stack_covariance(
     slc_stack: ArrayLike,
     half_window: HalfWindow,
@@ -77,15 +77,29 @@ def estimate_stack_covariance_t(
     """Estimate the linked phase at all pixels of `slc_stack_reshaped`."""
     rows, cols, nslc = slc_stack_reshaped.shape
 
+    import jax.debug
+
     row_strides = strides.y
     col_strides = strides.x
     half_row = half_window.y
     half_col = half_window.x
 
-    out_rows, out_cols = compute_out_shape((rows, cols), strides)
+    # out_rows, out_cols = compute_out_shape((rows, cols), strides)
+    out_rows = get_output_size(rows, half_row, row_strides)
+    out_cols = get_output_size(cols, half_col, col_strides)
 
-    in_r_start = row_strides // 2
-    in_c_start = col_strides // 2
+    # in_r_start = row_strides // 2
+    # in_c_start = col_strides // 2
+    in_r_start = half_row
+    in_c_start = half_col
+    jax.debug.print(
+        "jdb: {rows}, {cols}, {out_rows}, {out_cols}".format(
+            rows=rows,
+            cols=cols,
+            out_rows=out_rows,
+            out_cols=out_cols,
+        )
+    )
 
     if neighbor_arrays is None:
         neighbor_arrays = jnp.ones(
@@ -127,7 +141,7 @@ def _get_stack_window_t(
 
     Expected shape of `stack` is (rows, cols, nslc).
     """
-    # https://jax.readthedocs.io/en/latest/notebooks/Common_Gotchas_in_JAX.html#non-array-inputs-numpy-vs-jax
+    # https://jax.readthedocs.io/en/latest/notebooks/Common_Gotchas_in_JAX.html#out-of-bounds-indexing
     # Note: out of bounds indexing for JAX clamps to the nearest value
     # This is fine as we want to trim the borders anyway, so we don't need the
     # extra checks in utils._get_slices
@@ -175,6 +189,8 @@ def coh_mat_single_t(
     combined_mask = valid_samples_mask & neighbor_mask[:, None]
 
     # Mask the slc samples
+    # note that it's not possible to change the size based on the mask
+    # https://jax.readthedocs.io/en/latest/notebooks/Common_Gotchas_in_JAX.html#dynamic-shapes
     masked_slc = jnp.where(combined_mask, slc_samples, 0)
 
     # Compute cross-correlation
