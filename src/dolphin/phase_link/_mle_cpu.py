@@ -25,7 +25,6 @@ def run_cpu(
     use_slc_amp: bool = True,
     neighbor_arrays: Optional[np.ndarray] = None,
     calc_average_coh: bool = False,
-    n_workers: int = 1,
     **kwargs,
 ) -> MleOutput:
     """Run the CPU version of the stack covariance estimator and MLE solver.
@@ -56,9 +55,6 @@ def run_cpu(
     calc_average_coh : bool, default=False
         If requested, the average of each row of the covariance matrix is computed
         for the purposes of finding the best reference (highest coherence) date
-    n_workers : int, optional
-        The number of workers to use for (CPU version) multiprocessing.
-        If 1 (default), no multiprocessing is used.
     **kwargs : dict, optional
         Additional keyword arguments not used by CPU version.
 
@@ -81,7 +77,6 @@ def run_cpu(
         use_evd=use_evd,
         beta=beta,
         reference_idx=reference_idx,
-        n_workers=n_workers,
     )
     cpx_phase = np.exp(1j * output_phase)
     # Get the temporal coherence

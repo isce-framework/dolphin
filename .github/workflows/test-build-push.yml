@@ -32,7 +32,6 @@ jobs:
               numpy=1.23
               numba=0.54
               pydantic=2.1
-              pymp-pypi=0.4.5
               pyproj=3.3
               rasterio=1.3
               rich=12.0

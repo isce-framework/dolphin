@@ -487,6 +487,8 @@ def set_num_threads(num_threads: int):
 
     Uses https://github.com/joblib/threadpoolctl for numpy.
     """
+    import os
+
     import numba
     from threadpoolctl import ThreadpoolController
 
@@ -495,6 +497,7 @@ def set_num_threads(num_threads: int):
     controller.limit(limits=num_threads)
     # https://numba.readthedocs.io/en/stable/user/threading-layer.html#example-of-limiting-the-number-of-threads
     numba.set_num_threads(num_threads)
+    os.environ["XLA_FLAGS"] = f"--xla_force_host_platform_device_count={num_threads}"
 
 
 def get_cpu_count():

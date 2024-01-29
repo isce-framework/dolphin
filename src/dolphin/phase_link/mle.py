@@ -176,7 +176,6 @@ def mle_stack(
     use_evd: bool = False,
     beta: float = 0.01,
     reference_idx: int = 0,
-    n_workers: int = 1,
 ):
     """Estimate the linked phase for a stack of covariance matrices.
 
@@ -201,9 +200,6 @@ def mle_stack(
     reference_idx : int, optional
         The index of the reference acquisition, by default 0
         All outputs are multiplied by the conjugate of the data at this index.
-    n_workers : int, optional
-        The number of workers to use (CPU version) for the eigenvector problem.
-        If 1 (default), no multiprocessing is used.
 
     Returns
     -------
@@ -216,7 +212,7 @@ def mle_stack(
     Gamma = xp.abs(C_arrays)
 
     if use_evd:
-        V = _get_eigvecs(C_arrays, n_workers=n_workers, use_evd=True)
+        V = _get_eigvecs(C_arrays, use_evd=True)
         column_idx = -1
     else:
         if beta > 0:
@@ -227,7 +223,7 @@ def mle_stack(
             Gamma = (1 - beta) * Gamma + beta * Id
 
         Gamma_inv = xp.linalg.inv(Gamma)
-        V = _get_eigvecs(Gamma_inv * C_arrays, n_workers=n_workers, use_evd=False)
+        V = _get_eigvecs(Gamma_inv * C_arrays, use_evd=False)
         column_idx = 0
 
     # The shape of V is (rows, cols, nslc, nslc)
@@ -248,12 +244,12 @@ def mle_stack(
     return xp.moveaxis(phase_stack, -1, 0)
 
 
-def _get_eigvecs(C, n_workers: int = 1, use_evd: bool = False):
+def _get_eigvecs(C, use_evd: bool = False):
     xp = get_array_module(C)
     if xp == np:
         # The block splitting isn't needed for numpy.
         # return np.linalg.eigh(C)[1]
-        return _get_eigvecs_jax(C, n_workers=n_workers, use_evd=use_evd)
+        return _get_eigvecs_jax(C, use_evd=use_evd)
 
     # Make sure we don't overflow: cupy https://github.com/cupy/cupy/issues/7261
     # The work_size must be less than 2**30, so
