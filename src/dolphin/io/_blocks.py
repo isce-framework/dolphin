@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from typing import Iterator, Optional
 
@@ -19,6 +20,9 @@ __all__ = [
     "StridedBlockManager",
     "iter_blocks",
 ]
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -264,9 +268,70 @@ def get_output_size(in_size: int, stride: int, half_window: int) -> int:
     int
         Size of output array
     """
-    # out_rows = (rows - 2 * half_row) // row_strides + 1
-    # out_cols = (cols - 2 * half_col) // col_strides + 1
-    return (in_size - half_window * 2) // stride + 1
+    return len(get_full_res_centers(in_size, stride, half_window))
+
+
+def get_full_res_centers(in_size: int, stride: int, half_window: int) -> list[int]:
+    """Get the centers of the full-res pixels used by a strided processor.
+
+    Parameters
+    ----------
+    in_size : int
+        Size of input array
+    stride : int
+        Striding/decimation factor
+    half_window : int
+        Half window size
+
+    Returns
+    -------
+    list[int]
+        Center indices of full-res pixels
+    """
+    cur_idx = half_window
+    # cur_idx = stride // 2
+    idxs = []
+    while cur_idx < in_size - half_window:
+        # if cur_idx < half_window:
+        # continue
+        idxs.append(cur_idx)
+        cur_idx += stride
+        logger.debug(f"{half_window} {cur_idx} {in_size}")
+    return idxs
+
+
+"""
+Current flow for iterating over large array (say 5000 x 20_000)
+
+- Decide block size (default: 512, 512), stride, and half window.
+    Assume i'm just talk about 1D now. assume `stride=3`, `half_window=2`
+- it's doing 0 overlap in the output grid now. The idea is to map the output
+indices back into which input full res we need.
+- The only ones we're skipping are at the edges... that's using the "output nodata size"
+which is round(half_window / stride)
+- So for an output slice of, say, slice(2, 4), First i can get the full res centers:
+    In [362]: _blocks.unstride_center_slice(slice(2, 4), 3)
+    Out[362]: slice(7, 11, None)
+- Then i'll load a buffer round these using the half-window:
+    [7-2, 11+2] => [5, 13]
+
+This part all seems clear... but now, say I had that 2-sized output slice.
+Then I load the size 8 full res pixels.
+The covariance estimates need to be centered on the right full-res pixel centers,
+    in this case: [ 2, 5, 8]
+
+problem:
+- if i do no strides, `strides=1`, but a half window of 2... where should i account
+for the nodata?
+
+now the output size depends on both the strides AND the half window...
+so in = 20, strides=1, half_window=2 leads to output size=16
+
+Should i just go back to the old way of doing it?
+
+before... say im doing out grid slice(2, 4)
+i'd expand to full res, then pad some to pull in full res data
+"""
 
 
 def unstride_full_cover_slice(
@@ -322,11 +387,10 @@ def _get_relative_offset_slice(
 ) -> slice:
     """Get the offset of the output slice relative to the full-res slice."""
     full_res_inner = unstride_full_cover_slice(output_slice, strides)
-    # We assume that half_window > strides // 2, which makes the start
-    #  of `full_res_inner` larger than the start of `full_padded_slice`.:
     #   full_res_inner =    slice(3, 6)
     #   full_padded_slice = slice(0, 9)
     relative_start = full_res_inner.start - full_padded_slice.start
+    assert relative_start >= 0
     relative_end = full_res_inner.stop - full_padded_slice.stop
     return slice(relative_start, relative_end)
 
@@ -427,7 +491,7 @@ class StridedBlockManager:
             The current slices for the output raster
         full_res_input : BlockIndices
             Slices used to load the full-res input data
-        full_res_relative_teim : BlockIndices
+        full_res_relative_trim : BlockIndices
             Slices to use on a full-res input block to remove nodata border pixels
             caused by the half_window padding.
             These slices are relative (e.g. slice(1, -1)).
@@ -451,9 +515,9 @@ class StridedBlockManager:
             yield (out_block, full_res_input, full_res_relative_trim, full_res_output)
 
     def _get_out_nodata_size(self, direction: str) -> int:
-        return round(
-            getattr(self.half_window, direction) / getattr(self.strides, direction)
-        )
+        half_win = getattr(self.half_window, direction)
+        stride = getattr(self.strides, direction)
+        return round(half_win / stride)
 
     @property
     def output_shape(self) -> tuple[int, int]:
@@ -493,23 +557,3 @@ class StridedBlockManager:
             start_offsets=self.output_margin,
             end_margin=self.output_margin,
         )
-
-    # def get_trimming_block(self) -> BlockIndices:
-    #     """Compute the slices which trim output nodata values.
-
-    #     When the BlockIndex gets dilated (using `strides`) and padded (using
-    #     `half_window`), the result will have nodata around the edges.
-    #     The size of the nodata pixels in the full-res block is just
-    #         (half_window['y'], half_window['x'])
-    #     In the output (strided) coordinates, the number of nodata pixels is
-    #     shrunk by how many strides are taken.
-
-    #     Note that this is independent of which block we're on; the number of
-    #     nodata pixels on the border is always the same.
-    #     """
-    #     row_nodata = self._get_out_nodata_size("y")
-    #     col_nodata = self._get_out_nodata_size("x")
-    #     # Extra check if we have no trimming to do: use slice(0, None)
-    #     row_end = -row_nodata if row_nodata > 0 else None
-    #     col_end = -col_nodata if col_nodata > 0 else None
-    #     return BlockIndices(row_nodata, row_end, col_nodata, col_end)

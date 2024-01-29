@@ -148,9 +148,13 @@ def run_mle(
         use_slc_amp=use_slc_amp,
     )
 
+    rows_trimmed = slice(half_window.y, -half_window.y)
+    cols_trimmed = slice(half_window.x, -half_window.x)
+    # First, remove the outer padding caused by the half window
+    nodata_mask_inner = nodata_mask[rows_trimmed, cols_trimmed]
     # Get the smaller, looked versions of the masks
     # We zero out nodata if all pixels within the window had nodata
-    mask_looked = take_looks(nodata_mask, *strides, func_type="all")
+    mask_looked = take_looks(nodata_mask_inner, *strides, func_type="all")
     # Set no data pixels to np.nan
     mle_out.temp_coh[mask_looked] = np.nan
 
@@ -159,8 +163,8 @@ def run_mle(
         _fill_ps_pixels(
             mle_out.mle_est,
             mle_out.temp_coh,
-            slc_stack,
-            ps_mask,
+            slc_stack[rows_trimmed, cols_trimmed],
+            slc_stack[rows_trimmed, cols_trimmed],
             strides,
             avg_mag,
             reference_idx,

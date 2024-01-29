@@ -130,8 +130,23 @@ def test_get_output_size():
     # get_output_shape(in_size: int, stride: int, half_window: int) -> int:
     in_size = 10
     stride = 1
+    assert get_output_size(in_size, stride, 0) == 10
     half_window = 2
     assert get_output_size(in_size, stride, half_window) == 6
+
+    stride = 3
+    assert get_output_size(in_size, stride, 1) == 3
+    assert get_output_size(in_size, stride, 2) == 1
+    assert get_output_size(9, stride, 3) == 1
+    assert get_output_size(8, stride, 3) == 1
+    assert get_output_size(7, stride, 3) == 0
+
+    in_size = 15
+    stride = 5
+    assert get_output_size(in_size, stride, 1) == 3
+    assert get_output_size(in_size, stride, 2) == 3
+    assert get_output_size(in_size, stride, 3) == 1
+    assert get_output_size(in_size, stride, 4) == 1
 
 
 class TestUnstride:

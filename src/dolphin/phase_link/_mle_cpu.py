@@ -98,8 +98,10 @@ def run_cpu(
     if use_slc_amp:
         # use the amplitude from the original SLCs
         # account for the strides when grabbing original data
-        # we need to match `io.compute_out_shape` here
-        slcs_decimated = decimate(slc_stack, strides)
+        half_rows, half_cols = half_window
+        slcs_decimated = decimate(
+            slc_stack[:, half_rows:-half_rows, half_cols:-half_cols], strides
+        )
         mle_est *= np.abs(slcs_decimated)
 
     return MleOutput(mle_est, temp_coh, avg_coh)

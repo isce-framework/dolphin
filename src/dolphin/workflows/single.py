@@ -188,7 +188,7 @@ def run_wrapped_phase_single(
         # Run the phase linking process on the current ministack
         reference_idx = max(0, first_real_slc_idx - 1)
         try:
-            cur_mle_stack, temp_coh, avg_coh = run_mle(
+            mle_out = run_mle(
                 cur_data,
                 half_window=half_window_tup,
                 strides=strides_tup,
@@ -214,23 +214,23 @@ def run_wrapped_phase_single(
             continue
 
         # Fill in the nan values with 0
-        np.nan_to_num(cur_mle_stack, copy=False)
-        np.nan_to_num(temp_coh, copy=False)
+        np.nan_to_num(mle_out.mle_est, copy=False)
+        np.nan_to_num(mle_out.temp_coh, copy=False)
 
         # Save each of the MLE estimates (ignoring those corresponding to
         # compressed SLCs indexes)
-        assert len(cur_mle_stack[first_real_slc_idx:]) == len(phase_linked_slc_files)
+        assert len(mle_out.mle_est[first_real_slc_idx:]) == len(phase_linked_slc_files)
 
         for img, f in zip(
-            # cur_mle_stack[first_real_slc_idx:, trimmed_rows, trimmed_cols],
-            cur_mle_stack[first_real_slc_idx:],
+            # mle_est[first_real_slc_idx:, trimmed_rows, trimmed_cols],
+            mle_out.mle_est[first_real_slc_idx:],
             phase_linked_slc_files,
         ):
             writer.queue_write(img, f, out_rows.start, out_cols.start)
 
         # Get the SHP counts for each pixel (if not using Rect window)
         if neighbor_arrays is None:
-            shp_counts = np.zeros(cur_mle_stack.shape[-2:], dtype=np.int16)
+            shp_counts = np.zeros(mle_out.mle_est.shape[-2:], dtype=np.int16)
         else:
             shp_counts = np.sum(neighbor_arrays, axis=(-2, -1))
 
@@ -238,7 +238,7 @@ def run_wrapped_phase_single(
         cur_comp_slc = compress(
             # Get the inner portion of the full-res SLC data
             cur_data[first_real_slc_idx:, trim_full_rows, trim_full_cols],
-            cur_mle_stack[first_real_slc_idx:],
+            mle_out.mle_est[first_real_slc_idx:],
         )
 
         # ### Save results ###
@@ -252,7 +252,7 @@ def run_wrapped_phase_single(
         )
 
         # All other outputs are strided (smaller in size)
-        out_datas = [temp_coh, avg_coh, shp_counts]
+        out_datas = [mle_out.temp_coh, mle_out.avg_coh, shp_counts]
         for data, output_file in zip(out_datas, output_files[1:]):
             if data is None:  # May choose to skip some outputs, e.g. "avg_coh"
                 continue

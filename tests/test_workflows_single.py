@@ -32,7 +32,6 @@ def test_sequential_gtiff(tmp_path, slc_file_list):
     )
 
     hy, hx = 1, 2
-    # half_window = {"x": cols // 2, "y": rows // 2}
     half_window = {"x": hx, "y": hy}
     strides = {"x": 1, "y": 1}
     output_folder = tmp_path / "single"

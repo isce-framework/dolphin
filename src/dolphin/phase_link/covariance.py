@@ -85,8 +85,8 @@ def estimate_stack_covariance_t(
     half_col = half_window.x
 
     # out_rows, out_cols = compute_out_shape((rows, cols), strides)
-    out_rows = get_output_size(rows, half_row, row_strides)
-    out_cols = get_output_size(cols, half_col, col_strides)
+    out_rows = get_output_size(rows, stride=row_strides, half_window=half_row)
+    out_cols = get_output_size(cols, stride=col_strides, half_window=half_col)
 
     # in_r_start = row_strides // 2
     # in_c_start = col_strides // 2
