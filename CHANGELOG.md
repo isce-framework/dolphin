@@ -15,6 +15,8 @@
 
 Added
 - `jax`>=0.4.19
+- `numpy`=>1.23 (bump to minimum version that they're still supporting)
+- `scipy`>=1.9 (same reason)
 
 Removed:
 - `pymp`
