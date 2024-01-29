@@ -36,7 +36,7 @@ if hasattr(covariance, "estimate_stack_covariance_cpu"):
             neighbor_arrays=neighbor_arrays,
         )
 
-    covariance.estimate_stack_covariance = f
+    covariance.estimate_stack_covariance = f  # type: ignore[assignment]
 
 
 def _make_slc_samples(shape=SHAPE):
