@@ -140,275 +140,18 @@ slice(90, 190, None)), (slice(90, 180, None), slice(180, 250, None))]
         cur_col = start_col_offset  # reset back to the starting offset
 
 
-def unstride_center(decimated_index: int, stride: int) -> int:
-    """Compute the inverse of a striding operation, finding the full-res area center.
-
-    Note that for even strides, there are two valid centers;
-    we return the larger index. i.e. for `stride=2`, then
-        unstride_center(0, 2) = 1
-
-    Parameters
-    ----------
-    decimated_index : int
-        Index from output, decimated array
-    stride : int
-        Striding/decimation factor
-
-    Returns
-    -------
-    int
-        Center of corresponding pixel in full-res array.
-    """
-    return decimated_index * stride + stride // 2
-
-
-def unstride_center_slice(decimated_slice: slice, stride: int) -> slice:
-    """Get the slice pointing at the centers of a full-res slice."""
-    full_res_start = unstride_center(decimated_slice.start, stride)
-    if decimated_slice.stop is not None:
-        last_decimated_idx = decimated_slice.stop - 1
-        full_res_end = unstride_center(last_decimated_idx, stride) + 1
-    else:
-        full_res_end = None
-    return slice(full_res_start, full_res_end)
-
-
-def unstride_center_block(
-    decimated_block: BlockIndices,
-    strides: Strides,
+def get_full_res_trim(
+    in_no_pad_block: BlockIndices, in_block: BlockIndices
 ) -> BlockIndices:
-    """Grow slices in `BlockIndices` to undo a striding operation.
-
-    This is so we can go back from the smaller, strided/decimated grid
-    indices to the original, full-res grid indices.
-
-    `decimated_block` is the smaller one which was made by taking `strides`
-    from the larger block.
-
-    Here we translate the decimated indexes to the full-res region *center* indices.
-
-    Uses `unstride_center_slice` to do the actual work on each dimension.
-
-    Parameters
-    ----------
-    decimated_block : BlockIndices
-        Slices for an smaller, strided array.
-    strides : tuple[int, int] or Strides(y, x)
-        Decimation factor in y and x which was used for `in_block`
-
-    Returns
-    -------
-    BlockIndices
-        Output slices for larger array
-    """
-    # Just treat each dim using the 1d function
-    row_slice, col_slice = decimated_block
-    full_row_slice = unstride_center_slice(row_slice, strides.y)
-    full_col_slice = unstride_center_slice(col_slice, strides.x)
-    return BlockIndices.from_slices(full_row_slice, full_col_slice)
-
-
-"""
-
-when going for the “upsampling” step, I want to grab the colored
-block regions and ignore the half window again.
-
-the “trimming” part cam from the fact that I calculate the part to load
-using strides and half window.
-
-BlockManager(arr_shape=(10, 10), block_shape=(15, 15),
-             strides=Strides(y=3, x=3), half_window=HalfWindow(y=4, x=4))
-[
-    col_start=1, col_stop=2),
-    col_start=1, col_stop=-1),
-    col_start=0, col_stop=9),
-    col_start=4, col_stop=5)
-]
-slc_stack.shape = (11, 9, 9)
-Out[257]: (1, 1, 11, 11)
-
-Now, the out was one OutSize pixel, the in relevant SLC pixels are (3, 4, 5)
-(that's why the final slice is slice(4, 5). it's talking about the one full-res center)
-BUT i don't wanna read in from the main slc usince `slice(3, 6)`, which would be easy:
-out_slice=(1, 2), so slice(1*3, 2*3) = slice(3, 6) is what i want.
-Instead, i have the real data I read which was (0, 9). how can i get what I want?
-
-I need a trimming slice... the (0, 9) was made by
-    1. get the output indices (thats slice(1, 2) here. i only want the out index [1])
-    2. find the SLC center pixels those correspond to (slice(4, 5), or full-res index 4)
-    3. Pad that slice with the half window ( +/-4 pixels, which makes it slice(0, 9))
-
-So now to get to the *relative* slice to trim so results are the same as slice(3, 6):
-    1. i should figure out slice(3,6), which is _unstrided_full_cover(output_slice, 3)
-    2. figure the offset relative to the slice(0, 9)
-#TODO: MAKE AN ERROR IF THEY PASS HALF WINDOW LESS THAN STRIDES//2
-(verify- is this def a problem? or just weird? it's ignoring input data...)
-(It WOULD break the assumption of _get_relative_offset_slice, because we think that the
-full_padded_slice will be bigger than _unstrided_full_cover, but it wouldnt it
-strides//2 > half_window)
-"""
-
-
-def get_output_size(in_size: int, stride: int, half_window: int) -> int:
-    """Get the size of valid data for one dimension from the strided output.
-
-    Uses the half_window to find the amount of padding to ignore at the edges.
-
-    Parameters
-    ----------
-    in_size : int
-        Size of input array
-    stride : int
-        Striding/decimation factor
-    half_window : int
-        Half window size
-
-    Returns
-    -------
-    int
-        Size of output array
-    """
-    return len(get_full_res_centers(in_size, stride, half_window))
-
-
-def get_full_res_centers(in_size: int, stride: int, half_window: int) -> list[int]:
-    """Get the centers of the full-res pixels used by a strided processor.
-
-    Parameters
-    ----------
-    in_size : int
-        Size of input array
-    stride : int
-        Striding/decimation factor
-    half_window : int
-        Half window size
-
-    Returns
-    -------
-    list[int]
-        Center indices of full-res pixels
-    """
-    cur_idx = half_window
-    # cur_idx = stride // 2
-    idxs = []
-    while cur_idx < in_size - half_window:
-        # if cur_idx < half_window:
-        # continue
-        idxs.append(cur_idx)
-        cur_idx += stride
-        logger.debug(f"{half_window} {cur_idx} {in_size}")
-    return idxs
-
-
-"""
-Current flow for iterating over large array (say 5000 x 20_000)
-
-- Decide block size (default: 512, 512), stride, and half window.
-    Assume i'm just talk about 1D now. assume `stride=3`, `half_window=2`
-- it's doing 0 overlap in the output grid now. The idea is to map the output
-indices back into which input full res we need.
-- The only ones we're skipping are at the edges... that's using the "output nodata size"
-which is round(half_window / stride)
-- So for an output slice of, say, slice(2, 4), First i can get the full res centers:
-    In [362]: _blocks.unstride_center_slice(slice(2, 4), 3)
-    Out[362]: slice(7, 11, None)
-- Then i'll load a buffer round these using the half-window:
-    [7-2, 11+2] => [5, 13]
-
-This part all seems clear... but now, say I had that 2-sized output slice.
-Then I load the size 8 full res pixels.
-The covariance estimates need to be centered on the right full-res pixel centers,
-    in this case: [ 2, 5, 8]
-
-problem:
-- if i do no strides, `strides=1`, but a half window of 2... where should i account
-for the nodata?
-
-now the output size depends on both the strides AND the half window...
-so in = 20, strides=1, half_window=2 leads to output size=16
-
-Should i just go back to the old way of doing it?
-
-before... say im doing out grid slice(2, 4)
-i'd expand to full res, then pad some to pull in full res data
-"""
-
-
-def unstride_full_cover_slice(
-    decimated_slice: slice,
-    stride: int,
-) -> slice:
-    """Dilate a slice by a stride factor to cover the whole full-res region.
-
-    Parameters
-    ----------
-    decimated_slice : slice
-        Slice from output, decimated array
-    stride : int
-        Striding/decimation factor
-
-    Returns
-    -------
-    slice
-        slice which covers the whole full-res region corresponding
-        to `decimated_slice`
-    """
-    return slice(stride * decimated_slice.start, stride * decimated_slice.stop)
-
-
-def unstride_full_cover_block(
-    decimated_block: BlockIndices, strides: Strides
-) -> BlockIndices:
-    """Grow slices in `BlockIndices` to undo a striding operation.
-
-    Parameters
-    ----------
-    decimated_block : BlockIndices
-        BlockIndices from output, decimated array
-    strides : tuple[int, int] or Strides(y, x)
-        Decimation factor in y and x which was used for `in_block`
-
-    Returns
-    -------
-    BlockIndices
-        BlockIndices which covers the whole full-res region corresponding
-        to `decimated_block`
-    """
-    row_slice, col_slice = decimated_block
-    row_s, col_s = strides
-    return BlockIndices.from_slices(
-        unstride_full_cover_slice(row_slice, row_s),
-        unstride_full_cover_slice(col_slice, col_s),
+    in_no_pad_rows, in_no_pad_cols = in_no_pad_block
+    in_rows, in_cols = in_block
+    trim_full_col = slice(
+        in_no_pad_cols.start - in_cols.start, in_no_pad_cols.stop - in_cols.stop
     )
-
-
-def _get_relative_offset_slice(
-    output_slice: slice, full_padded_slice: slice, strides: int
-) -> slice:
-    """Get the offset of the output slice relative to the full-res slice."""
-    full_res_inner = unstride_full_cover_slice(output_slice, strides)
-    #   full_res_inner =    slice(3, 6)
-    #   full_padded_slice = slice(0, 9)
-    relative_start = full_res_inner.start - full_padded_slice.start
-    assert relative_start >= 0
-    relative_end = full_res_inner.stop - full_padded_slice.stop
-    return slice(relative_start, relative_end)
-
-
-def _get_relative_offset_block(
-    output_block: BlockIndices,
-    full_padded_block: BlockIndices,
-    strides: Strides,
-) -> BlockIndices:
-    """Get the offset of the output block relative to the full-res block."""
-    row_slice, col_slice = output_block
-    row_offset_slice = _get_relative_offset_slice(
-        row_slice, full_padded_block.row_slice, strides.y
+    trim_full_row = slice(
+        in_no_pad_rows.start - in_rows.start, in_no_pad_rows.stop - in_rows.stop
     )
-    col_offset_slice = _get_relative_offset_slice(
-        col_slice, full_padded_block.col_slice, strides.x
-    )
-    return BlockIndices.from_slices(row_offset_slice, col_offset_slice)
+    return BlockIndices.from_slices(trim_full_row, trim_full_col)
 
 
 def get_slice_length(s: slice, data_size: int = 1_000_000):
@@ -464,6 +207,35 @@ def pad_block(in_block: BlockIndices, margins: tuple[int, int]) -> BlockIndices:
     )
 
 
+def dilate_block(in_block: BlockIndices, strides: Strides) -> BlockIndices:
+    """Grow slices in `BlockIndices` to fit a larger array.
+
+    This is to undo the "stride"/decimation index changes, so
+     we can go from smaller, strided array indices to the original.
+
+    Assumes in in_block is the smaller one which has been made
+    by taking `strides` from the larger block.
+
+    Parameters
+    ----------
+    in_block : BlockIndices
+        Slices for an smaller, strided array.
+    strides : Strides or tuple[int, int]
+        Decimation factor in y and c which was used for `in_block`
+
+    Returns
+    -------
+    BlockIndices
+        Output slices for larger array
+    """
+    row_strides, col_strides = strides
+    row_start = in_block.row_start * row_strides
+    col_start = in_block.col_start * col_strides
+    row_stop = None if in_block.row_stop is None else in_block.row_stop * row_strides
+    col_stop = None if in_block.col_stop is None else in_block.col_stop * col_strides
+    return BlockIndices(row_start, row_stop, col_start, col_stop)
+
+
 @dataclass
 class StridedBlockManager:
     """Class to handle slicing/trimming overlapping blocks with strides."""
@@ -482,37 +254,31 @@ class StridedBlockManager:
 
     def iter_blocks(
         self,
-    ) -> Iterator[tuple[BlockIndices, BlockIndices, BlockIndices, BlockIndices]]:
+    ) -> Iterator[
+        tuple[BlockIndices, BlockIndices, BlockIndices, BlockIndices, BlockIndices]
+    ]:
         """Iterate over the input/output block indices.
 
         Yields
         ------
         output_block : BlockIndices
             The current slices for the output raster
-        full_res_input : BlockIndices
+        out_trim : BlockIndices
+            Slices to use on a processed output block to remove nodata border pixels.
+            These may be relative (e.g. slice(1, -1)), not absolute like `output_block`.
+        input_block : BlockIndices
             Slices used to load the full-res input data
-        full_res_relative_trim : BlockIndices
-            Slices to use on a full-res input block to remove nodata border pixels
-            caused by the half_window padding.
-            These slices are relative (e.g. slice(1, -1)).
-        full_res_output : BlockIndices
-            Slices which point to the position within the full-res data without padding.
+        input_no_padding : BlockIndices
+            Slices which point to the position within the full-res data without padding
+        input_trim : BlockIndices
+            Slices to use on full-res input block to remove padding from half-window.
         """
-        # trimming_block = self.get_trimming_block()
+        out_trim = self.get_trimming_block()
         for out_block in self.iter_outputs():
-            # First undo the stride/decimation factor
-            input_no_padding = unstride_center_block(out_block, strides=self.strides)
-            full_res_input = pad_block(
-                input_no_padding, margins=(self.half_window.y, self.half_window.x)
-            )
-            # now get the relative to trim away the edges of `full_res_input`
-            full_res_relative_trim = _get_relative_offset_block(
-                out_block, full_res_input, strides=self.strides
-            )
-            # And form the full-res location where we'll write an output
-            full_res_output = unstride_full_cover_block(out_block, strides=self.strides)
-
-            yield (out_block, full_res_input, full_res_relative_trim, full_res_output)
+            input_no_padding = dilate_block(out_block, strides=self.strides)
+            input_block = pad_block(input_no_padding, margins=self.input_padding_shape)
+            input_trim = get_full_res_trim(input_no_padding, input_block)
+            yield (out_block, out_trim, input_block, input_no_padding, input_trim)
 
     def _get_out_nodata_size(self, direction: str) -> int:
         half_win = getattr(self.half_window, direction)
@@ -557,3 +323,23 @@ class StridedBlockManager:
             start_offsets=self.output_margin,
             end_margin=self.output_margin,
         )
+
+    def get_trimming_block(self) -> BlockIndices:
+        """Compute the slices which trim output nodata values.
+
+        When the BlockIndex gets dilated (using `strides`) and padded (using
+        `half_window`), the result will have nodata around the edges.
+        The size of the nodata pixels in the full-res block is just
+            (half_window['y'], half_window['x'])
+        In the output (strided) coordinates, the number of nodata pixels is
+        shrunk by how many strides are taken.
+
+        Note that this is independent of which block we're on; the number of
+        nodata pixels on the border is always the same.
+        """
+        row_nodata = self._get_out_nodata_size("y")
+        col_nodata = self._get_out_nodata_size("x")
+        # Extra check if we have no trimming to do: use slice(0, None)
+        row_end = -row_nodata if row_nodata > 0 else None
+        col_end = -col_nodata if col_nodata > 0 else None
+        return BlockIndices(row_nodata, row_end, col_nodata, col_end)

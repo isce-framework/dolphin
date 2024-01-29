@@ -14,7 +14,7 @@ from jax import Array, jit, lax, vmap
 from jax.typing import ArrayLike
 
 from dolphin._types import HalfWindow, Strides
-from dolphin.io._blocks import get_output_size
+from dolphin.utils import compute_out_shape
 
 DEFAULT_STRIDES = Strides(1, 1)
 
@@ -84,9 +84,7 @@ def estimate_stack_covariance_t(
     half_row = half_window.y
     half_col = half_window.x
 
-    # out_rows, out_cols = compute_out_shape((rows, cols), strides)
-    out_rows = get_output_size(rows, stride=row_strides, half_window=half_row)
-    out_cols = get_output_size(cols, stride=col_strides, half_window=half_col)
+    out_rows, out_cols = compute_out_shape((rows, cols), strides)
 
     # in_r_start = row_strides // 2
     # in_c_start = col_strides // 2

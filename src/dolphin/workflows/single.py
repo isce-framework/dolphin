@@ -19,7 +19,7 @@ from numpy.typing import DTypeLike
 from dolphin import io, shp
 from dolphin._log import get_log
 from dolphin._types import Filename, HalfWindow, Strides
-from dolphin.io import BlockIndices, EagerLoader, StridedBlockManager, VRTStack
+from dolphin.io import EagerLoader, StridedBlockManager, VRTStack
 from dolphin.phase_link import PhaseLinkRuntimeError, compress, run_mle
 from dolphin.stack import MiniStackInfo
 
@@ -146,22 +146,24 @@ def run_wrapped_phase_single(
     # Set up the background loader
     loader = EagerLoader(reader=vrt, block_shape=block_shape)
     # Queue all input slices, skip ones that are all nodata
-    blocks: list[tuple[BlockIndices, BlockIndices, BlockIndices, BlockIndices]] = []
-    for out, in_block, trim, full_out in block_manager.iter_blocks():
-        in_rows, in_cols = in_block
+    blocks = []
+    # Queue all input slices, skip ones that are all nodata
+    for b in block_manager.iter_blocks():
+        in_rows, in_cols = b[2]
         if nodata_mask[in_rows, in_cols].all():
             continue
         loader.queue_read(in_rows, in_cols)
-        blocks.append((out, in_block, trim, full_out))
+        blocks.append(b)
 
     logger.info(f"Iterating over {block_shape} blocks, {len(blocks)} total")
-    for out_block, in_block, full_res_trim, full_res_output in blocks:
-        logger.debug(f"{out_block = }, {in_block = }")
-        # logger.debug(f"{full_res_trim = }, {full_res_output = }")
-        out_rows, out_cols = out_block
-        in_rows, in_cols = in_block
-        trim_full_rows, trim_full_cols = full_res_trim
-        full_res_out_rows, full_res_out_cols = full_res_output
+    for (
+        (out_rows, out_cols),
+        (out_trim_rows, out_trim_cols),
+        (in_rows, in_cols),
+        (in_no_pad_rows, in_no_pad_cols),
+        (in_trim_rows, in_trim_cols),
+    ) in blocks:
+        logger.debug(f"{out_rows = }, {out_cols = }, {in_rows = }, {in_no_pad_rows = }")
 
         cur_data, (read_rows, read_cols) = loader.get_data()
         if np.all(cur_data == 0) or np.isnan(cur_data).all():
@@ -222,8 +224,7 @@ def run_wrapped_phase_single(
         assert len(mle_out.mle_est[first_real_slc_idx:]) == len(phase_linked_slc_files)
 
         for img, f in zip(
-            # mle_est[first_real_slc_idx:, trimmed_rows, trimmed_cols],
-            mle_out.mle_est[first_real_slc_idx:],
+            mle_out.mle_est[first_real_slc_idx:, out_trim_rows, out_trim_cols],
             phase_linked_slc_files,
         ):
             writer.queue_write(img, f, out_rows.start, out_cols.start)
@@ -237,8 +238,8 @@ def run_wrapped_phase_single(
         # Compress the ministack using only the non-compressed SLCs
         cur_comp_slc = compress(
             # Get the inner portion of the full-res SLC data
-            cur_data[first_real_slc_idx:, trim_full_rows, trim_full_cols],
-            mle_out.mle_est[first_real_slc_idx:],
+            cur_data[first_real_slc_idx:, in_trim_rows, in_trim_cols],
+            mle_out.mle_est[first_real_slc_idx:, out_trim_rows, out_trim_cols],
         )
 
         # ### Save results ###
@@ -247,8 +248,8 @@ def run_wrapped_phase_single(
         writer.queue_write(
             cur_comp_slc,
             output_files[0].filename,
-            full_res_out_rows.start,
-            full_res_out_cols.start,
+            in_no_pad_rows.start,
+            in_no_pad_cols.start,
         )
 
         # All other outputs are strided (smaller in size)
@@ -257,7 +258,7 @@ def run_wrapped_phase_single(
             if data is None:  # May choose to skip some outputs, e.g. "avg_coh"
                 continue
             writer.queue_write(
-                data,
+                data[out_trim_rows, out_trim_cols],
                 output_file.filename,
                 out_rows.start,
                 out_cols.start,
