@@ -1,5 +1,3 @@
-from typing import ClassVar
-
 import numpy as np
 import pytest
 
@@ -7,13 +5,8 @@ from dolphin._types import HalfWindow, Strides
 from dolphin.io._blocks import (
     BlockIndices,
     StridedBlockManager,
-    _get_relative_offset_slice,
-    get_output_size,
     get_slice_length,
     iter_blocks,
-    unstride_center,
-    unstride_center_block,
-    unstride_center_slice,
 )
 from dolphin.utils import compute_out_shape, upsample_nearest
 
@@ -113,106 +106,6 @@ def test_nonzero_block_size_with_margin():
         assert get_slice_length(cs) > 0
         check_out[rs, cs] += 1
     assert np.all(check_out[:, 1:-1] == 1)
-
-
-def test_relative_slices():
-    full_padded = slice(0, 10)
-    inner = slice(2, 8)
-    strides = 1
-    assert _get_relative_offset_slice(inner, full_padded, strides) == slice(2, -2)
-
-    inner = slice(1, 2)
-    strides = 3
-    assert _get_relative_offset_slice(inner, full_padded, 3) == slice(3, -4)
-
-
-def test_get_output_size():
-    # get_output_shape(in_size: int, stride: int, half_window: int) -> int:
-    in_size = 10
-    stride = 1
-    assert get_output_size(in_size, stride, 0) == 10
-    half_window = 2
-    assert get_output_size(in_size, stride, half_window) == 6
-
-    stride = 3
-    assert get_output_size(in_size, stride, 1) == 3
-    assert get_output_size(in_size, stride, 2) == 1
-    assert get_output_size(9, stride, 3) == 1
-    assert get_output_size(8, stride, 3) == 1
-    assert get_output_size(7, stride, 3) == 0
-
-    in_size = 15
-    stride = 5
-    assert get_output_size(in_size, stride, 1) == 3
-    assert get_output_size(in_size, stride, 2) == 3
-    assert get_output_size(in_size, stride, 3) == 1
-    assert get_output_size(in_size, stride, 4) == 1
-
-
-class TestUnstride:
-    full_res_centers: ClassVar = {
-        0: [0, 1, 1, 2, 2, 3],
-        1: [1, 3, 4, 6, 7, 9],
-        2: [2, 5, 7, 10, 12, 15],
-    }
-
-    @pytest.fixture
-    def strides(self):
-        return [1, 2, 3, 4, 5, 6]
-
-    def test_unstride_center(self, strides):
-        idx = 0
-        for stride, expected_center in zip(strides, self.full_res_centers[0]):
-            assert unstride_center(idx, stride) == expected_center
-
-        idx = 1
-        for stride, expected_center in zip(strides, self.full_res_centers[1]):
-            assert unstride_center(idx, stride) == expected_center
-
-        idx = 2
-        for stride, expected_center in zip(strides, self.full_res_centers[2]):
-            assert unstride_center(idx, stride) == expected_center
-
-    def unstride_slice(self):
-        assert unstride_center_slice(slice(0, 1), 1) == slice(0, 1)
-        assert unstride_center_slice(slice(0, 2), 2) == slice(1, 4)
-        assert unstride_center_slice(slice(1, 3), 5) == slice(7, 13)
-
-    def test_unstride_block(self):
-        # Iterate over the output, decimated raster
-        out_blocks = list(iter_blocks((3, 5), (2, 2)))
-        assert out_blocks == [
-            BlockIndices(row_start=0, row_stop=2, col_start=0, col_stop=2),
-            BlockIndices(row_start=0, row_stop=2, col_start=2, col_stop=4),
-            BlockIndices(row_start=0, row_stop=2, col_start=4, col_stop=5),
-            BlockIndices(row_start=2, row_stop=3, col_start=0, col_stop=2),
-            BlockIndices(row_start=2, row_stop=3, col_start=2, col_stop=4),
-            BlockIndices(row_start=2, row_stop=3, col_start=4, col_stop=5),
-        ]
-        # Dilate each out block
-        in_blocks = [
-            unstride_center_block(b, strides=Strides(1, 1)) for b in out_blocks
-        ]
-        assert in_blocks == out_blocks
-
-        in_blocks = [
-            unstride_center_block(b, strides=Strides(1, 3)) for b in out_blocks
-        ]
-        assert in_blocks == [
-            BlockIndices(row_start=0, row_stop=2, col_start=0, col_stop=6),
-            BlockIndices(row_start=0, row_stop=2, col_start=6, col_stop=12),
-            BlockIndices(row_start=0, row_stop=2, col_start=12, col_stop=15),
-            BlockIndices(row_start=2, row_stop=3, col_start=0, col_stop=6),
-            BlockIndices(row_start=2, row_stop=3, col_start=6, col_stop=12),
-            BlockIndices(row_start=2, row_stop=3, col_start=12, col_stop=15),
-        ]
-
-    def test_dilate_strided(self):
-        db = unstride_center_block(
-            BlockIndices(row_start=0, row_stop=3, col_start=0, col_stop=5),
-            Strides(2, 2),
-        )
-        assert db == BlockIndices(row_start=1, row_stop=6, col_start=1, col_stop=10)
 
 
 class TestBlockManager:
