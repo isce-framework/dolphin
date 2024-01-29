@@ -77,8 +77,6 @@ def estimate_stack_covariance_t(
     """Estimate the linked phase at all pixels of `slc_stack_reshaped`."""
     rows, cols, nslc = slc_stack_reshaped.shape
 
-    import jax.debug
-
     row_strides = strides.y
     col_strides = strides.x
     half_row = half_window.y
@@ -86,18 +84,8 @@ def estimate_stack_covariance_t(
 
     out_rows, out_cols = compute_out_shape((rows, cols), strides)
 
-    # in_r_start = row_strides // 2
-    # in_c_start = col_strides // 2
-    in_r_start = half_row
-    in_c_start = half_col
-    jax.debug.print(
-        "jdb: {rows}, {cols}, {out_rows}, {out_cols}".format(
-            rows=rows,
-            cols=cols,
-            out_rows=out_rows,
-            out_cols=out_cols,
-        )
-    )
+    in_r_start = row_strides // 2
+    in_c_start = col_strides // 2
 
     if neighbor_arrays is None:
         neighbor_arrays = jnp.ones(
