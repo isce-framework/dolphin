@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import logging
 import warnings
+from functools import partial
 from typing import NamedTuple, Optional
 
+import jax.numpy as jnp
 import numpy as np
-import pymp
-from jax import Array
-from scipy.linalg import eigh
+from jax import Array, jit, vmap
+from jax.typing import ArrayLike
 
 from dolphin._types import HalfWindow, Strides
 from dolphin.utils import get_array_module, take_looks
@@ -252,7 +253,7 @@ def _get_eigvecs(C, n_workers: int = 1, use_evd: bool = False):
     if xp == np:
         # The block splitting isn't needed for numpy.
         # return np.linalg.eigh(C)[1]
-        return _get_eigvecs_scipy(C, n_workers=n_workers, use_evd=use_evd)
+        return _get_eigvecs_jax(C, n_workers=n_workers, use_evd=use_evd)
 
     # Make sure we don't overflow: cupy https://github.com/cupy/cupy/issues/7261
     # The work_size must be less than 2**30, so
@@ -278,26 +279,20 @@ def _get_eigvecs(C, n_workers: int = 1, use_evd: bool = False):
     return V_out
 
 
-def _get_eigvecs_scipy(A: np.ndarray, n_workers: int = 1, use_evd: bool = False):
+@partial(jit, static_argnames=("use_evd",))
+def _get_eigvecs_jax(C_arrays: ArrayLike, use_evd: bool = False) -> Array:
     # Subset index for scipy.eigh: larges eig for EVD. Smallest for EMI.
-    subset_idx = A.shape[-1] - 1 if use_evd else 0
+    subset_idx = C_arrays.shape[-1] - 1 if use_evd else 0
 
-    A_shared = pymp.shared.array(A.shape, dtype="complex64")
-    A_shared[:] = A[:]
-    rows, cols, nslc, _ = A.shape
-    out = pymp.shared.array((rows, cols, nslc), dtype="complex64")
-    with pymp.Parallel(n_workers) as p:
-        # Looping over linear index for pixels (less nesting of pymp context managers)
-        for idx in p.range(rows * cols):
-            # Iterating over every output pixels, convert to a row/col index
-            r, c = np.unravel_index(idx, (rows, cols))
-            out[r, c, :] = eigh(
-                A_shared[r, c], subset_by_index=[subset_idx, subset_idx]
-            )[1].ravel()
+    def get_top_eigvecs(C: Array):
+        # The eigenvalues in ascending order, each repeated according
+        # The column ``eigenvectors[:, i]`` is the normalized eigenvector
+        # corresponding to the eigenvalue ``eigenvalues[i]``.
+        return jnp.linalg.eigh(C)[1][:, [subset_idx]]
 
-    del A_shared
-    # Add the last dimension back to match the shape of the cupy output
-    return out[:, :, :, None]
+    # vmap over the first 2 dimensions (rows, cols)
+    get_eigvecs_block = vmap(vmap(get_top_eigvecs))
+    return get_eigvecs_block(C_arrays)
 
 
 def _check_all_nans(slc_stack: np.ndarray):
