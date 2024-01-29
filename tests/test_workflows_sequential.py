@@ -1,11 +1,10 @@
-import numpy.testing as npt
 import pytest
 
-from dolphin import io, stack
+from dolphin import stack
 
 # from dolphin._types import HalfWindow, Strides
 from dolphin.io import _readers
-from dolphin.phase_link import mle, simulate
+from dolphin.phase_link import simulate
 from dolphin.utils import compute_out_shape, gpu_is_available
 from dolphin.workflows import sequential
 
@@ -26,7 +25,7 @@ def test_sequential_gtiff(tmp_path, slc_file_list):
 
     half_window = {"x": cols // 2, "y": rows // 2}
     strides = {"x": 1, "y": 1}
-    out_shape = compute_out_shape((rows, cols), strides=strides)
+    out_shape = compute_out_shape((rows, cols), strides=(strides["y"], strides["x"]))
     if not all(out_shape):
         pytest.skip(f"Output shape = {out_shape}")
     output_folder = tmp_path / "sequential"
@@ -53,23 +52,6 @@ def test_sequential_gtiff(tmp_path, slc_file_list):
     )
 
     assert len(list(output_folder.glob("2*.slc.tif"))) == vrt_stack.shape[0]
-
-    # TODO: This probably won't work with just random data
-    pytest.skip("This test is not working with random data.")
-    # Get the MLE estimates from the entire stack output.
-    slc_stack = vrt_stack.read_stack()
-    mle_est, _, _ = mle.run_mle(
-        slc_stack,
-        half_window=half_window,
-        strides=strides,
-        # gpu_enabled=gpu_enabled,
-    )
-
-    # Check that the sequential output matches the MLE estimates.
-    for idx, out_file in enumerate(sorted(output_folder.glob("2*.slc.tif"))):
-        layer = io.load_gdal(out_file)
-        expected = mle_est[idx]
-        npt.assert_allclose(layer, expected, atol=1e-3)
 
 
 # Input is only (5, 10) so we can't use a larger window.
