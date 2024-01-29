@@ -10,7 +10,7 @@ dependencies:
   - h5py>=3.6
   - hdf5!=1.12.2 # https://github.com/SciTools/iris/issues/5187 and https://github.com/pydata/xarray/issues/7549
   - jax>=0.4.19
-  - numba>=0.54
+  - numba>=0.56
   - numpy>=1.23
   - opera-utils>=0.1.5
   - pydantic>=2.1

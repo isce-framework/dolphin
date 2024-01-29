@@ -30,7 +30,7 @@ jobs:
               h5py=3.6
               jax=0.4.19
               numpy=1.23
-              numba=0.54
+              numba=0.56
               pydantic=2.1
               pyproj=3.3
               rasterio=1.3
