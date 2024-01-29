@@ -121,11 +121,11 @@ class TestBlockManager:
             BlockIndices(row_start=4, row_stop=5, col_start=3, col_stop=5),
         ]
 
-        outs, trimming, ins, in_no_pads = zip(*list(bm.iter_blocks()))
+        outs, out_trim, ins, in_no_pads, in_trim = zip(*list(bm.iter_blocks()))
         assert outs == ins
         assert outs == in_no_pads
         assert all(
-            (rs, cs) == (slice(0, None), slice(0, None)) for (rs, cs) in trimming
+            (rs, cs) == (slice(0, None), slice(0, None)) for (rs, cs) in out_trim
         )
 
     def test_iter_outputs(self):
@@ -148,7 +148,7 @@ class TestBlockManager:
             assert col_slice.stop < ncols - out_col_margin
 
 
-@pytest.mark.skip(reason="Uses old logic ")
+# @pytest.mark.skip(reason="Uses old logic ")
 class TestFakeProcess:
     def _fake_process(self, in_arr, strides: Strides, half_window: HalfWindow):
         """Dummy processing which has same nodata pattern as `phase_link.run_mle`."""
@@ -192,15 +192,16 @@ class TestFakeProcess:
         )
         for (
             (out_rows, out_cols),
-            (trimming_rows, trimming_cols),
+            (out_trim_rows, out_trim_cols),
             (in_rows, in_cols),
             (in_no_pad_rows, in_no_pad_cols),
+            (_in_trim_rows, _in_trim_cols),
         ) in bm.iter_blocks():
             in_data = full_res_data[in_rows, in_cols]
             out_data = self._fake_process(in_data, strides, half_window)
 
             # inner = _get_trimmed_full_res(out_arr, in_block, in_no_pad_block)
-            data_trimmed = out_data[trimming_rows, trimming_cols]
+            data_trimmed = out_data[out_trim_rows, out_trim_cols]
             assert np.all(~np.isnan(data_trimmed))
             assert get_slice_length(out_rows) == data_trimmed.shape[0]
             assert get_slice_length(out_cols) == data_trimmed.shape[1]
