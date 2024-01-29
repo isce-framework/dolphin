@@ -116,7 +116,6 @@ https://conda.anaconda.org/conda-forge/linux-64/scipy-1.11.4-py311h64a7726_0.con
 https://conda.anaconda.org/conda-forge/linux-64/shapely-2.0.2-py311he06c224_0.conda#c90e2469d7512f3bba893533a82d7a02
 https://conda.anaconda.org/conda-forge/linux-64/snappy-1.1.10-h9fff704_0.conda#e6d228cd0bb74a51dd18f5bfce0b4115
 https://conda.anaconda.org/conda-forge/linux-64/sqlite-3.44.2-h2c6b66d_0.conda#4f2892c672829693fd978d065db4e8be
-https://conda.anaconda.org/conda-forge/linux-64/tbb-2021.10.0-h00ab1b0_2.conda#eb0d5c122f42714f86a7058d1ce7b2e6
 https://conda.anaconda.org/conda-forge/linux-64/tiledb-2.16.3-h8c794c1_3.conda#7de728789b0aba16018f726dc5ddbec2
 https://conda.anaconda.org/conda-forge/linux-64/tk-8.6.13-noxft_h4845f30_101.conda#d453b98d9c83e71da0741bb0ff4d76bc
 https://conda.anaconda.org/conda-forge/linux-64/tzcode-2023c-h0b41bf4_0.conda#0c0533894f21c3d35697cb8378d390e2
@@ -160,7 +159,6 @@ https://conda.anaconda.org/conda-forge/noarch/pooch-1.8.0-pyhd8ed1ab_0.conda#134
 https://conda.anaconda.org/conda-forge/noarch/poppler-data-0.4.12-hd8ed1ab_0.conda#d8d7293c5b37f39b2ac32940621c6592
 https://conda.anaconda.org/conda-forge/noarch/pydantic-2.5.2-pyhd8ed1ab_0.conda#3f908ebfccbfd09946961862d26bb9af
 https://conda.anaconda.org/conda-forge/noarch/pygments-2.17.2-pyhd8ed1ab_0.conda#140a7f159396547e9799aa98f9f0742e
-https://conda.anaconda.org/conda-forge/noarch/pymp-pypi-0.4.5-pyhd8ed1ab_0.tar.bz2#3d56b4c5a162223b9f20cef1fdc8a89a
 https://conda.anaconda.org/conda-forge/noarch/pysocks-1.7.1-pyha2e5f31_6.tar.bz2#2a7de29fb590ca14b5243c4c812c8025
 https://conda.anaconda.org/conda-forge/noarch/requests-2.31.0-pyhd8ed1ab_0.conda#a30144e4156cdbb236f99ebb49828f8b
 https://conda.anaconda.org/conda-forge/noarch/rich-13.7.0-pyhd8ed1ab_0.conda#d7a11d4f3024b2f4a6e0ae7377dd61e9

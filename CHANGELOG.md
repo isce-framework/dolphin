@@ -3,11 +3,21 @@
 **Added**
 - Added `DatasetWriter` protocol
 - Added `RasterWriter` and `BackgroundRasterWriter` implementations of this protocol
+- Refactored phase linking
+  - Covariance and EVD/MLE use `jax`
+  - This combines the implementation of CPU/GPU, and removes the need for usign `pymp`
 
 **Changed**
 - Internal module organization, including grouping IO modules into `dolphin.io` subpackage
 - Renamed `io.Writer` to `io.GdalWriter` to distinguish from `RasterWriter`
 
+**Dependencies**
+
+Added
+- `jax`>=0.4.19
+
+Removed:
+- `pymp`
 
 # [v0.11.0](https://github.com/isce-framework/dolphin/compare/v0.10.0...v0.11.0) - 2023-01-24
 
