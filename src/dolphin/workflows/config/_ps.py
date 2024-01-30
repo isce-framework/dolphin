@@ -50,10 +50,9 @@ class PsWorkflow(WorkflowBase):
         _read_file_list_or_glob
     )
 
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
+    def model_post_init(self, __context: Any) -> None:
         """After validation, set up properties for use during workflow run."""
-        super().__init__(*args, **kwargs)
-
+        super().model_post_init(__context)
         # Ensure outputs from workflow steps are within work directory.
         if not self.keep_paths_relative:
             # Resolve all CSLC paths:

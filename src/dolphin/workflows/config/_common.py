@@ -382,10 +382,9 @@ class WorkflowBase(YamlModel):
     # Stores the list of directories to be created by the workflow
     _directory_list: list[Path] = PrivateAttr(default_factory=list)
 
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
+    def model_post_init(self, __context: Any) -> None:
         """After validation, set up properties for use during workflow run."""
-        super().__init__(*args, **kwargs)
-
+        super().model_post_init(__context)
         # Ensure outputs from workflow steps are within work directory.
         if not self.keep_paths_relative:
             # Save all directories as absolute paths

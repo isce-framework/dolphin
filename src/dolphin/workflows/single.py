@@ -267,6 +267,7 @@ def run_wrapped_phase_single(
                 out_cols.start,
             )
 
+    loader.notify_finished()
     # Block until all the writers for this ministack have finished
     logger.info(f"Waiting to write {writer.num_queued} blocks of data.")
     writer.notify_finished()

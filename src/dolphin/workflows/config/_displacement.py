@@ -179,10 +179,9 @@ class DisplacementWorkflow(WorkflowBase):
 
         return self
 
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
+    def model_post_init(self, __context: Any) -> None:
         """After validation, set up properties for use during workflow run."""
-        super().__init__(*args, **kwargs)
-
+        super().model_post_init(__context)
         # Ensure outputs from workflow steps are within work directory.
         if not self.keep_paths_relative:
             # Resolve all CSLC paths:
@@ -199,6 +198,13 @@ class DisplacementWorkflow(WorkflowBase):
             "unwrap_options",
         ]:
             opts = getattr(self, step)
+            if isinstance(opts, dict):
+                # If this occurs, we are printing the schema.
+                # Using newer pydantic `model_construct`, this would be a dict,
+                # instead of an object.
+                # We don't care about the subsequent logic here
+                return
+
             if opts._directory.parent != work_dir:
                 opts._directory = work_dir / opts._directory
             if not self.keep_paths_relative:
