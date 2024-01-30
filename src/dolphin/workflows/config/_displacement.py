@@ -198,6 +198,13 @@ class DisplacementWorkflow(WorkflowBase):
             "unwrap_options",
         ]:
             opts = getattr(self, step)
+            if isinstance(opts, dict):
+                # If this occurs, we are printing the schema.
+                # Using newer pydantic `model_construct`, this would be a dict,
+                # instead of an object.
+                # We don't care about the subsequent logic here
+                return
+
             if opts._directory.parent != work_dir:
                 opts._directory = work_dir / opts._directory
             if not self.keep_paths_relative:
