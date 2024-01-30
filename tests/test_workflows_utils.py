@@ -4,7 +4,8 @@ import numpy as np
 import pytest
 from osgeo import gdal
 
-from dolphin import _readers, stack
+from dolphin import stack
+from dolphin.io import _readers
 from dolphin.workflows.single import setup_output_folder
 
 

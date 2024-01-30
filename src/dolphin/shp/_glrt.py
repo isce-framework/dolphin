@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 from math import log
+from typing import Optional
 
 import numba
 import numpy as np
 from numpy.typing import ArrayLike
 
-from dolphin._blocks import compute_out_shape
+from dolphin.utils import compute_out_shape
 
 from ._common import _make_loop_function, _read_cutoff_csv
 
@@ -26,7 +27,7 @@ def estimate_neighbors(
     var: ArrayLike,
     halfwin_rowcol: tuple[int, int],
     nslc: int,
-    strides: dict = {"x": 1, "y": 1},
+    strides: Optional[dict] = None,
     alpha: float = 0.05,
     prune_disconnected: bool = False,
 ):
@@ -75,6 +76,8 @@ def estimate_neighbors(
             `window_rows = 2 * halfwin_rowcol[0] + 1`
             `window_cols = 2 * halfwin_rowcol[1] + 1`
     """
+    if strides is None:
+        strides = {"x": 1, "y": 1}
     half_row, half_col = halfwin_rowcol
     rows, cols = mean.shape
 
@@ -120,5 +123,6 @@ def get_cutoff(alpha: float, N: int) -> float:
     n_alpha_to_cutoff = _read_cutoff_csv("glrt")
     try:
         return n_alpha_to_cutoff[(N, alpha)]
-    except KeyError:
-        raise ValueError(f"Not implemented for {N = }, {alpha = }")
+    except KeyError as e:
+        msg = f"Not implemented for {N = }, {alpha = }"
+        raise NotImplementedError(msg) from e

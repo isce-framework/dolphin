@@ -6,8 +6,7 @@ from typing import Optional
 import numpy as np
 from numba import cuda
 
-from dolphin._blocks import compute_out_shape
-from dolphin.utils import decimate
+from dolphin.utils import compute_out_shape, decimate
 
 from . import covariance, metrics
 from .mle import MleOutput, mle_stack
@@ -16,7 +15,7 @@ from .mle import MleOutput, mle_stack
 def run_gpu(
     slc_stack: np.ndarray,
     half_window: dict[str, int],
-    strides: dict[str, int] = {"x": 1, "y": 1},
+    strides: Optional[dict[str, int]] = None,
     use_evd: bool = False,
     beta: float = 0.01,
     reference_idx: int = 0,
@@ -61,6 +60,8 @@ def run_gpu(
     calc_average_coh : bool, default=False
         If requested, the average of each row of the covariance matrix is computed
         for the purposes of finding the best reference (highest coherence) date
+    **kwargs : dict, optional
+        Additional keyword arguments not used by CPU version.
 
     Returns
     -------
@@ -71,6 +72,8 @@ def run_gpu(
     """
     import cupy as cp
 
+    if strides is None:
+        strides = {"x": 1, "y": 1}
     num_slc, rows, cols = slc_stack.shape
 
     # Can't use dict in numba kernels, so pass the values as a tuple

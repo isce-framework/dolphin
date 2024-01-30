@@ -7,11 +7,10 @@ from dolphin._decorators import atomic_output
 
 def _long_write(filename, pause: float = 0.2):
     """Simulate a long writing process"""
-    f = open(filename, "w")
-    f.write("aaa\n")
-    time.sleep(pause)
-    f.write("bbb\n")
-    f.close()
+    with open(filename, "w") as f:
+        f.write("aaa\n")
+        time.sleep(pause)
+        f.write("bbb\n")
 
 
 @atomic_output(output_arg="outname")
@@ -54,7 +53,7 @@ def test_atomic_output_tmp(tmpdir):
         assert Path("out1.txt").exists()
 
 
-def test_atomic_output_dir(tmp_path):
+def test_atomic_output_dir(tmp_path: Path):
     out_dir = tmp_path / "out"
     filename = "testfile.txt"
     out_dir.mkdir()
@@ -62,7 +61,7 @@ def test_atomic_output_dir(tmp_path):
     assert Path(out_dir / filename).exists()
 
 
-def test_atomic_output_dir_tmp(tmp_path):
+def test_atomic_output_dir_tmp(tmp_path: Path):
     out_dir = tmp_path / "out"
     filename = "testfile.txt"
     out_dir.mkdir()
@@ -82,7 +81,7 @@ def test_atomic_output_name_swap_file(tmpdir):
         assert Path(outname2).exists()
 
 
-def test_atomic_output_dir_swap(tmp_path):
+def test_atomic_output_dir_swap(tmp_path: Path):
     # Kick off the writing function in the background
     # so we see if a different file was created
     # Check it works providing the "args"

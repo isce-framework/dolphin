@@ -46,7 +46,8 @@ def run(
         list of Paths to connected component files created.
     """
     if len(ifg_file_list) != len(cor_file_list):
-        raise ValueError(f"{len(ifg_file_list) = } != {len(cor_file_list) = }")
+        msg = f"{len(ifg_file_list) = } != {len(cor_file_list) = }"
+        raise ValueError(msg)
 
     output_path = unwrap_options._directory
     output_path.mkdir(exist_ok=True, parents=True)

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, List
+from typing import Any
 
 from pydantic import ConfigDict, Field, field_validator
 
@@ -27,7 +27,7 @@ class PsWorkflow(WorkflowBase):
 
     # Paths to input/output files
     input_options: InputOptions = Field(default_factory=InputOptions)
-    cslc_file_list: List[Path] = Field(
+    cslc_file_list: list[Path] = Field(
         default_factory=list,
         description=(
             "list of CSLC files, or newline-delimited file "

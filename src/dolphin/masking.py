@@ -87,7 +87,8 @@ def combine_mask_files(
     xsize, ysize = io.get_raster_xysize(mask_files[0])
 
     if combine_method not in ["any", "all"]:
-        raise ValueError("combine_method must be 'any' or 'all'")
+        msg = "combine_method must be 'any' or 'all'"
+        raise ValueError(msg)
 
     # Create output file
     driver = gdal.GetDriverByName(output_format)
@@ -108,9 +109,12 @@ def combine_mask_files(
     if input_conventions is None:
         input_conventions = [MaskConvention.NUMPY] * len(mask_files)
     elif len(input_conventions) != len(mask_files):
-        raise ValueError(
+        msg = (
             f"input_conventions ({len(input_conventions)}) must have the same"
-            f" length as mask_files ({len(mask_files)})",
+            f" length as mask_files ({len(mask_files)})"
+        )
+        raise ValueError(
+            msg,
         )
 
     # Uses the numpy convention (1 = invalid, 0 = valid) for combining logic

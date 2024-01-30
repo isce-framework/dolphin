@@ -1,15 +1,15 @@
 from __future__ import annotations
 
 from math import exp, sqrt
+from typing import Optional
 
 import numba
 import numpy as np
 from numba import cuda
 from numpy.typing import ArrayLike
 
-from dolphin._blocks import compute_out_shape
 from dolphin._log import get_log
-from dolphin.utils import _get_slices
+from dolphin.utils import _get_slices, compute_out_shape
 
 from ._common import remove_unconnected
 
@@ -23,7 +23,7 @@ def estimate_neighbors(
     amp_stack: ArrayLike,
     halfwin_rowcol: tuple[int, int],
     alpha: float,
-    strides: dict[str, int] = {"x": 1, "y": 1},
+    strides: Optional[dict[str, int]] = None,
     is_sorted: bool = False,
     prune_disconnected: bool = False,
 ):
@@ -36,10 +36,9 @@ def estimate_neighbors(
     #     neighbor_arrays,
     # )
 
-    if is_sorted:
-        sorted_amp_stack = amp_stack
-    else:
-        sorted_amp_stack = np.sort(amp_stack, axis=0)
+    if strides is None:
+        strides = {"x": 1, "y": 1}
+    sorted_amp_stack = amp_stack if is_sorted else np.sort(amp_stack, axis=0)
 
     num_slc, rows, cols = sorted_amp_stack.shape
     ecdf_dist_cutoff = _get_ecdf_critical_distance(num_slc, alpha)
@@ -96,7 +95,8 @@ def _loop_over_neighbors(
             amp_block = sorted_amp_stack[:, r_start:r_end, c_start:c_end]
             neighbors = is_shp[out_r, out_c, :, :]
             _set_neighbors(amp_block, halfwin_rowcol, ecdf_dist_cutoff, neighbors)
-            remove_unconnected(is_shp[out_r, out_c], inplace=True)
+            if prune_disconnected:
+                remove_unconnected(is_shp[out_r, out_c], inplace=True)
 
     return is_shp
 
@@ -203,11 +203,7 @@ def _get_max_cdf_dist(x1, x2):
         if i1 == n:
             cdf2 += 1 / n
             i2 += 1
-        elif i2 == n:
-            cdf1 += 1 / n
-            i1 += 1
-
-        elif x1[i1] < x2[i2]:
+        elif i2 == n or (x1[i1] < x2[i2]):
             cdf1 += 1 / n
             i1 += 1
         elif x1[i1] > x2[i2]:

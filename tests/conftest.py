@@ -11,7 +11,7 @@ from osgeo import gdal
 
 # https://numba.readthedocs.io/en/stable/user/threading-layer.html#example-of-limiting-the-number-of-threads
 if not os.environ.get("NUMBA_NUM_THREADS"):
-    os.environ["NUMBA_NUM_THREADS"] = str(min(os.cpu_count(), 16))  # type: ignore
+    os.environ["NUMBA_NUM_THREADS"] = str(min(os.cpu_count(), 16))  # type: ignore[type-var]
 
 from opera_utils import OPERA_DATASET_NAME
 
@@ -22,7 +22,7 @@ NUM_ACQ = 30
 
 
 # https://github.com/pytest-dev/pytest/issues/667#issuecomment-112206152
-@pytest.fixture
+@pytest.fixture()
 def random():
     np.random.seed(1234)
     simulate._seed(1234)
@@ -35,8 +35,7 @@ def slc_stack():
     data = np.random.normal(0, sigma, size=shape) + 1j * np.random.normal(
         0, sigma, size=shape
     )
-    data = data.astype(np.complex64)
-    return data
+    return data.astype(np.complex64)
 
 
 @pytest.fixture()
@@ -139,7 +138,7 @@ def slc_file_list_nc_with_sds(tmp_path, slc_stack, slc_date_list):
 
 @pytest.fixture(scope="session")
 def C_truth():
-    C, truth = simulate.simulate_C(
+    C, truth = simulate.simulate_coh(
         num_acq=NUM_ACQ,
         Tau0=72,
         gamma_inf=0.95,
@@ -150,7 +149,7 @@ def C_truth():
     return C, truth
 
 
-@pytest.fixture
+@pytest.fixture()
 def slc_samples(C_truth):
     C, _ = C_truth
     ns = 11 * 11
@@ -160,7 +159,7 @@ def slc_samples(C_truth):
 # General utils on loading data/attributes
 
 
-@pytest.fixture
+@pytest.fixture()
 def raster_100_by_200(tmp_path):
     ysize, xsize = 100, 200
     # Create a test raster
@@ -176,7 +175,7 @@ def raster_100_by_200(tmp_path):
     return filename
 
 
-@pytest.fixture
+@pytest.fixture()
 def tiled_raster_100_by_200(tmp_path):
     ysize, xsize = 100, 200
     tile_size = [32, 32]
@@ -202,7 +201,7 @@ def tiled_raster_100_by_200(tmp_path):
     return filename
 
 
-@pytest.fixture
+@pytest.fixture()
 def tiled_file_list(tiled_raster_100_by_200):
     tmp_path = tiled_raster_100_by_200.parent
     outname2 = tmp_path / "20220102test.tif"
@@ -222,7 +221,7 @@ def raster_10_by_20(tmp_path, tiled_raster_100_by_200):
     return outname2
 
 
-@pytest.fixture
+@pytest.fixture()
 def raster_with_nan(tmp_path, tiled_raster_100_by_200):
     # Raster with one nan pixel
     start_arr = load_gdal(tiled_raster_100_by_200)
@@ -238,7 +237,7 @@ def raster_with_nan(tmp_path, tiled_raster_100_by_200):
     return output_name
 
 
-@pytest.fixture
+@pytest.fixture()
 def raster_with_nan_block(tmp_path, tiled_raster_100_by_200):
     # One full block of 32x32 is nan
     output_name = tmp_path / "with_nans.tif"
@@ -253,7 +252,7 @@ def raster_with_nan_block(tmp_path, tiled_raster_100_by_200):
     return output_name
 
 
-@pytest.fixture
+@pytest.fixture()
 def raster_with_zero_block(tmp_path, tiled_raster_100_by_200):
     # One full block of 32x32 is nan
     output_name = tmp_path / "with_zeros.tif"
@@ -356,9 +355,7 @@ def opera_static_files_official(tmp_path) -> list[Path]:
     d.mkdir()
     file_list = []
 
-    b_id = 24520
-    for i in range(5):
-        burst_id = f"T012-{b_id:06d}-IW1"
+    for burst_id in ["T087-185683-IW2", "T087-185684-IW2"]:
         fname = d / f"{base}_{burst_id}_{ending}"
         create_static_layer_h5(fname)
         file_list.append(Path(fname))
@@ -375,15 +372,26 @@ def create_static_layer_h5(filename):
         shape = (4965, 19878)  # Adjust shape as needed
 
         # Create datasets with specified values
-        grp.create_dataset("layover_shadow_mask", shape, dtype=np.uint16)
-        grp.create_dataset(
-            "los_east", shape, dtype=np.float32, data=0.7 * np.ones(shape)
+        dsets = []
+        dsets.append(grp.create_dataset("layover_shadow_mask", shape, dtype=np.uint16))
+        dsets.append(
+            grp.create_dataset(
+                "los_east", shape, dtype=np.float32, data=0.7 * np.ones(shape)
+            )
         )
-        grp.create_dataset(
-            "los_north", shape, dtype=np.float32, data=-0.11 * np.ones(shape)
+        dsets.append(
+            grp.create_dataset(
+                "los_north", shape, dtype=np.float32, data=-0.11 * np.ones(shape)
+            )
         )
-        grp.create_dataset("projection", data=32615)
-        grp["projection"].attrs.update(CRS.from_epsg(32615).to_cf())
+        dsets.append(grp.create_dataset("projection", data=32615))
+
+        crs_wkt = CRS.from_epsg(32615).to_wkt()
+        for ds in dsets:
+            ds.attrs.update(CRS.from_epsg(32615).to_cf())
+            crs_attrs = {"crs_wkt": crs_wkt, "spatial_ref": crs_wkt}
+            ds.attrs.update(crs_attrs)
+
         dx, dy = 5, -10
         x0, y0 = 246362.5, 3422995.0
         xs = np.arange(x0, x0 + shape[1] * dx, dx)
@@ -392,3 +400,30 @@ def create_static_layer_h5(filename):
         grp.create_dataset("x_spacing", data=dx)
         grp.create_dataset("y_coordinates", (shape[0],), dtype=np.float32, data=ys)
         grp.create_dataset("y_spacing", data=abs(dy))
+
+
+@pytest.fixture()
+def weather_model_files():
+    data_dir = Path("tests/data")
+    with open(data_dir / "weather_model_files.txt") as f:
+        return f.readlines()
+
+
+@pytest.fixture()
+def tec_files():
+    data_dir = Path("tests/data")
+    with open(data_dir / "tec_files.txt") as f:
+        return f.readlines()
+
+
+@pytest.fixture()
+def dem_file(tmp_path, slc_stack):
+    fname = tmp_path / "dem.tif"
+    shape = slc_stack.shape
+    dem = np.random.rand(shape[-2], shape[-1]) + 1000
+    # Write to a file
+    driver = gdal.GetDriverByName("GTiff")
+    ds = driver.Create(str(fname), shape[-1], shape[-2], 1, gdal.GDT_Float32)
+    ds.GetRasterBand(1).WriteArray(dem)
+    ds = None
+    return fname

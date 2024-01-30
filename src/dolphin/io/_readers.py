@@ -22,11 +22,12 @@ from opera_utils._dates import get_dates, sort_files_by_date
 from osgeo import gdal
 
 from dolphin import io, utils
-from dolphin._background import _DEFAULT_TIMEOUT, BackgroundReader
-from dolphin._blocks import iter_blocks
 from dolphin._types import Filename
+from dolphin.io._blocks import iter_blocks
 from dolphin.stack import logger
 from dolphin.utils import progress
+
+from ._background import _DEFAULT_TIMEOUT, BackgroundReader
 
 __all__ = [
     "DatasetReader",
@@ -56,21 +57,18 @@ class DatasetReader(Protocol):
     Such objects must export NumPy-like `dtype`, `shape`, and `ndim` attributes,
     and must support NumPy-style slice-based indexing.
 
-    Note that this protol allows objects to be passed to `dask.array.from_array`
+    Note that this protocol allows objects to be passed to `dask.array.from_array`
     which needs `.shape`, `.ndim`, `.dtype` and support numpy-style slicing.
     """
 
     dtype: np.dtype
-    """numpy.dtype : Data-type of the array's elements."""  # noqa: D403
+    """numpy.dtype : Data-type of the array's elements."""
 
     shape: tuple[int, ...]
-    """tuple of int : Tuple of array dimensions."""  # noqa: D403
+    """tuple of int : Tuple of array dimensions."""
 
     ndim: int
-    """int : Number of array dimensions."""  # noqa: D403
-
-    masked: bool = False
-    """bool : If True, return a masked array with the nodata values masked out."""
+    """int : Number of array dimensions."""
 
     def __getitem__(self, key: tuple[Index, ...], /) -> ArrayLike:
         """Read a block of data."""
@@ -87,13 +85,13 @@ class StackReader(DatasetReader, Protocol):
     """
 
     ndim: int = 3
-    """int : Number of array dimensions."""  # noqa: D403
+    """int : Number of array dimensions."""
 
     shape: tuple[int, int, int]
     """tuple of int : Tuple of array dimensions."""
 
     def __len__(self) -> int:
-        """int : Number of images in the stack."""
+        """Int : Number of images in the stack."""
         return self.shape[0]
 
 
@@ -121,22 +119,23 @@ class BinaryReader(DatasetReader):
     suitable mutex is used to guard file access.)
     """
 
-    filepath: Path
-    """pathlib.Path : The file path."""  # noqa: D403
+    filename: Path
+    """pathlib.Path : The file path."""
 
     shape: tuple[int, ...]
-    """tuple of int : Tuple of array dimensions."""  # noqa: D403
+    """tuple of int : Tuple of array dimensions."""
 
     dtype: np.dtype
-    """numpy.dtype : Data-type of the array's elements."""  # noqa: D403
+    """numpy.dtype : Data-type of the array's elements."""
 
     nodata: Optional[float] = None
     """Optional[float] : Value to use for nodata pixels."""
 
     def __post_init__(self):
-        self.filepath = Path(self.filepath)
-        if not self.filepath.exists():
-            raise FileNotFoundError(f"File {self.filepath} does not exist.")
+        self.filename = Path(self.filename)
+        if not self.filename.exists():
+            msg = f"File {self.filename} does not exist."
+            raise FileNotFoundError(msg)
         self.dtype = np.dtype(self.dtype)
 
     @property
@@ -145,7 +144,7 @@ class BinaryReader(DatasetReader):
         return len(self.shape)
 
     def __getitem__(self, key: tuple[Index, ...], /) -> np.ndarray:
-        with self.filepath.open("rb") as f:
+        with self.filename.open("rb") as f:  # noqa: SIM117
             # Memory-map the entire file.
             with mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ) as mm:
                 # In order to safely close the memory-map, there can't be any dangling
@@ -154,7 +153,7 @@ class BinaryReader(DatasetReader):
                 arr = np.frombuffer(mm, dtype=self.dtype).reshape(self.shape)
                 data = arr[key].copy()
                 del arr
-        return _mask_array(data, self.nodata) if self.masked else data
+        return _mask_array(data, self.nodata) if self.nodata is not None else data
 
     def __array__(self) -> np.ndarray:
         return self[:,]
@@ -198,7 +197,7 @@ class HDF5Reader(DatasetReader):
 
     Attributes
     ----------
-    filepath : pathlib.Path | str
+    filename : pathlib.Path | str
         Location of HDF5 file.
     dset_name : str
         Path to the dataset within the file.
@@ -222,7 +221,7 @@ class HDF5Reader(DatasetReader):
     to set `keep_open=False` .
     """
 
-    filepath: Path
+    filename: Path
     """pathlib.Path : The file path."""
 
     dset_name: str
@@ -238,9 +237,9 @@ class HDF5Reader(DatasetReader):
     """bool : If True, keep the HDF5 file handle open for faster reading."""
 
     def __post_init__(self):
-        filepath = Path(self.filepath)
+        filename = Path(self.filename)
 
-        hf = h5py.File(filepath, "r")
+        hf = h5py.File(filename, "r")
         dset = hf[self.dset_name]
         self.shape = dset.shape
         self.dtype = dset.dtype
@@ -257,7 +256,7 @@ class HDF5Reader(DatasetReader):
 
     @property
     def ndim(self) -> int:  # type: ignore[override]
-        """int : Number of array dimensions."""
+        """Int : Number of array dimensions."""
         return len(self.shape)
 
     def __array__(self) -> np.ndarray:
@@ -267,9 +266,9 @@ class HDF5Reader(DatasetReader):
         if self.keep_open:
             data = self._dset[key]
         else:
-            with h5py.File(self.filepath, "r") as f:
+            with h5py.File(self.filename, "r") as f:
                 data = f[self.dset_name][key]
-        return _mask_array(data, self.nodata) if self.masked else data
+        return _mask_array(data, self.nodata) if self.nodata is not None else data
 
 
 def _ensure_slices(rows: Index, cols: Index) -> tuple[slice, slice]:
@@ -302,7 +301,7 @@ class RasterReader(DatasetReader):
     to set `keep_open=False` .
     """
 
-    filepath: Filename
+    filename: Filename
     """Filename : The file path."""
 
     band: int
@@ -332,18 +331,18 @@ class RasterReader(DatasetReader):
     """bool : If True, keep the rasterio file handle open for faster reading."""
 
     chunks: Optional[tuple[int, int]] = None
-    """Optional[tuple[int, int]] : Chunk shape of the dataset, or None if file is unchunked."""
+    """Optional[tuple[int, int]] : Chunk shape of the dataset, or None if unchunked."""
 
     @classmethod
     def from_file(
         cls,
-        filepath: Filename,
+        filename: Filename,
         band: int = 1,
         nodata: Optional[float] = None,
         keep_open: bool = False,
         **options,
     ) -> RasterReader:
-        with rio.open(filepath, "r", **options) as src:
+        with rio.open(filename, "r", **options) as src:
             shape = (src.height, src.width)
             dtype = np.dtype(src.dtypes[band - 1])
             driver = src.driver
@@ -353,7 +352,7 @@ class RasterReader(DatasetReader):
             chunks = src.block_shapes[band - 1]
 
             return cls(
-                filepath=filepath,
+                filename=filename,
                 band=band,
                 driver=driver,
                 crs=crs,
@@ -367,11 +366,11 @@ class RasterReader(DatasetReader):
 
     def __post_init__(self):
         if self.keep_open:
-            self._src = rio.open(self.filepath, "r")
+            self._src = rio.open(self.filename, "r")
 
     @property
     def ndim(self) -> int:  # type: ignore[override]
-        """int : Number of array dimensions."""
+        """Int : Number of array dimensions."""
         return 2
 
     def __array__(self) -> np.ndarray:
@@ -384,7 +383,8 @@ class RasterReader(DatasetReader):
             key = (slice(None), slice(None))
 
         if not isinstance(key, tuple):
-            raise ValueError("Index must be a tuple of slices or integers.")
+            msg = "Index must be a tuple of slices or integers."
+            raise TypeError(msg)
 
         r_slice, c_slice = _ensure_slices(*key[-2:])
         window = rasterio.windows.Window.from_slices(
@@ -396,9 +396,9 @@ class RasterReader(DatasetReader):
         if self.keep_open:
             out = self._src.read(self.band, window=window)
 
-        with rio.open(self.filepath) as src:
+        with rio.open(self.filename) as src:
             out = src.read(self.band, window=window)
-        out_masked = _mask_array(out, self.nodata) if self.masked else out
+        out_masked = _mask_array(out, self.nodata) if self.nodata is not None else out
         # Note that Rasterio doesn't use the `step` of a slice, so we need to
         # manually slice the output array.
         r_step, c_step = r_slice.step or 1, c_slice.step or 1
@@ -410,9 +410,11 @@ def _read_3d(
 ):
     # Check that it's a tuple of slices
     if not isinstance(key, tuple):
-        raise ValueError("Index must be a tuple of slices.")
+        msg = "Index must be a tuple of slices."
+        raise TypeError(msg)
     if len(key) not in (1, 3):
-        raise ValueError("Index must be a tuple of 1 or 3 slices.")
+        msg = "Index must be a tuple of 1 or 3 slices."
+        raise TypeError(msg)
     # If only the band is passed (e.g. stack[0]), convert to (0, :, :)
     if len(key) == 1:
         key = (key[0], slice(None), slice(None))
@@ -428,7 +430,8 @@ def _read_3d(
     elif isinstance(bands, int):
         band_idxs = [bands]
     else:
-        raise ValueError("Band index must be an integer or slice.")
+        msg = "Band index must be an integer or slice."
+        raise TypeError(msg)
 
     # Get only the bands we need
     if num_threads == 1:
@@ -529,9 +532,11 @@ class BinaryStackReader(BaseStackReader):
                 dtypes.add(src.dtypes[band - 1])
                 shapes.add(src.shape)
             if len(dtypes) > 1:
-                raise ValueError("All files must have the same data type.")
+                msg = "All files must have the same data type."
+                raise ValueError(msg)
             if len(shapes) > 1:
-                raise ValueError("All files must have the same shape.")
+                msg = "All files must have the same shape."
+                raise ValueError(msg)
             readers.append(BinaryReader.from_gdal(f, band=band))
         return cls(
             file_list=file_list,
@@ -598,7 +603,7 @@ class HDF5StackReader(BaseStackReader):
             for (f, dn) in zip(file_list, dset_names)
         ]
         # Check if nodata values were found in the files
-        nds = set([r.nodata for r in readers])
+        nds = {r.nodata for r in readers}
         if len(nds) == 1:
             nodata = nds.pop()
 
@@ -660,10 +665,13 @@ class RasterStackReader(BaseStackReader):
             for (f, b) in zip(file_list, bands)
         ]
         # Check if nodata values were found in the files
-        nds = set([r.nodata for r in readers])
+        nds = {r.nodata for r in readers}
         if len(nds) == 1:
             nodata = nds.pop()
         return cls(file_list, readers, num_threads=num_threads, nodata=nodata)
+
+
+# Masked versions of each of the 2D/3D readers
 
 
 class VRTStack(StackReader):
@@ -710,11 +718,12 @@ class VRTStack(StackReader):
     ):
         if Path(outfile).exists() and write_file:
             if fail_on_overwrite:
-                raise FileExistsError(
+                msg = (
                     f"Output file {outfile} already exists. "
                     "Please delete or specify a different output file. "
                     "To create from an existing VRT, use the `from_vrt_file` method."
                 )
+                raise FileExistsError(msg)
             else:
                 logger.info(f"Overwriting {outfile}")
 
@@ -727,9 +736,7 @@ class VRTStack(StackReader):
         # Extract the date/datetimes from the filenames
         dates = [get_dates(f, fmt=file_date_fmt) for f in file_list]
         if sort_files:
-            files, dates = sort_files_by_date(  # type: ignore
-                files, file_date_fmt=file_date_fmt
-            )
+            files, dates = sort_files_by_date(files, file_date_fmt=file_date_fmt)
 
         # Save the attributes
         self.file_list = files
@@ -741,7 +748,7 @@ class VRTStack(StackReader):
         self.subdataset = subdataset
 
         if not skip_size_check:
-            io._assert_images_same_size(self._gdal_file_strings)
+            _assert_images_same_size(self._gdal_file_strings)
 
         # Use the first file in the stack to get size, transform info
         ds = gdal.Open(fspath(self._gdal_file_strings[0]))
@@ -774,8 +781,8 @@ class VRTStack(StackReader):
                 chunk_size = io.get_raster_chunk_size(filename)
                 # chunks in a vrt have a min of 16, max of 2**14=16384
                 # https://github.com/OSGeo/gdal/blob/2530defa1e0052827bc98696e7806037a6fec86e/frmts/vrt/vrtrasterband.cpp#L339
-                if any([b < 16 for b in chunk_size]) or any(
-                    [b > 16384 for b in chunk_size]
+                if any(b < 16 for b in chunk_size) or any(
+                    b > 16384 for b in chunk_size
                 ):
                     chunk_str = ""
                 else:
@@ -808,24 +815,6 @@ class VRTStack(StackReader):
         If we're not using .h5 or .nc, this will just be the file_list as is.
         """
         return [io.format_nc_filename(f, self.subdataset) for f in self.file_list]
-
-    def read_stack(
-        self,
-        band: Optional[int] = None,
-        subsample_factor: int = 1,
-        rows: Optional[slice] = None,
-        cols: Optional[slice] = None,
-        masked: bool = False,
-    ):
-        """Read in the SLC stack."""
-        return io.load_gdal(
-            self.outfile,
-            band=band,
-            subsample_factor=subsample_factor,
-            rows=rows,
-            cols=cols,
-            masked=masked,
-        )
 
     def __fspath__(self):
         # Allows os.fspath() to work on the object, enabling rasterio.open()
@@ -872,6 +861,10 @@ class VRTStack(StackReader):
     def ndim(self):
         return 3
 
+    @property
+    def dtype(self):
+        return io.get_raster_dtype(self._gdal_file_strings[0])
+
     def __getitem__(self, index):
         if isinstance(index, int):
             if index < 0:
@@ -899,7 +892,6 @@ class VRTStack(StackReader):
         else:
             # Get only the bands we need
             if self.num_threads == 1:
-                # out = np.stack([readers[i][r_slice, c_slice] for i in band_idxs], axis=0)
                 data = np.stack(
                     [self.read_stack(band=i, rows=rows, cols=cols) for i in bands],
                     axis=0,
@@ -913,9 +905,23 @@ class VRTStack(StackReader):
 
         return data.squeeze()
 
-    @property
-    def dtype(self):
-        return io.get_raster_dtype(self._gdal_file_strings[0])
+    def read_stack(
+        self,
+        band: Optional[int] = None,
+        subsample_factor: int = 1,
+        rows: Optional[slice] = None,
+        cols: Optional[slice] = None,
+        masked: bool = False,
+    ):
+        """Read in the SLC stack."""
+        return io.load_gdal(
+            self.outfile,
+            band=band,
+            subsample_factor=subsample_factor,
+            rows=rows,
+            cols=cols,
+            masked=masked,
+        )
 
 
 def _parse_vrt_file(vrt_file):
@@ -955,15 +961,24 @@ def _parse_vrt_file(vrt_file):
     filepaths = []
     for name in file_strings:
         if name.upper().startswith("HDF5:") or name.upper().startswith("NETCDF:"):
-            prefix, filepath, subdataset = name.split(":")
+            prefix, filename, subdataset = name.split(":")
             # Clean up subdataset
             sds = subdataset.replace('"', "").replace("'", "").lstrip("/")
             # Remove quoting if it was present
-            filepaths.append(filepath.replace('"', "").replace("'", ""))
+            filepaths.append(filename.replace('"', "").replace("'", ""))
         else:
             filepaths.append(name)
 
     return filepaths, sds
+
+
+def _assert_images_same_size(files):
+    """Ensure all files are the same size."""
+    with ThreadPoolExecutor(5) as executor:
+        sizes = list(executor.map(io.get_raster_xysize, files))
+    if len(set(sizes)) > 1:
+        msg = f"Not files have same raster (x, y) size:\n{set(sizes)}"
+        raise ValueError(msg)
 
 
 class EagerLoader(BackgroundReader):
@@ -1032,13 +1047,21 @@ class EagerLoader(BackgroundReader):
                 logger.debug(f"got data for {rows, cols}: {cur_block.shape}")
 
                 # Otherwise look at the actual block we loaded
-                if np.isnan(self._nodata):
-                    block_is_nodata = np.isnan(cur_block)
-                else:
-                    block_is_nodata = cur_block == self._nodata
-                if np.all(block_is_nodata):
-                    logger.debug("Skipping block since it was all nodata")
-                    continue
+                if self._skip_empty:
+                    if (
+                        isinstance(cur_block, np.ma.MaskedArray)
+                        and cur_block.mask.all()
+                    ):
+                        continue
+                    if np.isnan(self._nodata):
+                        block_is_nodata = np.isnan(cur_block)
+                    else:
+                        block_is_nodata = cur_block == self._nodata
+                    if np.all(block_is_nodata):
+                        logger.debug(
+                            f"Skipping block {rows}, {cols} since it was all nodata"
+                        )
+                        continue
                 yield cur_block, (rows, cols)
 
         self.notify_finished()

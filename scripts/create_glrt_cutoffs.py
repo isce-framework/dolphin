@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 """Compute Generalized Likelihood Ratio Test (GLRT) cutoffs.
 
 Runs over different sample sizes (N), significance levels (alpha), and scales.

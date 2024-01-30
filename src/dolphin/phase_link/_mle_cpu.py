@@ -16,7 +16,7 @@ logger = get_log(__name__)
 def run_cpu(
     slc_stack: np.ndarray,
     half_window: dict[str, int],
-    strides: dict[str, int] = {"x": 1, "y": 1},
+    strides: Optional[dict[str, int]] = None,
     use_evd: bool = False,
     beta: float = 0.01,
     reference_idx: int = 0,
@@ -57,6 +57,8 @@ def run_cpu(
     n_workers : int, optional
         The number of workers to use for (CPU version) multiprocessing.
         If 1 (default), no multiprocessing is used.
+    **kwargs : dict, optional
+        Additional keyword arguments not used by CPU version.
 
     Returns
     -------
@@ -65,6 +67,8 @@ def run_cpu(
     temp_coh : np.ndarray[np.float32]
         The temporal coherence at each pixel, shape (n_rows, n_cols)
     """
+    if strides is None:
+        strides = {"x": 1, "y": 1}
     C_arrays = covariance.estimate_stack_covariance_cpu(
         slc_stack,
         half_window,

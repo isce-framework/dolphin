@@ -56,14 +56,13 @@ def _get_opera_info() -> dict[str, Optional[str]]:
     """
     import opera_utils
 
-    blob = {
+    return {
         "dolphin": dolphin.__version__,
         "opera_utils": opera_utils.__version__,
         # optionals
         "isce3": _get_version("isce3"),
         "tophu": _get_version("tophu"),
     }
-    return blob
 
 
 def _get_deps_info() -> dict[str, Optional[str]]:

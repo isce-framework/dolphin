@@ -5,10 +5,12 @@ import math
 import resource
 import sys
 import warnings
+from collections.abc import Callable
+from concurrent.futures import Executor, Future
 from itertools import chain
 from multiprocessing import cpu_count
 from pathlib import Path
-from typing import Any, Iterable, Optional, Union
+from typing import Any, Iterable, Optional, Sequence, Union
 
 import numpy as np
 from numpy.typing import ArrayLike, DTypeLike
@@ -16,7 +18,7 @@ from osgeo import gdal, gdal_array, gdalconst
 from rich.progress import MofNCompleteColumn, Progress, SpinnerColumn, TimeElapsedColumn
 
 from dolphin._log import get_log
-from dolphin._types import Filename
+from dolphin._types import Bbox, Filename, P, T
 
 DateOrDatetime = Union[datetime.date, datetime.datetime]
 
@@ -91,7 +93,8 @@ def numpy_to_gdal_type(np_dtype: DTypeLike) -> int:
         return gdalconst.GDT_Byte
     gdal_code = gdal_array.NumericTypeCodeToGDALTypeCode(np_dtype)
     if gdal_code is None:
-        raise TypeError(f"dtype {np_dtype} not supported by GDAL.")
+        msg = f"dtype {np_dtype} not supported by GDAL."
+        raise TypeError(msg)
     return gdal_code
 
 
@@ -294,7 +297,8 @@ def _make_dims_multiples(arr, row_looks, col_looks, how="cutoff"):
             )
         return arr
     else:
-        raise ValueError(f"Invalid edge strategy: {how}")
+        msg = f"Invalid edge strategy: {how}"
+        raise ValueError(msg)
 
 
 def upsample_nearest(
@@ -413,7 +417,8 @@ def get_max_memory_usage(units: str = "GB", children: bool = True) -> float:
     elif units.lower().startswith("byte"):
         factor = 1.0
     else:
-        raise ValueError(f"Unknown units: {units}")
+        msg = f"Unknown units: {units}"
+        raise ValueError(msg)
     if sys.platform.startswith("linux"):
         # on linux, ru_maxrss is in kilobytes, while on mac, ru_maxrss is in bytes
         factor /= 1e3
@@ -425,8 +430,9 @@ def get_gpu_memory(pid: Optional[int] = None, gpu_id: int = 0) -> float:
     """Get the memory usage (in GiB) of the GPU for the current pid."""
     try:
         from pynvml.smi import nvidia_smi
-    except ImportError:
-        raise ImportError("Please install pynvml through pip or conda")
+    except ImportError as e:
+        msg = "Please install pynvml through pip or conda"
+        raise ImportError(msg) from e
 
     def get_mem(process):
         used_mem = process["used_memory"] if process else 0
@@ -471,9 +477,11 @@ def moving_window_mean(
     if isinstance(size, int):
         size = (size, size)
     if len(size) != 2:
-        raise ValueError("size must be a single int or a tuple of 2 ints")
+        msg = "size must be a single int or a tuple of 2 ints"
+        raise ValueError(msg)
     if size[0] % 2 == 0 or size[1] % 2 == 0:
-        raise ValueError("size must be odd in both dimensions")
+        msg = "size must be odd in both dimensions"
+        raise ValueError(msg)
 
     row_size, col_size = size
     row_pad = row_size // 2
@@ -532,7 +540,7 @@ def get_cpu_count():
     ----------
     1. https://github.com/joblib/loky/issues/111
     2. https://github.com/conan-io/conan/blob/982a97041e1ece715d157523e27a14318408b925/conans/client/tools/oss.py#L27 # noqa
-    """
+    """  # noqa: E501
 
     def get_cpu_quota():
         return int(Path("/sys/fs/cgroup/cpu/cpu.cfs_quota_us").read_text())
@@ -555,5 +563,190 @@ def flatten(list_of_lists: Iterable[Iterable[Any]]) -> chain[Any]:
     return chain.from_iterable(list_of_lists)
 
 
-def _format_date_pair(start: DateOrDatetime, end: DateOrDatetime, fmt="%Y%m%d") -> str:
+def format_date_pair(start: DateOrDatetime, end: DateOrDatetime, fmt="%Y%m%d") -> str:
+    """Format a date pair into a string.
+
+    Parameters
+    ----------
+    start : DateOrDatetime
+        First date or datetime
+    end : DateOrDatetime
+        Second date or datetime
+    fmt : str, optional
+        `datetime` formatter pattern, by default "%Y%m%d"
+
+    Returns
+    -------
+    str
+        Formatted date pair.
+    """
     return f"{start.strftime(fmt)}_{end.strftime(fmt)}"
+
+
+# Keep alias for now, but deprecate
+_format_date_pair = format_date_pair
+
+
+def prepare_geometry(
+    geometry_dir: Path,
+    geo_files: Sequence[Path],
+    matching_file: Path,
+    dem_file: Optional[Path],
+    epsg: int,
+    out_bounds: Bbox,
+    strides: Optional[dict[str, int]] = None,
+) -> dict[str, Path]:
+    """Prepare geometry files.
+
+    Parameters
+    ----------
+    geometry_dir : Path
+        Output directory for geometry files.
+    geo_files : list[Path]
+        list of geometry files.
+    matching_file : Path
+        Matching file.
+    dem_file : Optional[Path]
+        DEM file.
+    epsg : int
+        EPSG code.
+    out_bounds : Bbox
+        Output bounds.
+    strides : Dict[str, int], optional
+        Strides for resampling, by default {"x": 1, "y": 1}.
+
+    Returns
+    -------
+    Dict[str, Path]
+        Dictionary of prepared geometry files.
+    """
+    from dolphin import stitching
+    from dolphin.io import format_nc_filename
+
+    if strides is None:
+        strides = {"x": 1, "y": 1}
+    geometry_dir.mkdir(exist_ok=True)
+
+    stitched_geo_list = {}
+
+    if geo_files[0].name.endswith(".h5"):
+        # ISCE3 geocoded SLCs
+        datasets = ["los_east", "los_north"]
+
+        for ds_name in datasets:
+            outfile = geometry_dir / f"{ds_name}.tif"
+            logger.info(f"Creating {outfile}")
+            stitched_geo_list[ds_name] = outfile
+            ds_path = f"/data/{ds_name}"
+            cur_files = [format_nc_filename(f, ds_name=ds_path) for f in geo_files]
+
+            no_data = 0
+
+            stitching.merge_images(
+                cur_files,
+                outfile=outfile,
+                driver="GTiff",
+                out_bounds=out_bounds,
+                out_bounds_epsg=epsg,
+                in_nodata=no_data,
+                out_nodata=no_data,
+                target_aligned_pixels=True,
+                strides=strides,
+                overwrite=False,
+            )
+
+        if dem_file:
+            height_file = geometry_dir / "height.tif"
+            stitched_geo_list["height"] = height_file
+            if not height_file.exists():
+                logger.info(f"Creating {height_file}")
+                stitching.warp_to_match(
+                    input_file=dem_file,
+                    match_file=matching_file,
+                    output_file=height_file,
+                    resample_alg="cubic",
+                )
+    else:
+        # ISCE2 radar coordinates
+        dsets = {
+            "hgt.rdr": "height",
+            "incLocal.rdr": "incidence_angle",
+            "lat.rdr": "latitude",
+            "lon.rdr": "longitude",
+        }
+
+        for geo_file in geo_files:
+            if geo_file.stem in dsets:
+                out_name = dsets[geo_file.stem]
+            elif geo_file.name in dsets:
+                out_name = dsets[geo_file.name]
+                continue
+
+            out_file = geometry_dir / (out_name + ".tif")
+            stitched_geo_list[out_name] = out_file
+            logger.info(f"Creating {out_file}")
+
+            stitching.warp_to_match(
+                input_file=geo_file,
+                match_file=matching_file,
+                output_file=out_file,
+                resample_alg="cubic",
+            )
+
+    return stitched_geo_list
+
+
+def compute_out_shape(
+    shape: tuple[int, int], strides: dict[str, int]
+) -> tuple[int, int]:
+    """Calculate the output size for an input `shape` and row/col `strides`.
+
+    Parameters
+    ----------
+    shape : tuple[int, int]
+        Input size: (rows, cols)
+    strides : dict[str, int]
+        {"x": x strides, "y": y strides}
+
+    Returns
+    -------
+    out_shape : tuple[int, int]
+        Size of output after striding
+
+    Notes
+    -----
+    If there is not a full window (of size `strides`), the end
+    will get cut off rather than padded with a partial one.
+    This should match the output size of `[dolphin.utils.take_looks][]`.
+
+    As a 1D example, in array of size 6 with `strides`=3 along this dim,
+    we could expect the pixels to be centered on indexes
+    `[1, 4]`.
+
+        [ 0  1  2   3  4  5]
+
+    So the output size would be 2, since we have 2 full windows.
+    If the array size was 7 or 8, we would have 2 full windows and 1 partial,
+    so the output size would still be 2.
+    """
+    rows, cols = shape
+    rs, cs = strides["y"], strides["x"]
+    return (rows // rs, cols // cs)
+
+
+class DummyProcessPoolExecutor(Executor):
+    """Dummy ProcessPoolExecutor for to avoid forking for single_job purposes."""
+
+    def __init__(self, max_workers: Optional[int] = None, **kwargs):  # noqa: D107
+        self._max_workers = max_workers
+
+    def submit(  # noqa: D102
+        self, fn: Callable[P, T], /, *args: P.args, **kwargs: P.kwargs
+    ) -> Future[T]:
+        future: Future = Future()
+        result = fn(*args, **kwargs)
+        future.set_result(result)
+        return future
+
+    def shutdown(self, wait: bool = True, cancel_futures: bool = True):  # noqa: D102
+        pass

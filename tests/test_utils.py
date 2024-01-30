@@ -7,7 +7,7 @@ from dolphin import utils
 
 def test_get_types():
     np_dtype = np.dtype("complex64")
-    assert 10 == utils.numpy_to_gdal_type(np_dtype)
+    assert utils.numpy_to_gdal_type(np_dtype) == 10
     assert np_dtype == utils.gdal_to_numpy_type(10)
 
     # round trip float32

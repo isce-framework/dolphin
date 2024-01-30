@@ -62,10 +62,11 @@ def run(
     logger.info("Stitching interferograms by date.")
     out_bounds = Bbox(*output_options.bounds) if output_options.bounds else None
     date_to_ifg_path = stitching.merge_by_date(
-        image_file_list=ifg_file_list,  # type: ignore
+        image_file_list=ifg_file_list,
         file_date_fmt=file_date_fmt,
         output_dir=stitched_ifg_dir,
-        output_suffix=".int",
+        output_suffix=".int.tif",
+        driver="GTiff",
         out_bounds=out_bounds,
         out_bounds_epsg=output_options.bounds_epsg,
     )

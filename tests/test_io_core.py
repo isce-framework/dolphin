@@ -4,9 +4,9 @@ import numpy as np
 import numpy.testing as npt
 import pytest
 
-import dolphin._blocks
 from dolphin import io
-from dolphin._readers import VRTStack
+from dolphin.io import VRTStack
+from dolphin.utils import compute_out_shape
 
 
 def test_load(raster_100_by_200):
@@ -17,7 +17,7 @@ def test_load(raster_100_by_200):
 def test_get_raster_xysize(raster_100_by_200):
     arr = io.load_gdal(raster_100_by_200)
     assert arr.shape == (100, 200)
-    assert (200, 100) == io.get_raster_xysize(raster_100_by_200)
+    assert io.get_raster_xysize(raster_100_by_200) == (200, 100)
 
 
 def test_load_1_slice(raster_100_by_200):
@@ -154,7 +154,7 @@ def test_write_metadata(raster_100_by_200, tmpdir):
 def test_save_strided(raster_100_by_200, tmpdir):
     save_name = tmpdir / "same_size.tif"
     strides = {"x": 1, "y": 1}
-    out_shape = dolphin._blocks.compute_out_shape((100, 200), strides)
+    out_shape = compute_out_shape((100, 200), strides)
     assert out_shape == (100, 200)
     io.write_arr(
         arr=None,
@@ -168,7 +168,7 @@ def test_save_strided(raster_100_by_200, tmpdir):
 
     save_name2 = tmpdir / "smaller_size.tif"
     strides = {"x": 2, "y": 4}
-    out_shape = dolphin._blocks.compute_out_shape((100, 200), strides)
+    out_shape = compute_out_shape((100, 200), strides)
     assert out_shape == (25, 100)
     io.write_arr(
         arr=None,
@@ -209,7 +209,7 @@ def test_save_block(raster_100_by_200, tmpdir):
     npt.assert_array_almost_equal(block_loaded2, arr)
 
 
-@pytest.fixture
+@pytest.fixture()
 def cpx_arr(shape=(100, 200)):
     rng = np.random.default_rng()
     arr = rng.normal(size=shape) + 1j * rng.normal(size=shape)
