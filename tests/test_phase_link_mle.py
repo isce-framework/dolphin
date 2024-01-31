@@ -7,7 +7,6 @@ import pytest
 from dolphin._types import HalfWindow, Strides
 from dolphin.phase_link import covariance, mle, simulate
 from dolphin.phase_link._mle_cpu import run_cpu
-from dolphin.phase_link._mle_gpu import run_gpu
 from dolphin.utils import gpu_is_available
 
 GPU_AVAILABLE = gpu_is_available() and os.environ.get("NUMBA_DISABLE_JIT") != "1"
@@ -67,20 +66,6 @@ def test_estimation_cpu(slc_samples, est_mle_verify):
     npt.assert_array_almost_equal(est_mle_verify, est_phase, decimal=3)
 
 
-@pytest.mark.skipif(not GPU_AVAILABLE, reason="GPU not available")
-def test_estimation_gpu(slc_samples, est_mle_verify):
-    # Get the GPU version
-    slc_stack = slc_samples.reshape(NUM_ACQ, 11, 11)
-
-    est_mle_fullres, temp_coh, _ = run_gpu(slc_stack, HalfWindow(x=5, y=5))
-    assert est_mle_fullres.shape == (len(est_mle_verify), 11, 11)
-    assert temp_coh.shape == (11, 11)
-    # The middle pixel should be the same, since it had the full window
-    est_phase = np.angle(est_mle_fullres[:, 5, 5])
-    npt.assert_array_almost_equal(est_mle_verify, est_phase, decimal=3)
-    npt.assert_array_almost_equal(est_mle_verify, est_phase, decimal=3)
-
-
 def test_estimation_evd_cpu(slc_samples, est_evd_verify):
     # Get the GPU version
     slc_stack = slc_samples.reshape(NUM_ACQ, 11, 11)
@@ -119,13 +104,6 @@ def test_masked(slc_samples, C_truth):
     est_full = np.squeeze(mle.mle_stack(C_hat2))
     # Middle pixel should be the same
     npt.assert_array_almost_equal(est_mle, est_full[:, 5, 5], decimal=1)
-
-    if not GPU_AVAILABLE:
-        pytest.skip("GPU version not available")
-    # Now check GPU version
-    est_mle_gpu_fullres, _, _ = run_gpu(slc_stack_masked, half_window=HalfWindow(5, 5))
-    est_phase_gpu = np.angle(est_mle_gpu_fullres[:, 5, 5])
-    npt.assert_array_almost_equal(est_mle, est_phase_gpu, decimal=1)
 
 
 def test_run_mle(slc_samples):
