@@ -431,55 +431,14 @@ def get_gpu_memory(pid: Optional[int] = None, gpu_id: int = 0) -> float:
 def moving_window_mean(
     image: ArrayLike, size: Union[int, tuple[int, int]]
 ) -> np.ndarray:
-    """Calculate the mean of a moving window of size `size`.
+    """DEPRECATED: use `scipy.ndimage.uniform_filter` directly."""  # noqa: D401
+    from scipy.ndimage import uniform_filter
 
-    Parameters
-    ----------
-    image : ndarray
-        input image
-    size : int or tuple of int
-        Window size. If a single int, the window is square.
-        If a tuple of (row_size, col_size), the window can be rectangular.
-
-    Returns
-    -------
-    ndarray
-        image the same size as `image`, where each pixel is the mean
-        of the corresponding window.
-    """
-    if isinstance(size, int):
-        size = (size, size)
-    if len(size) != 2:
-        msg = "size must be a single int or a tuple of 2 ints"
-        raise ValueError(msg)
-    if size[0] % 2 == 0 or size[1] % 2 == 0:
-        msg = "size must be odd in both dimensions"
-        raise ValueError(msg)
-
-    row_size, col_size = size
-    row_pad = row_size // 2
-    col_pad = col_size // 2
-
-    # Pad the image with zeros
-    image_padded = np.pad(
-        image, ((row_pad + 1, row_pad), (col_pad + 1, col_pad)), mode="constant"
+    msg = (
+        "`moving_window_mean` is deprecated. Please use `scipy.ndimage.uniform_filter`."
     )
-
-    # Calculate the cumulative sum of the image
-    integral_img = np.cumsum(np.cumsum(image_padded, axis=0), axis=1)
-    if not np.iscomplexobj(integral_img):
-        integral_img = integral_img.astype(float)
-
-    # Calculate the mean of the moving window
-    # Uses the algorithm from https://en.wikipedia.org/wiki/Summed-area_table
-    window_mean = (
-        integral_img[row_size:, col_size:]
-        - integral_img[:-row_size, col_size:]
-        - integral_img[row_size:, :-col_size]
-        + integral_img[:-row_size, :-col_size]
-    )
-    window_mean /= row_size * col_size
-    return window_mean
+    warnings.warn(msg, category=DeprecationWarning, stacklevel=2)
+    return uniform_filter(image, size=size)
 
 
 def set_num_threads(num_threads: int):

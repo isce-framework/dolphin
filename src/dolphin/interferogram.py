@@ -12,6 +12,7 @@ from numpy.typing import ArrayLike
 from opera_utils import get_dates
 from osgeo import gdal
 from pydantic import BaseModel, Field, ValidationInfo, field_validator, model_validator
+from scipy.ndimage import uniform_filter
 
 from dolphin import io, utils
 from dolphin._log import get_log
@@ -623,7 +624,7 @@ def estimate_correlation_from_phase(
 
     # Note: the clipping is from possible partial windows producing correlation
     # above 1
-    cor = np.clip(np.abs(utils.moving_window_mean(inp, window_size)), 0, 1)
+    cor = np.clip(np.abs(uniform_filter(inp, window_size, mode="nearest")), 0, 1)
     # Return the input nans to nan
     cor[nan_mask] = np.nan
     # If the input was 0, the correlation is 0
