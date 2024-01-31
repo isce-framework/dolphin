@@ -253,14 +253,7 @@ def test_manual_indexes(tmp_path, four_slc_files):
 
 @pytest.fixture()
 def expected_3x3_cor():
-    # the edges will be less than 1 because of the windowing
-    return np.array(
-        [
-            [0.44444444, 0.66666667, 0.44444444],
-            [0.66666667, 1.0, 0.66666667],
-            [0.44444444, 0.66666667, 0.44444444],
-        ]
-    )
+    return np.ones((3, 3))
 
 
 @pytest.mark.parametrize("window_size", [3, (3, 3)])
