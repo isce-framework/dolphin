@@ -153,6 +153,7 @@ class BackgroundWorker(abc.ABC):
         self._thread.join(timeout)
 
     def __del__(self):
+        logger.debug(f"{self.name} notifying of exit")
         self.notify_finished()
 
 

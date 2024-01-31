@@ -18,7 +18,7 @@ from osgeo import gdal, gdal_array, gdalconst
 from rich.progress import MofNCompleteColumn, Progress, SpinnerColumn, TimeElapsedColumn
 
 from dolphin._log import get_log
-from dolphin._types import Bbox, Filename, P, T
+from dolphin._types import Bbox, Filename, P, Strides, T
 
 DateOrDatetime = Union[datetime.date, datetime.datetime]
 
@@ -351,33 +351,6 @@ def upsample_nearest(
     return arr_out
 
 
-def decimate(arr: ArrayLike, strides: dict[str, int]) -> ArrayLike:
-    """Decimate an array by strides in the x and y directions.
-
-    Output will match [`io.compute_out_shape`][dolphin.io.compute_out_shape]
-
-    Parameters
-    ----------
-    arr : ArrayLike
-        2D or 3D array to decimate.
-    strides : dict[str, int]
-        The strides in the x and y directions.
-
-    Returns
-    -------
-    ArrayLike
-        The decimated array.
-
-    """
-    xs, ys = strides["x"], strides["y"]
-    rows, cols = arr.shape[-2:]
-    start_r = ys // 2
-    start_c = xs // 2
-    end_r = (rows // ys) * ys + 1
-    end_c = (cols // xs) * xs + 1
-    return arr[..., start_r:end_r:ys, start_c:end_c:xs]
-
-
 def get_max_memory_usage(units: str = "GB", children: bool = True) -> float:
     """Get the maximum memory usage of the current process.
 
@@ -514,6 +487,8 @@ def set_num_threads(num_threads: int):
 
     Uses https://github.com/joblib/threadpoolctl for numpy.
     """
+    import os
+
     import numba
     from threadpoolctl import ThreadpoolController
 
@@ -522,6 +497,7 @@ def set_num_threads(num_threads: int):
     controller.limit(limits=num_threads)
     # https://numba.readthedocs.io/en/stable/user/threading-layer.html#example-of-limiting-the-number-of-threads
     numba.set_num_threads(num_threads)
+    os.environ["XLA_FLAGS"] = f"--xla_force_host_platform_device_count={num_threads}"
 
 
 def get_cpu_count():
@@ -696,17 +672,15 @@ def prepare_geometry(
     return stitched_geo_list
 
 
-def compute_out_shape(
-    shape: tuple[int, int], strides: dict[str, int]
-) -> tuple[int, int]:
+def compute_out_shape(shape: tuple[int, int], strides: Strides) -> tuple[int, int]:
     """Calculate the output size for an input `shape` and row/col `strides`.
 
     Parameters
     ----------
     shape : tuple[int, int]
         Input size: (rows, cols)
-    strides : dict[str, int]
-        {"x": x strides, "y": y strides}
+    strides : tuple[int, int]
+        (y strides, x strides)
 
     Returns
     -------
@@ -730,8 +704,8 @@ def compute_out_shape(
     so the output size would still be 2.
     """
     rows, cols = shape
-    rs, cs = strides["y"], strides["x"]
-    return (rows // rs, cols // cs)
+    rstride, cstride = strides
+    return (rows // rstride, cols // cstride)
 
 
 class DummyProcessPoolExecutor(Executor):

@@ -53,6 +53,20 @@ class Bbox(NamedTuple):
     top: float
 
 
+class Strides(NamedTuple):
+    """Decimation/striding factor in the y (column) and x (row) directions."""
+
+    y: int
+    x: int
+
+
+class HalfWindow(NamedTuple):
+    """Half-window size in the y (column) and x (row) directions."""
+
+    y: int
+    x: int
+
+
 # Used for callable types
 T = TypeVar("T")
 P = ParamSpec("P")

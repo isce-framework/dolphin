@@ -17,7 +17,7 @@ def compress(
         The stack of complex SLC data, shape (nslc, rows, cols)
     mle_estimate : np.array
         The estimated phase from [`run_mle`][dolphin.phase_link.mle.run_mle],
-        shape (nslc, rows // strides['y'], cols // strides['x'])
+        shape (nslc, rows // strides.y, cols // strides.x)
 
     Returns
     -------

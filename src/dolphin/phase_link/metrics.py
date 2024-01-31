@@ -2,27 +2,29 @@
 
 import functools
 
+from jax.typing import ArrayLike
+
 from dolphin.utils import get_array_module
 
 
-def estimate_temp_coh(est, C_arrays):
+def estimate_temp_coh(est: ArrayLike, C_arrays: ArrayLike):
     """Estimate the temporal coherence for a block of solutions.
 
     Parameters
     ----------
-    est : np.ndarray or cupy.ndarray
+    est : ArrayLike
         The estimated phase from, e.g., [dolphin.phase_link.run_mle][]
         shape = (nslc, rows, cols).
         If est.shape = (nslc,) (a single pixel), will be reshaped to (nslc, 1, 1)
-    C_arrays : np.ndarray or cupy.ndarray, shape = (rows, cols, nslc, nslc)
+    C_arrays : ArrayLike, shape = (rows, cols, nslc, nslc)
         The sample covariance matrix at each pixel
-        (e.g. from [dolphin.phase_link.covariance.estimate_stack_covariance_cpu][]).
+        (e.g. from [dolphin.phase_link.covariance.estimate_stack_covariance][]).
         If one covariance matrix is passed (C_arrays.shape = (nslc, nslc)),
         will be reshaped to (1, 1, nslc, nslc)
 
     Returns
     -------
-    np.ndarray or cupy.ndarray
+    jax.Array
         The temporal coherence of the time series compared to cov_matrix.
         Output shape is (rows, cols)
     """

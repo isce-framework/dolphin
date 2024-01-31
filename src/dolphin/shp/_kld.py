@@ -6,6 +6,7 @@ import numba
 import numpy as np
 from numpy.typing import ArrayLike
 
+from dolphin._types import Strides
 from dolphin.utils import compute_out_shape
 
 from ._common import _make_loop_function, _read_cutoff_csv
@@ -84,11 +85,11 @@ def estimate_neighbors(
 
     threshold = get_cutoff(nslc, alpha)
 
-    out_rows, out_cols = compute_out_shape((rows, cols), strides)
+    strides_rowcol = (strides["y"], strides["x"])
+    out_rows, out_cols = compute_out_shape((rows, cols), Strides(*strides_rowcol))
     is_shp = np.zeros(
         (out_rows, out_cols, 2 * half_row + 1, 2 * half_col + 1), dtype=np.bool_
     )
-    strides_rowcol = (strides["y"], strides["x"])
     return _loop_over_pixels(
         mean,
         var,

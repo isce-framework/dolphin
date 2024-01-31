@@ -83,7 +83,7 @@ def estimate_neighbors(
 
     if method == ShpMethod.RECT:
         # No estimation needed
-        neighbor_arrays = np.empty((0, 0, 0, 0), dtype=bool)
+        neighbor_arrays = None
     elif method.lower() == ShpMethod.GLRT:
         logger.debug("Estimating SHP neighbors using GLRT")
         if nslc is None:
