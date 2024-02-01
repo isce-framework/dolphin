@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 import logging
-import warnings
 from typing import NamedTuple, Optional
 
 import jax.numpy as jnp
 import numpy as np
-from jax import Array, vmap
+from jax import Array, jit, vmap
 from jax.scipy.linalg import cho_factor, cho_solve, eigh
 from jax.typing import ArrayLike
 
@@ -14,6 +13,7 @@ from dolphin._types import HalfWindow, Strides
 from dolphin.utils import take_looks
 
 from . import covariance, metrics
+from ._ps_filling import fill_ps_pixels
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +22,7 @@ class PhaseLinkRuntimeError(Exception):
     """Exception raised while running the MLE solver."""
 
 
-class MleOutput(NamedTuple):
+class PhaseLinkOutput(NamedTuple):
     """Output of the MLE solver."""
 
     mle_est: Array
@@ -38,118 +38,6 @@ class MleOutput(NamedTuple):
 DEFAULT_STRIDES = Strides(1, 1)
 
 
-def run_cpl(
-    slc_stack: np.ndarray,
-    half_window: HalfWindow,
-    strides: Strides,
-    use_evd: bool = False,
-    beta: float = 0.01,
-    reference_idx: int = 0,
-    use_slc_amp: bool = True,
-    neighbor_arrays: Optional[np.ndarray] = None,
-    calc_average_coh: bool = False,
-    **kwargs,
-) -> MleOutput:
-    """Run the CPU version of the stack covariance estimator and MLE solver.
-
-    Parameters
-    ----------
-    slc_stack : np.ndarray
-        The SLC stack, with shape (n_slc, n_rows, n_cols)
-    half_window : HalfWindow, or tuple[int, int]
-        A (named) tuple of (y, x) sizes for the half window.
-        The full window size is 2 * half_window + 1 for x, y.
-    strides : tuple[int, int], optional
-        The (y, x) strides (in pixels) to use for the sliding window.
-        By default (1, 1)
-    use_evd : bool, default = False
-        Use eigenvalue decomposition on the covariance matrix instead of
-        the EMI algorithm.
-    beta : float, optional
-        The regularization parameter, by default 0.01.
-    reference_idx : int, optional
-        The index of the (non compressed) reference SLC, by default 0
-    use_slc_amp : bool, optional
-        Whether to use the SLC amplitude when outputting the MLE estimate,
-        or to set the SLC amplitude to 1.0. By default True.
-    neighbor_arrays : np.ndarray, optional
-        The neighbor arrays to use for SHP, shape = (n_rows, n_cols, *window_shape).
-        If None, a rectangular window is used. By default None.
-    calc_average_coh : bool, default=False
-        If requested, the average of each row of the covariance matrix is computed
-        for the purposes of finding the best reference (highest coherence) date
-    **kwargs : dict, optional
-        Additional keyword arguments not used by CPU version.
-
-    Returns
-    -------
-    mle_est : np.ndarray[np.complex64]
-        The estimated linked phase, with shape (n_slc, n_rows, n_cols)
-    temp_coh : np.ndarray[np.float32]
-        The temporal coherence at each pixel, shape (n_rows, n_cols)
-    """
-    C_arrays = covariance.estimate_stack_covariance(
-        slc_stack,
-        half_window,
-        strides,
-        neighbor_arrays=neighbor_arrays,
-    )
-
-    output_phase = mle_stack(
-        C_arrays,
-        use_evd=use_evd,
-        beta=beta,
-        reference_idx=reference_idx,
-    )
-    cpx_phase = np.exp(1j * output_phase)
-    # Get the temporal coherence
-    temp_coh = metrics.estimate_temp_coh(cpx_phase, C_arrays)
-    mle_est = np.exp(1j * output_phase)
-
-    if calc_average_coh:
-        # If requested, average the Cov matrix at each row for reference selection
-        avg_coh_per_date = np.abs(C_arrays).mean(axis=3)
-        avg_coh = np.argmax(avg_coh_per_date, axis=2)
-    else:
-        avg_coh = None
-
-    if use_slc_amp:
-        # use the amplitude from the original SLCs
-        # account for the strides when grabbing original data
-        # we need to match `io.compute_out_shape` here
-        slcs_decimated = decimate(slc_stack, strides)
-        mle_est *= np.abs(slcs_decimated)
-
-    return MleOutput(mle_est, temp_coh, avg_coh)
-
-
-def decimate(arr: ArrayLike, strides: Strides) -> Array:
-    """Decimate an array by strides in the x and y directions.
-
-    Output will match [`io.compute_out_shape`][dolphin.io.compute_out_shape]
-
-    Parameters
-    ----------
-    arr : ArrayLike
-        2D or 3D array to decimate.
-    strides : dict[str, int]
-        The strides in the x and y directions.
-
-    Returns
-    -------
-    ArrayLike
-        The decimated array.
-
-    """
-    ys, xs = strides
-    rows, cols = arr.shape[-2:]
-    start_r = ys // 2
-    start_c = xs // 2
-    end_r = (rows // ys) * ys + 1
-    end_c = (cols // xs) * xs + 1
-    return arr[..., start_r:end_r:ys, start_c:end_c:xs]
-
-
 def run_phase_linking(
     slc_stack: np.ndarray,
     half_window: HalfWindow,
@@ -162,8 +50,11 @@ def run_phase_linking(
     neighbor_arrays: Optional[np.ndarray] = None,
     avg_mag: Optional[np.ndarray] = None,
     use_slc_amp: bool = True,
-) -> MleOutput:
-    """Estimate the linked phase for a stack using the MLE estimator.
+) -> PhaseLinkOutput:
+    """Estimate the linked phase for a stack of SLCs.
+
+    If passing a `ps_mask`, will combine the PS phases with the
+    estimated DS phases.
 
     Parameters
     ----------
@@ -206,11 +97,14 @@ def run_phase_linking(
 
     Returns
     -------
+    PhaseLinkOutput:
+        A Named tuple with the following fields
     mle_est : np.ndarray[np.complex64]
         The estimated linked phase, with shape (n_images, n_rows, n_cols)
     temp_coh : np.ndarray[np.float32]
         The temporal coherence at each pixel, shape (n_rows, n_cols)
-    If `calc_average_coh` is True, `avg_coh` will also be returned.
+    `avg_coh` : np.ndarray[np.float32]
+        (only If `calc_average_coh` is True) the average coherence for each SLC date
     """
     _, rows, cols = slc_stack.shape
     # Common pre-processing for both CPU and GPU versions:
@@ -249,8 +143,7 @@ def run_phase_linking(
     slc_stack_masked = slc_stack.copy()
     slc_stack_masked[:, ignore_mask] = np.nan
 
-    # mle_est, temp_coh, avg_coh = run_cpl(
-    mle_out = run_cpl(
+    mle_est, temp_coh, avg_coh = run_cpl(
         slc_stack=slc_stack_masked,
         half_window=half_window,
         strides=strides,
@@ -266,13 +159,13 @@ def run_phase_linking(
     mask_looked = take_looks(nodata_mask, *strides, func_type="all")
 
     # Set no data pixels to np.nan
-    mle_out.temp_coh[mask_looked] = np.nan
+    temp_coh[mask_looked] = np.nan
 
     # Fill in the PS pixels from the original SLC stack, if it was given
     if np.any(ps_mask):
-        _fill_ps_pixels(
-            mle_out.mle_est,
-            mle_out.temp_coh,
+        fill_ps_pixels(
+            mle_est,
+            temp_coh,
             slc_stack,
             ps_mask,
             strides,
@@ -280,10 +173,95 @@ def run_phase_linking(
             reference_idx,
         )
 
-    return mle_out
+    return PhaseLinkOutput(mle_est, temp_coh, avg_coh)
 
 
-def mle_stack(
+def run_cpl(
+    slc_stack: np.ndarray,
+    half_window: HalfWindow,
+    strides: Strides,
+    use_evd: bool = False,
+    beta: float = 0.01,
+    reference_idx: int = 0,
+    use_slc_amp: bool = True,
+    neighbor_arrays: Optional[np.ndarray] = None,
+    calc_average_coh: bool = False,
+    **kwargs,
+) -> tuple[Array, Array, Array]:
+    """Run the Combined Phase Linking (CPL) algorithm.
+
+    Estimates a coherence matrix for each SLC pixel, then
+    runs the EMI/EVD solver.
+
+    Parameters
+    ----------
+    slc_stack : np.ndarray
+        The SLC stack, with shape (n_slc, n_rows, n_cols)
+    half_window : HalfWindow, or tuple[int, int]
+        A (named) tuple of (y, x) sizes for the half window.
+        The full window size is 2 * half_window + 1 for x, y.
+    strides : tuple[int, int], optional
+        The (y, x) strides (in pixels) to use for the sliding window.
+        By default (1, 1)
+    use_evd : bool, default = False
+        Use eigenvalue decomposition on the covariance matrix instead of
+        the EMI algorithm.
+    beta : float, optional
+        The regularization parameter, by default 0.01.
+    reference_idx : int, optional
+        The index of the (non compressed) reference SLC, by default 0
+    use_slc_amp : bool, optional
+        Whether to use the SLC amplitude when outputting the MLE estimate,
+        or to set the SLC amplitude to 1.0. By default True.
+    neighbor_arrays : np.ndarray, optional
+        The neighbor arrays to use for SHP, shape = (n_rows, n_cols, *window_shape).
+        If None, a rectangular window is used. By default None.
+    calc_average_coh : bool, default=False
+        If requested, the average of each row of the covariance matrix is computed
+        for the purposes of finding the best reference (highest coherence) date
+    **kwargs : dict, optional
+        Additional keyword arguments not used by CPU version.
+
+    Returns
+    -------
+    Array
+
+    """
+    C_arrays = covariance.estimate_stack_covariance(
+        slc_stack,
+        half_window,
+        strides,
+        neighbor_arrays=neighbor_arrays,
+    )
+
+    output_phase = process_coherence_matrices(
+        C_arrays,
+        use_evd=use_evd,
+        beta=beta,
+        reference_idx=reference_idx,
+    )
+    mle_est = jnp.exp(1j * output_phase)
+    # Get the temporal coherence
+    temp_coh = metrics.estimate_temp_coh(mle_est, C_arrays)
+
+    if calc_average_coh:
+        # If requested, average the Cov matrix at each row for reference selection
+        avg_coh_per_date = jnp.abs(C_arrays).mean(axis=3)
+        avg_coh = jnp.argmax(avg_coh_per_date, axis=2)
+    else:
+        avg_coh = None
+
+    if use_slc_amp:
+        # use the amplitude from the original SLCs
+        # account for the strides when grabbing original data
+        # we need to match `io.compute_out_shape` here
+        slcs_decimated = decimate(slc_stack, strides)
+        mle_est *= np.abs(slcs_decimated)
+
+    return (mle_est, temp_coh, avg_coh)
+
+
+def process_coherence_matrices(
     C_arrays,
     use_evd: bool = False,
     beta: float = 0.01,
@@ -315,8 +293,11 @@ def mle_stack(
 
     Returns
     -------
-    ndarray, shape = (nslc, rows, cols)
-        The estimated linked phase, same shape as the input slcs (possibly multilooked)
+    eig_vecs : ndarray[float32], shape = (nslc, rows, cols)
+        The phase resulting from the optimization at each output pixel.
+        Shape is same as input slcs unless Strides > (1, 1)
+    eig_vals : ndarray[float], shape = (rows, cols)
+        The smallest (largest) eigenvalue as solved by EMI (EVD).
     """
     if use_evd:
         # EVD
@@ -347,7 +328,7 @@ def mle_stack(
         else:
             # Use the already- factored |Gamma|^-1, solving Ax = I gives the inverse
             Gamma_inv = cho_solve((cho, is_lower), Id)
-            eig_vecs = eigh_smallest_stack(Gamma_inv * C_arrays)
+            eig_vals, eig_vecs = eigh_smallest_stack(Gamma_inv * C_arrays)
 
     # Now the shape of eig_vecs is (rows, cols, nslc)
     # at pixel (r, c), eig_vecs[r, c] is the largest (smallest) eigenvector if
@@ -358,20 +339,22 @@ def mle_stack(
     # Make sure each still has 3 dims, then reference all phases to `ref`
     evd_estimate = eig_vecs * ref[:, :, None].conj()
 
-    # Return the phase (still as a GPU array)
-    phase_stack = jnp.angle(evd_estimate)
-    # Move the SLC dimension to the front (to match the SLC stack shape)
-    return jnp.moveaxis(phase_stack, -1, 0)
+    # Return the phase, Move the SLC dimension to the front
+    # (to match the SLC stack shape)
+    phase_stack = jnp.moveaxis(jnp.angle(evd_estimate), -1, 0)
+    return jnp.moveaxis(phase_stack, -1, 0), eig_vals
 
 
 # The eigenvalues are in ascending order
 # Column j of `eig_vecs` is the normalized eigenvector corresponding
 # to eigenvalue `lam[j]``
+@jit
 def _get_smallest_eigenpair(C) -> tuple[Array, Array]:
     lam, eig_vecs = eigh(C)
     return lam[0], eig_vecs[:, 0]
 
 
+@jit
 def _get_largest_eigenpair(C) -> tuple[Array, Array]:
     lam, eig_vecs = eigh(C)
     return lam[-1], eig_vecs[:, -1]
@@ -379,8 +362,75 @@ def _get_largest_eigenpair(C) -> tuple[Array, Array]:
 
 # We map over the first two dimensions, so now instead of one scalar eigenvalue,
 # we have (rows, cols) eigenvalues
-eigh_largest_stack = vmap(vmap(_get_smallest_eigenpair))
-eigh_smallest_stack = vmap(vmap(_get_smallest_eigenpair))
+@jit
+def eigh_smallest_stack(C_arrays: ArrayLike) -> tuple[Array, Array]:
+    """Get the smallest (eigenvalue, eigenvector) for each pixel in a 3D stack.
+
+    Parameters
+    ----------
+    C_arrays : ArrayLike
+        The stack of coherence matrices.
+        Shape = (rows, cols, nslc, nslc)
+
+    Returns
+    -------
+    eigenvalues : Array
+        The smallest eigenvalue for each pixel's matrix
+        Shape = (rows, cols)
+    eigenvectors : Array
+        The normalized eigenvector corresponding to the smallest eigenvalue
+        Shape = (rows, cols, nslc)
+    """
+    return vmap(vmap(_get_smallest_eigenpair))(C_arrays)
+
+
+@jit
+def eigh_largest_stack(C_arrays: ArrayLike) -> tuple[Array, Array]:
+    """Get the largest (eigenvalue, eigenvector) for each pixel in a 3D stack.
+
+    Parameters
+    ----------
+    C_arrays : ArrayLike
+        The stack of coherence matrices.
+        Shape = (rows, cols, nslc, nslc)
+
+    Returns
+    -------
+    eigenvalues : Array
+        The largest eigenvalue for each pixel's matrix
+        Shape = (rows, cols)
+    eigenvectors : Array
+        The normalized eigenvector corresponding to the largest eigenvalue
+        Shape = (rows, cols, nslc)
+    """
+    return vmap(vmap(_get_largest_eigenpair))(C_arrays)
+
+
+def decimate(arr: ArrayLike, strides: Strides) -> Array:
+    """Decimate an array by strides in the x and y directions.
+
+    Output will match [`io.compute_out_shape`][dolphin.io.compute_out_shape]
+
+    Parameters
+    ----------
+    arr : ArrayLike
+        2D or 3D array to decimate.
+    strides : dict[str, int]
+        The strides in the x and y directions.
+
+    Returns
+    -------
+    ArrayLike
+        The decimated array.
+
+    """
+    ys, xs = strides
+    rows, cols = arr.shape[-2:]
+    start_r = ys // 2
+    start_c = xs // 2
+    end_r = (rows // ys) * ys + 1
+    end_c = (cols // xs) * xs + 1
+    return arr[..., start_r:end_r:ys, start_c:end_c:xs]
 
 
 def _check_all_nans(slc_stack: np.ndarray):
@@ -391,129 +441,3 @@ def _check_all_nans(slc_stack: np.ndarray):
     if bad_slc_idxs.size > 0:
         msg = f"slc_stack[{bad_slc_idxs}] out of {len(slc_stack)} are all NaNs."
         raise PhaseLinkRuntimeError(msg)
-
-
-def _fill_ps_pixels(
-    mle_est: np.ndarray,
-    temp_coh: np.ndarray,
-    slc_stack: np.ndarray,
-    ps_mask: np.ndarray,
-    strides: Strides,
-    avg_mag: np.ndarray,
-    reference_idx: int = 0,
-    use_max_ps: bool = False,
-):
-    """Fill in the PS locations in the MLE estimate with the original SLC data.
-
-    Overwrites `mle_est` and `temp_coh` in place.
-
-    Parameters
-    ----------
-    mle_est : ndarray, shape = (nslc, rows, cols)
-        The complex valued-MLE estimate of the phase.
-    temp_coh : ndarray, shape = (rows, cols)
-        The temporal coherence of the estimate.
-    slc_stack : np.ndarray
-        The original SLC stack, with shape (n_images, n_rows, n_cols)
-    ps_mask : ndarray, shape = (rows, cols)
-        Boolean mask of pixels marking persistent scatterers (PS).
-    strides : Strides
-        The decimation (y, x) factors
-    avg_mag : np.ndarray, optional
-        The average magnitude of the SLC stack, used to to find the brightest
-        PS pixels to fill within each look window.
-    reference_idx : int, default = 0
-        SLC to use as reference for PS pixels. All pixel values are multiplied
-        by the conjugate of this index
-    use_max_ps : bool, optional
-        If True, use the brightest PS pixel in each look window to fill in the
-        MLE estimate. If False, use the average of all PS pixels in each look window.
-
-    Returns
-    -------
-    ps_masked_looked : ndarray
-        boolean array of PS, multilooked (using "any") to same size as `mle_est`
-    """
-    if avg_mag is None:
-        # Get the average magnitude of the SLC stack
-        # nanmean will ignore single NaNs, but not all NaNs, per pixel
-        with warnings.catch_warnings():
-            # ignore the warning about nansum/nanmean of empty slice
-            warnings.simplefilter("ignore", category=RuntimeWarning)
-            avg_mag = np.nanmean(np.abs(slc_stack), axis=0)
-    mag = avg_mag.copy()
-
-    # null out all the non-PS pixels when finding the brightest PS pixels
-    mag[~ps_mask] = np.nan
-    # For ps_mask, we set to True if any pixels within the window were PS
-    ps_mask_looked = take_looks(ps_mask, *strides, func_type="any", edge_strategy="pad")
-    # make sure it's the same size as the MLE result/temp_coh after padding
-    ps_mask_looked = ps_mask_looked[: mle_est.shape[1], : mle_est.shape[2]]
-
-    if use_max_ps:
-        print("Using max PS pixel to fill in MLE estimate")
-        # Get the indices of the brightest pixels within each look window
-        slc_r_idxs, slc_c_idxs = _get_max_idxs(mag, *strides)
-        # we're only filling where there are PS pixels
-        ref = np.exp(-1j * np.angle(slc_stack[reference_idx][slc_r_idxs, slc_c_idxs]))
-        for i in range(len(slc_stack)):
-            mle_est[i][ps_mask_looked] = slc_stack[i][slc_r_idxs, slc_c_idxs] * ref
-    else:
-        # Get the average of all PS pixels within each look window
-        # The referencing to SLC 0 is done in _get_avg_ps
-        avg_ps = _get_avg_ps(slc_stack, ps_mask, strides)[
-            :, : mle_est.shape[1], : mle_est.shape[2]
-        ]
-        mle_est[:, ps_mask_looked] = avg_ps[:, ps_mask_looked]
-
-    # Force PS pixels to have high temporal coherence
-    temp_coh[ps_mask_looked] = 1
-
-
-def _get_avg_ps(
-    slc_stack: np.ndarray, ps_mask: np.ndarray, strides: Strides
-) -> np.ndarray:
-    # First, set all non-PS pixels to NaN
-    slc_stack_nanned = slc_stack.copy()
-    slc_stack_nanned[:, ~ps_mask] = np.nan
-    # Reference all ps pixels in the SLC stack to the first SLC
-    slc_stack_nanned[:, ps_mask] *= np.exp(
-        -1j * np.angle(slc_stack_nanned[0, ps_mask])
-    )[None]
-    # Then, take the average of all PS pixels within each look window
-    return take_looks(
-        slc_stack_nanned,
-        *strides,
-        func_type="nanmean",
-        edge_strategy="pad",
-    )
-
-
-def _get_max_idxs(arr, row_looks, col_looks):
-    """Get the indices of the maximum value in each look window."""
-    if row_looks == 1 and col_looks == 1:
-        # No need to pad if we're not looking
-        return np.where(arr == arr)
-    # Adjusted from this answer to not take every moving window
-    # https://stackoverflow.com/a/72742009/4174466
-    windows = np.lib.stride_tricks.sliding_window_view(arr, (row_looks, col_looks))[
-        ::row_looks, ::col_looks
-    ]
-    maxvals = np.nanmax(windows, axis=(2, 3))
-    indx = np.array((windows == np.expand_dims(maxvals, axis=(2, 3))).nonzero())
-
-    # In [82]: (windows == np.expand_dims(maxvals, axis = (2, 3))).nonzero()
-    # This gives 4 arrays:
-    # First two are the window indices
-    # (array([0, 0, 0, 1, 1, 1]),
-    # array([0, 1, 2, 0, 1, 2]),
-    # last two are the relative indices (within each window)
-    # array([0, 0, 1, 1, 1, 1]),
-    # array([1, 1, 1, 1, 1, 0]))
-    window_positions, relative_positions = indx.reshape((2, 2, -1))
-    # Multiply the first two by the window size to get the absolute indices
-    # of the top lefts of the windows
-    window_offsets = np.array([row_looks, col_looks]).reshape((2, 1))
-    # Then add the last two to get the relative indices
-    rows, cols = relative_positions + window_positions * window_offsets
-    return rows, cols
