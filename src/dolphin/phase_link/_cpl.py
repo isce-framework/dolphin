@@ -10,12 +10,12 @@ from dolphin._log import get_log
 from dolphin._types import HalfWindow, Strides
 
 from . import covariance, metrics
-from .mle import MleOutput, mle_stack
+from ._core import MleOutput, mle_stack
 
 logger = get_log(__name__)
 
 
-def run_cpu(
+def run_cpl(
     slc_stack: np.ndarray,
     half_window: HalfWindow,
     strides: Strides,

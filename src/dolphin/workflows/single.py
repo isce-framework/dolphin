@@ -20,7 +20,7 @@ from dolphin import io, shp
 from dolphin._log import get_log
 from dolphin._types import Filename, HalfWindow, Strides
 from dolphin.io import EagerLoader, StridedBlockManager, VRTStack
-from dolphin.phase_link import PhaseLinkRuntimeError, compress, run_mle
+from dolphin.phase_link import PhaseLinkRuntimeError, compress, run_phase_linking
 from dolphin.stack import MiniStackInfo
 
 from .config import ShpMethod
@@ -190,7 +190,7 @@ def run_wrapped_phase_single(
         # Run the phase linking process on the current ministack
         reference_idx = max(0, first_real_slc_idx - 1)
         try:
-            mle_out = run_mle(
+            mle_out = run_phase_linking(
                 cur_data,
                 half_window=half_window_tup,
                 strides=strides_tup,

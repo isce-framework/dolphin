@@ -13,6 +13,8 @@ from jax.typing import ArrayLike
 from dolphin._types import HalfWindow, Strides
 from dolphin.utils import get_array_module, take_looks
 
+from ._cpl import run_cpl
+
 logger = logging.getLogger(__name__)
 
 
@@ -36,7 +38,7 @@ class MleOutput(NamedTuple):
 DEFAULT_STRIDES = Strides(1, 1)
 
 
-def run_mle(
+def run_phase_linking(
     slc_stack: np.ndarray,
     half_window: HalfWindow,
     strides: Strides = DEFAULT_STRIDES,
@@ -98,8 +100,6 @@ def run_mle(
         The temporal coherence at each pixel, shape (n_rows, n_cols)
     If `calc_average_coh` is True, `avg_coh` will also be returned.
     """
-    from ._mle_cpu import run_cpu as _run_cpu
-
     _, rows, cols = slc_stack.shape
     # Common pre-processing for both CPU and GPU versions:
 
@@ -137,8 +137,8 @@ def run_mle(
     slc_stack_masked = slc_stack.copy()
     slc_stack_masked[:, ignore_mask] = np.nan
 
-    # mle_est, temp_coh, avg_coh = _run_cpu(
-    mle_out = _run_cpu(
+    # mle_est, temp_coh, avg_coh = run_cpl(
+    mle_out = run_cpl(
         slc_stack=slc_stack_masked,
         half_window=half_window,
         strides=strides,
