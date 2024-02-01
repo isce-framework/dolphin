@@ -8,6 +8,7 @@ from typing import NamedTuple, Optional
 import jax.numpy as jnp
 import numpy as np
 from jax import Array, jit, vmap
+from jax.scipy.linalg import cho_factor, cho_solve, eigh
 from jax.typing import ArrayLike
 
 from dolphin._types import HalfWindow, Strides
@@ -206,58 +207,77 @@ def mle_stack(
     ndarray, shape = (nslc, rows, cols)
         The estimated linked phase, same shape as the input slcs (possibly multilooked)
     """
-    xp = get_array_module(C_arrays)
-    # estimate the wrapped phase based on the EMI paper
-    # *smallest* eigenvalue decomposition of the (|Gamma|^-1  *  C) matrix
-    Gamma = xp.abs(C_arrays)
+    jnp = get_array_module(C_arrays)
 
     if use_evd:
-        V = _get_eigvecs(C_arrays, use_evd=True)
-        column_idx = -1
+        # EVD
+        eig_vals, eig_vecs = eigh_largest_stack(C_arrays)
     else:
-        if beta > 0:
-            # Perform regularization
-            Id = xp.eye(Gamma.shape[-1], dtype=Gamma.dtype)
-            # repeat the identity matrix for each pixel
-            Id = xp.tile(Id, (Gamma.shape[0], Gamma.shape[1], 1, 1))
-            Gamma = (1 - beta) * Gamma + beta * Id
+        # EMI
+        # estimate the wrapped phase based on the EMI paper
+        # *smallest* eigenvalue decomposition of the (|Gamma|^-1  *  C) matrix
 
-        Gamma_inv = xp.linalg.inv(Gamma)
-        V = _get_eigvecs(Gamma_inv * C_arrays, use_evd=False)
-        column_idx = 0
+        # Identity used for regularization and for solving
+        Id = jnp.eye(C_arrays.shape[-1], dtype=C_arrays.dtype)
+        # repeat the identity matrix for each pixel
+        Id = jnp.tile(Id, (C_arrays.shape[0], C_arrays.shape[1], 1, 1))
 
-    # The shape of V is (rows, cols, nslc, nslc)
-    # at pixel (r, c), the columns of V[r, c] are the eigenvectors.
-    # They're ordered by increasing eigenvalue, so the first column is the
-    # eigenvector corresponding to the smallest eigenvalue (phase solution for EMI),
-    # and the last column is for the largest eigenvalue (used by EVD)
-    evd_estimate = V[:, :, :, column_idx]
+        Gamma = _get_gamma_matrix(C_arrays, Id.astype(jnp.float32), beta)
+        # Attempt to invert Gamma
+        Gamma_inv = cho_factor(Gamma)
+        cho, is_lower = cho_factor(Gamma)
+
+        # Check: If it fails the cholesky factor, it's close to singular and
+        # we should just fall back to EVD
+        if jnp.isnan(cho).any():
+            # inverting |Gamma| failed: fall back to computing EVD
+            eig_vals, eig_vecs = eigh_largest_stack(C_arrays)
+        else:
+            # Use the already- factored |Gamma|^-1, solving Ax = I gives the inverse
+            Gamma_inv = cho_solve((cho, is_lower), Id)
+            eig_vecs = eigh_smallest_stack(Gamma_inv * C_arrays)
+
+    # Now the shape of eig_vecs is (rows, cols, nslc)
+    # at pixel (r, c), eig_vecs[r, c] is the largest (smallest) eigenvector if
+    # we picked EVD (EMI)
 
     # The phase estimate on the reference day will be size (rows, cols)
-    ref = evd_estimate[:, :, reference_idx]
+    ref = eig_vecs[:, :, reference_idx]
     # Make sure each still has 3 dims, then reference all phases to `ref`
-    evd_estimate = evd_estimate * xp.conjugate(ref[:, :, None])
+    evd_estimate = eig_vecs * ref[:, :, None].conj()
 
     # Return the phase (still as a GPU array)
-    phase_stack = xp.angle(evd_estimate)
+    phase_stack = jnp.angle(evd_estimate)
     # Move the SLC dimension to the front (to match the SLC stack shape)
-    return xp.moveaxis(phase_stack, -1, 0)
+    return jnp.moveaxis(phase_stack, -1, 0)
 
 
-@partial(jit, static_argnames=("use_evd",))
-def _get_eigvecs(C_arrays: ArrayLike, use_evd: bool = False) -> Array:
-    # Subset index for scipy.eigh: larges eig for EVD. Smallest for EMI.
-    subset_idx = C_arrays.shape[-1] - 1 if use_evd else 0
+@partial(jit, static_argnames=("beta"))
+def _get_gamma_matrix(C_arrays: ArrayLike, Id: ArrayLike, beta: float) -> Array:
+    Gamma = jnp.abs(C_arrays)
+    if beta > 0:
+        # Perform regularization
+        Gamma = (1 - beta) * Gamma + beta * Id
+    return Gamma
 
-    def get_top_eigvecs(C: Array):
-        # The eigenvalues in ascending order, each repeated according
-        # The column ``eigenvectors[:, i]`` is the normalized eigenvector
-        # corresponding to the eigenvalue ``eigenvalues[i]``.
-        return jnp.linalg.eigh(C)[1][:, [subset_idx]]
 
-    # vmap over the first 2 dimensions (rows, cols)
-    get_eigvecs_block = vmap(vmap(get_top_eigvecs))
-    return get_eigvecs_block(C_arrays)
+# The eigenvalues are in ascending order
+# Column j of `eig_vecs` is the normalized eigenvector corresponding
+# to eigenvalue `lam[j]``
+def _get_smallest_eigenpair(C) -> tuple[Array, Array]:
+    lam, eig_vecs = eigh(C)
+    return lam[0], eig_vecs[:, 0]
+
+
+def _get_largest_eigenpair(C) -> tuple[Array, Array]:
+    lam, eig_vecs = eigh(C)
+    return lam[-1], eig_vecs[:, -1]
+
+
+# We map over the first two dimensions, so now instead of one scalar eigenvalue,
+# we have (rows, cols) eigenvalues
+eigh_largest_stack = vmap(vmap(_get_smallest_eigenpair))
+eigh_smallest_stack = vmap(vmap(_get_smallest_eigenpair))
 
 
 def _check_all_nans(slc_stack: np.ndarray):
