@@ -14,7 +14,7 @@ jobs:
   pytest:
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest]
         deps:
             # Note: for now we're manually adding tophu deps,
             # will change once it's on conda forge
@@ -43,10 +43,6 @@ jobs:
               rasterio
               pyaps3>=0.3
               opera-utils>=0.1.5
-        exclude:  # TODO: Remove this once pymp is gone
-          - os: macos-latest
-            deps:
-              label: Latest
 
       fail-fast: false
     name: ${{ matrix.os }} • ${{ matrix.deps.label }}
