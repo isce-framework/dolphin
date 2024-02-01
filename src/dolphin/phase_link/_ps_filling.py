@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 
 def fill_ps_pixels(
-    mle_est: np.ndarray,
+    cpx_phase: np.ndarray,
     temp_coh: np.ndarray,
     slc_stack: np.ndarray,
     ps_mask: np.ndarray,
@@ -23,11 +23,11 @@ def fill_ps_pixels(
 ):
     """Fill in the PS locations in the MLE estimate with the original SLC data.
 
-    Overwrites `mle_est` and `temp_coh` in place.
+    Overwrites `cpx_phase` and `temp_coh` in place.
 
     Parameters
     ----------
-    mle_est : ndarray, shape = (nslc, rows, cols)
+    cpx_phase : ndarray, shape = (nslc, rows, cols)
         The complex valued-MLE estimate of the phase.
     temp_coh : ndarray, shape = (rows, cols)
         The temporal coherence of the estimate.
@@ -50,7 +50,7 @@ def fill_ps_pixels(
     Returns
     -------
     ps_masked_looked : ndarray
-        boolean array of PS, multilooked (using "any") to same size as `mle_est`
+        boolean array of PS, multilooked (using "any") to same size as `cpx_phase`
     """
     if avg_mag is None:
         # Get the average magnitude of the SLC stack
@@ -66,7 +66,7 @@ def fill_ps_pixels(
     # For ps_mask, we set to True if any pixels within the window were PS
     ps_mask_looked = take_looks(ps_mask, *strides, func_type="any", edge_strategy="pad")
     # make sure it's the same size as the MLE result/temp_coh after padding
-    ps_mask_looked = ps_mask_looked[: mle_est.shape[1], : mle_est.shape[2]]
+    ps_mask_looked = ps_mask_looked[: cpx_phase.shape[1], : cpx_phase.shape[2]]
 
     if use_max_ps:
         print("Using max PS pixel to fill in MLE estimate")
@@ -75,14 +75,14 @@ def fill_ps_pixels(
         # we're only filling where there are PS pixels
         ref = np.exp(-1j * np.angle(slc_stack[reference_idx][slc_r_idxs, slc_c_idxs]))
         for i in range(len(slc_stack)):
-            mle_est[i][ps_mask_looked] = slc_stack[i][slc_r_idxs, slc_c_idxs] * ref
+            cpx_phase[i][ps_mask_looked] = slc_stack[i][slc_r_idxs, slc_c_idxs] * ref
     else:
         # Get the average of all PS pixels within each look window
         # The referencing to SLC 0 is done in _get_avg_ps
         avg_ps = _get_avg_ps(slc_stack, ps_mask, strides)[
-            :, : mle_est.shape[1], : mle_est.shape[2]
+            :, : cpx_phase.shape[1], : cpx_phase.shape[2]
         ]
-        mle_est[:, ps_mask_looked] = avg_ps[:, ps_mask_looked]
+        cpx_phase[:, ps_mask_looked] = avg_ps[:, ps_mask_looked]
 
     # Force PS pixels to have high temporal coherence
     temp_coh[ps_mask_looked] = 1
