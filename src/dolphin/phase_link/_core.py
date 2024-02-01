@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import logging
+from functools import partial
 from typing import NamedTuple, Optional
 
 import jax.numpy as jnp
 import numpy as np
-from jax import Array, jit, vmap
+from jax import Array, jit, lax, vmap
 from jax.scipy.linalg import cho_factor, cho_solve, eigh
 from jax.typing import ArrayLike
 
@@ -55,7 +56,7 @@ def run_phase_linking(
     neighbor_arrays: Optional[np.ndarray] = None,
     avg_mag: Optional[np.ndarray] = None,
     use_slc_amp: bool = True,
-    calc_average_coh: bool = True,
+    calc_average_coh: bool = False,
 ) -> PhaseLinkOutput:
     """Estimate the linked phase for a stack of SLCs.
 
@@ -178,7 +179,7 @@ def run_phase_linking(
     mask_looked = take_looks(nodata_mask, *strides, func_type="all")
 
     # Set no data pixels to np.nan
-    temp_coh = np.where(mask_looked, jnp.nan, temp_coh)
+    temp_coh = np.where(mask_looked, np.nan, temp_coh)
 
     # Fill in the PS pixels from the original SLC stack, if it was given
     if np.any(ps_mask):
@@ -248,7 +249,7 @@ def run_cpl(
         The eigenvalues of the coherence matrices.
         If `use_evd` is True, these are the largest eigenvalues;
         Otherwise, for EMI they are the smallest.
-    avg_coh : Array | None
+    avg_coh : np.ndarray | None
         The average coherence of each row of the coherence matrix,
         if requested.
     """
@@ -271,12 +272,13 @@ def run_cpl(
     if calc_average_coh:
         # If requested, average the Cov matrix at each row for reference selection
         avg_coh_per_date = jnp.abs(C_arrays).mean(axis=3)
-        avg_coh = jnp.argmax(avg_coh_per_date, axis=2)
+        avg_coh = np.argmax(avg_coh_per_date, axis=2)
     else:
         avg_coh = None
     return optimized_phase, temp_coh, eigenvalues, avg_coh
 
 
+@partial(jit, static_argnames=("use_evd", "beta", "reference_idx"))
 def process_coherence_matrices(
     C_arrays,
     use_evd: bool = False,
@@ -315,7 +317,6 @@ def process_coherence_matrices(
     eig_vals : ndarray[float], shape = (rows, cols)
         The smallest (largest) eigenvalue as solved by EMI (EVD).
     """
-    eig_vals, eig_vecs = eigh_largest_stack(C_arrays)
     if use_evd:
         # EVD
         eig_vals, eig_vecs = eigh_largest_stack(C_arrays)
@@ -334,18 +335,30 @@ def process_coherence_matrices(
             # Perform regularization
             Gamma = (1 - beta) * Gamma + beta * Id
         # Attempt to invert Gamma
-        Gamma_inv = cho_factor(Gamma)
         cho, is_lower = cho_factor(Gamma)
 
         # Check: If it fails the cholesky factor, it's close to singular and
         # we should just fall back to EVD
-        if jnp.isnan(cho).any():
-            # inverting |Gamma| failed: fall back to computing EVD
-            eig_vals, eig_vecs = eigh_largest_stack(C_arrays)
-        else:
+        # These functions are the callbacks used in `lax.cond`
+        def _get_emi_result() -> tuple[Array, Array]:
             # Use the already- factored |Gamma|^-1, solving Ax = I gives the inverse
             Gamma_inv = cho_solve((cho, is_lower), Id)
-            eig_vals, eig_vecs = eigh_smallest_stack(Gamma_inv * C_arrays)
+            return eigh_smallest_stack(Gamma_inv * C_arrays)
+
+        def _get_evd_result() -> tuple[Array, Array]:
+            # inverting |Gamma| failed: fall back to computing EVD
+            return eigh_largest_stack(C_arrays)
+
+        eig_vals, eig_vecs = lax.cond(
+            jnp.isnan(cho).any(),
+            # Run this on True: EVD, since we failed to invert:
+            _get_evd_result,
+            # Otherwise, on False, we're fine to use EMI
+            _get_emi_result,
+        )
+        # Note that we're using `lax.cond` because an `if` would faile the
+        # jit tracing
+        # https://jax.readthedocs.io/en/latest/notebooks/Common_Gotchas_in_JAX.html#cond
 
     # Now the shape of eig_vecs is (rows, cols, nslc)
     # at pixel (r, c), eig_vecs[r, c] is the largest (smallest) eigenvector if

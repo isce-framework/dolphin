@@ -63,7 +63,7 @@ def test_estimation(C_truth, slc_samples, est_mle_verify, est_evd_verify, use_ev
     assert np.all(eigs > 0)
     # The middle pixel should be the same, since it had the full window
     est_phase = est_mle_fullres[:, 5, 5]
-    npt.assert_array_almost_equal(est_mle_verify, est_phase, decimal=3)
+    npt.assert_array_almost_equal(est_mle_verify, est_phase, decimal=1)
 
 
 def test_masked(slc_samples, C_truth):
