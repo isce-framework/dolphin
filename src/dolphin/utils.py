@@ -183,6 +183,7 @@ def gpu_is_available() -> bool:
     # TODO: not sure yet how to check for the jax gpu installation
     try:
         from numba import cuda
+        from numba.cuda.cudadrv.error import CudaRuntimeError
 
     except ImportError:
         logger.debug("numba installed, but GPU not available")
@@ -190,7 +191,7 @@ def gpu_is_available() -> bool:
     try:
         cuda_version = cuda.runtime.get_version()
         logger.debug(f"CUDA version: {cuda_version}")
-    except OSError as e:
+    except (OSError, CudaRuntimeError) as e:
         logger.debug(f"CUDA runtime version error: {e}")
         return False
     try:
