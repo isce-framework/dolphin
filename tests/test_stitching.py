@@ -164,3 +164,33 @@ def test_merge_images_specify_bounds(
 
     b = io.get_raster_bounds(outfile)
     assert b == buffered_bounds
+
+
+def test_merge_images_one_image_out_bounds_specified(
+    tmp_path, shifted_slc_files, shifted_slc_bounds
+):
+    from shapely.geometry import box
+
+    outfile = tmp_path / "stitched.tif"
+
+    buffered_box = box(*shifted_slc_bounds).buffer(1.5)
+    buffered_bounds = buffered_box.bounds
+
+    # only grab the first image
+    # without specifying bounds, this should not work
+    stitching.merge_images(shifted_slc_files[:1], outfile)
+
+    b = io.get_raster_bounds(outfile)
+    assert b != buffered_bounds
+
+    outfile2 = tmp_path / "stitched_with_bounds.tif"
+    # after specifying bounds, this should work
+    stitching.merge_images(
+        shifted_slc_files[:1],
+        outfile2,
+        target_aligned_pixels=False,
+        out_bounds=buffered_bounds,
+    )
+
+    b = io.get_raster_bounds(outfile2)
+    assert b == buffered_bounds
