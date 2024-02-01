@@ -20,7 +20,7 @@ from dolphin import io, shp
 from dolphin._log import get_log
 from dolphin._types import Filename, HalfWindow, Strides
 from dolphin.io import EagerLoader, StridedBlockManager, VRTStack
-from dolphin.phase_link import PhaseLinkRuntimeError, compress, run_mle
+from dolphin.phase_link import PhaseLinkRuntimeError, compress, run_phase_linking
 from dolphin.stack import MiniStackInfo
 
 from .config import ShpMethod
@@ -123,6 +123,7 @@ def run_wrapped_phase_single(
             output_folder / f"temporal_coherence_{start_end}.tif", np.float32, strides
         ),
         OutputFile(output_folder / f"avg_coh_{start_end}.tif", np.uint16, strides),
+        OutputFile(output_folder / f"eigenvalues_{start_end}.tif", np.float32, strides),
         OutputFile(output_folder / f"shp_counts_{start_end}.tif", np.uint16, strides),
     ]
     for op in output_files:
@@ -190,7 +191,7 @@ def run_wrapped_phase_single(
         # Run the phase linking process on the current ministack
         reference_idx = max(0, first_real_slc_idx - 1)
         try:
-            mle_out = run_mle(
+            pl_output = run_phase_linking(
                 cur_data,
                 half_window=half_window_tup,
                 strides=strides_tup,
@@ -216,22 +217,24 @@ def run_wrapped_phase_single(
             continue
 
         # Fill in the nan values with 0
-        np.nan_to_num(mle_out.mle_est, copy=False)
-        np.nan_to_num(mle_out.temp_coh, copy=False)
+        np.nan_to_num(pl_output.cpx_phase, copy=False)
+        np.nan_to_num(pl_output.temp_coh, copy=False)
 
         # Save each of the MLE estimates (ignoring those corresponding to
         # compressed SLCs indexes)
-        assert len(mle_out.mle_est[first_real_slc_idx:]) == len(phase_linked_slc_files)
+        assert len(pl_output.cpx_phase[first_real_slc_idx:]) == len(
+            phase_linked_slc_files
+        )
 
         for img, f in zip(
-            mle_out.mle_est[first_real_slc_idx:, out_trim_rows, out_trim_cols],
+            pl_output.cpx_phase[first_real_slc_idx:, out_trim_rows, out_trim_cols],
             phase_linked_slc_files,
         ):
             writer.queue_write(img, f, out_rows.start, out_cols.start)
 
         # Get the SHP counts for each pixel (if not using Rect window)
         if neighbor_arrays is None:
-            shp_counts = np.zeros(mle_out.mle_est.shape[-2:], dtype=np.int16)
+            shp_counts = np.zeros(pl_output.cpx_phase.shape[-2:], dtype=np.int16)
         else:
             shp_counts = np.sum(neighbor_arrays, axis=(-2, -1))
 
@@ -239,7 +242,7 @@ def run_wrapped_phase_single(
         cur_comp_slc = compress(
             # Get the inner portion of the full-res SLC data
             cur_data[first_real_slc_idx:, in_trim_rows, in_trim_cols],
-            mle_out.mle_est[first_real_slc_idx:, out_trim_rows, out_trim_cols],
+            pl_output.cpx_phase[first_real_slc_idx:, out_trim_rows, out_trim_cols],
         )
 
         # ### Save results ###
@@ -253,7 +256,7 @@ def run_wrapped_phase_single(
         )
 
         # All other outputs are strided (smaller in size)
-        out_datas = [mle_out.temp_coh, mle_out.avg_coh, shp_counts]
+        out_datas = [pl_output.temp_coh, pl_output.avg_coh, shp_counts]
         for data, output_file in zip(out_datas, output_files[1:]):
             if data is None:  # May choose to skip some outputs, e.g. "avg_coh"
                 continue

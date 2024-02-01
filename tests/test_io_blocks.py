@@ -151,7 +151,7 @@ class TestBlockManager:
 # @pytest.mark.skip(reason="Uses old logic ")
 class TestFakeProcess:
     def _fake_process(self, in_arr, strides: Strides, half_window: HalfWindow):
-        """Dummy processing which has same nodata pattern as `phase_link.run_mle`."""
+        """Dummy processing which has same nodata pattern as `phase_link`."""
         nrows, ncols = in_arr.shape
         row_half, col_half = half_window.y, half_window.x
         rs, cs = strides.y, strides.x

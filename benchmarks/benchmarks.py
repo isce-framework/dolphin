@@ -9,7 +9,7 @@ from osgeo import gdal
 
 from dolphin import io, shp
 from dolphin._types import HalfWindow, Strides
-from dolphin.phase_link import covariance, mle, simulate
+from dolphin.phase_link import _core, covariance, simulate
 from dolphin.stack import MiniStackPlanner
 from dolphin.workflows import sequential
 
@@ -102,7 +102,7 @@ class PhaseLinkingBenchmark:
         self.slc_stack = self.slc_samples.reshape((nslc, *SHAPE))
 
     def time_phase_link(self, nslc: int, use_evd: bool):
-        mle.run_mle(
+        _core.run_phase_linking(
             self.slc_stack,
             half_window=HALF_WINDOW,
             strides=STRIDES,
@@ -110,7 +110,7 @@ class PhaseLinkingBenchmark:
         )
 
     def peakmem_phase_link(self, nslc: int, use_evd: bool):
-        mle.run_mle(
+        _core.run_phase_linking(
             self.slc_stack,
             half_window=HALF_WINDOW,
             strides=STRIDES,

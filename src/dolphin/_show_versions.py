@@ -76,6 +76,7 @@ def _get_deps_info() -> dict[str, Optional[str]]:
     deps = [
         "numpy",
         "numba",
+        "jax",
         "osgeo.gdal",
         "h5py",
         "ruamel_yaml",
@@ -95,7 +96,7 @@ def _get_gpu_info() -> dict[str, Optional[str]]:
     """
     from dolphin.utils import gpu_is_available
 
-    return {"cupy": _get_version("cupy"), "gpu_is_available": str(gpu_is_available())}
+    return {"jax": _get_version("jax"), "gpu_is_available": str(gpu_is_available())}
 
 
 def _print_info_dict(info_dict: dict) -> None:

@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import argparse
 import sys
-from multiprocessing import cpu_count
 from pathlib import Path
 from typing import Optional, Union
 
 from dolphin._types import TropoModel, TropoType
+from dolphin.utils import get_cpu_count
 
 from .config import (
     DisplacementWorkflow,
@@ -30,7 +30,6 @@ def create_config(
     amp_dispersion_threshold: float = 0.25,
     strides: tuple[int, int],
     block_shape: tuple[int, int] = (512, 512),
-    n_workers: int = 4,
     threads_per_worker: int = 4,
     n_parallel_bursts: int = 1,
     no_gpu: bool = False,
@@ -114,7 +113,6 @@ def create_config(
         worker_settings={
             "block_shape": block_shape,
             "n_parallel_bursts": n_parallel_bursts,
-            "n_workers": n_workers,
             "threads_per_worker": threads_per_worker,
             "gpu_enabled": (not no_gpu),
         },
@@ -356,12 +354,6 @@ def get_parser(subparser=None, subcommand_name="run"):
         help="Shape (rows, col) of blocks of data to load at once time.",
     )
     worker_group.add_argument(
-        "--n-workers",
-        type=int,
-        default=4,
-        help="Number of CPU workers to use (for CPU processing).",
-    )
-    worker_group.add_argument(
         "--n-parallel-bursts",
         type=int,
         default=1,
@@ -370,7 +362,7 @@ def get_parser(subparser=None, subcommand_name="run"):
     worker_group.add_argument(
         "--threads-per-worker",
         type=int,
-        default=min(1, cpu_count() // 4),
+        default=max(1, get_cpu_count() // 2),
         help="Number of threads to use per worker.",
     )
     parser.set_defaults(run_func=create_config)

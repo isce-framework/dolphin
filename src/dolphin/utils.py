@@ -168,15 +168,24 @@ def full_suffix(filename: Filename):
     return "".join(fpath.suffixes)
 
 
+def disable_gpu():
+    """Disable GPU usage."""
+    import os
+
+    import jax.config
+
+    os.environ["CUDA_VISIBLE_DEVICES"] = ""
+    jax.config.update("jax_platform_name", "cpu")
+
+
 def gpu_is_available() -> bool:
     """Check if a GPU is available."""
+    # TODO: not sure yet how to check for the jax gpu installation
     try:
-        # cupy not available on Mac m1
-        import cupy as cp  # noqa: F401
         from numba import cuda
 
     except ImportError:
-        logger.debug("numba/cupy installed, but GPU not available")
+        logger.debug("numba installed, but GPU not available")
         return False
     try:
         cuda_version = cuda.runtime.get_version()
@@ -193,23 +202,6 @@ def gpu_is_available() -> bool:
         logger.debug("No available GPUs found")
         return False
     return True
-
-
-def get_array_module(arr):
-    """Get the array module (numpy or cupy) for the given array.
-
-    References
-    ----------
-    https://docs.cupy.dev/en/stable/user_guide/basic.html#how-to-write-cpu-gpu-agnostic-code
-    """
-    try:
-        import cupy as cp
-
-        xp = cp.get_array_module(arr)
-    except ImportError:
-        logger.debug("cupy not installed, falling back to numpy")
-        xp = np
-    return xp
 
 
 def take_looks(arr, row_looks, col_looks, func_type="nansum", edge_strategy="cutoff"):
@@ -237,15 +229,12 @@ def take_looks(arr, row_looks, col_looks, func_type="nansum", edge_strategy="cut
     Notes
     -----
     Cuts off values if the size isn't divisible by num looks.
-    Will use cupy if available and if `arr` is a cupy array on the GPU.
     """
-    xp = get_array_module(arr)
-
     if row_looks == 1 and col_looks == 1:
         return arr
 
     if arr.ndim >= 3:
-        return xp.stack(
+        return np.stack(
             [
                 take_looks(
                     a,
@@ -264,12 +253,12 @@ def take_looks(arr, row_looks, col_looks, func_type="nansum", edge_strategy="cut
     new_rows = rows // row_looks
     new_cols = cols // col_looks
 
-    func = getattr(xp, func_type)
+    func = getattr(np, func_type)
     with warnings.catch_warnings():
         # ignore the warning about nansum of empty slice
         warnings.simplefilter("ignore", category=RuntimeWarning)
         return func(
-            xp.reshape(arr, (new_rows, row_looks, new_cols, col_looks)), axis=(3, 1)
+            np.reshape(arr, (new_rows, row_looks, new_cols, col_looks)), axis=(3, 1)
         )
 
 
@@ -322,12 +311,7 @@ def upsample_nearest(
     -------
     ndarray
         The upsampled array, shape = `output_shape`.
-
-    Notes
-    -----
-    Will use cupy if available and if `arr` is a cupy array on the GPU.
     """
-    xp = get_array_module(arr)
     in_rows, in_cols = arr.shape[-2:]
     out_rows, out_cols = output_shape[-2:]
     if (in_rows, in_cols) == (out_rows, out_cols):
@@ -339,14 +323,14 @@ def upsample_nearest(
     else:
         row_looks, col_looks = looks
 
-    arr_up = xp.repeat(xp.repeat(arr, row_looks, axis=-2), col_looks, axis=-1)
+    arr_up = np.repeat(np.repeat(arr, row_looks, axis=-2), col_looks, axis=-1)
     # This may be larger than the original array, or it may be smaller, depending
     # on whether it was padded or cutoff
     out_r = min(out_rows, arr_up.shape[-2])
     out_c = min(out_cols, arr_up.shape[-1])
 
     shape = (len(arr), out_rows, out_cols) if arr.ndim == 3 else (out_rows, out_cols)
-    arr_out = xp.zeros(shape=shape, dtype=arr.dtype)
+    arr_out = np.zeros(shape=shape, dtype=arr.dtype)
     arr_out[..., :out_r, :out_c] = arr_up[..., :out_r, :out_c]
     return arr_out
 
@@ -456,6 +440,7 @@ def set_num_threads(num_threads: int):
     controller.limit(limits=num_threads)
     # https://numba.readthedocs.io/en/stable/user/threading-layer.html#example-of-limiting-the-number-of-threads
     numba.set_num_threads(num_threads)
+    # jax setup is harder, for now
     os.environ["XLA_FLAGS"] = f"--xla_force_host_platform_device_count={num_threads}"
 
 

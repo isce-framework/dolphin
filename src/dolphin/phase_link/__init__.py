@@ -6,4 +6,4 @@ Currently implements the eigenvalue-based maximum likelihood (EMI) algorithm fro
 """
 
 from ._compress import compress  # noqa: F401
-from .mle import PhaseLinkRuntimeError, run_mle  # noqa: F401
+from ._core import PhaseLinkRuntimeError, run_phase_linking  # noqa: F401
