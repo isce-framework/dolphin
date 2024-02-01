@@ -6,7 +6,6 @@ import pytest
 
 from dolphin._types import HalfWindow, Strides
 from dolphin.phase_link import _core, covariance, simulate
-from dolphin.phase_link._cpl import run_cpl
 from dolphin.utils import gpu_is_available
 
 GPU_AVAILABLE = gpu_is_available() and os.environ.get("NUMBA_DISABLE_JIT") != "1"
@@ -56,7 +55,7 @@ def test_estimation_cpu(slc_samples, est_mle_verify):
     # Get the GPU version
     slc_stack = slc_samples.reshape(NUM_ACQ, 11, 11)
 
-    est_mle_fullres, temp_coh, _ = run_cpl(
+    est_mle_fullres, temp_coh, _ = _core.run_cpl(
         slc_stack, HalfWindow(x=5, y=5), Strides(x=1, y=1)
     )
     assert est_mle_fullres.shape == (len(est_mle_verify), 11, 11)
@@ -70,7 +69,7 @@ def test_estimation_evd_cpu(slc_samples, est_evd_verify):
     # Get the GPU version
     slc_stack = slc_samples.reshape(NUM_ACQ, 11, 11)
 
-    est_evd_fullres, temp_coh, _ = run_cpl(
+    est_evd_fullres, temp_coh, _ = _core.run_cpl(
         slc_stack, half_window=HalfWindow(5, 5), strides=Strides(1, 1), use_evd=True
     )
     assert est_evd_fullres.shape == (len(est_evd_verify), 11, 11)
@@ -106,7 +105,7 @@ def test_masked(slc_samples, C_truth):
     npt.assert_array_almost_equal(est_mle, est_full[:, 5, 5], decimal=1)
 
 
-def test_run_mle(slc_samples):
+def test_run_phase_linking(slc_samples):
     slc_stack = slc_samples.reshape(NUM_ACQ, 11, 11)
     mle_est, _, _ = _core.run_phase_linking(
         slc_stack,
@@ -120,7 +119,7 @@ def test_run_mle(slc_samples):
     npt.assert_array_almost_equal(expected_phase, np.angle(mle_est[:, 5, 5]), decimal=1)
 
 
-def test_run_mle_norm_output(slc_samples):
+def test_run_phase_linking_norm_output(slc_samples):
     slc_stack = slc_samples.reshape(NUM_ACQ, 11, 11)
     ps_mask = np.zeros((11, 11), dtype=bool)
     ps_mask[1, 1] = True
@@ -182,7 +181,7 @@ def test_ps_fill(slc_samples, strides):
 
 
 @pytest.mark.parametrize("strides", [1, 2, 3])
-def test_run_mle_ps_fill(slc_samples, strides):
+def test_run_phase_linking_ps_fill(slc_samples, strides):
     slc_stack = slc_samples.reshape(NUM_ACQ, 11, 11)
     ps_idx = 2
     ps_mask = np.zeros((11, 11), dtype=bool)
