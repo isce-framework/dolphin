@@ -1,4 +1,6 @@
-# [Unreleased](https://github.com/isce-framework/dolphin/compare/v0.11.0...main)
+# [Unreleased](https://github.com/isce-framework/dolphin/compare/v0.12.0...main)
+
+# [0.12.0](https://github.com/isce-framework/dolphin/compare/v0.11.0...v0.12.0)
 
 **Added**
 - Added `DatasetWriter` protocol
@@ -6,10 +8,15 @@
 - Refactored phase linking
   - Covariance and EVD/MLE use `jax`
   - This combines the implementation of CPU/GPU, and removes the need for usign `pymp`
+- Added `utils.disable_gpu` to stop the use ofr a GPU even if it's available
 
 **Changed**
 - Internal module organization, including grouping IO modules into `dolphin.io` subpackage
 - Renamed `io.Writer` to `io.GdalWriter` to distinguish from `RasterWriter`
+- Removed the `n_workers` option from the configuration.
+  - There is no more need to have two levels of parallelism (`threads_per_worker` and `n_workers`)
+  - The name `threads_per_worker` is kept for consistency; it is still an accurate name for the multi-burst processing case.
+
 
 **Dependencies**
 
@@ -21,6 +28,7 @@ Added
 
 Removed:
 - `pymp`
+- `cupy` from optional GPU usage
 
 # [v0.11.0](https://github.com/isce-framework/dolphin/compare/v0.10.0...v0.11.0) - 2023-01-24
 

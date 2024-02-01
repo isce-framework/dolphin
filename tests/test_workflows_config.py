@@ -1,6 +1,5 @@
 import shutil
 from datetime import datetime
-from multiprocessing import cpu_count
 from pathlib import Path
 
 import pydantic
@@ -99,7 +98,6 @@ def test_outputs_defaults():
 def test_worker_settings_defaults():
     ws = config.WorkerSettings()
     assert ws.gpu_enabled is True
-    assert ws.n_workers == cpu_count()
     assert ws.threads_per_worker == 1
     assert ws.block_shape == (512, 512)
 

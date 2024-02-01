@@ -287,11 +287,8 @@ def process_coherence_matrices(
 ) -> tuple[Array, Array]:
     """Estimate the linked phase for a stack of coherence matrices.
 
-    This function is used for both the CPU and GPU versions after
-    coherence estimation.
-    Will use cupy if available, (and if the input is a GPU array).
-    Otherwise, uses numpy (for CPU version).
-
+    This function is used after coherence estimation to estimate the
+    optimized SLC phase.
 
     Parameters
     ----------

@@ -18,7 +18,6 @@ from dolphin import __version__ as _dolphin_version
 from dolphin._log import get_log
 from dolphin._types import Bbox
 from dolphin.io import DEFAULT_HDF5_OPTIONS, DEFAULT_TIFF_OPTIONS
-from dolphin.utils import get_cpu_count
 
 from ._enums import InterferogramNetworkType, ShpMethod, UnwrapMethod
 from ._yaml_model import YamlModel
@@ -214,14 +213,6 @@ class WorkerSettings(BaseModel, extra="forbid"):
     gpu_enabled: bool = Field(
         True,
         description="Whether to use GPU for processing (if available)",
-    )
-    n_workers: int = Field(
-        default_factory=get_cpu_count,
-        ge=1,
-        description=(
-            "(For non-GPU) Number of cpu cores to use for Python multiprocessing. Uses"
-            " `multiprocessing.cpu_count()` if not set."
-        ),
     )
     threads_per_worker: int = Field(
         1,
