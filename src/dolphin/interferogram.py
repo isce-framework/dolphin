@@ -675,7 +675,6 @@ def estimate_interferometric_correlations(
             output_name=cor_path,
             like_filename=ifg_path,
             driver=out_driver,
-            options=io.DEFAULT_ENVI_OPTIONS,
         )
     return corr_paths
 

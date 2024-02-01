@@ -182,7 +182,7 @@ def merge_images(
             logger.info(f"Overwrite=True: removing {outfile}")
             Path(outfile).unlink()
 
-    if len(file_list) == 1:
+    if len(file_list) == 1 and out_bounds is None:
         logger.info("Only one image, no stitching needed")
         logger.info(f"Copying {file_list[0]} to {outfile} and zeroing nodata values.")
         _copy_set_nodata(
