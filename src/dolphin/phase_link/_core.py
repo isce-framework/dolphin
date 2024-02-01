@@ -244,39 +244,8 @@ def mle_stack(
     return xp.moveaxis(phase_stack, -1, 0)
 
 
-def _get_eigvecs(C, use_evd: bool = False):
-    xp = get_array_module(C)
-    if xp == np:
-        # The block splitting isn't needed for numpy.
-        # return np.linalg.eigh(C)[1]
-        return _get_eigvecs_jax(C, use_evd=use_evd)
-
-    # Make sure we don't overflow: cupy https://github.com/cupy/cupy/issues/7261
-    # The work_size must be less than 2**30, so
-    # Keep (rows*cols) approximately less than 2**21? make it 2**20 to be safer
-    # see https://github.com/cupy/cupy/issues/7261#issuecomment-1362991323 for that math
-    rows, cols, _, _ = C.shape
-    max_batch_size = 2**20
-    num_blocks = 1 + (rows * cols) // max_batch_size
-    if num_blocks > 1:
-        # V_out wil lbe the eigenvectors, shape (rows, cols, nslc, nslc)
-        V_out = xp.empty_like(C)
-        # Split the computation into blocks
-        # This is to avoid overflow errors in cupy.linalg.eigh
-        for i in range(num_blocks):
-            # get chunks of rows at a time
-            start = i * (rows // num_blocks)
-            end = (i + 1) * (rows // num_blocks)
-            if i == num_blocks - 1:
-                end = rows
-            V_out[start:end] = xp.linalg.eigh(C[start:end])[1]
-    else:
-        _, V_out = xp.linalg.eigh(C)
-    return V_out
-
-
 @partial(jit, static_argnames=("use_evd",))
-def _get_eigvecs_jax(C_arrays: ArrayLike, use_evd: bool = False) -> Array:
+def _get_eigvecs(C_arrays: ArrayLike, use_evd: bool = False) -> Array:
     # Subset index for scipy.eigh: larges eig for EVD. Smallest for EMI.
     subset_idx = C_arrays.shape[-1] - 1 if use_evd else 0
 
