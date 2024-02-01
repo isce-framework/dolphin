@@ -36,10 +36,11 @@ def test_cli_config_basic(tmpdir, slc_file_list):
             main(
                 [
                     "config",
-                    "--n-workers",
-                    "1",
                     "--threads-per-worker",
-                    "1",
+                    "2",
+                    "--strides",
+                    "6",
+                    "3",
                     "--slc-files",
                     *list(map(str, slc_file_list)),
                 ]
