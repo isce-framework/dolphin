@@ -25,13 +25,18 @@ class PhaseLinkRuntimeError(Exception):
 class PhaseLinkOutput(NamedTuple):
     """Output of the MLE solver."""
 
-    mle_est: Array
+    cpx_phase: np.ndarray
     """Estimated linked phase."""
 
-    temp_coh: Array
-    """Temporal coherence."""
+    temp_coh: np.ndarray
+    """Temporal coherence of the optimization.
+    A goodness of fit parameter from 0 to 1 at each pixel.
+    """
 
-    avg_coh: Array | None = None
+    eigenvalues: np.ndarray
+    """The smallest (largest) eigenvalue resulting from EMI (EVD)."""
+
+    avg_coh: np.ndarray | None = None
     """Average coherence across dates for each SLC."""
 
 
@@ -50,6 +55,7 @@ def run_phase_linking(
     neighbor_arrays: Optional[np.ndarray] = None,
     avg_mag: Optional[np.ndarray] = None,
     use_slc_amp: bool = True,
+    calc_average_coh: bool = True,
 ) -> PhaseLinkOutput:
     """Estimate the linked phase for a stack of SLCs.
 
@@ -94,15 +100,19 @@ def run_phase_linking(
     use_slc_amp : bool, optional
         Whether to use the SLC amplitude when outputting the MLE estimate,
         or to set the SLC amplitude to 1.0. By default True.
+    calc_average_coh : bool, optional, default = False
+        Whether to calculate the average coherence for each SLC date.
 
     Returns
     -------
     PhaseLinkOutput:
         A Named tuple with the following fields
-    mle_est : np.ndarray[np.complex64]
+    linked_phase : np.ndarray[np.complex64]
         The estimated linked phase, with shape (n_images, n_rows, n_cols)
     temp_coh : np.ndarray[np.float32]
         The temporal coherence at each pixel, shape (n_rows, n_cols)
+    eigenvalues : np.ndarray[np.float32]
+        The smallest (largest) eigenvalue resulting from EMI (EVD).
     `avg_coh` : np.ndarray[np.float32]
         (only If `calc_average_coh` is True) the average coherence for each SLC date
     """
@@ -143,7 +153,7 @@ def run_phase_linking(
     slc_stack_masked = slc_stack.copy()
     slc_stack_masked[:, ignore_mask] = np.nan
 
-    mle_est, temp_coh, avg_coh = run_cpl(
+    optimized_phase, eigenvalues, temp_coh, avg_coh = run_cpl(
         slc_stack=slc_stack_masked,
         half_window=half_window,
         strides=strides,
@@ -151,20 +161,29 @@ def run_phase_linking(
         beta=beta,
         reference_idx=reference_idx,
         neighbor_arrays=neighbor_arrays,
-        use_slc_amp=use_slc_amp,
+        calc_average_coh=calc_average_coh,
     )
+
+    if use_slc_amp:
+        # use the amplitude from the original SLCs
+        # account for the strides when grabbing original data
+        # we need to match `io.compute_out_shape` here
+        slcs_decimated = decimate(slc_stack, strides)
+        cpx_phase = np.exp(1j * optimized_phase) * np.abs(slcs_decimated)
+    else:
+        cpx_phase = np.exp(1j * optimized_phase)
 
     # Get the smaller, looked versions of the masks
     # We zero out nodata if all pixels within the window had nodata
     mask_looked = take_looks(nodata_mask, *strides, func_type="all")
 
     # Set no data pixels to np.nan
-    temp_coh[mask_looked] = np.nan
+    temp_coh = np.where(mask_looked, jnp.nan, temp_coh)
 
     # Fill in the PS pixels from the original SLC stack, if it was given
     if np.any(ps_mask):
         fill_ps_pixels(
-            mle_est,
+            cpx_phase,
             temp_coh,
             slc_stack,
             ps_mask,
@@ -173,7 +192,7 @@ def run_phase_linking(
             reference_idx,
         )
 
-    return PhaseLinkOutput(mle_est, temp_coh, avg_coh)
+    return PhaseLinkOutput(cpx_phase, temp_coh, np.array(eigenvalues), avg_coh)
 
 
 def run_cpl(
@@ -183,11 +202,9 @@ def run_cpl(
     use_evd: bool = False,
     beta: float = 0.01,
     reference_idx: int = 0,
-    use_slc_amp: bool = True,
     neighbor_arrays: Optional[np.ndarray] = None,
     calc_average_coh: bool = False,
-    **kwargs,
-) -> tuple[Array, Array, Array]:
+) -> tuple[Array, Array, Array, Array | None]:
     """Run the Combined Phase Linking (CPL) algorithm.
 
     Estimates a coherence matrix for each SLC pixel, then
@@ -219,13 +236,21 @@ def run_cpl(
     calc_average_coh : bool, default=False
         If requested, the average of each row of the covariance matrix is computed
         for the purposes of finding the best reference (highest coherence) date
-    **kwargs : dict, optional
-        Additional keyword arguments not used by CPU version.
 
     Returns
     -------
-    Array
-
+    optimized_phase : Array
+        Optimized SLC phase, shape same as `slc_stack` unless Strides are requested.
+    temp_coh : Array
+        Temporal coherence of the optimization.
+        A goodness of fit parameter from 0 to 1 at each pixel.
+    eigenvalues : Array
+        The eigenvalues of the coherence matrices.
+        If `use_evd` is True, these are the largest eigenvalues;
+        Otherwise, for EMI they are the smallest.
+    avg_coh : Array | None
+        The average coherence of each row of the coherence matrix,
+        if requested.
     """
     C_arrays = covariance.estimate_stack_covariance(
         slc_stack,
@@ -234,15 +259,14 @@ def run_cpl(
         neighbor_arrays=neighbor_arrays,
     )
 
-    output_phase = process_coherence_matrices(
+    optimized_phase, eigenvalues = process_coherence_matrices(
         C_arrays,
         use_evd=use_evd,
         beta=beta,
         reference_idx=reference_idx,
     )
-    mle_est = jnp.exp(1j * output_phase)
     # Get the temporal coherence
-    temp_coh = metrics.estimate_temp_coh(mle_est, C_arrays)
+    temp_coh = metrics.estimate_temp_coh(jnp.exp(1j * optimized_phase), C_arrays)
 
     if calc_average_coh:
         # If requested, average the Cov matrix at each row for reference selection
@@ -250,15 +274,7 @@ def run_cpl(
         avg_coh = jnp.argmax(avg_coh_per_date, axis=2)
     else:
         avg_coh = None
-
-    if use_slc_amp:
-        # use the amplitude from the original SLCs
-        # account for the strides when grabbing original data
-        # we need to match `io.compute_out_shape` here
-        slcs_decimated = decimate(slc_stack, strides)
-        mle_est *= np.abs(slcs_decimated)
-
-    return (mle_est, temp_coh, avg_coh)
+    return optimized_phase, temp_coh, eigenvalues, avg_coh
 
 
 def process_coherence_matrices(
@@ -266,7 +282,7 @@ def process_coherence_matrices(
     use_evd: bool = False,
     beta: float = 0.01,
     reference_idx: int = 0,
-):
+) -> tuple[Array, Array]:
     """Estimate the linked phase for a stack of coherence matrices.
 
     This function is used for both the CPU and GPU versions after
@@ -299,6 +315,7 @@ def process_coherence_matrices(
     eig_vals : ndarray[float], shape = (rows, cols)
         The smallest (largest) eigenvalue as solved by EMI (EVD).
     """
+    eig_vals, eig_vecs = eigh_largest_stack(C_arrays)
     if use_evd:
         # EVD
         eig_vals, eig_vecs = eigh_largest_stack(C_arrays)
@@ -342,7 +359,7 @@ def process_coherence_matrices(
     # Return the phase, Move the SLC dimension to the front
     # (to match the SLC stack shape)
     phase_stack = jnp.moveaxis(jnp.angle(evd_estimate), -1, 0)
-    return jnp.moveaxis(phase_stack, -1, 0), eig_vals
+    return phase_stack, eig_vals
 
 
 # The eigenvalues are in ascending order
