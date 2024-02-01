@@ -2,19 +2,18 @@ from __future__ import annotations
 
 import logging
 import warnings
-from functools import partial
 from typing import NamedTuple, Optional
 
 import jax.numpy as jnp
 import numpy as np
-from jax import Array, jit, vmap
+from jax import Array, vmap
 from jax.scipy.linalg import cho_factor, cho_solve, eigh
 from jax.typing import ArrayLike
 
 from dolphin._types import HalfWindow, Strides
-from dolphin.utils import get_array_module, take_looks
+from dolphin.utils import take_looks
 
-from ._cpl import run_cpl
+from . import covariance, metrics
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +36,118 @@ class MleOutput(NamedTuple):
 
 
 DEFAULT_STRIDES = Strides(1, 1)
+
+
+def run_cpl(
+    slc_stack: np.ndarray,
+    half_window: HalfWindow,
+    strides: Strides,
+    use_evd: bool = False,
+    beta: float = 0.01,
+    reference_idx: int = 0,
+    use_slc_amp: bool = True,
+    neighbor_arrays: Optional[np.ndarray] = None,
+    calc_average_coh: bool = False,
+    **kwargs,
+) -> MleOutput:
+    """Run the CPU version of the stack covariance estimator and MLE solver.
+
+    Parameters
+    ----------
+    slc_stack : np.ndarray
+        The SLC stack, with shape (n_slc, n_rows, n_cols)
+    half_window : HalfWindow, or tuple[int, int]
+        A (named) tuple of (y, x) sizes for the half window.
+        The full window size is 2 * half_window + 1 for x, y.
+    strides : tuple[int, int], optional
+        The (y, x) strides (in pixels) to use for the sliding window.
+        By default (1, 1)
+    use_evd : bool, default = False
+        Use eigenvalue decomposition on the covariance matrix instead of
+        the EMI algorithm.
+    beta : float, optional
+        The regularization parameter, by default 0.01.
+    reference_idx : int, optional
+        The index of the (non compressed) reference SLC, by default 0
+    use_slc_amp : bool, optional
+        Whether to use the SLC amplitude when outputting the MLE estimate,
+        or to set the SLC amplitude to 1.0. By default True.
+    neighbor_arrays : np.ndarray, optional
+        The neighbor arrays to use for SHP, shape = (n_rows, n_cols, *window_shape).
+        If None, a rectangular window is used. By default None.
+    calc_average_coh : bool, default=False
+        If requested, the average of each row of the covariance matrix is computed
+        for the purposes of finding the best reference (highest coherence) date
+    **kwargs : dict, optional
+        Additional keyword arguments not used by CPU version.
+
+    Returns
+    -------
+    mle_est : np.ndarray[np.complex64]
+        The estimated linked phase, with shape (n_slc, n_rows, n_cols)
+    temp_coh : np.ndarray[np.float32]
+        The temporal coherence at each pixel, shape (n_rows, n_cols)
+    """
+    C_arrays = covariance.estimate_stack_covariance(
+        slc_stack,
+        half_window,
+        strides,
+        neighbor_arrays=neighbor_arrays,
+    )
+
+    output_phase = mle_stack(
+        C_arrays,
+        use_evd=use_evd,
+        beta=beta,
+        reference_idx=reference_idx,
+    )
+    cpx_phase = np.exp(1j * output_phase)
+    # Get the temporal coherence
+    temp_coh = metrics.estimate_temp_coh(cpx_phase, C_arrays)
+    mle_est = np.exp(1j * output_phase)
+
+    if calc_average_coh:
+        # If requested, average the Cov matrix at each row for reference selection
+        avg_coh_per_date = np.abs(C_arrays).mean(axis=3)
+        avg_coh = np.argmax(avg_coh_per_date, axis=2)
+    else:
+        avg_coh = None
+
+    if use_slc_amp:
+        # use the amplitude from the original SLCs
+        # account for the strides when grabbing original data
+        # we need to match `io.compute_out_shape` here
+        slcs_decimated = decimate(slc_stack, strides)
+        mle_est *= np.abs(slcs_decimated)
+
+    return MleOutput(mle_est, temp_coh, avg_coh)
+
+
+def decimate(arr: ArrayLike, strides: Strides) -> Array:
+    """Decimate an array by strides in the x and y directions.
+
+    Output will match [`io.compute_out_shape`][dolphin.io.compute_out_shape]
+
+    Parameters
+    ----------
+    arr : ArrayLike
+        2D or 3D array to decimate.
+    strides : dict[str, int]
+        The strides in the x and y directions.
+
+    Returns
+    -------
+    ArrayLike
+        The decimated array.
+
+    """
+    ys, xs = strides
+    rows, cols = arr.shape[-2:]
+    start_r = ys // 2
+    start_c = xs // 2
+    end_r = (rows // ys) * ys + 1
+    end_c = (cols // xs) * xs + 1
+    return arr[..., start_r:end_r:ys, start_c:end_c:xs]
 
 
 def run_phase_linking(
@@ -178,10 +289,10 @@ def mle_stack(
     beta: float = 0.01,
     reference_idx: int = 0,
 ):
-    """Estimate the linked phase for a stack of covariance matrices.
+    """Estimate the linked phase for a stack of coherence matrices.
 
     This function is used for both the CPU and GPU versions after
-    covariance estimation.
+    coherence estimation.
     Will use cupy if available, (and if the input is a GPU array).
     Otherwise, uses numpy (for CPU version).
 
@@ -189,7 +300,7 @@ def mle_stack(
     Parameters
     ----------
     C_arrays : ndarray, shape = (rows, cols, nslc, nslc)
-        The sample covariance matrix at each pixel
+        The sample coherence matrix at each pixel
         (e.g. from [dolphin.phase_link.covariance.estimate_stack_covariance][])
     use_evd : bool, default = False
         Use eigenvalue decomposition on the covariance matrix instead of
@@ -207,8 +318,6 @@ def mle_stack(
     ndarray, shape = (nslc, rows, cols)
         The estimated linked phase, same shape as the input slcs (possibly multilooked)
     """
-    jnp = get_array_module(C_arrays)
-
     if use_evd:
         # EVD
         eig_vals, eig_vecs = eigh_largest_stack(C_arrays)
@@ -222,7 +331,10 @@ def mle_stack(
         # repeat the identity matrix for each pixel
         Id = jnp.tile(Id, (C_arrays.shape[0], C_arrays.shape[1], 1, 1))
 
-        Gamma = _get_gamma_matrix(C_arrays, Id.astype(jnp.float32), beta)
+        Gamma = jnp.abs(C_arrays)
+        if beta > 0:
+            # Perform regularization
+            Gamma = (1 - beta) * Gamma + beta * Id
         # Attempt to invert Gamma
         Gamma_inv = cho_factor(Gamma)
         cho, is_lower = cho_factor(Gamma)
@@ -250,15 +362,6 @@ def mle_stack(
     phase_stack = jnp.angle(evd_estimate)
     # Move the SLC dimension to the front (to match the SLC stack shape)
     return jnp.moveaxis(phase_stack, -1, 0)
-
-
-@partial(jit, static_argnames=("beta"))
-def _get_gamma_matrix(C_arrays: ArrayLike, Id: ArrayLike, beta: float) -> Array:
-    Gamma = jnp.abs(C_arrays)
-    if beta > 0:
-        # Perform regularization
-        Gamma = (1 - beta) * Gamma + beta * Id
-    return Gamma
 
 
 # The eigenvalues are in ascending order
