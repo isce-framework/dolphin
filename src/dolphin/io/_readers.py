@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import mmap
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
@@ -24,10 +25,11 @@ from osgeo import gdal
 from dolphin import io, utils
 from dolphin._types import Filename
 from dolphin.io._blocks import iter_blocks
-from dolphin.stack import logger
 from dolphin.utils import progress
 
 from ._background import _DEFAULT_TIMEOUT, BackgroundReader
+
+logger = logging.getLogger(__name__)
 
 __all__ = [
     "DatasetReader",
