@@ -6,6 +6,7 @@ References
     linking using joined distributed and persistent scatterers." Computers &
     Geosciences (2022): 105291.
 
+
 """
 from __future__ import annotations
 
@@ -368,6 +369,7 @@ def setup_output_folder(
     -------
     list[Path]
         list of saved empty files for the outputs of phase linking
+
     """
     if strides is None:
         strides = {"y": 1, "x": 1}

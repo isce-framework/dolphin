@@ -72,6 +72,7 @@ def unwrap_snaphu_py(
         Path to output unwrapped phase file.
     conncomp_path : Path
         Path to output connected component label file.
+
     """
     import snaphu
 

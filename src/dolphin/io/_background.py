@@ -44,6 +44,7 @@ class BackgroundWorker(abc.ABC):
     The usual caveats about Python threading apply.  It's typically a poor
     choice for concurrency unless the global interpreter lock (GIL) has been
     released, which can happen in IO calls and compiled extensions.
+
     """
 
     def __init__(
@@ -172,6 +173,7 @@ class BackgroundWriter(BackgroundWorker):
     timeout : float
         Interval in seconds used to check for finished notification once write
         queue is empty.
+
     """
 
     def __init__(self, nq=1, timeout=_DEFAULT_TIMEOUT, **kwargs):
@@ -224,6 +226,7 @@ class BackgroundReader(BackgroundWorker):
     timeout : float
         Interval in seconds used to check for finished notification once write
         queue is empty.
+
     """
 
     def __init__(self, nq=1, timeout=_DEFAULT_TIMEOUT, **kwargs):

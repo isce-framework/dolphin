@@ -44,6 +44,7 @@ def run(
         list of Paths to unwrapped interferograms created.
     conncomp_paths : list[Path]
         list of Paths to connected component files created.
+
     """
     if len(ifg_file_list) != len(cor_file_list):
         msg = f"{len(ifg_file_list) = } != {len(cor_file_list) = }"

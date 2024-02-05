@@ -44,6 +44,7 @@ def run(
         for controlling the workflow.
     debug : bool, optional
         Enable debug logging, by default False.
+
     """
     # Set the logging level for all `dolphin.` modules
     logger = get_log(name="dolphin", debug=debug, filename=cfg.log_file)

@@ -41,6 +41,7 @@ def run(
         In the case of sequential phase linking, this is the average of all ministacks.
     ps_looked_file : Path
         The multilooked boolean persistent scatterer file.
+
     """
     logger = get_log(debug=debug)
     work_dir = cfg.work_directory
@@ -220,6 +221,7 @@ def create_ifgs(
     NotImplementedError
         Currently raised for `InterferogramNetworkType`s besides single reference
         or max-bandwidth
+
     """
     ifg_dir = interferogram_network._directory
     if not dry_run:

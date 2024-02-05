@@ -39,6 +39,7 @@ class YamlModel(BaseModel):
             https://docs.pydantic.dev/usage/exporting_models/#modeljson
         indent_per_level : int, default = 2
             Number of spaces to indent per level.
+
         """
         yaml_obj = self._to_yaml_obj(by_alias=by_alias)
 
@@ -77,6 +78,7 @@ class YamlModel(BaseModel):
         -------
         Config
             Workflow configuration
+
         """
         y = YAML(typ="safe")
         with open(yaml_path) as f:
@@ -102,6 +104,7 @@ class YamlModel(BaseModel):
             By default, prints to stdout.
         indent_per_level : int, default = 2
             Number of spaces to indent per level.
+
         """
         full_dict = cls._construct_empty()
         # UserWarning: Pydantic serializer warnings:

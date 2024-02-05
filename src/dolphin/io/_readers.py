@@ -117,6 +117,7 @@ class BinaryReader(DatasetReader):
     for reading or writing and closed immediately after each read/write operation. This
     allows multiple spawned processes to write to the file in coordination (as long as a
     suitable mutex is used to guard file access.)
+
     """
 
     filename: Path
@@ -178,6 +179,7 @@ class BinaryReader(DatasetReader):
         -------
         BinaryReader
             The BinaryReader object.
+
         """
         with rio.open(filename) as src:
             dtype = src.dtypes[band - 1]
@@ -219,6 +221,7 @@ class HDF5Reader(DatasetReader):
     immediately after each read/write operation.
     If passing the `HDF5Reader` to multiple spawned processes, it is recommended
     to set `keep_open=False` .
+
     """
 
     filename: Path
@@ -299,6 +302,7 @@ class RasterReader(DatasetReader):
     immediately after each read/write operation.
     If passing the `RasterReader` to multiple spawned processes, it is recommended
     to set `keep_open=False` .
+
     """
 
     filename: Filename
@@ -491,6 +495,7 @@ class BinaryStackReader(BaseStackReader):
         -------
         BinaryStackReader
             The BinaryStackReader object.
+
         """
         readers = [
             BinaryReader(Path(f), shape=shape_2d, dtype=dtype) for f in file_list
@@ -523,6 +528,7 @@ class BinaryStackReader(BaseStackReader):
         -------
         BinaryStackReader
             The BinaryStackReader object.
+
         """
         readers = []
         dtypes = set()
@@ -562,6 +568,7 @@ class HDF5StackReader(BaseStackReader):
     immediately after each read/write operation.
     If passing the `HDF5StackReader` to multiple spawned processes, it is recommended
     to set `keep_open=False`.
+
     """
 
     @classmethod
@@ -594,6 +601,7 @@ class HDF5StackReader(BaseStackReader):
         -------
         HDF5StackReader
             The HDF5StackReader object.
+
         """
         if isinstance(dset_names, str):
             dset_names = [dset_names] * len(file_list)
@@ -624,6 +632,7 @@ class RasterStackReader(BaseStackReader):
     If `keep_open=True`, this class stores an open file object.
     Otherwise, the file is opened on-demand for reading or writing and closed
     immediately after each read/write operation.
+
     """
 
     @classmethod
@@ -656,6 +665,7 @@ class RasterStackReader(BaseStackReader):
         -------
         RasterStackReader
             The RasterStackReader object.
+
         """
         if isinstance(bands, int):
             bands = [bands] * len(file_list)
@@ -701,6 +711,7 @@ class VRTStack(StackReader):
     file_date_fmt : str, optional (default = "%Y%m%d")
         Format string for parsing the dates from the filenames.
         Passed to [opera_utils._dates.get_dates][].
+
     """
 
     def __init__(
@@ -947,6 +958,7 @@ def _parse_vrt_file(vrt_file):
         List of filepaths to the SLCs
     sds
         Subdataset name, if using NetCDF/HDF5 files
+
     """
     file_strings = []
     with open(vrt_file) as f:

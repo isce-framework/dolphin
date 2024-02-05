@@ -40,6 +40,7 @@ def progress(dummy=False):
     ...     for i in p.track(range(10)):
     ...         pass
     10/10 Working... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 100% 0:00:00
+
     """
 
     class DummyProgress:
@@ -86,6 +87,7 @@ def numpy_to_gdal_type(np_dtype: DTypeLike) -> int:
     TypeError
         If `np_dtype` is not a numpy dtype, or if the provided dtype is not
         supported by GDAL (for example, `np.dtype('>i4')`)
+
     """
     np_dtype = np.dtype(np_dtype)
 
@@ -163,6 +165,7 @@ def full_suffix(filename: Filename):
         '.tif'
         >>> full_suffix('test.tar.gz')
         '.tar.gz'
+
     """
     fpath = Path(filename)
     return "".join(fpath.suffixes)
@@ -230,6 +233,7 @@ def take_looks(arr, row_looks, col_looks, func_type="nansum", edge_strategy="cut
     Notes
     -----
     Cuts off values if the size isn't divisible by num looks.
+
     """
     if row_looks == 1 and col_looks == 1:
         return arr
@@ -312,6 +316,7 @@ def upsample_nearest(
     -------
     ndarray
         The upsampled array, shape = `output_shape`.
+
     """
     in_rows, in_cols = arr.shape[-2:]
     out_rows, out_cols = output_shape[-2:]
@@ -461,6 +466,7 @@ def get_cpu_count():
     ----------
     1. https://github.com/joblib/loky/issues/111
     2. https://github.com/conan-io/conan/blob/982a97041e1ece715d157523e27a14318408b925/conans/client/tools/oss.py#L27 # noqa
+
     """  # noqa: E501
 
     def get_cpu_quota():
@@ -500,6 +506,7 @@ def format_date_pair(start: DateOrDatetime, end: DateOrDatetime, fmt="%Y%m%d") -
     -------
     str
         Formatted date pair.
+
     """
     return f"{start.strftime(fmt)}_{end.strftime(fmt)}"
 
@@ -540,6 +547,7 @@ def prepare_geometry(
     -------
     Dict[str, Path]
         Dictionary of prepared geometry files.
+
     """
     from dolphin import stitching
     from dolphin.io import format_nc_filename
@@ -647,6 +655,7 @@ def compute_out_shape(shape: tuple[int, int], strides: Strides) -> tuple[int, in
     So the output size would be 2, since we have 2 full windows.
     If the array size was 7 or 8, we would have 2 full windows and 1 partial,
     so the output size would still be 2.
+
     """
     rows, cols = shape
     rstride, cstride = strides

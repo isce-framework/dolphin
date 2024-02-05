@@ -54,6 +54,7 @@ def estimate_stack_covariance(
     ------
     ValueError
         If `slc_stack` is not complex data.
+
     """
     if not np.iscomplexobj(slc_stack):
         msg = "The SLC stack must be complex."

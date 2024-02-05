@@ -216,6 +216,7 @@ def unwrap(
     -----
     On MacOS, the SNAPHU unwrapper doesn't work due to a MemoryMap bug.
     ICU is used instead.
+
     """
     if isinstance(downsample_factor, int):
         downsample_factor = (downsample_factor, downsample_factor)

@@ -323,6 +323,7 @@ class Network:
         Raise an error if any SLCs aren't GDAL-readable.
     write : bool
         Whether to write the VRT files to disk. Defaults to True.
+
     """
 
     slc_list: Sequence[Filename]
@@ -489,6 +490,7 @@ class Network:
         -------
         list
             Pairs of (date1, date2) ifgs
+
         """
         slc_to_idx = {s: idx for idx, s in enumerate(slc_list)}
         return [
@@ -524,6 +526,7 @@ class Network:
         ------
         ValueError
             If any of the input files have more than one date.
+
         """
         ifg_strs = Network._all_pairs(slc_list)
         ifg_dates = Network._all_pairs(dates)
@@ -610,6 +613,7 @@ def estimate_correlation_from_phase(
     -------
     np.ndarray
         Correlation array
+
     """
     if isinstance(ifg, VRTInterferogram):
         ifg = ifg.load()
@@ -657,6 +661,7 @@ def estimate_interferometric_correlations(
     -------
     list[Path]
         Paths to newly written correlation files.
+
     """
     logger = get_log()
 
@@ -731,6 +736,7 @@ def convert_pl_to_ifg(
     -------
     Path
         Path to renamed file.
+
     """
     # The phase_linked_slc will be named with the secondary date.
     # Make the output from that, plus the given reference date
