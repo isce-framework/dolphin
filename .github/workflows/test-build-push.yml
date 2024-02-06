@@ -26,7 +26,7 @@ jobs:
             spec: >-
               python=3.9
               isce3
-              gdal=3.5
+              gdal=3.4
               h5py=3.6
               jax=0.4.19
               numpy=1.23
