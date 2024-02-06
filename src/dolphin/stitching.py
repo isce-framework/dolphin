@@ -7,7 +7,7 @@ import tempfile
 from datetime import datetime
 from os import fspath
 from pathlib import Path
-from typing import Iterable, Optional, Sequence, Union
+from typing import Iterable, Optional, Sequence
 
 import numpy as np
 from numpy.typing import DTypeLike
@@ -27,13 +27,13 @@ def merge_by_date(
     image_file_list: Iterable[Filename],
     file_date_fmt: str = DEFAULT_DATETIME_FORMAT,
     output_dir: Filename = ".",
-    driver: str = "ENVI",
-    output_suffix: str = ".int",
+    driver: str = "GTiff",
+    output_suffix: str = ".int.tif",
     out_nodata: Optional[float] = 0,
     in_nodata: Optional[float] = None,
     out_bounds: Optional[Bbox] = None,
     out_bounds_epsg: Optional[int] = None,
-    options: Optional[Sequence[str]] = io.DEFAULT_ENVI_OPTIONS,
+    options: Optional[Sequence[str]] = io.DEFAULT_TIFF_OPTIONS,
     overwrite: bool = False,
 ) -> dict[tuple[datetime, ...], Path]:
     """Group images from the same datetime and merge into one image per datetime.
@@ -62,7 +62,8 @@ def merge_by_date(
         EPSG code for the `out_bounds`.
         If not provided, assumed to match the projections of `file_list`.
     options : Optional[Sequence[str]]
-        Driver-specific creation options passed to GDAL. Default is ["SUFFIX=ADD"]
+        Driver-specific creation options passed to GDAL.
+        Default is [dolphin.io.DEFAULT_TIFF_OPTIONS][].
     overwrite : bool
         Overwrite existing files. Default is False.
 
@@ -76,6 +77,7 @@ def merge_by_date(
     -----
     This function is intended to be used with filenames that contain datetime pairs
     (from interferograms).
+
     """
     image_path_list = [Path(f) for f in image_file_list]
     grouped_images = group_by_date(image_path_list, file_date_fmt=file_date_fmt)
@@ -89,7 +91,8 @@ def merge_by_date(
         elif len(dates) == 1:
             date_str = dates[0].strftime(file_date_fmt)
         else:
-            raise ValueError(f"Expected 1 or 2 dates: {dates}.")
+            msg = f"Expected 1 or 2 dates: {dates}."
+            raise ValueError(msg)
         outfile = Path(output_dir) / (date_str + output_suffix)
 
         merge_images(
@@ -115,14 +118,14 @@ def merge_images(
     target_aligned_pixels: bool = True,
     out_bounds: Optional[Bbox] = None,
     out_bounds_epsg: Optional[int] = None,
-    strides: dict[str, int] = {"x": 1, "y": 1},
-    driver: str = "ENVI",
+    strides: Optional[dict[str, int]] = None,
+    driver: str = "GTiff",
     out_nodata: Optional[float] = 0,
     out_dtype: Optional[DTypeLike] = None,
     in_nodata: Optional[float] = None,
     resample_alg: str = "lanczos",
     overwrite: bool = False,
-    options: Optional[Sequence[str]] = io.DEFAULT_ENVI_OPTIONS,
+    options: Optional[Sequence[str]] = io.DEFAULT_TIFF_OPTIONS,
     create_only: bool = False,
 ) -> None:
     """Combine multiple SLC images on the same date into one image.
@@ -151,7 +154,7 @@ def merge_images(
     strides : dict[str, int]
         subsample factor: {"x": x strides, "y": y strides}
     driver : str
-        GDAL driver to use for output file. Default is ENVI.
+        GDAL driver to use for output file. Default is GTiff.
     out_nodata : Optional[float | str]
         Nodata value to use for output file. Default is 0.
     out_dtype : Optional[DTypeLike]
@@ -165,10 +168,14 @@ def merge_images(
     overwrite : bool
         Overwrite existing files. Default is False.
     options : Optional[Sequence[str]]
-        Driver-specific creation options passed to GDAL. Default is ["SUFFIX=ADD"]
+        Driver-specific creation options passed to GDAL.
+        Default is [dolphin.io.DEFAULT_TIFF_OPTIONS][].
     create_only : bool
         If True, creates an empty output file, does not write data. Default is False.
+
     """
+    if strides is None:
+        strides = {"x": 1, "y": 1}
     if Path(outfile).exists():
         if not overwrite:
             logger.info(f"{outfile} already exists, skipping")
@@ -177,7 +184,7 @@ def merge_images(
             logger.info(f"Overwrite=True: removing {outfile}")
             Path(outfile).unlink()
 
-    if len(file_list) == 1:
+    if len(file_list) == 1 and out_bounds is None:
         logger.info("Only one image, no stitching needed")
         logger.info(f"Copying {file_list[0]} to {outfile} and zeroing nodata values.")
         _copy_set_nodata(
@@ -210,7 +217,7 @@ def merge_images(
     )
     # Compute output array shape. We guarantee it will cover the output
     # bounds completely
-    bounds, combined_nodata = get_combined_bounds_nodata(  # type: ignore
+    bounds, combined_nodata = get_combined_bounds_nodata(
         *warped_file_list,
         target_aligned_pixels=target_aligned_pixels,
         out_bounds=out_bounds,
@@ -230,9 +237,9 @@ def merge_images(
         args.extend(["-a_nodata", str(out_nodata)])
     if in_nodata is not None or combined_nodata is not None:
         ndv = str(in_nodata) if in_nodata is not None else str(combined_nodata)
-        args.extend(["-n", ndv])  # type: ignore
+        args.extend(["-n", ndv])
     if out_dtype is not None:
-        out_gdal_dtype = gdal.GetDataTypeName(io.numpy_to_gdal_type(out_dtype))
+        out_gdal_dtype = gdal.GetDataTypeName(utils.numpy_to_gdal_type(out_dtype))
         args.extend(["-ot", out_gdal_dtype])
     if target_aligned_pixels:
         args.append("-tap")
@@ -281,20 +288,21 @@ def get_downsampled_vrts(
     -------
     list[Filename]
         The warped filenames.
+
     """
     if not filenames:
         return []
     warped_files = []
     res = _get_resolution(filenames)
     for idx, fn in enumerate(filenames):
-        fn = Path(fn)
-        warped_fn = Path(dirname) / _get_temp_filename(fn, idx, "_downsampled")
-        logger.debug(f"Downsampling {fn} by {strides}")
+        p = Path(fn)
+        warped_fn = Path(dirname) / _get_temp_filename(p, idx, "_downsampled")
+        logger.debug(f"Downsampling {p} by {strides}")
         warped_files.append(warped_fn)
-        left, bottom, right, top = io.get_raster_bounds(fn)
+        left, bottom, right, top = io.get_raster_bounds(p)
         gdal.Translate(
             fspath(warped_fn),
-            fspath(fn),
+            fspath(p),
             format="VRT",  # Just creates a file that will warp on the fly
             resampleAlg="nearest",  # nearest neighbor for resampling
             xRes=res[0] * strides["x"],
@@ -341,6 +349,7 @@ def warp_to_projection(
     -------
     list[Filename]
         The warped filenames.
+
     """
     if projection is None:
         projection = _get_mode_projection(filenames)
@@ -349,24 +358,24 @@ def warp_to_projection(
 
     warped_files = []
     for idx, fn in enumerate(filenames):
-        fn = Path(fn)
-        ds = gdal.Open(fspath(fn))
+        p = Path(fn)
+        ds = gdal.Open(fspath(p))
         proj_in = ds.GetProjection()
         if proj_in == projection:
-            warped_files.append(fn)
+            warped_files.append(p)
             continue
-        warped_fn = Path(dirname) / _get_temp_filename(fn, idx, "_warped")
-        warped_fn = Path(dirname) / f"{fn.stem}_{idx}_warped.vrt"
+        warped_fn = Path(dirname) / _get_temp_filename(p, idx, "_warped")
+        warped_fn = Path(dirname) / f"{p.stem}_{idx}_warped.vrt"
         from_srs_name = ds.GetSpatialRef().GetName()
         to_srs_name = osr.SpatialReference(projection).GetName()
         logger.info(
-            f"Reprojecting {fn} from {from_srs_name} to match mode projection"
+            f"Reprojecting {p} from {from_srs_name} to match mode projection"
             f" {to_srs_name}"
         )
         warped_files.append(warped_fn)
         gdal.Warp(
             fspath(warped_fn),
-            fspath(fn),
+            fspath(p),
             format="VRT",  # Just creates a file that will warp on the fly
             dstSRS=projection,
             resampleAlg=resample_alg,
@@ -389,7 +398,8 @@ def _get_resolution(filenames: Iterable[Filename]) -> tuple[float, float]:
     gts = [gdal.Open(fspath(fn)).GetGeoTransform() for fn in filenames]
     res = [(dx, dy) for (_, dx, _, _, _, dy) in gts]
     if len(set(res)) > 1:
-        raise ValueError(f"The input files have different resolutions: {res}. ")
+        msg = f"The input files have different resolutions: {res}. "
+        raise ValueError(msg)
     return res[0]
 
 
@@ -398,8 +408,8 @@ def get_combined_bounds_nodata(
     target_aligned_pixels: bool = False,
     out_bounds: Optional[Bbox] = None,
     out_bounds_epsg: Optional[int] = None,
-    strides: dict[str, int] = {"x": 1, "y": 1},
-) -> tuple[Bbox, Union[str, float, None]]:
+    strides: Optional[dict[str, int]] = None,
+) -> tuple[Bbox, Optional[float]]:
     """Get the bounds and nodata of the combined image.
 
     Parameters
@@ -423,15 +433,18 @@ def get_combined_bounds_nodata(
     -------
     bounds : Bbox
         (min_x, min_y, max_x, max_y)
-    nodata : float
+    nodata : float | None
         Nodata value of the input files
 
     Raises
     ------
     ValueError:
         If the inputs files have different resolutions/projections/nodata values
+
     """
     # scan input files
+    if strides is None:
+        strides = {"x": 1, "y": 1}
     xs = []
     ys = []
     resolutions = set()
@@ -456,11 +469,14 @@ def get_combined_bounds_nodata(
         nodatas.add(str(nd) if (nd is not None and np.isnan(nd)) else nd)
 
     if len(resolutions) > 1:
-        raise ValueError(f"The input files have different resolutions: {resolutions}. ")
+        msg = f"The input files have different resolutions: {resolutions}. "
+        raise ValueError(msg)
     if len(projs) > 1:
-        raise ValueError(f"The input files have different projections: {projs}. ")
+        msg = f"The input files have different projections: {projs}. "
+        raise ValueError(msg)
     if len(nodatas) > 1:
-        raise ValueError(f"The input files have different nodata values: {nodatas}. ")
+        msg = f"The input files have different nodata values: {nodatas}. "
+        raise ValueError(msg)
     res = (abs(dx) * strides["x"], abs(dy) * strides["y"])
 
     if out_bounds is not None:
@@ -468,17 +484,20 @@ def get_combined_bounds_nodata(
             dst_epsg = io.get_raster_crs(filenames[0]).to_epsg()
             bounds = _reproject_bounds(out_bounds, out_bounds_epsg, dst_epsg)
         else:
-            bounds = out_bounds  # type: ignore
+            bounds = out_bounds
     else:
         bounds = Bbox(min(xs), min(ys), max(xs), max(ys))
 
     if target_aligned_pixels:
         bounds = _align_bounds(bounds, res)
 
-    return bounds, list(nodatas)[0]
+    nodata = next(iter(nodatas))
+    # Convert back from string "nan"
+    ndv: float | None = np.nan if nodata == "nan" else nodata  # type: ignore[assignment]
+    return bounds, ndv
 
 
-def _align_bounds(bounds: Iterable[float], res: tuple[float, float]):
+def _align_bounds(bounds: Bbox, res: tuple[float, float]) -> Bbox:
     """Align boundary with an integer multiple of the resolution."""
     left, bottom, right, top = bounds
     left = math.floor(left / res[0]) * res[0]
@@ -511,6 +530,7 @@ def get_transformed_bounds(filename: Filename, epsg_code: Optional[int] = None):
     -------
     tuple
         The bounds of the raster as (left, bottom, right, top)
+
     """
     bounds = io.get_raster_bounds(filename)
     if epsg_code is None:
@@ -593,6 +613,7 @@ def warp_to_match(
     Path
         Path to the output image.
         Same as `output_file` if provided, otherwise a path to the in-memory VRT.
+
     """
     bounds = io.get_raster_bounds(match_file)
     crs_wkt = io.get_raster_crs(match_file).to_wkt()

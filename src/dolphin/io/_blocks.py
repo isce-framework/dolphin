@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from typing import Iterator, Optional
+
+from dolphin._types import HalfWindow, Strides
+from dolphin.utils import compute_out_shape
 
 # 1. iterate without overlap over output, decimated array
 #   - Start with an offset, shrink the size, both by `half_window//strides`
@@ -13,10 +17,12 @@ from typing import Iterator, Optional
 
 __all__ = [
     "BlockIndices",
-    "BlockManager",
-    "compute_out_shape",
+    "StridedBlockManager",
     "iter_blocks",
 ]
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -28,10 +34,26 @@ class BlockIndices:
     col_start: int
     col_stop: Optional[int]
 
-    def __iter__(self):
-        return iter(
-            (slice(self.row_start, self.row_stop), slice(self.col_start, self.col_stop))
+    @classmethod
+    def from_slices(cls, row_slice: slice, col_slice: slice) -> BlockIndices:
+        return cls(
+            row_start=row_slice.start,
+            row_stop=row_slice.stop,
+            col_start=col_slice.start,
+            col_stop=col_slice.stop,
         )
+
+    @property
+    def row_slice(self) -> slice:
+        return slice(self.row_start, self.row_stop)
+
+    @property
+    def col_slice(self) -> slice:
+        return slice(self.col_start, self.col_stop)
+
+    # Allows user to unpack like (row_slice, col_slice) = block_index
+    def __iter__(self):
+        return iter((self.row_slice, self.col_slice))
 
 
 def iter_blocks(
@@ -77,6 +99,7 @@ BlockIndices(row_start=100, row_stop=180, col_start=200, col_stop=250)]
 slice(90, 190, None)), (slice(0, 100, None), slice(180, 250, None)), \
 (slice(90, 180, None), slice(0, 100, None)), (slice(90, 180, None), \
 slice(90, 190, None)), (slice(90, 180, None), slice(180, 250, None))]
+
     """
     total_rows, total_cols = arr_shape
     height, width = block_shape
@@ -92,9 +115,11 @@ slice(90, 190, None)), (slice(90, 180, None), slice(180, 250, None))]
 
     # Check we're not moving backwards with the overlap:
     if row_overlap >= height and height != total_rows:
-        raise ValueError(f"{row_overlap = } must be less than block height {height}")
+        msg = f"{row_overlap = } must be less than block height {height}"
+        raise ValueError(msg)
     if col_overlap >= width and width != total_cols:
-        raise ValueError(f"{col_overlap = } must be less than block width {width}")
+        msg = f"{col_overlap = } must be less than block width {width}"
+        raise ValueError(msg)
 
     # Set up the iterating indices
     cur_row = start_row_offset
@@ -116,37 +141,18 @@ slice(90, 190, None)), (slice(90, 180, None), slice(180, 250, None))]
         cur_col = start_col_offset  # reset back to the starting offset
 
 
-def dilate_block(
-    in_block: BlockIndices,
-    strides: dict[str, int],
+def get_full_res_trim(
+    in_no_pad_block: BlockIndices, in_block: BlockIndices
 ) -> BlockIndices:
-    """Grow slices in `BlockIndices` to fit a larger array.
-
-    This is to undo the "stride"/decimation index changes, so
-     we can go from smaller, strided array indices to the original.
-
-    Assumes in in_block is the smaller one which has been made
-    by taking `strides` from the larger block.
-
-    Parameters
-    ----------
-    in_block : BlockIndices
-        Slices for an smaller, strided array.
-    strides : dict[str, int]
-        Decimation factor in x and y which was used for `in_block`
-        {'x': col_strides, 'y': row_strides}
-
-    Returns
-    -------
-    BlockIndices
-        Output slices for larger array
-    """
-    row_strides, col_strides = strides["y"], strides["x"]
-    row_start = in_block.row_start * row_strides
-    col_start = in_block.col_start * col_strides
-    row_stop = None if in_block.row_stop is None else in_block.row_stop * row_strides
-    col_stop = None if in_block.col_stop is None else in_block.col_stop * col_strides
-    return BlockIndices(row_start, row_stop, col_start, col_stop)
+    in_no_pad_rows, in_no_pad_cols = in_no_pad_block
+    in_rows, in_cols = in_block
+    trim_full_col = slice(
+        in_no_pad_cols.start - in_cols.start, in_no_pad_cols.stop - in_cols.stop
+    )
+    trim_full_row = slice(
+        in_no_pad_rows.start - in_rows.start, in_no_pad_rows.stop - in_rows.stop
+    )
+    return BlockIndices.from_slices(trim_full_row, trim_full_col)
 
 
 def get_slice_length(s: slice, data_size: int = 1_000_000):
@@ -177,137 +183,150 @@ def pad_block(in_block: BlockIndices, margins: tuple[int, int]) -> BlockIndices:
     -------
     BlockIndices
         Output slices for larger block
+
+    Raises
+    ------
+    ValueError
+        If the block is too small to be padded by the given margins
+        (leads to start < 0)
+
     """
     r_margin, c_margin = margins
     r_slice, c_slice = in_block
     if r_slice.start - r_margin < 0:
-        raise ValueError(f"{r_slice = }, but {r_margin = }")
+        msg = f"{r_slice = }, but {r_margin = }"
+        raise ValueError(msg)
     if c_slice.start - c_margin < 0:
-        raise ValueError(f"{c_slice = }, but {c_margin = }")
+        msg = f"{c_slice = }, but {c_margin = }"
+        raise ValueError(msg)
     return BlockIndices(
-        max(r_slice.start - r_margin, 0),
+        # max(r_slice.start - r_margin, 0),
+        r_slice.start - r_margin,
         r_slice.stop + r_margin,
-        max(c_slice.start - c_margin, 0),
+        # max(c_slice.start - c_margin, 0),
+        c_slice.start - c_margin,
         c_slice.stop + c_margin,
     )
 
 
-def compute_out_shape(
-    shape: tuple[int, int], strides: dict[str, int]
-) -> tuple[int, int]:
-    """Calculate the output size for an input `shape` and row/col `strides`.
+def dilate_block(in_block: BlockIndices, strides: Strides) -> BlockIndices:
+    """Grow slices in `BlockIndices` to fit a larger array.
+
+    This is to undo the "stride"/decimation index changes, so
+     we can go from smaller, strided array indices to the original.
+
+    Assumes in in_block is the smaller one which has been made
+    by taking `strides` from the larger block.
 
     Parameters
     ----------
-    shape : tuple[int, int]
-        Input size: (rows, cols)
-    strides : dict[str, int]
-        {"x": x strides, "y": y strides}
+    in_block : BlockIndices
+        Slices for an smaller, strided array.
+    strides : Strides or tuple[int, int]
+        Decimation factor in y and c which was used for `in_block`
 
     Returns
     -------
-    out_shape : tuple[int, int]
-        Size of output after striding
+    BlockIndices
+        Output slices for larger array
 
-    Notes
-    -----
-    If there is not a full window (of size `strides`), the end
-    will get cut off rather than padded with a partial one.
-    This should match the output size of `[dolphin.utils.take_looks][]`.
-
-    As a 1D example, in array of size 6 with `strides`=3 along this dim,
-    we could expect the pixels to be centered on indexes
-    `[1, 4]`.
-
-        [ 0  1  2   3  4  5]
-
-    So the output size would be 2, since we have 2 full windows.
-    If the array size was 7 or 8, we would have 2 full windows and 1 partial,
-    so the output size would still be 2.
     """
-    rows, cols = shape
-    rs, cs = strides["y"], strides["x"]
-    return (rows // rs, cols // cs)
+    row_strides, col_strides = strides
+    row_start = in_block.row_start * row_strides
+    col_start = in_block.col_start * col_strides
+    row_stop = None if in_block.row_stop is None else in_block.row_stop * row_strides
+    col_stop = None if in_block.col_stop is None else in_block.col_stop * col_strides
+    return BlockIndices(row_start, row_stop, col_start, col_stop)
 
 
 @dataclass
-class BlockManager:
+class StridedBlockManager:
     """Class to handle slicing/trimming overlapping blocks with strides."""
 
     arr_shape: tuple[int, int]
     """(row, col) of the full-res 2D image"""
     block_shape: tuple[int, int]
     """(row, col) size of each input block to operate on at one time"""
-    strides: dict[str, int] = field(default_factory=lambda: {"x": 1, "y": 1})
+    strides: Strides = field(default_factory=lambda: Strides(1, 1))
     """Decimation/downsampling factor in y/row and x/column direction"""
-    half_window: dict[str, int] = field(default_factory=lambda: {"x": 0, "y": 0})
+    half_window: HalfWindow = field(default_factory=lambda: HalfWindow(0, 0))
     """For multi-looking iterations, size of the (full-res) half window
     in y/row and x/column direction.
     Used to find `overlaps` between blocks and `start_offset`/`end_margin` for
     `iter_blocks`."""
 
-    def __post_init__(self):
-        self._half_rowcol = (self.half_window["y"], self.half_window["x"])
-        # The output margins that we'll skip depends on the half window and strides.
-        # The `half_window` is in full-res coordinates, so the output
-        # margin size is smaller
-        self._out_margin = (
-            self._get_out_nodata_size("y"),
-            self._get_out_nodata_size("x"),
-        )
-
-        # The amount of extra padding the input blocks need depends on the
-        # window and the strides.
-        self._in_padding = (
-            self.strides["y"] * self._get_out_nodata_size("y"),
-            self.strides["x"] * self._get_out_nodata_size("x"),
-        )
-
     def iter_blocks(
         self,
-    ) -> Iterator[tuple[BlockIndices, BlockIndices, BlockIndices, BlockIndices]]:
+    ) -> Iterator[
+        tuple[BlockIndices, BlockIndices, BlockIndices, BlockIndices, BlockIndices]
+    ]:
         """Iterate over the input/output block indices.
 
         Yields
         ------
         output_block : BlockIndices
             The current slices for the output raster
-        trimming_block : BlockIndices
-            The slices to use on a processed output block to remove nodata border pixels.
+        out_trim : BlockIndices
+            Slices to use on a processed output block to remove nodata border pixels.
             These may be relative (e.g. slice(1, -1)), not absolute like `output_block`.
         input_block : BlockIndices
             Slices used to load the full-res input data
         input_no_padding : BlockIndices
             Slices which point to the position within the full-res data without padding
+        input_trim : BlockIndices
+            Slices to use on full-res input block to remove padding from half-window.
+
         """
-        trimming_block = self.get_trimming_block()
+        out_trim = self.get_trimming_block()
         for out_block in self.iter_outputs():
-            input_no_padding = self.dilate_block(out_block)
-            input_block = self.pad_block(input_no_padding)
-            yield (out_block, trimming_block, input_block, input_no_padding)
+            input_no_padding = dilate_block(out_block, strides=self.strides)
+            input_block = pad_block(input_no_padding, margins=self.input_padding_shape)
+            input_trim = get_full_res_trim(input_no_padding, input_block)
+            yield (out_block, out_trim, input_block, input_no_padding, input_trim)
+
+    def _get_out_nodata_size(self, direction: str) -> int:
+        half_win = getattr(self.half_window, direction)
+        stride = getattr(self.strides, direction)
+        return round(half_win / stride)
 
     @property
-    def output_shape(self):
+    def output_shape(self) -> tuple[int, int]:
         return compute_out_shape(self.arr_shape, self.strides)
 
     @property
-    def out_block_shape(self):
+    def out_block_shape(self) -> tuple[int, int]:
         return compute_out_shape(self.block_shape, self.strides)
+
+    @property
+    def input_padding_shape(self) -> tuple[int, int]:
+        """Amount of extra padding the input blocks need.
+
+        Depends on the window size, and the strides.
+        """
+        return (
+            self.strides.y * self._get_out_nodata_size("y"),
+            self.strides.x * self._get_out_nodata_size("x"),
+        )
+
+    @property
+    def output_margin(self) -> tuple[int, int]:
+        """The output margins that we ignore while iterating.
+
+        Depends on the half window and strides.
+
+        The `half_window` is in full-res (input) coordinates (which would be the
+        amount to skip with no striding), so the output margin size is smaller
+        """
+        return (self._get_out_nodata_size("y"), self._get_out_nodata_size("x"))
 
     def iter_outputs(self) -> Iterator[BlockIndices]:
         yield from iter_blocks(
             arr_shape=self.output_shape,
             block_shape=self.out_block_shape,
             overlaps=(0, 0),  # We're not overlapping in the *output* grid
-            start_offsets=self._out_margin,
-            end_margin=self._out_margin,
+            start_offsets=self.output_margin,
+            end_margin=self.output_margin,
         )
-
-    def dilate_block(self, out_block: BlockIndices) -> BlockIndices:
-        return dilate_block(out_block, strides=self.strides)
-
-    def pad_block(self, unpadded_input_block: BlockIndices) -> BlockIndices:
-        return pad_block(unpadded_input_block, margins=self._in_padding)
 
     def get_trimming_block(self) -> BlockIndices:
         """Compute the slices which trim output nodata values.
@@ -328,7 +347,3 @@ class BlockManager:
         row_end = -row_nodata if row_nodata > 0 else None
         col_end = -col_nodata if col_nodata > 0 else None
         return BlockIndices(row_nodata, row_end, col_nodata, col_end)
-
-    def _get_out_nodata_size(self, direction: str) -> int:
-        nodata_size = round(self.half_window[direction] / self.strides[direction])
-        return nodata_size

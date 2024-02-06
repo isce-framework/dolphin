@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 from __future__ import annotations
 
 from pathlib import Path
@@ -7,8 +6,9 @@ from pprint import pformat
 import opera_utils
 
 import dolphin.ps
-from dolphin import __version__, _readers
+from dolphin import __version__
 from dolphin._log import get_log, log_runtime
+from dolphin.io import VRTStack
 from dolphin.utils import get_max_memory_usage
 
 from .config import PsWorkflow
@@ -31,6 +31,7 @@ def run(
         Whether to compute the looked version of the PS mask, by default False.
     debug : bool, optional
         Enable debug logging, by default False.
+
     """
     # Set the logging level for all `dolphin.` modules
     logger = get_log(name="dolphin", debug=debug, filename=cfg.log_file)
@@ -50,13 +51,12 @@ def run(
     try:
         grouped_slc_files = opera_utils.group_by_burst(cfg.cslc_file_list)
         if len(grouped_slc_files) > 1:
-            raise NotImplementedError(
-                "Multiple bursts not yet supported for PsWorkflow"
-            )
+            msg = "Multiple bursts not yet supported for PsWorkflow"
+            raise NotImplementedError(msg)
     except ValueError as e:
         # Make sure it's not some other ValueError
         if "Could not parse burst id" not in str(e):
-            raise e
+            raise
         # Otherwise, we have SLC files which are not OPERA burst files
 
     # grab the only key (either a burst, or "") and use that
@@ -64,13 +64,14 @@ def run(
 
     input_file_list = cfg.cslc_file_list
     if not input_file_list:
-        raise ValueError("No input files found")
+        msg = "No input files found"
+        raise ValueError(msg)
 
     # #############################################
     # Make a VRT pointing to the input SLC files
     # #############################################
     subdataset = cfg.input_options.subdataset
-    vrt_stack = _readers.VRTStack(
+    vrt_stack = VRTStack(
         input_file_list,
         subdataset=subdataset,
         outfile=cfg.work_directory / "slc_stack.vrt",

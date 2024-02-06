@@ -25,6 +25,7 @@ def compute_phase_diffs(phase):
     -------
     int
         Total number of jumps exceeding pi.
+
     """
     return _compute_phase_diffs(phase)
 
@@ -49,6 +50,7 @@ def rewrap_to_twopi(arr: ArrayLike) -> np.ndarray:
     -------
     np.ndarray
         Array of phases between -pi and pi
+
     """
     return np.mod(np.pi + arr, TWOPI) - np.pi
 
@@ -72,13 +74,14 @@ def gaussian_filter_nan(
         Size of filter kernel. passed into `gaussian_filter`
     mode : str, default = "constant"
         Boundary mode for `[scipy.ndimage.gaussian_filter][]`
-    **filter_kwargs : Any
+    **kwargs : Any
         Passed into `[scipy.ndimage.gaussian_filter][]`
 
     Returns
     -------
     ndarray
         Filtered version of `image`.
+
     """
     if np.sum(np.isnan(image)) == 0:
         return gaussian_filter(image, sigma=sigma, mode=mode, **kwargs)

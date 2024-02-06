@@ -82,6 +82,7 @@ def multiscale_unwrap(
         Path to output unwrapped phase file.
     conncomp_path : Path
         Path to output connected component label file.
+
     """
     import rasterio as rio
     import tophu
@@ -108,7 +109,8 @@ def multiscale_unwrap(
             )
             nodata = 0
         else:
-            raise ValueError(f"Unknown {unwrap_method = }")
+            msg = f"Unknown {unwrap_method = }"
+            raise ValueError(msg)
         return unwrap_callback, nodata
 
     # Used to track if we can redirect logs or not

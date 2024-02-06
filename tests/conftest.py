@@ -11,7 +11,7 @@ from osgeo import gdal
 
 # https://numba.readthedocs.io/en/stable/user/threading-layer.html#example-of-limiting-the-number-of-threads
 if not os.environ.get("NUMBA_NUM_THREADS"):
-    os.environ["NUMBA_NUM_THREADS"] = str(min(os.cpu_count(), 16))  # type: ignore
+    os.environ["NUMBA_NUM_THREADS"] = str(min(os.cpu_count(), 16))  # type: ignore[type-var]
 
 from opera_utils import OPERA_DATASET_NAME
 
@@ -22,7 +22,7 @@ NUM_ACQ = 30
 
 
 # https://github.com/pytest-dev/pytest/issues/667#issuecomment-112206152
-@pytest.fixture
+@pytest.fixture()
 def random():
     np.random.seed(1234)
     simulate._seed(1234)
@@ -35,8 +35,7 @@ def slc_stack():
     data = np.random.normal(0, sigma, size=shape) + 1j * np.random.normal(
         0, sigma, size=shape
     )
-    data = data.astype(np.complex64)
-    return data
+    return data.astype(np.complex64)
 
 
 @pytest.fixture()
@@ -139,7 +138,7 @@ def slc_file_list_nc_with_sds(tmp_path, slc_stack, slc_date_list):
 
 @pytest.fixture(scope="session")
 def C_truth():
-    C, truth = simulate.simulate_C(
+    C, truth = simulate.simulate_coh(
         num_acq=NUM_ACQ,
         Tau0=72,
         gamma_inf=0.95,
@@ -150,7 +149,7 @@ def C_truth():
     return C, truth
 
 
-@pytest.fixture
+@pytest.fixture()
 def slc_samples(C_truth):
     C, _ = C_truth
     ns = 11 * 11
@@ -160,7 +159,7 @@ def slc_samples(C_truth):
 # General utils on loading data/attributes
 
 
-@pytest.fixture
+@pytest.fixture()
 def raster_100_by_200(tmp_path):
     ysize, xsize = 100, 200
     # Create a test raster
@@ -176,7 +175,7 @@ def raster_100_by_200(tmp_path):
     return filename
 
 
-@pytest.fixture
+@pytest.fixture()
 def tiled_raster_100_by_200(tmp_path):
     ysize, xsize = 100, 200
     tile_size = [32, 32]
@@ -202,7 +201,7 @@ def tiled_raster_100_by_200(tmp_path):
     return filename
 
 
-@pytest.fixture
+@pytest.fixture()
 def tiled_file_list(tiled_raster_100_by_200):
     tmp_path = tiled_raster_100_by_200.parent
     outname2 = tmp_path / "20220102test.tif"
@@ -222,7 +221,7 @@ def raster_10_by_20(tmp_path, tiled_raster_100_by_200):
     return outname2
 
 
-@pytest.fixture
+@pytest.fixture()
 def raster_with_nan(tmp_path, tiled_raster_100_by_200):
     # Raster with one nan pixel
     start_arr = load_gdal(tiled_raster_100_by_200)
@@ -238,7 +237,7 @@ def raster_with_nan(tmp_path, tiled_raster_100_by_200):
     return output_name
 
 
-@pytest.fixture
+@pytest.fixture()
 def raster_with_nan_block(tmp_path, tiled_raster_100_by_200):
     # One full block of 32x32 is nan
     output_name = tmp_path / "with_nans.tif"
@@ -253,7 +252,7 @@ def raster_with_nan_block(tmp_path, tiled_raster_100_by_200):
     return output_name
 
 
-@pytest.fixture
+@pytest.fixture()
 def raster_with_zero_block(tmp_path, tiled_raster_100_by_200):
     # One full block of 32x32 is nan
     output_name = tmp_path / "with_zeros.tif"
@@ -406,17 +405,15 @@ def create_static_layer_h5(filename):
 @pytest.fixture()
 def weather_model_files():
     data_dir = Path("tests/data")
-    with open(data_dir / "weather_model_files.txt", "r") as f:
-        file_list = f.readlines()
-    return file_list
+    with open(data_dir / "weather_model_files.txt") as f:
+        return f.readlines()
 
 
 @pytest.fixture()
 def tec_files():
     data_dir = Path("tests/data")
-    with open(data_dir / "tec_files.txt", "r") as f:
-        file_list = f.readlines()
-    return file_list
+    with open(data_dir / "tec_files.txt") as f:
+        return f.readlines()
 
 
 @pytest.fixture()

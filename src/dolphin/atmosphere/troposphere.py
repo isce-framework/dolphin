@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import datetime
-import os
 from dataclasses import dataclass
 from os import fspath
 from pathlib import Path
@@ -100,7 +99,8 @@ def estimate_tropospheric_delay(
     troposphere_files : Mapping[tuple[datetime.datetime], Sequence[Filename]]
         Dictionary of troposphere files indexed by date.
     geom_files : dict[str, Path]
-        Dictionary of geometry files with height and incidence angle/(los_east and los_north)..
+        Dictionary of geometry files with height and incidence angle, or
+        los_east and los_north.
     output_dir : Path
         Output directory.
     tropo_package : str
@@ -113,6 +113,7 @@ def estimate_tropospheric_delay(
         the EPSG code of the input data
     bounds : Bbox
         Output bounds.
+
     """
     # Read geogrid data
     xsize, ysize = io.get_raster_xysize(ifg_file_list[0])
@@ -131,10 +132,7 @@ def estimate_tropospheric_delay(
     first_date = next(iter(slc_files))
     wavelength = oput.get_radar_wavelength(slc_files[first_date][0])
 
-    if tropo_package.lower() == "pyaps":
-        tropo_run = compute_pyaps
-    else:
-        tropo_run = compute_raider
+    tropo_run = compute_pyaps if tropo_package.lower() == "pyaps" else compute_raider
 
     # comb is short for the summation of wet and dry components
     if (tropo_delay_type.value == "hydrostatic") and (tropo_package == "raider"):
@@ -144,32 +142,27 @@ def estimate_tropospheric_delay(
     else:
         delay_type = tropo_delay_type.value
 
-    output_tropo = output_dir / "troposphere"
-    output_tropo.mkdir(exist_ok=True)
+    output_tropo_dir = output_dir / "troposphere"
+    output_tropo_dir.mkdir(exist_ok=True)
     for ifg in ifg_file_list:
         ref_date, sec_date = get_dates(ifg)
 
-        tropo_delay_product_name = (
-            fspath(output_tropo)
-            + f"/{_format_date_pair(ref_date, sec_date)}_tropoDelay_pyaps_{tropo_model.value}_LOS_{delay_type}.tif"
-        )
+        date_str = _format_date_pair(ref_date, sec_date)
+        name = f"{date_str}_tropoDelay_pyaps_{tropo_model.value}_LOS_{delay_type}.tif"
+        tropo_delay_product_path = output_tropo_dir / name
 
-        if Path(tropo_delay_product_name).exists():
-            logger.info(
-                f"Tropospheric correction for interferogram {_format_date_pair(ref_date, sec_date)} already exists, skipping"
-            )
+        if tropo_delay_product_path.exists():
+            logger.info(f"{tropo_delay_product_path} exists, skipping")
             continue
 
         reference_date = (ref_date,)
         secondary_date = (sec_date,)
 
         if (
-            reference_date not in troposphere_files.keys()
-            or secondary_date not in troposphere_files.keys()
+            reference_date not in troposphere_files
+            or secondary_date not in troposphere_files
         ):
-            logger.warning(
-                f"Weather-model files do not exist for interferogram {_format_date_pair(ref_date, sec_date)}, skipping"
-            )
+            logger.warning(f"Weather-model files do not exist for {date_str}, skipping")
             continue
 
         delay_parameters = DelayParams(
@@ -197,7 +190,7 @@ def estimate_tropospheric_delay(
         # Write 2D tropospheric correction layer to disc
         io.write_arr(
             arr=tropo_delay_2d,
-            output_name=tropo_delay_product_name,
+            output_name=tropo_delay_product_path,
             like_filename=ifg,
         )
 
@@ -216,6 +209,7 @@ def compute_pyaps(delay_parameters: DelayParams) -> np.ndarray:
     -------
     np.ndarray
         tropospheric delay datacube.
+
     """
     import pyaps3 as pa
 
@@ -274,9 +268,7 @@ def compute_pyaps(delay_parameters: DelayParams) -> np.ndarray:
     # Tropo delay datacube
     tropo_delay_datacube = np.stack(tropo_delay_datacube_list)
     # Create a maksed datacube that excludes the NaN values
-    tropo_delay_datacube_masked = np.ma.masked_invalid(tropo_delay_datacube)
-
-    return tropo_delay_datacube_masked
+    return np.ma.masked_invalid(tropo_delay_datacube)
 
 
 def compute_raider(delay_parameters: DelayParams) -> np.ndarray:
@@ -291,6 +283,7 @@ def compute_raider(delay_parameters: DelayParams) -> np.ndarray:
     -------
     np.ndarray
         tropospheric delay datacube.
+
     """
     from RAiDER.delay import tropo_delay as raider_tropo_delay
     from RAiDER.llreader import BoundingBox
@@ -366,9 +359,7 @@ def compute_raider(delay_parameters: DelayParams) -> np.ndarray:
     pnts = np.stack((hv.flatten(), yv.flatten(), xv.flatten()), axis=-1)
 
     # Interpolate
-    tropo_delay_datacube = tropo_delay_interpolator(pnts).reshape(hv.shape)
-
-    return tropo_delay_datacube
+    return tropo_delay_interpolator(pnts).reshape(hv.shape)
 
 
 def compute_2d_delay(
@@ -393,8 +384,9 @@ def compute_2d_delay(
     -------
     np.ndarray
         Computed 2D delay.
+
     """
-    dem_file = geo_files["height"]
+    dem_file = Path(geo_files["height"])
 
     ysize, xsize = delay_parameters.shape
     x_origin, x_res, x_, y_origin, y_, y_res = delay_parameters.geotransform
@@ -423,15 +415,16 @@ def compute_2d_delay(
         outputBoundsSRS=crs,
         resampleAlg="near",
     )
+    # Use the same suffix for warping
     target_ds = gdal.Warp(
-        os.path.abspath(fspath(dem_file) + ".temp"),
-        os.path.abspath(fspath(dem_file)),
+        "",  # Output to memory to read
+        fspath(dem_file.resolve()),
         options=options,
     )
 
     dem = target_ds.ReadAsArray()
 
-    if "los_east" in geo_files.keys():
+    if "los_east" in geo_files:
         # ISCE3 geocoded products
         los_east = io.load_gdal(geo_files["los_east"])
         los_north = io.load_gdal(geo_files["los_north"])

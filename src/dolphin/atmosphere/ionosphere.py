@@ -51,13 +51,15 @@ def estimate_ionospheric_delay(
     tec_files : Dict[datetime.date, list[Filename]]
         Dictionary of TEC files indexed by date.
     geom_files : list[Path]
-        Dictionary of geometry files with height and incidence angle/(los_east and los_north).
+        Dictionary of geometry files with height and incidence angle, or
+        los_east and los_north.
     output_dir : Path
         Output directory.
     epsg : int
         the EPSG code of the input data
     bounds : Bbox
         Output bounds.
+
     """
     if epsg != 4326:
         left, bottom, right, top = transform_bounds(
@@ -71,7 +73,7 @@ def estimate_ionospheric_delay(
     lonc = (left + right) / 2
 
     # Read the incidence angle
-    if "lost_east" in geom_files.keys():
+    if "lost_east" in geom_files:
         # ISCE3 geocoded products
         los_east = io.load_gdal(geom_files["los_east"])
         los_north = io.load_gdal(geom_files["los_north"])
@@ -101,7 +103,8 @@ def estimate_ionospheric_delay(
 
         if Path(iono_delay_product_name).exists():
             logger.info(
-                f"Tropospheric correction for interferogram {_format_date_pair(ref_date, sec_date)} already exists, skipping"
+                "Tropospheric correction for interferogram "
+                f"{_format_date_pair(ref_date, sec_date)} already exists, skipping"
             )
             continue
 
@@ -142,7 +145,7 @@ def estimate_ionospheric_delay(
 
 
 def incidence_angle_ground_to_iono(inc_angle: ArrayLike, iono_height: float = 450e3):
-    """Calibrate the incidence angle of LOS vector on the ground surface to the ionosphere shell.
+    """Calibrate incidence angle on the ground surface to the ionosphere shell.
 
     Equation (11) in Yunjun et al. (2022, TGRS)
 
@@ -158,6 +161,7 @@ def incidence_angle_ground_to_iono(inc_angle: ArrayLike, iono_height: float = 45
     -------
     np.ndarray
         incidence angle on the iono shell in degrees
+
     """
     # convert degrees to radians
     inc_angle_rad = inc_angle * np.pi / 180
@@ -190,13 +194,12 @@ def read_zenith_tec(
     -------
     float
         zenith TEC of the scene center in TECU.
+
     """
     time = oput.get_zero_doppler_time(slc_file)
     utc_seconds = time.hour * 3600.0 + time.minute * 60.0 + time.second
 
-    vtec = get_ionex_value(tec_file=tec_file, utc_sec=utc_seconds, lat=lat, lon=lon)
-
-    return vtec
+    return get_ionex_value(tec_file=tec_file, utc_sec=utc_seconds, lat=lat, lon=lon)
 
 
 def vtec_to_range_delay(
@@ -221,6 +224,7 @@ def vtec_to_range_delay(
     -------
     np.ndarray
         predicted range delay in meters
+
     """
     # ignore no-data value in inc_angle
     if isinstance(inc_angle, np.ndarray):
@@ -269,6 +273,7 @@ def get_ionex_value(
     -------
     float
         vertical TEC value in TECU
+
     """
     # time info
     utc_min = utc_sec / 60.0
@@ -327,6 +332,7 @@ def read_ionex(
         1D np.ndarray in size of (num_lon), longitude in degrees
     tec_maps: np.ndarray
         3D np.ndarray in size of (num_map, num_lat, num_lon), vertical TEC in TECU
+
     """
 
     def parse_map(tec_map, key="TEC", exponent=-1):

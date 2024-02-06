@@ -7,8 +7,9 @@ from typing import Optional, Sequence, cast
 import numpy as np
 from opera_utils import get_dates, make_nodata_mask
 
-from dolphin import _readers, interferogram, ps, stack
+from dolphin import interferogram, ps, stack
 from dolphin._log import get_log, log_runtime
+from dolphin.io import VRTStack
 
 from . import InterferogramNetwork, InterferogramNetworkType, sequential
 from .config import DisplacementWorkflow
@@ -40,6 +41,7 @@ def run(
         In the case of sequential phase linking, this is the average of all ministacks.
     ps_looked_file : Path
         The multilooked boolean persistent scatterer file.
+
     """
     logger = get_log(debug=debug)
     work_dir = cfg.work_directory
@@ -51,7 +53,7 @@ def run(
     # Make a VRT pointing to the input SLC files
     # #############################################
     subdataset = cfg.input_options.subdataset
-    vrt_stack = _readers.VRTStack(
+    vrt_stack = VRTStack(
         input_file_list,
         subdataset=subdataset,
         outfile=cfg.work_directory / "slc_stack.vrt",
@@ -160,8 +162,8 @@ def run(
             shp_alpha=cfg.phase_linking.shp_alpha,
             shp_nslc=shp_nslc,
             block_shape=cfg.worker_settings.block_shape,
-            n_workers=cfg.worker_settings.n_workers,
-            gpu_enabled=cfg.worker_settings.gpu_enabled,
+            # n_workers=cfg.worker_settings.n_workers,
+            # gpu_enabled=cfg.worker_settings.gpu_enabled,
         )
         comp_slc_file = comp_slcs[-1]
 
@@ -219,6 +221,7 @@ def create_ifgs(
     NotImplementedError
         Currently raised for `InterferogramNetworkType`s besides single reference
         or max-bandwidth
+
     """
     ifg_dir = interferogram_network._directory
     if not dry_run:
@@ -238,8 +241,9 @@ def create_ifgs(
             verify_slcs=not dry_run,
         )
         if len(network.ifg_list) == 0:
-            raise ValueError("No interferograms were created")
-        ifg_file_list = [ifg.path for ifg in network.ifg_list]  # type: ignore
+            msg = "No interferograms were created"
+            raise ValueError(msg)
+        ifg_file_list = [ifg.path for ifg in network.ifg_list]  # type: ignore[misc]
         assert all(p is not None for p in ifg_file_list)
 
         return ifg_file_list
@@ -267,7 +271,7 @@ def create_ifgs(
     # For other networks, we have to combine other ones formed from the `Network`
     if network_type == InterferogramNetworkType.MAX_BANDWIDTH:
         max_b = interferogram_network.max_bandwidth
-        # Max bandwidth is easier because we just take the first `max_b` from `phase_linked_slcs`
+        # Max bandwidth is easier: take the first `max_b` from `phase_linked_slcs`
         # (which are the (ref_date, ...) interferograms),...
         ifgs_ref_date = ifg_file_list[:max_b]
         # ...then combine it with the results from the `Network`
@@ -287,10 +291,11 @@ def create_ifgs(
         return ifgs_ref_date + ifgs_others
 
     # Other types: TODO
-    raise NotImplementedError(
+    msg = (
         "Only single-reference/max-bandwidth interferograms are supported when"
         " starting with compressed SLCs"
     )
+    raise NotImplementedError(msg)
     # Say we had inputs like:
     #  compressed_2_3 , slc_4, slc_5, slc_6
     # but the compressed one was referenced to "1"
@@ -331,8 +336,7 @@ def _get_input_dates(
     # TODO: this is a bit hacky, perhaps we can make this some input option
     # so that the user can specify how to get dates from their files (or even
     # directly pass in dates?)
-    input_dates = [
+    return [
         dates[:1] if not is_comp else dates
         for dates, is_comp in zip(input_dates, is_compressed)
     ]
-    return input_dates

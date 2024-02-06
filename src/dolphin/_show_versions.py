@@ -24,6 +24,7 @@ def _get_sys_info() -> dict[str, str]:
     -------
     dict
         system and Python version information
+
     """
     return {
         "python": sys.version.replace("\n", " "),
@@ -53,17 +54,17 @@ def _get_opera_info() -> dict[str, Optional[str]]:
     -------
     dict
         dolphin / opera module information
+
     """
     import opera_utils
 
-    blob = {
+    return {
         "dolphin": dolphin.__version__,
         "opera_utils": opera_utils.__version__,
         # optionals
         "isce3": _get_version("isce3"),
         "tophu": _get_version("tophu"),
     }
-    return blob
 
 
 def _get_deps_info() -> dict[str, Optional[str]]:
@@ -73,10 +74,12 @@ def _get_deps_info() -> dict[str, Optional[str]]:
     -------
     dict:
         version information on relevant Python libraries
+
     """
     deps = [
         "numpy",
         "numba",
+        "jax",
         "osgeo.gdal",
         "h5py",
         "ruamel_yaml",
@@ -93,10 +96,11 @@ def _get_gpu_info() -> dict[str, Optional[str]]:
     -------
     dict:
         version information on relevant Python libraries
+
     """
     from dolphin.utils import gpu_is_available
 
-    return {"cupy": _get_version("cupy"), "gpu_is_available": str(gpu_is_available())}
+    return {"jax": _get_version("jax"), "gpu_is_available": str(gpu_is_available())}
 
 
 def _print_info_dict(info_dict: dict) -> None:
@@ -111,6 +115,7 @@ def show_versions() -> None:
     Examples
     --------
     > python -c "import dolphin; dolphin.show_versions()"
+
     """
     from dolphin.utils import gpu_is_available
 

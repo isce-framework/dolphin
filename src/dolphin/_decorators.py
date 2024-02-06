@@ -64,6 +64,7 @@ def atomic_output(
     The output at `output_arg` *must not* exist already, or the decorator will error
     (though if `is_dir=True`, it is allowed to be an empty directory).
     The function being decorated *must* be called with keyword args for `output_arg`.
+
     """
 
     def decorator(func: Callable) -> Callable:
@@ -73,10 +74,11 @@ def atomic_output(
             if kwargs.get(output_arg):
                 final_out_name = kwargs[output_arg]
             else:
-                raise FileExistsError(
+                msg = (
                     f"Argument {output_arg} not passed to function {func.__name__}:"
                     f" {kwargs}"
                 )
+                raise FileExistsError(msg)
 
             final_path = Path(final_out_name)
             # Make sure the desired final output doesn't already exist
@@ -139,9 +141,9 @@ def _raise_if_exists(final_path: Path, is_dir: bool, overwrite: bool):
             except OSError as e:
                 err_msg = str(e)
                 if "Directory not empty" in err_msg:
-                    raise FileExistsError(msg)
+                    raise FileExistsError(msg) from e
                 else:
                     # Some other error we don't know
-                    raise e
+                    raise
         else:
             raise FileExistsError(msg)

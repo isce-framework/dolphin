@@ -13,11 +13,15 @@ from typing import Mapping, Sequence
 from opera_utils import group_by_burst, group_by_date
 
 from dolphin import __version__
-from dolphin._background import DummyProcessPoolExecutor
 from dolphin._log import get_log, log_runtime
 from dolphin.atmosphere import estimate_ionospheric_delay, estimate_tropospheric_delay
 from dolphin.io import get_raster_bounds, get_raster_crs
-from dolphin.utils import get_max_memory_usage, prepare_geometry, set_num_threads
+from dolphin.utils import (
+    DummyProcessPoolExecutor,
+    get_max_memory_usage,
+    prepare_geometry,
+    set_num_threads,
+)
 
 from . import stitching_bursts, unwrapping, wrapped_phase
 from ._utils import _create_burst_cfg, _remove_dir_if_empty
@@ -40,6 +44,7 @@ def run(
         for controlling the workflow.
     debug : bool, optional
         Enable debug logging, by default False.
+
     """
     # Set the logging level for all `dolphin.` modules
     logger = get_log(name="dolphin", debug=debug, filename=cfg.log_file)
@@ -52,7 +57,7 @@ def run(
     except ValueError as e:
         # Make sure it's not some other ValueError
         if "Could not parse burst id" not in str(e):
-            raise e
+            raise
         # Otherwise, we have SLC files which are not OPERA burst files
         grouped_slc_files = {"": cfg.cslc_file_list}
 
@@ -111,7 +116,7 @@ def run(
     else:
         # grab the only key (either a burst, or "") and use that
         cfg.create_dir_tree()
-        b = list(grouped_slc_files.keys())[0]
+        b = next(iter(grouped_slc_files.keys()))
         wrapped_phase_cfgs = [(b, cfg)]
 
     ifg_file_list: list[Path] = []
@@ -216,7 +221,7 @@ def run(
         )
 
         # Troposphere
-        if "height" not in frame_geometry_files.keys():
+        if "height" not in frame_geometry_files:
             logger.warning(
                 "DEM file is not given, skip estimating tropospheric corrections..."
             )
