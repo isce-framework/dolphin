@@ -490,7 +490,9 @@ def flatten(list_of_lists: Iterable[Iterable[Any]]) -> chain[Any]:
     return chain.from_iterable(list_of_lists)
 
 
-def format_date_pair(start: DateOrDatetime, end: DateOrDatetime, fmt="%Y%m%d") -> str:
+def format_date_pair(
+    start: DateOrDatetime, end: DateOrDatetime, fmt: str = "%Y%m%d"
+) -> str:
     """Format a date pair into a string.
 
     Parameters
@@ -500,7 +502,8 @@ def format_date_pair(start: DateOrDatetime, end: DateOrDatetime, fmt="%Y%m%d") -
     end : DateOrDatetime
         Second date or datetime
     fmt : str, optional
-        `datetime` formatter pattern, by default "%Y%m%d"
+        `datetime` formatter pattern.
+        Default = "%Y%m%d"
 
     Returns
     -------
@@ -508,7 +511,30 @@ def format_date_pair(start: DateOrDatetime, end: DateOrDatetime, fmt="%Y%m%d") -
         Formatted date pair.
 
     """
-    return f"{start.strftime(fmt)}_{end.strftime(fmt)}"
+    return format_dates(start, end, fmt=fmt, sep="_")
+
+
+def format_dates(*dates: DateOrDatetime, fmt: str = "%Y%m%d", sep: str = "_") -> str:
+    """Format a date pair into a string.
+
+    Parameters
+    ----------
+    *dates : DateOrDatetime
+        Sequence of date/datetimes to format
+    fmt : str, optional
+        `datetime` formatter pattern.
+        Default = "%Y%m%d"
+    sep : str, optional
+        string separator between dates.
+        Default = "_"
+
+    Returns
+    -------
+    str
+        Formatted date pair.
+
+    """
+    return sep.join((d.strftime(fmt)) for d in dates)
 
 
 # Keep alias for now, but deprecate

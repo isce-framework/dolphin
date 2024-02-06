@@ -17,7 +17,7 @@ from scipy import interpolate
 from dolphin import io
 from dolphin._log import get_log
 from dolphin._types import Bbox, Filename
-from dolphin.utils import _format_date_pair
+from dolphin.utils import format_date_pair
 
 logger = get_log(__name__)
 
@@ -98,13 +98,13 @@ def estimate_ionospheric_delay(
 
         iono_delay_product_name = (
             fspath(output_iono)
-            + f"/{_format_date_pair(ref_date, sec_date)}_ionoDelay.tif"
+            + f"/{format_date_pair(ref_date, sec_date)}_ionoDelay.tif"
         )
 
         if Path(iono_delay_product_name).exists():
             logger.info(
                 "Tropospheric correction for interferogram "
-                f"{_format_date_pair(ref_date, sec_date)} already exists, skipping"
+                f"{format_date_pair(ref_date, sec_date)} already exists, skipping"
             )
             continue
 

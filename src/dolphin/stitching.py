@@ -87,7 +87,7 @@ def merge_by_date(
     for dates, cur_images in grouped_images.items():
         logger.info(f"{dates}: Stitching {len(cur_images)} images.")
         if len(dates) == 2:
-            date_str = utils._format_date_pair(*dates)
+            date_str = utils.format_date_pair(*dates)
         elif len(dates) == 1:
             date_str = dates[0].strftime(file_date_fmt)
         else:

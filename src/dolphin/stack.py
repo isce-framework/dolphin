@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from dolphin._log import get_log
 from dolphin._types import DateOrDatetime, Filename
 from dolphin.io import DEFAULT_DATETIME_FORMAT
-from dolphin.utils import _format_date_pair
+from dolphin.utils import format_date_pair
 
 logger = get_log(__name__)
 
@@ -107,7 +107,7 @@ class BaseStack(BaseModel):
 
         Includes both compressed + normal SLCs in the range.
         """
-        return _format_date_pair(*self.full_date_range, fmt=self.file_date_fmt)
+        return format_date_pair(*self.full_date_range, fmt=self.file_date_fmt)
 
     @property
     def first_real_slc_idx(self) -> int:
@@ -126,7 +126,7 @@ class BaseStack(BaseModel):
     @property
     def real_slc_date_range_str(self) -> str:
         """Date range of the real SLCs in the ministack."""
-        return _format_date_pair(*self.real_slc_date_range, fmt=self.file_date_fmt)
+        return format_date_pair(*self.real_slc_date_range, fmt=self.file_date_fmt)
 
     @property
     def compressed_slc_file_list(self) -> list[Filename]:
@@ -141,7 +141,7 @@ class BaseStack(BaseModel):
         ]
 
     def get_date_str_list(self) -> list[str]:
-        """Get a formated string for each date/date tuple in the ministack."""
+        """Get a formatted string for each date/date tuple in the ministack."""
         date_strs: list[str] = []
         for d in self.dates:
             if len(d) == 1:
@@ -149,7 +149,7 @@ class BaseStack(BaseModel):
                 s = d[0].strftime(self.file_date_fmt)
             else:
                 # Compressed SLCs will have 2 dates in name marking the start / end
-                s = _format_date_pair(d[0], d[1], fmt=self.file_date_fmt)
+                s = format_date_pair(d[0], d[1], fmt=self.file_date_fmt)
             date_strs.append(s)
         return date_strs
 
@@ -239,7 +239,7 @@ class CompressedSlcInfo(BaseModel):
     @property
     def filename(self) -> str:
         """The filename of the compressed SLC for this ministack."""
-        date_str = _format_date_pair(*self.real_date_range, fmt=self.file_date_fmt)
+        date_str = format_date_pair(*self.real_date_range, fmt=self.file_date_fmt)
         return f"compressed_{date_str}.tif"
 
     @property
@@ -397,7 +397,7 @@ class MiniStackPlanner(BaseStack):
                 reference_idx = 0
 
             # Make the current ministack output folder using the start/end dates
-            new_date_str = _format_date_pair(
+            new_date_str = format_date_pair(
                 cur_dates[0][0], cur_dates[-1][-1], fmt=self.file_date_fmt
             )
             cur_output_folder = self.output_folder / new_date_str

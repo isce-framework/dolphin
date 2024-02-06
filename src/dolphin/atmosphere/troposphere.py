@@ -17,7 +17,7 @@ from scipy.interpolate import RegularGridInterpolator
 from dolphin import io
 from dolphin._log import get_log
 from dolphin._types import Bbox, Filename, TropoModel, TropoType
-from dolphin.utils import _format_date_pair
+from dolphin.utils import format_date_pair
 
 logger = get_log(__name__)
 
@@ -147,7 +147,7 @@ def estimate_tropospheric_delay(
     for ifg in ifg_file_list:
         ref_date, sec_date = get_dates(ifg)
 
-        date_str = _format_date_pair(ref_date, sec_date)
+        date_str = format_date_pair(ref_date, sec_date)
         name = f"{date_str}_tropoDelay_pyaps_{tropo_model.value}_LOS_{delay_type}.tif"
         tropo_delay_product_path = output_tropo_dir / name
 
@@ -180,7 +180,7 @@ def estimate_tropospheric_delay(
             secondary_file=troposphere_files[secondary_date],
             reference_time=oput.get_zero_doppler_time(slc_files[reference_date][0]),
             secondary_time=oput.get_zero_doppler_time(slc_files[secondary_date][0]),
-            interferogram=_format_date_pair(ref_date, sec_date),
+            interferogram=format_date_pair(ref_date, sec_date),
         )
 
         delay_datacube = tropo_run(delay_parameters)

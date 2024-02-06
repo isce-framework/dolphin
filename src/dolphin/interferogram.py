@@ -200,7 +200,7 @@ class VRTInterferogram(BaseModel, extra="allow"):
             self.outdir = utils._get_path_from_gdal_str(self.ref_slc).parent
         assert self.ref_date is not None
         assert self.sec_date is not None
-        date_str = utils._format_date_pair(
+        date_str = utils.format_date_pair(
             self.ref_date, self.sec_date, fmt=self.date_format
         )
         path = self.outdir / (date_str + DEFAULT_SUFFIX)
@@ -741,7 +741,7 @@ def convert_pl_to_ifg(
     # The phase_linked_slc will be named with the secondary date.
     # Make the output from that, plus the given reference date
     secondary_date = get_dates(phase_linked_slc)[-1]
-    date_str = utils._format_date_pair(reference_date, secondary_date)
+    date_str = utils.format_date_pair(reference_date, secondary_date)
     out_name = Path(output_dir) / f"{date_str}.int.vrt"
     if dry_run:
         return out_name
