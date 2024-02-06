@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import glob
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
@@ -364,7 +364,8 @@ class WorkflowBase(YamlModel):
         description="Path to output log file (in addition to logging to `stderr`).",
     )
     creation_time_utc: datetime = Field(
-        default_factory=datetime.utcnow, description="Time the config file was created"
+        default_factory=lambda: datetime.now(timezone.utc),
+        description="Time the config file was created",
     )
 
     model_config = ConfigDict(extra="allow")

@@ -9,9 +9,9 @@ from opera_utils import group_by_burst
 from dolphin.utils import flatten
 from dolphin.workflows import config, displacement
 
-# 'Grid size 49 will likely result in GPU under-utilization due to low occupancy.'
 pytestmark = pytest.mark.filterwarnings(
-    "ignore::numba.core.errors.NumbaPerformanceWarning"
+    "ignore::rasterio.errors.NotGeoreferencedWarning",
+    "ignore:.*io.FileIO.*:pytest.PytestUnraisableExceptionWarning",
 )
 
 
