@@ -229,6 +229,11 @@ class CompressedSlcInfo(BaseModel):
         return self
 
     @property
+    def dates(self) -> tuple[DateOrDatetime, DateOrDatetime, DateOrDatetime]:
+        """Alias for the (reference, start, end) date triplet."""
+        return (self.reference_date, self.start_date, self.end_date)
+
+    @property
     def real_date_range(self) -> tuple[DateOrDatetime, DateOrDatetime]:
         """Date range of the real SLCs in the ministack."""
         return self.start_date, self.end_date
@@ -236,8 +241,7 @@ class CompressedSlcInfo(BaseModel):
     @property
     def filename(self) -> str:
         """Create filename using a template with '{date_str}` in the name."""
-        start, end = self.real_date_range
-        date_str = format_dates(self.reference_date, start, end, fmt=self.file_date_fmt)
+        date_str = format_dates(*self.dates, fmt=self.file_date_fmt)
         return self.filename_template.format(date_str=date_str)
 
     @property
@@ -288,6 +292,9 @@ class CompressedSlcInfo(BaseModel):
     def from_file_metadata(cls, filename: Filename) -> CompressedSlcInfo:
         """Try to parse the CCSLC metadata from `filename`."""
         from dolphin.io import get_raster_metadata
+
+        if not Path(filename).exists():
+            raise FileNotFoundError(filename)
 
         domains = ["DOLPHIN", ""]
         for domain in domains:
@@ -341,8 +348,8 @@ class MiniStackInfo(BaseStack):
 
         return CompressedSlcInfo(
             reference_date=self.reference_date,
-            start_date=real_slc_dates[0],
-            end_date=real_slc_dates[-1],
+            start_date=real_slc_dates[0][0],
+            end_date=real_slc_dates[-1][0],
             real_slc_file_list=real_slc_files,
             real_slc_dates=real_slc_dates,
             compressed_slc_file_list=comp_slc_files,
@@ -367,8 +374,12 @@ class MiniStackPlanner(BaseStack):
         # Start of with any compressed SLCs that are passed in
         compressed_slc_infos: list[CompressedSlcInfo] = []
         for f in self.compressed_slc_file_list:
-            # Note: these must actually exist to be used!
-            compressed_slc_infos.append(CompressedSlcInfo.from_file_metadata(f))
+            try:
+                # Note: these must actually exist to be used!
+                compressed_slc_infos.append(CompressedSlcInfo.from_file_metadata(f))
+            except FileNotFoundError:
+                # If they're not real, fall back to just using the file triplet
+                compressed_slc_infos.append(CompressedSlcInfo.from_filename(f))
 
         # Solve each ministack using current chunk (and the previous compressed SLCs)
         ministack_starts = range(
@@ -388,8 +399,7 @@ class MiniStackPlanner(BaseStack):
             combined_files = cur_comp_slc_files + cur_files
 
             combined_dates = [
-                c.real_date_range
-                for c in compressed_slc_infos[-self.max_num_compressed :]
+                c.dates for c in compressed_slc_infos[-self.max_num_compressed :]
             ] + cur_dates
 
             num_ccslc = len(cur_comp_slc_files)
