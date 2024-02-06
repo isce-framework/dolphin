@@ -41,6 +41,7 @@ jobs:
               - conda-forge
       - name: Install
         run: |
+          pip install opera-utils
           pip install --no-deps .
       - name: Install test dependencies
         run: |
