@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 from __future__ import annotations
 
+import json
 import logging
 import warnings
 from datetime import date, datetime
@@ -135,7 +136,7 @@ class BaseStack(BaseModel):
     def get_date_str_list(self) -> list[str]:
         """Get a formatted string for each date/date tuple in the ministack."""
         # Should either be like YYYYMMDD, or YYYYMMDD_YYYYMMDD_YYYYMMDD
-        return [format_dates(*d, fmr=self.file_date_fmt) for d in self.dates]
+        return [format_dates(*d, fmt=self.file_date_fmt) for d in self.dates]
 
     def __rich_repr__(self):
         yield "file_list", self.file_list
@@ -180,6 +181,10 @@ class CompressedSlcInfo(BaseModel):
         DEFAULT_DATETIME_FORMAT,
         description="Format string for the dates/datetimes in the ministack filenames.",
     )
+    filename_template: str = Field(
+        "compressed_{date_str}.tif",
+        description="Template for creating filenames from the CCSLC date triplet.",
+    )
     output_folder: Path = Field(
         Path(),
         description="Folder/location where ministack will write outputs to.",
@@ -189,6 +194,8 @@ class CompressedSlcInfo(BaseModel):
     @classmethod
     def _untuple_dates(cls, v):
         """Make the dates not be tuples/lists of datetimes."""
+        if v is None:
+            return v
         out = []
         for item in v:
             if hasattr(item, "__iter__"):
@@ -208,7 +215,7 @@ class CompressedSlcInfo(BaseModel):
 
     @model_validator(mode="after")
     def _check_lengths(self):
-        if not self.real_slc_dates or not self.real_slc_file_list:
+        if self.real_slc_dates is None or self.real_slc_file_list is None:
             return self
         rlen = len(self.real_slc_file_list)
         clen = len(self.real_slc_dates)
@@ -224,12 +231,14 @@ class CompressedSlcInfo(BaseModel):
     @property
     def real_date_range(self) -> tuple[DateOrDatetime, DateOrDatetime]:
         """Date range of the real SLCs in the ministack."""
-        return (self.real_slc_dates[0], self.real_slc_dates[-1])
+        return self.start_date, self.end_date
 
-    def make_filename(self, template: str = "compressed_{date_str}.tif") -> str:
+    @property
+    def filename(self) -> str:
         """Create filename using a template with '{date_str}` in the name."""
-        date_str = format_dates(self, fmt=self.file_date_fmt)
-        return template.format(date_str=date_str)
+        start, end = self.real_date_range
+        date_str = format_dates(self.reference_date, start, end, fmt=self.file_date_fmt)
+        return self.filename_template.format(date_str=date_str)
 
     @property
     def path(self) -> Path:
@@ -278,8 +287,6 @@ class CompressedSlcInfo(BaseModel):
     @classmethod
     def from_file_metadata(cls, filename: Filename) -> CompressedSlcInfo:
         """Try to parse the CCSLC metadata from `filename`."""
-        import json
-
         from dolphin.io import get_raster_metadata
 
         domains = ["DOLPHIN", ""]
