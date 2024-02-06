@@ -59,6 +59,7 @@ def estimate_ionospheric_delay(
         the EPSG code of the input data
     bounds : Bbox
         Output bounds.
+
     """
     if epsg != 4326:
         left, bottom, right, top = transform_bounds(
@@ -160,6 +161,7 @@ def incidence_angle_ground_to_iono(inc_angle: ArrayLike, iono_height: float = 45
     -------
     np.ndarray
         incidence angle on the iono shell in degrees
+
     """
     # convert degrees to radians
     inc_angle_rad = inc_angle * np.pi / 180
@@ -192,6 +194,7 @@ def read_zenith_tec(
     -------
     float
         zenith TEC of the scene center in TECU.
+
     """
     time = oput.get_zero_doppler_time(slc_file)
     utc_seconds = time.hour * 3600.0 + time.minute * 60.0 + time.second
@@ -221,6 +224,7 @@ def vtec_to_range_delay(
     -------
     np.ndarray
         predicted range delay in meters
+
     """
     # ignore no-data value in inc_angle
     if isinstance(inc_angle, np.ndarray):
@@ -269,6 +273,7 @@ def get_ionex_value(
     -------
     float
         vertical TEC value in TECU
+
     """
     # time info
     utc_min = utc_sec / 60.0
@@ -327,6 +332,7 @@ def read_ionex(
         1D np.ndarray in size of (num_lon), longitude in degrees
     tec_maps: np.ndarray
         3D np.ndarray in size of (num_map, num_lat, num_lon), vertical TEC in TECU
+
     """
 
     def parse_map(tec_map, key="TEC", exponent=-1):

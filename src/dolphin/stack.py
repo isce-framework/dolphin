@@ -259,6 +259,7 @@ class CompressedSlcInfo(BaseModel):
         output_file : Optional[Filename], optional
             Path to the file to write the metadata to, by default None.
             If None, will use `self.path`.
+
         """
         from dolphin.io import set_raster_metadata
 

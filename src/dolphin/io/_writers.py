@@ -149,6 +149,7 @@ class RasterWriter(DatasetWriter, AbstractContextManager["RasterWriter"]):
             attribute of the reference raster. Defaults to None.
         **kwargs : dict, optional
             Additional driver-specific creation options passed to `rasterio.open`.
+
         """
         if like_filename is not None:
             with rasterio.open(like_filename) as dataset:
@@ -263,6 +264,7 @@ class BackgroundRasterWriter(BackgroundWriter):
 
         value : np.ndarray
             The block of data to write.
+
         """
         self._raster[key] = value
 
@@ -328,6 +330,7 @@ class GdalWriter(BackgroundWriter):
         ------
         ValueError
             If length of `output_files` does not match length of `cur_block`.
+
         """
         from dolphin.io import write_block
 

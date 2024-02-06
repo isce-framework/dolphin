@@ -64,6 +64,7 @@ def atomic_output(
     The output at `output_arg` *must not* exist already, or the decorator will error
     (though if `is_dir=True`, it is allowed to be an empty directory).
     The function being decorated *must* be called with keyword args for `output_arg`.
+
     """
 
     def decorator(func: Callable) -> Callable:

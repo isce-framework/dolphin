@@ -113,6 +113,7 @@ def estimate_tropospheric_delay(
         the EPSG code of the input data
     bounds : Bbox
         Output bounds.
+
     """
     # Read geogrid data
     xsize, ysize = io.get_raster_xysize(ifg_file_list[0])
@@ -208,6 +209,7 @@ def compute_pyaps(delay_parameters: DelayParams) -> np.ndarray:
     -------
     np.ndarray
         tropospheric delay datacube.
+
     """
     import pyaps3 as pa
 
@@ -281,6 +283,7 @@ def compute_raider(delay_parameters: DelayParams) -> np.ndarray:
     -------
     np.ndarray
         tropospheric delay datacube.
+
     """
     from RAiDER.delay import tropo_delay as raider_tropo_delay
     from RAiDER.llreader import BoundingBox
@@ -381,6 +384,7 @@ def compute_2d_delay(
     -------
     np.ndarray
         Computed 2D delay.
+
     """
     dem_file = Path(geo_files["height"])
 

@@ -25,6 +25,7 @@ def compute_phase_diffs(phase):
     -------
     int
         Total number of jumps exceeding pi.
+
     """
     return _compute_phase_diffs(phase)
 
@@ -49,6 +50,7 @@ def rewrap_to_twopi(arr: ArrayLike) -> np.ndarray:
     -------
     np.ndarray
         Array of phases between -pi and pi
+
     """
     return np.mod(np.pi + arr, TWOPI) - np.pi
 
@@ -79,6 +81,7 @@ def gaussian_filter_nan(
     -------
     ndarray
         Filtered version of `image`.
+
     """
     if np.sum(np.isnan(image)) == 0:
         return gaussian_filter(image, sigma=sigma, mode=mode, **kwargs)

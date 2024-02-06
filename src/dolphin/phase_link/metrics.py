@@ -25,6 +25,7 @@ def estimate_temp_coh(cpx_phase: ArrayLike, C_arrays: ArrayLike) -> Array:
     jax.Array
         The temporal coherence of the time series compared to cov_matrix.
         Output shape is (rows, cols)
+
     """
     if cpx_phase.ndim == 1:
         cpx_phase = cpx_phase.reshape(-1, 1, 1)

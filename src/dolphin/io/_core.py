@@ -107,6 +107,7 @@ def load_gdal(
     arr : np.ndarray or np.ma.MaskedArray
         Array of shape (bands, y, x) or (y, x) if `band` is specified,
         where y = height // subsample_factor and x = width // subsample_factor.
+
     """
     ds = gdal.Open(fspath(filename))
     nrows, ncols = ds.RasterYSize, ds.RasterXSize
@@ -194,6 +195,7 @@ def format_nc_filename(filename: Filename, ds_name: Optional[str] = None) -> str
     ------
     ValueError
         If `ds_name` is not provided for a .h5 or .nc file.
+
     """
     # If we've already formatted the filename, return it
     fname_clean = fspath(filename).lstrip('"').lstrip("'").rstrip('"').rstrip("'")
@@ -257,6 +259,7 @@ def get_raster_nodata(filename: Filename, band: int = 1) -> Optional[float]:
     -------
     Optional[float]
         Nodata value, or None if not found.
+
     """
     ds = gdal.Open(fspath(filename))
     return ds.GetRasterBand(band).GetNoDataValue()
@@ -274,6 +277,7 @@ def get_raster_crs(filename: Filename) -> CRS:
     -------
     CRS
         CRS.
+
     """
     ds = gdal.Open(fspath(filename))
     return CRS.from_wkt(ds.GetProjection())
@@ -291,6 +295,7 @@ def get_raster_gt(filename: Filename) -> list[float]:
     -------
     List[float]
         6 floats representing a GDAL Geotransform.
+
     """
     ds = gdal.Open(fspath(filename))
     return ds.GetGeoTransform()
@@ -308,6 +313,7 @@ def get_raster_dtype(filename: Filename) -> np.dtype:
     -------
     np.dtype
         Data type.
+
     """
     ds = gdal.Open(fspath(filename))
     return gdal_to_numpy_type(ds.GetRasterBand(1).DataType)
@@ -325,6 +331,7 @@ def get_raster_driver(filename: Filename) -> str:
     -------
     str
         Driver name.
+
     """
     ds = gdal.Open(fspath(filename))
     return ds.GetDriver().ShortName
@@ -363,6 +370,7 @@ def get_raster_metadata(filename: Filename, domain: str = ""):
     -------
     dict
         Dictionary of metadata.
+
     """
     ds = gdal.Open(fspath(filename))
     return ds.GetMetadata(domain)
@@ -381,6 +389,7 @@ def set_raster_metadata(
         Dictionary of metadata to set.
     domain : str, optional
         Domain to set metadata for. Default is "" (all domains).
+
     """
     ds = gdal.Open(fspath(filename), gdal.GA_Update)
     # Ensure the keys/values are written as strings
@@ -570,6 +579,7 @@ def write_block(
     ------
     ValueError
         If length of `output_files` does not match length of `cur_block`.
+
     """
     if cur_block.ndim == 2:
         # Make into 3D array shaped (1, rows, cols)

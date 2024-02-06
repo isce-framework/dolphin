@@ -24,6 +24,7 @@ def _get_sys_info() -> dict[str, str]:
     -------
     dict
         system and Python version information
+
     """
     return {
         "python": sys.version.replace("\n", " "),
@@ -53,6 +54,7 @@ def _get_opera_info() -> dict[str, Optional[str]]:
     -------
     dict
         dolphin / opera module information
+
     """
     import opera_utils
 
@@ -72,6 +74,7 @@ def _get_deps_info() -> dict[str, Optional[str]]:
     -------
     dict:
         version information on relevant Python libraries
+
     """
     deps = [
         "numpy",
@@ -93,6 +96,7 @@ def _get_gpu_info() -> dict[str, Optional[str]]:
     -------
     dict:
         version information on relevant Python libraries
+
     """
     from dolphin.utils import gpu_is_available
 
@@ -111,6 +115,7 @@ def show_versions() -> None:
     Examples
     --------
     > python -c "import dolphin; dolphin.show_versions()"
+
     """
     from dolphin.utils import gpu_is_available
 

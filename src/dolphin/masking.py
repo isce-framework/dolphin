@@ -80,6 +80,7 @@ def combine_mask_files(
     ValueError
         If `input_conventions` passed and is different length as `mask_files`
         If all mask_files are not the same shape
+
     """
     output_file = Path(output_file)
     gt = io.get_raster_gt(mask_files[0])

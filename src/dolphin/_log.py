@@ -52,6 +52,7 @@ def get_log(
     Returns
     -------
     logging.Logger
+
     """
     logger = logging.getLogger(name)
     if not logger.hasHandlers():
@@ -81,6 +82,7 @@ def setup_logging(debug: bool = False, root_name: str = "dolphin") -> None:
         Name of the base logger to configure.
         All sub-loggers (e.g. modules with <root_name>.<module_name>) will
         also get access to the handler.
+
     """
     # Set for all dolphin modules
     logger = logging.getLogger(root_name)

@@ -35,6 +35,7 @@ def remove_unconnected(data: ArrayLike, inplace: bool = True) -> np.ndarray:
     -----
     This function considers the 8 surrounding neighbors as connected
         (i.e. includes diagonals.)
+
     """
     if not inplace:
         data = data.copy()

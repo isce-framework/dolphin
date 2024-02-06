@@ -116,6 +116,7 @@ def run_phase_linking(
         The smallest (largest) eigenvalue resulting from EMI (EVD).
     `avg_coh` : np.ndarray[np.float32]
         (only If `calc_average_coh` is True) the average coherence for each SLC date
+
     """
     _, rows, cols = slc_stack.shape
     # Common pre-processing for both CPU and GPU versions:
@@ -252,6 +253,7 @@ def run_cpl(
     avg_coh : np.ndarray | None
         The average coherence of each row of the coherence matrix,
         if requested.
+
     """
     C_arrays = covariance.estimate_stack_covariance(
         slc_stack,
@@ -313,6 +315,7 @@ def process_coherence_matrices(
         Shape is same as input slcs unless Strides > (1, 1)
     eig_vals : ndarray[float], shape = (rows, cols)
         The smallest (largest) eigenvalue as solved by EMI (EVD).
+
     """
     if use_evd:
         # EVD
@@ -407,6 +410,7 @@ def eigh_smallest_stack(C_arrays: ArrayLike) -> tuple[Array, Array]:
     eigenvectors : Array
         The normalized eigenvector corresponding to the smallest eigenvalue
         Shape = (rows, cols, nslc)
+
     """
     return vmap(vmap(_get_smallest_eigenpair))(C_arrays)
 
@@ -429,6 +433,7 @@ def eigh_largest_stack(C_arrays: ArrayLike) -> tuple[Array, Array]:
     eigenvectors : Array
         The normalized eigenvector corresponding to the largest eigenvalue
         Shape = (rows, cols, nslc)
+
     """
     return vmap(vmap(_get_largest_eigenpair))(C_arrays)
 
