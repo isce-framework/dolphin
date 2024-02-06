@@ -14,7 +14,7 @@ jobs:
   pytest:
     strategy:
       matrix:
-        os: [ubuntu-latest]
+        os: [ubuntu-latest, macos-14]
         deps:
             # Note: for now we're manually adding tophu deps,
             # will change once it's on conda forge
@@ -44,7 +44,7 @@ jobs:
               pyaps3>=0.3
               opera-utils>=0.1.5
 
-      fail-fast: false
+      fail-fast: true
     name: ${{ matrix.os }} • ${{ matrix.deps.label }}
     runs-on: ${{ matrix.os }}
     defaults:
