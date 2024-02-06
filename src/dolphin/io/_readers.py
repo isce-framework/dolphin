@@ -20,12 +20,12 @@ import rasterio as rio
 from numpy.typing import ArrayLike
 from opera_utils._dates import get_dates, sort_files_by_date
 from osgeo import gdal
+from tqdm.auto import tqdm
 
 from dolphin import io, utils
 from dolphin._types import Filename
 from dolphin.io._blocks import iter_blocks
 from dolphin.stack import logger
-from dolphin.utils import progress
 
 from ._background import _DEFAULT_TIMEOUT, BackgroundReader
 
@@ -994,7 +994,6 @@ class EagerLoader(BackgroundReader):
         nodata_mask: Optional[ArrayLike] = None,
         queue_size: int = 1,
         timeout: float = _DEFAULT_TIMEOUT,
-        show_progress: bool = True,
     ):
         super().__init__(nq=queue_size, timeout=timeout, name="EagerLoader")
         self.reader = reader
@@ -1015,7 +1014,6 @@ class EagerLoader(BackgroundReader):
         self._nodata_mask = nodata_mask
         self._block_shape = block_shape
         self._nodata = nodata_value
-        self._show_progress = show_progress
         if self._nodata is None:
             self._nodata = np.nan
 
@@ -1041,27 +1039,23 @@ class EagerLoader(BackgroundReader):
 
         s_iter = range(len(queued_slices))
         desc = f"Processing {self._block_shape} sized blocks..."
-        with progress(dummy=not self._show_progress) as p:
-            for _ in p.track(s_iter, description=desc):
-                cur_block, (rows, cols) = self.get_data()
-                logger.debug(f"got data for {rows, cols}: {cur_block.shape}")
+        for _ in tqdm(s_iter, description=desc):
+            cur_block, (rows, cols) = self.get_data()
+            logger.debug(f"got data for {rows, cols}: {cur_block.shape}")
 
-                # Otherwise look at the actual block we loaded
-                if self._skip_empty:
-                    if (
-                        isinstance(cur_block, np.ma.MaskedArray)
-                        and cur_block.mask.all()
-                    ):
-                        continue
-                    if np.isnan(self._nodata):
-                        block_is_nodata = np.isnan(cur_block)
-                    else:
-                        block_is_nodata = cur_block == self._nodata
-                    if np.all(block_is_nodata):
-                        logger.debug(
-                            f"Skipping block {rows}, {cols} since it was all nodata"
-                        )
-                        continue
-                yield cur_block, (rows, cols)
+            # Otherwise look at the actual block we loaded
+            if self._skip_empty:
+                if isinstance(cur_block, np.ma.MaskedArray) and cur_block.mask.all():
+                    continue
+                if np.isnan(self._nodata):
+                    block_is_nodata = np.isnan(cur_block)
+                else:
+                    block_is_nodata = cur_block == self._nodata
+                if np.all(block_is_nodata):
+                    logger.debug(
+                        f"Skipping block {rows}, {cols} since it was all nodata"
+                    )
+                    continue
+            yield cur_block, (rows, cols)
 
         self.notify_finished()

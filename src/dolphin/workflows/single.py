@@ -56,7 +56,6 @@ def run_wrapped_phase_single(
     shp_alpha: float = 0.05,
     shp_nslc: Optional[int] = None,
     block_shape: tuple[int, int] = (1024, 1024),
-    # show_progress: bool = False,
 ):
     """Estimate wrapped phase for one ministack.
 

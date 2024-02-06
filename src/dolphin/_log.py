@@ -25,8 +25,6 @@ from logging import Formatter
 from pathlib import Path
 from typing import Optional
 
-from rich.logging import RichHandler
-
 from dolphin._types import Filename, P, T
 
 __all__ = ["get_log", "log_runtime"]
@@ -84,7 +82,12 @@ def setup_logging(debug: bool = False, root_name: str = "dolphin") -> None:
     """
     # Set for all dolphin modules
     logger = logging.getLogger(root_name)
-    h = RichHandler(rich_tracebacks=True, log_time_format="[%Y-%m-%d %H:%M:%S]")
+    h = logging.StreamHandler()
+    formatter = Formatter(
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        datefmt="Y%-%m-%dT%H:%M:%S",
+    )
+    h.setFormatter(formatter)
     logger.addHandler(h)
     log_level = logging.DEBUG if debug else logging.INFO
     logger.setLevel(log_level)

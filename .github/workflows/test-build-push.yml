@@ -16,12 +16,9 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-14]
         deps:
-            # Note: for now we're manually adding tophu deps,
-            # will change once it's on conda forge
           - label: Latest
             spec: >-
-              dask
-              rasterio
+              tophu
           - label: Minimum
             spec: >-
               python=3.9
@@ -33,15 +30,17 @@ jobs:
               pydantic=2.1
               pyproj=3.3
               rasterio=1.3
-              rich=12.0
               ruamel_yaml=0.15
               scipy=1.9
               shapely=1.8
               threadpoolctl>=3.0
-              dask
-              rasterio
+              tophu
               pyaps3>=0.3
               opera-utils>=0.1.5
+        exclude:
+          - os: macos-14
+            deps:
+              label: Minimum
 
       fail-fast: true
     name: ${{ matrix.os }} • ${{ matrix.deps.label }}

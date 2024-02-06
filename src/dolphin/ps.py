@@ -37,7 +37,6 @@ def create_ps(
     nodata_mask: Optional[np.ndarray] = None,
     update_existing: bool = False,
     block_shape: tuple[int, int] = (512, 512),
-    show_progress: bool = True,
 ):
     """Create the amplitude dispersion, mean, and PS files.
 
@@ -70,8 +69,6 @@ def create_ps(
     block_shape : tuple[int, int], optional
         The 2D block size to load all bands at a time.
         Default is (512, 512)
-    show_progress : bool, default=True
-        If true, displays a `rich.ProgressBar`.
     """
     if existing_amp_dispersion_file and existing_amp_mean_file and not update_existing:
         logger.info("Using existing amplitude dispersion file, skipping calculation.")
@@ -112,7 +109,6 @@ def create_ps(
         block_shape=block_shape,
         nodata_mask=nodata_mask,
         skip_empty=skip_empty,
-        show_progress=show_progress,
     )
     for cur_data, (rows, cols) in block_gen.iter_blocks():
         cur_rows, cur_cols = cur_data.shape[-2:]

@@ -9,11 +9,12 @@ from typing import Optional, Sequence, Union
 import isce3
 import numpy as np
 from isce3.unwrap import ICU, snaphu
+from tqdm.auto import tqdm
 
 from dolphin import io
 from dolphin._log import get_log, log_runtime
 from dolphin._types import Filename
-from dolphin.utils import DummyProcessPoolExecutor, full_suffix, progress
+from dolphin.utils import DummyProcessPoolExecutor, full_suffix
 from dolphin.workflows import UnwrapMethod
 
 from ._constants import CONNCOMP_SUFFIX, UNW_SUFFIX
@@ -135,14 +136,8 @@ def run(
             )
             for ifg_file, out_file, cor_file in zip(in_files, out_files, cor_filenames)
         ]
-        with progress() as p:
-            for fut in p.track(
-                as_completed(futures),
-                total=len(out_files),
-                description="Unwrapping...",
-                update_period=1,
-            ):
-                fut.result()
+        for fut in tqdm(as_completed(futures)):
+            fut.result()
 
     conncomp_files = [
         Path(str(outf).replace(UNW_SUFFIX, CONNCOMP_SUFFIX)) for outf in all_out_files
