@@ -323,7 +323,7 @@ def test_config_displacement_workflow_defaults(dir_with_1_slc):
 
     assert c.unwrap_options._directory == Path("unwrapped").resolve()
 
-    now = datetime.now(timezone.utcyy)
+    now = datetime.now(timezone.utc)
     assert (now - c.creation_time_utc).seconds == 0
 
 
