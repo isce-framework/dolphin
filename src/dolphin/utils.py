@@ -15,7 +15,6 @@ from typing import Any, Iterable, Optional, Sequence, Union
 import numpy as np
 from numpy.typing import ArrayLike, DTypeLike
 from osgeo import gdal, gdal_array, gdalconst
-from rich.progress import MofNCompleteColumn, Progress, SpinnerColumn, TimeElapsedColumn
 
 from dolphin._log import get_log
 from dolphin._types import Bbox, Filename, P, Strides, T
@@ -24,49 +23,6 @@ DateOrDatetime = Union[datetime.date, datetime.datetime]
 
 gdal.UseExceptions()
 logger = get_log(__name__)
-
-
-def progress(dummy=False):
-    """Create a Progress bar context manager.
-
-    Parameters
-    ----------
-    dummy : bool, default = False
-        If True, skips showing and calls `contextlib.nullcontext`
-
-    Usage
-    -----
-    >>> with progress() as p:
-    ...     for i in p.track(range(10)):
-    ...         pass
-    10/10 Working... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 100% 0:00:00
-
-    """
-
-    class DummyProgress:
-        """Context manager that does no additional processing.
-
-        Needs a `track` method to match rich.Progress.
-        """
-
-        def track(self, iterable, **kwargs):
-            yield from iterable
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *excinfo):
-            pass
-
-    if dummy:
-        return DummyProgress()
-
-    return Progress(
-        SpinnerColumn(),
-        MofNCompleteColumn(),
-        *Progress.get_default_columns()[:-1],  # Skip the ETA column
-        TimeElapsedColumn(),
-    )
 
 
 def numpy_to_gdal_type(np_dtype: DTypeLike) -> int:

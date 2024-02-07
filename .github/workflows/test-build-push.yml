@@ -50,6 +50,7 @@ jobs:
       - name: Enable numba boundscheck for better error catching
         run: |
           echo "NUMBA_BOUNDSCHECK=1" >> $GITHUB_ENV
+          echo "TQDM_DISABLE=1" >> $GITHUB_ENV
       - name: Test (with numba boundscheck on)
         run: |
           pytest -n0

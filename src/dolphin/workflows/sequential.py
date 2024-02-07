@@ -43,6 +43,7 @@ def run_wrapped_phase_sequential(
     use_evd: bool = False,
     beta: float = 0.01,
     block_shape: tuple[int, int] = (512, 512),
+    **tqdm_kwargs,
 ) -> tuple[list[Path], list[Path], Path]:
     """Estimate wrapped phase using batches of ministacks."""
     if strides is None:
@@ -109,6 +110,7 @@ def run_wrapped_phase_sequential(
                 shp_alpha=shp_alpha,
                 shp_nslc=shp_nslc,
                 block_shape=block_shape,
+                **tqdm_kwargs,
             )
 
         cur_output_files, cur_comp_slc_file, temp_coh_file = _get_outputs_from_folder(

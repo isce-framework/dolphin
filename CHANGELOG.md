@@ -1,6 +1,16 @@
 # [Unreleased](https://github.com/isce-framework/dolphin/compare/v0.12.0...main)
 
-# [0.12.0](https://github.com/isce-framework/dolphin/compare/v0.11.0...v0.12.0)
+
+**Fixed**
+
+- Apply bounds even if only one image is passed to `stitching` (#210)
+
+**Dependencies**
+
+- Move back to `tqdm` instead of using `rich` for progress bars.
+
+
+# [0.12.0](https://github.com/isce-framework/dolphin/compare/v0.11.0...v0.12.0) - 2024-02-01
 
 **Added**
 - Added `DatasetWriter` protocol
@@ -30,7 +40,7 @@ Removed:
 - `pymp`
 - `cupy` from optional GPU usage
 
-# [v0.11.0](https://github.com/isce-framework/dolphin/compare/v0.10.0...v0.11.0) - 2023-01-24
+# [v0.11.0](https://github.com/isce-framework/dolphin/compare/v0.10.0...v0.11.0) - 2024-01-24
 
 **Added**
 - Added ionospheric correction in `dolphin.atmosphere.ionosphere`
