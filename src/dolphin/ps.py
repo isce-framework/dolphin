@@ -9,7 +9,6 @@ from typing import Optional
 import numpy as np
 from numpy.typing import ArrayLike
 from osgeo import gdal
-from tqdm.auto import tqdm
 
 from dolphin import io, utils
 from dolphin._log import get_log
@@ -116,7 +115,6 @@ def create_ps(
         nodata_mask=nodata_mask,
         skip_empty=skip_empty,
     )
-    tqdm.write(f"{tqdm_kwargs = }")
     for cur_data, (rows, cols) in block_gen.iter_blocks(**tqdm_kwargs):
         cur_rows, cur_cols = cur_data.shape[-2:]
 

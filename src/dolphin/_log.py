@@ -16,8 +16,9 @@ Usage:
     # Custom output for this module:
     logger.success("Something great happened: highlight this success")
 """
-
 import logging
+import os
+import sys
 import time
 from collections.abc import Callable
 from functools import wraps
@@ -93,6 +94,10 @@ def setup_logging(debug: bool = False, root_name: str = "dolphin") -> None:
     logger.addHandler(h)
     log_level = logging.DEBUG if debug else logging.INFO
     logger.setLevel(log_level)
+    # Temp work around for tqdm on py312
+
+    if sys.version_info.major == 3 and sys.version_info.minor == 12:
+        os.environ["TQDM_DISABLE"] = "1"
 
 
 def log_runtime(f: Callable[P, T]) -> Callable[P, T]:
