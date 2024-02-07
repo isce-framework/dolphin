@@ -287,12 +287,18 @@ class CompressedSlcInfo(BaseModel):
             msg = f"{filename} does not have 3 dates like {date_fmt}"
             raise ValueError(msg) from e
         output_folder = Path(filename).parent
+        fname = Path(filename).name
+
+        # Use whichever filename was passed in by replacing the dates we parsed
+        _date_str = format_dates(ref, start, end, fmt=date_fmt)
+        filename_template = fname.replace(_date_str, "{date_str}")
         return cls(
             reference_date=ref,
             start_date=start,
             end_date=end,
             output_folder=output_folder,
             file_date_fmt=date_fmt,
+            filename_template=filename_template,
         )
 
     @classmethod
