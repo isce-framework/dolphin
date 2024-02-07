@@ -20,4 +20,5 @@ dependencies:
   - scipy>=1.9 # "scipy 0.16+ is required for linear algebra", numba. 1.9 is the oldest version working with jax=0.4.19
   - shapely>=1.8
   - threadpoolctl>=3.0
+  - tqdm>=4.60
   - typing_extensions>=3.10
