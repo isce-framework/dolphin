@@ -69,6 +69,7 @@ def create_ps(
     block_shape : tuple[int, int], optional
         The 2D block size to load all bands at a time.
         Default is (512, 512)
+
     """
     if existing_amp_dispersion_file and existing_amp_mean_file and not update_existing:
         logger.info("Using existing amplitude dispersion file, skipping calculation.")
@@ -203,6 +204,7 @@ def calc_ps_block(
     two acquisitions.
     Since fewer samples are used to calculate the mean and standard deviation,
     there is a higher false positive risk for these edge pixels.
+
     """
     if np.iscomplexobj(stack_mag):
         msg = "The input `stack_mag` must be real-valued."
@@ -275,6 +277,7 @@ def multilook_ps_mask(
     Returns
     -------
     output_file : Path
+
     """
     if strides == {"x": 1, "y": 1}:
         logger.info("No striding request, skipping multilook.")

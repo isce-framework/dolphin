@@ -195,6 +195,7 @@ def _get_max_cdf_dist(x1, x2):
     >>> x2 = np.array([6, 7, 8, 9, 10])
     >>> _get_max_cdf_dist(x1, x2)  # doctest: +NUMBER
     1.0
+
     """
     n = x1.shape[0]
     i1 = i2 = i_out = 0

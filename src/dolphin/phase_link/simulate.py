@@ -35,6 +35,7 @@ def simulate_sample(corr_matrix: np.array) -> np.array:
     Returns
     -------
     np.array
+
     """
     w, v = la.eigh(corr_matrix)
     w[w < 1e-3] = 0.0
@@ -66,6 +67,7 @@ def simulate_neighborhood_stack(
     np.array
         A stack of neighborhood samples
         size (corr_matrix.shape[0], neighbor_samples)
+
     """
     nslc = corr_matrix.shape[0]
     # A 2D matrix for a neighborhood over time.
@@ -169,6 +171,7 @@ def mle(cov_mat, beta=0.01):
     -------
     np.array
         The estimated linked phase
+
     """
     dtype = cov_mat.dtype
     cov_mat = cov_mat.astype(dtype)

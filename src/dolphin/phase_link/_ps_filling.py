@@ -51,6 +51,7 @@ def fill_ps_pixels(
     -------
     ps_masked_looked : ndarray
         boolean array of PS, multilooked (using "any") to same size as `cpx_phase`
+
     """
     if avg_mag is None:
         # Get the average magnitude of the SLC stack

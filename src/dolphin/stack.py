@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 from __future__ import annotations
 
+import json
+import logging
 import warnings
 from datetime import date, datetime
 from os import fspath
@@ -8,18 +10,14 @@ from pathlib import Path
 from typing import Optional, Sequence
 
 import numpy as np
+from opera_utils import get_dates
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-from dolphin._log import get_log
 from dolphin._types import DateOrDatetime, Filename
 from dolphin.io import DEFAULT_DATETIME_FORMAT
-from dolphin.utils import _format_date_pair
+from dolphin.utils import format_dates
 
-logger = get_log(__name__)
-
-# Sentinel value for when no reference date is provided
-# Appeases mypy
-_DUMMY_DATE = datetime(1900, 1, 1)
+logger = logging.getLogger(__name__)
 
 
 class BaseStack(BaseModel):
@@ -33,23 +31,12 @@ class BaseStack(BaseModel):
         ...,
         description="List of date sequences, one for each SLC in the ministack. "
         "Each item is a list/tuple of datetime.date or datetime.datetime objects, "
-        "as returned by [opera_utils._dates.get_dates][].",
+        "as returned by [opera_utils.get_dates][].",
     )
     is_compressed: list[bool] = Field(
         ...,
         description="List of booleans indicating whether each "
         "SLC is compressed or real.",
-    )
-    reference_date: datetime = Field(
-        _DUMMY_DATE,
-        description=(
-            "Reference date to be used for understanding output interferograms. "
-            "Note that this may be different from `dates[reference_idx]` if the"
-            " ministack starts with a compressed SLC which has an earlier 'base phase',"
-            " which is used as the phase linking references. "
-            "It will propagate across ministacks when we always use `reference_idx=0`."
-        ),
-        validate_default=True,
     )
     file_date_fmt: str = Field(
         DEFAULT_DATETIME_FORMAT,
@@ -88,13 +75,19 @@ class BaseStack(BaseModel):
             raise ValueError(msg)
         return self
 
-    @model_validator(mode="after")
-    def _check_unset_reference_date(self):
-        if self.reference_date == _DUMMY_DATE:
-            ref_date = self.dates[self.reference_idx][0]
-            logger.debug("No reference date provided, using first date: %s", ref_date)
-            self.reference_date = ref_date
-        return self
+    # @model_validator(mode="after")
+    # def _check_unset_reference_date(self):
+    #     if self.reference_date == _DUMMY_DATE:
+    #         ref_date = self.dates[self.reference_idx][0]
+    #         logger.debug("No reference date provided, using first date: %s", ref_date)
+    #         self.reference_date = ref_date
+    #     return self
+    @property
+    def reference_date(self):
+        """Date of the reference phase of the stack."""
+        # Note this works for either a length-1 tuple (real SLC), or for
+        # the compressed SLC formate (ref, start, end)
+        return self.dates[self.reference_idx][0]
 
     @property
     def full_date_range(self) -> tuple[DateOrDatetime, DateOrDatetime]:
@@ -107,7 +100,7 @@ class BaseStack(BaseModel):
 
         Includes both compressed + normal SLCs in the range.
         """
-        return _format_date_pair(*self.full_date_range, fmt=self.file_date_fmt)
+        return format_dates(*self.full_date_range, fmt=self.file_date_fmt)
 
     @property
     def first_real_slc_idx(self) -> int:
@@ -126,7 +119,7 @@ class BaseStack(BaseModel):
     @property
     def real_slc_date_range_str(self) -> str:
         """Date range of the real SLCs in the ministack."""
-        return _format_date_pair(*self.real_slc_date_range, fmt=self.file_date_fmt)
+        return format_dates(*self.real_slc_date_range, fmt=self.file_date_fmt)
 
     @property
     def compressed_slc_file_list(self) -> list[Filename]:
@@ -141,17 +134,9 @@ class BaseStack(BaseModel):
         ]
 
     def get_date_str_list(self) -> list[str]:
-        """Get a formated string for each date/date tuple in the ministack."""
-        date_strs: list[str] = []
-        for d in self.dates:
-            if len(d) == 1:
-                # normal SLC files will have a single date
-                s = d[0].strftime(self.file_date_fmt)
-            else:
-                # Compressed SLCs will have 2 dates in name marking the start / end
-                s = _format_date_pair(d[0], d[1], fmt=self.file_date_fmt)
-            date_strs.append(s)
-        return date_strs
+        """Get a formatted string for each date/date tuple in the ministack."""
+        # Should either be like YYYYMMDD, or YYYYMMDD_YYYYMMDD_YYYYMMDD
+        return [format_dates(*d, fmt=self.file_date_fmt) for d in self.dates]
 
     def __rich_repr__(self):
         yield "file_list", self.file_list
@@ -166,31 +151,39 @@ class BaseStack(BaseModel):
 class CompressedSlcInfo(BaseModel):
     """Class for holding attributes about one compressed SLC."""
 
-    real_slc_file_list: list[Filename] = Field(
+    reference_date: datetime = Field(
         ...,
+        description="Reference date for understanding output interferograms. "
+        "Note that this may be different from `start_date` (the first real SLC which "
+        " was used in the compression).",
+    )
+    start_date: datetime = Field(
+        ..., description="Datetime of the first real SLC used in the compression."
+    )
+    end_date: datetime = Field(
+        ..., description="Datetime of the last real SLC used in the compression."
+    )
+
+    real_slc_file_list: list[Filename] | None = Field(
+        None,
         description="List of real SLC filenames in the ministack.",
     )
-    real_slc_dates: list[datetime] = Field(
-        ...,
+    real_slc_dates: list[datetime] | None = Field(
+        None,
         description="List of date sequences, one for each SLC in the ministack. "
         "Each item is a list/tuple of datetime.date or datetime.datetime objects.",
     )
-    compressed_slc_file_list: list[Filename] = Field(
-        ...,
+    compressed_slc_file_list: list[Filename] | None = Field(
+        None,
         description="List of compressed SLC filenames in the ministack.",
-    )
-    reference_date: datetime = Field(
-        _DUMMY_DATE,
-        description="Reference date for understanding output interferograms. "
-        "Note that this may be different from `dates[reference_idx]` if the ministack "
-        "starts with a compressed SLC which has an earlier 'base phase', which "
-        "is used as the phase linking references. "
-        "It will propagate across ministacks when we always use `reference_idx=0`.",
-        validate_default=True,
     )
     file_date_fmt: str = Field(
         DEFAULT_DATETIME_FORMAT,
         description="Format string for the dates/datetimes in the ministack filenames.",
+    )
+    filename_template: str = Field(
+        "compressed_{date_str}.tif",
+        description="Template for creating filenames from the CCSLC date triplet.",
     )
     output_folder: Path = Field(
         Path(),
@@ -201,6 +194,8 @@ class CompressedSlcInfo(BaseModel):
     @classmethod
     def _untuple_dates(cls, v):
         """Make the dates not be tuples/lists of datetimes."""
+        if v is None:
+            return v
         out = []
         for item in v:
             if hasattr(item, "__iter__"):
@@ -220,6 +215,8 @@ class CompressedSlcInfo(BaseModel):
 
     @model_validator(mode="after")
     def _check_lengths(self):
+        if self.real_slc_dates is None or self.real_slc_file_list is None:
+            return self
         rlen = len(self.real_slc_file_list)
         clen = len(self.real_slc_dates)
         if rlen != clen:
@@ -232,15 +229,20 @@ class CompressedSlcInfo(BaseModel):
         return self
 
     @property
+    def dates(self) -> tuple[DateOrDatetime, DateOrDatetime, DateOrDatetime]:
+        """Alias for the (reference, start, end) date triplet."""
+        return (self.reference_date, self.start_date, self.end_date)
+
+    @property
     def real_date_range(self) -> tuple[DateOrDatetime, DateOrDatetime]:
         """Date range of the real SLCs in the ministack."""
-        return (self.real_slc_dates[0], self.real_slc_dates[-1])
+        return self.start_date, self.end_date
 
     @property
     def filename(self) -> str:
-        """The filename of the compressed SLC for this ministack."""
-        date_str = _format_date_pair(*self.real_date_range, fmt=self.file_date_fmt)
-        return f"compressed_{date_str}.tif"
+        """Create filename using a template with '{date_str}` in the name."""
+        date_str = format_dates(*self.dates, fmt=self.file_date_fmt)
+        return self.filename_template.format(date_str=date_str)
 
     @property
     def path(self) -> Path:
@@ -259,6 +261,7 @@ class CompressedSlcInfo(BaseModel):
         output_file : Optional[Filename], optional
             Path to the file to write the metadata to, by default None.
             If None, will use `self.path`.
+
         """
         from dolphin.io import set_raster_metadata
 
@@ -274,11 +277,37 @@ class CompressedSlcInfo(BaseModel):
         )
 
     @classmethod
+    def from_filename(
+        cls, filename: Filename, date_fmt: str = DEFAULT_DATETIME_FORMAT
+    ) -> CompressedSlcInfo:
+        """Parse just the dates from a compressed SLC filename."""
+        try:
+            ref, start, end = get_dates(filename, fmt=date_fmt)
+        except IndexError as e:
+            msg = f"{filename} does not have 3 dates like {date_fmt}"
+            raise ValueError(msg) from e
+        output_folder = Path(filename).parent
+        fname = Path(filename).name
+
+        # Use whichever filename was passed in by replacing the dates we parsed
+        _date_str = format_dates(ref, start, end, fmt=date_fmt)
+        filename_template = fname.replace(_date_str, "{date_str}")
+        return cls(
+            reference_date=ref,
+            start_date=start,
+            end_date=end,
+            output_folder=output_folder,
+            file_date_fmt=date_fmt,
+            filename_template=filename_template,
+        )
+
+    @classmethod
     def from_file_metadata(cls, filename: Filename) -> CompressedSlcInfo:
         """Try to parse the CCSLC metadata from `filename`."""
-        import json
-
         from dolphin.io import get_raster_metadata
+
+        if not Path(filename).exists():
+            raise FileNotFoundError(filename)
 
         domains = ["DOLPHIN", ""]
         for domain in domains:
@@ -331,10 +360,12 @@ class MiniStackInfo(BaseStack):
                 real_slc_dates.append(d)
 
         return CompressedSlcInfo(
+            reference_date=self.reference_date,
+            start_date=real_slc_dates[0][0],
+            end_date=real_slc_dates[-1][0],
             real_slc_file_list=real_slc_files,
             real_slc_dates=real_slc_dates,
             compressed_slc_file_list=comp_slc_files,
-            reference_date=self.reference_date,
             file_date_fmt=self.file_date_fmt,
             output_folder=self.output_folder,
         )
@@ -356,8 +387,10 @@ class MiniStackPlanner(BaseStack):
         # Start of with any compressed SLCs that are passed in
         compressed_slc_infos: list[CompressedSlcInfo] = []
         for f in self.compressed_slc_file_list:
-            # Note: these must actually exist to be used!
-            compressed_slc_infos.append(CompressedSlcInfo.from_file_metadata(f))
+            # TODO: will we ever actually need to read the old metadata here?
+            # # Note: these must actually exist to be used!
+            # compressed_slc_infos.append(CompressedSlcInfo.from_file_metadata(f))
+            compressed_slc_infos.append(CompressedSlcInfo.from_filename(f))
 
         # Solve each ministack using current chunk (and the previous compressed SLCs)
         ministack_starts = range(
@@ -369,6 +402,7 @@ class MiniStackPlanner(BaseStack):
             cur_files = list(self.file_list[cur_slice]).copy()
             cur_dates = list(self.dates[cur_slice]).copy()
 
+            # Read compressed*.tif files and if they do not exist use the compressed*.h5
             comp_slc_files = [c.path for c in compressed_slc_infos]
             # Add the existing compressed SLC files to the start, but
             # limit the num comp slcs `max_num_compressed`
@@ -376,8 +410,7 @@ class MiniStackPlanner(BaseStack):
             combined_files = cur_comp_slc_files + cur_files
 
             combined_dates = [
-                c.real_date_range
-                for c in compressed_slc_infos[-self.max_num_compressed :]
+                c.dates for c in compressed_slc_infos[-self.max_num_compressed :]
             ] + cur_dates
 
             num_ccslc = len(cur_comp_slc_files)
@@ -392,7 +425,7 @@ class MiniStackPlanner(BaseStack):
                 reference_idx = 0
 
             # Make the current ministack output folder using the start/end dates
-            new_date_str = _format_date_pair(
+            new_date_str = format_dates(
                 cur_dates[0][0], cur_dates[-1][-1], fmt=self.file_date_fmt
             )
             cur_output_folder = self.output_folder / new_date_str

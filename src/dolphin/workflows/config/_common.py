@@ -402,6 +402,7 @@ def _read_file_list_or_glob(cls, value):  # noqa: ARG001:
         pydantic model class
     value : str | Path | list[str] | list[Path]
         Value passed to pydantic model: Input file list.
+
     """
     if value is None:
         return []

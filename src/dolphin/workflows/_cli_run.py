@@ -19,6 +19,7 @@ def run(
         YAML file containing the workflow options.
     debug : bool, optional
         Enable debug logging, by default False.
+
     """
     # rest of imports here so --help doesn't take forever
 

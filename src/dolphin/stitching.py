@@ -77,6 +77,7 @@ def merge_by_date(
     -----
     This function is intended to be used with filenames that contain datetime pairs
     (from interferograms).
+
     """
     image_path_list = [Path(f) for f in image_file_list]
     grouped_images = group_by_date(image_path_list, file_date_fmt=file_date_fmt)
@@ -86,7 +87,7 @@ def merge_by_date(
     for dates, cur_images in grouped_images.items():
         logger.info(f"{dates}: Stitching {len(cur_images)} images.")
         if len(dates) == 2:
-            date_str = utils._format_date_pair(*dates)
+            date_str = utils.format_date_pair(*dates)
         elif len(dates) == 1:
             date_str = dates[0].strftime(file_date_fmt)
         else:
@@ -171,6 +172,7 @@ def merge_images(
         Default is [dolphin.io.DEFAULT_TIFF_OPTIONS][].
     create_only : bool
         If True, creates an empty output file, does not write data. Default is False.
+
     """
     if strides is None:
         strides = {"x": 1, "y": 1}
@@ -286,6 +288,7 @@ def get_downsampled_vrts(
     -------
     list[Filename]
         The warped filenames.
+
     """
     if not filenames:
         return []
@@ -346,6 +349,7 @@ def warp_to_projection(
     -------
     list[Filename]
         The warped filenames.
+
     """
     if projection is None:
         projection = _get_mode_projection(filenames)
@@ -436,6 +440,7 @@ def get_combined_bounds_nodata(
     ------
     ValueError:
         If the inputs files have different resolutions/projections/nodata values
+
     """
     # scan input files
     if strides is None:
@@ -525,6 +530,7 @@ def get_transformed_bounds(filename: Filename, epsg_code: Optional[int] = None):
     -------
     tuple
         The bounds of the raster as (left, bottom, right, top)
+
     """
     bounds = io.get_raster_bounds(filename)
     if epsg_code is None:
@@ -607,6 +613,7 @@ def warp_to_match(
     Path
         Path to the output image.
         Same as `output_file` if provided, otherwise a path to the in-memory VRT.
+
     """
     bounds = io.get_raster_bounds(match_file)
     crs_wkt = io.get_raster_crs(match_file).to_wkt()

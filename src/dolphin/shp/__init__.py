@@ -69,6 +69,7 @@ def estimate_neighbors(
         - nslc is not provided for GLRT/KLD methods
         - amp_stack is not provided for the KS method.
         - `method` not a valid `ShpMethod`
+
     """
     import numba
 

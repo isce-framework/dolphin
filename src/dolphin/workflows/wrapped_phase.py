@@ -41,6 +41,7 @@ def run(
         In the case of sequential phase linking, this is the average of all ministacks.
     ps_looked_file : Path
         The multilooked boolean persistent scatterer file.
+
     """
     logger = get_log(debug=debug)
     work_dir = cfg.work_directory
@@ -220,6 +221,7 @@ def create_ifgs(
     NotImplementedError
         Currently raised for `InterferogramNetworkType`s besides single reference
         or max-bandwidth
+
     """
     ifg_dir = interferogram_network._directory
     if not dry_run:
@@ -317,11 +319,9 @@ def _get_reference_date_idx(
 
     # Otherwise use the last Compressed SLC as reference
     reference_idx = np.where(is_compressed)[0][-1]
-    # read the Compressed SLC metadata to find it's reference date
-    comp_slc = stack.CompressedSlcInfo.from_file_metadata(
-        input_file_list[reference_idx]
-    )
-    return comp_slc.reference_date, reference_idx
+    reference_date = input_dates[reference_idx][0]
+
+    return reference_date, reference_idx
 
 
 def _get_input_dates(
