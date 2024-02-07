@@ -11,6 +11,7 @@ from pprint import pformat
 from typing import Mapping, Sequence
 
 from opera_utils import group_by_burst, group_by_date
+from tqdm.auto import tqdm
 
 from dolphin import __version__
 from dolphin._log import get_log, log_runtime
@@ -44,6 +45,7 @@ def run(
         for controlling the workflow.
     debug : bool, optional
         Enable debug logging, by default False.
+
     """
     # Set the logging level for all `dolphin.` modules
     logger = get_log(name="dolphin", debug=debug, filename=cfg.log_file)
@@ -133,14 +135,23 @@ def run(
     )
     mw = cfg.worker_settings.n_parallel_bursts
     ctx = mp.get_context("spawn")
-    with Executor(max_workers=mw, mp_context=ctx) as exc:
+    tqdm.set_lock(mp.RLock())
+    with Executor(
+        max_workers=mw,
+        mp_context=ctx,
+        initializer=tqdm.set_lock,
+        initargs=(tqdm.get_lock(),),
+    ) as exc:
         fut_to_burst = {
             exc.submit(
                 wrapped_phase.run,
                 burst_cfg,
                 debug=debug,
+                tqdm_kwargs={
+                    "position": i,
+                },
             ): burst
-            for burst, burst_cfg in wrapped_phase_cfgs
+            for i, (burst, burst_cfg) in enumerate(wrapped_phase_cfgs)
         }
         for fut in fut_to_burst:
             burst = fut_to_burst[fut]

@@ -23,6 +23,7 @@ def compress(
     -------
     np.array
         The compressed SLC data, shape (rows, cols)
+
     """
     # If the output is downsampled, we need to make `pl_cpx_phase` the same shape
     # as the output

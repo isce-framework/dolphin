@@ -56,6 +56,7 @@ def run(
         Path to temporal correlation file created.
     stitched_ps_file : Path
         Path to ps mask file created.
+
     """
     stitched_ifg_dir.mkdir(exist_ok=True, parents=True)
     # Also preps for snaphu, which needs binary format with no nans

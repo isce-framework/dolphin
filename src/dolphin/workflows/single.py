@@ -6,6 +6,7 @@ References
     linking using joined distributed and persistent scatterers." Computers &
     Geosciences (2022): 105291.
 
+
 """
 from __future__ import annotations
 
@@ -15,6 +16,7 @@ from typing import Optional
 
 import numpy as np
 from numpy.typing import DTypeLike
+from tqdm.auto import tqdm
 
 from dolphin import io, shp
 from dolphin._log import get_log
@@ -56,7 +58,7 @@ def run_wrapped_phase_single(
     shp_alpha: float = 0.05,
     shp_nslc: Optional[int] = None,
     block_shape: tuple[int, int] = (1024, 1024),
-    # show_progress: bool = False,
+    **tqdm_kwargs,
 ):
     """Estimate wrapped phase for one ministack.
 
@@ -163,7 +165,7 @@ def run_wrapped_phase_single(
         (in_rows, in_cols),
         (in_no_pad_rows, in_no_pad_cols),
         (in_trim_rows, in_trim_cols),
-    ) in blocks:
+    ) in tqdm(blocks, **tqdm_kwargs):
         logger.debug(f"{out_rows = }, {out_cols = }, {in_rows = }, {in_no_pad_rows = }")
 
         cur_data, (read_rows, read_cols) = loader.get_data()
@@ -368,6 +370,7 @@ def setup_output_folder(
     -------
     list[Path]
         list of saved empty files for the outputs of phase linking
+
     """
     if strides is None:
         strides = {"y": 1, "x": 1}

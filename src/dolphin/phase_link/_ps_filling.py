@@ -51,6 +51,7 @@ def fill_ps_pixels(
     -------
     ps_masked_looked : ndarray
         boolean array of PS, multilooked (using "any") to same size as `cpx_phase`
+
     """
     if avg_mag is None:
         # Get the average magnitude of the SLC stack
@@ -69,7 +70,7 @@ def fill_ps_pixels(
     ps_mask_looked = ps_mask_looked[: cpx_phase.shape[1], : cpx_phase.shape[2]]
 
     if use_max_ps:
-        print("Using max PS pixel to fill in MLE estimate")
+        logger.info("Using max PS pixel to fill in MLE estimate")
         # Get the indices of the brightest pixels within each look window
         slc_r_idxs, slc_c_idxs = _get_max_idxs(mag, *strides)
         # we're only filling where there are PS pixels

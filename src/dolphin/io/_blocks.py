@@ -99,6 +99,7 @@ BlockIndices(row_start=100, row_stop=180, col_start=200, col_stop=250)]
 slice(90, 190, None)), (slice(0, 100, None), slice(180, 250, None)), \
 (slice(90, 180, None), slice(0, 100, None)), (slice(90, 180, None), \
 slice(90, 190, None)), (slice(90, 180, None), slice(180, 250, None))]
+
     """
     total_rows, total_cols = arr_shape
     height, width = block_shape
@@ -188,6 +189,7 @@ def pad_block(in_block: BlockIndices, margins: tuple[int, int]) -> BlockIndices:
     ValueError
         If the block is too small to be padded by the given margins
         (leads to start < 0)
+
     """
     r_margin, c_margin = margins
     r_slice, c_slice = in_block
@@ -227,6 +229,7 @@ def dilate_block(in_block: BlockIndices, strides: Strides) -> BlockIndices:
     -------
     BlockIndices
         Output slices for larger array
+
     """
     row_strides, col_strides = strides
     row_start = in_block.row_start * row_strides
@@ -272,6 +275,7 @@ class StridedBlockManager:
             Slices which point to the position within the full-res data without padding
         input_trim : BlockIndices
             Slices to use on full-res input block to remove padding from half-window.
+
         """
         out_trim = self.get_trimming_block()
         for out_block in self.iter_outputs():

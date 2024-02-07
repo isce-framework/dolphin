@@ -19,13 +19,13 @@ import h5py
 import numpy as np
 import rasterio as rio
 from numpy.typing import ArrayLike
-from opera_utils._dates import get_dates, sort_files_by_date
+from opera_utils import get_dates, sort_files_by_date
 from osgeo import gdal
+from tqdm.auto import trange
 
 from dolphin import io, utils
 from dolphin._types import Filename
 from dolphin.io._blocks import iter_blocks
-from dolphin.utils import progress
 
 from ._background import _DEFAULT_TIMEOUT, BackgroundReader
 
@@ -119,6 +119,7 @@ class BinaryReader(DatasetReader):
     for reading or writing and closed immediately after each read/write operation. This
     allows multiple spawned processes to write to the file in coordination (as long as a
     suitable mutex is used to guard file access.)
+
     """
 
     filename: Path
@@ -180,6 +181,7 @@ class BinaryReader(DatasetReader):
         -------
         BinaryReader
             The BinaryReader object.
+
         """
         with rio.open(filename) as src:
             dtype = src.dtypes[band - 1]
@@ -221,6 +223,7 @@ class HDF5Reader(DatasetReader):
     immediately after each read/write operation.
     If passing the `HDF5Reader` to multiple spawned processes, it is recommended
     to set `keep_open=False` .
+
     """
 
     filename: Path
@@ -301,6 +304,7 @@ class RasterReader(DatasetReader):
     immediately after each read/write operation.
     If passing the `RasterReader` to multiple spawned processes, it is recommended
     to set `keep_open=False` .
+
     """
 
     filename: Filename
@@ -493,6 +497,7 @@ class BinaryStackReader(BaseStackReader):
         -------
         BinaryStackReader
             The BinaryStackReader object.
+
         """
         readers = [
             BinaryReader(Path(f), shape=shape_2d, dtype=dtype) for f in file_list
@@ -525,6 +530,7 @@ class BinaryStackReader(BaseStackReader):
         -------
         BinaryStackReader
             The BinaryStackReader object.
+
         """
         readers = []
         dtypes = set()
@@ -564,6 +570,7 @@ class HDF5StackReader(BaseStackReader):
     immediately after each read/write operation.
     If passing the `HDF5StackReader` to multiple spawned processes, it is recommended
     to set `keep_open=False`.
+
     """
 
     @classmethod
@@ -596,6 +603,7 @@ class HDF5StackReader(BaseStackReader):
         -------
         HDF5StackReader
             The HDF5StackReader object.
+
         """
         if isinstance(dset_names, str):
             dset_names = [dset_names] * len(file_list)
@@ -626,6 +634,7 @@ class RasterStackReader(BaseStackReader):
     If `keep_open=True`, this class stores an open file object.
     Otherwise, the file is opened on-demand for reading or writing and closed
     immediately after each read/write operation.
+
     """
 
     @classmethod
@@ -658,6 +667,7 @@ class RasterStackReader(BaseStackReader):
         -------
         RasterStackReader
             The RasterStackReader object.
+
         """
         if isinstance(bands, int):
             bands = [bands] * len(file_list)
@@ -702,7 +712,8 @@ class VRTStack(StackReader):
         in every images. Used for skipping the loading of these pixels.
     file_date_fmt : str, optional (default = "%Y%m%d")
         Format string for parsing the dates from the filenames.
-        Passed to [opera_utils._dates.get_dates][].
+        Passed to [opera_utils.get_dates][].
+
     """
 
     def __init__(
@@ -949,6 +960,7 @@ def _parse_vrt_file(vrt_file):
         List of filepaths to the SLCs
     sds
         Subdataset name, if using NetCDF/HDF5 files
+
     """
     file_strings = []
     with open(vrt_file) as f:
@@ -996,7 +1008,6 @@ class EagerLoader(BackgroundReader):
         nodata_mask: Optional[ArrayLike] = None,
         queue_size: int = 1,
         timeout: float = _DEFAULT_TIMEOUT,
-        show_progress: bool = True,
     ):
         super().__init__(nq=queue_size, timeout=timeout, name="EagerLoader")
         self.reader = reader
@@ -1017,7 +1028,6 @@ class EagerLoader(BackgroundReader):
         self._nodata_mask = nodata_mask
         self._block_shape = block_shape
         self._nodata = nodata_value
-        self._show_progress = show_progress
         if self._nodata is None:
             self._nodata = np.nan
 
@@ -1027,7 +1037,7 @@ class EagerLoader(BackgroundReader):
         return cur_block, (rows, cols)
 
     def iter_blocks(
-        self,
+        self, **tqdm_kwargs
     ) -> Generator[tuple[np.ndarray, tuple[slice, slice]], None, None]:
         # Queue up all slices to the work queue
         queued_slices = []
@@ -1041,29 +1051,24 @@ class EagerLoader(BackgroundReader):
             self.queue_read(rows, cols)
             queued_slices.append((rows, cols))
 
-        s_iter = range(len(queued_slices))
-        desc = f"Processing {self._block_shape} sized blocks..."
-        with progress(dummy=not self._show_progress) as p:
-            for _ in p.track(s_iter, description=desc):
-                cur_block, (rows, cols) = self.get_data()
-                logger.debug(f"got data for {rows, cols}: {cur_block.shape}")
+        logger.info(f"Processing {self._block_shape} sized blocks... {tqdm_kwargs}")
+        for _ in trange(len(queued_slices), **tqdm_kwargs):
+            cur_block, (rows, cols) = self.get_data()
+            logger.debug(f"got data for {rows, cols}: {cur_block.shape}")
 
-                # Otherwise look at the actual block we loaded
-                if self._skip_empty:
-                    if (
-                        isinstance(cur_block, np.ma.MaskedArray)
-                        and cur_block.mask.all()
-                    ):
-                        continue
-                    if np.isnan(self._nodata):
-                        block_is_nodata = np.isnan(cur_block)
-                    else:
-                        block_is_nodata = cur_block == self._nodata
-                    if np.all(block_is_nodata):
-                        logger.debug(
-                            f"Skipping block {rows}, {cols} since it was all nodata"
-                        )
-                        continue
-                yield cur_block, (rows, cols)
+            # Otherwise look at the actual block we loaded
+            if self._skip_empty:
+                if isinstance(cur_block, np.ma.MaskedArray) and cur_block.mask.all():
+                    continue
+                if np.isnan(self._nodata):
+                    block_is_nodata = np.isnan(cur_block)
+                else:
+                    block_is_nodata = cur_block == self._nodata
+                if np.all(block_is_nodata):
+                    logger.debug(
+                        f"Skipping block {rows}, {cols} since it was all nodata"
+                    )
+                    continue
+            yield cur_block, (rows, cols)
 
         self.notify_finished()

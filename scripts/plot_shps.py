@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 from __future__ import annotations
 
 import argparse
@@ -17,7 +16,7 @@ def plot_shps(
     var,
     half_window: dict[str, int],
     display_arr=None,
-    shp_methods=["glrt", "ks"],
+    shp_methods=None,
     shp_alpha=0.05,
     shp_nslc=None,
     cmap_nmap="Reds_r",
@@ -27,6 +26,8 @@ def plot_shps(
 
     Click on a pixel to see the neighborhood map.
     """
+    if shp_methods is None:
+        shp_methods = ["glrt", "ks"]
     if isinstance(slc_stack, str):
         slc_stack = VRTStack(slc_stack, write_file=False)
     if display_arr is None:
@@ -70,10 +71,7 @@ def plot_shps(
             # Calc SHPS:
             ax = axes[i]
             rs, cs = _get_slices(row, col, ny, nx)
-            if shp_method == "ks":
-                amp_stack = np.abs(slc_stack[:, rs, cs])
-            else:
-                amp_stack = None
+            amp_stack = np.abs(slc_stack[:, rs, cs]) if shp_method == "ks" else None
 
             cur_shps = shp.estimate_neighbors(
                 halfwin_rowcol=halfwin_rowcol,

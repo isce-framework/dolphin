@@ -17,7 +17,7 @@ from .config import DisplacementWorkflow
 
 @log_runtime
 def run(
-    cfg: DisplacementWorkflow, debug: bool = False
+    cfg: DisplacementWorkflow, debug: bool = False, tqdm_kwargs=None
 ) -> tuple[list[Path], Path, Path, Path]:
     """Run the displacement workflow on a stack of SLCs.
 
@@ -28,6 +28,9 @@ def run(
         for controlling the workflow.
     debug : bool, optional
         Enable debug logging, by default False.
+    tqdm_kwargs : dict, optional
+        dict of arguments to pass to `tqdm` (e.g. `position=n` for n parallel bars)
+        See https://tqdm.github.io/docs/tqdm/#tqdm-objects for all options.
 
     Returns
     -------
@@ -41,7 +44,10 @@ def run(
         In the case of sequential phase linking, this is the average of all ministacks.
     ps_looked_file : Path
         The multilooked boolean persistent scatterer file.
+
     """
+    if tqdm_kwargs is None:
+        tqdm_kwargs = {}
     logger = get_log(debug=debug)
     work_dir = cfg.work_directory
     logger.info("Running wrapped phase estimation in %s", work_dir)
@@ -73,6 +79,7 @@ def run(
         except IndexError:
             existing_amp = existing_disp = None
 
+        kwargs = tqdm_kwargs | {"desc": f"PS ({ps_output.parent})"}
         ps.create_ps(
             reader=vrt_stack,
             like_filename=vrt_stack.outfile,
@@ -83,6 +90,7 @@ def run(
             existing_amp_dispersion_file=existing_disp,
             existing_amp_mean_file=existing_amp,
             block_shape=cfg.worker_settings.block_shape,
+            **kwargs,
         )
 
     # Save a looked version of the PS mask too
@@ -136,6 +144,7 @@ def run(
         temp_coh_file = next(pl_path.glob("temporal_coherence*tif"))
     else:
         logger.info(f"Running sequential EMI step in {pl_path}")
+        kwargs = tqdm_kwargs | {"desc": f"Phase linking ({pl_path})"}
 
         # TODO: Need a good way to store the nslc attribute in the PS file...
         # If we pre-compute it from some big stack, we need to use that for SHP
@@ -161,8 +170,7 @@ def run(
             shp_alpha=cfg.phase_linking.shp_alpha,
             shp_nslc=shp_nslc,
             block_shape=cfg.worker_settings.block_shape,
-            # n_workers=cfg.worker_settings.n_workers,
-            # gpu_enabled=cfg.worker_settings.gpu_enabled,
+            **kwargs,
         )
         comp_slc_file = comp_slcs[-1]
 
@@ -220,6 +228,7 @@ def create_ifgs(
     NotImplementedError
         Currently raised for `InterferogramNetworkType`s besides single reference
         or max-bandwidth
+
     """
     ifg_dir = interferogram_network._directory
     if not dry_run:
@@ -317,11 +326,9 @@ def _get_reference_date_idx(
 
     # Otherwise use the last Compressed SLC as reference
     reference_idx = np.where(is_compressed)[0][-1]
-    # read the Compressed SLC metadata to find it's reference date
-    comp_slc = stack.CompressedSlcInfo.from_file_metadata(
-        input_file_list[reference_idx]
-    )
-    return comp_slc.reference_date, reference_idx
+    reference_date = input_dates[reference_idx][0]
+
+    return reference_date, reference_idx
 
 
 def _get_input_dates(

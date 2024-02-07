@@ -76,6 +76,7 @@ def estimate_neighbors(
             `[dolphin.io.compute_out_shape][]`
             `window_rows = 2 * halfwin_rowcol[0] + 1`
             `window_cols = 2 * halfwin_rowcol[1] + 1`
+
     """
     if strides is None:
         strides = {"x": 1, "y": 1}
@@ -120,6 +121,7 @@ def get_cutoff(alpha: float, N: int) -> float:
     -------
     float
         Cutoff value for the GLRT test statistic.
+
     """
     n_alpha_to_cutoff = _read_cutoff_csv("glrt")
     try:

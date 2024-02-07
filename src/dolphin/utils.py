@@ -15,7 +15,6 @@ from typing import Any, Iterable, Optional, Sequence, Union
 import numpy as np
 from numpy.typing import ArrayLike, DTypeLike
 from osgeo import gdal, gdal_array, gdalconst
-from rich.progress import MofNCompleteColumn, Progress, SpinnerColumn, TimeElapsedColumn
 
 from dolphin._log import get_log
 from dolphin._types import Bbox, Filename, P, Strides, T
@@ -24,48 +23,6 @@ DateOrDatetime = Union[datetime.date, datetime.datetime]
 
 gdal.UseExceptions()
 logger = get_log(__name__)
-
-
-def progress(dummy=False):
-    """Create a Progress bar context manager.
-
-    Parameters
-    ----------
-    dummy : bool, default = False
-        If True, skips showing and calls `contextlib.nullcontext`
-
-    Usage
-    -----
-    >>> with progress() as p:
-    ...     for i in p.track(range(10)):
-    ...         pass
-    10/10 Working... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 100% 0:00:00
-    """
-
-    class DummyProgress:
-        """Context manager that does no additional processing.
-
-        Needs a `track` method to match rich.Progress.
-        """
-
-        def track(self, iterable, **kwargs):
-            yield from iterable
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *excinfo):
-            pass
-
-    if dummy:
-        return DummyProgress()
-
-    return Progress(
-        SpinnerColumn(),
-        MofNCompleteColumn(),
-        *Progress.get_default_columns()[:-1],  # Skip the ETA column
-        TimeElapsedColumn(),
-    )
 
 
 def numpy_to_gdal_type(np_dtype: DTypeLike) -> int:
@@ -86,6 +43,7 @@ def numpy_to_gdal_type(np_dtype: DTypeLike) -> int:
     TypeError
         If `np_dtype` is not a numpy dtype, or if the provided dtype is not
         supported by GDAL (for example, `np.dtype('>i4')`)
+
     """
     np_dtype = np.dtype(np_dtype)
 
@@ -163,6 +121,7 @@ def full_suffix(filename: Filename):
         '.tif'
         >>> full_suffix('test.tar.gz')
         '.tar.gz'
+
     """
     fpath = Path(filename)
     return "".join(fpath.suffixes)
@@ -230,6 +189,7 @@ def take_looks(arr, row_looks, col_looks, func_type="nansum", edge_strategy="cut
     Notes
     -----
     Cuts off values if the size isn't divisible by num looks.
+
     """
     if row_looks == 1 and col_looks == 1:
         return arr
@@ -312,6 +272,7 @@ def upsample_nearest(
     -------
     ndarray
         The upsampled array, shape = `output_shape`.
+
     """
     in_rows, in_cols = arr.shape[-2:]
     out_rows, out_cols = output_shape[-2:]
@@ -461,6 +422,7 @@ def get_cpu_count():
     ----------
     1. https://github.com/joblib/loky/issues/111
     2. https://github.com/conan-io/conan/blob/982a97041e1ece715d157523e27a14318408b925/conans/client/tools/oss.py#L27 # noqa
+
     """  # noqa: E501
 
     def get_cpu_quota():
@@ -484,7 +446,9 @@ def flatten(list_of_lists: Iterable[Iterable[Any]]) -> chain[Any]:
     return chain.from_iterable(list_of_lists)
 
 
-def format_date_pair(start: DateOrDatetime, end: DateOrDatetime, fmt="%Y%m%d") -> str:
+def format_date_pair(
+    start: DateOrDatetime, end: DateOrDatetime, fmt: str = "%Y%m%d"
+) -> str:
     """Format a date pair into a string.
 
     Parameters
@@ -494,14 +458,39 @@ def format_date_pair(start: DateOrDatetime, end: DateOrDatetime, fmt="%Y%m%d") -
     end : DateOrDatetime
         Second date or datetime
     fmt : str, optional
-        `datetime` formatter pattern, by default "%Y%m%d"
+        `datetime` formatter pattern.
+        Default = "%Y%m%d"
 
     Returns
     -------
     str
         Formatted date pair.
+
     """
-    return f"{start.strftime(fmt)}_{end.strftime(fmt)}"
+    return format_dates(start, end, fmt=fmt, sep="_")
+
+
+def format_dates(*dates: DateOrDatetime, fmt: str = "%Y%m%d", sep: str = "_") -> str:
+    """Format a date pair into a string.
+
+    Parameters
+    ----------
+    *dates : DateOrDatetime
+        Sequence of date/datetimes to format
+    fmt : str, optional
+        `datetime` formatter pattern.
+        Default = "%Y%m%d"
+    sep : str, optional
+        string separator between dates.
+        Default = "_"
+
+    Returns
+    -------
+    str
+        Formatted date pair.
+
+    """
+    return sep.join((d.strftime(fmt)) for d in dates)
 
 
 # Keep alias for now, but deprecate
@@ -540,6 +529,7 @@ def prepare_geometry(
     -------
     Dict[str, Path]
         Dictionary of prepared geometry files.
+
     """
     from dolphin import stitching
     from dolphin.io import format_nc_filename
@@ -647,6 +637,7 @@ def compute_out_shape(shape: tuple[int, int], strides: Strides) -> tuple[int, in
     So the output size would be 2, since we have 2 full windows.
     If the array size was 7 or 8, we would have 2 full windows and 1 partial,
     so the output size would still be 2.
+
     """
     rows, cols = shape
     rstride, cstride = strides

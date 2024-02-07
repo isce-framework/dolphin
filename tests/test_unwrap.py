@@ -18,7 +18,8 @@ except ImportError:
 
 # Dataset has no geotransform, gcps, or rpcs. The identity matrix will be returned.
 pytestmark = pytest.mark.filterwarnings(
-    "ignore::rasterio.errors.NotGeoreferencedWarning"
+    "ignore::rasterio.errors.NotGeoreferencedWarning",
+    "ignore:.*io.FileIO.*:pytest.PytestUnraisableExceptionWarning",
 )
 
 

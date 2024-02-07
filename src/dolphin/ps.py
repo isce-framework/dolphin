@@ -37,7 +37,7 @@ def create_ps(
     nodata_mask: Optional[np.ndarray] = None,
     update_existing: bool = False,
     block_shape: tuple[int, int] = (512, 512),
-    show_progress: bool = True,
+    **tqdm_kwargs,
 ):
     """Create the amplitude dispersion, mean, and PS files.
 
@@ -70,8 +70,10 @@ def create_ps(
     block_shape : tuple[int, int], optional
         The 2D block size to load all bands at a time.
         Default is (512, 512)
-    show_progress : bool, default=True
-        If true, displays a `rich.ProgressBar`.
+    **tqdm_kwargs : optional
+        Arguments to pass to `tqdm`, (e.g. `position=n` for n parallel bars)
+        See https://tqdm.github.io/docs/tqdm/#tqdm-objects for all options.
+
     """
     if existing_amp_dispersion_file and existing_amp_mean_file and not update_existing:
         logger.info("Using existing amplitude dispersion file, skipping calculation.")
@@ -112,9 +114,8 @@ def create_ps(
         block_shape=block_shape,
         nodata_mask=nodata_mask,
         skip_empty=skip_empty,
-        show_progress=show_progress,
     )
-    for cur_data, (rows, cols) in block_gen.iter_blocks():
+    for cur_data, (rows, cols) in block_gen.iter_blocks(**tqdm_kwargs):
         cur_rows, cur_cols = cur_data.shape[-2:]
 
         if not (np.all(cur_data == 0) or np.all(np.isnan(cur_data))):
@@ -207,6 +208,7 @@ def calc_ps_block(
     two acquisitions.
     Since fewer samples are used to calculate the mean and standard deviation,
     there is a higher false positive risk for these edge pixels.
+
     """
     if np.iscomplexobj(stack_mag):
         msg = "The input `stack_mag` must be real-valued."
@@ -279,6 +281,7 @@ def multilook_ps_mask(
     Returns
     -------
     output_file : Path
+
     """
     if strides == {"x": 1, "y": 1}:
         logger.info("No striding request, skipping multilook.")

@@ -16,16 +16,15 @@ Usage:
     # Custom output for this module:
     logger.success("Something great happened: highlight this success")
 """
-
 import logging
+import os
+import sys
 import time
 from collections.abc import Callable
 from functools import wraps
 from logging import Formatter
 from pathlib import Path
 from typing import Optional
-
-from rich.logging import RichHandler
 
 from dolphin._types import Filename, P, T
 
@@ -52,6 +51,7 @@ def get_log(
     Returns
     -------
     logging.Logger
+
     """
     logger = logging.getLogger(name)
     if not logger.hasHandlers():
@@ -81,13 +81,23 @@ def setup_logging(debug: bool = False, root_name: str = "dolphin") -> None:
         Name of the base logger to configure.
         All sub-loggers (e.g. modules with <root_name>.<module_name>) will
         also get access to the handler.
+
     """
     # Set for all dolphin modules
     logger = logging.getLogger(root_name)
-    h = RichHandler(rich_tracebacks=True, log_time_format="[%Y-%m-%d %H:%M:%S]")
+    h = logging.StreamHandler()
+    formatter = Formatter(
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        datefmt="%Y-%m-%dT%H:%M:%S",
+    )
+    h.setFormatter(formatter)
     logger.addHandler(h)
     log_level = logging.DEBUG if debug else logging.INFO
     logger.setLevel(log_level)
+    # Temp work around for tqdm on py312
+
+    if sys.version_info.major == 3 and sys.version_info.minor == 12:
+        os.environ["TQDM_DISABLE"] = "1"
 
 
 def log_runtime(f: Callable[P, T]) -> Callable[P, T]:
