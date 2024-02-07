@@ -286,7 +286,14 @@ class CompressedSlcInfo(BaseModel):
         except IndexError as e:
             msg = f"{filename} does not have 3 dates like {date_fmt}"
             raise ValueError(msg) from e
-        return cls(reference_date=ref, start_date=start, end_date=end)
+        output_folder = Path(filename).parent
+        return cls(
+            reference_date=ref,
+            start_date=start,
+            end_date=end,
+            output_folder=output_folder,
+            file_date_fmt=date_fmt,
+        )
 
     @classmethod
     def from_file_metadata(cls, filename: Filename) -> CompressedSlcInfo:
@@ -374,12 +381,10 @@ class MiniStackPlanner(BaseStack):
         # Start of with any compressed SLCs that are passed in
         compressed_slc_infos: list[CompressedSlcInfo] = []
         for f in self.compressed_slc_file_list:
-            try:
-                # Note: these must actually exist to be used!
-                compressed_slc_infos.append(CompressedSlcInfo.from_file_metadata(f))
-            except FileNotFoundError:
-                # If they're not real, fall back to just using the file triplet
-                compressed_slc_infos.append(CompressedSlcInfo.from_filename(f))
+            # TODO: will we ever actually need to read the old metadata here?
+            # # Note: these must actually exist to be used!
+            # compressed_slc_infos.append(CompressedSlcInfo.from_file_metadata(f))
+            compressed_slc_infos.append(CompressedSlcInfo.from_filename(f))
 
         # Solve each ministack using current chunk (and the previous compressed SLCs)
         ministack_starts = range(
