@@ -396,7 +396,7 @@ def test_vrt():
   <GeoTransform> -6.4500000000000000e+01,  1.0000000000000000e+00,  0.0000000000000000e+00,  6.6500000000000000e+01,  0.0000000000000000e+00, -1.0000000000000000e+00</GeoTransform>
   <VRTRasterBand dataType="CFloat32" band="1">
     <SimpleSource>
-      <SourceFilename relativeToVRT="0">compressed_20220101_20220104.tif</SourceFilename>
+      <SourceFilename relativeToVRT="0">compressed_20220101_20220101_20220104.tif</SourceFilename>
       <SourceBand>1</SourceBand>
       <SrcRect xOff="0" yOff="0" xSize="128" ySize="128" />
       <DstRect xOff="0" yOff="0" xSize="128" ySize="128" />
@@ -436,7 +436,7 @@ def test_parse_vrt(tmp_path, test_vrt):
 
     filepaths, sds = _parse_vrt_file(tmp_path / "t.vrt")
     assert filepaths == [
-        "compressed_20220101_20220104.tif",
+        "compressed_20220101_20220101_20220104.tif",
         "t087_185684_iw2_20220102.h5",
         "t087_185684_iw2_20220103.h5",
         "t087_185684_iw2_20220104.h5",
