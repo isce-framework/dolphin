@@ -9,6 +9,7 @@ from typing import Optional
 import numpy as np
 from numpy.typing import ArrayLike
 from osgeo import gdal
+from tqdm.auto import tqdm
 
 from dolphin import io, utils
 from dolphin._log import get_log
@@ -37,6 +38,7 @@ def create_ps(
     nodata_mask: Optional[np.ndarray] = None,
     update_existing: bool = False,
     block_shape: tuple[int, int] = (512, 512),
+    **tqdm_kwargs,
 ):
     """Create the amplitude dispersion, mean, and PS files.
 
@@ -69,6 +71,9 @@ def create_ps(
     block_shape : tuple[int, int], optional
         The 2D block size to load all bands at a time.
         Default is (512, 512)
+    **tqdm_kwargs : optional
+        Arguments to pass to `tqdm`, (e.g. `position=n` for n parallel bars)
+        See https://tqdm.github.io/docs/tqdm/#tqdm-objects for all options.
 
     """
     if existing_amp_dispersion_file and existing_amp_mean_file and not update_existing:
@@ -111,7 +116,8 @@ def create_ps(
         nodata_mask=nodata_mask,
         skip_empty=skip_empty,
     )
-    for cur_data, (rows, cols) in block_gen.iter_blocks():
+    tqdm.write(f"{tqdm_kwargs = }")
+    for cur_data, (rows, cols) in block_gen.iter_blocks(**tqdm_kwargs):
         cur_rows, cur_cols = cur_data.shape[-2:]
 
         if not (np.all(cur_data == 0) or np.all(np.isnan(cur_data))):

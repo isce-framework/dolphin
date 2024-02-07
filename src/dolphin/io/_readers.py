@@ -21,7 +21,7 @@ import rasterio as rio
 from numpy.typing import ArrayLike
 from opera_utils import get_dates, sort_files_by_date
 from osgeo import gdal
-from tqdm.auto import tqdm
+from tqdm.auto import trange
 
 from dolphin import io, utils
 from dolphin._types import Filename
@@ -1037,7 +1037,7 @@ class EagerLoader(BackgroundReader):
         return cur_block, (rows, cols)
 
     def iter_blocks(
-        self,
+        self, **tqdm_kwargs
     ) -> Generator[tuple[np.ndarray, tuple[slice, slice]], None, None]:
         # Queue up all slices to the work queue
         queued_slices = []
@@ -1051,9 +1051,8 @@ class EagerLoader(BackgroundReader):
             self.queue_read(rows, cols)
             queued_slices.append((rows, cols))
 
-        s_iter = range(len(queued_slices))
-        desc = f"Processing {self._block_shape} sized blocks..."
-        for _ in tqdm(s_iter, desc=desc):
+        logger.info(f"Processing {self._block_shape} sized blocks... {tqdm_kwargs}")
+        for _ in trange(len(queued_slices), **tqdm_kwargs):
             cur_block, (rows, cols) = self.get_data()
             logger.debug(f"got data for {rows, cols}: {cur_block.shape}")
 

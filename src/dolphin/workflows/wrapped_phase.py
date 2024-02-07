@@ -17,7 +17,7 @@ from .config import DisplacementWorkflow
 
 @log_runtime
 def run(
-    cfg: DisplacementWorkflow, debug: bool = False
+    cfg: DisplacementWorkflow, debug: bool = False, tqdm_kwargs=None
 ) -> tuple[list[Path], Path, Path, Path]:
     """Run the displacement workflow on a stack of SLCs.
 
@@ -28,6 +28,9 @@ def run(
         for controlling the workflow.
     debug : bool, optional
         Enable debug logging, by default False.
+    tqdm_kwargs : dict, optional
+        dict of arguments to pass to `tqdm` (e.g. `position=n` for n parallel bars)
+        See https://tqdm.github.io/docs/tqdm/#tqdm-objects for all options.
 
     Returns
     -------
@@ -43,6 +46,8 @@ def run(
         The multilooked boolean persistent scatterer file.
 
     """
+    if tqdm_kwargs is None:
+        tqdm_kwargs = {}
     logger = get_log(debug=debug)
     work_dir = cfg.work_directory
     logger.info("Running wrapped phase estimation in %s", work_dir)
@@ -74,6 +79,7 @@ def run(
         except IndexError:
             existing_amp = existing_disp = None
 
+        kwargs = tqdm_kwargs | {"desc": f"PS ({ps_output.parent})"}
         ps.create_ps(
             reader=vrt_stack,
             like_filename=vrt_stack.outfile,
@@ -84,6 +90,7 @@ def run(
             existing_amp_dispersion_file=existing_disp,
             existing_amp_mean_file=existing_amp,
             block_shape=cfg.worker_settings.block_shape,
+            **kwargs,
         )
 
     # Save a looked version of the PS mask too
@@ -137,6 +144,7 @@ def run(
         temp_coh_file = next(pl_path.glob("temporal_coherence*tif"))
     else:
         logger.info(f"Running sequential EMI step in {pl_path}")
+        kwargs = tqdm_kwargs | {"desc": f"Phase linking ({pl_path})"}
 
         # TODO: Need a good way to store the nslc attribute in the PS file...
         # If we pre-compute it from some big stack, we need to use that for SHP
@@ -162,8 +170,7 @@ def run(
             shp_alpha=cfg.phase_linking.shp_alpha,
             shp_nslc=shp_nslc,
             block_shape=cfg.worker_settings.block_shape,
-            # n_workers=cfg.worker_settings.n_workers,
-            # gpu_enabled=cfg.worker_settings.gpu_enabled,
+            **kwargs,
         )
         comp_slc_file = comp_slcs[-1]
 

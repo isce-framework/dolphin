@@ -87,7 +87,7 @@ def setup_logging(debug: bool = False, root_name: str = "dolphin") -> None:
     h = logging.StreamHandler()
     formatter = Formatter(
         "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        datefmt="Y%-%m-%dT%H:%M:%S",
+        datefmt="%Y-%m-%dT%H:%M:%S",
     )
     h.setFormatter(formatter)
     logger.addHandler(h)
