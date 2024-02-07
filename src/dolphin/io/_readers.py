@@ -1053,7 +1053,7 @@ class EagerLoader(BackgroundReader):
 
         s_iter = range(len(queued_slices))
         desc = f"Processing {self._block_shape} sized blocks..."
-        for _ in tqdm(s_iter, description=desc):
+        for _ in tqdm(s_iter, desc=desc):
             cur_block, (rows, cols) = self.get_data()
             logger.debug(f"got data for {rows, cols}: {cur_block.shape}")
 
