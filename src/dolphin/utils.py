@@ -218,13 +218,16 @@ def take_looks(arr, row_looks, col_looks, func_type="nansum", edge_strategy="cut
             func_type=func_type,
             edge_strategy=edge_strategy,
         )
-        looked_mask = take_looks(
-            arr.mask,
-            row_looks,
-            col_looks,
-            func_type="any",
-            edge_strategy=edge_strategy,
-        )
+        if arr.mask.ndim == np.ma.nomask:
+            looked_mask = arr.mask
+        else:
+            looked_mask = take_looks(
+                arr.mask,
+                row_looks,
+                col_looks,
+                func_type="any",
+                edge_strategy=edge_strategy,
+            )
         return np.ma.MaskedArray(data=looked_data, mask=looked_mask)
 
     arr = _make_dims_multiples(arr, row_looks, col_looks, how=edge_strategy)

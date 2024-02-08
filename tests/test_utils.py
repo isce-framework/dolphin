@@ -14,7 +14,7 @@ def test_get_types():
 
 
 class TestTakeLooks:
-    def test_take_looks(self):
+    def test_basic(self):
         arr = np.array([[0.1, 0.01, 2], [3, 4, 1 + 1j]])
 
         downsampled = utils.take_looks(arr, 2, 1, func_type="nansum")
@@ -24,7 +24,7 @@ class TestTakeLooks:
         downsampled = utils.take_looks(arr, 1, 2, func_type="mean")
         npt.assert_array_equal(downsampled, np.array([[0.055], [3.5]]))
 
-    def test_take_looks_3d(self):
+    def test_3d(self):
         arr = np.array([[0.1, 0.01, 2], [3, 4, 1 + 1j]])
         arr3d = np.stack([arr, arr, arr], axis=0)
         downsampled = utils.take_looks(arr3d, 2, 1)
@@ -32,7 +32,7 @@ class TestTakeLooks:
         for i in range(3):
             npt.assert_array_equal(downsampled[i], expected)
 
-    def test_masked_looks(self, slc_samples):
+    def test_nans(self, slc_samples):
         slc_stack = slc_samples.reshape(30, 11, 11)
         mask = np.zeros((11, 11), dtype=bool)
         # Mask the top row
@@ -46,7 +46,7 @@ class TestTakeLooks:
 
         npt.assert_array_almost_equal(s1, s2, decimal=5)
 
-    def test_masked_array_looks(self):
+    def test_masked_array(self):
         arr = np.ma.MaskedArray(
             [[-999, 3, 4, 1 + 1j]], mask=[[True, False, False, False]]
         )
@@ -54,6 +54,12 @@ class TestTakeLooks:
         npt.assert_array_equal(
             downsampled, np.ma.MaskedArray([[np.inf, 5 + 1j]], mask=[True, False])
         )
+        assert type(downsampled) == np.ma.MaskedArray
+
+    def test_nomask(self):
+        arr = np.ma.MaskedArray([[0.1, 0.01, 2], [3, 4, 1 + 1j]], mask=np.ma.nomask)
+        downsampled = utils.take_looks(arr, 2, 1, func_type="nansum")
+        npt.assert_array_equal(downsampled, np.array([[3.1, 4.01, 3.0 + 1.0j]]))
         assert type(downsampled) == np.ma.MaskedArray
 
 
