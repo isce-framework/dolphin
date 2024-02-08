@@ -6,6 +6,7 @@ from typing import Sequence
 
 from dolphin import io, stitching, unwrap
 from dolphin._log import get_log, log_runtime
+from dolphin._overviews import ImageType, create_overviews
 from dolphin._types import PathOrStr
 
 from .config import UnwrapOptions
@@ -20,6 +21,7 @@ def run(
     nlooks: float,
     unwrap_options: UnwrapOptions,
     mask_file: PathOrStr | None = None,
+    add_overviews: bool = True,
 ) -> tuple[list[Path], list[Path]]:
     """Run the displacement workflow on a stack of SLCs.
 
@@ -37,6 +39,9 @@ def run(
     mask_file : PathOrStr, optional
         Path to boolean mask indicating nodata areas.
         1 indicates valid data, 0 indicates missing data.
+    add_overviews : bool, default = True
+        If True, creates overviews of the unwrapped phase and connected component
+        labels.
 
     Returns
     -------
@@ -79,6 +84,12 @@ def run(
         unwrap_method=unwrap_options.unwrap_method,
         scratchdir=unwrap_scratchdir,
     )
+
+    if add_overviews:
+        logger.info("Creating overviews for unwrapped images")
+        create_overviews(unwrapped_paths, image_type=ImageType.UNWRAPPED)
+        create_overviews(conncomp_paths, image_type=ImageType.CONNCOMP)
+        create_overviews(unwrapped_paths, image_type=ImageType.CORRELATION)
 
     return (unwrapped_paths, conncomp_paths)
 

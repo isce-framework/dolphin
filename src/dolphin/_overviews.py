@@ -14,9 +14,7 @@ gdal.UseExceptions()
 
 logger = logging.getLogger(__name__)
 
-raster_type_to_resampling = {
-    "unw": "average",
-}
+DEFAULT_LEVELS = [4, 8, 16, 32, 64]
 
 
 class Resampling(Enum):
@@ -27,10 +25,32 @@ class Resampling(Enum):
     LANCZOS = "lanczos"
 
 
-def add_overviews(
+class ImageType(Enum):
+    """Types of images produced by dolphin."""
+
+    UNWRAPPED = "unwrapped"
+    INTERFEROGRAM = "interferogram"
+    CORRELATION = "correlation"
+    CONNCOMP = "conncomp"
+    PS = "ps"
+
+
+IMAGE_TYPE_TO_RESAMPLING = {
+    ImageType.UNWRAPPED: Resampling.AVERAGE,
+    ImageType.INTERFEROGRAM: Resampling.LANCZOS,
+    ImageType.CORRELATION: Resampling.AVERAGE,
+    ImageType.CONNCOMP: Resampling.NEAREST,
+    # No max in resampling, yet, which would be best
+    # https://github.com/OSGeo/gdal/issues/3683
+    ImageType.PS: Resampling.AVERAGE,
+}
+
+
+def create_image_overviews(
     file_path: Path | str,
-    overview_levels: Sequence[int] = [4, 8, 16, 32, 64],
-    resampling: Resampling = Resampling.NEAREST,
+    levels: Sequence[int] = DEFAULT_LEVELS,
+    image_type: ImageType | None = None,
+    resampling: Resampling | None = None,
     external: bool = False,
     compression: str = "LZW",
 ):
@@ -40,11 +60,15 @@ def add_overviews(
     ----------
     file_path : Path
         Path to the file to process.
-    overview_levels : list
+    levels : Sequence[int]
         List of overview levels to add.
+        Default = [4, 8, 16, 32, 64]
+    image_type : ImageType, optional
+        If provided, looks up the default resampling algorithm
+        most appropriate for this type of raster.
     resampling : str or Resampling
-        GDAL resampling algorithm for overviews.
-        Default = "nearest"
+        GDAL resampling algorithm for overviews. Required
+        if not specifying `image_type`.
     external : bool, default = False
         Use external overviews (.ovr files).
     compression: str, default = "LZW"
@@ -52,6 +76,13 @@ def add_overviews(
         See https://gdal.org/programs/gdaladdo.html for options.
 
     """
+    if image_type is None and resampling is None:
+        raise ValueError("Must provide `image_type` or `resampling`")
+    if image_type is not None:
+        resampling = IMAGE_TYPE_TO_RESAMPLING[ImageType(image_type)]
+    else:
+        resampling = Resampling(resampling)
+
     flags = gdal.GA_Update if not external else gdal.GA_ReadOnly
     ds = gdal.Open(fspath(file_path), flags)
     if ds.GetRasterBand(1).GetOverviewCount() > 0:
@@ -60,16 +91,17 @@ def add_overviews(
 
     gdal.SetConfigOption("COMPRESS_OVERVIEW", compression)
     gdal.SetConfigOption("GDAL_NUM_THREADS", "2")
-    ds.BuildOverviews(resampling.value, overview_levels)
+    ds.BuildOverviews(resampling.value, levels)
 
 
-def process_files(
+def create_overviews(
     file_paths: Sequence[PathOrStr],
-    levels: Sequence[int],
-    resampling: Resampling,
+    levels: Sequence[int] = DEFAULT_LEVELS,
+    image_type: ImageType | None = None,
+    resampling: Resampling = Resampling.AVERAGE,
     max_workers: int = 5,
 ) -> None:
-    """Process files to add GDAL overviews and compression.
+    """Process many files to add GDAL overviews and compression.
 
     Parameters
     ----------
@@ -77,17 +109,21 @@ def process_files(
         Sequence of file paths to process.
     levels : Sequence[int]
         Sequence of overview levels to add.
+        Default = [4, 8, 16, 32, 64]
+    image_type : ImageType, optional
+        If provided, looks up the default resampling algorithm
     resampling : str or Resampling
-        GDAL resampling algorithm for overviews.
-        Default = "nearest"
+        GDAL resampling algorithm for overviews. Required
+        if not specifying `image_type`.
     max_workers : int, default = 5
         Number of parallel threads to run.
 
     """
     thread_map(
-        lambda file_path: add_overviews(
+        lambda file_path: create_image_overviews(
             Path(file_path),
-            overview_levels=list(levels),
+            levels=list(levels),
+            image_type=image_type,
             resampling=resampling,
         ),
         file_paths,
@@ -131,7 +167,7 @@ def run():
     # Convert resampling argument from string to Resampling Enum
     resampling_enum = Resampling(args.resampling)
 
-    process_files(
+    create_overviews(
         file_paths=args.file_paths,
         levels=args.levels,
         resampling=resampling_enum,
