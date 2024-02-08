@@ -1,14 +1,11 @@
 from __future__ import annotations
 
-import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from os import fspath
 from pathlib import Path
 from typing import Optional, Sequence, Union
 
-import isce3
 import numpy as np
-from isce3.unwrap import ICU, snaphu
 from tqdm.auto import tqdm
 
 from dolphin import io
@@ -18,6 +15,7 @@ from dolphin.utils import DummyProcessPoolExecutor, full_suffix
 from dolphin.workflows import UnwrapMethod
 
 from ._constants import CONNCOMP_SUFFIX, UNW_SUFFIX
+from ._snaphu_py import unwrap_snaphu_py
 from ._tophu import multiscale_unwrap
 from ._utils import _redirect_unwrapping_log, _zero_from_mask
 
@@ -116,8 +114,6 @@ def run(
 
     if mask_file:
         mask_file = Path(mask_file).resolve()
-        # TODO: include mask_file in snaphu
-        # Make sure it's the right format with 1s and 0s for include/exclude
 
     # This keeps it from spawning a new process for a single job.
     Executor = ThreadPoolExecutor if max_jobs > 1 else DummyProcessPoolExecutor
@@ -155,15 +151,17 @@ def unwrap(
     nlooks: float,
     mask_file: Optional[Filename] = None,
     zero_where_masked: bool = True,
+    ntiles: Union[int, tuple[int, int]] = 1,
+    tile_overlap: tuple[int, int] = (0, 0),
+    nproc: int = 1,
     unwrap_method: UnwrapMethod = UnwrapMethod.SNAPHU,
     init_method: str = "mst",
     cost: str = "smooth",
     log_to_file: bool = True,
     downsample_factor: Union[int, tuple[int, int]] = 1,
-    ntiles: Union[int, tuple[int, int]] = 1,
     scratchdir: Optional[Filename] = None,
 ) -> tuple[Path, Path]:
-    """Unwrap a single interferogram using isce3's bindings.
+    """Unwrap a single interferogram using snaphu, isce3, or tophu.
 
     Parameters
     ----------
@@ -185,20 +183,28 @@ def unwrap(
     unwrap_method : UnwrapMethod or str, optional, default = "snaphu"
         Choice of unwrapping algorithm to use.
         Choices: {"snaphu", "icu", "phass"}
+    ntiles : int or tuple[int, int], optional, default = (1, 1)
+        For either snaphu-py or tophu: divide the interferogram into tiles
+        and unwrap each separately, then combine.
+        If 1 or (1, 1), no tiling is performed, unwraps the interferogram as
+        one single image.
+    tile_overlap : tuple[int, int], optional
+        (For snaphu-py tiling): Number of pixels to overlap in the (row, col) direction.
+        Default = (0, 0)
+    nproc : int, optional
+        (For snaphu-py tiling) If specifying `ntiles`, number of processes to spawn
+        to unwrap the tiles in parallel.
+        Default = 1, which unwraps each tile in serial.
     init_method : str, choices = {"mcf", "mst"}
         SNAPHU initialization method, by default "mst"
     cost : str, choices = {"smooth", "defo", "p-norm",}
         SNAPHU cost function, by default "smooth"
     log_to_file : bool, optional
-        Redirect SNAPHU's logging output to file, by default True
+        Redirect isce3 logging output to file, by default True
     downsample_factor : int, optional, default = 1
         Downsample the interferograms by this factor to unwrap faster, then upsample
         to full resolution.
         If 1, doesn't use coarse_unwrap and unwraps as normal.
-    ntiles : int or tuple[int, int], optional, default = (1, 1)
-        Use multi-resolution unwrapping with `tophu` on the interferograms.
-        If 1 or (1, 1), doesn't use tophu and unwraps the interferogram as
-        one single image.
     scratchdir : Filename, optional
         Path to scratch directory to hold intermediate files.
         If None, uses `tophu`'s `/tmp/...` default.
@@ -210,11 +216,6 @@ def unwrap(
     conncomp_path : Path
         Path to output connected component label file.
 
-    Notes
-    -----
-    On MacOS, the SNAPHU unwrapper doesn't work due to a MemoryMap bug.
-    ICU is used instead.
-
     """
     if isinstance(downsample_factor, int):
         downsample_factor = (downsample_factor, downsample_factor)
@@ -222,6 +223,23 @@ def unwrap(
         ntiles = (ntiles, ntiles)
     # Coerce to the enum
     unwrap_method = UnwrapMethod(unwrap_method)
+
+    if unwrap_method == UnwrapMethod.SNAPHU:
+        # Pass everything to snaphu-py
+        return unwrap_snaphu_py(
+            ifg_filename,
+            corr_filename,
+            unw_filename,
+            nlooks,
+            ntiles=ntiles,
+            tile_overlap=tile_overlap,
+            mask_file=mask_file,
+            nproc=nproc,
+            zero_where_masked=zero_where_masked,
+            init_method=init_method,
+            cost=cost,
+            scratchdir=scratchdir,
+        )
 
     if any(t > 1 for t in ntiles):
         return multiscale_unwrap(
@@ -240,23 +258,18 @@ def unwrap(
             log_to_file=log_to_file,
         )
 
-    # check not MacOS
-    use_snaphu = sys.platform != "darwin" and unwrap_method not in ("icu", "phass")
-    Raster = isce3.io.gdal.Raster if use_snaphu else isce3.io.Raster
+    # Now we're using PHASS or ICU within isce3
+    from isce3.io import Raster
+    from isce3.unwrap import ICU, Phass
 
     shape = io.get_raster_xysize(ifg_filename)[::-1]
     corr_shape = io.get_raster_xysize(corr_filename)[::-1]
     if shape != corr_shape:
         msg = f"correlation {corr_shape} and interferogram {shape} shapes don't match"
         raise ValueError(msg)
-    mask_shape = io.get_raster_xysize(mask_file)[::-1] if mask_file else None
-    if mask_file and shape != mask_shape:
-        msg = f"Mask {mask_shape} and interferogram {shape} shapes don't match"
-        raise ValueError(msg)
 
     ifg_raster = Raster(fspath(ifg_filename))
     corr_raster = Raster(fspath(corr_filename))
-    mask_raster = Raster(fspath(mask_file)) if mask_file else None
     UNW_SUFFIX = full_suffix(unw_filename)
 
     # Get the driver based on the output file extension
@@ -287,14 +300,10 @@ def unwrap(
         options=io.DEFAULT_TIFF_OPTIONS,
     )
 
-    if use_snaphu:
-        unw_raster = Raster(fspath(unw_filename), 1, "w")
-        conncomp_raster = Raster(fspath(conncomp_filename), 1, "w")
-    else:
-        # The different raster classes have different APIs, so we need to
-        # create the raster objects differently.
-        unw_raster = Raster(fspath(unw_filename), True)
-        conncomp_raster = Raster(fspath(conncomp_filename), True)
+    # The different raster classes have different APIs, so we need to
+    # create the raster objects differently.
+    unw_raster = Raster(fspath(unw_filename), True)
+    conncomp_raster = Raster(fspath(conncomp_filename), True)
 
     _redirect_unwrapping_log(unw_filename, unwrap_method.value)
 
@@ -308,30 +317,24 @@ def unwrap(
 
     logger.info(
         f"Unwrapping size {(ifg_raster.length, ifg_raster.width)} {ifg_filename} to"
-        f" {unw_filename} using {'SNAPHU' if use_snaphu else 'ICU'}"
+        f" {unw_filename} using {unwrap_method.value}"
     )
-    if use_snaphu:
-        snaphu.unwrap(
-            unw_raster,
-            conncomp_raster,
-            ifg_raster,
-            corr_raster,
-            nlooks=nlooks,
-            cost=cost,
-            init_method=init_method,
-            mask=mask_raster,
-        )
+    if unwrap_method == UnwrapMethod.PHASS:
+        # TODO: expose the configuration for phass?
+        # If we ever find cases where changing help, then yes we should
+        # coherence_thresh: float = 0.2
+        # good_coherence: float = 0.7
+        # min_region_size: int = 200
+        unwrapper = Phass()
     else:
-        # Snaphu will fail on Mac OS due to a MemoryMap bug. Use ICU instead.
-        # TODO: Should we zero out the correlation data using the mask,
-        # since ICU doesn't support masking?
+        unwrapper = ICU(buffer_lines=shape[0])
 
-        icu = ICU(buffer_lines=shape[0])
-        icu.unwrap(
-            unw_raster,
-            conncomp_raster,
-            ifg_raster,
-            corr_raster,
-        )
+    unwrapper.unwrap(
+        unw_raster,
+        conncomp_raster,
+        ifg_raster,
+        corr_raster,
+    )
+
     del unw_raster, conncomp_raster
     return Path(unw_filename), Path(conncomp_filename)

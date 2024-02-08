@@ -16,6 +16,10 @@ def _zero_from_mask(
     zeroed_ifg_file = Path(ifg_filename).with_suffix(".zeroed.tif")
     zeroed_corr_file = Path(corr_filename).with_suffix(".zeroed.cor.tif")
 
+    if io.get_raster_xysize(ifg_filename) != io.get_raster_xysize(mask_filename):
+        msg = f"Mask {mask_filename} and {ifg_filename} shapes don't match"
+        raise ValueError(msg)
+
     mask = io.load_gdal(mask_filename)
     for in_f, out_f in zip(
         [ifg_filename, corr_filename], [zeroed_ifg_file, zeroed_corr_file]

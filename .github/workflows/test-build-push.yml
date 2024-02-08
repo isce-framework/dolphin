@@ -42,6 +42,7 @@ jobs:
       - name: Install
         run: |
           pip install "opera-utils>=0.2.1"
+          pip install "snaphu"
           pip install --no-deps .
       - name: Install test dependencies
         run: |
