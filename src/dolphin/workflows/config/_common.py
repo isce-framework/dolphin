@@ -287,6 +287,18 @@ class OutputOptions(BaseModel, extra="forbid"):
         list(DEFAULT_TIFF_OPTIONS),
         description="GDAL creation options for GeoTIFF files",
     )
+    add_overviews: bool = Field(
+        True,
+        description=(
+            "Whether to add overviews to the output GeoTIFF files. This will "
+            "increase file size, but can be useful for visualizing the data with "
+            "web mapping tools. See https://gdal.org/programs/gdaladdo.html for more."
+        ),
+    )
+    overview_levels: list[int] = Field(
+        [4, 8, 16, 32, 64],
+        description="List of overview levels to create (if `add_overviews=True`).",
+    )
 
     # validators
     @field_validator("bounds", mode="after")
