@@ -26,6 +26,7 @@ def solve(
     -------
     phi : np.array 1D
         The estimated phase for each SAR acquisition
+
     """
     phi = jnp.linalg.lstsq(A, dphi, rcond=None)[0]
     # Add 0 for the reference date to the front
@@ -52,6 +53,7 @@ def get_incidence_matrix(ifg_pairs: Sequence[tuple[int, int]]) -> np.ndarray:
         Each row corresponds to an ifg, each column to a SAR date.
         The value will be -1 on the early (reference) ifgs, +1 on later (secondary)
         since the ifg phase = (later - earlier)
+
     """
     sar_dates = sorted(set(flatten(ifg_pairs)))
 
