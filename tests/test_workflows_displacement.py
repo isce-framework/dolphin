@@ -35,12 +35,15 @@ def test_displacement_run_single(
             },
         )
         paths = displacement.run(cfg)
+        for p in paths.comp_slc_dict.values():
+            assert p.exists()
+        assert paths.stitched_ps_file.exists()
         assert all(p.exists() for p in paths.stitched_ifg_paths)
         assert all(p.exists() for p in paths.stitched_cor_paths)
         assert paths.stitched_temp_coh_file.exists()
         assert paths.stitched_ps_file.exists()
-        assert paths.unwrapped_paths is None
-        assert paths.conncomp_paths is None
+        assert all(p.exists() for p in paths.unwrapped_paths)
+        assert all(p.exists() for p in paths.conncomp_paths)
 
 
 def test_displacement_run_single_official_opera_naming(
@@ -74,7 +77,10 @@ def test_displacement_run_single_official_opera_naming(
             },
             unwrap_options={"run_unwrap": False},
         )
-        displacement.run(cfg)
+        outs = displacement.run(cfg)
+        # We skipped unwrapping here, so check:
+        assert outs.unwrapped_paths is None
+        assert outs.conncomp_paths is None
 
 
 def run_displacement_stack(
