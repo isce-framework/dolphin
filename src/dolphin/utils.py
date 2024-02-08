@@ -208,6 +208,25 @@ def take_looks(arr, row_looks, col_looks, func_type="nansum", edge_strategy="cut
             ]
         )
 
+    if isinstance(arr, np.ma.MaskedArray):
+        # Must do looks separately on mask
+        # https://github.com/numpy/numpy/issues/8881
+        looked_data = take_looks(
+            arr.data,
+            row_looks,
+            col_looks,
+            func_type=func_type,
+            edge_strategy=edge_strategy,
+        )
+        looked_mask = take_looks(
+            arr.mask,
+            row_looks,
+            col_looks,
+            func_type="any",
+            edge_strategy=edge_strategy,
+        )
+        return np.ma.MaskedArray(data=looked_data, mask=looked_mask)
+
     arr = _make_dims_multiples(arr, row_looks, col_looks, how=edge_strategy)
 
     rows, cols = arr.shape
