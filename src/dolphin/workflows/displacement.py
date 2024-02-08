@@ -35,6 +35,7 @@ logger = get_log(__name__)
 class OutputPaths(NamedTuple):
     """Named tuple of `DisplacementWorkflow` outputs."""
 
+    comp_slc_dict: dict[str, Path]
     stitched_ifg_paths: list[Path]
     stitched_cor_paths: list[Path]
     stitched_temp_coh_file: Path
@@ -206,6 +207,7 @@ def run(
         logger.info("Skipping unwrap step")
         _print_summary(cfg)
         return OutputPaths(
+            comp_slc_dict=comp_slc_dict,
             stitched_ifg_paths=stitched_ifg_paths,
             stitched_cor_paths=stitched_cor_paths,
             stitched_temp_coh_file=stitched_temp_coh_file,
@@ -290,6 +292,7 @@ def run(
     # Print the maximum memory usage for each worker
     _print_summary(cfg)
     return OutputPaths(
+        comp_slc_dict=comp_slc_dict,
         stitched_ifg_paths=stitched_ifg_paths,
         stitched_cor_paths=stitched_cor_paths,
         stitched_temp_coh_file=stitched_temp_coh_file,
