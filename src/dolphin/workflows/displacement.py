@@ -19,6 +19,7 @@ from dolphin.atmosphere import estimate_ionospheric_delay, estimate_tropospheric
 from dolphin.io import get_raster_bounds, get_raster_crs
 from dolphin.utils import (
     DummyProcessPoolExecutor,
+    disable_gpu,
     get_max_memory_usage,
     prepare_geometry,
     set_num_threads,
@@ -62,6 +63,8 @@ def run(
     logger = get_log(name="dolphin", debug=debug, filename=cfg.log_file)
     logger.debug(pformat(cfg.model_dump()))
 
+    if not cfg.worker_settings.gpu_enabled:
+        disable_gpu()
     set_num_threads(cfg.worker_settings.threads_per_worker)
 
     try:
