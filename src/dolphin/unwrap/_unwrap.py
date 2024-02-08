@@ -99,8 +99,10 @@ def run(
 
     output_path = Path(output_path)
 
+    ifg_suffixes = [full_suffix(f) for f in ifg_filenames]
     all_out_files = [
-        (output_path / Path(f).name).with_suffix(UNW_SUFFIX) for f in ifg_filenames
+        (output_path / Path(f).name.replace(suf, UNW_SUFFIX))
+        for f, suf in zip(ifg_filenames, ifg_suffixes)
     ]
     in_files, out_files = [], []
     for inf, outf in zip(ifg_filenames, all_out_files):
@@ -137,7 +139,8 @@ def run(
             for ifg_file, out_file, cor_file in zip(in_files, out_files, cor_filenames)
         ]
         for fut in tqdm(as_completed(futures)):
-            fut.result()
+            # We're not passing all the unw files in, so we need to tally up below
+            _unw_path, _cc_path = fut.result()
 
     conncomp_files = [
         Path(str(outf).replace(UNW_SUFFIX, CONNCOMP_SUFFIX)) for outf in all_out_files
