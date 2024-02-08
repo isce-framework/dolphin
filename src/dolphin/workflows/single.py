@@ -5,8 +5,9 @@ References
     .. [1] Mirzaee, Sara, Falk Amelung, and Heresh Fattahi. "Non-linear phase
     linking using joined distributed and persistent scatterers." Computers &
     Geosciences (2022): 105291.
-"""
 
+
+"""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -15,14 +16,13 @@ from typing import Optional
 
 import numpy as np
 from numpy.typing import DTypeLike
+from tqdm.auto import tqdm
 
 from dolphin import io, shp
-from dolphin._blocks import BlockManager
-from dolphin._decorators import atomic_output
 from dolphin._log import get_log
-from dolphin._readers import VRTStack
-from dolphin._types import Filename
-from dolphin.phase_link import PhaseLinkRuntimeError, compress, run_mle
+from dolphin._types import Filename, HalfWindow, Strides
+from dolphin.io import EagerLoader, StridedBlockManager, VRTStack
+from dolphin.phase_link import PhaseLinkRuntimeError, compress, run_phase_linking
 from dolphin.stack import MiniStackInfo
 
 from .config import ShpMethod
@@ -39,14 +39,14 @@ class OutputFile:
     strides: Optional[dict[str, int]] = None
 
 
-@atomic_output(output_arg="output_folder", is_dir=True)
+# @atomic_output(output_arg="output_folder", is_dir=True)
 def run_wrapped_phase_single(
     *,
     slc_vrt_file: Filename,
     ministack: MiniStackInfo,
     output_folder: Filename,
     half_window: dict,
-    strides: dict = {"x": 1, "y": 1},
+    strides: Optional[dict] = None,
     reference_idx: int = 0,
     beta: float = 0.01,
     use_evd: bool = False,
@@ -58,15 +58,17 @@ def run_wrapped_phase_single(
     shp_alpha: float = 0.05,
     shp_nslc: Optional[int] = None,
     block_shape: tuple[int, int] = (1024, 1024),
-    n_workers: int = 1,
-    gpu_enabled: bool = True,
-    show_progress: bool = False,
+    **tqdm_kwargs,
 ):
     """Estimate wrapped phase for one ministack.
 
     Output files will all be placed in the provided `output_folder`.
     """
     # TODO: extract common stuff between here and sequential
+    if strides is None:
+        strides = {"x": 1, "y": 1}
+    strides_tup = Strides(y=strides["y"], x=strides["x"])
+    half_window_tup = HalfWindow(y=half_window["y"], x=half_window["x"])
     output_folder = Path(output_folder)
     vrt = VRTStack.from_vrt_file(slc_vrt_file)
     input_slc_files = ministack.file_list
@@ -100,7 +102,7 @@ def run_wrapped_phase_single(
     logger.info(msg)
 
     # Create the background writer for this ministack
-    writer = io.Writer(debug=False)
+    writer = io.GdalWriter()
 
     logger.info(f"Total stack size (in pixels): {vrt.shape}")
     # Set up the output folder with empty files to write into
@@ -123,6 +125,7 @@ def run_wrapped_phase_single(
             output_folder / f"temporal_coherence_{start_end}.tif", np.float32, strides
         ),
         OutputFile(output_folder / f"avg_coh_{start_end}.tif", np.uint16, strides),
+        OutputFile(output_folder / f"eigenvalues_{start_end}.tif", np.float32, strides),
         OutputFile(output_folder / f"shp_counts_{start_end}.tif", np.uint16, strides),
     ]
     for op in output_files:
@@ -137,32 +140,39 @@ def run_wrapped_phase_single(
         )
 
     # Iterate over the output grid
-    block_manager = BlockManager(
+    block_manager = StridedBlockManager(
         arr_shape=(nrows, ncols),
         block_shape=block_shape,
-        strides=strides,
-        half_window=half_window,
+        strides=strides_tup,
+        half_window=half_window_tup,
     )
-    # block_gen = vrt.iter_blocks(
-    #     block_shape=block_shape,
-    #     overlaps=overlaps,
-    #     skip_empty=True,
-    #     nodata_mask=nodata_mask,
-    #     show_progress=show_progress,
-    # )
-    # for cur_data, (rows, cols) in block_gen:
-    blocks = list(block_manager.iter_blocks())
+    # Set up the background loader
+    loader = EagerLoader(reader=vrt, block_shape=block_shape)
+    # Queue all input slices, skip ones that are all nodata
+    blocks = []
+    # Queue all input slices, skip ones that are all nodata
+    for b in block_manager.iter_blocks():
+        in_rows, in_cols = b[2]
+        if nodata_mask[in_rows, in_cols].all():
+            continue
+        loader.queue_read(in_rows, in_cols)
+        blocks.append(b)
+
     logger.info(f"Iterating over {block_shape} blocks, {len(blocks)} total")
     for (
         (out_rows, out_cols),
-        (trimmed_rows, trimmed_cols),
+        (out_trim_rows, out_trim_cols),
         (in_rows, in_cols),
         (in_no_pad_rows, in_no_pad_cols),
-    ) in blocks:
+        (in_trim_rows, in_trim_cols),
+    ) in tqdm(blocks, **tqdm_kwargs):
         logger.debug(f"{out_rows = }, {out_cols = }, {in_rows = }, {in_no_pad_rows = }")
-        cur_data = vrt.read_stack(rows=in_rows, cols=in_cols)
-        if np.all(cur_data == 0):
+
+        cur_data, (read_rows, read_cols) = loader.get_data()
+        if np.all(cur_data == 0) or np.isnan(cur_data).all():
             continue
+        assert read_rows == in_rows and read_cols == in_cols
+
         cur_data = cur_data.astype(np.complex64)
 
         if shp_method == "ks":
@@ -183,10 +193,10 @@ def run_wrapped_phase_single(
         # Run the phase linking process on the current ministack
         reference_idx = max(0, first_real_slc_idx - 1)
         try:
-            cur_mle_stack, temp_coh, avg_coh = run_mle(
+            pl_output = run_phase_linking(
                 cur_data,
-                half_window=half_window,
-                strides=strides,
+                half_window=half_window_tup,
+                strides=strides_tup,
                 use_evd=use_evd,
                 beta=beta,
                 reference_idx=reference_idx,
@@ -194,8 +204,6 @@ def run_wrapped_phase_single(
                 ps_mask=ps_mask[in_rows, in_cols],
                 neighbor_arrays=neighbor_arrays,
                 avg_mag=amp_mean[in_rows, in_cols] if amp_mean is not None else None,
-                n_workers=n_workers,
-                gpu_enabled=gpu_enabled,
             )
         except PhaseLinkRuntimeError as e:
             # note: this is a warning instead of info, since it should
@@ -211,33 +219,32 @@ def run_wrapped_phase_single(
             continue
 
         # Fill in the nan values with 0
-        np.nan_to_num(cur_mle_stack, copy=False)
-        np.nan_to_num(temp_coh, copy=False)
+        np.nan_to_num(pl_output.cpx_phase, copy=False)
+        np.nan_to_num(pl_output.temp_coh, copy=False)
 
         # Save each of the MLE estimates (ignoring those corresponding to
         # compressed SLCs indexes)
-        assert len(cur_mle_stack[first_real_slc_idx:]) == len(phase_linked_slc_files)
+        assert len(pl_output.cpx_phase[first_real_slc_idx:]) == len(
+            phase_linked_slc_files
+        )
 
         for img, f in zip(
-            cur_mle_stack[first_real_slc_idx:, trimmed_rows, trimmed_cols],
+            pl_output.cpx_phase[first_real_slc_idx:, out_trim_rows, out_trim_cols],
             phase_linked_slc_files,
         ):
             writer.queue_write(img, f, out_rows.start, out_cols.start)
 
         # Get the SHP counts for each pixel (if not using Rect window)
-        shp_counts = np.sum(neighbor_arrays, axis=(-2, -1))
+        if neighbor_arrays is None:
+            shp_counts = np.zeros(pl_output.cpx_phase.shape[-2:], dtype=np.int16)
+        else:
+            shp_counts = np.sum(neighbor_arrays, axis=(-2, -1))
 
-        # Get the inner portion of the full-res SLC data
-        trim_full_col = slice(
-            in_no_pad_cols.start - in_cols.start, in_no_pad_cols.stop - in_cols.stop
-        )
-        trim_full_row = slice(
-            in_no_pad_rows.start - in_rows.start, in_no_pad_rows.stop - in_rows.stop
-        )
         # Compress the ministack using only the non-compressed SLCs
         cur_comp_slc = compress(
-            cur_data[first_real_slc_idx:, trim_full_row, trim_full_col],
-            cur_mle_stack[first_real_slc_idx:, trimmed_rows, trimmed_cols],
+            # Get the inner portion of the full-res SLC data
+            cur_data[first_real_slc_idx:, in_trim_rows, in_trim_cols],
+            pl_output.cpx_phase[first_real_slc_idx:, out_trim_rows, out_trim_cols],
         )
 
         # ### Save results ###
@@ -251,17 +258,18 @@ def run_wrapped_phase_single(
         )
 
         # All other outputs are strided (smaller in size)
-        out_datas = [temp_coh, avg_coh, shp_counts]
+        out_datas = [pl_output.temp_coh, pl_output.avg_coh, shp_counts]
         for data, output_file in zip(out_datas, output_files[1:]):
             if data is None:  # May choose to skip some outputs, e.g. "avg_coh"
                 continue
             writer.queue_write(
-                data[trimmed_rows, trimmed_cols],
+                data[out_trim_rows, out_trim_cols],
                 output_file.filename,
                 out_rows.start,
                 out_cols.start,
             )
 
+    loader.notify_finished()
     # Block until all the writers for this ministack have finished
     logger.info(f"Waiting to write {writer.num_queued} blocks of data.")
     writer.notify_finished()
@@ -328,7 +336,7 @@ def setup_output_folder(
     driver: str = "GTiff",
     dtype="complex64",
     like_filename: Optional[Filename] = None,
-    strides: dict[str, int] = {"y": 1, "x": 1},
+    strides: Optional[dict[str, int]] = None,
     nodata: Optional[float] = 0,
     output_folder: Optional[Path] = None,
 ) -> list[Path]:
@@ -362,7 +370,10 @@ def setup_output_folder(
     -------
     list[Path]
         list of saved empty files for the outputs of phase linking
+
     """
+    if strides is None:
+        strides = {"y": 1, "x": 1}
     if output_folder is None:
         output_folder = ministack.output_folder
     # Note: DONT use the ministack.output_folder here, since that will

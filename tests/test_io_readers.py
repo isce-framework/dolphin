@@ -8,7 +8,7 @@ import rasterio as rio
 from osgeo import gdal
 from rasterio.errors import NotGeoreferencedWarning
 
-from dolphin._readers import (
+from dolphin.io._readers import (
     BinaryReader,
     BinaryStackReader,
     EagerLoader,
@@ -56,23 +56,22 @@ def binary_file_list(tmp_path_factory, slc_stack):
     for i, slc in enumerate(slc_stack):
         f = tmp_path / f"test_{i}.bin"
         # Ignore warning
-        with pytest.warns(NotGeoreferencedWarning):
-            with rio.open(
-                f,
-                "w",
-                driver="ENVI",
-                width=shape[1],
-                height=shape[0],
-                count=1,
-                dtype=dtype,
-            ) as dst:
-                dst.write(slc, 1)
+        with pytest.warns(NotGeoreferencedWarning), rio.open(
+            f,
+            "w",
+            driver="ENVI",
+            width=shape[1],
+            height=shape[0],
+            count=1,
+            dtype=dtype,
+        ) as dst:
+            dst.write(slc, 1)
         files.append(f)
 
     return files
 
 
-@pytest.fixture
+@pytest.fixture()
 def binary_reader(slc_stack, binary_file_list):
     f = BinaryReader(
         binary_file_list[0], shape=slc_stack[0].shape, dtype=slc_stack.dtype
@@ -134,7 +133,7 @@ def hdf5_file_list(tmp_path_factory, slc_stack):
     return files
 
 
-@pytest.fixture
+@pytest.fixture()
 def hdf5_reader(hdf5_file_list, slc_stack):
     r = HDF5Reader(hdf5_file_list[0], dset_name="data", keep_open=True)
     assert r.shape == slc_stack[0].shape
@@ -176,7 +175,7 @@ class TestHDF5:
 
 
 # #### RasterReader Tests ####
-@pytest.fixture
+@pytest.fixture()
 def raster_reader(slc_file_list, slc_stack):
     # ignore georeferencing warnings
     with pytest.warns(rio.errors.NotGeoreferencedWarning):
@@ -238,7 +237,7 @@ def test_ellipsis_reads(binary_reader, hdf5_reader, raster_reader, rows, cols):
 # #### VRT Tests ####
 
 
-@pytest.fixture
+@pytest.fixture()
 def vrt_stack(tmp_path, slc_stack, slc_file_list):
     vrt_file = tmp_path / "test.vrt"
     s = VRTStack(slc_file_list, outfile=vrt_file)
@@ -248,7 +247,7 @@ def vrt_stack(tmp_path, slc_stack, slc_file_list):
     return s
 
 
-@pytest.fixture
+@pytest.fixture()
 def vrt_stack_nc(tmp_path, slc_stack, slc_file_list_nc):
     vrt_file = tmp_path / "test_nc.vrt"
     s = VRTStack(slc_file_list_nc, outfile=vrt_file, subdataset="data")
@@ -257,7 +256,7 @@ def vrt_stack_nc(tmp_path, slc_stack, slc_file_list_nc):
     return s
 
 
-@pytest.fixture
+@pytest.fixture()
 def vrt_stack_nc_subdataset(tmp_path, slc_stack, slc_file_list_nc_with_sds):
     vrt_file = tmp_path / "test_nc.vrt"
     files_only = [_get_path_from_gdal_str(f) for f in slc_file_list_nc_with_sds]
@@ -267,7 +266,7 @@ def vrt_stack_nc_subdataset(tmp_path, slc_stack, slc_file_list_nc_with_sds):
     return s
 
 
-@pytest.fixture
+@pytest.fixture()
 def vrt_stack_nc_wgs84(tmp_path, slc_stack, slc_file_list_nc_wgs84):
     # Check an alternative projection system
     vrt_file = tmp_path / "test_nc_wgs84.vrt"
@@ -278,7 +277,7 @@ def vrt_stack_nc_wgs84(tmp_path, slc_stack, slc_file_list_nc_wgs84):
 
 
 def test_create(vrt_stack, vrt_stack_nc):
-    for v in [vrt_stack, vrt_stack_nc]:
+    for _v in [vrt_stack, vrt_stack_nc]:
         vrt_file = vrt_stack.outfile
         assert vrt_file.exists()
         assert vrt_file.stat().st_size > 0
@@ -351,7 +350,7 @@ def test_bad_sizes(slc_file_list, raster_10_by_20):
     assert get_raster_xysize(slc_file_list[0]) == get_raster_xysize(slc_file_list[1])
     assert get_raster_xysize(slc_file_list[0]) != get_raster_xysize(raster_10_by_20)
     with pytest.raises(ValueError):
-        VRTStack(slc_file_list + [raster_10_by_20], outfile="other.vrt")
+        VRTStack([*slc_file_list, raster_10_by_20], outfile="other.vrt")
 
 
 def test_iter_blocks(vrt_stack):
@@ -390,14 +389,14 @@ def test_tiled_iter_blocks(tmp_path, tiled_file_list):
     assert len(blocks) == len(slices) == 4
 
 
-@pytest.fixture
+@pytest.fixture()
 def test_vrt():
     return """<VRTDataset rasterXSize="128" rasterYSize="128">
   <SRS dataAxisToSRSAxisMapping="1,2">PROJCS["WGS 84 / UTM zone 15N",GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AUTHORITY["EPSG","4326"]],PROJECTION["Transverse_Mercator"],PARAMETER["latitude_of_origin",0],PARAMETER["central_meridian",-93],PARAMETER["scale_factor",0.9996],PARAMETER["false_easting",500000],PARAMETER["false_northing",0],UNIT["metre",1],AXIS["Easting",EAST],AXIS["Northing",NORTH],AUTHORITY["EPSG","32615"]]</SRS>
   <GeoTransform> -6.4500000000000000e+01,  1.0000000000000000e+00,  0.0000000000000000e+00,  6.6500000000000000e+01,  0.0000000000000000e+00, -1.0000000000000000e+00</GeoTransform>
   <VRTRasterBand dataType="CFloat32" band="1">
     <SimpleSource>
-      <SourceFilename relativeToVRT="0">compressed_20220101_20220104.tif</SourceFilename>
+      <SourceFilename relativeToVRT="0">compressed_20220101_20220101_20220104.tif</SourceFilename>
       <SourceBand>1</SourceBand>
       <SrcRect xOff="0" yOff="0" xSize="128" ySize="128" />
       <DstRect xOff="0" yOff="0" xSize="128" ySize="128" />
@@ -428,7 +427,7 @@ def test_vrt():
     </SimpleSource>
   </VRTRasterBand>
 </VRTDataset>
-"""
+"""  # noqa: E501
 
 
 def test_parse_vrt(tmp_path, test_vrt):
@@ -437,7 +436,7 @@ def test_parse_vrt(tmp_path, test_vrt):
 
     filepaths, sds = _parse_vrt_file(tmp_path / "t.vrt")
     assert filepaths == [
-        "compressed_20220101_20220104.tif",
+        "compressed_20220101_20220101_20220104.tif",
         "t087_185684_iw2_20220102.h5",
         "t087_185684_iw2_20220103.h5",
         "t087_185684_iw2_20220104.h5",

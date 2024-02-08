@@ -1,6 +1,7 @@
 import pytest
 
-from dolphin import _readers, stack
+from dolphin import stack
+from dolphin.io import _readers
 from dolphin.phase_link import simulate
 from dolphin.utils import gpu_is_available
 from dolphin.workflows import single
@@ -14,8 +15,10 @@ pytestmark = pytest.mark.filterwarnings(
 )
 
 
-@pytest.mark.parametrize("gpu_enabled", [True, False])
-def test_sequential_gtiff(tmp_path, slc_file_list, gpu_enabled):
+# TODO: do I want to add a flag to disable gpu use?
+# @pytest.mark.parametrize("gpu_enabled", [True, False])
+# def test_sequential_gtiff(tmp_path, slc_file_list, gpu_enabled):
+def test_sequential_gtiff(tmp_path, slc_file_list):
     """Run through the sequential estimation with a GeoTIFF stack."""
     vrt_file = tmp_path / "slc_stack.vrt"
     files = slc_file_list[:3]
@@ -28,7 +31,8 @@ def test_sequential_gtiff(tmp_path, slc_file_list, gpu_enabled):
         is_compressed=is_compressed,
     )
 
-    half_window = {"x": cols // 2, "y": rows // 2}
+    hy, hx = 1, 2
+    half_window = {"x": hx, "y": hy}
     strides = {"x": 1, "y": 1}
     output_folder = tmp_path / "single"
     single.run_wrapped_phase_single(
@@ -38,8 +42,7 @@ def test_sequential_gtiff(tmp_path, slc_file_list, gpu_enabled):
         half_window=half_window,
         strides=strides,
         shp_method="rect",
-        n_workers=2,
-        gpu_enabled=gpu_enabled,
+        # gpu_enabled=gpu_enabled,
     )
 
     assert output_folder.exists()

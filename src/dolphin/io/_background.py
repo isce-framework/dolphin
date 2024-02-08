@@ -1,14 +1,10 @@
 from __future__ import annotations
 
 import abc
-from collections.abc import Callable
-from concurrent.futures import Executor, Future
 from queue import Empty, Full, Queue
 from threading import Event, Thread, main_thread
-from typing import Optional
 
 from dolphin._log import get_log
-from dolphin._types import P, T
 
 logger = get_log(__name__)
 
@@ -18,7 +14,6 @@ __all__ = [
     "BackgroundWorker",
     "BackgroundReader",
     "BackgroundWriter",
-    "DummyProcessPoolExecutor",
 ]
 
 
@@ -49,6 +44,7 @@ class BackgroundWorker(abc.ABC):
     The usual caveats about Python threading apply.  It's typically a poor
     choice for concurrency unless the global interpreter lock (GIL) has been
     released, which can happen in IO calls and compiled extensions.
+
     """
 
     def __init__(
@@ -114,7 +110,6 @@ class BackgroundWorker(abc.ABC):
     @abc.abstractmethod
     def process(self, *args, **kw):
         """User-defined task to operate in background thread."""
-        pass
 
     def queue_work(self, *args, **kw):
         """Add a job to the work queue to be executed.
@@ -123,7 +118,8 @@ class BackgroundWorker(abc.ABC):
         Same input interface as `process`.
         """
         if self._finished_event.is_set():
-            raise RuntimeError("Attempted to queue_work after notify_finished!")
+            msg = "Attempted to queue_work after notify_finished!"
+            raise RuntimeError(msg)
         self._work_queue.put((args, kw))
 
     def get_result(self):
@@ -137,10 +133,11 @@ class BackgroundWorker(abc.ABC):
                 result = self._results_queue.get(timeout=self.timeout)
                 self._results_queue.task_done()
                 break
-            except Empty:
+            except Empty as e:
                 logger.debug(f"{self.name} get_result timed out, checking if done")
                 if self._finished_event.is_set():
-                    raise RuntimeError("Attempted to get_result after notify_finished!")
+                    msg = "Attempted to get_result after notify_finished!"
+                    raise RuntimeError(msg) from e
                 continue
         return result
 
@@ -157,6 +154,7 @@ class BackgroundWorker(abc.ABC):
         self._thread.join(timeout)
 
     def __del__(self):
+        logger.debug(f"{self.name} notifying of exit")
         self.notify_finished()
 
 
@@ -175,6 +173,7 @@ class BackgroundWriter(BackgroundWorker):
     timeout : float
         Interval in seconds used to check for finished notification once write
         queue is empty.
+
     """
 
     def __init__(self, nq=1, timeout=_DEFAULT_TIMEOUT, **kwargs):
@@ -198,10 +197,14 @@ class BackgroundWriter(BackgroundWorker):
     def process(self, *args, **kw):
         self.write(*args, **kw)
 
+    @property
+    def num_queued(self):
+        """Number of items waiting in the queue to be written."""
+        return self._work_queue.qsize()
+
     @abc.abstractmethod
     def write(self, *args, **kw):
         """User-defined method for writing data."""
-        pass
 
 
 class BackgroundReader(BackgroundWorker):
@@ -223,6 +226,7 @@ class BackgroundReader(BackgroundWorker):
     timeout : float
         Interval in seconds used to check for finished notification once write
         queue is empty.
+
     """
 
     def __init__(self, nq=1, timeout=_DEFAULT_TIMEOUT, **kwargs):
@@ -259,22 +263,3 @@ class BackgroundReader(BackgroundWorker):
     @abc.abstractmethod
     def read(self, *args, **kw):
         """User-defined method for reading a chunk of data."""
-        pass
-
-
-class DummyProcessPoolExecutor(Executor):
-    """Dummy ProcessPoolExecutor for to avoid forking for single_job purposes."""
-
-    def __init__(self, max_workers: Optional[int] = None, **kwargs):
-        self._max_workers = max_workers
-
-    def submit(
-        self, fn: Callable[P, T], /, *args: P.args, **kwargs: P.kwargs
-    ) -> Future[T]:
-        future: Future = Future()
-        result = fn(*args, **kwargs)
-        future.set_result(result)
-        return future
-
-    def shutdown(self, wait: bool = True, cancel_futures: bool = True):
-        pass

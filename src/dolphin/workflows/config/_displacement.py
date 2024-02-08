@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Annotated, Any, List, Optional
+from typing import Annotated, Any, Optional
 
+from opera_utils._dates import get_dates, sort_files_by_date
 from pydantic import (
     BaseModel,
     ConfigDict,
@@ -12,7 +13,6 @@ from pydantic import (
     model_validator,
 )
 
-from dolphin._dates import get_dates, sort_files_by_date
 from dolphin._log import get_log
 from dolphin._types import TropoModel, TropoType
 
@@ -29,6 +29,7 @@ from ._common import (
 
 __all__ = [
     "DisplacementWorkflow",
+    "CorrectionOptions",
 ]
 
 logger = get_log(__name__)
@@ -39,8 +40,9 @@ class CorrectionOptions(BaseModel, extra="forbid"):
     """Configuration for the auxillary phase corrections."""
 
     _atm_directory: Path = Path("atmosphere")
+    _iono_date_fmt: list[str] = ["%j0.%y", "%Y%j0000"]
 
-    troposphere_files: List[Path] = Field(
+    troposphere_files: list[Path] = Field(
         default_factory=list,
         description=(
             "List of weather-model files (one per date) for tropospheric corrections"
@@ -54,29 +56,28 @@ class CorrectionOptions(BaseModel, extra="forbid"):
 
     tropo_package: Annotated[str, StringConstraints(to_lower=True)] = Field(
         "pyaps",
-        description="Package to use for tropospheric correction. Choices are: pyaps, raider",
+        description="Package for tropospheric correction. Choices: pyaps, raider",
     )
 
     tropo_model: TropoModel = Field(
-        TropoModel.ERA5,
-        description="source of the atmospheric model. Choices are:"
-        "ERA5, ERAI, MERRA2, NARR, HRRR, GMAO, HRES",
+        TropoModel.ERA5, description="source of the atmospheric model."
     )
 
     tropo_delay_type: TropoType = Field(
         TropoType.COMB,
-        description="Tropospheric delay type to calculate, comb contains both wet and dry delays."
-        "Choices are: wet, dry, comb, hydrostatic",
+        description="Tropospheric delay type to calculate, comb contains both wet "
+        "and dry delays.",
     )
 
-    ionosphere_files: List[Path] = Field(
+    ionosphere_files: list[Path] = Field(
         default_factory=list,
         description=(
             "List of GNSS-derived TEC maps for ionospheric corrections (one per date)."
             " Source is https://cddis.nasa.gov/archive/gnss/products/ionex/"
         ),
     )
-    geometry_files: List[Path] = Field(
+
+    geometry_files: list[Path] = Field(
         default_factory=list,
         description=(
             "Line-of-sight geometry files for each burst/SLC stack area, for use in"
@@ -101,7 +102,7 @@ class DisplacementWorkflow(WorkflowBase):
 
     # Paths to input/output files
     input_options: InputOptions = Field(default_factory=InputOptions)
-    cslc_file_list: List[Path] = Field(
+    cslc_file_list: list[Path] = Field(
         default_factory=list,
         description=(
             "list of CSLC files, or newline-delimited file "
@@ -112,14 +113,14 @@ class DisplacementWorkflow(WorkflowBase):
 
     # Options for each step in the workflow
     ps_options: PsOptions = Field(default_factory=PsOptions)
-    amplitude_dispersion_files: List[Path] = Field(
+    amplitude_dispersion_files: list[Path] = Field(
         default_factory=list,
         description=(
             "Paths to existing Amplitude Dispersion file (1 per SLC region) for PS"
             " update calculation. If none provided, computed using the input SLC stack."
         ),
     )
-    amplitude_mean_files: List[Path] = Field(
+    amplitude_mean_files: list[Path] = Field(
         default_factory=list,
         description=(
             "Paths to an existing Amplitude Mean files (1 per SLC region) for PS update"
@@ -147,29 +148,30 @@ class DisplacementWorkflow(WorkflowBase):
     )
 
     @model_validator(mode="after")
-    def _check_input_files_exist(self) -> "DisplacementWorkflow":
+    def _check_input_files_exist(self) -> DisplacementWorkflow:
         file_list = self.cslc_file_list
         if not file_list:
-            raise ValueError("Must specify list of input SLC files.")
+            msg = "Must specify list of input SLC files."
+            raise ValueError(msg)
 
         input_options = self.input_options
         date_fmt = input_options.cslc_date_fmt
         # Filter out files that don't have dates in the filename
         files_matching_date = [Path(f) for f in file_list if get_dates(f, fmt=date_fmt)]
         if len(files_matching_date) < len(file_list):
-            raise ValueError(
+            msg = (
                 f"Found {len(files_matching_date)} files with dates like {date_fmt} in"
                 f" the filename out of {len(file_list)} files."
             )
+            raise ValueError(msg)
 
         ext = file_list[0].suffix
         # If they're HDF5/NetCDF files, we need to check that the subdataset exists
         if ext in [".h5", ".nc"]:
             subdataset = input_options.subdataset
             if subdataset is None:
-                raise ValueError(
-                    "Must provide subdataset name for input NetCDF/HDF5 files."
-                )
+                msg = "Must provide subdataset name for input NetCDF/HDF5 files."
+                raise ValueError(msg)
 
         # Coerce the file_list to a sorted list of Path objects
         self.cslc_file_list = [
@@ -178,10 +180,9 @@ class DisplacementWorkflow(WorkflowBase):
 
         return self
 
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
+    def model_post_init(self, __context: Any) -> None:
         """After validation, set up properties for use during workflow run."""
-        super().__init__(*args, **kwargs)
-
+        super().model_post_init(__context)
         # Ensure outputs from workflow steps are within work directory.
         if not self.keep_paths_relative:
             # Resolve all CSLC paths:
@@ -198,7 +199,14 @@ class DisplacementWorkflow(WorkflowBase):
             "unwrap_options",
         ]:
             opts = getattr(self, step)
-            if not opts._directory.parent == work_dir:
+            if isinstance(opts, dict):
+                # If this occurs, we are printing the schema.
+                # Using newer pydantic `model_construct`, this would be a dict,
+                # instead of an object.
+                # We don't care about the subsequent logic here
+                return
+
+            if opts._directory.parent != work_dir:
                 opts._directory = work_dir / opts._directory
             if not self.keep_paths_relative:
                 opts._directory = opts._directory.resolve(strict=False)

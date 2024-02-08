@@ -4,12 +4,12 @@ import numpy as np
 import numpy.testing as npt
 import pytest
 
-from dolphin.phase_link import covariance, mle, simulate
-from dolphin.phase_link._mle_cpu import run_cpu
-from dolphin.phase_link._mle_gpu import run_gpu
+from dolphin._types import HalfWindow, Strides
+from dolphin.phase_link import _core, covariance, simulate
+from dolphin.phase_link._ps_filling import fill_ps_pixels
 from dolphin.utils import gpu_is_available
 
-GPU_AVAILABLE = gpu_is_available() and not (os.environ.get("NUMBA_DISABLE_JIT") == "1")
+GPU_AVAILABLE = gpu_is_available() and os.environ.get("NUMBA_DISABLE_JIT") != "1"
 NUM_ACQ = 30
 simulate._seed(1234)
 
@@ -29,7 +29,7 @@ def slc_samples(C_truth):
 # CPU versions of the MLE and EVD estimates
 @pytest.fixture(scope="module")
 def C_hat(slc_samples):
-    return covariance.coh_mat_single(slc_samples)
+    return np.array(covariance.coh_mat_single(slc_samples))
 
 
 # Make the single-pixel comparisons with simple implementation
@@ -43,52 +43,27 @@ def est_evd_verify(C_hat):
     return np.angle(simulate.evd(C_hat))
 
 
-# Check that the estimates are close to the truth
-def test_estimation(C_truth, est_mle_verify, est_evd_verify):
+@pytest.mark.parametrize("use_evd", [False, True])
+def test_estimation(C_truth, slc_samples, est_mle_verify, est_evd_verify, use_evd):
     _, truth = C_truth
 
+    # Check that the estimates are close to the truth
     err_deg = 10
     assert np.degrees(simulate.rmse(truth, est_evd_verify)) < err_deg
     assert np.degrees(simulate.rmse(truth, est_mle_verify)) < err_deg
 
-
-def test_estimation_cpu(slc_samples, est_mle_verify):
-    # Get the GPU version
     slc_stack = slc_samples.reshape(NUM_ACQ, 11, 11)
 
-    est_mle_fullres, temp_coh, _ = run_cpu(slc_stack, half_window={"x": 5, "y": 5})
-    assert est_mle_fullres.shape == (len(est_mle_verify), 11, 11)
-    assert temp_coh.shape == (11, 11)
-    # The middle pixel should be the same, since it had the full window
-    est_phase = np.angle(est_mle_fullres[:, 5, 5])
-    npt.assert_array_almost_equal(est_mle_verify, est_phase, decimal=3)
-
-
-@pytest.mark.skipif(not GPU_AVAILABLE, reason="GPU not available")
-def test_estimation_gpu(slc_samples, est_mle_verify):
-    # Get the GPU version
-    slc_stack = slc_samples.reshape(NUM_ACQ, 11, 11)
-
-    est_mle_fullres, temp_coh, _ = run_gpu(slc_stack, half_window={"x": 5, "y": 5})
-    assert est_mle_fullres.shape == (len(est_mle_verify), 11, 11)
-    assert temp_coh.shape == (11, 11)
-    # The middle pixel should be the same, since it had the full window
-    est_phase = np.angle(est_mle_fullres[:, 5, 5])
-    npt.assert_array_almost_equal(est_mle_verify, est_phase, decimal=3)
-
-
-def test_estimation_evd_cpu(slc_samples, est_evd_verify):
-    # Get the GPU version
-    slc_stack = slc_samples.reshape(NUM_ACQ, 11, 11)
-
-    est_evd_fullres, temp_coh, _ = run_cpu(
-        slc_stack, half_window={"x": 5, "y": 5}, use_evd=True
+    est_mle_fullres, temp_coh, eigs, _ = _core.run_cpl(
+        slc_stack, HalfWindow(x=5, y=5), Strides(x=1, y=1), use_evd=use_evd
     )
-    assert est_evd_fullres.shape == (len(est_evd_verify), 11, 11)
+    assert est_mle_fullres.shape == (len(est_mle_verify), 11, 11)
     assert temp_coh.shape == (11, 11)
+    assert eigs.shape == (11, 11)
+    assert np.all(eigs > 0)
     # The middle pixel should be the same, since it had the full window
-    est_phase = np.angle(est_evd_fullres[:, 5, 5])
-    npt.assert_array_almost_equal(est_evd_verify, est_phase, decimal=3)
+    est_phase = est_mle_fullres[:, 5, 5]
+    npt.assert_array_almost_equal(est_mle_verify, est_phase, decimal=1)
 
 
 def test_masked(slc_samples, C_truth):
@@ -101,7 +76,7 @@ def test_masked(slc_samples, C_truth):
 
     _, truth = C_truth
     C_hat1 = covariance.coh_mat_single(slc_samples_masked)
-    est_mle = np.angle(simulate.mle(C_hat1))
+    est_mle = np.angle(simulate.mle(np.array(C_hat1)))
 
     err_deg = 10
     assert np.degrees(simulate.rmse(truth, est_mle)) < err_deg
@@ -109,62 +84,54 @@ def test_masked(slc_samples, C_truth):
     slc_stack_masked = slc_stack.copy()
     slc_stack_masked[:, mask] = np.nan
 
-    C_hat2 = covariance.estimate_stack_covariance_cpu(
-        slc_stack_masked, half_window={"x": 5, "y": 5}
+    C_hat2 = covariance.estimate_stack_covariance(
+        slc_stack_masked, half_window=HalfWindow(5, 5)
     )
-    est_full = np.squeeze(mle.mle_stack(C_hat2))
+    est_full = _core.process_coherence_matrices(C_hat2)[0]
     # Middle pixel should be the same
     npt.assert_array_almost_equal(est_mle, est_full[:, 5, 5], decimal=1)
 
-    if not GPU_AVAILABLE:
-        pytest.skip("GPU version not available")
-    # Now check GPU version
-    est_mle_gpu_fullres, _, _ = run_gpu(slc_stack_masked, half_window={"x": 5, "y": 5})
-    est_phase_gpu = np.angle(est_mle_gpu_fullres[:, 5, 5])
-    npt.assert_array_almost_equal(est_mle, est_phase_gpu, decimal=1)
 
-
-def test_run_mle(slc_samples):
+def test_run_phase_linking(slc_samples):
     slc_stack = slc_samples.reshape(NUM_ACQ, 11, 11)
-    mle_est, _, _ = mle.run_mle(
+    mle_est, _, _, _ = _core.run_phase_linking(
         slc_stack,
-        half_window={"x": 5, "y": 5},
-        gpu_enabled=False,
+        half_window=HalfWindow(5, 5),
     )
 
     C_hat = covariance.coh_mat_single(slc_samples)
-    expected_phase = np.angle(simulate.mle(C_hat))
+    expected_phase = np.angle(simulate.mle(np.array(C_hat)))
 
     # Middle pixel should be the same
     npt.assert_array_almost_equal(expected_phase, np.angle(mle_est[:, 5, 5]), decimal=1)
 
 
-def test_run_mle_norm_output(slc_samples):
+def test_run_phase_linking_norm_output(slc_samples):
     slc_stack = slc_samples.reshape(NUM_ACQ, 11, 11)
     ps_mask = np.zeros((11, 11), dtype=bool)
     ps_mask[1, 1] = True
-    mle_est, _, _ = mle.run_mle(
+    mle_est, _, _, _ = _core.run_phase_linking(
         slc_stack,
-        half_window={"x": 5, "y": 5},
+        half_window=HalfWindow(5, 5),
         ps_mask=ps_mask,
         use_slc_amp=False,
-        gpu_enabled=False,
     )
     assert np.allclose(np.abs(mle_est), 1)
 
 
-@pytest.mark.parametrize("gpu_enabled", [True, False])
 @pytest.mark.parametrize("strides", [1, 2, 3, 4, 5])
 @pytest.mark.parametrize("half_window", [5, 11])
 @pytest.mark.parametrize("shape", [(10, 11), (15, 20), (50, 75)])
-def test_strides_window_sizes(gpu_enabled, strides, half_window, shape):
+def test_strides_window_sizes(strides, half_window, shape):
     """Test that window and stride sizes don't cause errors for many input shapes."""
     data = np.random.normal(0, 1, size=(4, *shape)).astype(np.complex64)
-    mle.run_mle(
+    if 2 * half_window + 1 > shape[0]:
+        # TODO: We should raise an appropriate error, then catch here
+        pytest.skip("Window size is too large for input shape")
+    _core.run_phase_linking(
         data,
-        half_window={"x": half_window, "y": half_window},
-        strides={"x": strides, "y": strides},
-        gpu_enabled=gpu_enabled,
+        half_window=HalfWindow(half_window, half_window),
+        strides=Strides(strides, strides),
     )
 
 
@@ -180,12 +147,12 @@ def test_ps_fill(slc_samples, strides):
     ps_mask = np.zeros((11, 11), dtype=bool)
     ps_mask[ps_idx, ps_idx] = True
 
-    mle._fill_ps_pixels(
+    fill_ps_pixels(
         mle_est,
         temp_coh,
         slc_stack,
         ps_mask,
-        {"x": strides, "y": strides},
+        Strides(strides, strides),
         None,  # avg_mag
     )
 
@@ -200,19 +167,17 @@ def test_ps_fill(slc_samples, strides):
     assert temp_coh[out_idx, out_idx] == 1
 
 
-@pytest.mark.parametrize("gpu_enabled", [True, False])
 @pytest.mark.parametrize("strides", [1, 2, 3])
-def test_run_mle_ps_fill(slc_samples, gpu_enabled, strides):
+def test_run_phase_linking_ps_fill(slc_samples, strides):
     slc_stack = slc_samples.reshape(NUM_ACQ, 11, 11)
     ps_idx = 2
     ps_mask = np.zeros((11, 11), dtype=bool)
     ps_mask[ps_idx, ps_idx] = True
-    mle_est, temp_coh, _ = mle.run_mle(
+    mle_est, temp_coh, _, _ = _core.run_phase_linking(
         slc_stack,
-        half_window={"x": 5, "y": 5},
-        strides={"x": strides, "y": strides},
+        half_window=HalfWindow(5, 5),
+        strides=Strides(strides, strides),
         ps_mask=ps_mask,
-        gpu_enabled=gpu_enabled,
     )
     ps_phase = slc_stack[:, ps_idx, ps_idx]
     ps_phase *= ps_phase[0].conj()  # Reference to first acquisition

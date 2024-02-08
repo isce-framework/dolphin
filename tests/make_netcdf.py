@@ -1,8 +1,8 @@
-#!/usr/bin/env python
 from __future__ import annotations
 
 import argparse
 import os
+from pathlib import Path
 from typing import Union
 
 import h5py
@@ -34,12 +34,13 @@ def create_test_nc(
 ):
     if isinstance(subdir, list):
         # Create groups in the same file to make multiple SubDatasets
-        return [
+        [
             create_test_nc(
                 outfile, epsg, s, data, data_ds_name, shape, dtype, xoff, yoff, "a"
             )
             for s in subdir
         ]
+        return
 
     if data is None:
         data = np.ones(shape, dtype=dtype)
@@ -87,6 +88,7 @@ def create_test_nc(
     # CF 1.7+ requires this attribute to be named "crs_wkt"
     # spatial_ref is old GDAL way. Using that for testing only.
     srs_ds.attrs[srs_name] = crs.to_wkt()
+    srs_ds.attrs["crs_wkt"] = crs.to_wkt()
 
     srs_ds.attrs.update(crs.to_cf())
 
@@ -133,11 +135,12 @@ if __name__ == "__main__":
     args = get_cli_args()
 
     # Check output extension is .nc (Only for verification with GDAL)
-    if os.path.splitext(args.outfile)[1] != ".nc":
-        raise Exception(
-            "This script uses GDAL's netcdf4 driver for verification and expects output"
-            " file to have an extension of .nc"
+    if Path(args.outfile).suffix != ".nc":
+        msg = (
+            "This script uses GDAL's netcdf4 driver for verification and expects "
+            "output file to have an extension of .nc"
         )
+        raise ValueError(msg)
 
     create_test_nc(args.outfile, epsg=args.epsg, subdir=args.subdir)
     gdalinfo = gdal.Info(args.outfile, format="json")

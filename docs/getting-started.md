@@ -1,6 +1,5 @@
 ## Install
 
-
 `dolphin` is available on conda-forge:
 
 ```bash
@@ -106,9 +105,9 @@ If you have access to a GPU, you can install the extra requirements from running
 mamba env update -n dolphin-env --file conda-env-gpu-extras.yml
 ```
 Note that the version of `cudatoolkit` must match the drivers installed for your GPU (which may come from the output of `nvidia-smi`)
-See the [numba](https://numba.readthedocs.io/en/stable/cuda/overview.html#software) and [cupy](https://docs.cupy.dev/en/stable/install.html) installation instructions for more details on getting set up.
+See the [numba](https://numba.readthedocs.io/en/stable/cuda/overview.html#software) installation instructions for more details on getting set up.
 
-To check whether you have successfully installed `numba` and `cupy`, run
+To check whether you have successfully installed `numba` with GPU support run
 ```bash
 python -c 'from dolphin import utils; print(utils.gpu_available())'
 ```
@@ -126,3 +125,6 @@ mkdocs serve
 ```
 then open http://localhost:8000 in your browser.
 Creating new files or updating existing files will automatically trigger a rebuild of the documentation while `mkdocs serve` is running.
+
+For citations, use the notation `[@Ansari2018EfficientPhaseEstimation]` to refer to a Bibtex key in `docs/references.bib`  (e.g. [@Ansari2018EfficientPhaseEstimation]).
+This can be done in either a markdown file, or in a docstring.

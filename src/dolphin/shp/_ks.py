@@ -1,15 +1,16 @@
 from __future__ import annotations
 
 from math import exp, sqrt
+from typing import Optional
 
 import numba
 import numpy as np
 from numba import cuda
 from numpy.typing import ArrayLike
 
-from dolphin._blocks import compute_out_shape
 from dolphin._log import get_log
-from dolphin.utils import _get_slices
+from dolphin._types import Strides
+from dolphin.utils import _get_slices, compute_out_shape
 
 from ._common import remove_unconnected
 
@@ -23,7 +24,7 @@ def estimate_neighbors(
     amp_stack: ArrayLike,
     halfwin_rowcol: tuple[int, int],
     alpha: float,
-    strides: dict[str, int] = {"x": 1, "y": 1},
+    strides: Optional[dict[str, int]] = None,
     is_sorted: bool = False,
     prune_disconnected: bool = False,
 ):
@@ -36,17 +37,16 @@ def estimate_neighbors(
     #     neighbor_arrays,
     # )
 
-    if is_sorted:
-        sorted_amp_stack = amp_stack
-    else:
-        sorted_amp_stack = np.sort(amp_stack, axis=0)
+    if strides is None:
+        strides = {"x": 1, "y": 1}
+    sorted_amp_stack = amp_stack if is_sorted else np.sort(amp_stack, axis=0)
 
     num_slc, rows, cols = sorted_amp_stack.shape
     ecdf_dist_cutoff = _get_ecdf_critical_distance(num_slc, alpha)
     logger.debug(f"ecdf_dist_cutoff: {ecdf_dist_cutoff}")
 
     strides_rowcol = strides["y"], strides["x"]
-    out_rows, out_cols = compute_out_shape((rows, cols), strides)
+    out_rows, out_cols = compute_out_shape((rows, cols), Strides(*strides_rowcol))
     half_row, half_col = halfwin_rowcol
     is_shp = np.zeros(
         (out_rows, out_cols, 2 * half_row + 1, 2 * half_col + 1), dtype=np.bool_
@@ -96,7 +96,8 @@ def _loop_over_neighbors(
             amp_block = sorted_amp_stack[:, r_start:r_end, c_start:c_end]
             neighbors = is_shp[out_r, out_c, :, :]
             _set_neighbors(amp_block, halfwin_rowcol, ecdf_dist_cutoff, neighbors)
-            remove_unconnected(is_shp[out_r, out_c], inplace=True)
+            if prune_disconnected:
+                remove_unconnected(is_shp[out_r, out_c], inplace=True)
 
     return is_shp
 
@@ -194,6 +195,7 @@ def _get_max_cdf_dist(x1, x2):
     >>> x2 = np.array([6, 7, 8, 9, 10])
     >>> _get_max_cdf_dist(x1, x2)  # doctest: +NUMBER
     1.0
+
     """
     n = x1.shape[0]
     i1 = i2 = i_out = 0
@@ -203,11 +205,7 @@ def _get_max_cdf_dist(x1, x2):
         if i1 == n:
             cdf2 += 1 / n
             i2 += 1
-        elif i2 == n:
-            cdf1 += 1 / n
-            i1 += 1
-
-        elif x1[i1] < x2[i2]:
+        elif i2 == n or (x1[i1] < x2[i2]):
             cdf1 += 1 / n
             i1 += 1
         elif x1[i1] > x2[i2]:

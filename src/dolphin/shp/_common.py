@@ -35,6 +35,7 @@ def remove_unconnected(data: ArrayLike, inplace: bool = True) -> np.ndarray:
     -----
     This function considers the 8 surrounding neighbors as connected
         (i.e. includes diagonals.)
+
     """
     if not inplace:
         data = data.copy()
@@ -147,7 +148,7 @@ def _make_loop_function(
 
                         T = compute_test_stat(scale_1, scale_2)
 
-                        is_shp[out_r, out_c, r_off, c_off] = T < threshold
+                        is_shp[out_r, out_c, r_off, c_off] = threshold > T
                 if prune_disconnected:
                     # For this pixel, prune the groups not connected to the center
                     remove_unconnected(is_shp[out_r, out_c], inplace=True)
@@ -163,7 +164,7 @@ def _read_cutoff_csv(test_name):
     filename = Path(__file__).parent / f"{test_name}_cutoffs.csv"
 
     result = {}
-    with open(filename, "r") as file:
+    with open(filename) as file:
         reader = csv.DictReader(file)
         for row in reader:
             n = int(row["N"])

@@ -4,16 +4,25 @@ from __future__ import annotations
 import multiprocessing as mp
 from collections import defaultdict
 from concurrent.futures import ProcessPoolExecutor
+from datetime import datetime
+from os import PathLike
 from pathlib import Path
 from pprint import pformat
+from typing import Mapping, NamedTuple, Sequence
 
 from opera_utils import group_by_burst, group_by_date
+from tqdm.auto import tqdm
 
 from dolphin import __version__
-from dolphin._background import DummyProcessPoolExecutor
 from dolphin._log import get_log, log_runtime
-from dolphin.atmosphere import estimate_tropospheric_delay
-from dolphin.utils import get_max_memory_usage, set_num_threads
+from dolphin.atmosphere import estimate_ionospheric_delay, estimate_tropospheric_delay
+from dolphin.io import get_raster_bounds, get_raster_crs
+from dolphin.utils import (
+    DummyProcessPoolExecutor,
+    get_max_memory_usage,
+    prepare_geometry,
+    set_num_threads,
+)
 
 from . import stitching_bursts, unwrapping, wrapped_phase
 from ._utils import _create_burst_cfg, _remove_dir_if_empty
@@ -22,11 +31,22 @@ from .config import DisplacementWorkflow
 logger = get_log(__name__)
 
 
+class OutputPaths(NamedTuple):
+    """Named tuple of `DisplacementWorkflow` outputs."""
+
+    stitched_ifg_paths: list[Path]
+    stitched_cor_paths: list[Path]
+    stitched_temp_coh_file: Path
+    stitched_ps_file: Path
+    unwrapped_paths: list[Path] | None
+    conncomp_paths: list[Path] | None
+
+
 @log_runtime
 def run(
     cfg: DisplacementWorkflow,
     debug: bool = False,
-):
+) -> OutputPaths:
     """Run the displacement workflow on a stack of SLCs.
 
     Parameters
@@ -36,6 +56,7 @@ def run(
         for controlling the workflow.
     debug : bool, optional
         Enable debug logging, by default False.
+
     """
     # Set the logging level for all `dolphin.` modules
     logger = get_log(name="dolphin", debug=debug, filename=cfg.log_file)
@@ -48,7 +69,7 @@ def run(
     except ValueError as e:
         # Make sure it's not some other ValueError
         if "Could not parse burst id" not in str(e):
-            raise e
+            raise
         # Otherwise, we have SLC files which are not OPERA burst files
         grouped_slc_files = {"": cfg.cslc_file_list}
 
@@ -68,6 +89,17 @@ def run(
         )
     else:
         grouped_tropo_files = None
+
+    grouped_iono_files: Mapping[tuple[datetime], Sequence[str | PathLike[str]]] = {}
+    if len(cfg.correction_options.ionosphere_files) > 0:
+        for fmt in cfg.correction_options._iono_date_fmt:
+            group_iono = group_by_date(
+                cfg.correction_options.ionosphere_files,
+                file_date_fmt=fmt,
+            )
+            if len(next(iter(group_iono))) == 0:
+                continue
+            grouped_iono_files = {**grouped_iono_files, **group_iono}
 
     # ######################################
     # 1. Burst-wise Wrapped phase estimation
@@ -96,7 +128,7 @@ def run(
     else:
         # grab the only key (either a burst, or "") and use that
         cfg.create_dir_tree()
-        b = list(grouped_slc_files.keys())[0]
+        b = next(iter(grouped_slc_files.keys()))
         wrapped_phase_cfgs = [(b, cfg)]
 
     ifg_file_list: list[Path] = []
@@ -114,14 +146,23 @@ def run(
     )
     mw = cfg.worker_settings.n_parallel_bursts
     ctx = mp.get_context("spawn")
-    with Executor(max_workers=mw, mp_context=ctx) as exc:
+    tqdm.set_lock(mp.RLock())
+    with Executor(
+        max_workers=mw,
+        mp_context=ctx,
+        initializer=tqdm.set_lock,
+        initargs=(tqdm.get_lock(),),
+    ) as exc:
         fut_to_burst = {
             exc.submit(
                 wrapped_phase.run,
                 burst_cfg,
                 debug=debug,
+                tqdm_kwargs={
+                    "position": i,
+                },
             ): burst
-            for burst, burst_cfg in wrapped_phase_cfgs
+            for i, (burst, burst_cfg) in enumerate(wrapped_phase_cfgs)
         }
         for fut in fut_to_burst:
             burst = fut_to_burst[fut]
@@ -161,11 +202,18 @@ def run(
     if not cfg.unwrap_options.run_unwrap:
         logger.info("Skipping unwrap step")
         _print_summary(cfg)
-        return
+        return OutputPaths(
+            stitched_ifg_paths=stitched_ifg_paths,
+            stitched_cor_paths=stitched_cor_paths,
+            stitched_temp_coh_file=stitched_temp_coh_file,
+            stitched_ps_file=stitched_ps_file,
+            unwrapped_paths=None,
+            conncomp_paths=None,
+        )
 
     row_looks, col_looks = cfg.phase_linking.half_window.to_looks()
     nlooks = row_looks * col_looks
-    unwrapping.run(
+    unwrapped_paths, conncomp_paths = unwrapping.run(
         ifg_file_list=stitched_ifg_paths,
         cor_file_list=stitched_cor_paths,
         nlooks=nlooks,
@@ -177,30 +225,75 @@ def run(
     # 4. Estimate corrections for each interferogram
     # ##############################################
 
-    if cfg.correction_options.dem_file is None:
-        logger.warning(
-            "DEM file is not given, skip estimating tropospheric corrections..."
-        )
-    else:
-        out_dir = cfg.work_directory / cfg.correction_options._atm_directory
+    if len(cfg.correction_options.geometry_files) > 0:
         stitched_ifg_dir = cfg.interferogram_network._directory
         ifg_filenames = sorted(Path(stitched_ifg_dir).glob("*.int"))
+        out_dir = cfg.work_directory / cfg.correction_options._atm_directory
+        out_dir.mkdir(exist_ok=True)
         grouped_slc_files = group_by_date(cfg.cslc_file_list)
-        estimate_tropospheric_delay(
-            ifg_file_list=ifg_filenames,
-            troposphere_files=grouped_tropo_files,
-            slc_files=grouped_slc_files,
-            geom_files=cfg.correction_options.geometry_files,
+
+        # Prepare frame geometry files
+        geometry_dir = out_dir / "geometry"
+        geometry_dir.mkdir(exist_ok=True)
+        crs = get_raster_crs(ifg_filenames[0])
+        epsg = crs.to_epsg()
+        out_bounds = get_raster_bounds(ifg_filenames[0])
+        frame_geometry_files = prepare_geometry(
+            geometry_dir=geometry_dir,
+            geo_files=cfg.correction_options.geometry_files,
+            matching_file=ifg_filenames[0],
             dem_file=cfg.correction_options.dem_file,
-            output_dir=out_dir,
-            tropo_package=cfg.correction_options.tropo_package,
-            tropo_model=cfg.correction_options.tropo_model,
-            tropo_delay_type=cfg.correction_options.tropo_delay_type,
+            epsg=epsg,
+            out_bounds=out_bounds,
             strides=cfg.output_options.strides,
         )
 
+        # Troposphere
+        if "height" not in frame_geometry_files:
+            logger.warning(
+                "DEM file is not given, skip estimating tropospheric corrections..."
+            )
+        else:
+            if grouped_tropo_files:
+                estimate_tropospheric_delay(
+                    ifg_file_list=ifg_filenames,
+                    troposphere_files=grouped_tropo_files,
+                    slc_files=grouped_slc_files,
+                    geom_files=frame_geometry_files,
+                    output_dir=out_dir,
+                    tropo_package=cfg.correction_options.tropo_package,
+                    tropo_model=cfg.correction_options.tropo_model,
+                    tropo_delay_type=cfg.correction_options.tropo_delay_type,
+                    epsg=epsg,
+                    bounds=out_bounds,
+                )
+            else:
+                logger.info("No weather model, skip tropospheric correction ...")
+
+        # Ionosphere
+        if grouped_iono_files:
+            estimate_ionospheric_delay(
+                ifg_file_list=ifg_filenames,
+                slc_files=grouped_slc_files,
+                tec_files=grouped_iono_files,
+                geom_files=frame_geometry_files,
+                output_dir=out_dir,
+                epsg=epsg,
+                bounds=out_bounds,
+            )
+        else:
+            logger.info("No TEC files, skip ionospheric correction ...")
+
     # Print the maximum memory usage for each worker
     _print_summary(cfg)
+    return OutputPaths(
+        stitched_ifg_paths=stitched_ifg_paths,
+        stitched_cor_paths=stitched_cor_paths,
+        stitched_temp_coh_file=stitched_temp_coh_file,
+        stitched_ps_file=stitched_ps_file,
+        unwrapped_paths=None,
+        conncomp_paths=None,
+    )
 
 
 def _print_summary(cfg):

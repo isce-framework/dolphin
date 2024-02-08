@@ -12,9 +12,11 @@ else:
     from typing_extensions import ParamSpec
 
 # Some classes are declared as generic in stubs, but not at runtime.
-# In Python 3.9 and earlier, os.PathLike is not subscriptable, results in a runtime error
-# https://stackoverflow.com/questions/71077499/typeerror-abcmeta-object-is-not-subscriptable
+# In Python 3.9 and earlier, os.PathLike is not subscriptable, results in runtime error
 if TYPE_CHECKING:
+    from builtins import ellipsis
+
+    Index = ellipsis | slice | int
     PathLikeStr = PathLike[str]
 else:
     PathLikeStr = PathLike
@@ -43,12 +45,27 @@ class Bbox(NamedTuple):
         Right coordinate (xmax)
     top : float
         Top coordinate (ymax)
+
     """
 
     left: float
     bottom: float
     right: float
     top: float
+
+
+class Strides(NamedTuple):
+    """Decimation/striding factor in the y (column) and x (row) directions."""
+
+    y: int
+    x: int
+
+
+class HalfWindow(NamedTuple):
+    """Half-window size in the y (column) and x (row) directions."""
+
+    y: int
+    x: int
 
 
 # Used for callable types
@@ -58,7 +75,7 @@ P = ParamSpec("P")
 DateOrDatetime = Union[datetime.datetime, datetime.date]
 
 
-class TropoModel(Enum):
+class TropoModel(str, Enum):
     """Enumeration representing different tropospheric models."""
 
     ERA5 = "ERA5"
@@ -71,7 +88,7 @@ class TropoModel(Enum):
     GMAO = "GMAO"
 
 
-class TropoType(Enum):
+class TropoType(str, Enum):
     """Type of tropospheric delay."""
 
     WET = "wet"

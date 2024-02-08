@@ -46,6 +46,7 @@ body:
         2.
         3.
         ...
+        If you have a `dolphin_config.yaml` that you used, you can attach that as well.
       render: bash
   - type: textarea
     id: environment

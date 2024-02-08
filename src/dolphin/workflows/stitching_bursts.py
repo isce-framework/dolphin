@@ -6,6 +6,7 @@ from typing import Sequence
 
 from dolphin import stitching
 from dolphin._log import get_log, log_runtime
+from dolphin._overviews import ImageType, create_image_overviews, create_overviews
 from dolphin._types import Bbox
 from dolphin.interferogram import estimate_interferometric_correlations
 
@@ -56,16 +57,18 @@ def run(
         Path to temporal correlation file created.
     stitched_ps_file : Path
         Path to ps mask file created.
+
     """
     stitched_ifg_dir.mkdir(exist_ok=True, parents=True)
     # Also preps for snaphu, which needs binary format with no nans
     logger.info("Stitching interferograms by date.")
     out_bounds = Bbox(*output_options.bounds) if output_options.bounds else None
     date_to_ifg_path = stitching.merge_by_date(
-        image_file_list=ifg_file_list,  # type: ignore
+        image_file_list=ifg_file_list,
         file_date_fmt=file_date_fmt,
         output_dir=stitched_ifg_dir,
-        output_suffix=".int",
+        output_suffix=".int.tif",
+        driver="GTiff",
         out_bounds=out_bounds,
         out_bounds_epsg=output_options.bounds_epsg,
     )
@@ -97,6 +100,13 @@ def run(
         out_bounds=out_bounds,
         out_bounds_epsg=output_options.bounds_epsg,
     )
+
+    if output_options.add_overviews:
+        logger.info("Creating overviews for stitched images")
+        create_overviews(stitched_ifg_paths, image_type=ImageType.INTERFEROGRAM)
+        create_overviews(interferometric_corr_paths, image_type=ImageType.CORRELATION)
+        create_image_overviews(stitched_ps_file, image_type=ImageType.PS)
+        create_image_overviews(stitched_temp_coh_file, image_type=ImageType.CORRELATION)
 
     return (
         stitched_ifg_paths,

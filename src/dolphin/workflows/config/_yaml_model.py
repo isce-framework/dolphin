@@ -39,6 +39,7 @@ class YamlModel(BaseModel):
             https://docs.pydantic.dev/usage/exporting_models/#modeljson
         indent_per_level : int, default = 2
             Number of spaces to indent per level.
+
         """
         yaml_obj = self._to_yaml_obj(by_alias=by_alias)
 
@@ -47,7 +48,6 @@ class YamlModel(BaseModel):
                 yaml_obj,
                 self.model_json_schema(by_alias=by_alias),
                 indent_per_level=indent_per_level,
-                pydantic_class=self.__class__,
             )
 
         y = YAML()
@@ -78,9 +78,10 @@ class YamlModel(BaseModel):
         -------
         Config
             Workflow configuration
+
         """
         y = YAML(typ="safe")
-        with open(yaml_path, "r") as f:
+        with open(yaml_path) as f:
             data = y.load(f)
 
         return cls(**data)
@@ -103,6 +104,7 @@ class YamlModel(BaseModel):
             By default, prints to stdout.
         indent_per_level : int, default = 2
             Number of spaces to indent per level.
+
         """
         full_dict = cls._construct_empty()
         # UserWarning: Pydantic serializer warnings:
@@ -137,8 +139,7 @@ class YamlModel(BaseModel):
         y = YAML()
         ss = StringIO()
         y.dump(json.loads(self.model_dump_json(by_alias=by_alias)), ss)
-        yaml_obj = y.load(ss.getvalue())
-        return yaml_obj
+        return y.load(ss.getvalue())
 
 
 def _add_comments(
@@ -148,33 +149,31 @@ def _add_comments(
     definitions: Optional[dict] = None,
     # variable specifying how much to indent per level
     indent_per_level: int = 2,
-    pydantic_class=None,
 ):
     """Add comments above each YAML field using the pydantic model schema."""
     # Definitions are in schemas that contain nested pydantic Models
-    if definitions is None:
-        definitions = schema.get("$defs")
+    defs = schema.get("$defs") if definitions is None else definitions
 
     for key, val in schema["properties"].items():
         reference = ""
         # Get sub-schema if it exists
-        if "$ref" in val.keys():
-            # At top level, example is 'outputs': {'$ref': '#/definitions/Outputs'}
+        if "$ref" in val:
+            # At top level, example is 'outputs': {'$ref': '#/defs/Outputs'}
             reference = val["$ref"]
-        elif "allOf" in val.keys():
-            # within 'definitions', it looks like
-            #  'allOf': [{'$ref': '#/definitions/HalfWindow'}]
+        elif "allOf" in val:
+            # within 'defs', it looks like
+            #  'allOf': [{'$ref': '#/defs/HalfWindow'}]
             reference = val["allOf"][0]["$ref"]
 
         ref_key = reference.split("/")[-1]
         if ref_key:  # The current property is a reference to something else
-            if "enum" in definitions[ref_key]:  # type: ignore
+            if "enum" in defs[ref_key]:  # type: ignore[index]
                 # This is just an Enum, not a sub schema.
                 # Overwrite the value with the referenced value
-                val = definitions[ref_key]  # type: ignore
+                val = defs[ref_key]  # type: ignore[index] # noqa: PLW2901
             else:
                 # The reference is a sub schema, so we need to recurse
-                sub_schema = definitions[ref_key]  # type: ignore
+                sub_schema = defs[ref_key]  # type:ignore[index]
                 # Get the sub-model
                 sub_loaded_yaml = loaded_yaml[key]
                 # recurse on the sub-model
@@ -182,7 +181,7 @@ def _add_comments(
                     sub_loaded_yaml,
                     sub_schema,
                     indent=indent + indent_per_level,
-                    definitions=definitions,
+                    definitions=defs,
                     indent_per_level=indent_per_level,
                 )
                 continue
@@ -195,7 +194,7 @@ def _add_comments(
                 subsequent_indent=" " * indent_per_level,
             )
         )
-        if "anyOf" in val.keys():
+        if "anyOf" in val:
             #   'anyOf': [{'type': 'string'}, {'type': 'null'}],
             # Join the options with a pipe, like Python types
             type_str = " | ".join(d["type"] for d in val["anyOf"])
@@ -203,7 +202,7 @@ def _add_comments(
         else:
             type_str = val["type"]
         type_line = f"\n  Type: {type_str}."
-        choices = f"\n  Options: {val['enum']}." if "enum" in val.keys() else ""
+        choices = f"\n  Options: {val['enum']}." if "enum" in val else ""
 
         # Combine the description/type/choices as the YAML comment
         comment = f"{desc}{type_line}{choices}"

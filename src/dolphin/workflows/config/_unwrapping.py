@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, List
+from typing import Any
 
 from pydantic import ConfigDict, Field, field_validator
 
@@ -27,7 +27,7 @@ class UnwrappingWorkflow(WorkflowBase):
     """Configuration for the unwrapping stage of the workflow."""
 
     # Paths to input/output files
-    ifg_file_list: List[Path] = Field(
+    ifg_file_list: list[Path] = Field(
         default_factory=list,
         description=(
             "list of CSLC files, or newline-delimited file "
@@ -51,10 +51,9 @@ class UnwrappingWorkflow(WorkflowBase):
         _read_file_list_or_glob
     )
 
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
+    def model_post_init(self, __context: Any) -> None:
         """After validation, set up properties for use during workflow run."""
-        super().__init__(*args, **kwargs)
-
+        super().model_post_init(__context)
         # Ensure outputs from workflow steps are within work directory.
         if not self.keep_paths_relative:
             # Resolve all CSLC paths:
@@ -64,7 +63,7 @@ class UnwrappingWorkflow(WorkflowBase):
         # move output dir inside the work directory (if it's not already inside).
         # They may already be inside if we're loading from a json/yaml file.
         opts = self.unwrap_options
-        if not opts._directory.parent == work_dir:
+        if opts._directory.parent != work_dir:
             opts._directory = work_dir / opts._directory
         if not self.keep_paths_relative:
             opts._directory = opts._directory.resolve(strict=False)

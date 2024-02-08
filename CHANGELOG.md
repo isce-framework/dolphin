@@ -1,6 +1,64 @@
-# [Unreleased](https://github.com/isce-framework/dolphin/compare/v0.9.0...main)
+# [Unreleased](https://github.com/isce-framework/dolphin/compare/v0.12.0...main)
 
-# [v0.9.0](https://github.com/isce-framework/dolphin/compare/v0.8.0...v0.9.0)
+
+**Fixed**
+
+- Apply bounds even if only one image is passed to `stitching` (#210)
+
+**Dependencies**
+
+- Move back to `tqdm` instead of using `rich` for progress bars.
+
+
+# [0.12.0](https://github.com/isce-framework/dolphin/compare/v0.11.0...v0.12.0) - 2024-02-01
+
+**Added**
+- Added `DatasetWriter` protocol
+- Added `RasterWriter` and `BackgroundRasterWriter` implementations of this protocol
+- Refactored phase linking
+  - Covariance and EVD/MLE use `jax`
+  - This combines the implementation of CPU/GPU, and removes the need for usign `pymp`
+- Added `utils.disable_gpu` to stop the use ofr a GPU even if it's available
+
+**Changed**
+- Internal module organization, including grouping IO modules into `dolphin.io` subpackage
+- Renamed `io.Writer` to `io.GdalWriter` to distinguish from `RasterWriter`
+- Removed the `n_workers` option from the configuration.
+  - There is no more need to have two levels of parallelism (`threads_per_worker` and `n_workers`)
+  - The name `threads_per_worker` is kept for consistency; it is still an accurate name for the multi-burst processing case.
+
+
+**Dependencies**
+
+Added
+- `jax`>=0.4.19
+- `numpy`=>1.23 (bump to minimum version that they're still supporting)
+- `scipy`>=1.9 (same reason)
+- `numba`>=0.54
+
+Removed:
+- `pymp`
+- `cupy` from optional GPU usage
+
+# [v0.11.0](https://github.com/isce-framework/dolphin/compare/v0.10.0...v0.11.0) - 2024-01-24
+
+**Added**
+- Added ionospheric correction in `dolphin.atmosphere.ionosphere`
+  - Included in `DisplacementWorkflow` if TEC files are provided
+
+
+# [v0.10.0](https://github.com/isce-framework/dolphin/compare/v0.9.0...v0.10.0) - 2024-01-22
+
+**Added**
+- Create `dolphin.unwrap` subpackage to split out unwrapping calls, and post-processing modules.
+
+**Removed**
+- the `_dates` module has been removed in favor of using `opera_utils._dates`
+
+**Fixed**
+- `stitching.merge_images` will now give consistent sizes for provided bounds when `strides` is given
+
+# [v0.9.0](https://github.com/isce-framework/dolphin/compare/v0.8.0...v0.9.0) - 2024-01-10
 
 **Added**
 - `DatasetReader` and `StackReader` protocols for reading in data from different sources
@@ -12,7 +70,10 @@
 - The `VRTStack` no longer has an `.iter_blocks` method
   - This has been replaced with creating an `EagerLoader` directly and passing it to the `reader` argument
 
-# [v0.8.0](https://github.com/isce-framework/dolphin/compare/v0.7.0...v0.8.0)
+**Dependencies**
+- Added `rasterio>=1.3`
+
+# [v0.8.0](https://github.com/isce-framework/dolphin/compare/v0.7.0...v0.8.0) - 2024-01-05
 
 **Added**
 - Ability to unwrap interferograms with the [`snaphu-py`](https://github.com/isce-framework/snaphu-py) (not a required dependency)
@@ -29,7 +90,7 @@
 - The default extension for conncomps is now `.tif`. Use geotiffs instead of ENVI format for connected components.
 - Using ruff instead of pydocstyle due to archived repo
 
-# [v0.7.0](https://github.com/isce-framework/dolphin/compare/v0.6.1...v0.7.0)
+# [v0.7.0](https://github.com/isce-framework/dolphin/compare/v0.6.1...v0.7.0) - 2023-11-29
 
 **Added**
 - `MiniStackPlanner` and `MiniStackInfo` class which does the planning for how a large stack of SLCs will be processed in batches.

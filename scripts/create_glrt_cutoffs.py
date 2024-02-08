@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 """Compute Generalized Likelihood Ratio Test (GLRT) cutoffs.
 
 Runs over different sample sizes (N), significance levels (alpha), and scales.
@@ -37,6 +35,7 @@ def get_test_stat_glrt(
     -------
     ndarray:
         A numpy array of test statistics
+
     """
     x = rayleigh.rvs(scale=scale, size=(nsim, 2 * N))
 
@@ -67,6 +66,7 @@ def get_alpha_cutoff(
     -------
     float:
         Alpha cutoff value
+
     """
     return np.percentile(
         get_test_stat_glrt(N=N, nsim=nsim, scale=scale), 100 * (1 - alpha)
@@ -90,6 +90,7 @@ def compute_cutoff(
     Returns
     -------
     (N, alpha, scale, computed cutoff)
+
     """
     return (N, alpha, scale, get_alpha_cutoff(alpha=alpha, N=N, scale=scale))
 

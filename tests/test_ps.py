@@ -4,7 +4,6 @@ from osgeo import gdal
 
 import dolphin.ps
 from dolphin import io
-from dolphin._readers import VRTStack
 
 
 def test_ps_block(slc_stack):
@@ -49,10 +48,10 @@ def test_ps_threshold(slc_stack):
     assert ps_pixels.sum() == 0
 
 
-@pytest.fixture
+@pytest.fixture()
 def vrt_stack(tmp_path, slc_file_list):
     vrt_file = tmp_path / "test.vrt"
-    return VRTStack(slc_file_list, outfile=vrt_file)
+    return io.VRTStack(slc_file_list, outfile=vrt_file)
 
 
 def test_create_ps(tmp_path, vrt_stack):
@@ -72,10 +71,10 @@ def test_create_ps(tmp_path, vrt_stack):
     assert io.get_raster_dtype(amp_dispersion_file) == np.float32
 
 
-@pytest.fixture
+@pytest.fixture()
 def vrt_stack_with_nans(tmp_path, raster_with_nan_block):
     vrt_file = tmp_path / "test_with_nans.vrt"
-    return VRTStack([raster_with_nan_block, raster_with_nan_block], outfile=vrt_file)
+    return io.VRTStack([raster_with_nan_block, raster_with_nan_block], outfile=vrt_file)
 
 
 def _write_zeros(file, shape):
