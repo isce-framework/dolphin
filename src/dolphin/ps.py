@@ -297,7 +297,7 @@ def multilook_ps_mask(
         logger.info(f"{out_path} exists, skipping.")
         return out_path
 
-    ps_mask = io.load_gdal(ps_mask_file, masked=True).astype(bool).filled(False)
+    ps_mask = io.load_gdal(ps_mask_file, masked=True).astype(bool)
     full_rows, full_cols = ps_mask.shape
     ps_mask_looked = utils.take_looks(
         ps_mask, strides["y"], strides["x"], func_type="any", edge_strategy="pad"
@@ -305,12 +305,12 @@ def multilook_ps_mask(
     # make sure it's the same size as the MLE result/temp_coh after padding
     out_rows, out_cols = full_rows // strides["y"], full_cols // strides["x"]
     ps_mask_looked = ps_mask_looked[:out_rows, :out_cols]
-    ps_mask_looked = ps_mask_looked.astype("uint8")
+    ps_mask_looked = ps_mask_looked.astype("uint8").filled(NODATA_VALUES["ps"])
     io.write_arr(
         arr=ps_mask_looked,
         like_filename=ps_mask_file,
         output_name=out_path,
         strides=strides,
-        nodata=255,
+        nodata=NODATA_VALUES["ps"],
     )
     return out_path
