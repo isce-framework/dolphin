@@ -22,7 +22,6 @@ class Resampling(Enum):
 
     NEAREST = "nearest"
     AVERAGE = "average"
-    LANCZOS = "lanczos"
 
 
 class ImageType(Enum):
@@ -37,7 +36,7 @@ class ImageType(Enum):
 
 IMAGE_TYPE_TO_RESAMPLING = {
     ImageType.UNWRAPPED: Resampling.AVERAGE,
-    ImageType.INTERFEROGRAM: Resampling.LANCZOS,
+    ImageType.INTERFEROGRAM: Resampling.AVERAGE,
     ImageType.CORRELATION: Resampling.AVERAGE,
     ImageType.CONNCOMP: Resampling.NEAREST,
     # No max in resampling, yet, which would be best

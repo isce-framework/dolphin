@@ -427,3 +427,39 @@ def dem_file(tmp_path, slc_stack):
     ds.GetRasterBand(1).WriteArray(dem)
     ds = None
     return fname
+
+
+# For unwrapping/overviews
+@pytest.fixture()
+def list_of_gtiff_ifgs(tmp_path, raster_100_by_200):
+    ifg_list = []
+    for i in range(3):
+        # Create a copy of the raster in the same directory
+        f = tmp_path / f"ifg_{i}.int.tif"
+        write_arr(
+            arr=np.ones((100, 200), dtype=np.complex64),
+            output_name=f,
+            like_filename=raster_100_by_200,
+            driver="GTiff",
+        )
+        ifg_list.append(f)
+
+    return ifg_list
+
+
+@pytest.fixture()
+def list_of_envi_ifgs(tmp_path, raster_100_by_200):
+    ifg_list = []
+    for i in range(3):
+        # Create a copy of the raster in the same directory
+        f = tmp_path / f"ifg_{i}.int"
+        ifg_list.append(f)
+        write_arr(
+            arr=np.ones((100, 200), dtype=np.complex64),
+            output_name=f,
+            like_filename=raster_100_by_200,
+            driver="ENVI",
+        )
+        ifg_list.append(f)
+
+    return ifg_list
