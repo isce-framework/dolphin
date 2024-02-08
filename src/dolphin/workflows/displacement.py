@@ -8,7 +8,7 @@ from datetime import datetime
 from os import PathLike
 from pathlib import Path
 from pprint import pformat
-from typing import Mapping, Sequence
+from typing import Mapping, NamedTuple, Sequence
 
 from opera_utils import group_by_burst, group_by_date
 from tqdm.auto import tqdm
@@ -31,11 +31,22 @@ from .config import DisplacementWorkflow
 logger = get_log(__name__)
 
 
+class OutputPaths(NamedTuple):
+    """Named tuple of `DisplacementWorkflow` outputs."""
+
+    stitched_ifg_paths: list[Path]
+    stitched_cor_paths: list[Path]
+    stitched_temp_coh_file: Path
+    stitched_ps_file: Path
+    unwrapped_paths: list[Path] | None
+    conncomp_paths: list[Path] | None
+
+
 @log_runtime
 def run(
     cfg: DisplacementWorkflow,
     debug: bool = False,
-):
+) -> OutputPaths:
     """Run the displacement workflow on a stack of SLCs.
 
     Parameters
@@ -191,11 +202,18 @@ def run(
     if not cfg.unwrap_options.run_unwrap:
         logger.info("Skipping unwrap step")
         _print_summary(cfg)
-        return
+        return OutputPaths(
+            stitched_ifg_paths=stitched_ifg_paths,
+            stitched_cor_paths=stitched_cor_paths,
+            stitched_temp_coh_file=stitched_temp_coh_file,
+            stitched_ps_file=stitched_ps_file,
+            unwrapped_paths=None,
+            conncomp_paths=None,
+        )
 
     row_looks, col_looks = cfg.phase_linking.half_window.to_looks()
     nlooks = row_looks * col_looks
-    unwrapping.run(
+    unwrapped_paths, conncomp_paths = unwrapping.run(
         ifg_file_list=stitched_ifg_paths,
         cor_file_list=stitched_cor_paths,
         nlooks=nlooks,
@@ -268,6 +286,14 @@ def run(
 
     # Print the maximum memory usage for each worker
     _print_summary(cfg)
+    return OutputPaths(
+        stitched_ifg_paths=stitched_ifg_paths,
+        stitched_cor_paths=stitched_cor_paths,
+        stitched_temp_coh_file=stitched_temp_coh_file,
+        stitched_ps_file=stitched_ps_file,
+        unwrapped_paths=None,
+        conncomp_paths=None,
+    )
 
 
 def _print_summary(cfg):

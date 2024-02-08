@@ -34,7 +34,13 @@ def test_displacement_run_single(
                 "gpu_enabled": (os.environ.get("NUMBA_DISABLE_JIT") != "1")
             },
         )
-        displacement.run(cfg)
+        paths = displacement.run(cfg)
+        assert all(p.exists() for p in paths.stitched_ifg_paths)
+        assert all(p.exists() for p in paths.stitched_cor_paths)
+        assert paths.stitched_temp_coh_file.exists()
+        assert paths.stitched_ps_file.exists()
+        assert paths.unwrapped_paths is None
+        assert paths.conncomp_paths is None
 
 
 def test_displacement_run_single_official_opera_naming(
