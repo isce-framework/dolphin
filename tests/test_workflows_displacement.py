@@ -42,6 +42,9 @@ def test_displacement_run_single(
         assert all(p.exists() for p in paths.stitched_cor_paths)
         assert paths.stitched_temp_coh_file.exists()
         assert paths.stitched_ps_file.exists()
+        assert paths.unwrapped_paths is not None
+        assert paths.conncomp_paths is not None
+        assert all(p.exists() for p in paths.conncomp_paths)
         assert all(p.exists() for p in paths.unwrapped_paths)
         assert all(p.exists() for p in paths.conncomp_paths)
 
