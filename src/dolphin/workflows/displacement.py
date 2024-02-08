@@ -294,8 +294,8 @@ def run(
         stitched_cor_paths=stitched_cor_paths,
         stitched_temp_coh_file=stitched_temp_coh_file,
         stitched_ps_file=stitched_ps_file,
-        unwrapped_paths=None,
-        conncomp_paths=None,
+        unwrapped_paths=unwrapped_paths,
+        conncomp_paths=conncomp_paths,
     )
 
 
