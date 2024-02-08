@@ -32,7 +32,7 @@ def create_config(
     block_shape: tuple[int, int] = (512, 512),
     threads_per_worker: int = 4,
     n_parallel_bursts: int = 1,
-    no_gpu: bool = False,
+    enable_gpu: bool = False,
     ntiles: tuple[int, int] = (1, 1),
     downsample_factor: tuple[int, int] = (1, 1),
     no_unwrap: bool = False,
@@ -114,7 +114,7 @@ def create_config(
             "block_shape": block_shape,
             "n_parallel_bursts": n_parallel_bursts,
             "threads_per_worker": threads_per_worker,
-            "gpu_enabled": (not no_gpu),
+            "gpu_enabled": enable_gpu,
         },
         log_file=log_file,
         amplitude_mean_files=amplitude_mean_files,
@@ -342,9 +342,9 @@ def get_parser(subparser=None, subcommand_name="run"):
         help="Path to directory to store intermediate/output files.",
     )
     worker_group.add_argument(
-        "--no-gpu",
+        "--enable-gpu",
         action="store_true",
-        help="Disable the GPU (if using a machine that has one available).",
+        help="Enable usage of GPU (if using a machine that has one available).",
     )
     worker_group.add_argument(
         "--block-shape",

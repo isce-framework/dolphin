@@ -97,7 +97,7 @@ def test_outputs_defaults():
 
 def test_worker_settings_defaults():
     ws = config.WorkerSettings()
-    assert ws.gpu_enabled is True
+    assert ws.gpu_enabled is False
     assert ws.threads_per_worker == 1
     assert ws.block_shape == (512, 512)
 

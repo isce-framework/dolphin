@@ -19,6 +19,7 @@ from dolphin.atmosphere import estimate_ionospheric_delay, estimate_tropospheric
 from dolphin.io import get_raster_bounds, get_raster_crs
 from dolphin.utils import (
     DummyProcessPoolExecutor,
+    disable_gpu,
     get_max_memory_usage,
     prepare_geometry,
     set_num_threads,
@@ -34,6 +35,7 @@ logger = get_log(__name__)
 class OutputPaths(NamedTuple):
     """Named tuple of `DisplacementWorkflow` outputs."""
 
+    comp_slc_dict: dict[str, Path]
     stitched_ifg_paths: list[Path]
     stitched_cor_paths: list[Path]
     stitched_temp_coh_file: Path
@@ -62,6 +64,8 @@ def run(
     logger = get_log(name="dolphin", debug=debug, filename=cfg.log_file)
     logger.debug(pformat(cfg.model_dump()))
 
+    if not cfg.worker_settings.gpu_enabled:
+        disable_gpu()
     set_num_threads(cfg.worker_settings.threads_per_worker)
 
     try:
@@ -203,6 +207,7 @@ def run(
         logger.info("Skipping unwrap step")
         _print_summary(cfg)
         return OutputPaths(
+            comp_slc_dict=comp_slc_dict,
             stitched_ifg_paths=stitched_ifg_paths,
             stitched_cor_paths=stitched_cor_paths,
             stitched_temp_coh_file=stitched_temp_coh_file,
@@ -287,12 +292,13 @@ def run(
     # Print the maximum memory usage for each worker
     _print_summary(cfg)
     return OutputPaths(
+        comp_slc_dict=comp_slc_dict,
         stitched_ifg_paths=stitched_ifg_paths,
         stitched_cor_paths=stitched_cor_paths,
         stitched_temp_coh_file=stitched_temp_coh_file,
         stitched_ps_file=stitched_ps_file,
-        unwrapped_paths=None,
-        conncomp_paths=None,
+        unwrapped_paths=unwrapped_paths,
+        conncomp_paths=conncomp_paths,
     )
 
 
