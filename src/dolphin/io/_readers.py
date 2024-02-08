@@ -1051,7 +1051,7 @@ class EagerLoader(BackgroundReader):
             self.queue_read(rows, cols)
             queued_slices.append((rows, cols))
 
-        logger.info(f"Processing {self._block_shape} sized blocks... {tqdm_kwargs}")
+        logger.info(f"Processing {self._block_shape} sized blocks...")
         for _ in trange(len(queued_slices), **tqdm_kwargs):
             cur_block, (rows, cols) = self.get_data()
             logger.debug(f"got data for {rows, cols}: {cur_block.shape}")
