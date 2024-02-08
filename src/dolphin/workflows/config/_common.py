@@ -211,7 +211,7 @@ class WorkerSettings(BaseModel, extra="forbid"):
     """Settings for controlling CPU/GPU settings and parallelism."""
 
     gpu_enabled: bool = Field(
-        True,
+        False,
         description="Whether to use GPU for processing (if available)",
     )
     threads_per_worker: int = Field(
