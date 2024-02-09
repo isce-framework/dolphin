@@ -168,7 +168,7 @@ def unwrap(
     zero_where_masked: bool = True,
     ntiles: Union[int, tuple[int, int]] = 1,
     tile_overlap: tuple[int, int] = (0, 0),
-    nproc: int = 1,
+    n_parallel_tiles: int = 1,
     unwrap_method: UnwrapMethod = UnwrapMethod.SNAPHU,
     init_method: str = "mst",
     cost: str = "smooth",
@@ -206,7 +206,7 @@ def unwrap(
     tile_overlap : tuple[int, int], optional
         (For snaphu-py tiling): Number of pixels to overlap in the (row, col) direction.
         Default = (0, 0)
-    nproc : int, optional
+    n_parallel_tiles : int, optional
         (For snaphu-py tiling) If specifying `ntiles`, number of processes to spawn
         to unwrap the tiles in parallel.
         Default = 1, which unwraps each tile in serial.
@@ -249,7 +249,7 @@ def unwrap(
             ntiles=ntiles,
             tile_overlap=tile_overlap,
             mask_file=mask_file,
-            nproc=nproc,
+            nproc=n_parallel_tiles,
             zero_where_masked=zero_where_masked,
             init_method=init_method,
             cost=cost,
