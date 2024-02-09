@@ -19,6 +19,7 @@ from .config import (
 def create_config(
     *,
     outfile: Union[str, Path],
+    print_empty: bool = False,
     slc_files: Optional[list[str]] = None,
     subdataset: Optional[str] = None,
     keep_paths_relative: bool = False,
@@ -52,6 +53,10 @@ def create_config(
     amplitude_dispersion_files: Optional[list[str]] = None,
 ):
     """Create a config for a displacement workflow."""
+    if print_empty:
+        DisplacementWorkflow.print_yaml_schema(outfile)
+        return
+
     if amplitude_dispersion_files is None:
         amplitude_dispersion_files = []
     if amplitude_mean_files is None:
@@ -143,6 +148,11 @@ def get_parser(subparser=None, subcommand_name="run"):
         parser = argparse.ArgumentParser(**metadata)
 
     # parser._action_groups.pop()
+    parser.add_argument(
+        "--print-empty",
+        action="store_true",
+        help="Flag to print a YAML file with only default filled to `outfile`.",
+    )
     parser.add_argument(
         "-o",
         "--outfile",
@@ -368,14 +378,3 @@ def get_parser(subparser=None, subcommand_name="run"):
     parser.set_defaults(run_func=create_config)
 
     return parser
-
-
-def main(args=None):
-    """Get the command line arguments and create the config file."""
-    parser = get_parser()
-    parsed_args = parser.parse_args(args)
-    create_config(**vars(parsed_args))
-
-
-if __name__ == "__main__":
-    main()
