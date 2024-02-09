@@ -53,8 +53,9 @@ def create_config(
     amplitude_dispersion_files: Optional[list[str]] = None,
 ):
     """Create a config for a displacement workflow."""
+    output = sys.stdout if outfile == "-" else outfile
     if print_empty:
-        DisplacementWorkflow.print_yaml_schema(outfile)
+        DisplacementWorkflow.print_yaml_schema(output)
         return
 
     if amplitude_dispersion_files is None:
@@ -126,11 +127,8 @@ def create_config(
         amplitude_dispersion_files=amplitude_dispersion_files,
     )
 
-    if outfile == "-":  # Write to stdout
-        cfg.to_yaml(sys.stdout)
-    else:
-        print(f"Saving configuration to {outfile!s}", file=sys.stderr)
-        cfg.to_yaml(outfile)
+    print(f"Saving configuration to {output!s}", file=sys.stderr)
+    cfg.to_yaml(output)
 
 
 def get_parser(subparser=None, subcommand_name="run"):

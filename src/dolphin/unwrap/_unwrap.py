@@ -34,8 +34,11 @@ def run(
     mask_file: Optional[Filename] = None,
     unwrap_method: UnwrapMethod = UnwrapMethod.SNAPHU,
     init_method: str = "mst",
+    cost: str = "smooth",
     max_jobs: int = 1,
     ntiles: Union[int, tuple[int, int]] = 1,
+    tile_overlap: tuple[int, int] = (0, 0),
+    n_parallel_tiles: int = 1,
     downsample_factor: Union[int, tuple[int, int]] = 1,
     scratchdir: Optional[Filename] = None,
     overwrite: bool = False,
@@ -60,14 +63,23 @@ def run(
         Choices: {"snaphu", "icu", "phass"}
     init_method : str, choices = {"mcf", "mst"}
         SNAPHU initialization method, by default "mst".
+    cost : str, choices = {"smooth", "defo", "p-norm",}
+        SNAPHU cost function, by default "smooth"
     max_jobs : int, optional, default = 1
         Maximum parallel processes.
     ntiles : int or tuple[int, int], optional, default = (1, 1)
         Use multi-resolution unwrapping with `tophu` on the interferograms.
         If 1 or (1, 1), doesn't use tophu and unwraps the interferogram as
         one single image.
+    tile_overlap : tuple[int, int], optional
+        (For snaphu-py tiling): Number of pixels to overlap in the (row, col) direction.
+        Default = (0, 0)
+    n_parallel_tiles : int, optional
+        (For snaphu-py tiling) If specifying `ntiles`, number of tiles to unwrap
+        in parallel for each interferogram.
+        Default = 1, which unwraps each tile in serial.
     downsample_factor : int, optional, default = 1
-        (For running coarse_unwrap): Downsample the interferograms by this
+        (For tophu/multi-scale unwrapping): Downsample the interferograms by this
         factor to unwrap faster, then upsample to full resolution.
     scratchdir : Filename, optional
         Path to scratch directory to hold intermediate files.
@@ -126,10 +138,13 @@ def run(
                 unw_filename=out_file,
                 nlooks=nlooks,
                 init_method=init_method,
+                cost=cost,
                 unwrap_method=unwrap_method,
                 mask_file=mask_file,
                 downsample_factor=downsample_factor,
                 ntiles=ntiles,
+                tile_overlap=tile_overlap,
+                n_parallel_tiles=n_parallel_tiles,
                 scratchdir=scratchdir,
             )
             for ifg_file, out_file, cor_file in zip(in_files, out_files, cor_filenames)
