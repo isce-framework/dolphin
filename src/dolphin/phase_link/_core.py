@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from enum import IntEnum
 from functools import partial
 from typing import NamedTuple, Optional
 
@@ -23,6 +24,13 @@ class PhaseLinkRuntimeError(Exception):
     """Exception raised while running the MLE solver."""
 
 
+class EstimatorType(IntEnum):
+    """Type of estimator used for phase linking."""
+
+    EVD = 0
+    EMI = 1
+
+
 class PhaseLinkOutput(NamedTuple):
     """Output of the MLE solver."""
 
@@ -36,6 +44,8 @@ class PhaseLinkOutput(NamedTuple):
 
     eigenvalues: np.ndarray
     """The smallest (largest) eigenvalue resulting from EMI (EVD)."""
+
+    estimator_used: np.ndarray  # dtype: np.int8
 
     avg_coh: np.ndarray | None = None
     """Average coherence across dates for each SLC."""
@@ -155,7 +165,7 @@ def run_phase_linking(
     slc_stack_masked = slc_stack.copy()
     slc_stack_masked[:, ignore_mask] = np.nan
 
-    optimized_phase, eigenvalues, temp_coh, avg_coh = run_cpl(
+    optimized_phase, temp_coh, eigenvalues, est_used, avg_coh = run_cpl(
         slc_stack=slc_stack_masked,
         half_window=half_window,
         strides=strides,
@@ -194,7 +204,9 @@ def run_phase_linking(
             reference_idx,
         )
 
-    return PhaseLinkOutput(cpx_phase, temp_coh, np.array(eigenvalues), avg_coh)
+    return PhaseLinkOutput(
+        cpx_phase, temp_coh, np.array(eigenvalues), est_used, avg_coh
+    )
 
 
 def run_cpl(
@@ -262,7 +274,7 @@ def run_cpl(
         neighbor_arrays=neighbor_arrays,
     )
 
-    optimized_phase, eigenvalues = process_coherence_matrices(
+    optimized_phase, eigenvalues, est_used = process_coherence_matrices(
         C_arrays,
         use_evd=use_evd,
         beta=beta,
@@ -277,14 +289,14 @@ def run_cpl(
         avg_coh = np.argmax(avg_coh_per_date, axis=2)
     else:
         avg_coh = None
-    return optimized_phase, temp_coh, eigenvalues, avg_coh
+    return optimized_phase, temp_coh, eigenvalues, est_used, avg_coh
 
 
 @partial(jit, static_argnames=("use_evd", "beta", "reference_idx"))
 def process_coherence_matrices(
     C_arrays,
     use_evd: bool = False,
-    beta: float = 0.01,
+    beta: float = 0.00,
     reference_idx: int = 0,
 ) -> tuple[Array, Array]:
     """Estimate the linked phase for a stack of coherence matrices.
@@ -317,18 +329,20 @@ def process_coherence_matrices(
         The smallest (largest) eigenvalue as solved by EMI (EVD).
 
     """
+    rows, cols, n, _ = C_arrays.shape
     if use_evd:
         # EVD
         eig_vals, eig_vecs = eigh_largest_stack(C_arrays)
+        est_used = jnp.zeros(eig_vals.shape, dtype=bool)
     else:
         # EMI
         # estimate the wrapped phase based on the EMI paper
         # *smallest* eigenvalue decomposition of the (|Gamma|^-1  *  C) matrix
 
         # Identity used for regularization and for solving
-        Id = jnp.eye(C_arrays.shape[-1], dtype=C_arrays.dtype)
+        Id = jnp.eye(n, dtype=C_arrays.dtype)
         # repeat the identity matrix for each pixel
-        Id = jnp.tile(Id, (C_arrays.shape[0], C_arrays.shape[1], 1, 1))
+        Id = jnp.tile(Id, (rows, cols, 1, 1))
 
         Gamma = jnp.abs(C_arrays)
         if beta > 0:
@@ -339,31 +353,38 @@ def process_coherence_matrices(
 
         # Check: If it fails the cholesky factor, it's close to singular and
         # we should just fall back to EVD
-        # These functions are the callbacks used in `lax.cond`
-        def _get_emi_result() -> tuple[Array, Array]:
-            # Use the already- factored |Gamma|^-1, solving Ax = I gives the inverse
-            Gamma_inv = cho_solve((cho, is_lower), Id)
-            return eigh_smallest_stack(Gamma_inv * C_arrays)
+        # Use the already- factored |Gamma|^-1, solving Ax = I gives the inverse
+        Gamma_inv = cho_solve((cho, is_lower), Id)
+        emi_eig_vals, emi_eig_vecs = eigh_smallest_stack(Gamma_inv * C_arrays)
+        # for places where inverting |Gamma| failed: fall back to computing EVD
+        evd_eig_vals, evd_eig_vecs = eigh_largest_stack(C_arrays)
 
-        def _get_evd_result() -> tuple[Array, Array]:
-            # inverting |Gamma| failed: fall back to computing EVD
-            return eigh_largest_stack(C_arrays)
-
-        eig_vals, eig_vecs = lax.cond(
-            jnp.isnan(cho).any(),
-            # Run this on True: EVD, since we failed to invert:
-            _get_evd_result,
-            # Otherwise, on False, we're fine to use EMI
-            _get_emi_result,
-        )
-        # Note that we're using `lax.cond` because an `if` would faile the
-        # jit tracing
+        # Use https://jax.readthedocs.io/en/latest/_autosummary/jax.lax.select.html
+        # Note that `if` would fail the jit tracing
         # https://jax.readthedocs.io/en/latest/notebooks/Common_Gotchas_in_JAX.html#cond
+        inv_has_nans = jnp.any(jnp.isnan(Gamma_inv), axis=(-1, -2))
+
+        # Must broadcast the 2D boolean array so it's the same size as the outputs
+        inv_has_nans_3d = jnp.tile(inv_has_nans[:, :, None], (1, 1, n))
+
+        eig_vecs = lax.select(
+            inv_has_nans_3d,
+            # Run this on True: EVD, since we failed to invert:
+            evd_eig_vecs,
+            # Otherwise, on False, we're fine to use EMI
+            emi_eig_vecs,
+        )
+        eig_vals = lax.select(inv_has_nans, evd_eig_vals, emi_eig_vals)
+        # Make array of bools to indicate which estimator was used for each pixel
+
+        evd_used = jnp.zeros(emi_eig_vals.shape, dtype=jnp.int8)
+        emi_used = jnp.ones(emi_eig_vals.shape, dtype=jnp.int8)
+
+        est_used = lax.select(inv_has_nans, evd_used, emi_used)
 
     # Now the shape of eig_vecs is (rows, cols, nslc)
     # at pixel (r, c), eig_vecs[r, c] is the largest (smallest) eigenvector if
     # we picked EVD (EMI)
-
     # The phase estimate on the reference day will be size (rows, cols)
     ref = eig_vecs[:, :, reference_idx]
     # Make sure each still has 3 dims, then reference all phases to `ref`
@@ -372,7 +393,8 @@ def process_coherence_matrices(
     # Return the phase, Move the SLC dimension to the front
     # (to match the SLC stack shape)
     phase_stack = jnp.moveaxis(jnp.angle(evd_estimate), -1, 0)
-    return phase_stack, eig_vals
+    return phase_stack, eig_vals, est_used
+    # return evd_estimate, eig_vals, est_used
 
 
 # The eigenvalues are in ascending order
