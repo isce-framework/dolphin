@@ -17,8 +17,8 @@ def solve(
 
     Parameters
     ----------
-    ifg_pairs : Sequence[tuple[int, int]]
-        List of ifg pairs representated as tuples of (index 1, index 2)
+    A : Arraylike
+        Incidence matrix of shape (n_ifgs, n_sar_dates - 1)
     dphi : np.array 1D
         The phase differences between the ifg pairs
 
@@ -53,6 +53,7 @@ def get_incidence_matrix(ifg_pairs: Sequence[tuple[int, int]]) -> np.ndarray:
         Each row corresponds to an ifg, each column to a SAR date.
         The value will be -1 on the early (reference) ifgs, +1 on later (secondary)
         since the ifg phase = (later - earlier)
+        Shape: (n_ifgs, n_sar_dates - 1)
 
     """
     sar_dates = sorted(set(flatten(ifg_pairs)))
