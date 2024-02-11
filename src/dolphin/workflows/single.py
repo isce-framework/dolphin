@@ -19,6 +19,7 @@ from numpy.typing import DTypeLike
 from tqdm.auto import tqdm
 
 from dolphin import io, shp
+from dolphin._decorators import atomic_output
 from dolphin._log import get_log
 from dolphin._types import Filename, HalfWindow, Strides
 from dolphin.io import EagerLoader, StridedBlockManager, VRTStack
@@ -39,7 +40,7 @@ class OutputFile:
     strides: Optional[dict[str, int]] = None
 
 
-# @atomic_output(output_arg="output_folder", is_dir=True)
+@atomic_output(output_arg="output_folder", is_dir=True)
 def run_wrapped_phase_single(
     *,
     slc_vrt_file: Filename,
@@ -124,8 +125,9 @@ def run_wrapped_phase_single(
         OutputFile(
             output_folder / f"temporal_coherence_{start_end}.tif", np.float32, strides
         ),
-        OutputFile(output_folder / f"avg_coh_{start_end}.tif", np.uint16, strides),
         OutputFile(output_folder / f"eigenvalues_{start_end}.tif", np.float32, strides),
+        OutputFile(output_folder / f"estimator_used_{start_end}.tif", np.int8, strides),
+        OutputFile(output_folder / f"avg_coh_{start_end}.tif", np.uint16, strides),
         OutputFile(output_folder / f"shp_counts_{start_end}.tif", np.uint16, strides),
     ]
     for op in output_files:
@@ -258,7 +260,13 @@ def run_wrapped_phase_single(
         )
 
         # All other outputs are strided (smaller in size)
-        out_datas = [pl_output.temp_coh, pl_output.avg_coh, shp_counts]
+        out_datas = [
+            pl_output.temp_coh,
+            pl_output.eigenvalues,
+            pl_output.estimator_used,
+            pl_output.avg_coh,
+            shp_counts,
+        ]
         for data, output_file in zip(out_datas, output_files[1:]):
             if data is None:  # May choose to skip some outputs, e.g. "avg_coh"
                 continue
