@@ -146,17 +146,17 @@ def run_wrapped_phase_sequential(
     all_slc_files = list(chain.from_iterable(output_slc_files))
     all_comp_slc_files = [ms.get_compressed_slc_info().path for ms in ministacks]
 
-    pl_outputs = []
+    out_pl_slcs = []
     for slc_fname in all_slc_files:
         slc_fname.rename(output_folder / slc_fname.name)
-        pl_outputs.append(output_folder / slc_fname.name)
+        out_pl_slcs.append(output_folder / slc_fname.name)
 
     comp_outputs = []
     for p in all_comp_slc_files:
         p.rename(output_folder / p.name)
         comp_outputs.append(output_folder / p.name)
 
-    return pl_outputs, comp_outputs, output_temp_coh_file
+    return out_pl_slcs, comp_outputs, output_temp_coh_file
 
 
 def _get_outputs_from_folder(output_folder: Path):

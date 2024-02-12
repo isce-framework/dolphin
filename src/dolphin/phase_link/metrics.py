@@ -1,6 +1,6 @@
 """Module for computing quality metrics of estimated solutions."""
 import jax.numpy as jnp
-from jax import Array, jit
+from jax import Array, jit, vmap
 from jax.typing import ArrayLike
 
 
@@ -28,24 +28,67 @@ def estimate_temp_coh(cpx_phase: ArrayLike, C_arrays: ArrayLike) -> Array:
 
     """
     if cpx_phase.ndim == 1:
-        cpx_phase = cpx_phase.reshape(-1, 1, 1)
+        cpx_phase = cpx_phase.reshape(1, 1, -1)
     if C_arrays.ndim == 2:
         C_arrays = C_arrays.reshape(1, 1, *C_arrays.shape)
 
-    # Move to match the SLC dimension at the end for the covariances
-    est_arrays = jnp.moveaxis(cpx_phase, 0, -1)
-    # Get only the phase of the covariance (not correlation/magnitude)
-    C_angles = jnp.exp(1j * jnp.angle(C_arrays))
+    _temp_coh_3d = vmap(estimate_temp_coh_single)
+    estimate_temp_coh = vmap(_temp_coh_3d)
+    return estimate_temp_coh(cpx_phase, C_arrays)
 
-    est_phase_diffs = jnp.einsum("jka, jkb->jkab", est_arrays, est_arrays.conj())
-    # shape will be (rows, cols, nslc, nslc)
-    differences = C_angles * est_phase_diffs.conj()
 
-    # # Get just the upper triangle of the differences (not the diagonal)
-    nslc = C_angles.shape[-1]
-    # Get the upper triangle (not including the diagonal) of a matrix.
+@jit
+def estimate_temp_coh_single(cpx_phase: ArrayLike, C: ArrayLike) -> Array:
+    """Estimate the temporal coherence for one covariance matrix/phase solution.
+
+    Parameters
+    ----------
+    cpx_phase : ArrayLike
+        1D-Complex valued phase linking results from [dolphin.phase_link.run_cpl][]
+    C : ArrayLike, shape = (nslc, nslc)
+        The sample covariance matrix at one pixel.
+
+    Returns
+    -------
+    jax.Array
+        The temporal coherence of the time series compared to cov_matrix.
+        Output shape is ()
+
+    """
+    # For original Squeesar temp coh, everything is equally weighted
+    W = jnp.ones(C.shape, dtype="float32")
+    return _general_temp_coh_single(cpx_phase=cpx_phase, C=C, W=W)
+
+
+@jit
+def estimate_weighted_temp_coh_single(cpx_phase: ArrayLike, C: ArrayLike) -> Array:
+    """Estimate the weighted temporal coherence for one pixel."""
+    # Weight the differences by pass in weights coherence magnitudes
+    W = jnp.abs(C)
+    return _general_temp_coh_single(cpx_phase=cpx_phase, C=C, W=W)
+
+
+@jit
+def _general_temp_coh_single(cpx_phase: ArrayLike, C: ArrayLike, W: ArrayLike) -> Array:
+    """Estimate the (weighted) temporal coherence for a single solution."""
+    # Make outer product of complex phase (reform all possible ifgs from the solution)
+    reformed_ifg_phases = jnp.angle(cpx_phase[:, None] @ cpx_phase[None, :].conj())
+
+    C_angles = jnp.exp(1j * jnp.angle(C))
+    differences = C_angles * jnp.exp(-1j * reformed_ifg_phases)
+    # Weight the differences by the weights passed in
+    differences *= W
+
+    nslc, _ = C.shape
+    # Only add up the upper triangle of the hermitian matrix
     rows, cols = jnp.triu_indices(nslc, k=1)
-    upper_diffs = differences[:, :, rows, cols]
-    # get number of non-nan values
-    count = jnp.count_nonzero(~jnp.isnan(upper_diffs), axis=-1)
-    return jnp.abs(jnp.nansum(upper_diffs, axis=-1)) / count
+    upper_diffs = differences[rows, cols]
+    upper_weights = W[rows, cols]
+
+    # Get the total weight used for the divisor
+    diff_is_nan = jnp.isnan(upper_diffs)
+    total_diffs = jnp.sum(jnp.where(diff_is_nan, 0, upper_diffs))
+    total_weights = jnp.sum(jnp.where(diff_is_nan, 0, upper_weights))
+    out = jnp.abs(total_diffs / total_weights)
+    # Protect against all-zero `total_weights`
+    return jnp.nan_to_num(out, nan=0, posinf=0, neginf=0)
