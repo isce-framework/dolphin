@@ -20,6 +20,9 @@ from ._ps_filling import fill_ps_pixels
 logger = logging.getLogger(__name__)
 
 
+DEFAULT_STRIDES = Strides(1, 1)
+
+
 class PhaseLinkRuntimeError(Exception):
     """Exception raised while running the MLE solver."""
 
@@ -52,15 +55,12 @@ class PhaseLinkOutput(NamedTuple):
     """Average coherence across dates for each SLC."""
 
 
-DEFAULT_STRIDES = Strides(1, 1)
-
-
 def run_phase_linking(
     slc_stack: np.ndarray,
     half_window: HalfWindow,
     strides: Strides = DEFAULT_STRIDES,
     use_evd: bool = False,
-    beta: float = 0.01,
+    beta: float = 0.00,
     reference_idx: int = 0,
     nodata_mask: np.ndarray = None,
     ps_mask: Optional[np.ndarray] = None,
@@ -145,7 +145,7 @@ def run_phase_linking(
         ps_mask = np.zeros((rows, cols), dtype=bool)
     else:
         ps_mask = ps_mask.astype(bool)
-    _check_all_nans(slc_stack)
+    _raise_if_all_nan(slc_stack)
 
     # Make sure we also are ignoring pixels which are nans for all SLCs
     if nodata_mask.shape != (rows, cols) or ps_mask.shape != (rows, cols):
@@ -166,7 +166,6 @@ def run_phase_linking(
     slc_stack_masked = slc_stack.copy()
     slc_stack_masked[:, ignore_mask] = np.nan
 
-    # optimized_phase, temp_coh, eigenvalues, estimator, avg_coh = run_cpl(
     cpl_out = run_cpl(
         slc_stack=slc_stack_masked,
         half_window=half_window,
@@ -183,9 +182,9 @@ def run_phase_linking(
         # account for the strides when grabbing original data
         # we need to match `io.compute_out_shape` here
         slcs_decimated = decimate(slc_stack, strides)
-        cpx_phase = np.exp(1j * cpl_out.cpx_phase) * np.abs(slcs_decimated)
+        cpx_phase = np.exp(1j * np.angle(cpl_out.cpx_phase)) * np.abs(slcs_decimated)
     else:
-        cpx_phase = np.exp(1j * cpl_out.cpx_phase)
+        cpx_phase = np.exp(1j * np.angle(cpl_out.cpx_phase))
 
     # Get the smaller, looked versions of the masks
     # We zero out nodata if all pixels within the window had nodata
@@ -221,7 +220,7 @@ def run_cpl(
     half_window: HalfWindow,
     strides: Strides,
     use_evd: bool = False,
-    beta: float = 0.01,
+    beta: float = 0.00,
     reference_idx: int = 0,
     neighbor_arrays: Optional[np.ndarray] = None,
     calc_average_coh: bool = False,
@@ -260,21 +259,25 @@ def run_cpl(
 
     Returns
     -------
-    optimized_phase : Array
+    cpx_phase : Array
         Optimized SLC phase, shape same as `slc_stack` unless Strides are requested.
     temp_coh : Array
         Temporal coherence of the optimization.
         A goodness of fit parameter from 0 to 1 at each pixel.
+        shape = (out_rows, out_cols)
     eigenvalues : Array
         The eigenvalues of the coherence matrices.
         If `use_evd` is True, these are the largest eigenvalues;
         Otherwise, for EMI they are the smallest.
+        shape = (out_rows, out_cols)
     estimator : Array
         The estimator used at each pixel.
         0 = EVD, 1 = EMI
+        shape = (out_rows, out_cols)
     avg_coh : np.ndarray | None
         The average coherence of each row of the coherence matrix,
         if requested.
+        shape = (ncls, out_rows, out_cols)
 
     """
     C_arrays = covariance.estimate_stack_covariance(
@@ -300,7 +303,11 @@ def run_cpl(
     else:
         avg_coh = None
 
-    return PhaseLinkOutput(cpx_phase, temp_coh, eigenvalues, estimator, avg_coh)
+    # Reshape the (rows, cols, ncls) output to be same as input stack
+    cpx_phase_reshaped = jnp.moveaxis(cpx_phase, -1, 0)
+    return PhaseLinkOutput(
+        cpx_phase_reshaped, temp_coh, eigenvalues, estimator, avg_coh
+    )
 
 
 @partial(jit, static_argnames=("use_evd", "beta", "reference_idx"))
@@ -309,7 +316,7 @@ def process_coherence_matrices(
     use_evd: bool = False,
     beta: float = 0.00,
     reference_idx: int = 0,
-) -> tuple[Array, Array]:
+) -> tuple[Array, Array, Array]:
     """Estimate the linked phase for a stack of coherence matrices.
 
     This function is used after coherence estimation to estimate the
@@ -333,7 +340,7 @@ def process_coherence_matrices(
 
     Returns
     -------
-    eig_vecs : ndarray[float32], shape = (nslc, rows, cols)
+    eig_vecs : ndarray[float32], shape = (rows, cols, nslc)
         The phase resulting from the optimization at each output pixel.
         Shape is same as input slcs unless Strides > (1, 1)
     eig_vals : ndarray[float], shape = (rows, cols)
@@ -408,11 +415,7 @@ def process_coherence_matrices(
     # Make sure each still has 3 dims, then reference all phases to `ref`
     evd_estimate = eig_vecs * jnp.exp(-1j * jnp.angle(ref[:, :, None]))
 
-    # Return the phase, Move the SLC dimension to the front
-    # (to match the SLC stack shape)
-    phase_stack = jnp.moveaxis(jnp.angle(evd_estimate), -1, 0)
-    return phase_stack, eig_vals, estimator
-    # return evd_estimate, eig_vals, estimator
+    return evd_estimate, eig_vals, estimator
 
 
 # The eigenvalues are in ascending order
@@ -505,7 +508,7 @@ def decimate(arr: ArrayLike, strides: Strides) -> Array:
     return arr[..., start_r:end_r:ys, start_c:end_c:xs]
 
 
-def _check_all_nans(slc_stack: np.ndarray):
+def _raise_if_all_nan(slc_stack: np.ndarray):
     """Check for all NaNs in each SLC of the stack."""
     nans = np.isnan(slc_stack)
     # Check that there are no SLCS which are all nans:

@@ -49,7 +49,7 @@ def run_wrapped_phase_single(
     half_window: dict,
     strides: Optional[dict] = None,
     reference_idx: int = 0,
-    beta: float = 0.01,
+    beta: float = 0.00,
     use_evd: bool = False,
     mask_file: Optional[Filename] = None,
     ps_mask_file: Optional[Filename] = None,
