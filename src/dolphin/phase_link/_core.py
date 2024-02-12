@@ -211,7 +211,7 @@ def run_phase_linking(
         # Convert the rest to numpy for writing
         np.array(cpl_out.eigenvalues),
         np.array(cpl_out.estimator),
-        np.array(cpl_out.avg_coh),
+        cpl_out.avg_coh,
     )
 
 
