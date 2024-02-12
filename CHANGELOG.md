@@ -1,5 +1,12 @@
 # [Unreleased](https://github.com/isce-framework/dolphin/compare/v0.12.0...main)
 
+**Fixed**
+- Temporal coherence and eigenvalue rasters were switched in their naming
+- Output a better `estimator` raster to see where we switched to EVD
+
+**Changed**
+- refactor temporal coherence calculation to use `vmap`
+  - Allows us to start making a weighted temporal coherence metric
 
 # [0.13.0](https://github.com/isce-framework/dolphin/compare/v0.12.0...v0.13.0) - 2024-02-09
 
