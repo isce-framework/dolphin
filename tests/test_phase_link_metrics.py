@@ -50,8 +50,6 @@ def test_temp_coh():
     # Just repeat the first C matrix and first estimate
     C_arrays = np.array(out_C).reshape((2, 2, 30, 30))
     est_arrays = np.exp(1j * np.array(out_truth).reshape((2, 2, 30)))
-    # mimic the shape of (nslc, rows, cols)
-    est_arrays = np.moveaxis(est_arrays, -1, 0)
     tc_image = metrics.estimate_temp_coh(est_arrays, C_arrays)
 
     expected_tc_image = np.array(out_tc).reshape((2, 2))
