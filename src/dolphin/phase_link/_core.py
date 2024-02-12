@@ -45,7 +45,8 @@ class PhaseLinkOutput(NamedTuple):
     eigenvalues: np.ndarray
     """The smallest (largest) eigenvalue resulting from EMI (EVD)."""
 
-    estimator_used: np.ndarray  # dtype: np.int8
+    estimator: np.ndarray  # dtype: np.int8
+    """The estimator type used for phase linking at each pixel."""
 
     avg_coh: np.ndarray | None = None
     """Average coherence across dates for each SLC."""
@@ -165,7 +166,8 @@ def run_phase_linking(
     slc_stack_masked = slc_stack.copy()
     slc_stack_masked[:, ignore_mask] = np.nan
 
-    optimized_phase, temp_coh, eigenvalues, est_used, avg_coh = run_cpl(
+    # optimized_phase, temp_coh, eigenvalues, estimator, avg_coh = run_cpl(
+    cpl_out = run_cpl(
         slc_stack=slc_stack_masked,
         half_window=half_window,
         strides=strides,
@@ -181,16 +183,16 @@ def run_phase_linking(
         # account for the strides when grabbing original data
         # we need to match `io.compute_out_shape` here
         slcs_decimated = decimate(slc_stack, strides)
-        cpx_phase = np.exp(1j * optimized_phase) * np.abs(slcs_decimated)
+        cpx_phase = np.exp(1j * cpl_out.cpx_phase) * np.abs(slcs_decimated)
     else:
-        cpx_phase = np.exp(1j * optimized_phase)
+        cpx_phase = np.exp(1j * cpl_out.cpx_phase)
 
     # Get the smaller, looked versions of the masks
     # We zero out nodata if all pixels within the window had nodata
     mask_looked = take_looks(nodata_mask, *strides, func_type="all")
 
     # Set no data pixels to np.nan
-    temp_coh = np.where(mask_looked, np.nan, temp_coh)
+    temp_coh = np.where(mask_looked, np.nan, cpl_out.temp_coh)
 
     # Fill in the PS pixels from the original SLC stack, if it was given
     if np.any(ps_mask):
@@ -205,7 +207,12 @@ def run_phase_linking(
         )
 
     return PhaseLinkOutput(
-        cpx_phase, temp_coh, np.array(eigenvalues), est_used, avg_coh
+        cpx_phase,
+        temp_coh,
+        # Convert the rest to numpy for writing
+        np.array(cpl_out.eigenvalues),
+        np.array(cpl_out.estimator),
+        np.array(cpl_out.avg_coh),
     )
 
 
@@ -218,7 +225,7 @@ def run_cpl(
     reference_idx: int = 0,
     neighbor_arrays: Optional[np.ndarray] = None,
     calc_average_coh: bool = False,
-) -> tuple[Array, Array, Array, Array | None]:
+) -> PhaseLinkOutput:
     """Run the Combined Phase Linking (CPL) algorithm.
 
     Estimates a coherence matrix for each SLC pixel, then
@@ -262,6 +269,9 @@ def run_cpl(
         The eigenvalues of the coherence matrices.
         If `use_evd` is True, these are the largest eigenvalues;
         Otherwise, for EMI they are the smallest.
+    estimator : Array
+        The estimator used at each pixel.
+        0 = EVD, 1 = EMI
     avg_coh : np.ndarray | None
         The average coherence of each row of the coherence matrix,
         if requested.
@@ -274,14 +284,14 @@ def run_cpl(
         neighbor_arrays=neighbor_arrays,
     )
 
-    optimized_phase, eigenvalues, est_used = process_coherence_matrices(
+    cpx_phase, eigenvalues, estimator = process_coherence_matrices(
         C_arrays,
         use_evd=use_evd,
         beta=beta,
         reference_idx=reference_idx,
     )
     # Get the temporal coherence
-    temp_coh = metrics.estimate_temp_coh(jnp.exp(1j * optimized_phase), C_arrays)
+    temp_coh = metrics.estimate_temp_coh(cpx_phase, C_arrays)
 
     if calc_average_coh:
         # If requested, average the Cov matrix at each row for reference selection
@@ -289,7 +299,8 @@ def run_cpl(
         avg_coh = np.argmax(avg_coh_per_date, axis=2)
     else:
         avg_coh = None
-    return optimized_phase, temp_coh, eigenvalues, est_used, avg_coh
+
+    return PhaseLinkOutput(cpx_phase, temp_coh, eigenvalues, estimator, avg_coh)
 
 
 @partial(jit, static_argnames=("use_evd", "beta", "reference_idx"))
@@ -327,13 +338,16 @@ def process_coherence_matrices(
         Shape is same as input slcs unless Strides > (1, 1)
     eig_vals : ndarray[float], shape = (rows, cols)
         The smallest (largest) eigenvalue as solved by EMI (EVD).
+    estimator : Array
+        The estimator used at each pixel.
+        0 = EVD, 1 = EMI
 
     """
     rows, cols, n, _ = C_arrays.shape
     if use_evd:
         # EVD
         eig_vals, eig_vecs = eigh_largest_stack(C_arrays)
-        est_used = jnp.zeros(eig_vals.shape, dtype=bool)
+        estimator = jnp.zeros(eig_vals.shape, dtype=bool)
     else:
         # EMI
         # estimate the wrapped phase based on the EMI paper
@@ -356,7 +370,11 @@ def process_coherence_matrices(
         # Use the already- factored |Gamma|^-1, solving Ax = I gives the inverse
         Gamma_inv = cho_solve((cho, is_lower), Id)
         emi_eig_vals, emi_eig_vecs = eigh_smallest_stack(Gamma_inv * C_arrays)
-        # for places where inverting |Gamma| failed: fall back to computing EVD
+        # From the EMI paper, nomalize the eigenvectors to have norm sqrt(n)
+        emi_eig_vecs = jnp.sqrt(n) * emi_eig_vecs / jnp.linalg.norm(emi_eig_vecs)
+        # is the output is the inverse of the eigenvectors? or inverse conj?
+
+        # For places where inverting |Gamma| failed: fall back to computing EVD
         evd_eig_vals, evd_eig_vecs = eigh_largest_stack(C_arrays)
 
         # Use https://jax.readthedocs.io/en/latest/_autosummary/jax.lax.select.html
@@ -374,13 +392,13 @@ def process_coherence_matrices(
             # Otherwise, on False, we're fine to use EMI
             emi_eig_vecs,
         )
-        eig_vals = lax.select(inv_has_nans, evd_eig_vals, emi_eig_vals)
-        # Make array of bools to indicate which estimator was used for each pixel
 
+        eig_vals = lax.select(inv_has_nans, evd_eig_vals, emi_eig_vals)
+        # Make array of ints to indicate which estimator was used for each pixel
+        # 0 means EVD, 1 mean EMI
         evd_used = jnp.zeros(emi_eig_vals.shape, dtype=jnp.int8)
         emi_used = jnp.ones(emi_eig_vals.shape, dtype=jnp.int8)
-
-        est_used = lax.select(inv_has_nans, evd_used, emi_used)
+        estimator = lax.select(inv_has_nans, evd_used, emi_used)
 
     # Now the shape of eig_vecs is (rows, cols, nslc)
     # at pixel (r, c), eig_vecs[r, c] is the largest (smallest) eigenvector if
@@ -388,13 +406,13 @@ def process_coherence_matrices(
     # The phase estimate on the reference day will be size (rows, cols)
     ref = eig_vecs[:, :, reference_idx]
     # Make sure each still has 3 dims, then reference all phases to `ref`
-    evd_estimate = eig_vecs * ref[:, :, None].conj()
+    evd_estimate = eig_vecs * jnp.exp(-1j * jnp.angle(ref[:, :, None]))
 
     # Return the phase, Move the SLC dimension to the front
     # (to match the SLC stack shape)
     phase_stack = jnp.moveaxis(jnp.angle(evd_estimate), -1, 0)
-    return phase_stack, eig_vals, est_used
-    # return evd_estimate, eig_vals, est_used
+    return phase_stack, eig_vals, estimator
+    # return evd_estimate, eig_vals, estimator
 
 
 # The eigenvalues are in ascending order

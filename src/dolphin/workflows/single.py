@@ -121,12 +121,14 @@ def run_wrapped_phase_single(
     # Use the real-SLC date range for output file naming
     start_end = ministack.real_slc_date_range_str
     output_files: list[OutputFile] = [
+        # The compressed SLC does not used strides
         OutputFile(output_folder / comp_slc_info.filename, np.complex64),
+        # but all the rest do:
         OutputFile(
             output_folder / f"temporal_coherence_{start_end}.tif", np.float32, strides
         ),
         OutputFile(output_folder / f"eigenvalues_{start_end}.tif", np.float32, strides),
-        OutputFile(output_folder / f"estimator_used_{start_end}.tif", np.int8, strides),
+        OutputFile(output_folder / f"estimator_{start_end}.tif", np.int8, strides),
         OutputFile(output_folder / f"avg_coh_{start_end}.tif", np.uint16, strides),
         OutputFile(output_folder / f"shp_counts_{start_end}.tif", np.uint16, strides),
     ]
@@ -263,7 +265,7 @@ def run_wrapped_phase_single(
         out_datas = [
             pl_output.temp_coh,
             pl_output.eigenvalues,
-            pl_output.estimator_used,
+            pl_output.estimator,
             pl_output.avg_coh,
             shp_counts,
         ]
