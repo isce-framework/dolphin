@@ -3,7 +3,7 @@ from __future__ import annotations
 import glob
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 from pydantic import (
     BaseModel,
@@ -176,6 +176,9 @@ class UnwrapOptions(BaseModel, extra="forbid"):
     )
     _directory: Path = PrivateAttr(Path("unwrapped"))
     unwrap_method: UnwrapMethod = UnwrapMethod.SNAPHU
+    n_parallel_jobs: int = Field(
+        1, description="Number of interferograms to unwrap in parallel."
+    )
     ntiles: tuple[int, int] = Field(
         (1, 1),
         description=(
@@ -183,7 +186,6 @@ class UnwrapOptions(BaseModel, extra="forbid"):
             "the inputs into"
         ),
     )
-
     downsample_factor: tuple[int, int] = Field(
         (1, 1),
         description=(
@@ -198,12 +200,19 @@ class UnwrapOptions(BaseModel, extra="forbid"):
             " (row, col) directions."
         ),
     )
-    n_parallel_jobs: int = Field(
-        1, description="Number of interferograms to unwrap in parallel."
+    n_parallel_tiles: int = Field(
+        1,
+        description=(
+            "(for snaphu) Number of tiles to unwrap in parallel for each interferogram."
+        ),
     )
-    init_method: str = Field(
+    init_method: Literal["mcf", "mst"] = Field(
         "mcf",
         description="Initialization method for SNAPHU.",
+    )
+    cost: Literal["defo", "smooth"] = Field(
+        "smooth",
+        description="Statistical cost mode method for SNAPHU.",
     )
 
 

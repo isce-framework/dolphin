@@ -1,9 +1,17 @@
 # [Unreleased](https://github.com/isce-framework/dolphin/compare/v0.12.0...main)
 
 
+# [0.13.0](https://github.com/isce-framework/dolphin/compare/v0.12.0...v0.13.0) - 2024-02-09
+
+**Added**
+
+- `_overviews` module, and workflow configuration to create overviews of the output stitched rasters
+- Configuration to use the [snaphu-py](https://github.com/isce-framework/snaphu-py) wrapper, and drop using `isce3.unwrap.snaphu`
+
 **Fixed**
 
 - Apply bounds even if only one image is passed to `stitching` (#210)
+- Allow `take_looks` to work with `MaskedArrays` without converting to `np.ndarray`
 
 **Dependencies**
 
