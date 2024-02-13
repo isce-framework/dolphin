@@ -171,5 +171,4 @@ def run():
         levels=args.levels,
         resampling=resampling_enum,
         max_workers=args.max_workers,
-        overwrite=args.overwrite,
     )
