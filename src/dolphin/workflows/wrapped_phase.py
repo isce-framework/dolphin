@@ -137,7 +137,7 @@ def run(
         logger.warning(f"Could not make nodata mask: {e}")
         nodata_mask_file = None
 
-    phase_linked_slcs = list(pl_path.glob("2*.tif"))
+    phase_linked_slcs = sorted(pl_path.glob("2*.tif"))
     if len(phase_linked_slcs) > 0:
         logger.info(f"Skipping EVD step, {len(phase_linked_slcs)} files already exist")
         comp_slc_list = sorted(pl_path.glob("compressed*tif"))
