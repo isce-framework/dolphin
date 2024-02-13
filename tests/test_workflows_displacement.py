@@ -35,8 +35,9 @@ def test_displacement_run_single(
             },
         )
         paths = displacement.run(cfg)
-        for p in paths.comp_slc_dict.values():
-            assert p.exists()
+
+        for slc_paths in paths.comp_slc_dict.values():
+            assert all(p.exists() for p in slc_paths)
         assert paths.stitched_ps_file.exists()
         assert all(p.exists() for p in paths.stitched_ifg_paths)
         assert all(p.exists() for p in paths.stitched_cor_paths)
