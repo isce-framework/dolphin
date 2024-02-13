@@ -89,7 +89,7 @@ class PhaseLinkingOptions(BaseModel, extra="forbid"):
     )
 
     beta: float = Field(
-        0.01,
+        0.00,
         description=(
             "Beta regularization parameter for correlation matrix inversion. 0 is no"
             " regularization."
