@@ -150,7 +150,7 @@ def run(
     )
     mw = cfg.worker_settings.n_parallel_bursts
     ctx = mp.get_context("spawn")
-    tqdm.set_lock(mp.RLock())
+    tqdm.set_lock(ctx.RLock())
     with Executor(
         max_workers=mw,
         mp_context=ctx,
