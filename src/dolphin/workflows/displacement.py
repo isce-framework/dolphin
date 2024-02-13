@@ -35,7 +35,7 @@ logger = get_log(__name__)
 class OutputPaths(NamedTuple):
     """Named tuple of `DisplacementWorkflow` outputs."""
 
-    comp_slc_dict: dict[str, Path]
+    comp_slc_dict: dict[str, list[Path]]
     stitched_ifg_paths: list[Path]
     stitched_cor_paths: list[Path]
     stitched_temp_coh_file: Path
@@ -140,7 +140,7 @@ def run(
     ps_file_list: list[Path] = []
     # The comp_slc tracking object is a dict, since we'll need to organize
     # multiple comp slcs by burst (they'll have the same filename)
-    comp_slc_dict: dict[str, Path] = {}
+    comp_slc_dict: dict[str, list[Path]] = {}
     # Now for each burst, run the wrapped phase estimation
     # Try running several bursts in parallel...
     Executor = (
@@ -171,9 +171,9 @@ def run(
         for fut in fut_to_burst:
             burst = fut_to_burst[fut]
 
-            cur_ifg_list, comp_slc, temp_coh, ps_file = fut.result()
+            cur_ifg_list, comp_slcs, temp_coh, ps_file = fut.result()
             ifg_file_list.extend(cur_ifg_list)
-            comp_slc_dict[burst] = comp_slc
+            comp_slc_dict[burst] = comp_slcs
             temp_coh_file_list.append(temp_coh)
             ps_file_list.append(ps_file)
 
