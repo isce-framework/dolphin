@@ -377,8 +377,12 @@ def process_coherence_matrices(
         # Use the already- factored |Gamma|^-1, solving Ax = I gives the inverse
         Gamma_inv = cho_solve((cho, is_lower), Id)
         emi_eig_vals, emi_eig_vecs = eigh_smallest_stack(Gamma_inv * C_arrays)
-        # From the EMI paper, nomalize the eigenvectors to have norm sqrt(n)
-        emi_eig_vecs = jnp.sqrt(n) * emi_eig_vecs / jnp.linalg.norm(emi_eig_vecs)
+        # From the EMI paper, normalize the eigenvectors to have norm sqrt(n)
+        emi_eig_vecs = (
+            jnp.sqrt(n)
+            * emi_eig_vecs
+            / jnp.linalg.norm(emi_eig_vecs, axis=-1, keepdims=True)
+        )
         # is the output is the inverse of the eigenvectors? or inverse conj?
 
         # For places where inverting |Gamma| failed: fall back to computing EVD
