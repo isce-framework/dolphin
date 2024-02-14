@@ -24,7 +24,6 @@ def test_displacement_run_single(
             cslc_file_list=opera_slc_files,
             input_options={"subdataset": "/data/VV"},
             interferogram_network={
-                "network_type": config.InterferogramNetworkType.MANUAL_INDEX,
                 "indexes": [(0, -1)],
             },
             phase_linking={
@@ -63,7 +62,6 @@ def test_displacement_run_single_official_opera_naming(
             cslc_file_list=opera_slc_files_official,
             input_options={"subdataset": "/data/VV"},
             interferogram_network={
-                "network_type": config.InterferogramNetworkType.MANUAL_INDEX,
                 "indexes": [(0, -1)],
             },
             phase_linking={
