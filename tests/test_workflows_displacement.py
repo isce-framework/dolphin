@@ -24,7 +24,6 @@ def test_displacement_run_single(
             cslc_file_list=opera_slc_files,
             input_options={"subdataset": "/data/VV"},
             interferogram_network={
-                "network_type": config.InterferogramNetworkType.MANUAL_INDEX,
                 "indexes": [(0, -1)],
             },
             phase_linking={
@@ -35,12 +34,19 @@ def test_displacement_run_single(
             },
         )
         paths = displacement.run(cfg)
+
+        for slc_paths in paths.comp_slc_dict.values():
+            assert all(p.exists() for p in slc_paths)
+        assert paths.stitched_ps_file.exists()
         assert all(p.exists() for p in paths.stitched_ifg_paths)
         assert all(p.exists() for p in paths.stitched_cor_paths)
         assert paths.stitched_temp_coh_file.exists()
         assert paths.stitched_ps_file.exists()
-        assert paths.unwrapped_paths is None
-        assert paths.conncomp_paths is None
+        assert paths.unwrapped_paths is not None
+        assert paths.conncomp_paths is not None
+        assert all(p.exists() for p in paths.conncomp_paths)
+        assert all(p.exists() for p in paths.unwrapped_paths)
+        assert all(p.exists() for p in paths.conncomp_paths)
 
 
 def test_displacement_run_single_official_opera_naming(
@@ -56,7 +62,6 @@ def test_displacement_run_single_official_opera_naming(
             cslc_file_list=opera_slc_files_official,
             input_options={"subdataset": "/data/VV"},
             interferogram_network={
-                "network_type": config.InterferogramNetworkType.MANUAL_INDEX,
                 "indexes": [(0, -1)],
             },
             phase_linking={
@@ -74,7 +79,10 @@ def test_displacement_run_single_official_opera_naming(
             },
             unwrap_options={"run_unwrap": False},
         )
-        displacement.run(cfg)
+        outs = displacement.run(cfg)
+        # We skipped unwrapping here, so check:
+        assert outs.unwrapped_paths is None
+        assert outs.conncomp_paths is None
 
 
 def run_displacement_stack(

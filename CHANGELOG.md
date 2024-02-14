@@ -1,9 +1,28 @@
-# [Unreleased](https://github.com/isce-framework/dolphin/compare/v0.12.0...main)
+# [Unreleased](https://github.com/isce-framework/dolphin/compare/v0.13.0...main)
 
+**Fixed**
+- Temporal coherence and eigenvalue rasters were switched in their naming
+- Output a better `estimator` raster to see where we switched to EVD
+- Cap the max number of threads to the CPU count to avoid `numba` config errors
+
+**Changed**
+- refactor temporal coherence calculation to use `vmap`
+  - Allows us to start making a weighted temporal coherence metric
+- Turn off default `beta=0.01` regularization now that CPL is in place
+- Removed `InterferogramNetworkType` from configuration.
+  - You can add multiple types of network parameters and it includes all of them. Adding the name only decreased flexibility.
+
+# [0.13.0](https://github.com/isce-framework/dolphin/compare/v0.12.0...v0.13.0) - 2024-02-09
+
+**Added**
+
+- `_overviews` module, and workflow configuration to create overviews of the output stitched rasters
+- Configuration to use the [snaphu-py](https://github.com/isce-framework/snaphu-py) wrapper, and drop using `isce3.unwrap.snaphu`
 
 **Fixed**
 
 - Apply bounds even if only one image is passed to `stitching` (#210)
+- Allow `take_looks` to work with `MaskedArrays` without converting to `np.ndarray`
 
 **Dependencies**
 

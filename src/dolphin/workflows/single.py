@@ -19,6 +19,7 @@ from numpy.typing import DTypeLike
 from tqdm.auto import tqdm
 
 from dolphin import io, shp
+from dolphin._decorators import atomic_output
 from dolphin._log import get_log
 from dolphin._types import Filename, HalfWindow, Strides
 from dolphin.io import EagerLoader, StridedBlockManager, VRTStack
@@ -39,7 +40,7 @@ class OutputFile:
     strides: Optional[dict[str, int]] = None
 
 
-# @atomic_output(output_arg="output_folder", is_dir=True)
+@atomic_output(output_arg="output_folder", is_dir=True)
 def run_wrapped_phase_single(
     *,
     slc_vrt_file: Filename,
@@ -48,7 +49,7 @@ def run_wrapped_phase_single(
     half_window: dict,
     strides: Optional[dict] = None,
     reference_idx: int = 0,
-    beta: float = 0.01,
+    beta: float = 0.00,
     use_evd: bool = False,
     mask_file: Optional[Filename] = None,
     ps_mask_file: Optional[Filename] = None,
@@ -120,12 +121,15 @@ def run_wrapped_phase_single(
     # Use the real-SLC date range for output file naming
     start_end = ministack.real_slc_date_range_str
     output_files: list[OutputFile] = [
+        # The compressed SLC does not used strides
         OutputFile(output_folder / comp_slc_info.filename, np.complex64),
+        # but all the rest do:
         OutputFile(
             output_folder / f"temporal_coherence_{start_end}.tif", np.float32, strides
         ),
-        OutputFile(output_folder / f"avg_coh_{start_end}.tif", np.uint16, strides),
         OutputFile(output_folder / f"eigenvalues_{start_end}.tif", np.float32, strides),
+        OutputFile(output_folder / f"estimator_{start_end}.tif", np.int8, strides),
+        OutputFile(output_folder / f"avg_coh_{start_end}.tif", np.uint16, strides),
         OutputFile(output_folder / f"shp_counts_{start_end}.tif", np.uint16, strides),
     ]
     for op in output_files:
@@ -258,7 +262,13 @@ def run_wrapped_phase_single(
         )
 
         # All other outputs are strided (smaller in size)
-        out_datas = [pl_output.temp_coh, pl_output.avg_coh, shp_counts]
+        out_datas = [
+            pl_output.temp_coh,
+            pl_output.eigenvalues,
+            pl_output.estimator,
+            pl_output.avg_coh,
+            shp_counts,
+        ]
         for data, output_file in zip(out_datas, output_files[1:]):
             if data is None:  # May choose to skip some outputs, e.g. "avg_coh"
                 continue

@@ -17,8 +17,8 @@ jobs:
         os: [ubuntu-latest, macos-14]
         deps:
           - label: Latest
-            # spec: >-
-            #   tophu
+            spec: >-
+              isce3
 
       fail-fast: true
     name: ${{ matrix.os }} • ${{ matrix.deps.label }}
@@ -41,7 +41,7 @@ jobs:
               - conda-forge
       - name: Install
         run: |
-          pip install "opera-utils>=0.2.1"
+          pip install "snaphu" "opera-utils>=0.2.1"
           pip install --no-deps .
       - name: Install test dependencies
         run: |

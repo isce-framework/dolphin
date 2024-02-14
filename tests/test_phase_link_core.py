@@ -54,15 +54,22 @@ def test_estimation(C_truth, slc_samples, est_mle_verify, est_evd_verify, use_ev
 
     slc_stack = slc_samples.reshape(NUM_ACQ, 11, 11)
 
-    est_mle_fullres, temp_coh, eigs, _ = _core.run_cpl(
+    # cpx_phase, temp_coh, eigs, _ = _core.run_cpl(
+    pl_out = _core.run_cpl(
         slc_stack, HalfWindow(x=5, y=5), Strides(x=1, y=1), use_evd=use_evd
     )
-    assert est_mle_fullres.shape == (len(est_mle_verify), 11, 11)
-    assert temp_coh.shape == (11, 11)
-    assert eigs.shape == (11, 11)
-    assert np.all(eigs > 0)
+    assert pl_out.cpx_phase.shape == (len(est_mle_verify), 11, 11)
+    assert pl_out.temp_coh.shape == (11, 11)
+    assert pl_out.eigenvalues.shape == (11, 11)
+    if use_evd:
+        assert np.all(pl_out.eigenvalues > NUM_ACQ / 3)
+        assert pl_out
+    else:
+        # should be 1, but floating point rounding sometimes drops
+        assert np.all(pl_out.eigenvalues > 0.99)
+
     # The middle pixel should be the same, since it had the full window
-    est_phase = est_mle_fullres[:, 5, 5]
+    est_phase = np.angle(pl_out.cpx_phase[:, 5, 5])
     npt.assert_array_almost_equal(est_mle_verify, est_phase, decimal=1)
 
 
@@ -89,12 +96,12 @@ def test_masked(slc_samples, C_truth):
     )
     est_full = _core.process_coherence_matrices(C_hat2)[0]
     # Middle pixel should be the same
-    npt.assert_array_almost_equal(est_mle, est_full[:, 5, 5], decimal=1)
+    npt.assert_array_almost_equal(est_mle, np.angle(est_full[5, 5, :]), decimal=1)
 
 
 def test_run_phase_linking(slc_samples):
     slc_stack = slc_samples.reshape(NUM_ACQ, 11, 11)
-    mle_est, _, _, _ = _core.run_phase_linking(
+    pl_out = _core.run_phase_linking(
         slc_stack,
         half_window=HalfWindow(5, 5),
     )
@@ -103,20 +110,22 @@ def test_run_phase_linking(slc_samples):
     expected_phase = np.angle(simulate.mle(np.array(C_hat)))
 
     # Middle pixel should be the same
-    npt.assert_array_almost_equal(expected_phase, np.angle(mle_est[:, 5, 5]), decimal=1)
+    npt.assert_array_almost_equal(
+        expected_phase, np.angle(pl_out.cpx_phase[:, 5, 5]), decimal=1
+    )
 
 
 def test_run_phase_linking_norm_output(slc_samples):
     slc_stack = slc_samples.reshape(NUM_ACQ, 11, 11)
     ps_mask = np.zeros((11, 11), dtype=bool)
     ps_mask[1, 1] = True
-    mle_est, _, _, _ = _core.run_phase_linking(
+    pl_out = _core.run_phase_linking(
         slc_stack,
         half_window=HalfWindow(5, 5),
         ps_mask=ps_mask,
         use_slc_amp=False,
     )
-    assert np.allclose(np.abs(mle_est), 1)
+    assert np.allclose(np.abs(pl_out.cpx_phase), 1)
 
 
 @pytest.mark.parametrize("strides", [1, 2, 3, 4, 5])
@@ -173,7 +182,7 @@ def test_run_phase_linking_ps_fill(slc_samples, strides):
     ps_idx = 2
     ps_mask = np.zeros((11, 11), dtype=bool)
     ps_mask[ps_idx, ps_idx] = True
-    mle_est, temp_coh, _, _ = _core.run_phase_linking(
+    pl_out = _core.run_phase_linking(
         slc_stack,
         half_window=HalfWindow(5, 5),
         strides=Strides(strides, strides),
@@ -184,7 +193,7 @@ def test_run_phase_linking_ps_fill(slc_samples, strides):
 
     out_idx = ps_idx // strides
     npt.assert_array_almost_equal(
-        np.angle(ps_phase), np.angle(mle_est[:, out_idx, out_idx])
+        np.angle(ps_phase), np.angle(pl_out.cpx_phase[:, out_idx, out_idx])
     )
 
-    assert temp_coh[out_idx, out_idx] == 1
+    assert pl_out.temp_coh[out_idx, out_idx] == 1
