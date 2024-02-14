@@ -7,6 +7,7 @@ from typing import (
     Any,
     Mapping,
     Protocol,
+    Sequence,
     TypeVar,
     runtime_checkable,
 )
@@ -24,6 +25,7 @@ __all__ = [
     "DatasetWriter",
     "RasterWriter",
     "GdalWriter",
+    "GdalStackWriter",
 ]
 
 if TYPE_CHECKING:
@@ -338,3 +340,62 @@ class GdalWriter(BackgroundWriter):
 
     def __setitem__(self, key, value):
         self.queue_write(value, key)
+
+
+class GdalStackWriter(BackgroundWriter):
+    """Class to write 3D data to multiple files in a background thread."""
+
+    def __init__(
+        self,
+        file_list: Sequence[FileExistsError],
+        like_filename: Filename | None = None,
+        max_queue: int = 0,
+        debug: bool = False,
+        **file_creation_kwargs,
+    ):
+        from dolphin.io import write_arr
+
+        if debug is False:
+            super().__init__(nq=max_queue, name="GdalStackWriter")
+        else:
+            # Don't start a background thread. Just synchronously write data
+            self.queue_write = self.write  # type: ignore[assignment]
+
+        for fn in file_list:
+            write_arr(
+                arr=None,
+                output_name=fn,
+                like_filename=like_filename,
+                **file_creation_kwargs,
+            )
+
+        self.file_list = file_list
+
+    def write(self, data: ArrayLike, row_start: int, col_start: int):
+        """Write out an ndarray to a subset of the pre-made `filename`.
+
+        Parameters
+        ----------
+        data : ArrayLike
+            3D data array to save.
+        filename : Filename
+            list of output files to save to, or (if cur_block is 2D) a single file.
+        row_start : int
+            Row index to start writing at.
+        col_start : int
+            Column index to start writing at.
+
+        Raises
+        ------
+        ValueError
+            If length of `output_files` does not match length of `cur_block`.
+
+        """
+        from dolphin.io import write_block
+
+        if data.ndim == 2:
+            data = data[None, ...]
+        if data.shape[0] != len(self.file_list):
+            raise ValueError(f"{data.shape = }, but {len(self.file_list) = }")
+        for fn, layer in zip(self.file_list, data):
+            write_block(layer, fn, row_start, col_start)
