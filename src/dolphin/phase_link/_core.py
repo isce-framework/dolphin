@@ -277,7 +277,7 @@ def run_cpl(
     avg_coh : np.ndarray | None
         The average coherence of each row of the coherence matrix,
         if requested.
-        shape = (ncls, out_rows, out_cols)
+        shape = (nslc, out_rows, out_cols)
 
     """
     C_arrays = covariance.estimate_stack_covariance(
@@ -303,7 +303,7 @@ def run_cpl(
     else:
         avg_coh = None
 
-    # Reshape the (rows, cols, ncls) output to be same as input stack
+    # Reshape the (rows, cols, nslcs) output to be same as input stack
     cpx_phase_reshaped = jnp.moveaxis(cpx_phase, -1, 0)
     return PhaseLinkOutput(
         cpx_phase_reshaped, temp_coh, eigenvalues, estimator, avg_coh
