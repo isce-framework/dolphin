@@ -118,6 +118,14 @@ def unwrap_snaphu_py(
                 tile_overlap=tile_overlap,
                 nproc=nproc,
                 scratchdir=scratchdir,
+                # https://github.com/isce-framework/snaphu-py/commit/a77cbe1ff115d96164985523987b1db3278970ed
+                # On frame-sized ifgs, especially with decorrelation, defaults of
+                # (500, 100) for (tile_cost_thresh, min_region_size) lead to
+                # "Exceeded maximum number of secondary arcs"
+                # "Decrease TILECOSTTHRESH and/or increase MINREGIONSIZE"
+                tile_cost_thresh=200,
+                # ... "and/or increase MINREGIONSIZE"
+                min_region_size=300,
             )
     finally:
         igram.close()
