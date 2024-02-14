@@ -6,7 +6,7 @@ import pydantic
 import pytest
 from make_netcdf import create_test_nc
 
-from dolphin.workflows import InterferogramNetworkType, UnwrapMethod, config
+from dolphin.workflows import UnwrapMethod, config
 
 
 # Testing what the defaults look like for each class
@@ -59,18 +59,15 @@ def test_interferogram_network_defaults():
     assert opts.reference_idx == 0
     assert opts.max_bandwidth is None
     assert opts.max_temporal_baseline is None
-    assert opts.network_type == InterferogramNetworkType.SINGLE_REFERENCE
 
 
 def test_interferogram_network_types():
     opts = config.InterferogramNetwork(max_bandwidth=2)
     assert opts.max_bandwidth == 2
-    assert opts.network_type == InterferogramNetworkType.MAX_BANDWIDTH
     assert opts.max_temporal_baseline is None
 
     opts = config.InterferogramNetwork(max_temporal_baseline=30)
     assert opts.max_temporal_baseline == 30
-    assert opts.network_type == InterferogramNetworkType.MAX_TEMPORAL_BASELINE
     assert opts.max_bandwidth is None
 
 
@@ -313,11 +310,6 @@ def test_config_displacement_workflow_defaults(dir_with_1_slc):
 
     assert c.interferogram_network._directory == Path("interferograms").resolve()
     assert c.interferogram_network.reference_idx == 0
-    assert (
-        c.interferogram_network.network_type
-        == InterferogramNetworkType.SINGLE_REFERENCE
-    )
-
     assert c.interferogram_network.max_bandwidth is None
     assert c.interferogram_network.max_temporal_baseline is None
 

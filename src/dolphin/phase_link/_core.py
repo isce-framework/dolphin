@@ -60,7 +60,7 @@ def run_phase_linking(
     half_window: HalfWindow,
     strides: Strides = DEFAULT_STRIDES,
     use_evd: bool = False,
-    beta: float = 0.00,
+    beta: float = 0.0,
     reference_idx: int = 0,
     nodata_mask: np.ndarray = None,
     ps_mask: Optional[np.ndarray] = None,
@@ -88,7 +88,7 @@ def run_phase_linking(
         Use eigenvalue decomposition on the covariance matrix instead of
         the EMI algorithm.
     beta : float, optional
-        The regularization parameter, by default 0.01.
+        The regularization parameter, by default 0 (no regularization).
     reference_idx : int, optional
         The index of the (non compressed) reference SLC, by default 0
     nodata_mask : np.ndarray, optional
@@ -220,7 +220,7 @@ def run_cpl(
     half_window: HalfWindow,
     strides: Strides,
     use_evd: bool = False,
-    beta: float = 0.00,
+    beta: float = 0,
     reference_idx: int = 0,
     neighbor_arrays: Optional[np.ndarray] = None,
     calc_average_coh: bool = False,
@@ -244,7 +244,7 @@ def run_cpl(
         Use eigenvalue decomposition on the covariance matrix instead of
         the EMI algorithm.
     beta : float, optional
-        The regularization parameter, by default 0.01.
+        The regularization parameter, by default 0 (no regularization).
     reference_idx : int, optional
         The index of the (non compressed) reference SLC, by default 0
     use_slc_amp : bool, optional
@@ -314,7 +314,7 @@ def run_cpl(
 def process_coherence_matrices(
     C_arrays,
     use_evd: bool = False,
-    beta: float = 0.00,
+    beta: float = 0.0,
     reference_idx: int = 0,
 ) -> tuple[Array, Array, Array]:
     """Estimate the linked phase for a stack of coherence matrices.
@@ -333,7 +333,7 @@ def process_coherence_matrices(
     beta : float, optional
         The regularization parameter for inverting Gamma = |C|
         The regularization is applied as (1 - beta) * Gamma + beta * I
-        Default is 0.01.
+        Default is 0 (no regularization).
     reference_idx : int, optional
         The index of the reference acquisition, by default 0
         All outputs are multiplied by the conjugate of the data at this index.

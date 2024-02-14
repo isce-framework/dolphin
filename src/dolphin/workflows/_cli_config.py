@@ -10,7 +10,6 @@ from dolphin.utils import get_cpu_count
 
 from .config import (
     DisplacementWorkflow,
-    InterferogramNetworkType,
     ShpMethod,
     UnwrapMethod,
 )
@@ -70,10 +69,7 @@ def create_config(
         troposphere_files = []
     if single_update:
         # create only one interferogram from the first and last SLC images
-        interferogram_network = {
-            "network_type": InterferogramNetworkType.MANUAL_INDEX,
-            "indexes": [(0, -1)],
-        }
+        interferogram_network = {"indexes": [(0, -1)]}
         # Override the ministack size so that only one phase linking is run
         ministack_size = 1000
     else:

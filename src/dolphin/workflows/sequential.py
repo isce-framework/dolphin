@@ -41,7 +41,7 @@ def run_wrapped_phase_sequential(
     shp_alpha: float = 0.05,
     shp_nslc: Optional[int] = None,
     use_evd: bool = False,
-    beta: float = 0.01,
+    beta: float = 0.00,
     block_shape: tuple[int, int] = (512, 512),
     **tqdm_kwargs,
 ) -> tuple[list[Path], list[Path], Path]:

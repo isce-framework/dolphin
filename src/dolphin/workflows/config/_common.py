@@ -19,7 +19,7 @@ from dolphin._log import get_log
 from dolphin._types import Bbox
 from dolphin.io import DEFAULT_HDF5_OPTIONS, DEFAULT_TIFF_OPTIONS
 
-from ._enums import InterferogramNetworkType, ShpMethod, UnwrapMethod
+from ._enums import ShpMethod, UnwrapMethod
 from ._yaml_model import YamlModel
 
 logger = get_log(__name__)
@@ -89,13 +89,13 @@ class PhaseLinkingOptions(BaseModel, extra="forbid"):
     )
 
     beta: float = Field(
-        0.01,
+        0.00,
         description=(
             "Beta regularization parameter for correlation matrix inversion. 0 is no"
             " regularization."
         ),
-        gt=0.0,
-        lt=1.0,
+        ge=0.0,
+        le=1.0,
     )
     shp_method: ShpMethod = ShpMethod.GLRT
     shp_alpha: float = Field(
@@ -107,7 +107,10 @@ class PhaseLinkingOptions(BaseModel, extra="forbid"):
 
 
 class InterferogramNetwork(BaseModel, extra="forbid"):
-    """Options to determine the type of network for interferogram formation."""
+    """Options to determine the type of network for interferogram formation.
+
+    If no parameters passed, uses single-reference network with `reference_idx=0`.
+    """
 
     _directory: Path = PrivateAttr(Path("interferograms"))
 
@@ -134,33 +137,19 @@ class InterferogramNetwork(BaseModel, extra="forbid"):
             " interferograms to form."
         ),
     )
-    network_type: InterferogramNetworkType = InterferogramNetworkType.SINGLE_REFERENCE
 
     # validation
     @model_validator(mode="after")
-    def _check_network_type(self) -> InterferogramNetwork:
+    def _check_zero_parameters(self) -> InterferogramNetwork:
         ref_idx = self.reference_idx
         max_bw = self.max_bandwidth
         max_tb = self.max_temporal_baseline
+        indexes = self.indexes
         # Check if more than one has been set:
-        if sum([ref_idx is not None, max_bw is not None, max_tb is not None]) > 1:
-            msg = (
-                "Only one of `reference_idx`, `max_bandwidth`, or"
-                " `max_temporal_baseline` can be set."
+        if ref_idx is None and max_bw is None and max_tb is None and indexes is None:
+            logger.debug(
+                "No network configuration options were set. Using single-reference."
             )
-            raise ValueError(msg)
-        if max_tb is not None:
-            self.network_type = InterferogramNetworkType.MAX_TEMPORAL_BASELINE
-            return self
-
-        if max_bw is not None:
-            self.network_type = InterferogramNetworkType.MAX_BANDWIDTH
-            return self
-
-        # If nothing else specified, set to a single reference network
-        self.network_type = InterferogramNetworkType.SINGLE_REFERENCE
-        # and make sure the reference index is set
-        if ref_idx is None:
             self.reference_idx = 0
         return self
 
