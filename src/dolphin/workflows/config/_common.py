@@ -94,8 +94,8 @@ class PhaseLinkingOptions(BaseModel, extra="forbid"):
             "Beta regularization parameter for correlation matrix inversion. 0 is no"
             " regularization."
         ),
-        gt=0.0,
-        lt=1.0,
+        ge=0.0,
+        le=1.0,
     )
     shp_method: ShpMethod = ShpMethod.GLRT
     shp_alpha: float = Field(
