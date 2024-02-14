@@ -107,7 +107,10 @@ class PhaseLinkingOptions(BaseModel, extra="forbid"):
 
 
 class InterferogramNetwork(BaseModel, extra="forbid"):
-    """Options to determine the type of network for interferogram formation."""
+    """Options to determine the type of network for interferogram formation.
+
+    If no parameters passed, uses single-reference network with `reference_idx=0`.
+    """
 
     _directory: Path = PrivateAttr(Path("interferograms"))
 
@@ -144,8 +147,10 @@ class InterferogramNetwork(BaseModel, extra="forbid"):
         indexes = self.indexes
         # Check if more than one has been set:
         if ref_idx is None and max_bw is None and max_tb is None and indexes is None:
-            msg = "No network configuration options were set"
-            raise ValueError(msg)
+            logger.debug(
+                "No network configuration options were set. Using single-reference."
+            )
+            self.reference_idx = 0
         return self
 
 
