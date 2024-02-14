@@ -70,17 +70,8 @@ COPY --chown=$MAMBA_USER:$MAMBA_USER . .
 # Activate, otherwise python will not be found
 # https://github.com/mamba-org/micromamba-docker#running-commands-in-dockerfile-within-the-conda-environment
 ARG MAMBA_DOCKERFILE_ACTIVATE=1
-# For now, manually install tophu from git
-RUN python -m pip install --no-deps git+https://github.com/isce-framework/tophu@66df96fc4645f6977421336ed96c553833216c07
-# For now, install the snaphu-py wrapping from from git SSH is failing for the submodule:
-#   Please make sure you have the correct access rights
-#   and the repository exists.
-#   fatal: clone of 'git@github.com:gmgunter/snaphu.git' into submodule path '/tmp/pip-req-build-3tmwyzij/ext/snaphu' failed
-#   Failed to clone 'ext/snaphu'. Retry scheduled
-#   Host key verification failed.
-# So we can force HTTPS by adding:
-RUN git config --global url.https://github.com/.insteadOf git@github.com: && \
-    pip install git+https://github.com/isce-framework/snaphu-py@7b4332076c5202f519a09eac9303aaffc751158f
+# For now, manually install tophu/snaphu from git/pip
+RUN python -m pip install --no-deps "snaphu>=0.2" git+https://github.com/isce-framework/tophu@66df96fc4645f6977421336ed96c553833216c07
 
 # --no-deps because they are installed with conda
 RUN python -m pip install --no-deps .
