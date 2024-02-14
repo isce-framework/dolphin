@@ -48,7 +48,7 @@ def run(
     """
     if tqdm_kwargs is None:
         tqdm_kwargs = {}
-    logger = get_log(debug=debug)
+    logger = get_log(name=__name__, debug=debug)
     work_dir = cfg.work_directory
     logger.info("Running wrapped phase estimation in %s", work_dir)
 

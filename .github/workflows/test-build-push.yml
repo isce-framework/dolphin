@@ -41,12 +41,11 @@ jobs:
               - conda-forge
       - name: Install
         run: |
-          pip install "snaphu" "opera-utils>=0.2.1"
+          pip install --no-deps "snaphu>=0.2" "opera-utils>=0.3.0" git+https://github.com/isce-framework/tophu@main
           pip install --no-deps .
       - name: Install test dependencies
         run: |
           micromamba install -f tests/requirements.txt -c conda-forge
-          pip install --no-deps git+https://github.com/isce-framework/tophu@main
       - name: Enable numba boundscheck for better error catching
         run: |
           echo "NUMBA_BOUNDSCHECK=1" >> $GITHUB_ENV
