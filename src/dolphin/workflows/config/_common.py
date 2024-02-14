@@ -204,6 +204,15 @@ class UnwrapOptions(BaseModel, extra="forbid"):
         description="Statistical cost mode method for SNAPHU.",
     )
 
+    @field_validator("ntiles", "downsample_factor", mode="before")
+    @classmethod
+    def _to_tuple(cls, v):
+        if v is None:
+            return (1, 1)
+        elif isinstance(v, int):
+            return (v, v)
+        return v
+
 
 class WorkerSettings(BaseModel, extra="forbid"):
     """Settings for controlling CPU/GPU settings and parallelism."""
