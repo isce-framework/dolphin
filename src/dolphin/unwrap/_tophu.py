@@ -7,6 +7,7 @@ import numpy as np
 from dolphin import io
 from dolphin._log import get_log
 from dolphin._types import Filename
+from dolphin.io._core import DEFAULT_TIFF_OPTIONS_RIO
 from dolphin.utils import full_suffix
 from dolphin.workflows import UnwrapMethod
 
@@ -132,7 +133,6 @@ def multiscale_unwrap(
 
     # SUFFIX=ADD
     # Convert to something rasterio understands
-    gtiff_options = dict(opt.lower().split("=") for opt in io.DEFAULT_TIFF_OPTIONS)
     logger.debug(f"Saving conncomps to {conncomp_filename}")
     conncomp_rb = tophu.RasterBand(
         conncomp_filename,
@@ -143,7 +143,7 @@ def multiscale_unwrap(
         crs=crs,
         transform=transform,
         nodata=ccl_nodata,
-        **gtiff_options,
+        **DEFAULT_TIFF_OPTIONS_RIO,
     )
     unw_rb = tophu.RasterBand(
         unw_filename,
@@ -153,7 +153,7 @@ def multiscale_unwrap(
         crs=crs,
         transform=transform,
         nodata=unw_nodata,
-        **gtiff_options,
+        **DEFAULT_TIFF_OPTIONS_RIO,
     )
 
     if zero_where_masked and mask_file is not None:

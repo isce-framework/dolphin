@@ -4,6 +4,7 @@ from pathlib import Path
 
 from dolphin._log import get_log
 from dolphin._types import Filename
+from dolphin.io._core import DEFAULT_TIFF_OPTIONS_RIO
 from dolphin.utils import full_suffix
 
 from ._constants import CONNCOMP_SUFFIX, DEFAULT_CCL_NODATA, DEFAULT_UNW_NODATA
@@ -101,10 +102,18 @@ def unwrap_snaphu_py(
     try:
         with (
             snaphu.io.Raster.create(
-                unw_filename, like=igram, nodata=unw_nodata, dtype="f4"
+                unw_filename,
+                like=igram,
+                nodata=unw_nodata,
+                dtype="f4",
+                **DEFAULT_TIFF_OPTIONS_RIO,
             ) as unw,
             snaphu.io.Raster.create(
-                cc_filename, like=igram, nodata=ccl_nodata, dtype="u2"
+                cc_filename,
+                like=igram,
+                nodata=ccl_nodata,
+                dtype="u2",
+                **DEFAULT_TIFF_OPTIONS_RIO,
             ) as conncomp,
         ):
             # Unwrap and store the results in the `unw` and `conncomp` rasters.
