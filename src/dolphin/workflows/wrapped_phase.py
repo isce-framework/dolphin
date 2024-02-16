@@ -322,6 +322,12 @@ def create_ifgs(
         )
         raise NotImplementedError(msg)
 
+    # Dedupe, in case different options made the same ifg
+    requested_ifgs = set(ifg_file_list)
+    # remove ones we aren't using (in the case of a single index)
+    written_ifgs = set(ifg_dir.glob("*.int*"))
+    for p in written_ifgs - requested_ifgs:
+        p.unlink()
     return ifg_file_list
 
 
