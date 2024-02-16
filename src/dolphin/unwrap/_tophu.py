@@ -10,7 +10,7 @@ from dolphin._types import Filename
 from dolphin.utils import full_suffix
 from dolphin.workflows import UnwrapMethod
 
-from ._constants import CONNCOMP_SUFFIX
+from ._constants import CONNCOMP_SUFFIX, DEFAULT_CCL_NODATA, DEFAULT_UNW_NODATA
 from ._utils import _redirect_unwrapping_log, _zero_from_mask
 
 logger = get_log(__name__)
@@ -24,10 +24,11 @@ def multiscale_unwrap(
     ntiles: tuple[int, int],
     nlooks: float,
     mask_file: Filename | None = None,
-    zero_where_masked: bool = True,
+    zero_where_masked: bool = False,
     unwrap_method: UnwrapMethod = UnwrapMethod.SNAPHU,
     unwrap_callback=None,  # type is `tophu.UnwrapCallback`
-    nodata: str | float | None = None,
+    unw_nodata: float | None = DEFAULT_UNW_NODATA,
+    ccl_nodata: int | None = DEFAULT_CCL_NODATA,
     init_method: str = "mst",
     cost: str = "smooth",
     scratchdir: Filename | None = None,
@@ -63,9 +64,11 @@ def multiscale_unwrap(
     unwrap_callback : tophu.UnwrapCallback
         Alternative to `unwrap_method`: directly provide a callable
         function usable in `tophu`. See [tophu.UnwrapCallback] docs for interface.
-    nodata : float | str, optional.
+    unw_nodata : float, optional.
         If providing `unwrap_callback`, provide the nodata value for your
         unwrapping function.
+    ccl_nodata : float, optional
+        Nodata value for the connected component labels.
     init_method : str, choices = {"mcf", "mst"}
         SNAPHU initialization method, by default "mst"
     cost : str, choices = {"smooth", "defo", "p-norm",}
@@ -95,6 +98,7 @@ def multiscale_unwrap(
         if unwrap_callback is not None:
             # Pass through what the user gave
             return unwrap_callback, nodata
+        # Otherwise, set defaults depending on the method
         unwrap_method = UnwrapMethod(unwrap_method)
         if unwrap_method == UnwrapMethod.ICU:
             unwrap_callback = tophu.ICUUnwrap()
@@ -115,7 +119,9 @@ def multiscale_unwrap(
 
     # Used to track if we can redirect logs or not
     _user_gave_callback = unwrap_callback is not None
-    unwrap_callback, nodata = _get_cb_and_nodata(unwrap_method, unwrap_callback, nodata)
+    unwrap_callback, unw_nodata = _get_cb_and_nodata(
+        unwrap_method, unwrap_callback, unw_nodata
+    )
     # Used to track if we can redirect logs or not
 
     (width, height) = io.get_raster_xysize(ifg_filename)
@@ -136,6 +142,7 @@ def multiscale_unwrap(
         driver="GTiff",
         crs=crs,
         transform=transform,
+        nodata=ccl_nodata,
         **gtiff_options,
     )
     unw_rb = tophu.RasterBand(
@@ -145,7 +152,7 @@ def multiscale_unwrap(
         dtype=np.float32,
         crs=crs,
         transform=transform,
-        nodata=nodata,
+        nodata=unw_nodata,
         **gtiff_options,
     )
 

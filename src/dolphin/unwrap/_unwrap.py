@@ -1,11 +1,9 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from os import fspath
 from pathlib import Path
 from typing import Optional, Sequence, Union
 
-import numpy as np
 from tqdm.auto import tqdm
 
 from dolphin import io
@@ -14,10 +12,16 @@ from dolphin._types import Filename
 from dolphin.utils import DummyProcessPoolExecutor, full_suffix
 from dolphin.workflows import UnwrapMethod
 
-from ._constants import CONNCOMP_SUFFIX, UNW_SUFFIX
+from ._constants import (
+    CONNCOMP_SUFFIX,
+    DEFAULT_CCL_NODATA,
+    DEFAULT_UNW_NODATA,
+    UNW_SUFFIX,
+)
+from ._isce3 import unwrap_isce3
 from ._snaphu_py import unwrap_snaphu_py
 from ._tophu import multiscale_unwrap
-from ._utils import _redirect_unwrapping_log, _zero_from_mask
+from ._utils import create_combined_mask, set_nodata_values
 
 logger = get_log(__name__)
 
@@ -40,6 +44,8 @@ def run(
     tile_overlap: tuple[int, int] = (0, 0),
     n_parallel_tiles: int = 1,
     downsample_factor: Union[int, tuple[int, int]] = 1,
+    unw_nodata: float | None = DEFAULT_UNW_NODATA,
+    ccl_nodata: int | None = DEFAULT_CCL_NODATA,
     scratchdir: Optional[Filename] = None,
     overwrite: bool = False,
 ) -> tuple[list[Path], list[Path]]:
@@ -81,6 +87,12 @@ def run(
     downsample_factor : int, optional, default = 1
         (For tophu/multi-scale unwrapping): Downsample the interferograms by this
         factor to unwrap faster, then upsample to full resolution.
+    unw_nodata : float , optional.
+        Requested nodata value for the unwrapped phase.
+        Default = 0
+    ccl_nodata : float, optional
+        Requested nodata value for connected component labels.
+        Default = max value of UInt16 (65535)
     scratchdir : Filename, optional
         Path to scratch directory to hold intermediate files.
         If None, uses `tophu`'s `/tmp/...` default.
@@ -145,6 +157,8 @@ def run(
                 ntiles=ntiles,
                 tile_overlap=tile_overlap,
                 n_parallel_tiles=n_parallel_tiles,
+                unw_nodata=unw_nodata,
+                ccl_nodata=ccl_nodata,
                 scratchdir=scratchdir,
             )
             for ifg_file, out_file, cor_file in zip(in_files, out_files, cor_filenames)
@@ -165,7 +179,7 @@ def unwrap(
     unw_filename: Filename,
     nlooks: float,
     mask_file: Optional[Filename] = None,
-    zero_where_masked: bool = True,
+    zero_where_masked: bool = False,
     ntiles: Union[int, tuple[int, int]] = 1,
     tile_overlap: tuple[int, int] = (0, 0),
     n_parallel_tiles: int = 1,
@@ -174,6 +188,8 @@ def unwrap(
     cost: str = "smooth",
     log_to_file: bool = True,
     downsample_factor: Union[int, tuple[int, int]] = 1,
+    unw_nodata: float | None = DEFAULT_UNW_NODATA,
+    ccl_nodata: int | None = DEFAULT_CCL_NODATA,
     scratchdir: Optional[Filename] = None,
 ) -> tuple[Path, Path]:
     """Unwrap a single interferogram using snaphu, isce3, or tophu.
@@ -220,6 +236,12 @@ def unwrap(
         Downsample the interferograms by this factor to unwrap faster, then upsample
         to full resolution.
         If 1, doesn't use coarse_unwrap and unwraps as normal.
+    unw_nodata : float , optional.
+        Requested nodata value for the unwrapped phase.
+        Default = 0
+    ccl_nodata : float, optional
+        Requested nodata value for connected component labels.
+        Default = max value of UInt16 (65535)
     scratchdir : Filename, optional
         Path to scratch directory to hold intermediate files.
         If None, uses `tophu`'s `/tmp/...` default.
@@ -239,32 +261,43 @@ def unwrap(
     # Coerce to the enum
     unwrap_method = UnwrapMethod(unwrap_method)
 
+    # Check for a nodata mask
+    if io.get_raster_nodata(ifg_filename) is None or mask_file is None:
+        # With no marked `nodata`, just use the passed in mask
+        combined_mask_file = mask_file
+    else:
+        combined_mask_file = Path(ifg_filename).with_suffix(".mask.tif")
+        create_combined_mask(
+            mask_filename=mask_file,
+            image_filename=ifg_filename,
+            output_filename=combined_mask_file,
+        )
+
     if unwrap_method == UnwrapMethod.SNAPHU:
         # Pass everything to snaphu-py
-        return unwrap_snaphu_py(
+        unw_path, conncomp_path = unwrap_snaphu_py(
             ifg_filename,
             corr_filename,
             unw_filename,
             nlooks,
             ntiles=ntiles,
             tile_overlap=tile_overlap,
-            mask_file=mask_file,
+            mask_file=combined_mask_file,
             nproc=n_parallel_tiles,
             zero_where_masked=zero_where_masked,
             init_method=init_method,
             cost=cost,
             scratchdir=scratchdir,
         )
-
-    if any(t > 1 for t in ntiles):
-        return multiscale_unwrap(
+    elif any(t > 1 for t in ntiles):
+        unw_path, conncomp_path = multiscale_unwrap(
             ifg_filename,
             corr_filename,
             unw_filename,
             downsample_factor,
             ntiles=ntiles,
             nlooks=nlooks,
-            mask_file=mask_file,
+            mask_file=combined_mask_file,
             zero_where_masked=zero_where_masked,
             init_method=init_method,
             cost=cost,
@@ -272,84 +305,26 @@ def unwrap(
             scratchdir=scratchdir,
             log_to_file=log_to_file,
         )
-
-    # Now we're using PHASS or ICU within isce3
-    from isce3.io import Raster
-    from isce3.unwrap import ICU, Phass
-
-    shape = io.get_raster_xysize(ifg_filename)[::-1]
-    corr_shape = io.get_raster_xysize(corr_filename)[::-1]
-    if shape != corr_shape:
-        msg = f"correlation {corr_shape} and interferogram {shape} shapes don't match"
-        raise ValueError(msg)
-
-    ifg_raster = Raster(fspath(ifg_filename))
-    corr_raster = Raster(fspath(corr_filename))
-    UNW_SUFFIX = full_suffix(unw_filename)
-
-    # Get the driver based on the output file extension
-    if Path(unw_filename).suffix == ".tif":
-        driver = "GTiff"
-        opts = list(io.DEFAULT_TIFF_OPTIONS)
     else:
-        driver = "ENVI"
-        opts = list(io.DEFAULT_ENVI_OPTIONS)
-
-    # Create output rasters for unwrapped phase & connected component labels.
-    # Writing with `io.write_arr` because isce3 doesn't have creation options
-    io.write_arr(
-        arr=None,
-        output_name=unw_filename,
-        driver=driver,
-        like_filename=ifg_filename,
-        dtype=np.float32,
-        options=opts,
-    )
-    conncomp_filename = str(unw_filename).replace(UNW_SUFFIX, CONNCOMP_SUFFIX)
-    io.write_arr(
-        arr=None,
-        output_name=conncomp_filename,
-        driver="GTiff",
-        dtype=np.uint32,
-        like_filename=ifg_filename,
-        options=io.DEFAULT_TIFF_OPTIONS,
-    )
-
-    # The different raster classes have different APIs, so we need to
-    # create the raster objects differently.
-    unw_raster = Raster(fspath(unw_filename), True)
-    conncomp_raster = Raster(fspath(conncomp_filename), True)
-
-    _redirect_unwrapping_log(unw_filename, unwrap_method.value)
-
-    if zero_where_masked and mask_file is not None:
-        logger.info(f"Zeroing phase/corr of pixels masked in {mask_file}")
-        zeroed_ifg_file, zeroed_corr_file = _zero_from_mask(
-            ifg_filename, corr_filename, mask_file
+        unw_path, conncomp_path = unwrap_isce3(
+            ifg_filename,
+            corr_filename,
+            unw_filename,
+            mask_file=combined_mask_file,
+            unwrap_method=unwrap_method,
+            zero_where_masked=zero_where_masked,
         )
-        corr_raster = Raster(fspath(zeroed_corr_file))
-        ifg_raster = Raster(fspath(zeroed_ifg_file))
 
-    logger.info(
-        f"Unwrapping size {(ifg_raster.length, ifg_raster.width)} {ifg_filename} to"
-        f" {unw_filename} using {unwrap_method.value}"
+    # TODO: post-processing steps go here:
+
+    # Reset the input nodata values to be nodata in the unwrapped and CCL
+    logger.info(f"Setting nodata values of {unw_path} file")
+    set_nodata_values(
+        filename=unw_path, output_nodata=unw_nodata, like_filename=ifg_filename
     )
-    if unwrap_method == UnwrapMethod.PHASS:
-        # TODO: expose the configuration for phass?
-        # If we ever find cases where changing help, then yes we should
-        # coherence_thresh: float = 0.2
-        # good_coherence: float = 0.7
-        # min_region_size: int = 200
-        unwrapper = Phass()
-    else:
-        unwrapper = ICU(buffer_lines=shape[0])
-
-    unwrapper.unwrap(
-        unw_raster,
-        conncomp_raster,
-        ifg_raster,
-        corr_raster,
+    logger.info(f"Setting nodata values of {conncomp_path} file")
+    set_nodata_values(
+        filename=conncomp_path, output_nodata=ccl_nodata, like_filename=ifg_filename
     )
 
-    del unw_raster, conncomp_raster
-    return Path(unw_filename), Path(conncomp_filename)
+    return unw_path, conncomp_path
