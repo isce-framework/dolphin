@@ -22,7 +22,8 @@ def unwrap_snaphu_py(
     nproc: int = 1,
     mask_file: Filename | None = None,
     zero_where_masked: bool = False,
-    nodata: str | float | None = None,
+    unw_nodata: float | None = None,
+    ccl_nodata: float | None = 65535,
     init_method: str = "mst",
     cost: str = "smooth",
     scratchdir: Filename | None = None,
@@ -58,9 +59,11 @@ def unwrap_snaphu_py(
         Set wrapped phase/correlation to 0 where mask is 0 before unwrapping.
         If not mask is provided, this is ignored.
         By default True.
-    nodata : float | str, optional.
+    unw_nodata : float , optional.
         If providing `unwrap_callback`, provide the nodata value for your
         unwrapping function.
+    ccl_nodata : float, optional
+        Nodata value for the connected component labels.
     init_method : str, choices = {"mcf", "mst"}
         initialization method, by default "mst"
     cost : str
@@ -98,10 +101,10 @@ def unwrap_snaphu_py(
     try:
         with (
             snaphu.io.Raster.create(
-                unw_filename, like=igram, nodata=nodata, dtype="f4"
+                unw_filename, like=igram, nodata=unw_nodata, dtype="f4"
             ) as unw,
             snaphu.io.Raster.create(
-                cc_filename, like=igram, nodata=nodata, dtype="u4"
+                cc_filename, like=igram, nodata=ccl_nodata, dtype="u2"
             ) as conncomp,
         ):
             # Unwrap and store the results in the `unw` and `conncomp` rasters.

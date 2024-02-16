@@ -293,4 +293,5 @@ def unwrap(
         )
 
     # TODO: post-processing steps go here:
+    # Reset the input nodata values to be nodata in the `unw` and CCL
     return unw_path, conncomp_path
