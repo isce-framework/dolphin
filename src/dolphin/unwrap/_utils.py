@@ -70,6 +70,63 @@ def create_combined_mask(
     return Path(output_filename)
 
 
+def set_nodata_values(
+    *,
+    filename: Filename,
+    output_nodata: float | None = None,
+    like_filename: Filename,
+):
+    """Set pixels values for `filename` to be nodata where `like_filename` is nodata.
+
+    Updates pixels where `like_filename` is nodata, but keeps the nodata pixels
+    currently in `filename`. The new pixel value will be `output_nodata`.
+
+    Parameters
+    ----------
+    filename : Filename
+        _description_
+    output_nodata : float, optional
+        Value to use as nodata in the newly saved `filename`.
+        If none, will keep the same nodata value currently in `filename`.
+    like_filename : Filename
+        Raster whose nodata values will be used to mask out `filename.`
+        Must have a `nodata` value set.
+
+    Raises
+    ------
+    ValueError
+        If `like_filename` doesn't have `nodata`.
+
+    """
+    with rio.open(like_filename) as src:
+        if not src.nodatavals:
+            msg = f"{like_filename} does not have any `nodata` values."
+            raise ValueError(msg)
+        # https://rasterio.readthedocs.io/en/stable/topics/masks.html
+        # rasterio loads this where 0 means the pixel is masked
+        # Reform to be like a numpy mask
+        bad_like = ~(src.read_masks(1).astype(bool))
+
+    with rio.open(filename, "r+") as dst:
+        # We also want to keep the currently-nodata-pixels as nodata,
+        # so we combine the `like_filename`'s nodata and this mask
+        arr = dst.read(1)
+        bad_cur_nodata = ~(dst.read_masks(1).astype(bool))
+        if output_nodata is None:
+            if dst.nodata is None:
+                raise ValueError(
+                    f"output_nodata not given, but {filename} has no `nodata` set."
+                )
+            output_nodata = dst.nodata
+
+        # set the raster's nodata metadata
+        dst.nodata = output_nodata
+
+        combined_mask = bad_cur_nodata | bad_like
+        arr[combined_mask] = output_nodata
+        dst.write(arr, 1)
+
+
 def _zero_from_mask(
     ifg_filename: Filename, corr_filename: Filename, mask_filename: Filename
 ) -> tuple[Path, Path]:

@@ -157,7 +157,7 @@ class TestTophu:
             corr_filename=corr_raster,
             unw_filename=unw_filename,
             unwrap_callback=unwrap_callback,
-            nodata=0,
+            unw_nodata=0,
             nlooks=1,
             ntiles=(2, 2),
             downsample_factor=(3, 3),

@@ -6,7 +6,7 @@ from dolphin._log import get_log
 from dolphin._types import Filename
 from dolphin.utils import full_suffix
 
-from ._constants import CONNCOMP_SUFFIX
+from ._constants import CONNCOMP_SUFFIX, DEFAULT_CCL_NODATA, DEFAULT_UNW_NODATA
 from ._utils import _zero_from_mask
 
 logger = get_log(__name__)
@@ -22,8 +22,8 @@ def unwrap_snaphu_py(
     nproc: int = 1,
     mask_file: Filename | None = None,
     zero_where_masked: bool = False,
-    unw_nodata: float | None = None,
-    ccl_nodata: float | None = 65535,
+    unw_nodata: float | None = DEFAULT_CCL_NODATA,
+    ccl_nodata: int | None = DEFAULT_UNW_NODATA,
     init_method: str = "mst",
     cost: str = "smooth",
     scratchdir: Filename | None = None,

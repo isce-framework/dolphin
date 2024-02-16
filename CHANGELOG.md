@@ -1,5 +1,15 @@
 # [Unreleased](https://github.com/isce-framework/dolphin/compare/v0.13.0...main)
 
+# [0.14.1](https://github.com/isce-framework/dolphin/compare/v0.13.0...main) - 2024-02-15
+
+**Fixed**
+
+- Changed snaphu-py tile defaults to avoid max secondary arcs error in #233
+- Fixed `linalg.norm`` to be pixelwise in `process_coherence_matrices` in #234
+
+
+# [0.14.0](https://github.com/isce-framework/dolphin/compare/v0.13.0...main) - 2024-02-13
+
 **Fixed**
 - Temporal coherence and eigenvalue rasters were switched in their naming
 - Output a better `estimator` raster to see where we switched to EVD

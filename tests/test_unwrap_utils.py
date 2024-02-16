@@ -57,3 +57,41 @@ def test_create_combined_mask(corr_raster, mask_raster):
     assert (mask[:20] == 0).all()
     assert (mask[:, :20] == 0).all()
     assert (mask[20:, 20:] == 1).all()
+
+
+def test_set_nodata_values(corr_raster):
+    import rasterio
+
+    corr_copy = corr_raster.parent / "corr_copy.tif"
+    # The first 20 cols have nodata
+    arr = np.ones((100, 200), dtype="float32")
+    arr[:, :20] = -1
+    io.write_arr(
+        arr=arr,
+        output_name=corr_copy,
+        like_filename=corr_raster,
+        nodata=-1,
+        driver="GTiff",
+    )
+    with rasterio.open(corr_copy) as src:
+        assert src.nodata == -1
+        a = src.read(1)
+        assert np.all(a[:, :20] == -1)
+        assert np.all(a[:, 20:] == 1)
+
+    _utils.set_nodata_values(filename=corr_copy, like_filename=corr_raster)
+    # Without specifying `output_nodata`, should keep existing nodata of `filename`
+    with rasterio.open(corr_copy) as src:
+        assert src.nodata == -1
+        a = src.read(1)
+        assert np.all(a[:20] == -1)
+        assert np.all(a[:, :20] == -1)
+
+    _utils.set_nodata_values(
+        filename=corr_copy, output_nodata=-2, like_filename=corr_raster
+    )
+    with rasterio.open(corr_copy) as src:
+        assert src.nodata == -2
+        a = src.read(1)
+        assert np.all(a[:20] == -2)
+        assert np.all(a[:, :20] == -2)

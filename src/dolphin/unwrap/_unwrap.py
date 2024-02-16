@@ -12,11 +12,16 @@ from dolphin._types import Filename
 from dolphin.utils import DummyProcessPoolExecutor, full_suffix
 from dolphin.workflows import UnwrapMethod
 
-from ._constants import CONNCOMP_SUFFIX, UNW_SUFFIX
+from ._constants import (
+    CONNCOMP_SUFFIX,
+    DEFAULT_CCL_NODATA,
+    DEFAULT_UNW_NODATA,
+    UNW_SUFFIX,
+)
 from ._isce3 import unwrap_isce3
 from ._snaphu_py import unwrap_snaphu_py
 from ._tophu import multiscale_unwrap
-from ._utils import create_combined_mask
+from ._utils import create_combined_mask, set_nodata_values
 
 logger = get_log(__name__)
 
@@ -39,6 +44,8 @@ def run(
     tile_overlap: tuple[int, int] = (0, 0),
     n_parallel_tiles: int = 1,
     downsample_factor: Union[int, tuple[int, int]] = 1,
+    unw_nodata: float | None = DEFAULT_UNW_NODATA,
+    ccl_nodata: int | None = DEFAULT_CCL_NODATA,
     scratchdir: Optional[Filename] = None,
     overwrite: bool = False,
 ) -> tuple[list[Path], list[Path]]:
@@ -80,6 +87,12 @@ def run(
     downsample_factor : int, optional, default = 1
         (For tophu/multi-scale unwrapping): Downsample the interferograms by this
         factor to unwrap faster, then upsample to full resolution.
+    unw_nodata : float , optional.
+        Requested nodata value for the unwrapped phase.
+        Default = 0
+    ccl_nodata : float, optional
+        Requested nodata value for connected component labels.
+        Default = max value of UInt16 (65535)
     scratchdir : Filename, optional
         Path to scratch directory to hold intermediate files.
         If None, uses `tophu`'s `/tmp/...` default.
@@ -144,6 +157,8 @@ def run(
                 ntiles=ntiles,
                 tile_overlap=tile_overlap,
                 n_parallel_tiles=n_parallel_tiles,
+                unw_nodata=unw_nodata,
+                ccl_nodata=ccl_nodata,
                 scratchdir=scratchdir,
             )
             for ifg_file, out_file, cor_file in zip(in_files, out_files, cor_filenames)
@@ -173,6 +188,8 @@ def unwrap(
     cost: str = "smooth",
     log_to_file: bool = True,
     downsample_factor: Union[int, tuple[int, int]] = 1,
+    unw_nodata: float | None = DEFAULT_UNW_NODATA,
+    ccl_nodata: int | None = DEFAULT_CCL_NODATA,
     scratchdir: Optional[Filename] = None,
 ) -> tuple[Path, Path]:
     """Unwrap a single interferogram using snaphu, isce3, or tophu.
@@ -219,6 +236,12 @@ def unwrap(
         Downsample the interferograms by this factor to unwrap faster, then upsample
         to full resolution.
         If 1, doesn't use coarse_unwrap and unwraps as normal.
+    unw_nodata : float , optional.
+        Requested nodata value for the unwrapped phase.
+        Default = 0
+    ccl_nodata : float, optional
+        Requested nodata value for connected component labels.
+        Default = max value of UInt16 (65535)
     scratchdir : Filename, optional
         Path to scratch directory to hold intermediate files.
         If None, uses `tophu`'s `/tmp/...` default.
@@ -293,5 +316,15 @@ def unwrap(
         )
 
     # TODO: post-processing steps go here:
-    # Reset the input nodata values to be nodata in the `unw` and CCL
+
+    # Reset the input nodata values to be nodata in the unwrapped and CCL
+    logger.info(f"Setting nodata values of {unw_path} file")
+    set_nodata_values(
+        filename=unw_path, output_nodata=unw_nodata, like_filename=ifg_filename
+    )
+    logger.info(f"Setting nodata values of {conncomp_path} file")
+    set_nodata_values(
+        filename=conncomp_path, output_nodata=ccl_nodata, like_filename=ifg_filename
+    )
+
     return unw_path, conncomp_path
