@@ -244,7 +244,7 @@ def unwrap(
         # With no marked `nodata`, just use the passed in mask
         combined_mask_file = mask_file
     else:
-        combined_mask_file = Path(ifg_filename).with_suffix(".masked.tif")
+        combined_mask_file = Path(ifg_filename).with_suffix(".mask.tif")
         create_combined_mask(
             mask_filename=mask_file,
             image_filename=ifg_filename,
