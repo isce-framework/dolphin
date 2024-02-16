@@ -165,7 +165,7 @@ def unwrap(
     unw_filename: Filename,
     nlooks: float,
     mask_file: Optional[Filename] = None,
-    zero_where_masked: bool = True,
+    zero_where_masked: bool = False,
     ntiles: Union[int, tuple[int, int]] = 1,
     tile_overlap: tuple[int, int] = (0, 0),
     n_parallel_tiles: int = 1,

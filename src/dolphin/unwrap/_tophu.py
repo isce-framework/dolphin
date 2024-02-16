@@ -24,7 +24,7 @@ def multiscale_unwrap(
     ntiles: tuple[int, int],
     nlooks: float,
     mask_file: Filename | None = None,
-    zero_where_masked: bool = True,
+    zero_where_masked: bool = False,
     unwrap_method: UnwrapMethod = UnwrapMethod.SNAPHU,
     unwrap_callback=None,  # type is `tophu.UnwrapCallback`
     nodata: str | float | None = None,

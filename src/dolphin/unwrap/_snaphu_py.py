@@ -21,7 +21,7 @@ def unwrap_snaphu_py(
     tile_overlap: tuple[int, int] = (0, 0),
     nproc: int = 1,
     mask_file: Filename | None = None,
-    zero_where_masked: bool = True,
+    zero_where_masked: bool = False,
     nodata: str | float | None = None,
     init_method: str = "mst",
     cost: str = "smooth",
