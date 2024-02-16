@@ -17,7 +17,7 @@ from dolphin.workflows import UnwrapMethod
 from ._constants import CONNCOMP_SUFFIX, UNW_SUFFIX
 from ._snaphu_py import unwrap_snaphu_py
 from ._tophu import multiscale_unwrap
-from ._utils import _redirect_unwrapping_log, _zero_from_mask
+from ._utils import _redirect_unwrapping_log, _zero_from_mask, create_combined_mask
 
 logger = get_log(__name__)
 
@@ -238,6 +238,18 @@ def unwrap(
         ntiles = (ntiles, ntiles)
     # Coerce to the enum
     unwrap_method = UnwrapMethod(unwrap_method)
+
+    # Check for a nodata mask
+    if io.get_raster_nodata(ifg_filename) is None or mask_file is None:
+        # With no marked `nodata`, just use the passed in mask
+        combined_mask_file = mask_file
+    else:
+        combined_mask_file = Path(ifg_filename).with_suffix(".masked.tif")
+        create_combined_mask(
+            mask_filename=mask_file,
+            image_filename=ifg_filename,
+            output_filename=combined_mask_file,
+        )
 
     if unwrap_method == UnwrapMethod.SNAPHU:
         # Pass everything to snaphu-py
