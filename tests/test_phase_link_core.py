@@ -26,26 +26,14 @@ def slc_samples(C_truth):
     return simulate.simulate_neighborhood_stack(C, ns)
 
 
-# CPU versions of the MLE and EVD estimates
-@pytest.fixture(scope="module")
-def C_hat(slc_samples):
-    return np.array(covariance.coh_mat_single(slc_samples))
-
-
-# Make the single-pixel comparisons with simple implementation
-@pytest.fixture(scope="module")
-def est_mle_verify(C_hat):
-    return np.angle(simulate.mle(C_hat))
-
-
-@pytest.fixture(scope="module")
-def est_evd_verify(C_hat):
-    return np.angle(simulate.evd(C_hat))
-
-
 @pytest.mark.parametrize("use_evd", [False, True])
-def test_estimation(C_truth, slc_samples, est_mle_verify, est_evd_verify, use_evd):
+def test_estimation(C_truth, slc_samples, use_evd):
     _, truth = C_truth
+
+    C_hat = np.array(covariance.coh_mat_single(slc_samples))
+    # Make the single-pixel comparisons with simple implementation
+    est_mle_verify = np.angle(simulate.mle(C_hat))
+    est_evd_verify = np.angle(simulate.evd(C_hat))
 
     # Check that the estimates are close to the truth
     err_deg = 10
@@ -74,7 +62,7 @@ def test_estimation(C_truth, slc_samples, est_mle_verify, est_evd_verify, use_ev
 
 
 def test_masked(slc_samples, C_truth):
-    slc_stack = slc_samples.reshape(NUM_ACQ, 11, 11)
+    slc_stack = slc_samples.copy().reshape(NUM_ACQ, 11, 11)
     mask = np.zeros((11, 11), dtype=bool)
     # Mask the top row
     mask[0, :] = True
@@ -100,7 +88,7 @@ def test_masked(slc_samples, C_truth):
 
 
 def test_run_phase_linking(slc_samples):
-    slc_stack = slc_samples.reshape(NUM_ACQ, 11, 11)
+    slc_stack = slc_samples.copy().reshape(NUM_ACQ, 11, 11)
     pl_out = _core.run_phase_linking(
         slc_stack,
         half_window=HalfWindow(5, 5),
@@ -115,9 +103,10 @@ def test_run_phase_linking(slc_samples):
     )
 
 
-def test_run_phase_linking_norm_output(slc_samples):
-    slc_stack = slc_samples.reshape(NUM_ACQ, 11, 11)
+def test_run_phase_linking_use_slc_amp(slc_samples):
+    slc_stack = slc_samples.copy().reshape(NUM_ACQ, 11, 11)
     ps_mask = np.zeros((11, 11), dtype=bool)
+    # Specify at least 1 ps
     ps_mask[1, 1] = True
     pl_out = _core.run_phase_linking(
         slc_stack,
@@ -125,7 +114,27 @@ def test_run_phase_linking_norm_output(slc_samples):
         ps_mask=ps_mask,
         use_slc_amp=False,
     )
+    # The output should still all have modulus of 1
     assert np.allclose(np.abs(pl_out.cpx_phase), 1)
+
+
+def test_run_phase_linking_with_shift(slc_samples):
+    slc_stack = slc_samples.copy().reshape(NUM_ACQ, 11, 11)
+    # Pretend there's a shift which should lead to nodata at the intersection
+    # First row of the first image
+    slc_stack[0, 0, :] = np.nan
+    # last row of the second image
+    slc_stack[1, -1, :] = np.nan
+    pl_out = _core.run_phase_linking(
+        slc_stack,
+        half_window=HalfWindow(5, 5),
+    )
+
+    assert np.isnan(pl_out.cpx_phase[:, [0, -1], :]).all()
+    assert np.isnan(pl_out.temp_coh[[0, -1], :]).all()
+
+    assert np.all(~np.isnan(pl_out.cpx_phase[:, 1:-1, :]))
+    assert np.all(~np.isnan(pl_out.temp_coh[1:-1, :]))
 
 
 @pytest.mark.parametrize("strides", [1, 2, 3, 4, 5])
@@ -147,7 +156,7 @@ def test_strides_window_sizes(strides, half_window, shape):
 @pytest.mark.parametrize("strides", [1, 2, 3, 4])
 def test_ps_fill(slc_samples, strides):
     rows, cols = 11, 11
-    slc_stack = slc_samples.reshape(NUM_ACQ, rows, cols)
+    slc_stack = slc_samples.copy().reshape(NUM_ACQ, 11, 11)
 
     mle_est = np.zeros((NUM_ACQ, rows // strides, cols // strides), dtype=np.complex64)
     temp_coh = np.zeros(mle_est.shape[1:])
@@ -178,7 +187,7 @@ def test_ps_fill(slc_samples, strides):
 
 @pytest.mark.parametrize("strides", [1, 2, 3])
 def test_run_phase_linking_ps_fill(slc_samples, strides):
-    slc_stack = slc_samples.reshape(NUM_ACQ, 11, 11)
+    slc_stack = slc_samples.copy().reshape(NUM_ACQ, 11, 11)
     ps_idx = 2
     ps_mask = np.zeros((11, 11), dtype=bool)
     ps_mask[ps_idx, ps_idx] = True
