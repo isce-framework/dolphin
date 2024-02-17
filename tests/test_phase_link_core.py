@@ -115,9 +115,10 @@ def test_run_phase_linking(slc_samples):
     )
 
 
-def test_run_phase_linking_norm_output(slc_samples):
+def test_run_phase_linking_use_slc_amp(slc_samples):
     slc_stack = slc_samples.reshape(NUM_ACQ, 11, 11)
     ps_mask = np.zeros((11, 11), dtype=bool)
+    # Specify at least 1 ps
     ps_mask[1, 1] = True
     pl_out = _core.run_phase_linking(
         slc_stack,
@@ -125,7 +126,27 @@ def test_run_phase_linking_norm_output(slc_samples):
         ps_mask=ps_mask,
         use_slc_amp=False,
     )
+    # The output should still all have modulus of 1
     assert np.allclose(np.abs(pl_out.cpx_phase), 1)
+
+
+def test_run_phase_linking_with_shift(slc_samples):
+    slc_stack = slc_samples.reshape(NUM_ACQ, 11, 11)
+    # Pretend there's a shift which should lead to nodata at the intersection
+    # First row of the first image
+    slc_stack[0, 0, :] = np.nan
+    # last row of the second image
+    slc_stack[1, -1, :] = np.nan
+    pl_out = _core.run_phase_linking(
+        slc_stack,
+        half_window=HalfWindow(5, 5),
+    )
+
+    assert np.isnan(pl_out.cpx_phase[:, [0, -1], :]).all()
+    assert np.isnan(pl_out.temp_coh[[0, -1], :]).all()
+
+    assert np.all(~np.isnan(pl_out.cpx_phase[:, 1:-1, :]))
+    assert np.all(~np.isnan(pl_out.temp_coh[1:-1, :]))
 
 
 @pytest.mark.parametrize("strides", [1, 2, 3, 4, 5])
