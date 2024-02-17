@@ -6,6 +6,10 @@
 - Update regions which are nodata in interferograms to be nodata in unwrapped phase
 - Use `uint16` data type for connected component labels
 
+**Fixed**
+
+- Intersection of nodata regions for SLC stack are now all set to `nan` during phase linking
+
 # [0.14.1](https://github.com/isce-framework/dolphin/compare/v0.14.0...0.14.1) - 2024-02-15
 
 **Fixed**
