@@ -1,4 +1,6 @@
-# [Unreleased](https://github.com/isce-framework/dolphin/compare/v0.14.1...main)
+# [Unreleased](https://github.com/isce-framework/dolphin/compare/v0.15.0...main)
+
+# [0.15.0](https://github.com/isce-framework/dolphin/compare/v0.14.1...0.15.0) - 2024-02-16
 
 **Changed**
 
