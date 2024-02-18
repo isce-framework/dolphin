@@ -10,7 +10,6 @@ from dolphin.utils import get_cpu_count
 
 from .config import (
     DisplacementWorkflow,
-    InterferogramNetworkType,
     ShpMethod,
     UnwrapMethod,
 )
@@ -19,6 +18,7 @@ from .config import (
 def create_config(
     *,
     outfile: Union[str, Path],
+    print_empty: bool = False,
     slc_files: Optional[list[str]] = None,
     subdataset: Optional[str] = None,
     keep_paths_relative: bool = False,
@@ -32,7 +32,7 @@ def create_config(
     block_shape: tuple[int, int] = (512, 512),
     threads_per_worker: int = 4,
     n_parallel_bursts: int = 1,
-    no_gpu: bool = False,
+    enable_gpu: bool = False,
     ntiles: tuple[int, int] = (1, 1),
     downsample_factor: tuple[int, int] = (1, 1),
     no_unwrap: bool = False,
@@ -52,6 +52,11 @@ def create_config(
     amplitude_dispersion_files: Optional[list[str]] = None,
 ):
     """Create a config for a displacement workflow."""
+    output = sys.stdout if outfile == "-" else outfile
+    if print_empty:
+        DisplacementWorkflow.print_yaml_schema(output)
+        return
+
     if amplitude_dispersion_files is None:
         amplitude_dispersion_files = []
     if amplitude_mean_files is None:
@@ -64,10 +69,7 @@ def create_config(
         troposphere_files = []
     if single_update:
         # create only one interferogram from the first and last SLC images
-        interferogram_network = {
-            "network_type": InterferogramNetworkType.MANUAL_INDEX,
-            "indexes": [(0, -1)],
-        }
+        interferogram_network = {"indexes": [(0, -1)]}
         # Override the ministack size so that only one phase linking is run
         ministack_size = 1000
     else:
@@ -114,18 +116,15 @@ def create_config(
             "block_shape": block_shape,
             "n_parallel_bursts": n_parallel_bursts,
             "threads_per_worker": threads_per_worker,
-            "gpu_enabled": (not no_gpu),
+            "gpu_enabled": enable_gpu,
         },
         log_file=log_file,
         amplitude_mean_files=amplitude_mean_files,
         amplitude_dispersion_files=amplitude_dispersion_files,
     )
 
-    if outfile == "-":  # Write to stdout
-        cfg.to_yaml(sys.stdout)
-    else:
-        print(f"Saving configuration to {outfile!s}", file=sys.stderr)
-        cfg.to_yaml(outfile)
+    print(f"Saving configuration to {output!s}", file=sys.stderr)
+    cfg.to_yaml(output)
 
 
 def get_parser(subparser=None, subcommand_name="run"):
@@ -143,6 +142,11 @@ def get_parser(subparser=None, subcommand_name="run"):
         parser = argparse.ArgumentParser(**metadata)
 
     # parser._action_groups.pop()
+    parser.add_argument(
+        "--print-empty",
+        action="store_true",
+        help="Flag to print a YAML file with only default filled to `outfile`.",
+    )
     parser.add_argument(
         "-o",
         "--outfile",
@@ -342,9 +346,9 @@ def get_parser(subparser=None, subcommand_name="run"):
         help="Path to directory to store intermediate/output files.",
     )
     worker_group.add_argument(
-        "--no-gpu",
+        "--enable-gpu",
         action="store_true",
-        help="Disable the GPU (if using a machine that has one available).",
+        help="Enable usage of GPU (if using a machine that has one available).",
     )
     worker_group.add_argument(
         "--block-shape",
@@ -368,14 +372,3 @@ def get_parser(subparser=None, subcommand_name="run"):
     parser.set_defaults(run_func=create_config)
 
     return parser
-
-
-def main(args=None):
-    """Get the command line arguments and create the config file."""
-    parser = get_parser()
-    parsed_args = parser.parse_args(args)
-    create_config(**vars(parsed_args))
-
-
-if __name__ == "__main__":
-    main()

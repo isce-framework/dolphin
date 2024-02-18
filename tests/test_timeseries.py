@@ -33,11 +33,11 @@ def test_incidence_matrix():
     assert A.shape == (5, 5)
     expected = np.array(
         [
-            [1, 0, 0, 0],
-            [-1, 1, 0, 0],
-            [0, -1, 1, 0],
-            [0, 0, -1, 1],
-            [0, 0, 0, -1],
+            [1, 0, 0, 0, 0],
+            [-1, 1, 0, 0, 0],
+            [0, -1, 1, 0, 0],
+            [0, 0, -1, 1, 0],
+            [0, 0, 0, -1, 1],
         ]
     )
     np.testing.assert_array_equal(A, expected)

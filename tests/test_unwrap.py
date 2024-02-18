@@ -1,5 +1,4 @@
 import os
-import sys
 from pathlib import Path
 
 import numpy as np
@@ -127,44 +126,44 @@ class TestUnwrapRun:
         assert all(p.exists() for p in c_paths)
 
 
-@pytest.mark.skipif(
-    not TOPHU_INSTALLED, reason="tophu not installed for multiscale unwrapping"
-)
-@pytest.mark.skipif(sys.platform == "darwin", reason="Snaphu does not work on MacOS")
-def test_unwrap_multiscale(tmp_path, raster_100_by_200, corr_raster):
-    unw_filename = tmp_path / "unwrapped.unw.tif"
-    out_path, conncomp_path = dolphin.unwrap.unwrap(
-        ifg_filename=raster_100_by_200,
-        corr_filename=corr_raster,
-        unw_filename=unw_filename,
-        nlooks=1,
-        ntiles=(2, 2),
-        downsample_factor=(3, 3),
-        init_method="mst",
+class TestTophu:
+    @pytest.mark.skipif(
+        not TOPHU_INSTALLED, reason="tophu not installed for multiscale unwrapping"
     )
-    assert out_path.exists()
-    assert conncomp_path.exists()
+    def test_unwrap_multiscale(self, tmp_path, raster_100_by_200, corr_raster):
+        unw_filename = tmp_path / "unwrapped.unw.tif"
+        out_path, conncomp_path = dolphin.unwrap.unwrap(
+            ifg_filename=raster_100_by_200,
+            corr_filename=corr_raster,
+            unw_filename=unw_filename,
+            nlooks=1,
+            ntiles=(2, 2),
+            downsample_factor=(3, 3),
+            unwrap_method="phass",
+        )
+        assert out_path.exists()
+        assert conncomp_path.exists()
 
-
-@pytest.mark.skipif(
-    not TOPHU_INSTALLED, reason="tophu not installed for multiscale unwrapping"
-)
-def test_unwrap_multiscale_callback_given(tmp_path, raster_100_by_200, corr_raster):
-    unw_filename = tmp_path / "unwrapped.unw.tif"
-    unwrap_callback = tophu.ICUUnwrap()
-    out_path, conncomp_path = dolphin.unwrap.multiscale_unwrap(
-        ifg_filename=raster_100_by_200,
-        corr_filename=corr_raster,
-        unw_filename=unw_filename,
-        unwrap_callback=unwrap_callback,
-        nodata=0,
-        nlooks=1,
-        ntiles=(2, 2),
-        downsample_factor=(3, 3),
-        init_method="mst",
+    @pytest.mark.skipif(
+        not TOPHU_INSTALLED, reason="tophu not installed for multiscale unwrapping"
     )
-    assert out_path.exists()
-    assert conncomp_path.exists()
+    def test_unwrap_multiscale_callback_given(
+        self, tmp_path, raster_100_by_200, corr_raster
+    ):
+        unw_filename = tmp_path / "unwrapped.unw.tif"
+        unwrap_callback = tophu.ICUUnwrap()
+        out_path, conncomp_path = dolphin.unwrap.multiscale_unwrap(
+            ifg_filename=raster_100_by_200,
+            corr_filename=corr_raster,
+            unw_filename=unw_filename,
+            unwrap_callback=unwrap_callback,
+            nodata=0,
+            nlooks=1,
+            ntiles=(2, 2),
+            downsample_factor=(3, 3),
+        )
+        assert out_path.exists()
+        assert conncomp_path.exists()
 
 
 @pytest.mark.skipif(os.environ.get("NUMBA_DISABLE_JIT") == "1", reason="JIT disabled")

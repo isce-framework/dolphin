@@ -18,12 +18,13 @@ def unwrap_snaphu_py(
     unw_filename: Filename,
     nlooks: float,
     ntiles: tuple[int, int] = (1, 1),
-    nproc: int = 1,
     tile_overlap: tuple[int, int] = (0, 0),
+    nproc: int = 1,
     mask_file: Filename | None = None,
     zero_where_masked: bool = True,
     nodata: str | float | None = None,
     init_method: str = "mst",
+    cost: str = "smooth",
     scratchdir: Filename | None = None,
 ) -> tuple[Path, Path]:
     """Unwrap an interferogram using at multiple scales using `tophu`.
@@ -61,7 +62,10 @@ def unwrap_snaphu_py(
         If providing `unwrap_callback`, provide the nodata value for your
         unwrapping function.
     init_method : str, choices = {"mcf", "mst"}
-        SNAPHU initialization method, by default "mst"
+        initialization method, by default "mst"
+    cost : str
+        Statistical cost mode.
+        Default = "smooth"
     scratchdir : Filename, optional
         If provided, uses a scratch directory to save the intermediate files
         during unwrapping.
@@ -106,6 +110,7 @@ def unwrap_snaphu_py(
                 corr,
                 nlooks=nlooks,
                 init=init_method,
+                cost=cost,
                 mask=mask,
                 unw=unw,
                 conncomp=conncomp,

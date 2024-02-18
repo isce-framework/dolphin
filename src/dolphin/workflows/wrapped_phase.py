@@ -11,14 +11,14 @@ from dolphin import interferogram, ps, stack
 from dolphin._log import get_log, log_runtime
 from dolphin.io import VRTStack
 
-from . import InterferogramNetwork, InterferogramNetworkType, sequential
+from . import InterferogramNetwork, sequential
 from .config import DisplacementWorkflow
 
 
 @log_runtime
 def run(
     cfg: DisplacementWorkflow, debug: bool = False, tqdm_kwargs=None
-) -> tuple[list[Path], Path, Path, Path]:
+) -> tuple[list[Path], list[Path], Path, Path]:
     """Run the displacement workflow on a stack of SLCs.
 
     Parameters
@@ -36,8 +36,8 @@ def run(
     -------
     ifg_file_list : list[Path]
         list of Paths to virtual interferograms created.
-    comp_slc_file : Path
-        Path to the final compressed SLC file created.
+    comp_slc_file_list : list[Path]
+        Paths to the compressed SLC files created from each ministack.
     temp_coh_file : Path
         Path to temporal coherence file created.
         In the case of a single phase linking step, this is from one phase linking step.
@@ -137,10 +137,10 @@ def run(
         logger.warning(f"Could not make nodata mask: {e}")
         nodata_mask_file = None
 
-    phase_linked_slcs = list(pl_path.glob("2*.tif"))
+    phase_linked_slcs = sorted(pl_path.glob("2*.tif"))
     if len(phase_linked_slcs) > 0:
         logger.info(f"Skipping EVD step, {len(phase_linked_slcs)} files already exist")
-        comp_slc_file = sorted(pl_path.glob("compressed*tif"))[-1]
+        comp_slc_list = sorted(pl_path.glob("compressed*tif"))
         temp_coh_file = next(pl_path.glob("temporal_coherence*tif"))
     else:
         logger.info(f"Running sequential EMI step in {pl_path}")
@@ -152,7 +152,7 @@ def run(
         shp_nslc = None
         (
             phase_linked_slcs,
-            comp_slcs,
+            comp_slc_list,
             temp_coh_file,
         ) = sequential.run_wrapped_phase_sequential(
             slc_vrt_file=vrt_stack.outfile,
@@ -172,7 +172,6 @@ def run(
             block_shape=cfg.worker_settings.block_shape,
             **kwargs,
         )
-        comp_slc_file = comp_slcs[-1]
 
     # ###################################################
     # Form interferograms from estimated wrapped phase
@@ -182,13 +181,13 @@ def run(
     existing_ifgs = list(ifg_network._directory.glob("*.int.*"))
     if len(existing_ifgs) > 0:
         logger.info(f"Skipping interferogram step, {len(existing_ifgs)} exists")
-        return existing_ifgs, comp_slc_file, temp_coh_file, ps_looked_file
-    logger.info(f"Creating virtual interferograms from {len(phase_linked_slcs)} files")
+        return existing_ifgs, comp_slc_list, temp_coh_file, ps_looked_file
 
+    logger.info(f"Creating virtual interferograms from {len(phase_linked_slcs)} files")
     ifg_file_list = create_ifgs(
         ifg_network, phase_linked_slcs, any(is_compressed), reference_date
     )
-    return ifg_file_list, comp_slc_file, temp_coh_file, ps_looked_file
+    return ifg_file_list, comp_slc_list, temp_coh_file, ps_looked_file
 
 
 def create_ifgs(
@@ -226,8 +225,8 @@ def create_ifgs(
     ValueError
         If invalid parameters are passed which lead to 0 interferograms being formed
     NotImplementedError
-        Currently raised for `InterferogramNetworkType`s besides single reference
-        or max-bandwidth
+        Currently raised for max-temporal-baseline networks when
+        `contained_compressed_slcs` is True
 
     """
     ifg_dir = interferogram_network._directory
@@ -235,7 +234,7 @@ def create_ifgs(
         ifg_dir.mkdir(parents=True, exist_ok=True)
     ifg_file_list: list[Path] = []
     if not contained_compressed_slcs:
-        # When no compressed SLCs were passed in to the config, we can direclty pass
+        # When no compressed SLCs were passed in to the config, we can directly pass
         # options to `Network` and get the ifg list
         network = interferogram.Network(
             slc_list=phase_linked_slcs,
@@ -263,24 +262,42 @@ def create_ifgs(
 
     # To get the ifgs from the reference date to secondary(conj), this involves doing
     # a `.conj()` on the phase-linked SLCs (which are currently `day1.conj() * day2`)
-    network_type = interferogram_network.network_type
-    for f in phase_linked_slcs:
-        p = interferogram.convert_pl_to_ifg(
+    single_ref_ifgs = [
+        interferogram.convert_pl_to_ifg(
             f, reference_date=reference_date, output_dir=ifg_dir, dry_run=dry_run
         )
-        ifg_file_list.append(p)
+        for f in phase_linked_slcs
+    ]
 
     # If we're only wanting single-reference day-(reference) to day-k interferograms,
     # these are all we need
-    if network_type == InterferogramNetworkType.SINGLE_REFERENCE:
-        return ifg_file_list
+    # XX Fix this hack for later
+    if interferogram_network.indexes and interferogram_network.indexes == [(0, -1)]:
+        ifg_file_list.append(single_ref_ifgs[-1])
+        # # This isn't really what we want here, the logic is different than Network:
+        # ifgs = [
+        #     (single_ref_ifgs[ref_idx], single_ref_ifgs[sec_idx])
+        #     for ref_idx, sec_idx in interferogram_network.indexes
+        # ]
+        # ifg_file_list.extend(ifgs)
+
+    if interferogram_network.reference_idx == 0:
+        ifg_file_list.extend(single_ref_ifgs)
 
     # For other networks, we have to combine other ones formed from the `Network`
-    if network_type == InterferogramNetworkType.MAX_BANDWIDTH:
+    # Say we had inputs like:
+    #  compressed_1_2_3 , slc_4, slc_5, slc_6
+    # the compressed one is referenced to "1"
+    # There will be 3 PL outputs for days 4, 5, 6, referenced to day "1":
+    # (1, 4), (1, 5), (1, 6)
+    # If we requested max-bw-2 interferograms, we want
+    # (1, 4), (1, 5), (4, 5), (4, 6), (5, 6)
+    # (the same as though we had normal SLCs (1, 4, 5, 6) )
+    if interferogram_network.max_bandwidth is not None:
         max_b = interferogram_network.max_bandwidth
         # Max bandwidth is easier: take the first `max_b` from `phase_linked_slcs`
         # (which are the (ref_date, ...) interferograms),...
-        ifgs_ref_date = ifg_file_list[:max_b]
+        ifgs_ref_date = single_ref_ifgs[:max_b]
         # ...then combine it with the results from the `Network`
         # Manually specify the dates, which come from the names of `phase_linked_slcs`
         secondary_dates = [get_dates(f)[0] for f in phase_linked_slcs]
@@ -295,24 +312,17 @@ def create_ifgs(
         # Using `cast` to assert that the paths are not None
         ifgs_others = cast(list[Path], [ifg.path for ifg in network_rest.ifg_list])
 
-        return ifgs_ref_date + ifgs_others
+        ifg_file_list.extend(ifgs_ref_date + ifgs_others)
 
-    # Other types: TODO
-    msg = (
-        "Only single-reference/max-bandwidth interferograms are supported when"
-        " starting with compressed SLCs"
-    )
-    raise NotImplementedError(msg)
-    # Say we had inputs like:
-    #  compressed_2_3 , slc_4, slc_5, slc_6
-    # but the compressed one was referenced to "1"
-    # There will be 3 PL outputs for days 4, 5, 6, referenced to day "1":
-    # (1, 4), (1, 5), (1, 6)
-    # If we requested max-bw-2 interferograms, we want
-    # (1, 4), (1, 5), (4, 5), (4, 6), (5, 6)
-    # (the same as though we had normal SLCs (1, 4, 5, 6) )
-    #
-    # return ifg_file_list
+    if interferogram_network.max_temporal_baseline is not None:
+        # Other types: TODO
+        msg = (
+            "max-temporal-baseline networks not yet supported when "
+            " starting with compressed SLCs"
+        )
+        raise NotImplementedError(msg)
+
+    return ifg_file_list
 
 
 def _get_reference_date_idx(

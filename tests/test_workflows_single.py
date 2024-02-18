@@ -15,9 +15,6 @@ pytestmark = pytest.mark.filterwarnings(
 )
 
 
-# TODO: do I want to add a flag to disable gpu use?
-# @pytest.mark.parametrize("gpu_enabled", [True, False])
-# def test_sequential_gtiff(tmp_path, slc_file_list, gpu_enabled):
 def test_sequential_gtiff(tmp_path, slc_file_list):
     """Run through the sequential estimation with a GeoTIFF stack."""
     vrt_file = tmp_path / "slc_stack.vrt"
@@ -42,7 +39,6 @@ def test_sequential_gtiff(tmp_path, slc_file_list):
         half_window=half_window,
         strides=strides,
         shp_method="rect",
-        # gpu_enabled=gpu_enabled,
     )
 
     assert output_folder.exists()
