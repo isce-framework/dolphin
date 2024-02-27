@@ -12,6 +12,7 @@ NUM_DATES = 10
 DT = 12
 START_DATE = datetime(2020, 1, 1)
 SHAPE = 50, 50
+VELO_RAD_PER_DAY = 0.2  # rad / day
 
 
 def make_sar_dates():
@@ -24,11 +25,10 @@ def make_sar_dates():
 def make_sar_phases(sar_dates):
     out = np.empty((NUM_DATES, *SHAPE), dtype="float32")
     # Make a linear ramp which increases each time interval
-    slope = 0.2  # rad / day
     ramp0 = np.ones((SHAPE[0], 1)) * np.arange(SHAPE[1]).reshape(1, -1)
     ramp0 /= SHAPE[1]
     for idx in range(len(sar_dates)):
-        cur_slope = slope * DT * idx
+        cur_slope = VELO_RAD_PER_DAY * DT * idx
         out[idx] = cur_slope * ramp0
     return out
 
@@ -93,27 +93,40 @@ class TestUtils:
         np.testing.assert_array_equal(A, expected)
 
 
-class TestSolve:
+class TestInvert:
     def test_basic(self, data):
         sar_dates, sar_phases, ifg_date_pairs, ifgs = data
 
         A = timeseries.get_incidence_matrix(ifg_date_pairs)
         # Get some
         dphi = ifgs[:, -1, -1]
-        phi = timeseries.solve(A, dphi)
+        phi = timeseries.invert_network(A, dphi)
         assert phi.shape[0] == len(sar_dates)
         assert phi[0] == 0
         npt.assert_allclose(phi, sar_phases[:, -1, -1], atol=1e-5)
 
 
 class TestVelocity:
-    def test_basic(self, data):
+    @pytest.fixture
+    def x_arr(self, data):
+        sar_dates, sar_phases, ifg_date_pairs, ifgs = data
+        return timeseries.datetime_to_float(sar_dates)
+
+    @pytest.fixture
+    def expected_velo(self, data, x_arr):
+        sar_dates, sar_phases, ifg_date_pairs, ifgs = data
+        out = np.zeros(SHAPE)
+        for i in range(SHAPE[0]):
+            for j in range(SHAPE[1]):
+                out[i, j] = np.polyfit(x_arr, sar_phases[:, i, j], 1)[0]
+        return out
+
+    def test_basic(self, data, x_arr, expected_velo):
         sar_dates, sar_phases, ifg_date_pairs, ifgs = data
 
-        A = timeseries.get_incidence_matrix(ifg_date_pairs)
-        velocities = timeseries.estimate_velocity(A, ifgs)
-        assert velocities.shape == (50, 50)
-        npt.assert_allclose(velocities, 0.2, atol=1e-5)
+        velocities = timeseries.estimate_velocity(x_arr, sar_phases)
+        assert velocities.shape == (SHAPE[0], SHAPE[1])
+        npt.assert_allclose(velocities, expected_velo, atol=1e-5)
 
 
 if __name__ == "__main__":

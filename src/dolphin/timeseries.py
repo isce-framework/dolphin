@@ -14,11 +14,21 @@ from dolphin import DateOrDatetime, io
 from dolphin._types import PathOrStr
 from dolphin.utils import flatten, format_dates
 
+__all__ = [
+    "invert_network",
+    "invert_network_stack",
+    "get_incidence_matrix",
+    "estimate_velocity",
+    "create_velocity",
+    "create_temporal_average",
+    "invert_unw_network",
+]
+
 T = TypeVar("T")
 
 
 @jit
-def solve(
+def invert_network(
     A: ArrayLike,
     dphi: np.ndarray,
 ) -> Array:
@@ -45,9 +55,9 @@ def solve(
 # vectorize the solve function to work on 2D and 3D arrays
 # We are not vectorizing over the A matrix, only the dphi vector
 # Solve 2d shapes: (nrows, n_ifgs) -> (nrows, n_sar_dates)
-solve_2d = vmap(solve, in_axes=(None, 1), out_axes=1)
+invert_network_2d = vmap(invert_network, in_axes=(None, 1), out_axes=1)
 # Solve 3d shapes: (nrows, ncols, n_ifgs) -> (nrows, ncols, n_sar_dates)
-solve_3d = vmap(solve_2d, in_axes=(None, 2), out_axes=2)
+invert_network_stack = vmap(invert_network_2d, in_axes=(None, 2), out_axes=2)
 
 
 def get_incidence_matrix(
@@ -97,16 +107,16 @@ def get_incidence_matrix(
 
 
 @jit
-def estimate_velocity(unw_stack: ArrayLike, x_arr: ArrayLike) -> Array:
+def estimate_velocity(x_arr: ArrayLike, unw_stack: ArrayLike) -> Array:
     """Estimate the velocity from a stack of unwrapped interferograms.
 
     Parameters
     ----------
-    unw_stack : ArrayLike
-        Array of unwrapped phase values at each pixel, shape=`(n_time, n_rows, n_cols)`.
     x_arr : ArrayLike
         Array of time values corresponding to each unwrapped phase image.
         Length must match `unw_stack.shape[0]`.
+    unw_stack : ArrayLike
+        Array of unwrapped phase values at each pixel, shape=`(n_time, n_rows, n_cols)`.
 
     Returns
     -------
@@ -115,14 +125,14 @@ def estimate_velocity(unw_stack: ArrayLike, x_arr: ArrayLike) -> Array:
         E.g. if the unwrapped phase is in radians, the velocity is in rad/day.
 
     """
+    # TODO: weighted least squares using correlation?
+    n_time, n_rows, n_cols = unw_stack.shape
 
-    def fit_line(time, y, axis=0):
-        # TODO: weighted least squares using correlation?
-        return jnp.polyfit(time, y, deg=1, axis=axis, rcond=None)[0]
-
-    # We use the same x inputs for all output pixels, which is why x_arr is `static`
-    fit_3d = vmap(vmap(fit_line))
-    return fit_3d(x_arr, unw_stack)
+    # We use the same x inputs for all output pixels
+    unw_pixels = unw_stack.reshape(n_time, -1)
+    coeffs = jnp.polyfit(x_arr, unw_pixels, deg=1, rcond=None)
+    velos = coeffs[0]
+    return velos.reshape(n_rows, n_cols)
 
 
 def datetime_to_float(dates: Sequence[DateOrDatetime]) -> np.ndarray:
@@ -198,7 +208,7 @@ def create_velocity(
     ) -> tuple[slice, slice, np.ndarray]:
         stack = reader[:, rows, cols]
         # Fit a line to each pixel
-        return rows, cols, estimate_velocity(stack, x_arr)
+        return rows, cols, estimate_velocity(x_arr=x_arr, stack=stack)
 
     return process_blocks(
         file_list=unw_file_list,
@@ -256,7 +266,7 @@ def invert_unw_network(
         reader: io.StackReader, rows: slice, cols: slice
     ) -> tuple[slice, slice, np.ndarray]:
         stack = reader[:, rows, cols]
-        return rows, cols, solve_3d(A, stack)
+        return rows, cols, invert_network_stack(A, stack)
 
     return process_blocks(
         file_list=unw_file_list,
