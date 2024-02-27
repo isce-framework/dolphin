@@ -4,9 +4,10 @@ from pathlib import Path
 
 from dolphin._log import get_log
 from dolphin._types import Filename
+from dolphin.io._core import DEFAULT_TIFF_OPTIONS_RIO
 from dolphin.utils import full_suffix
 
-from ._constants import CONNCOMP_SUFFIX
+from ._constants import CONNCOMP_SUFFIX, DEFAULT_CCL_NODATA, DEFAULT_UNW_NODATA
 from ._utils import _zero_from_mask
 
 logger = get_log(__name__)
@@ -21,8 +22,9 @@ def unwrap_snaphu_py(
     tile_overlap: tuple[int, int] = (0, 0),
     nproc: int = 1,
     mask_file: Filename | None = None,
-    zero_where_masked: bool = True,
-    nodata: str | float | None = None,
+    zero_where_masked: bool = False,
+    unw_nodata: float | None = DEFAULT_CCL_NODATA,
+    ccl_nodata: int | None = DEFAULT_UNW_NODATA,
     init_method: str = "mst",
     cost: str = "smooth",
     scratchdir: Filename | None = None,
@@ -58,9 +60,11 @@ def unwrap_snaphu_py(
         Set wrapped phase/correlation to 0 where mask is 0 before unwrapping.
         If not mask is provided, this is ignored.
         By default True.
-    nodata : float | str, optional.
+    unw_nodata : float , optional.
         If providing `unwrap_callback`, provide the nodata value for your
         unwrapping function.
+    ccl_nodata : float, optional
+        Nodata value for the connected component labels.
     init_method : str, choices = {"mcf", "mst"}
         initialization method, by default "mst"
     cost : str
@@ -98,10 +102,18 @@ def unwrap_snaphu_py(
     try:
         with (
             snaphu.io.Raster.create(
-                unw_filename, like=igram, nodata=nodata, dtype="f4"
+                unw_filename,
+                like=igram,
+                nodata=unw_nodata,
+                dtype="f4",
+                **DEFAULT_TIFF_OPTIONS_RIO,
             ) as unw,
             snaphu.io.Raster.create(
-                cc_filename, like=igram, nodata=nodata, dtype="u4"
+                cc_filename,
+                like=igram,
+                nodata=ccl_nodata,
+                dtype="u2",
+                **DEFAULT_TIFF_OPTIONS_RIO,
             ) as conncomp,
         ):
             # Unwrap and store the results in the `unw` and `conncomp` rasters.
@@ -118,6 +130,14 @@ def unwrap_snaphu_py(
                 tile_overlap=tile_overlap,
                 nproc=nproc,
                 scratchdir=scratchdir,
+                # https://github.com/isce-framework/snaphu-py/commit/a77cbe1ff115d96164985523987b1db3278970ed
+                # On frame-sized ifgs, especially with decorrelation, defaults of
+                # (500, 100) for (tile_cost_thresh, min_region_size) lead to
+                # "Exceeded maximum number of secondary arcs"
+                # "Decrease TILECOSTTHRESH and/or increase MINREGIONSIZE"
+                tile_cost_thresh=200,
+                # ... "and/or increase MINREGIONSIZE"
+                min_region_size=300,
             )
     finally:
         igram.close()

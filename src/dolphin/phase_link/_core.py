@@ -190,8 +190,8 @@ def run_phase_linking(
     # We zero out nodata if all pixels within the window had nodata
     mask_looked = take_looks(nodata_mask, *strides, func_type="all")
 
-    # Set no data pixels to np.nan
-    temp_coh = np.where(mask_looked, np.nan, cpl_out.temp_coh)
+    # Convert from jax array back to np
+    temp_coh = np.array(cpl_out.temp_coh)
 
     # Fill in the PS pixels from the original SLC stack, if it was given
     if np.any(ps_mask):
@@ -204,6 +204,10 @@ def run_phase_linking(
             avg_mag,
             reference_idx,
         )
+
+    # Finally, ensure the nodata regions are 0
+    cpx_phase[:, mask_looked] = np.nan
+    temp_coh[mask_looked] = np.nan
 
     return PhaseLinkOutput(
         cpx_phase,
@@ -377,8 +381,12 @@ def process_coherence_matrices(
         # Use the already- factored |Gamma|^-1, solving Ax = I gives the inverse
         Gamma_inv = cho_solve((cho, is_lower), Id)
         emi_eig_vals, emi_eig_vecs = eigh_smallest_stack(Gamma_inv * C_arrays)
-        # From the EMI paper, nomalize the eigenvectors to have norm sqrt(n)
-        emi_eig_vecs = jnp.sqrt(n) * emi_eig_vecs / jnp.linalg.norm(emi_eig_vecs)
+        # From the EMI paper, normalize the eigenvectors to have norm sqrt(n)
+        emi_eig_vecs = (
+            jnp.sqrt(n)
+            * emi_eig_vecs
+            / jnp.linalg.norm(emi_eig_vecs, axis=-1, keepdims=True)
+        )
         # is the output is the inverse of the eigenvectors? or inverse conj?
 
         # For places where inverting |Gamma| failed: fall back to computing EVD

@@ -46,24 +46,30 @@ __all__ = [
     "DEFAULT_DATETIME_FORMAT",
     "DEFAULT_HDF5_OPTIONS",
     "DEFAULT_TIFF_OPTIONS",
-    "DEFAULT_TILE_SIZE",
+    "DEFAULT_TILE_SHAPE",
 ]
 
 
 DEFAULT_DATETIME_FORMAT = "%Y%m%d"
-DEFAULT_TILE_SIZE = [128, 128]
-DEFAULT_TIFF_OPTIONS = (
-    "COMPRESS=DEFLATE",
-    "ZLEVEL=4",
-    "BIGTIFF=YES",
-    "TILED=YES",
-    f"BLOCKXSIZE={DEFAULT_TILE_SIZE[1]}",
-    f"BLOCKYSIZE={DEFAULT_TILE_SIZE[0]}",
+DEFAULT_TILE_SHAPE = [128, 128]
+# For use in rasterio
+DEFAULT_TIFF_OPTIONS_RIO = {
+    "compress": "deflate",
+    "zlevel": 4,
+    "bigtiff": "yes",
+    "tiled": "yes",
+    "blockxsize": DEFAULT_TILE_SHAPE[1],
+    "blockysize": DEFAULT_TILE_SHAPE[0],
+}
+# For gdal's bindings
+DEFAULT_TIFF_OPTIONS = tuple(
+    f"{k.upper()}={v}" for k, v in DEFAULT_TIFF_OPTIONS_RIO.items()
 )
+
 DEFAULT_ENVI_OPTIONS = ("SUFFIX=ADD",)
 DEFAULT_HDF5_OPTIONS = {
     # https://docs.h5py.org/en/stable/high/dataset.html#filter-pipeline
-    "chunks": DEFAULT_TILE_SIZE,
+    "chunks": DEFAULT_TILE_SHAPE,
     "compression": "gzip",
     "compression_opts": 4,
     "shuffle": True,
