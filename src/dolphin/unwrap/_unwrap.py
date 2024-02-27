@@ -18,7 +18,6 @@ from ._constants import (
     DEFAULT_UNW_NODATA,
     UNW_SUFFIX,
 )
-from ._isce3 import unwrap_isce3
 from ._snaphu_py import unwrap_snaphu_py
 from ._tophu import multiscale_unwrap
 from ._utils import create_combined_mask, set_nodata_values
@@ -289,7 +288,7 @@ def unwrap(
             cost=cost,
             scratchdir=scratchdir,
         )
-    elif any(t > 1 for t in ntiles):
+    else:
         unw_path, conncomp_path = multiscale_unwrap(
             ifg_filename,
             corr_filename,
@@ -304,15 +303,6 @@ def unwrap(
             unwrap_method=unwrap_method,
             scratchdir=scratchdir,
             log_to_file=log_to_file,
-        )
-    else:
-        unw_path, conncomp_path = unwrap_isce3(
-            ifg_filename,
-            corr_filename,
-            unw_filename,
-            mask_file=combined_mask_file,
-            unwrap_method=unwrap_method,
-            zero_where_masked=zero_where_masked,
         )
 
     # TODO: post-processing steps go here:
