@@ -1,4 +1,5 @@
 from concurrent.futures import Future, ThreadPoolExecutor
+from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Callable, Sequence, TypeVar
 
@@ -11,7 +12,7 @@ from tqdm.auto import tqdm
 
 from dolphin import DateOrDatetime, io
 from dolphin._types import PathOrStr
-from dolphin.utils import flatten
+from dolphin.utils import flatten, format_dates
 
 T = TypeVar("T")
 
@@ -42,7 +43,10 @@ def solve(
 
 
 # vectorize the solve function to work on 2D and 3D arrays
+# We are not vectorizing over the A matrix, only the dphi vector
+# Solve 2d shapes: (nrows, n_ifgs) -> (nrows, n_sar_dates)
 solve_2d = vmap(solve, in_axes=(None, 1), out_axes=1)
+# Solve 3d shapes: (nrows, ncols, n_ifgs) -> (nrows, ncols, n_sar_dates)
 solve_3d = vmap(solve_2d, in_axes=(None, 2), out_axes=2)
 
 
@@ -116,8 +120,8 @@ def estimate_velocity(unw_stack: ArrayLike, x_arr: ArrayLike) -> Array:
         # TODO: weighted least squares using correlation?
         return jnp.polyfit(time, y, deg=1, axis=axis, rcond=None)[0]
 
-    # We use the same x inputs for all output pixels, so only vmap over y
-    fit_3d = vmap(vmap(fit_line, in_axes=(None, 0)), in_axes=(None, 0))
+    # We use the same x inputs for all output pixels, which is why x_arr is `static`
+    fit_3d = vmap(vmap(fit_line))
     return fit_3d(x_arr, unw_stack)
 
 
@@ -222,6 +226,42 @@ def create_temporal_average(
         file_list=file_list,
         output_files=[output_file],
         func=read_and_average,
+        block_shape=block_shape,
+        num_threads=num_threads,
+    )
+
+
+def invert_unw_network(
+    unw_file_list: Sequence[PathOrStr],
+    output_dir: PathOrStr,
+    ifg_date_pairs: Sequence[Sequence[DateOrDatetime]] | None = None,
+    block_shape: tuple[int, int] = (512, 512),
+    num_threads: int = 5,
+):
+    """Perform pixel-wise inversion of unwrapped network to get phase per date."""
+    if ifg_date_pairs is None:
+        ifg_date_pairs = get_dates(unw_file_list)
+
+    ifg_tuples = [tuple(pair) for pair in ifg_date_pairs]
+    if not all(len(pair) == 2 for pair in ifg_tuples):
+        raise ValueError("Each item in `ifg_date_pairs` must be a sequence of length 2")
+
+    sar_dates = sorted(set(flatten(ifg_tuples)))
+    A = get_incidence_matrix(ifg_pairs=ifg_tuples, sar_idxs=sar_dates)
+    # Make the names of the output files from the SAR dates to solve for
+    ref_date = sar_dates[0]
+    out_paths = [Path(output_dir) / format_dates(ref_date, d) for d in sar_dates]
+
+    def read_and_solve(
+        reader: io.StackReader, rows: slice, cols: slice
+    ) -> tuple[slice, slice, np.ndarray]:
+        stack = reader[:, rows, cols]
+        return rows, cols, solve_3d(A, stack)
+
+    return process_blocks(
+        file_list=unw_file_list,
+        output_files=out_paths,
+        func=read_and_solve,
         block_shape=block_shape,
         num_threads=num_threads,
     )

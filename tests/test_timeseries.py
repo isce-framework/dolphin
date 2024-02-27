@@ -106,6 +106,16 @@ class TestSolve:
         npt.assert_allclose(phi, sar_phases[:, -1, -1], atol=1e-5)
 
 
+class TestVelocity:
+    def test_basic(self, data):
+        sar_dates, sar_phases, ifg_date_pairs, ifgs = data
+
+        A = timeseries.get_incidence_matrix(ifg_date_pairs)
+        velocities = timeseries.estimate_velocity(A, ifgs)
+        assert velocities.shape == (50, 50)
+        npt.assert_allclose(velocities, 0.2, atol=1e-5)
+
+
 if __name__ == "__main__":
     # import the fixtures
     sar_dates = make_sar_dates()
