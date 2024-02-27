@@ -81,17 +81,7 @@ def unwrap_isce3(
         driver = "ENVI"
         opts = list(io.DEFAULT_ENVI_OPTIONS)
 
-    if unwrap_method == UnwrapMethod.PHASS:
-        # TODO: expose the configuration for phass?
-        # If we ever find cases where changing help, then yes we should
-        # coherence_thresh: float = 0.2
-        # good_coherence: float = 0.7
-        # min_region_size: int = 200
-        unwrapper = Phass()
-        unw_nodata = -10_000
-    else:
-        unwrapper = ICU(buffer_lines=shape[0])
-        unw_nodata = 0
+    unw_nodata = -10_000 if unwrap_method == UnwrapMethod.PHASS else 0
     # Create output rasters for unwrapped phase & connected component labels.
     # Writing with `io.write_arr` because isce3 doesn't have creation options
     io.write_arr(
@@ -133,13 +123,28 @@ def unwrap_isce3(
         f"Unwrapping size {(ifg_raster.length, ifg_raster.width)} {ifg_filename} to"
         f" {unw_filename} using {unwrap_method.value}"
     )
+    if unwrap_method == UnwrapMethod.PHASS:
+        # TODO: expose the configuration for phass?
+        # If we ever find cases where changing help, then yes we should
+        # coherence_thresh: float = 0.2
+        # good_coherence: float = 0.7
+        # min_region_size: int = 200
+        unwrapper = Phass()
+        unwrapper.unwrap(
+            ifg_raster,
+            corr_raster,
+            unw_raster,
+            conncomp_raster,
+        )
+    else:
+        unwrapper = ICU(buffer_lines=shape[0])
 
-    unwrapper.unwrap(
-        unw_raster,
-        conncomp_raster,
-        ifg_raster,
-        corr_raster,
-    )
+        unwrapper.unwrap(
+            unw_raster,
+            conncomp_raster,
+            ifg_raster,
+            corr_raster,
+        )
 
     del unw_raster, conncomp_raster
     return Path(unw_filename), Path(conncomp_filename)

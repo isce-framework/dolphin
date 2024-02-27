@@ -19,6 +19,7 @@ jobs:
           - label: Latest
             spec: >-
               isce3
+              tophu
 
       fail-fast: true
     name: ${{ matrix.os }} • ${{ matrix.deps.label }}
