@@ -93,7 +93,6 @@ def run(
         logger.info("Creating overviews for unwrapped images")
         create_overviews(unwrapped_paths, image_type=ImageType.UNWRAPPED)
         create_overviews(conncomp_paths, image_type=ImageType.CONNCOMP)
-        create_overviews(unwrapped_paths, image_type=ImageType.CORRELATION)
 
     return (unwrapped_paths, conncomp_paths)
 
