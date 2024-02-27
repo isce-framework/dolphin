@@ -347,7 +347,7 @@ class GdalStackWriter(BackgroundWriter):
 
     def __init__(
         self,
-        file_list: Sequence[FileExistsError],
+        file_list: Sequence[Filename],
         like_filename: Filename | None = None,
         max_queue: int = 0,
         debug: bool = False,

@@ -2,6 +2,7 @@ import itertools
 from datetime import datetime, timedelta
 
 import numpy as np
+import numpy.testing as npt
 import pytest
 from numpy.linalg import lstsq as lstsq_numpy
 
@@ -40,7 +41,7 @@ def make_ifg_date_pairs(sar_dates):
 def make_ifgs(sar_phases):
     """Form all possible unwrapped interferogram pairs from the sar images"""
     return np.stack(
-        [(ref - sec) for (ref, sec) in itertools.combinations(sar_phases, 2)]
+        [(sec - ref) for (ref, sec) in itertools.combinations(sar_phases, 2)]
     )
 
 
@@ -51,21 +52,6 @@ def data():
     ifg_date_pairs = make_ifg_date_pairs(sar_dates)
     ifgs = make_ifgs(sar_phases)
     return sar_dates, sar_phases, ifg_date_pairs, ifgs
-
-
-def test_incidence_matrix():
-    A = timeseries.get_incidence_matrix([(0, 1), (1, 2), (2, 3), (3, 4), (4, 5)])
-    assert A.shape == (5, 5)
-    expected = np.array(
-        [
-            [1, 0, 0, 0, 0],
-            [-1, 1, 0, 0, 0],
-            [0, -1, 1, 0, 0],
-            [0, 0, -1, 1, 0],
-            [0, 0, 0, -1, 1],
-        ]
-    )
-    np.testing.assert_array_equal(A, expected)
 
 
 def solve_with_removal(A, b):
@@ -83,14 +69,41 @@ def solve_by_zeroing(A, b):
     return lstsq_numpy(A0, b2)[0]
 
 
-def test_solve(data):
-    sar_dates, sar_phases, ifg_date_pairs, ifgs = data
+class TestUtils:
+    def test_datetime_to_float(self):
+        sar_dates = make_sar_dates()
+        date_arr = timeseries.datetime_to_float(sar_dates)
+        expected = np.array(
+            [0.0, 12.0, 24.0, 36.0, 48.0, 60.0, 72.0, 84.0, 96.0, 108.0]
+        )
+        assert np.allclose(date_arr, expected)
 
-    A = timeseries.get_incidence_matrix([(0, 1), (1, 2), (2, 3), (3, 4), (4, 5)])
-    # Get some
-    dphi = ifgs[:, 0, 0]
-    phi = timeseries.solve(A, dphi)
-    assert phi.shape == (sar_dates - 1)
+    def test_incidence_matrix(self):
+        A = timeseries.get_incidence_matrix([(0, 1), (1, 2), (2, 3), (3, 4), (4, 5)])
+        assert A.shape == (5, 5)
+        expected = np.array(
+            [
+                [1, 0, 0, 0, 0],
+                [-1, 1, 0, 0, 0],
+                [0, -1, 1, 0, 0],
+                [0, 0, -1, 1, 0],
+                [0, 0, 0, -1, 1],
+            ]
+        )
+        np.testing.assert_array_equal(A, expected)
+
+
+class TestSolve:
+    def test_basic(self, data):
+        sar_dates, sar_phases, ifg_date_pairs, ifgs = data
+
+        A = timeseries.get_incidence_matrix(ifg_date_pairs)
+        # Get some
+        dphi = ifgs[:, -1, -1]
+        phi = timeseries.solve(A, dphi)
+        assert phi.shape[0] == len(sar_dates)
+        assert phi[0] == 0
+        npt.assert_allclose(phi, sar_phases[:, -1, -1], atol=1e-5)
 
 
 if __name__ == "__main__":
