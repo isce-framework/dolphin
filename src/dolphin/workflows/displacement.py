@@ -233,6 +233,8 @@ def run(
     # ##############################################
     # 4. Estimate corrections for each interferogram
     # ##############################################
+    tropo_paths: list[Path] | None = None
+    iono_paths: list[Path] | None = None
     if len(cfg.correction_options.geometry_files) > 0:
         stitched_ifg_dir = cfg.interferogram_network._directory
         ifg_filenames = sorted(Path(stitched_ifg_dir).glob("*.int.tif"))
@@ -261,7 +263,6 @@ def run(
             logger.warning(
                 "DEM file is not given, skip estimating tropospheric corrections..."
             )
-            tropo_paths = None
         else:
             if grouped_tropo_files:
                 tropo_paths = estimate_tropospheric_delay(
@@ -278,7 +279,6 @@ def run(
                 )
             else:
                 logger.info("No weather model, skip tropospheric correction ...")
-                tropo_paths = None
 
         # Ionosphere
         if grouped_iono_files:
@@ -293,7 +293,6 @@ def run(
             )
         else:
             logger.info("No TEC files, skip ionospheric correction ...")
-            iono_paths = None
 
     # Print the maximum memory usage for each worker
     _print_summary(cfg)
