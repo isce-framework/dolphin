@@ -229,10 +229,9 @@ def run(
     # ##############################################
     # 4. Estimate corrections for each interferogram
     # ##############################################
-
     if len(cfg.correction_options.geometry_files) > 0:
         stitched_ifg_dir = cfg.interferogram_network._directory
-        ifg_filenames = sorted(Path(stitched_ifg_dir).glob("*.int"))
+        ifg_filenames = sorted(Path(stitched_ifg_dir).glob("*.int.tif"))
         out_dir = cfg.work_directory / cfg.correction_options._atm_directory
         out_dir.mkdir(exist_ok=True)
         grouped_slc_files = group_by_date(cfg.cslc_file_list)

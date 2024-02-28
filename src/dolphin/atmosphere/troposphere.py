@@ -129,7 +129,10 @@ def estimate_tropospheric_delay(
 
     tropo_height_levels = np.concatenate(([-100], np.arange(0, 9000, 500)))
 
-    first_date = next(iter(slc_files))
+    for key in slc_files:
+        if len(key) == 1:
+            first_date = key
+            break
     wavelength = oput.get_radar_wavelength(slc_files[first_date][0])
 
     tropo_run = compute_pyaps if tropo_package.lower() == "pyaps" else compute_raider
@@ -165,6 +168,16 @@ def estimate_tropospheric_delay(
             logger.warning(f"Weather-model files do not exist for {date_str}, skipping")
             continue
 
+        secondary_time = oput.get_zero_doppler_time(slc_files[secondary_date][0])
+        if len(slc_files[reference_date]) == 0:
+            # this is for when we have compressed slcs but the actual
+            # reference date does not exist in the input data
+            reference_time = datetime.datetime.combine(
+                reference_date[0].date(), secondary_time.time()
+            )
+        else:
+            reference_time = oput.get_zero_doppler_time(slc_files[reference_date][0])
+
         delay_parameters = DelayParams(
             x_coordinates=xcoord,
             y_coordinates=ycoord,
@@ -178,8 +191,8 @@ def estimate_tropospheric_delay(
             geotransform=gt,
             reference_file=troposphere_files[reference_date],
             secondary_file=troposphere_files[secondary_date],
-            reference_time=oput.get_zero_doppler_time(slc_files[reference_date][0]),
-            secondary_time=oput.get_zero_doppler_time(slc_files[secondary_date][0]),
+            reference_time=reference_time,
+            secondary_time=secondary_time,
             interferogram=format_date_pair(ref_date, sec_date),
         )
 
