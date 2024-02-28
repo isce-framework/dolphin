@@ -261,6 +261,7 @@ def run(
             logger.warning(
                 "DEM file is not given, skip estimating tropospheric corrections..."
             )
+            tropo_paths = None
         else:
             if grouped_tropo_files:
                 tropo_paths = estimate_tropospheric_delay(
