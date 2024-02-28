@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import datetime
 import re
-from os import fspath
 from pathlib import Path
 from typing import Mapping, Sequence
 
@@ -39,7 +38,7 @@ def estimate_ionospheric_delay(
     output_dir: Path,
     epsg: int,
     bounds: Bbox,
-):
+) -> list[Path]:
     """Estimate the range delay caused by ionosphere for each interferogram.
 
     Parameters
@@ -59,6 +58,11 @@ def estimate_ionospheric_delay(
         the EPSG code of the input data
     bounds : Bbox
         Output bounds.
+
+    Returns
+    -------
+    list[Path]
+        List of newly created ionospheric phase delay corrections.
 
     """
     if epsg != 4326:
@@ -97,15 +101,16 @@ def estimate_ionospheric_delay(
     output_iono = output_dir / "ionosphere"
     output_iono.mkdir(exist_ok=True)
 
+    output_paths: list[Path] = []
+
     for ifg in ifg_file_list:
         ref_date, sec_date = get_dates(ifg)
 
-        iono_delay_product_name = (
-            fspath(output_iono)
-            + f"/{format_date_pair(ref_date, sec_date)}_ionoDelay.tif"
-        )
+        name = f"{format_date_pair(ref_date, sec_date)}_ionoDelay.tif"
+        iono_delay_product_name = output_iono / name
 
-        if Path(iono_delay_product_name).exists():
+        output_paths.append(iono_delay_product_name)
+        if iono_delay_product_name.exists():
             logger.info(
                 "Tropospheric correction for interferogram "
                 f"{format_date_pair(ref_date, sec_date)} already exists, skipping"
@@ -153,7 +158,7 @@ def estimate_ionospheric_delay(
             like_filename=ifg,
         )
 
-    return
+    return output_paths
 
 
 def incidence_angle_ground_to_iono(inc_angle: ArrayLike, iono_height: float = 450e3):

@@ -42,6 +42,8 @@ class OutputPaths(NamedTuple):
     stitched_ps_file: Path
     unwrapped_paths: list[Path] | None
     conncomp_paths: list[Path] | None
+    tropospheric_corrections: list[Path] | None
+    ionospheric_corrections: list[Path] | None
 
 
 @log_runtime
@@ -214,6 +216,8 @@ def run(
             stitched_ps_file=stitched_ps_file,
             unwrapped_paths=None,
             conncomp_paths=None,
+            tropospheric_corrections=None,
+            ionospheric_corrections=None,
         )
 
     row_looks, col_looks = cfg.phase_linking.half_window.to_looks()
@@ -229,6 +233,8 @@ def run(
     # ##############################################
     # 4. Estimate corrections for each interferogram
     # ##############################################
+    tropo_paths: list[Path] | None = None
+    iono_paths: list[Path] | None = None
     if len(cfg.correction_options.geometry_files) > 0:
         stitched_ifg_dir = cfg.interferogram_network._directory
         ifg_filenames = sorted(Path(stitched_ifg_dir).glob("*.int.tif"))
@@ -259,7 +265,7 @@ def run(
             )
         else:
             if grouped_tropo_files:
-                estimate_tropospheric_delay(
+                tropo_paths = estimate_tropospheric_delay(
                     ifg_file_list=ifg_filenames,
                     troposphere_files=grouped_tropo_files,
                     slc_files=grouped_slc_files,
@@ -276,7 +282,7 @@ def run(
 
         # Ionosphere
         if grouped_iono_files:
-            estimate_ionospheric_delay(
+            iono_paths = estimate_ionospheric_delay(
                 ifg_file_list=ifg_filenames,
                 slc_files=grouped_slc_files,
                 tec_files=grouped_iono_files,
@@ -298,6 +304,8 @@ def run(
         stitched_ps_file=stitched_ps_file,
         unwrapped_paths=unwrapped_paths,
         conncomp_paths=conncomp_paths,
+        tropospheric_corrections=tropo_paths,
+        ionospheric_corrections=iono_paths,
     )
 
 
