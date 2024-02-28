@@ -68,6 +68,8 @@ class TestUnwrapSingle:
         )
         assert unw_path.exists()
         assert conncomp_path.exists()
+        assert io.get_raster_nodata(unw_path) == 0
+        assert io.get_raster_nodata(conncomp_path) == 65535
 
     @pytest.mark.parametrize("method", [UnwrapMethod.ICU, UnwrapMethod.PHASS])
     def test_unwrap_methods(self, tmp_path, raster_100_by_200, corr_raster, method):
@@ -96,6 +98,22 @@ class TestUnwrapSingle:
         assert Path(logfile_name).exists()
         assert u_path.exists()
         assert c_path.exists()
+
+    def test_unwrap_snaphu_nodata(self, tmp_path, list_of_gtiff_ifgs, corr_raster):
+        # test other init_method
+        unw_filename = tmp_path / "unwrapped.unw.tif"
+        unw_path, conncomp_path = dolphin.unwrap.unwrap(
+            ifg_filename=list_of_gtiff_ifgs[0],
+            corr_filename=corr_raster,
+            unw_filename=unw_filename,
+            nlooks=1,
+            ccl_nodata=123,
+            unw_nodata=np.nan,
+        )
+        assert unw_path.exists()
+        assert conncomp_path.exists()
+        assert np.isnan(io.get_raster_nodata(unw_path))
+        assert io.get_raster_nodata(conncomp_path) == 123
 
 
 class TestUnwrapRun:
