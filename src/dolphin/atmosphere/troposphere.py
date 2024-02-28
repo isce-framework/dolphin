@@ -87,7 +87,7 @@ def estimate_tropospheric_delay(
     tropo_delay_type: TropoType,
     epsg: int,
     bounds: Bbox,
-):
+) -> list[Path]:
     """Estimate the tropospheric delay corrections for each interferogram.
 
     Parameters
@@ -113,6 +113,11 @@ def estimate_tropospheric_delay(
         the EPSG code of the input data
     bounds : Bbox
         Output bounds.
+
+    Returns
+    -------
+    list[Path]
+        List of newly created tropospheric phase delay geotiffs.
 
     """
     # Read geogrid data
@@ -147,12 +152,14 @@ def estimate_tropospheric_delay(
 
     output_tropo_dir = output_dir / "troposphere"
     output_tropo_dir.mkdir(exist_ok=True)
+    output_paths: list[Path] = []
     for ifg in ifg_file_list:
         ref_date, sec_date = get_dates(ifg)
 
         date_str = format_date_pair(ref_date, sec_date)
         name = f"{date_str}_tropoDelay_pyaps_{tropo_model.value}_LOS_{delay_type}.tif"
         tropo_delay_product_path = output_tropo_dir / name
+        output_paths.append(tropo_delay_product_path)
 
         if tropo_delay_product_path.exists():
             logger.info(f"{tropo_delay_product_path} exists, skipping")
@@ -207,7 +214,7 @@ def estimate_tropospheric_delay(
             like_filename=ifg,
         )
 
-    return
+    return output_paths
 
 
 def compute_pyaps(delay_parameters: DelayParams) -> np.ndarray:
