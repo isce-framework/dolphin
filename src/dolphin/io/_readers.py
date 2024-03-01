@@ -28,6 +28,7 @@ from dolphin._types import Filename
 from dolphin.io._blocks import iter_blocks
 
 from ._background import _DEFAULT_TIMEOUT, BackgroundReader
+from ._utils import _ensure_slices, _unpack_3d_slices
 
 logger = logging.getLogger(__name__)
 
@@ -44,10 +45,9 @@ __all__ = [
     "EagerLoader",
 ]
 
-if TYPE_CHECKING:
-    from builtins import ellipsis
 
-    Index = ellipsis | slice | int
+if TYPE_CHECKING:
+    from dolphin._types import Index
 
 
 @runtime_checkable
@@ -276,18 +276,6 @@ class HDF5Reader(DatasetReader):
         return _mask_array(data, self.nodata) if self.nodata is not None else data
 
 
-def _ensure_slices(rows: Index, cols: Index) -> tuple[slice, slice]:
-    def _parse(key: Index):
-        if isinstance(key, int):
-            return slice(key, key + 1)
-        elif key is ...:
-            return slice(None)
-        else:
-            return key
-
-    return _parse(rows), _parse(cols)
-
-
 @dataclass
 class RasterReader(DatasetReader):
     """A single raster band of a GDAL-compatible dataset.
@@ -414,20 +402,7 @@ class RasterReader(DatasetReader):
 def _read_3d(
     key: tuple[Index, ...], readers: Sequence[DatasetReader], num_threads: int = 1
 ):
-    # Check that it's a tuple of slices
-    if not isinstance(key, tuple):
-        msg = "Index must be a tuple of slices."
-        raise TypeError(msg)
-    if len(key) not in (1, 3):
-        msg = "Index must be a tuple of 1 or 3 slices."
-        raise TypeError(msg)
-    # If only the band is passed (e.g. stack[0]), convert to (0, :, :)
-    if len(key) == 1:
-        key = (key[0], slice(None), slice(None))
-    # unpack the slices
-    bands, rows, cols = key
-    # convert the rows/cols to slices
-    r_slice, c_slice = _ensure_slices(rows, cols)
+    bands, r_slice, c_slice = _unpack_3d_slices(key)
 
     if isinstance(bands, slice):
         # convert the bands to -1-indexed list
