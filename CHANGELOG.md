@@ -11,6 +11,7 @@
 
 **Fixed**
 - `BackgroundRasterWriter`  was not creating the files necessary before writing
+- Allow user to specify more than one type of interferogram in `Network` configuration
 
 # [0.15.3](https://github.com/isce-framework/dolphin/compare/v0.15.2...0.15.3) - 2024-02-27
 
