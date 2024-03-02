@@ -1,7 +1,8 @@
+import logging
 from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from typing import Protocol, Sequence, TypeVar
+from typing import NamedTuple, Protocol, Sequence, TypeVar
 
 import jax.numpy as jnp
 import numpy as np
@@ -25,6 +26,8 @@ __all__ = [
 ]
 
 T = TypeVar("T")
+
+logger = logging.getLogger(__name__)
 
 
 @jit
@@ -326,11 +329,19 @@ def create_temporal_average(
         )
 
 
+class ReferencePoint(NamedTuple):
+    row: int
+    col: int
+
+
 def invert_unw_network(
     unw_file_list: Sequence[PathOrStr],
+    reference: ReferencePoint,
     output_dir: PathOrStr,
     ifg_date_pairs: Sequence[Sequence[DateOrDatetime]] | None = None,
     block_shape: tuple[int, int] = (512, 512),
+    cor_file_list: Sequence[PathOrStr] | None = None,
+    cor_threshold: float = 0.2,
     num_threads: int = 5,
 ):
     """Perform pixel-wise inversion of unwrapped network to get phase per date."""
@@ -347,21 +358,45 @@ def invert_unw_network(
     ref_date = sar_dates[0]
     out_paths = [Path(output_dir) / format_dates(ref_date, d) for d in sar_dates]
 
+    out_vrt_name = Path(output_dir) / "unw_network.vrt"
+    unw_reader = io.VRTStack(
+        file_list=unw_file_list, outfile=out_vrt_name, skip_size_check=True
+    )
+    cor_vrt_name = Path(output_dir) / "unw_network.vrt"
+
+    # Get the reference point data
+    ref_row, ref_col = reference
+    ref_data = unw_reader[:, ref_row, ref_col].reshape(-1, 1, 1)
+
     def read_and_solve(
         readers: Sequence[io.StackReader], rows: slice, cols: slice
     ) -> tuple[slice, slice, np.ndarray]:
-        stack = readers[0][:, rows, cols]
+        if len(readers) == 2:
+            unw_reader, cor_reader = readers
+            stack = unw_reader[:, rows, cols]
+            weights = cor_reader[:, rows, cols]
+            weights[weights < cor_threshold] = 0
+        else:
+            stack = readers[0][:, rows, cols]
+
+        # subtract the reference
+        stack = stack - ref_data
+
         # TODO: possible second for weights
         return rows, cols, invert_network_stack(A, stack)
 
-    with NamedTemporaryFile(mode="w", suffix=".vrt") as f:
-        reader = io.VRTStack(
-            file_list=unw_file_list, outfile=f.name, skip_size_check=True
+    if cor_file_list is not None:
+        cor_reader = io.VRTStack(
+            file_list=cor_file_list, outfile=cor_vrt_name, skip_size_check=True
         )
-        writer = io.BackgroundStackWriter(out_paths, like_filename=unw_file_list[0])
+        readers = [unw_reader, cor_reader]
+    else:
+        readers = [unw_reader]
+
+    writer = io.BackgroundStackWriter(out_paths, like_filename=unw_file_list[0])
 
     return process_blocks(
-        readers=[reader],
+        readers=readers,
         writer=writer,
         func=read_and_solve,
         block_shape=block_shape,
