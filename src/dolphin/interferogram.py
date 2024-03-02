@@ -412,8 +412,7 @@ class Network:
             raise ValueError(msg)
 
         # Sort and dedupe them
-        ifgs = sorted(set(ifgs))
-        return ifgs
+        return sorted(set(ifgs))
 
     def _create_vrt_ifgs(self) -> list[VRTInterferogram]:
         """Write out a VRTInterferogram for each ifg."""
