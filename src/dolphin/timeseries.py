@@ -106,17 +106,6 @@ def get_incidence_matrix(
     return A
 
 
-# """vmapping polyfit
-# In [138]: def fit1w(x, y, w):
-#      ...:     return jnp.polyfit(x, y, deg=1, w=w)
-#      ...:
-# In [140]: weights2d = np.ones_like(yy)
-
-# In [142]: vfitw = vmap(fit1w, in_axes=(None, -1, -1), out_axes=(-1))
-# In [143]: vfit1w(xx, yy.reshape(100, 1, -1), weights2d.reshape(100, 1, -1))
-# """
-
-
 @jit
 def estimate_velocity_pixel(x: ArrayLike, y: ArrayLike, w: ArrayLike) -> Array:
     """Estimate the velocity from a single pixel's time series.
@@ -136,9 +125,8 @@ def estimate_velocity_pixel(x: ArrayLike, y: ArrayLike, w: ArrayLike) -> Array:
         The estimated velocity in (unw unit) / day.
 
     """
-    # Need to reshape w so that it can be broadcast with x and y
     # Jax polyfit will grab the first *2* dimensions of y to solve in a batch
-    return jnp.polyfit(x, y.reshape(-1, 1), deg=1, w=w.reshape(-1, 1), rcond=None)[0]
+    return jnp.polyfit(x, y, deg=1, w=w.reshape(y.shape), rcond=None)[0]
 
 
 @jit
@@ -169,14 +157,14 @@ def estimate_velocity(
     n_time, n_rows, n_cols = unw_stack.shape
 
     # We use the same x inputs for all output pixels
+    assert unw_stack.shape == weight_stack.shape
     unw_pixels = unw_stack.reshape(n_time, -1)
-    weights_pixels = weight_stack.reshape(n_time, -1)
+    weights_pixels = weight_stack.reshape(n_time, 1, -1)
 
     # coeffs = jnp.polyfit(x_arr, unw_pixels, deg=1, rcond=None)
-    coeffs = vmap(estimate_velocity_pixel, in_axes=(None, 0, 0))(
+    velos = vmap(estimate_velocity_pixel, in_axes=(None, -1, -1))(
         x_arr, unw_pixels, weights_pixels
     )
-    velos = coeffs[0]
     return velos.reshape(n_rows, n_cols)
 
 

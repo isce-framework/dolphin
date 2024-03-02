@@ -124,7 +124,8 @@ class TestVelocity:
     def test_basic(self, data, x_arr, expected_velo):
         sar_dates, sar_phases, ifg_date_pairs, ifgs = data
 
-        velocities = timeseries.estimate_velocity(x_arr, sar_phases)
+        weights = np.ones_like(sar_phases)
+        velocities = timeseries.estimate_velocity(x_arr, sar_phases, weights)
         assert velocities.shape == (SHAPE[0], SHAPE[1])
         npt.assert_allclose(velocities, expected_velo, atol=1e-5)
 
