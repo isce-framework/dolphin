@@ -16,8 +16,8 @@ from dolphin._types import PathOrStr
 from dolphin.utils import flatten, format_dates
 
 __all__ = [
-    "invert_network",
-    "invert_network_stack",
+    "weighted_lstsq_single",
+    "invert_stack",
     "get_incidence_matrix",
     "estimate_velocity",
     "create_velocity",
@@ -31,36 +31,105 @@ logger = logging.getLogger(__name__)
 
 
 @jit
-def invert_network(
+def weighted_lstsq_single(
     A: ArrayLike,
-    dphi: np.ndarray,
+    b: ArrayLike,
+    weights: ArrayLike,
 ) -> Array:
-    """Solve the SBAS problem for a list of ifg pairs and phase differences.
+    r"""Perform weighted least for one data vector.
+
+    Minimizes the weighted 2-norm of the residual vector:
+
+    \[
+        || b - A x ||^2_W
+    \]
+
+    where \(W\) is a diagonal matrix of weights.
 
     Parameters
     ----------
     A : Arraylike
         Incidence matrix of shape (n_ifgs, n_sar_dates - 1)
-    dphi : np.array 1D
+    b : ArrayLike, 1D
         The phase differences between the ifg pairs
+    weights : ArrayLike, 1D, optional
+        The weights for each element of `b`.
 
     Returns
     -------
-    phi : np.array 1D
+    x : np.array 1D
         The estimated phase for each SAR acquisition
+    residuals : np.array 1D
+        Sums of squared residuals: Squared Euclidean 2-norm for `b - A @ x`
+        For a 1D `b`, this is a scalar.
 
     """
-    phi = jnp.linalg.lstsq(A, dphi, rcond=None)[0]
+    # scale both A and b by sqrt so we are minimizing
+    sqrt_weights = jnp.sqrt(weights)
+    # Multiply each data point by sqrt(weight)
+    b_scaled = b * sqrt_weights
+    # Multiply each row by sqrt(weight)
+    A_scaled = A * sqrt_weights[:, None]
+
+    # Run the weighted least squares
+    x, residuals, rank, sing_vals = jnp.linalg.lstsq(A_scaled, b_scaled)
+    # TODO: do we need special handling?
+    # if rank < A.shape[1]:
+    #     # logger.warning("Rank deficient solution")
+
+    return x, residuals.ravel()
+
+
+@jit
+def invert_stack(
+    A: ArrayLike, dphi: ArrayLike, weights: ArrayLike | None = None
+) -> Array:
+    """Solve the SBAS problem for a stack of unwrapped phase differences.
+
+    Parameters
+    ----------
+    A : ArrayLike
+        Incidence matrix of shape (n_ifgs, n_sar_dates - 1)
+    dphi : ArrayLike
+        The phase differences between the ifg pairs, shape=(n_ifgs, n_rows, n_cols)
+    weights : ArrayLike, optional
+        The weights for each element of `dphi`.
+        Same shape as `dphi`.
+        If not provided, all weights are set to 1 (ordinary least squares).
+
+    Returns
+    -------
+    phi : np.array 3D
+        The estimated phase for each SAR acquisition
+        Shape is (n_sar_dates, n_rows, n_cols)
+    residuals : np.array 2D
+        Sums of squared residuals: Squared Euclidean 2-norm for `dphi - A @ x`
+        Shape is (n_rows, n_cols)
+
+    Notes
+    -----
+    To mask out data points of a pixel, the weight can be set to 0.
+    When `A` remains full rank, setting the weight to zero is the same as removing
+    the entry from the data vector and the corresponding row from `A`.
+
+    """
+    n_ifgs, n_rows, n_cols = dphi.shape
+
+    # vectorize the solve function to work on 2D and 3D arrays
+    # We are not vectorizing over the A matrix, only the dphi vector
+    # Solve 2d shapes: (nrows, n_ifgs) -> (nrows, n_sar_dates)
+    # invert_2d = vmap(invert_single, in_axes=(None, 1, 1), out_axes=1)
+    invert_2d = vmap(weighted_lstsq_single, in_axes=(None, 1, 1), out_axes=(1, 1))
+    # Solve 3d shapes: (nrows, ncols, n_ifgs) -> (nrows, ncols, n_sar_dates)
+    invert_3d = vmap(invert_2d, in_axes=(None, 2, 2), out_axes=(2, 2))
+
+    if weights is None:
+        weights = jnp.ones_like(dphi)
+    phase, residuals = invert_3d(A, dphi, weights)
     # Add 0 for the reference date to the front
-    return jnp.concatenate([jnp.array([0]), phi])
-
-
-# vectorize the solve function to work on 2D and 3D arrays
-# We are not vectorizing over the A matrix, only the dphi vector
-# Solve 2d shapes: (nrows, n_ifgs) -> (nrows, n_sar_dates)
-invert_network_2d = vmap(invert_network, in_axes=(None, 1), out_axes=1)
-# Solve 3d shapes: (nrows, ncols, n_ifgs) -> (nrows, ncols, n_sar_dates)
-invert_network_stack = vmap(invert_network_2d, in_axes=(None, 2), out_axes=2)
+    phase = jnp.concatenate([jnp.zeros((1, n_rows, n_cols)), phase], axis=0)
+    # Reshape the residuals to be 2D
+    return phase, residuals[0]
 
 
 def get_incidence_matrix(
@@ -197,7 +266,8 @@ def datetime_to_float(dates: Sequence[DateOrDatetime]) -> np.ndarray:
 class BlockProcessor(Protocol):
     """Protocol for a block-wise processing function.
 
-    Reads a block from each reader, processes it, and returns the result.
+    Reads a block of data from each reader, processes it, and returns the result
+    as an array-like object.
     """
 
     def __call__(
@@ -226,6 +296,7 @@ def process_blocks(
 
     pbar = tqdm(total=len(slices))
 
+    # Define the callback to write the result to an output DatasetWrite
     def write_callback(fut: Future):
         rows, cols, data = fut.result()
         writer[..., rows, cols] = data
@@ -245,7 +316,7 @@ def create_velocity(
     cor_threshold: float = 0.2,
     block_shape: tuple[int, int] = (512, 512),
     num_threads: int = 5,
-):
+) -> None:
     """Perform pixel-wise (weighted) linear regression to estimate velocity."""
     if date_list is None:
         date_list = get_dates(unw_file_list)
@@ -290,7 +361,7 @@ def create_velocity(
             readers = [unw_reader]
 
         writer = io.BackgroundRasterWriter(output_file, like_filename=unw_file_list[0])
-        return process_blocks(
+        process_blocks(
             # file_list=unw_file_list,
             # output_files=[output_file],
             readers=readers,
@@ -306,7 +377,7 @@ def create_temporal_average(
     output_file: PathOrStr,
     block_shape: tuple[int, int] = (512, 512),
     num_threads: int = 5,
-):
+) -> None:
     """Average all images in `reader` to create a 2D image in `output_file`."""
 
     def read_and_average(
@@ -318,7 +389,7 @@ def create_temporal_average(
         reader = io.VRTStack(file_list=file_list, outfile=f.name, skip_size_check=True)
         writer = io.BackgroundRasterWriter(output_file, like_filename=file_list[0])
 
-        return process_blocks(
+        process_blocks(
             # file_list=file_list,
             # output_files=[output_file],
             readers=[reader],
@@ -343,8 +414,37 @@ def invert_unw_network(
     cor_file_list: Sequence[PathOrStr] | None = None,
     cor_threshold: float = 0.2,
     num_threads: int = 5,
-):
-    """Perform pixel-wise inversion of unwrapped network to get phase per date."""
+) -> list[Path]:
+    """Perform pixel-wise inversion of unwrapped network to get phase per date.
+
+    Parameters
+    ----------
+    unw_file_list : Sequence[PathOrStr]
+        List of unwrapped phase files.
+    reference : ReferencePoint
+        The reference point to use for the inversion.
+        The data vector from `unw_file_list` at this point will be subtracted
+        from all other points when solving.
+    output_dir : PathOrStr
+        The directory to save the output files
+    ifg_date_pairs : Sequence[Sequence[DateOrDatetime]], optional
+        List of date pairs to use for the inversion. If not provided, will be
+        parsed from filenames in `unw_file_list`.
+    block_shape : tuple[int, int], optional
+        The shape of the blocks to process in parallel
+    cor_file_list : Sequence[PathOrStr], optional
+        List of correlation files to use for weighting the inversion
+    cor_threshold : float, optional
+        The correlation threshold to use for weighting the inversion
+    num_threads : int, optional
+        The parallel blocks to process at once.
+
+    Returns
+    -------
+    out_paths : list[Path]
+        List of the output files created by the inversion.
+
+    """
     if ifg_date_pairs is None:
         ifg_date_pairs = get_dates(unw_file_list)
 
@@ -383,7 +483,7 @@ def invert_unw_network(
         stack = stack - ref_data
 
         # TODO: possible second for weights
-        return rows, cols, invert_network_stack(A, stack)
+        return rows, cols, invert_stack(A, stack, weights)
 
     if cor_file_list is not None:
         cor_reader = io.VRTStack(
@@ -395,10 +495,12 @@ def invert_unw_network(
 
     writer = io.BackgroundStackWriter(out_paths, like_filename=unw_file_list[0])
 
-    return process_blocks(
+    process_blocks(
         readers=readers,
         writer=writer,
         func=read_and_solve,
         block_shape=block_shape,
         num_threads=num_threads,
     )
+    # Return the output files
+    return out_paths

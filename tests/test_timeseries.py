@@ -94,16 +94,77 @@ class TestUtils:
 
 
 class TestInvert:
-    def test_basic(self, data):
+    @pytest.fixture
+    def A(self, data):
+        _, _, ifg_date_pairs, _ = data
+        return timeseries.get_incidence_matrix(ifg_date_pairs)
+
+    def test_basic(self, data, A):
         sar_dates, sar_phases, ifg_date_pairs, ifgs = data
 
-        A = timeseries.get_incidence_matrix(ifg_date_pairs)
-        # Get some
-        dphi = ifgs[:, -1, -1]
-        phi = timeseries.invert_network(A, dphi)
+        # Get one pixel
+        b = ifgs[:, -1, -1]
+        weights = np.ones_like(b)
+        x, residual = timeseries.weighted_lstsq_single(A, b, weights)
+        assert x.shape[0] == len(sar_dates) - 1
+        npt.assert_allclose(x, sar_phases[1:, -1, -1], atol=1e-5)
+        assert np.array(residual).item() < 1e-5
+
+    def test_stack(self, data, A):
+        sar_dates, sar_phases, ifg_date_pairs, ifgs = data
+
+        phi_stack, residuals = timeseries.invert_stack(A, ifgs)
+        assert phi_stack.shape == sar_phases.shape
+        assert residuals.shape == sar_phases.shape[1:]
+        npt.assert_allclose(phi_stack, sar_phases, atol=1e-5)
+        npt.assert_array_less(residuals, 1e-5)
+
+    def test_weighted_stack(self, data, A):
+        sar_dates, sar_phases, ifg_date_pairs, ifgs = data
+
+        weights = np.ones_like(ifgs)
+        phi, residuals = timeseries.invert_stack(A, ifgs, weights)
         assert phi.shape[0] == len(sar_dates)
-        assert phi[0] == 0
-        npt.assert_allclose(phi, sar_phases[:, -1, -1], atol=1e-5)
+        npt.assert_allclose(phi, sar_phases, atol=1e-5)
+        # Here there is no noise, so it's over determined
+        weights[1, :, :] = 0
+        phi2, residuals2 = timeseries.invert_stack(A, ifgs, weights)
+        npt.assert_allclose(phi2, sar_phases, atol=1e-5)
+        npt.assert_allclose(residuals2, residuals, atol=1e-5)
+
+    def test_remove_row_vs_weighted(self, data, A):
+        """Check that removing a row/data point is equivalent to zero-weighting it."""
+        sar_dates, sar_phases, ifg_date_pairs, ifgs = data
+        dphi = ifgs[:, -1, -1]
+        # add noise to the ifgs, or we can't tell a difference
+        dphi_noisy = dphi + np.random.normal(0, 0.1, dphi.shape)
+
+        # Once with a zeroed weight
+        weights = np.ones_like(dphi_noisy)
+        weights[1] = 0
+        phi_0, residual_0 = timeseries.weighted_lstsq_single(A, dphi_noisy, weights)
+
+        A2 = A.copy()
+        # delete a row
+        A2 = np.delete(A2, 1, axis=0)
+        # delete the data point
+        dphi2 = np.delete(dphi_noisy, 1)
+        weights2 = np.delete(weights, 1)
+        phi2, residual2 = timeseries.weighted_lstsq_single(A2, dphi2, weights2)
+        npt.assert_allclose(phi_0, phi2, atol=1e-5)
+
+    def test_unw_invert(self, data):
+        """"""
+        # invert_unw_network(
+        #     unw_file_list: Sequence[PathOrStr],
+        #     reference: ReferencePoint,
+        #     output_dir: PathOrStr,
+        #     ifg_date_pairs: Sequence[Sequence[DateOrDatetime]] | None = None,
+        #     block_shape: tuple[int, int] = (512, 512),
+        #     cor_file_list: Sequence[PathOrStr] | None = None,
+        #     cor_threshold: float = 0.2,
+        #     num_threads: int = 5,
+        # )
 
 
 class TestVelocity:
@@ -121,7 +182,7 @@ class TestVelocity:
                 out[i, j] = np.polyfit(x_arr, sar_phases[:, i, j], 1)[0]
         return out
 
-    def test_basic(self, data, x_arr, expected_velo):
+    def test_stack(self, data, x_arr, expected_velo):
         sar_dates, sar_phases, ifg_date_pairs, ifgs = data
 
         weights = np.ones_like(sar_phases)
