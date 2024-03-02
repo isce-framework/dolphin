@@ -2,11 +2,13 @@ from __future__ import annotations
 
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
+from pathlib import Path
 from typing import (
     TYPE_CHECKING,
     Any,
     Mapping,
     Protocol,
+    Sequence,
     TypeVar,
     runtime_checkable,
 )
@@ -19,15 +21,56 @@ from rasterio.windows import Window
 from dolphin._types import Filename
 
 from ._background import BackgroundWriter
+from ._utils import _unpack_3d_slices
 
 __all__ = [
+    "BackgroundBlockWriter",
     "DatasetWriter",
+    "DatasetStackWriter",
     "RasterWriter",
-    "GdalWriter",
+    "BackgroundRasterWriter",
+    "BackgroundStackWriter",
 ]
 
 if TYPE_CHECKING:
     from dolphin._types import Index
+
+
+class BackgroundBlockWriter(BackgroundWriter):
+    """Class to write data to multiple files in the background using `gdal` bindings."""
+
+    def __init__(self, *, max_queue: int = 0, debug: bool = False, **kwargs):
+        if debug is False:
+            super().__init__(nq=max_queue, name="Writer", **kwargs)
+        else:
+            # Don't start a background thread. Just synchronously write data
+            self.queue_write = self.write  # type: ignore[assignment]
+
+    def write(
+        self, data: ArrayLike, filename: Filename, row_start: int, col_start: int
+    ):
+        """Write out an ndarray to a subset of the pre-made `filename`.
+
+        Parameters
+        ----------
+        data : ArrayLike
+            2D or 3D data array to save.
+        filename : Filename
+            list of output files to save to, or (if cur_block is 2D) a single file.
+        row_start : int
+            Row index to start writing at.
+        col_start : int
+            Column index to start writing at.
+
+        Raises
+        ------
+        ValueError
+            If length of `output_files` does not match length of `cur_block`.
+
+        """
+        from dolphin.io import write_block
+
+        write_block(data, filename, row_start, col_start)
 
 
 @runtime_checkable
@@ -47,6 +90,30 @@ class DatasetWriter(Protocol):
     """tuple of int : Tuple of array dimensions."""
 
     ndim: int
+    """int : Number of array dimensions."""
+
+    def __setitem__(self, key: tuple[Index, ...], value: np.ndarray, /) -> None:
+        """Write a block of data."""
+        ...
+
+
+@runtime_checkable
+class DatasetStackWriter(Protocol):
+    """An array-like interface for writing output datasets.
+
+    `DatasetWriter` defines the abstract interface that types must conform to in order
+    to be used by functions which write outputs in blocks.
+    Such objects must export NumPy-like `dtype`, `shape`, and `ndim` attributes,
+    and must support NumPy-style slice-based indexing for setting data..
+    """
+
+    dtype: np.dtype
+    """numpy.dtype : Data-type of the array's elements."""
+
+    shape: tuple[int, ...]
+    """tuple of int : Tuple of array dimensions."""
+
+    ndim: int = 3
     """int : Number of array dimensions."""
 
     def __setitem__(self, key: tuple[Index, ...], value: np.ndarray, /) -> None:
@@ -232,27 +299,38 @@ class RasterWriter(DatasetWriter, AbstractContextManager["RasterWriter"]):
             self.filename,
             "r+",
         ) as dataset:
+            if len(key) == 2:
+                rows, cols = key
+            elif len(key) == 3:
+                _, rows, cols = _unpack_3d_slices(key)
+            else:
+                raise ValueError(f"Invalid key: {key!r}")
             window = Window.from_slices(
-                *key,
+                rows,
+                cols,
                 height=dataset.height,
                 width=dataset.width,
             )
             return dataset.write(value, self.band, window=window)
 
 
-class BackgroundRasterWriter(BackgroundWriter):
+class BackgroundRasterWriter(BackgroundWriter, DatasetWriter):
     """Class to write data to files in a background thread."""
 
     def __init__(
-        self, filename: Filename, max_queue: int = 0, debug: bool = False, **kwargs
+        self, filename: Filename, *, max_queue: int = 0, debug: bool = False, **kwargs
     ):
         if debug is False:
-            super().__init__(nq=max_queue, name="Writer", **kwargs)
+            super().__init__(nq=max_queue, name="Writer")
         else:
             # Don't start a background thread. Just synchronously write data
             self.queue_write = self.write  # type: ignore[assignment]
-        self._raster = RasterWriter(filename, **kwargs)
+        if Path(filename).exists():
+            self._raster = RasterWriter(filename)
+        else:
+            self._raster = RasterWriter.create(filename, **kwargs)
         self.filename = filename
+        self.ndim = 2
 
     def write(self, key: tuple[Index, ...], value: np.ndarray):
         """Write out an ndarray to a subset of the pre-made `filename`.
@@ -289,10 +367,6 @@ class BackgroundRasterWriter(BackgroundWriter):
     def dtype(self) -> np.dtype:
         return self._raster.dtype
 
-    @property
-    def ndim(self) -> int:
-        return self._raster.ndim
-
     def __enter__(self):
         return self
 
@@ -300,25 +374,50 @@ class BackgroundRasterWriter(BackgroundWriter):
         self.close()
 
 
-class GdalWriter(BackgroundWriter):
-    """Class to write data to files in a background thread using `gdal` bindings."""
+class BackgroundStackWriter(BackgroundWriter, DatasetStackWriter):
+    """Class to write 3D data to multiple files in a background thread.
 
-    def __init__(self, max_queue: int = 0, debug: bool = False, **kwargs):
+    Will create/overwrite the files in `file_list` if they exist.
+    """
+
+    def __init__(
+        self,
+        file_list: Sequence[Filename],
+        *,
+        like_filename: Filename | None = None,
+        max_queue: int = 0,
+        debug: bool = False,
+        **file_creation_kwargs,
+    ):
+        from dolphin.io import write_arr
+
         if debug is False:
-            super().__init__(nq=max_queue, name="Writer", **kwargs)
+            super().__init__(nq=max_queue, name="GdalStackWriter")
         else:
             # Don't start a background thread. Just synchronously write data
             self.queue_write = self.write  # type: ignore[assignment]
 
-    def write(
-        self, data: ArrayLike, filename: Filename, row_start: int, col_start: int
-    ):
+        for fn in file_list:
+            write_arr(
+                arr=None,
+                output_name=fn,
+                like_filename=like_filename,
+                **file_creation_kwargs,
+            )
+
+        self.file_list = file_list
+
+        with rasterio.open(self.file_list[0]) as src:
+            self.shape = (len(self.file_list), *src.shape)
+            self.dtype = src.dtypes[0]
+
+    def write(self, data: ArrayLike, row_start: int, col_start: int):
         """Write out an ndarray to a subset of the pre-made `filename`.
 
         Parameters
         ----------
         data : ArrayLike
-            2D or 3D data array to save.
+            3D data array to save.
         filename : Filename
             list of output files to save to, or (if cur_block is 2D) a single file.
         row_start : int
@@ -334,7 +433,27 @@ class GdalWriter(BackgroundWriter):
         """
         from dolphin.io import write_block
 
-        write_block(data, filename, row_start, col_start)
+        if data.ndim == 2:
+            data = data[None, ...]
+        if data.shape[0] != len(self.file_list):
+            raise ValueError(f"{data.shape = }, but {len(self.file_list) = }")
+        for fn, layer in zip(self.file_list, data):
+            write_block(layer, fn, row_start, col_start)
 
     def __setitem__(self, key, value):
-        self.queue_write(value, key)
+        # Unpack the slices
+        band, rows, cols = _unpack_3d_slices(key)
+        # Check we asked to write to all the files
+        if band not in (slice(None), slice(None, None, None), ...):
+            self.notify_finished()
+            raise NotImplementedError("Can only write to all files at once.")
+        self.queue_write(value, rows.start, cols.start)
+
+    @property
+    def closed(self) -> bool:
+        """bool : True if the dataset is closed."""  # noqa: D403
+        return self._thread.is_alive() is False
+
+    def close(self) -> None:
+        """Close the underlying dataset and stop the background thread."""
+        self.notify_finished()
