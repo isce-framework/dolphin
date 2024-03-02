@@ -1,7 +1,7 @@
 from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from typing import Callable, Sequence, TypeVar
+from typing import Protocol, Sequence, TypeVar
 
 import jax.numpy as jnp
 import numpy as np
@@ -106,8 +106,45 @@ def get_incidence_matrix(
     return A
 
 
+# """vmapping polyfit
+# In [138]: def fit1w(x, y, w):
+#      ...:     return jnp.polyfit(x, y, deg=1, w=w)
+#      ...:
+# In [140]: weights2d = np.ones_like(yy)
+
+# In [142]: vfitw = vmap(fit1w, in_axes=(None, -1, -1), out_axes=(-1))
+# In [143]: vfit1w(xx, yy.reshape(100, 1, -1), weights2d.reshape(100, 1, -1))
+# """
+
+
 @jit
-def estimate_velocity(x_arr: ArrayLike, unw_stack: ArrayLike) -> Array:
+def estimate_velocity_pixel(x: ArrayLike, y: ArrayLike, w: ArrayLike) -> Array:
+    """Estimate the velocity from a single pixel's time series.
+
+    Parameters
+    ----------
+    x : np.array 1D
+        The time values
+    y : np.array 1D
+        The unwrapped phase values
+    w : np.array 1D
+        The weights for each time value
+
+    Returns
+    -------
+    velocity : np.array, 0D
+        The estimated velocity in (unw unit) / day.
+
+    """
+    # Need to reshape w so that it can be broadcast with x and y
+    # Jax polyfit will grab the first *2* dimensions of y to solve in a batch
+    return jnp.polyfit(x, y.reshape(-1, 1), deg=1, w=w.reshape(-1, 1), rcond=None)[0]
+
+
+@jit
+def estimate_velocity(
+    x_arr: ArrayLike, unw_stack: ArrayLike, weight_stack: ArrayLike
+) -> Array:
     """Estimate the velocity from a stack of unwrapped interferograms.
 
     Parameters
@@ -117,6 +154,9 @@ def estimate_velocity(x_arr: ArrayLike, unw_stack: ArrayLike) -> Array:
         Length must match `unw_stack.shape[0]`.
     unw_stack : ArrayLike
         Array of unwrapped phase values at each pixel, shape=`(n_time, n_rows, n_cols)`.
+    weight_stack : ArrayLike
+        Array of weights for each pixel, shape=`(n_time, n_rows, n_cols)`.
+        If not provided, all weights are set to 1.
 
     Returns
     -------
@@ -130,7 +170,12 @@ def estimate_velocity(x_arr: ArrayLike, unw_stack: ArrayLike) -> Array:
 
     # We use the same x inputs for all output pixels
     unw_pixels = unw_stack.reshape(n_time, -1)
-    coeffs = jnp.polyfit(x_arr, unw_pixels, deg=1, rcond=None)
+    weights_pixels = weight_stack.reshape(n_time, -1)
+
+    # coeffs = jnp.polyfit(x_arr, unw_pixels, deg=1, rcond=None)
+    coeffs = vmap(estimate_velocity_pixel, in_axes=(None, 0, 0))(
+        x_arr, unw_pixels, weights_pixels
+    )
     velos = coeffs[0]
     return velos.reshape(n_rows, n_cols)
 
@@ -158,65 +203,111 @@ def datetime_to_float(dates: Sequence[DateOrDatetime]) -> np.ndarray:
     return date_arr.astype(float) / sec_per_day
 
 
+class BlockProcessor(Protocol):
+    """Protocol for a block-wise processing function.
+
+    Reads a block from each reader, processes it, and returns the result.
+    """
+
+    def __call__(
+        self, readers: Sequence[io.StackReader], rows: slice, cols: slice
+    ) -> ArrayLike:
+        ...
+
+
 def process_blocks(
-    file_list: Sequence[PathOrStr],
-    output_files: Sequence[PathOrStr],
-    func: Callable[[io.StackReader, slice, slice], ArrayLike],
-    like_filename: PathOrStr | None = None,
+    readers: Sequence[io.StackReader],
+    writer: io.DatasetWriter,
+    func: BlockProcessor,
+    # output_files: Sequence[PathOrStr],
+    # like_filename: PathOrStr | None = None,
     block_shape: tuple[int, int] = (512, 512),
     num_threads: int = 5,
 ):
-    """Perform block-wise processing over `file_list` to create `output_file`."""
+    """Perform block-wise processing over blocks in `readers`, writing to `writer`."""
     # reader = RasterStackReader.from_file_list(file_list=file_list)
-    shape = io.get_raster_xysize(file_list[0])[::-1]
+    # writer = io.GdalStackWriter(
+    #     file_list=output_files, like_filename=like_filename or file_list[0]
+    # )
+    # shape = io.get_raster_xysize(file_list[0])[::-1]
+    shape = readers[0].shape[-2:]
     slices = list(io.iter_blocks(shape, block_shape=block_shape))
 
-    writer = io.GdalStackWriter(
-        file_list=output_files, like_filename=like_filename or file_list[0]
-    )
     pbar = tqdm(total=len(slices))
 
     def write_callback(fut: Future):
         rows, cols, data = fut.result()
-        writer.queue_write(data, rows.start, cols.start)
+        writer[..., rows, cols] = data
         pbar.update()
 
-    with NamedTemporaryFile(mode="w", suffix=".vrt") as f, ThreadPoolExecutor(
-        num_threads
-    ) as exc:
-        reader = io.VRTStack(file_list=file_list, outfile=f.name)
+    with ThreadPoolExecutor(num_threads) as exc:
         for rows, cols in slices:
-            future = exc.submit(func, reader, rows, cols)
+            future = exc.submit(func, readers=readers, rows=rows, cols=cols)
             future.add_done_callback(write_callback)
-    writer.notify_finished()
 
 
 def create_velocity(
     unw_file_list: Sequence[PathOrStr],
     output_file: PathOrStr,
     date_list: Sequence[DateOrDatetime] | None = None,
+    cor_file_list: Sequence[PathOrStr] | None = None,
+    cor_threshold: float = 0.2,
     block_shape: tuple[int, int] = (512, 512),
     num_threads: int = 5,
 ):
-    """Perform pixel-wise linear regression to estimate velocity."""
+    """Perform pixel-wise (weighted) linear regression to estimate velocity."""
     if date_list is None:
         date_list = get_dates(unw_file_list)
     x_arr = datetime_to_float(date_list)
 
     def read_and_fit(
-        reader: io.StackReader, rows: slice, cols: slice
+        readers: Sequence[io.StackReader], rows: slice, cols: slice
     ) -> tuple[slice, slice, np.ndarray]:
-        stack = reader[:, rows, cols]
-        # Fit a line to each pixel
-        return rows, cols, estimate_velocity(x_arr=x_arr, stack=stack)
+        if len(readers) == 2:
+            unw_reader, cor_reader = readers
+            unw_stack = unw_reader[:, rows, cols]
+            weights = cor_reader[:, rows, cols]
+            weights[weights < cor_threshold] = 0
+        else:
+            unw_stack = readers[0][:, rows, cols]
+            weights = np.ones_like(unw_stack)
+        # Fit a line to each pixel with weighted least squares
+        return (
+            rows,
+            cols,
+            estimate_velocity(x_arr=x_arr, stack=unw_stack, weight_stack=weights),
+        )
 
-    return process_blocks(
-        file_list=unw_file_list,
-        output_files=[output_file],
-        func=read_and_fit,
-        block_shape=block_shape,
-        num_threads=num_threads,
-    )
+    # Note: For some reason, the `RasterStackReader` is much slower than the VRT:
+    # ~300 files takes >2 min to open, >2 min to read each block
+    # VRTStack seems to take ~30 secs to open, 1 min to read
+    # Very possible there's a tuning param/rasterio config to fix, but not sure.
+    # unw_reader = io.RasterStackReader.from_file_list(file_list=unw_file_list)
+    # cor_reader = io.RasterStackReader.from_file_list(file_list=cor_file_list)
+    with NamedTemporaryFile(mode="w", suffix=".vrt") as f1, NamedTemporaryFile(
+        mode="w", suffix=".vrt"
+    ) as f2:
+        unw_reader = io.VRTStack(
+            file_list=unw_file_list, outfile=f1.name, skip_size_check=True
+        )
+        if cor_file_list is not None:
+            cor_reader = io.VRTStack(
+                file_list=cor_file_list, outfile=f2.name, skip_size_check=True
+            )
+            readers = [unw_reader, cor_reader]
+        else:
+            readers = [unw_reader]
+
+        writer = io.BackgroundRasterWriter(output_file, like_filename=unw_file_list[0])
+        return process_blocks(
+            # file_list=unw_file_list,
+            # output_files=[output_file],
+            readers=readers,
+            writer=writer,
+            func=read_and_fit,
+            block_shape=block_shape,
+            num_threads=num_threads,
+        )
 
 
 def create_temporal_average(
@@ -228,17 +319,23 @@ def create_temporal_average(
     """Average all images in `reader` to create a 2D image in `output_file`."""
 
     def read_and_average(
-        reader: io.StackReader, rows: slice, cols: slice
+        readers: Sequence[io.StackReader], rows: slice, cols: slice
     ) -> tuple[slice, slice, np.ndarray]:
-        return rows, cols, np.nanmean(reader[:, rows, cols], axis=0)
+        return rows, cols, np.nanmean(readers[0][:, rows, cols], axis=0)
 
-    return process_blocks(
-        file_list=file_list,
-        output_files=[output_file],
-        func=read_and_average,
-        block_shape=block_shape,
-        num_threads=num_threads,
-    )
+    with NamedTemporaryFile(mode="w", suffix=".vrt") as f:
+        reader = io.VRTStack(file_list=file_list, outfile=f.name, skip_size_check=True)
+        writer = io.BackgroundRasterWriter(output_file, like_filename=file_list[0])
+
+        return process_blocks(
+            # file_list=file_list,
+            # output_files=[output_file],
+            readers=[reader],
+            writer=writer,
+            func=read_and_average,
+            block_shape=block_shape,
+            num_threads=num_threads,
+        )
 
 
 def invert_unw_network(
@@ -263,14 +360,21 @@ def invert_unw_network(
     out_paths = [Path(output_dir) / format_dates(ref_date, d) for d in sar_dates]
 
     def read_and_solve(
-        reader: io.StackReader, rows: slice, cols: slice
+        readers: Sequence[io.StackReader], rows: slice, cols: slice
     ) -> tuple[slice, slice, np.ndarray]:
-        stack = reader[:, rows, cols]
+        stack = readers[0][:, rows, cols]
+        # TODO: possible second for weights
         return rows, cols, invert_network_stack(A, stack)
 
+    with NamedTemporaryFile(mode="w", suffix=".vrt") as f:
+        reader = io.VRTStack(
+            file_list=unw_file_list, outfile=f.name, skip_size_check=True
+        )
+        writer = io.BackgroundStackWriter(out_paths, like_filename=unw_file_list[0])
+
     return process_blocks(
-        file_list=unw_file_list,
-        output_files=out_paths,
+        readers=[reader],
+        writer=writer,
         func=read_and_solve,
         block_shape=block_shape,
         num_threads=num_threads,

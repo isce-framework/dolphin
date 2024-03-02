@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
+from pathlib import Path
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -298,8 +299,15 @@ class RasterWriter(DatasetWriter, AbstractContextManager["RasterWriter"]):
             self.filename,
             "r+",
         ) as dataset:
+            if len(key) == 2:
+                rows, cols = key
+            elif len(key) == 3:
+                _, rows, cols = _unpack_3d_slices(key)
+            else:
+                raise ValueError(f"Invalid key: {key!r}")
             window = Window.from_slices(
-                *key,
+                rows,
+                cols,
                 height=dataset.height,
                 width=dataset.width,
             )
@@ -313,11 +321,14 @@ class BackgroundRasterWriter(BackgroundWriter, DatasetWriter):
         self, filename: Filename, *, max_queue: int = 0, debug: bool = False, **kwargs
     ):
         if debug is False:
-            super().__init__(nq=max_queue, name="Writer", **kwargs)
+            super().__init__(nq=max_queue, name="Writer")
         else:
             # Don't start a background thread. Just synchronously write data
             self.queue_write = self.write  # type: ignore[assignment]
-        self._raster = RasterWriter(filename, **kwargs)
+        if Path(filename).exists():
+            self._raster = RasterWriter(filename)
+        else:
+            self._raster = RasterWriter.create(filename, **kwargs)
         self.filename = filename
         self.ndim = 2
 
