@@ -87,7 +87,7 @@ def estimate_tropospheric_delay(
     tropo_delay_type: TropoType,
     epsg: int,
     bounds: Bbox,
-):
+) -> list[Path]:
     """Estimate the tropospheric delay corrections for each interferogram.
 
     Parameters
@@ -114,6 +114,11 @@ def estimate_tropospheric_delay(
     bounds : Bbox
         Output bounds.
 
+    Returns
+    -------
+    list[Path]
+        List of newly created tropospheric phase delay geotiffs.
+
     """
     # Read geogrid data
     xsize, ysize = io.get_raster_xysize(ifg_file_list[0])
@@ -129,7 +134,10 @@ def estimate_tropospheric_delay(
 
     tropo_height_levels = np.concatenate(([-100], np.arange(0, 9000, 500)))
 
-    first_date = next(iter(slc_files))
+    for key in slc_files:
+        if len(key) == 1:
+            first_date = key
+            break
     wavelength = oput.get_radar_wavelength(slc_files[first_date][0])
 
     tropo_run = compute_pyaps if tropo_package.lower() == "pyaps" else compute_raider
@@ -144,12 +152,14 @@ def estimate_tropospheric_delay(
 
     output_tropo_dir = output_dir / "troposphere"
     output_tropo_dir.mkdir(exist_ok=True)
+    output_paths: list[Path] = []
     for ifg in ifg_file_list:
         ref_date, sec_date = get_dates(ifg)
 
         date_str = format_date_pair(ref_date, sec_date)
         name = f"{date_str}_tropoDelay_pyaps_{tropo_model.value}_LOS_{delay_type}.tif"
         tropo_delay_product_path = output_tropo_dir / name
+        output_paths.append(tropo_delay_product_path)
 
         if tropo_delay_product_path.exists():
             logger.info(f"{tropo_delay_product_path} exists, skipping")
@@ -165,6 +175,16 @@ def estimate_tropospheric_delay(
             logger.warning(f"Weather-model files do not exist for {date_str}, skipping")
             continue
 
+        secondary_time = oput.get_zero_doppler_time(slc_files[secondary_date][0])
+        if len(slc_files[reference_date]) == 0:
+            # this is for when we have compressed slcs but the actual
+            # reference date does not exist in the input data
+            reference_time = datetime.datetime.combine(
+                reference_date[0].date(), secondary_time.time()
+            )
+        else:
+            reference_time = oput.get_zero_doppler_time(slc_files[reference_date][0])
+
         delay_parameters = DelayParams(
             x_coordinates=xcoord,
             y_coordinates=ycoord,
@@ -178,8 +198,8 @@ def estimate_tropospheric_delay(
             geotransform=gt,
             reference_file=troposphere_files[reference_date],
             secondary_file=troposphere_files[secondary_date],
-            reference_time=oput.get_zero_doppler_time(slc_files[reference_date][0]),
-            secondary_time=oput.get_zero_doppler_time(slc_files[secondary_date][0]),
+            reference_time=reference_time,
+            secondary_time=secondary_time,
             interferogram=format_date_pair(ref_date, sec_date),
         )
 
@@ -194,7 +214,7 @@ def estimate_tropospheric_delay(
             like_filename=ifg,
         )
 
-    return
+    return output_paths
 
 
 def compute_pyaps(delay_parameters: DelayParams) -> np.ndarray:

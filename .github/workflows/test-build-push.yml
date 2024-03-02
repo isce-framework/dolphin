@@ -17,8 +17,7 @@ jobs:
         os: [ubuntu-latest, macos-14]
         deps:
           - label: Latest
-            # we can't do `tophu` on macos-14 because it's not available
-            # but the one extra spec is dask
+            # we can't specify `tophu` for conda, not available on mac
             spec: >-
               isce3
               dask
@@ -44,7 +43,7 @@ jobs:
               - conda-forge
       - name: Install
         run: |
-          pip install --no-deps "snaphu" "opera-utils>=0.2.1"
+          pip install --no-deps "snaphu>=0.2.1" "opera-utils>=0.3.0" git+https://github.com/isce-framework/tophu@main
           pip install --no-deps .
       - name: Install test dependencies
         run: |
