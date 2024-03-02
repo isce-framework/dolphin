@@ -6,7 +6,8 @@ import numpy.testing as npt
 import pytest
 from numpy.linalg import lstsq as lstsq_numpy
 
-from dolphin import timeseries
+from dolphin import io, timeseries
+from dolphin.utils import format_dates
 
 NUM_DATES = 10
 DT = 12
@@ -137,7 +138,7 @@ class TestInvert:
         sar_dates, sar_phases, ifg_date_pairs, ifgs = data
         dphi = ifgs[:, -1, -1]
         # add noise to the ifgs, or we can't tell a difference
-        dphi_noisy = dphi + np.random.normal(0, 0.1, dphi.shape)
+        dphi_noisy = dphi + np.random.normal(0, 0.3, dphi.shape)
 
         # Once with a zeroed weight
         weights = np.ones_like(dphi_noisy)
@@ -153,18 +154,42 @@ class TestInvert:
         phi2, residual2 = timeseries.weighted_lstsq_single(A2, dphi2, weights2)
         npt.assert_allclose(phi_0, phi2, atol=1e-5)
 
-    def test_unw_invert(self, data):
+        npt.assert_allclose(residual_0, residual2, atol=1e-5)
+
+    @pytest.fixture
+    def unw_files(self, tmp_path, data, raster_100_by_200):
+        """Write the data to disk and return the file names."""
+        sar_dates, sar_phases, ifg_date_pairs, ifgs = data
+
+        out = []
+        # use the raster as a template
+        for pair, ifg in zip(ifg_date_pairs, ifgs):
+            fname = tmp_path / (format_dates(*pair) + ".tif")
+            io.write_arr(arr=ifg, output_name=fname, like_filename=raster_100_by_200)
+            out.append(fname)
+
+        return out
+
+    def test_invert_unw_network(self, data, unw_files, tmp_path):
         """"""
-        # invert_unw_network(
-        #     unw_file_list: Sequence[PathOrStr],
-        #     reference: ReferencePoint,
-        #     output_dir: PathOrStr,
-        #     ifg_date_pairs: Sequence[Sequence[DateOrDatetime]] | None = None,
-        #     block_shape: tuple[int, int] = (512, 512),
-        #     cor_file_list: Sequence[PathOrStr] | None = None,
-        #     cor_threshold: float = 0.2,
-        #     num_threads: int = 5,
-        # )
+
+        output_dir = tmp_path / "output"
+        output_dir.mkdir()
+        ref_point = (0, 0)
+        out_files = timeseries.invert_unw_network(
+            unw_file_list=unw_files,
+            reference=ref_point,
+            output_dir=output_dir,
+            # ifg_date_pairs: Sequence[Sequence[DateOrDatetime]] | None = None,
+            # block_shape: tuple[int, int] = (512, 512),
+            # cor_file_list: Sequence[PathOrStr] | None = None,
+            # cor_threshold: float = 0.2,
+            num_threads=1,
+        )
+        # Check results
+        solved_stack = io.RasterStackReader.from_file_list(out_files)[:, :, :]
+        sar_phases = data[1]
+        npt.assert_allclose(solved_stack, sar_phases, atol=1e-5)
 
 
 class TestVelocity:

@@ -13,7 +13,7 @@ from tqdm.auto import tqdm
 
 from dolphin import DateOrDatetime, io
 from dolphin._types import PathOrStr
-from dolphin.utils import flatten, format_dates
+from dolphin.utils import DummyProcessPoolExecutor, flatten, format_dates
 
 __all__ = [
     "weighted_lstsq_single",
@@ -302,7 +302,8 @@ def process_blocks(
         writer[..., rows, cols] = data
         pbar.update()
 
-    with ThreadPoolExecutor(num_threads) as exc:
+    Executor = ThreadPoolExecutor if num_threads > 1 else DummyProcessPoolExecutor
+    with Executor(num_threads) as exc:
         for rows, cols in slices:
             future = exc.submit(func, readers=readers, rows=rows, cols=cols)
             future.add_done_callback(write_callback)
@@ -319,7 +320,8 @@ def create_velocity(
 ) -> None:
     """Perform pixel-wise (weighted) linear regression to estimate velocity."""
     if date_list is None:
-        date_list = get_dates(unw_file_list)
+        date_list = [get_dates(f)[1] for f in unw_file_list]
+        # TODO: need the relative one?
     x_arr = datetime_to_float(date_list)
 
     def read_and_fit(
@@ -371,6 +373,8 @@ def create_velocity(
             num_threads=num_threads,
         )
 
+    writer.notify_finished()
+
 
 def create_temporal_average(
     file_list: Sequence[PathOrStr],
@@ -385,9 +389,9 @@ def create_temporal_average(
     ) -> tuple[slice, slice, np.ndarray]:
         return rows, cols, np.nanmean(readers[0][:, rows, cols], axis=0)
 
+    writer = io.BackgroundRasterWriter(output_file, like_filename=file_list[0])
     with NamedTemporaryFile(mode="w", suffix=".vrt") as f:
         reader = io.VRTStack(file_list=file_list, outfile=f.name, skip_size_check=True)
-        writer = io.BackgroundRasterWriter(output_file, like_filename=file_list[0])
 
         process_blocks(
             # file_list=file_list,
@@ -399,6 +403,8 @@ def create_temporal_average(
             num_threads=num_threads,
         )
 
+    writer.notify_finished()
+
 
 class ReferencePoint(NamedTuple):
     row: int
@@ -409,10 +415,10 @@ def invert_unw_network(
     unw_file_list: Sequence[PathOrStr],
     reference: ReferencePoint,
     output_dir: PathOrStr,
-    ifg_date_pairs: Sequence[Sequence[DateOrDatetime]] | None = None,
-    block_shape: tuple[int, int] = (512, 512),
     cor_file_list: Sequence[PathOrStr] | None = None,
     cor_threshold: float = 0.2,
+    ifg_date_pairs: Sequence[Sequence[DateOrDatetime]] | None = None,
+    block_shape: tuple[int, int] = (512, 512),
     num_threads: int = 5,
 ) -> list[Path]:
     """Perform pixel-wise inversion of unwrapped network to get phase per date.
@@ -446,17 +452,24 @@ def invert_unw_network(
 
     """
     if ifg_date_pairs is None:
-        ifg_date_pairs = get_dates(unw_file_list)
+        ifg_date_pairs = [get_dates(f) for f in unw_file_list]
 
-    ifg_tuples = [tuple(pair) for pair in ifg_date_pairs]
-    if not all(len(pair) == 2 for pair in ifg_tuples):
-        raise ValueError("Each item in `ifg_date_pairs` must be a sequence of length 2")
+    try:
+        # Ensure it's a list of pairs
+        ifg_tuples = [(ref, sec) for (ref, sec) in ifg_date_pairs]  # noqa: C416
+    except ValueError as e:
+        raise ValueError(
+            "Each item in `ifg_date_pairs` must be a sequence of length 2"
+        ) from e
 
     sar_dates = sorted(set(flatten(ifg_tuples)))
     A = get_incidence_matrix(ifg_pairs=ifg_tuples, sar_idxs=sar_dates)
     # Make the names of the output files from the SAR dates to solve for
     ref_date = sar_dates[0]
-    out_paths = [Path(output_dir) / format_dates(ref_date, d) for d in sar_dates]
+    suffix = ".tif"
+    out_paths = [
+        Path(output_dir) / (format_dates(ref_date, d) + suffix) for d in sar_dates
+    ]
 
     out_vrt_name = Path(output_dir) / "unw_network.vrt"
     unw_reader = io.VRTStack(
@@ -478,12 +491,16 @@ def invert_unw_network(
             weights[weights < cor_threshold] = 0
         else:
             stack = readers[0][:, rows, cols]
+            weights = np.ones_like(stack)
 
         # subtract the reference
         stack = stack - ref_data
 
-        # TODO: possible second for weights
-        return rows, cols, invert_stack(A, stack, weights)
+        # TODO: possible second input for weights? from conncomps
+        # TODO: do i want to write residuals too? Do i need
+        # to have multiple writers then?
+        phases = invert_stack(A, stack, weights)[0]
+        return rows, cols, np.asarray(phases)
 
     if cor_file_list is not None:
         cor_reader = io.VRTStack(
@@ -502,5 +519,6 @@ def invert_unw_network(
         block_shape=block_shape,
         num_threads=num_threads,
     )
+    writer.notify_finished()
     # Return the output files
     return out_paths
