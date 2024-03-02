@@ -30,6 +30,11 @@ T = TypeVar("T")
 logger = logging.getLogger(__name__)
 
 
+class ReferencePoint(NamedTuple):
+    row: int
+    col: int
+
+
 @jit
 def weighted_lstsq_single(
     A: ArrayLike,
@@ -286,11 +291,6 @@ def process_blocks(
     num_threads: int = 5,
 ):
     """Perform block-wise processing over blocks in `readers`, writing to `writer`."""
-    # reader = RasterStackReader.from_file_list(file_list=file_list)
-    # writer = io.GdalStackWriter(
-    #     file_list=output_files, like_filename=like_filename or file_list[0]
-    # )
-    # shape = io.get_raster_xysize(file_list[0])[::-1]
     shape = readers[0].shape[-2:]
     slices = list(io.iter_blocks(shape, block_shape=block_shape))
 
@@ -321,7 +321,6 @@ def create_velocity(
     """Perform pixel-wise (weighted) linear regression to estimate velocity."""
     if date_list is None:
         date_list = [get_dates(f)[1] for f in unw_file_list]
-        # TODO: need the relative one?
     x_arr = datetime_to_float(date_list)
 
     def read_and_fit(
@@ -342,12 +341,11 @@ def create_velocity(
             estimate_velocity(x_arr=x_arr, stack=unw_stack, weight_stack=weights),
         )
 
-    # Note: For some reason, the `RasterStackReader` is much slower than the VRT:
+    # Note: For some reason, the `RasterStackReader` is much slower than the VRT
+    # for files on S3:
     # ~300 files takes >2 min to open, >2 min to read each block
     # VRTStack seems to take ~30 secs to open, 1 min to read
     # Very possible there's a tuning param/rasterio config to fix, but not sure.
-    # unw_reader = io.RasterStackReader.from_file_list(file_list=unw_file_list)
-    # cor_reader = io.RasterStackReader.from_file_list(file_list=cor_file_list)
     with NamedTemporaryFile(mode="w", suffix=".vrt") as f1, NamedTemporaryFile(
         mode="w", suffix=".vrt"
     ) as f2:
@@ -364,8 +362,6 @@ def create_velocity(
 
         writer = io.BackgroundRasterWriter(output_file, like_filename=unw_file_list[0])
         process_blocks(
-            # file_list=unw_file_list,
-            # output_files=[output_file],
             readers=readers,
             writer=writer,
             func=read_and_fit,
@@ -394,8 +390,6 @@ def create_temporal_average(
         reader = io.VRTStack(file_list=file_list, outfile=f.name, skip_size_check=True)
 
         process_blocks(
-            # file_list=file_list,
-            # output_files=[output_file],
             readers=[reader],
             writer=writer,
             func=read_and_average,
@@ -404,11 +398,6 @@ def create_temporal_average(
         )
 
     writer.notify_finished()
-
-
-class ReferencePoint(NamedTuple):
-    row: int
-    col: int
 
 
 def invert_unw_network(
@@ -520,5 +509,4 @@ def invert_unw_network(
         num_threads=num_threads,
     )
     writer.notify_finished()
-    # Return the output files
     return out_paths
