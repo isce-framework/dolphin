@@ -314,6 +314,7 @@ def process_blocks(
 def create_velocity(
     unw_file_list: Sequence[PathOrStr],
     output_file: PathOrStr,
+    reference: ReferencePoint,
     date_list: Sequence[DateOrDatetime] | None = None,
     cor_file_list: Sequence[PathOrStr] | None = None,
     cor_threshold: float = 0.2,
@@ -329,6 +330,9 @@ def create_velocity(
         List of unwrapped phase files.
     output_file : PathOrStr
         The output file to save the velocity to.
+    reference : ReferencePoint
+        The (row, col) to use as reference before fitting the velocity.
+        This point will be subtracted from all other points before solving.
     date_list : Sequence[DateOrDatetime], optional
         List of dates corresponding to the unwrapped phase files.
         If not provided, will be parsed from filenames in `unw_file_list`.
@@ -357,6 +361,26 @@ def create_velocity(
         date_list = [get_dates(f)[1] for f in unw_file_list]
     x_arr = datetime_to_float(date_list)
 
+    # Set up the input data readers
+    out_dir = Path(output_file).parent
+    unw_reader = io.VRTStack(
+        file_list=unw_file_list,
+        outfile=out_dir / "velocity_inputs.vrt",
+        skip_size_check=True,
+    )
+    if cor_file_list is not None and len(cor_file_list) == len(unw_file_list):
+        cor_reader = io.VRTStack(
+            file_list=cor_file_list,
+            outfile=out_dir / "cor_inputs.vrt",
+            skip_size_check=True,
+        )
+    else:
+        cor_reader = None
+
+    # Read in the reference point
+    ref_row, ref_col = reference
+    ref_data = unw_reader[:, ref_row, ref_col].reshape(-1, 1, 1)
+
     def read_and_fit(
         readers: Sequence[io.StackReader], rows: slice, cols: slice
     ) -> tuple[slice, slice, np.ndarray]:
@@ -369,6 +393,8 @@ def create_velocity(
         else:
             unw_stack = readers[0][:, rows, cols]
             weights = np.ones_like(unw_stack)
+        # Reference the data
+        unw_stack = unw_stack - ref_data
         # Fit a line to each pixel with weighted least squares
         return (
             rows,
@@ -376,35 +402,23 @@ def create_velocity(
             estimate_velocity(x_arr=x_arr, unw_stack=unw_stack, weight_stack=weights),
         )
 
-    use_cor = cor_file_list is not None and len(cor_file_list) == len(unw_file_list)
     # Note: For some reason, the `RasterStackReader` is much slower than the VRT
     # for files on S3:
     # ~300 files takes >2 min to open, >2 min to read each block
     # VRTStack seems to take ~30 secs to open, 1 min to read
     # Very possible there's a tuning param/rasterio config to fix, but not sure.
-    with NamedTemporaryFile(mode="w", suffix=".vrt") as f1, NamedTemporaryFile(
-        mode="w", suffix=".vrt"
-    ) as f2:
-        unw_reader = io.VRTStack(
-            file_list=unw_file_list, outfile=f1.name, skip_size_check=True
-        )
-        if use_cor:
-            assert cor_file_list is not None
-            cor_reader = io.VRTStack(
-                file_list=cor_file_list, outfile=f2.name, skip_size_check=True
-            )
-            readers = [unw_reader, cor_reader]
-        else:
-            readers = [unw_reader]
+    readers = [unw_reader]
+    if cor_reader is not None:
+        readers.append(cor_reader)
 
-        writer = io.BackgroundRasterWriter(output_file, like_filename=unw_file_list[0])
-        process_blocks(
-            readers=readers,
-            writer=writer,
-            func=read_and_fit,
-            block_shape=block_shape,
-            num_threads=num_threads,
-        )
+    writer = io.BackgroundRasterWriter(output_file, like_filename=unw_file_list[0])
+    process_blocks(
+        readers=readers,
+        writer=writer,
+        func=read_and_fit,
+        block_shape=block_shape,
+        num_threads=num_threads,
+    )
 
     writer.notify_finished()
     if add_overviews:

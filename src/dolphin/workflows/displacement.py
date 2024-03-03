@@ -356,6 +356,13 @@ def run_timeseries(
     output_path = ts_opts._directory
     output_path.mkdir(exist_ok=True, parents=True)
 
+    # First we find the reference point for the unwrapped interferograms
+    reference = timeseries.select_reference_point(
+        conncomp_paths,
+        stitched_amp_dispersion_file,
+        output_dir=ts_opts._directory,
+    )
+
     ifg_date_pairs = [get_dates(f) for f in unwrapped_paths]
     sar_dates = sorted(set(flatten(ifg_date_pairs)))
     # if we did single-reference interferograms, for `n` sar dates, we will only have
@@ -364,11 +371,6 @@ def run_timeseries(
     # check if we even need to invert, or if it was single reference
     if needs_inversion:
         logger.info("Selecting a reference point for unwrapped interferograms")
-        reference = timeseries.select_reference_point(
-            conncomp_paths,
-            stitched_amp_dispersion_file,
-            output_dir=ts_opts._directory,
-        )
 
         logger.info("Inverting network of %s unwrapped ifgs", len(unwrapped_paths))
         inverted_phase_paths = timeseries.invert_unw_network(
@@ -385,6 +387,7 @@ def run_timeseries(
         timeseries.create_velocity(
             unw_file_list=inverted_phase_paths,
             output_file=ts_opts._velocity_file,
+            reference=reference,
             date_list=sar_dates,
             cor_file_list=cor_paths,
             cor_threshold=ts_opts.correlation_threshold,
