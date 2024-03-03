@@ -2,7 +2,7 @@ import logging
 from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from typing import NamedTuple, Protocol, Sequence, TypeVar
+from typing import Callable, NamedTuple, Protocol, Sequence, TypeVar
 
 import jax.numpy as jnp
 import numpy as np
@@ -372,18 +372,47 @@ def create_velocity(
     writer.notify_finished()
 
 
+class AverageFunc(Protocol):
+    """Protocol for temporally averaging a block of data."""
+
+    def __call__(self, ArrayLike, axis: int) -> ArrayLike:
+        ...
+
+
 def create_temporal_average(
     file_list: Sequence[PathOrStr],
     output_file: PathOrStr,
     block_shape: tuple[int, int] = (512, 512),
     num_threads: int = 5,
+    average_func: Callable[[ArrayLike, int], np.ndarray] = np.nanmean,
 ) -> None:
-    """Average all images in `reader` to create a 2D image in `output_file`."""
+    """Average all images in `reader` to create a 2D image in `output_file`.
+
+    Parameters
+    ----------
+    file_list : Sequence[PathOrStr]
+        List of files to average
+    output_file : PathOrStr
+        The output file to save the average to
+    block_shape : tuple[int, int], optional
+        The shape of the blocks to process in parallel.
+        Default is (512, 512)
+    num_threads : int, optional
+        The parallel blocks to process at once.
+        Default is 5.
+    average_func : Callable[[ArrayLike, int], np.ndarray], optional
+        The function to use to average the images.
+        Default is `np.nanmean`, which calls
+        `np.nanmean(arr, axis=0)`.
+        on each block.
+
+    """
 
     def read_and_average(
         readers: Sequence[io.StackReader], rows: slice, cols: slice
     ) -> tuple[slice, slice, np.ndarray]:
-        return rows, cols, np.nanmean(readers[0][:, rows, cols], axis=0)
+        chunk = readers[0][:, rows, cols]
+        return rows, cols, average_func(chunk, 0)
 
     writer = io.BackgroundRasterWriter(output_file, like_filename=file_list[0])
     with NamedTemporaryFile(mode="w", suffix=".vrt") as f:
@@ -510,3 +539,48 @@ def invert_unw_network(
     )
     writer.notify_finished()
     return out_paths
+
+
+def select_reference_point(
+    ccl_file_list: Sequence[PathOrStr],
+    amp_dispersion_file: PathOrStr,
+    output_dir: Path,
+    block_shape: tuple[int, int] = (512, 512),
+    num_threads: int = 5,
+) -> ReferencePoint:
+    """Automatically select a reference point for a stack of unwrapped interferograms.
+
+    Uses the amplitude dispersion and connected component labels, the point is selected
+    which
+
+    1. is within intersection of all nonzero connected component labels (always valid)
+    2. has the lowest amplitude dispersion
+    """
+    conncomp_intersection_file = Path(output_dir) / "conncomp_intersection.tif"
+
+    def intersect_conncomp(arr: ArrayLike, axis: int) -> np.ndarray:
+        is_valid_conncomp = arr > 0
+        return np.logical_and.reduce(is_valid_conncomp, axis=axis).astype(np.int16)
+
+    if not conncomp_intersection_file.exists():
+        logger.info("Creating intersection of connected components")
+        create_temporal_average(
+            file_list=ccl_file_list,
+            output_file=conncomp_intersection_file,
+            block_shape=block_shape,
+            num_threads=num_threads,
+            average_func=intersect_conncomp,
+        )
+
+    logger.info("Selecting reference point")
+    conncomp_intersection = io.load_gdal(conncomp_intersection_file)
+    # ps_mask = io.load_gdal(ps_mask_file, masked=True)
+    amp_dispersion = io.load_gdal(amp_dispersion_file, masked=True)
+
+    # Mask out where the conncomps where 0
+    amp_dispersion.mask = amp_dispersion.mask | (conncomp_intersection == 0)
+
+    # Pick the point with the lowest amplitude dispersion
+    ref_row, ref_col = np.unravel_index(np.argmin(amp_dispersion), amp_dispersion.shape)
+
+    return ReferencePoint(ref_row, ref_col)
