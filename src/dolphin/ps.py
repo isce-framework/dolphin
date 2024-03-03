@@ -291,6 +291,7 @@ def multilook_ps_files(
         logger.info("No striding request, skipping multilook.")
         return Path(ps_mask_file), Path(amp_dispersion_file)
     full_cols, full_rows = io.get_raster_xysize(ps_mask_file)
+    out_rows, out_cols = full_rows // strides["y"], full_cols // strides["x"]
 
     ps_suffix = Path(ps_mask_file).suffix
     ps_out_path = Path(str(ps_mask_file).replace(ps_suffix, f"_looked{ps_suffix}"))
@@ -304,7 +305,6 @@ def multilook_ps_files(
             ps_mask, strides["y"], strides["x"], func_type="any", edge_strategy="pad"
         )
         # make sure it's the same size as the MLE result/temp_coh after padding
-        out_rows, out_cols = full_rows // strides["y"], full_cols // strides["x"]
         ps_mask_looked = ps_mask_looked[:out_rows, :out_cols]
         ps_mask_looked = ps_mask_looked.astype("uint8").filled(NODATA_VALUES["ps"])
         io.write_arr(
@@ -332,6 +332,7 @@ def multilook_ps_files(
             func_type="nanmin",
             edge_strategy="pad",
         )
+        amp_disp_looked = amp_disp_looked[:out_rows, :out_cols]
         amp_disp_looked = amp_disp_looked.filled(NODATA_VALUES["amp_dispersion"])
         io.write_arr(
             arr=amp_disp_looked,
