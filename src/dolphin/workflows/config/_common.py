@@ -16,7 +16,7 @@ from pydantic import (
 
 from dolphin import __version__ as _dolphin_version
 from dolphin._log import get_log
-from dolphin._types import Bbox
+from dolphin._types import Bbox, ReferencePoint
 from dolphin.io import DEFAULT_HDF5_OPTIONS, DEFAULT_TIFF_OPTIONS
 
 from ._enums import ShpMethod, UnwrapMethod
@@ -32,6 +32,7 @@ __all__ = [
     "PsOptions",
     "PhaseLinkingOptions",
     "InterferogramNetwork",
+    "TimeseriesOptions",
     "UnwrapOptions",
 ]
 
@@ -212,6 +213,39 @@ class UnwrapOptions(BaseModel, extra="forbid"):
         elif isinstance(v, int):
             return (v, v)
         return v
+
+
+class TimeseriesOptions(BaseModel, extra="forbid"):
+    """Options for inversion/time series fitting."""
+
+    _directory: Path = PrivateAttr(Path("timeseries"))
+    _velocity_file: Path = PrivateAttr(Path("timeseries/velocity.tif"))
+    run_inversion: bool = Field(
+        True,
+        description=(
+            "Whether to run the inversion step after unwrapping, if more than "
+            " a single-reference network is used."
+        ),
+    )
+    reference_point: Optional[ReferencePoint] = Field(
+        None,
+        description=(
+            "Reference point (row, col) used if performing a time series inversion. "
+            "If not provided, a point will be selected from a consistent connected "
+            "component with low amplitude dispersion."
+        ),
+    )
+
+    run_velocity: bool = Field(
+        True,
+        description="Run the velocity estimation from the phase time series.",
+    )
+    correlation_threshold: float = Field(
+        0.2,
+        description="Pixels with correlation below this value will be masked out.",
+        ge=0.0,
+        le=1.0,
+    )
 
 
 class WorkerSettings(BaseModel, extra="forbid"):

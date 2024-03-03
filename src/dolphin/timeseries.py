@@ -2,7 +2,7 @@ import logging
 from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from typing import Callable, NamedTuple, Protocol, Sequence, TypeVar
+from typing import Callable, Protocol, Sequence, TypeVar
 
 import jax.numpy as jnp
 import numpy as np
@@ -12,7 +12,7 @@ from opera_utils import get_dates
 from tqdm.auto import tqdm
 
 from dolphin import DateOrDatetime, io
-from dolphin._types import PathOrStr
+from dolphin._types import PathOrStr, ReferencePoint
 from dolphin.utils import DummyProcessPoolExecutor, flatten, format_dates
 
 __all__ = [
@@ -28,11 +28,6 @@ __all__ = [
 T = TypeVar("T")
 
 logger = logging.getLogger(__name__)
-
-
-class ReferencePoint(NamedTuple):
-    row: int
-    col: int
 
 
 @jit
@@ -302,6 +297,7 @@ def process_blocks(
         writer[..., rows, cols] = data
         pbar.update()
 
+    num_threads = 1
     Executor = ThreadPoolExecutor if num_threads > 1 else DummyProcessPoolExecutor
     with Executor(num_threads) as exc:
         for rows, cols in slices:
@@ -319,6 +315,10 @@ def create_velocity(
     num_threads: int = 5,
 ) -> None:
     """Perform pixel-wise (weighted) linear regression to estimate velocity."""
+    if Path(output_file).exists():
+        logger.info(f"Output file {output_file} already exists, skipping velocity")
+        return
+
     if date_list is None:
         date_list = [get_dates(f)[1] for f in unw_file_list]
     x_arr = datetime_to_float(date_list)
@@ -326,6 +326,7 @@ def create_velocity(
     def read_and_fit(
         readers: Sequence[io.StackReader], rows: slice, cols: slice
     ) -> tuple[slice, slice, np.ndarray]:
+        # Only use the cor_reader if it's the same shape as the unw_reader
         if len(readers) == 2:
             unw_reader, cor_reader = readers
             unw_stack = unw_reader[:, rows, cols]
@@ -338,9 +339,10 @@ def create_velocity(
         return (
             rows,
             cols,
-            estimate_velocity(x_arr=x_arr, stack=unw_stack, weight_stack=weights),
+            estimate_velocity(x_arr=x_arr, unw_stack=unw_stack, weight_stack=weights),
         )
 
+    use_cor = cor_file_list is not None and len(cor_file_list) == len(unw_file_list)
     # Note: For some reason, the `RasterStackReader` is much slower than the VRT
     # for files on S3:
     # ~300 files takes >2 min to open, >2 min to read each block
@@ -352,7 +354,8 @@ def create_velocity(
         unw_reader = io.VRTStack(
             file_list=unw_file_list, outfile=f1.name, skip_size_check=True
         )
-        if cor_file_list is not None:
+        if use_cor:
+            assert cor_file_list is not None
             cor_reader = io.VRTStack(
                 file_list=cor_file_list, outfile=f2.name, skip_size_check=True
             )
@@ -479,15 +482,18 @@ def invert_unw_network(
         raise ValueError(
             "Each item in `ifg_date_pairs` must be a sequence of length 2"
         ) from e
-
-    sar_dates = sorted(set(flatten(ifg_tuples)))
-    A = get_incidence_matrix(ifg_pairs=ifg_tuples, sar_idxs=sar_dates)
     # Make the names of the output files from the SAR dates to solve for
+    sar_dates = sorted(set(flatten(ifg_tuples)))
     ref_date = sar_dates[0]
     suffix = ".tif"
     out_paths = [
         Path(output_dir) / (format_dates(ref_date, d) + suffix) for d in sar_dates
     ]
+    if all(p.exists() for p in out_paths):
+        logger.info("All output files already exist, skipping inversion")
+        return out_paths
+
+    A = get_incidence_matrix(ifg_pairs=ifg_tuples, sar_idxs=sar_dates)
 
     out_vrt_name = Path(output_dir) / "unw_network.vrt"
     unw_reader = io.VRTStack(
@@ -583,4 +589,4 @@ def select_reference_point(
     # Pick the point with the lowest amplitude dispersion
     ref_row, ref_col = np.unravel_index(np.argmin(amp_dispersion), amp_dispersion.shape)
 
-    return ReferencePoint(ref_row, ref_col)
+    return ReferencePoint(int(ref_row), int(ref_col))

@@ -4,6 +4,7 @@
 - Added `dolphin.timeseries` module with basic functionality:
   - Invert a stack of unwrapped interferograms to a timeseries (using correlation weighting optionally)
   - Estimate a (weighted) linear velocity from a timeseries
+- Added inversion and velocity estimation as options to `DisplacementWorkflow`
 - Create `DatasetStackWriter` protocol, with `BackgroundStackWriter` implementation
 
 **Changed**

@@ -182,7 +182,7 @@ def run(
     # ###################################################
 
     ifg_network = cfg.interferogram_network
-    existing_ifgs = list(ifg_network._directory.glob("*.int.*"))
+    existing_ifgs = list(ifg_network._directory.glob("*.int.vrt"))
     if len(existing_ifgs) > 0:
         logger.info(f"Skipping interferogram step, {len(existing_ifgs)} exists")
         return (

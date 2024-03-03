@@ -28,7 +28,7 @@ from dolphin.utils import (
 
 from . import stitching_bursts, unwrapping, wrapped_phase
 from ._utils import _create_burst_cfg, _remove_dir_if_empty
-from .config import DisplacementWorkflow
+from .config import DisplacementWorkflow, TimeseriesOptions
 
 logger = get_log(__name__)
 
@@ -241,23 +241,19 @@ def run(
     # 4. If a network was unwrapped, invert it
     # ##############################################
 
-    ifg_date_pairs = [get_dates(f) for f in unwrapped_paths]
-    sar_dates = sorted(set(flatten(ifg_date_pairs)))
-    # check if we even need to invert, or if it was single reference
-    if len(sar_dates) > len(ifg_date_pairs) + 1:
-        reference = timeseries.select_reference_point(
-            conncomp_paths,
-            stitched_amp_dispersion_file,
-            # output_dir=cfg.work_directory / cfg.timeseries._directory,
-            output_dir=Path(),
+    ts_opts = cfg.timeseries_options
+    if ts_opts.run_inversion or ts_opts.run_velocity:
+        inverted_phase_paths = run_timeseries(
+            ts_opts=ts_opts,
+            unwrapped_paths=unwrapped_paths,
+            conncomp_paths=conncomp_paths,
+            cor_paths=stitched_cor_paths,
+            stitched_amp_dispersion_file=stitched_amp_dispersion_file,
+            # TODO: do i care to configure block shape, or num threads from somewhere?
+            # num_threads=cfg.worker_settings....?
         )
-        logger.info("Inverting network of %s unwrapped ifgs", len(unwrapped_paths))
-        timeseries.invert_unw_network(
-            unw_file_list=unwrapped_paths,
-            reference=reference,
-            output_dir=Path(),
-            # output_dir=cfg.work_directory / cfg.timeseries._directory,
-        )
+    else:
+        inverted_phase_paths = unwrapped_paths
 
     # ##############################################
     # 5. Estimate corrections for each interferogram
@@ -332,7 +328,8 @@ def run(
         stitched_temp_coh_file=stitched_temp_coh_file,
         stitched_ps_file=stitched_ps_file,
         stitched_amp_dispersion_file=stitched_amp_dispersion_file,
-        unwrapped_paths=unwrapped_paths,
+        # unwrapped_paths=unwrapped_paths,
+        unwrapped_paths=inverted_phase_paths,
         conncomp_paths=conncomp_paths,
         tropospheric_corrections=tropo_paths,
         ionospheric_corrections=iono_paths,
@@ -345,3 +342,53 @@ def _print_summary(cfg):
     logger.info(f"Maximum memory usage: {max_mem:.2f} GB")
     logger.info(f"Config file dolphin version: {cfg._dolphin_version}")
     logger.info(f"Current running dolphin version: {__version__}")
+
+
+def run_timeseries(
+    ts_opts: TimeseriesOptions,
+    unwrapped_paths: Sequence[Path],
+    conncomp_paths: Sequence[Path],
+    cor_paths: Sequence[Path],
+    stitched_amp_dispersion_file: Path,
+    num_threads: int = 5,
+) -> list[Path]:
+    """Invert the unwrapped interferograms, estimate timeseries and phase velocity."""
+    output_path = ts_opts._directory
+    output_path.mkdir(exist_ok=True, parents=True)
+
+    ifg_date_pairs = [get_dates(f) for f in unwrapped_paths]
+    sar_dates = sorted(set(flatten(ifg_date_pairs)))
+    # if we did single-reference interferograms, for `n` sar dates, we will only have
+    # `n-1` interferograms. Any more than n-1 ifgs means we need to invert
+    needs_inversion = len(unwrapped_paths) > len(sar_dates) - 1
+    # check if we even need to invert, or if it was single reference
+    if needs_inversion:
+        logger.info("Selecting a reference point for unwrapped interferograms")
+        reference = timeseries.select_reference_point(
+            conncomp_paths,
+            stitched_amp_dispersion_file,
+            output_dir=ts_opts._directory,
+        )
+
+        logger.info("Inverting network of %s unwrapped ifgs", len(unwrapped_paths))
+        inverted_phase_paths = timeseries.invert_unw_network(
+            unw_file_list=unwrapped_paths,
+            reference=reference,
+            output_dir=ts_opts._directory,
+        )
+    else:
+        logger.info("Skipping inversion step, as there is only one reference")
+        inverted_phase_paths = list(unwrapped_paths)
+
+    if ts_opts.run_velocity:
+        logger.info("Estimating phase velocity")
+        timeseries.create_velocity(
+            unw_file_list=inverted_phase_paths,
+            output_file=ts_opts._velocity_file,
+            date_list=sar_dates,
+            cor_file_list=cor_paths,
+            cor_threshold=ts_opts.correlation_threshold,
+            num_threads=num_threads,
+        )
+
+    return inverted_phase_paths
