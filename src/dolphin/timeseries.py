@@ -242,7 +242,7 @@ def estimate_velocity(
     return velos.reshape(n_rows, n_cols)
 
 
-def _datetime_to_float(dates: Sequence[DateOrDatetime]) -> np.ndarray:
+def datetime_to_float(dates: Sequence[DateOrDatetime]) -> np.ndarray:
     """Convert a sequence of datetime objects to a float representation.
 
     Output units are in days since the first item in `dates`.
@@ -355,7 +355,7 @@ def create_velocity(
 
     if date_list is None:
         date_list = [get_dates(f)[1] for f in unw_file_list]
-    x_arr = _datetime_to_float(date_list)
+    x_arr = datetime_to_float(date_list)
 
     def read_and_fit(
         readers: Sequence[io.StackReader], rows: slice, cols: slice
