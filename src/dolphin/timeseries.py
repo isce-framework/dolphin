@@ -12,17 +12,19 @@ from opera_utils import get_dates
 from tqdm.auto import tqdm
 
 from dolphin import DateOrDatetime, io
+from dolphin._overviews import ImageType, create_overviews
 from dolphin._types import PathOrStr, ReferencePoint
 from dolphin.utils import DummyProcessPoolExecutor, flatten, format_dates
 
 __all__ = [
-    "weighted_lstsq_single",
     "invert_stack",
     "get_incidence_matrix",
     "estimate_velocity",
     "create_velocity",
     "create_temporal_average",
     "invert_unw_network",
+    "correlation_to_variance",
+    "select_reference_point",
 ]
 
 T = TypeVar("T")
@@ -240,7 +242,7 @@ def estimate_velocity(
     return velos.reshape(n_rows, n_cols)
 
 
-def datetime_to_float(dates: Sequence[DateOrDatetime]) -> np.ndarray:
+def _datetime_to_float(dates: Sequence[DateOrDatetime]) -> np.ndarray:
     """Convert a sequence of datetime objects to a float representation.
 
     Output units are in days since the first item in `dates`.
@@ -285,7 +287,11 @@ def process_blocks(
     block_shape: tuple[int, int] = (512, 512),
     num_threads: int = 5,
 ):
-    """Perform block-wise processing over blocks in `readers`, writing to `writer`."""
+    """Perform block-wise processing over blocks in `readers`, writing to `writer`.
+
+    Extracts the common functionality from several routines to read and process
+    a stack of rasters in parallel.
+    """
     shape = readers[0].shape[-2:]
     slices = list(io.iter_blocks(shape, block_shape=block_shape))
 
@@ -313,15 +319,43 @@ def create_velocity(
     cor_threshold: float = 0.2,
     block_shape: tuple[int, int] = (512, 512),
     num_threads: int = 5,
+    add_overviews: bool = True,
 ) -> None:
-    """Perform pixel-wise (weighted) linear regression to estimate velocity."""
+    """Perform pixel-wise (weighted) linear regression to estimate velocity.
+
+    Parameters
+    ----------
+    unw_file_list : Sequence[PathOrStr]
+        List of unwrapped phase files.
+    output_file : PathOrStr
+        The output file to save the velocity to.
+    date_list : Sequence[DateOrDatetime], optional
+        List of dates corresponding to the unwrapped phase files.
+        If not provided, will be parsed from filenames in `unw_file_list`.
+    cor_file_list : Sequence[PathOrStr], optional
+        List of correlation files to use for weighting the velocity estimation.
+        If not provided, all weights are set to 1.
+    cor_threshold : float, optional
+        The correlation threshold to use for weighting the velocity estimation.
+        Default is 0.2.
+    block_shape : tuple[int, int], optional
+        The shape of the blocks to process in parallel.
+        Default is (512, 512)
+    num_threads : int, optional
+        The parallel blocks to process at once.
+        Default is 5.
+    add_overviews : bool, optional
+        If True, creates overviews of the new velocity raster.
+        Default is True.
+
+    """
     if Path(output_file).exists():
         logger.info(f"Output file {output_file} already exists, skipping velocity")
         return
 
     if date_list is None:
         date_list = [get_dates(f)[1] for f in unw_file_list]
-    x_arr = datetime_to_float(date_list)
+    x_arr = _datetime_to_float(date_list)
 
     def read_and_fit(
         readers: Sequence[io.StackReader], rows: slice, cols: slice
@@ -373,6 +407,9 @@ def create_velocity(
         )
 
     writer.notify_finished()
+    if add_overviews:
+        logger.info("Creating overviews for velocity image")
+        create_overviews([output_file])
 
 
 class AverageFunc(Protocol):
@@ -405,9 +442,7 @@ def create_temporal_average(
         Default is 5.
     average_func : Callable[[ArrayLike, int], np.ndarray], optional
         The function to use to average the images.
-        Default is `np.nanmean`, which calls
-        `np.nanmean(arr, axis=0)`.
-        on each block.
+        Default is `np.nanmean`, which calls `np.nanmean(arr, axis=0)` on each block.
 
     """
 
@@ -438,9 +473,11 @@ def invert_unw_network(
     output_dir: PathOrStr,
     cor_file_list: Sequence[PathOrStr] | None = None,
     cor_threshold: float = 0.2,
+    n_cor_looks: int = 1,
     ifg_date_pairs: Sequence[Sequence[DateOrDatetime]] | None = None,
     block_shape: tuple[int, int] = (512, 512),
     num_threads: int = 5,
+    add_overviews: bool = True,
 ) -> list[Path]:
     """Perform pixel-wise inversion of unwrapped network to get phase per date.
 
@@ -463,8 +500,17 @@ def invert_unw_network(
         List of correlation files to use for weighting the inversion
     cor_threshold : float, optional
         The correlation threshold to use for weighting the inversion
+        Default is 0.2
+    n_cor_looks : int, optional
+        The number of looks used to form the input correlation data, used
+        to convert correlation to phase variance.
+        Default is 1.
     num_threads : int, optional
         The parallel blocks to process at once.
+        Default is 5.
+    add_overviews : bool, optional
+        If True, creates overviews of the new unwrapped phase rasters.
+        Default is True.
 
     Returns
     -------
@@ -482,6 +528,7 @@ def invert_unw_network(
         raise ValueError(
             "Each item in `ifg_date_pairs` must be a sequence of length 2"
         ) from e
+
     # Make the names of the output files from the SAR dates to solve for
     sar_dates = sorted(set(flatten(ifg_tuples)))
     ref_date = sar_dates[0]
@@ -511,8 +558,9 @@ def invert_unw_network(
         if len(readers) == 2:
             unw_reader, cor_reader = readers
             stack = unw_reader[:, rows, cols]
-            weights = cor_reader[:, rows, cols]
-            weights[weights < cor_threshold] = 0
+            cor = cor_reader[:, rows, cols]
+            weights = correlation_to_variance(cor, n_cor_looks)
+            weights[cor < cor_threshold] = 0
         else:
             stack = readers[0][:, rows, cols]
             weights = np.ones_like(stack)
@@ -544,7 +592,33 @@ def invert_unw_network(
         num_threads=num_threads,
     )
     writer.notify_finished()
+
+    if add_overviews:
+        logger.info("Creating overviews for unwrapped images")
+        create_overviews(out_paths, image_type=ImageType.UNWRAPPED)
     return out_paths
+
+
+def correlation_to_variance(correlation: ArrayLike, nlooks: int) -> Array:
+    r"""Convert interferometric correlation to phase variance.
+
+    Uses the CRLB formula from Rodriguez, 1992 [1]_ to get the phase variance,
+    \sigma_{\phi}^2:
+
+    \[
+        \sigma_{\phi}^{2} = \frac{1}{2N_{L}} \frac{1 - \gamma^{2}}{\gamma^{2}}
+    \]
+
+    where \gamma is the correlation and N_L is the effective number of looks.
+
+    References
+    ----------
+    .. [1] Rodriguez, E., and J. M. Martin. "Theory and design of interferometric
+    synthetic aperture radars." IEEE Proceedings of Radar and Signal Processing.
+    Vol. 139. No. 2. IET Digital Library, 1992.
+
+    """
+    return (1 - correlation**2) / (2 * nlooks * correlation**2 + 1e-6)
 
 
 def select_reference_point(
@@ -589,4 +663,5 @@ def select_reference_point(
     # Pick the point with the lowest amplitude dispersion
     ref_row, ref_col = np.unravel_index(np.argmin(amp_dispersion), amp_dispersion.shape)
 
+    # Cast to `int` to avoid having `np.int64` types
     return ReferencePoint(int(ref_row), int(ref_col))
