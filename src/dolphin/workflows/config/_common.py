@@ -16,7 +16,7 @@ from pydantic import (
 
 from dolphin import __version__ as _dolphin_version
 from dolphin._log import get_log
-from dolphin._types import Bbox, ReferencePoint
+from dolphin._types import Bbox
 from dolphin.io import DEFAULT_HDF5_OPTIONS, DEFAULT_TIFF_OPTIONS
 
 from ._enums import ShpMethod, UnwrapMethod
@@ -227,7 +227,7 @@ class TimeseriesOptions(BaseModel, extra="forbid"):
             " a single-reference network is used."
         ),
     )
-    reference_point: Optional[ReferencePoint] = Field(
+    reference_point: Optional[tuple[int, int]] = Field(
         None,
         description=(
             "Reference point (row, col) used if performing a time series inversion. "
