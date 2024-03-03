@@ -303,7 +303,6 @@ def process_blocks(
         writer[..., rows, cols] = data
         pbar.update()
 
-    num_threads = 1
     Executor = ThreadPoolExecutor if num_threads > 1 else DummyProcessPoolExecutor
     with Executor(num_threads) as exc:
         for rows, cols in slices:
@@ -439,6 +438,7 @@ def create_temporal_average(
     block_shape: tuple[int, int] = (512, 512),
     num_threads: int = 5,
     average_func: Callable[[ArrayLike, int], np.ndarray] = np.nanmean,
+    read_masked: bool = False,
 ) -> None:
     """Average all images in `reader` to create a 2D image in `output_file`.
 
@@ -457,6 +457,9 @@ def create_temporal_average(
     average_func : Callable[[ArrayLike, int], np.ndarray], optional
         The function to use to average the images.
         Default is `np.nanmean`, which calls `np.nanmean(arr, axis=0)` on each block.
+    read_masked : bool, optional
+        If True, reads the data as a masked array based on the rasters' nodata values.
+        Default is False.
 
     """
 
@@ -468,7 +471,12 @@ def create_temporal_average(
 
     writer = io.BackgroundRasterWriter(output_file, like_filename=file_list[0])
     with NamedTemporaryFile(mode="w", suffix=".vrt") as f:
-        reader = io.VRTStack(file_list=file_list, outfile=f.name, skip_size_check=True)
+        reader = io.VRTStack(
+            file_list=file_list,
+            outfile=f.name,
+            skip_size_check=True,
+            read_masked=read_masked,
+        )
 
         process_blocks(
             readers=[reader],
@@ -652,9 +660,16 @@ def select_reference_point(
     """
     conncomp_intersection_file = Path(output_dir) / "conncomp_intersection.tif"
 
-    def intersect_conncomp(arr: ArrayLike, axis: int) -> np.ndarray:
-        is_valid_conncomp = arr > 0
-        return np.logical_and.reduce(is_valid_conncomp, axis=axis).astype(np.int16)
+    def intersect_conncomp(arr: np.ma.MaskedArray, axis: int) -> np.ndarray:
+        # Track where input is nodata
+        any_masked = np.any(arr.mask, axis=axis)
+        # Get the logical AND of all nonzero conncomp labels
+        fillval = arr.fill_value
+        is_valid_conncomp = arr.filled(0) > 0
+        all_are_valid = np.all(is_valid_conncomp, axis=axis).astype(arr.dtype)
+        # Reset nodata
+        all_are_valid[any_masked] = fillval
+        return all_are_valid
 
     if not conncomp_intersection_file.exists():
         logger.info("Creating intersection of connected components")
@@ -664,18 +679,38 @@ def select_reference_point(
             block_shape=block_shape,
             num_threads=num_threads,
             average_func=intersect_conncomp,
+            read_masked=True,
         )
 
     logger.info("Selecting reference point")
-    conncomp_intersection = io.load_gdal(conncomp_intersection_file)
-    # ps_mask = io.load_gdal(ps_mask_file, masked=True)
+    conncomp_intersection = io.load_gdal(conncomp_intersection_file, masked=True)
+
+    # Find the largest conncomp region in the intersection
+    isin_largest_conncomp = get_largest_conncomp(conncomp_intersection)
+
     amp_dispersion = io.load_gdal(amp_dispersion_file, masked=True)
+    # Mask out where the conncomps aren't equal to the largest
+    amp_dispersion.mask = amp_dispersion.mask | (~isin_largest_conncomp)
 
-    # Mask out where the conncomps where 0
-    amp_dispersion.mask = amp_dispersion.mask | (conncomp_intersection == 0)
-
-    # Pick the point with the lowest amplitude dispersion
+    # Pick the (unmasked) point with the lowest amplitude dispersion
     ref_row, ref_col = np.unravel_index(np.argmin(amp_dispersion), amp_dispersion.shape)
 
     # Cast to `int` to avoid having `np.int64` types
     return ReferencePoint(int(ref_row), int(ref_col))
+
+
+def get_largest_conncomp(conncomp_intersection: ArrayLike) -> np.ndarray:
+    """Get a max for the largest nonzero connected component in the intersection."""
+    from scipy import ndimage
+
+    label, nlabels = ndimage.label(
+        conncomp_intersection.filled(0), structure=np.ones((3, 3))
+    )
+    logger.info("Found %d connected components in intersection", nlabels)
+    # Find the label with the most pixels using bincount
+    label_counts = np.bincount(label.ravel())
+    # (ignore the 0 label)
+    largest_idx = np.argmax(label_counts[1:]) + 1
+
+    # Make a mask of the largest conncomp
+    return label == largest_idx
