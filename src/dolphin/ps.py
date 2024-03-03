@@ -261,12 +261,12 @@ def _use_existing_files(
     shutil.copy(existing_amp_mean_file, output_amp_mean_file)
 
 
-def multilook_ps_mask(
+def multilook_ps_files(
     strides: dict[str, int],
     ps_mask_file: Filename,
-    output_file: Optional[Filename] = None,
-) -> Path:
-    """Create a multilooked version of the full-res PS mask.
+    amp_dispersion_file: Filename,
+) -> tuple[Path, Path]:
+    """Create a multilooked version of the full-res PS mask/ampltiude dispersion.
 
     Parameters
     ----------
@@ -274,43 +274,70 @@ def multilook_ps_mask(
         Decimation factor for 'x', 'y'
     ps_mask_file : Filename
         Name of input full-res uint8 PS mask file
-    output_file : Optional[Filename], optional
-        Name of file to save result to.
-        Defaults to same as `ps_mask_file`, but with "_looked" added before suffix.
+    amp_dispersion_file : Filename
+        Name of input full-res float32 amplitude dispersion file
 
     Returns
     -------
-    output_file : Path
+    output_ps_file : Path
+        Multilooked PS mask file
+        Will be same as `ps_mask_file`, but with "_looked" added before suffix.
+    output_amp_disp_file : Path
+        Multilooked amplitude dispersion file
+        Similar naming scheme to `output_ps_file`
 
     """
     if strides == {"x": 1, "y": 1}:
         logger.info("No striding request, skipping multilook.")
-        return Path(ps_mask_file)
-    if output_file is None:
-        ps_suffix = Path(ps_mask_file).suffix
-        out_path = Path(str(ps_mask_file).replace(ps_suffix, f"_looked{ps_suffix}"))
-        logger.info(f"Saving a looked PS mask to {out_path}")
+        return Path(ps_mask_file), Path(amp_dispersion_file)
+    full_cols, full_rows = io.get_raster_xysize(ps_mask_file)
+
+    ps_suffix = Path(ps_mask_file).suffix
+    ps_out_path = Path(str(ps_mask_file).replace(ps_suffix, f"_looked{ps_suffix}"))
+    logger.info(f"Saving a looked PS mask to {ps_out_path}")
+
+    if Path(ps_out_path).exists():
+        logger.info(f"{ps_out_path} exists, skipping.")
     else:
-        out_path = Path(output_file)
+        ps_mask = io.load_gdal(ps_mask_file, masked=True).astype(bool)
+        ps_mask_looked = utils.take_looks(
+            ps_mask, strides["y"], strides["x"], func_type="any", edge_strategy="pad"
+        )
+        # make sure it's the same size as the MLE result/temp_coh after padding
+        out_rows, out_cols = full_rows // strides["y"], full_cols // strides["x"]
+        ps_mask_looked = ps_mask_looked[:out_rows, :out_cols]
+        ps_mask_looked = ps_mask_looked.astype("uint8").filled(NODATA_VALUES["ps"])
+        io.write_arr(
+            arr=ps_mask_looked,
+            like_filename=ps_mask_file,
+            output_name=ps_out_path,
+            strides=strides,
+            nodata=NODATA_VALUES["ps"],
+        )
 
-    if Path(out_path).exists():
-        logger.info(f"{out_path} exists, skipping.")
-        return out_path
-
-    ps_mask = io.load_gdal(ps_mask_file, masked=True).astype(bool)
-    full_rows, full_cols = ps_mask.shape
-    ps_mask_looked = utils.take_looks(
-        ps_mask, strides["y"], strides["x"], func_type="any", edge_strategy="pad"
+    amp_disp_suffix = Path(amp_dispersion_file).suffix
+    amp_disp_out_path = Path(
+        str(amp_dispersion_file).replace(amp_disp_suffix, f"_looked{amp_disp_suffix}")
     )
-    # make sure it's the same size as the MLE result/temp_coh after padding
-    out_rows, out_cols = full_rows // strides["y"], full_cols // strides["x"]
-    ps_mask_looked = ps_mask_looked[:out_rows, :out_cols]
-    ps_mask_looked = ps_mask_looked.astype("uint8").filled(NODATA_VALUES["ps"])
-    io.write_arr(
-        arr=ps_mask_looked,
-        like_filename=ps_mask_file,
-        output_name=out_path,
-        strides=strides,
-        nodata=NODATA_VALUES["ps"],
-    )
-    return out_path
+    if amp_disp_out_path.exists():
+        logger.info(f"{amp_disp_out_path} exists, skipping.")
+    else:
+        amp_disp = io.load_gdal(amp_dispersion_file, masked=True)
+        # We use `nanmin` assuming that the multilooked PS is using
+        # the strongest PS (the one with the lowest amplitude dispersion)
+        amp_disp_looked = utils.take_looks(
+            amp_disp,
+            strides["y"],
+            strides["x"],
+            func_type="nanmin",
+            edge_strategy="pad",
+        )
+        amp_disp_looked = amp_disp_looked.filled(NODATA_VALUES["amp_dispersion"])
+        io.write_arr(
+            arr=amp_disp_looked,
+            like_filename=amp_dispersion_file,
+            output_name=amp_disp_out_path,
+            strides=strides,
+            nodata=NODATA_VALUES["amp_dispersion"],
+        )
+    return ps_out_path, amp_disp_out_path

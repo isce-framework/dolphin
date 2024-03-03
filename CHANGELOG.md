@@ -8,6 +8,7 @@
 
 **Changed**
 - Rename `GdalWriter` to `BackgroundBlockWriter`
+- Displacement workflow now also creates/returns a stitched, multi-looked version of the amplitude dispersion
 
 **Fixed**
 - `BackgroundRasterWriter`  was not creating the files necessary before writing

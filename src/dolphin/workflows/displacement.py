@@ -10,16 +10,17 @@ from pathlib import Path
 from pprint import pformat
 from typing import Mapping, NamedTuple, Sequence
 
-from opera_utils import group_by_burst, group_by_date
+from opera_utils import get_dates, group_by_burst, group_by_date
 from tqdm.auto import tqdm
 
-from dolphin import __version__
+from dolphin import __version__, timeseries
 from dolphin._log import get_log, log_runtime
 from dolphin.atmosphere import estimate_ionospheric_delay, estimate_tropospheric_delay
 from dolphin.io import get_raster_bounds, get_raster_crs
 from dolphin.utils import (
     DummyProcessPoolExecutor,
     disable_gpu,
+    flatten,
     get_max_memory_usage,
     prepare_geometry,
     set_num_threads,
@@ -40,6 +41,7 @@ class OutputPaths(NamedTuple):
     stitched_cor_paths: list[Path]
     stitched_temp_coh_file: Path
     stitched_ps_file: Path
+    stitched_amp_dispersion_file: Path
     unwrapped_paths: list[Path] | None
     conncomp_paths: list[Path] | None
     tropospheric_corrections: list[Path] | None
@@ -140,6 +142,7 @@ def run(
     ifg_file_list: list[Path] = []
     temp_coh_file_list: list[Path] = []
     ps_file_list: list[Path] = []
+    amp_dispersion_file_list: list[Path] = []
     # The comp_slc tracking object is a dict, since we'll need to organize
     # multiple comp slcs by burst (they'll have the same filename)
     comp_slc_dict: dict[str, list[Path]] = {}
@@ -173,11 +176,12 @@ def run(
         for fut in fut_to_burst:
             burst = fut_to_burst[fut]
 
-            cur_ifg_list, comp_slcs, temp_coh, ps_file = fut.result()
+            cur_ifg_list, comp_slcs, temp_coh, ps_file, amp_disp_file = fut.result()
             ifg_file_list.extend(cur_ifg_list)
             comp_slc_dict[burst] = comp_slcs
             temp_coh_file_list.append(temp_coh)
             ps_file_list.append(ps_file)
+            amp_dispersion_file_list.append(amp_disp_file)
 
     # ###################################
     # 2. Stitch burst-wise interferograms
@@ -192,10 +196,12 @@ def run(
         stitched_cor_paths,
         stitched_temp_coh_file,
         stitched_ps_file,
+        stitched_amp_dispersion_file,
     ) = stitching_bursts.run(
         ifg_file_list=ifg_file_list,
         temp_coh_file_list=temp_coh_file_list,
         ps_file_list=ps_file_list,
+        amp_dispersion_list=amp_dispersion_file_list,
         stitched_ifg_dir=cfg.interferogram_network._directory,
         output_options=cfg.output_options,
         file_date_fmt=cfg.input_options.cslc_date_fmt,
@@ -214,6 +220,7 @@ def run(
             stitched_cor_paths=stitched_cor_paths,
             stitched_temp_coh_file=stitched_temp_coh_file,
             stitched_ps_file=stitched_ps_file,
+            stitched_amp_dispersion_file=stitched_amp_dispersion_file,
             unwrapped_paths=None,
             conncomp_paths=None,
             tropospheric_corrections=None,
@@ -231,7 +238,29 @@ def run(
     )
 
     # ##############################################
-    # 4. Estimate corrections for each interferogram
+    # 4. If a network was unwrapped, invert it
+    # ##############################################
+
+    ifg_date_pairs = [get_dates(f) for f in unwrapped_paths]
+    sar_dates = sorted(set(flatten(ifg_date_pairs)))
+    # check if we even need to invert, or if it was single reference
+    if len(sar_dates) > len(ifg_date_pairs) + 1:
+        reference = timeseries.select_reference_point(
+            conncomp_paths,
+            stitched_amp_dispersion_file,
+            # output_dir=cfg.work_directory / cfg.timeseries._directory,
+            output_dir=Path(),
+        )
+        logger.info("Inverting network of %s unwrapped ifgs", len(unwrapped_paths))
+        timeseries.invert_unw_network(
+            unw_file_list=unwrapped_paths,
+            reference=reference,
+            output_dir=Path(),
+            # output_dir=cfg.work_directory / cfg.timeseries._directory,
+        )
+
+    # ##############################################
+    # 5. Estimate corrections for each interferogram
     # ##############################################
     tropo_paths: list[Path] | None = None
     iono_paths: list[Path] | None = None
@@ -302,6 +331,7 @@ def run(
         stitched_cor_paths=stitched_cor_paths,
         stitched_temp_coh_file=stitched_temp_coh_file,
         stitched_ps_file=stitched_ps_file,
+        stitched_amp_dispersion_file=stitched_amp_dispersion_file,
         unwrapped_paths=unwrapped_paths,
         conncomp_paths=conncomp_paths,
         tropospheric_corrections=tropo_paths,
