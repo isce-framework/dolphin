@@ -682,9 +682,6 @@ class VRTStack(StackReader):
     sort_files : bool, optional (default = True)
         Sort the files in `file_list`. Assumes that the naming convention
         will sort the files in increasing time order.
-    nodata_mask_file : pathlib.Path, optional
-        Path to file containing a mask of pixels containing with nodata
-        in every images. Used for skipping the loading of these pixels.
     file_date_fmt : str, optional (default = "%Y%m%d")
         Format string for parsing the dates from the filenames.
         Passed to [opera_utils.get_dates][].
@@ -703,6 +700,7 @@ class VRTStack(StackReader):
         fail_on_overwrite: bool = False,
         skip_size_check: bool = False,
         num_threads: int = 1,
+        read_masked: bool = False,
     ):
         if Path(outfile).exists() and write_file:
             if fail_on_overwrite:
@@ -730,6 +728,7 @@ class VRTStack(StackReader):
         self.file_list = files
         self.dates = dates
         self.num_threads = num_threads
+        self._read_masked = read_masked
 
         self.outfile = Path(outfile).resolve()
         # Assumes that all files use the same subdataset (if NetCDF)
@@ -740,15 +739,21 @@ class VRTStack(StackReader):
 
         # Use the first file in the stack to get size, transform info
         ds = gdal.Open(fspath(self._gdal_file_strings[0]))
+        bnd1 = ds.GetRasterBand(1)
         self.xsize = ds.RasterXSize
         self.ysize = ds.RasterYSize
+        self.nodatavals = []
+        for i in range(1, ds.RasterCount + 1):
+            bnd = ds.GetRasterBand(i)
+            self.nodatavals.append(bnd.GetNoDataValue())
+        self.nodata = self.nodatavals[0]
         # Should be CFloat32
-        self.gdal_dtype = gdal.GetDataTypeName(ds.GetRasterBand(1).DataType)
+        self.gdal_dtype = gdal.GetDataTypeName(bnd1.DataType)
         # Save these for setting at the end
         self.gt = ds.GetGeoTransform()
         self.proj = ds.GetProjection()
         self.srs = ds.GetSpatialRef()
-        ds = None
+        ds = bnd1 = None
         # Save the subset info
 
         self.xoff, self.yoff = 0, 0
@@ -794,6 +799,12 @@ class VRTStack(StackReader):
         ds.SetGeoTransform(self.gt)
         ds.SetProjection(self.proj)
         ds.SetSpatialRef(self.srs)
+        if self.nodata is not None:
+            for i in range(ds.RasterCount):
+                # ds.GetRasterBand(i + 1).SetNoDataValue(self.nodatavals[i])
+                # Force to be the same nodataval for all bands
+                ds.GetRasterBand(i + 1).SetNoDataValue(self.nodata)
+
         ds = None
 
     @property
@@ -899,9 +910,11 @@ class VRTStack(StackReader):
         subsample_factor: int = 1,
         rows: Optional[slice] = None,
         cols: Optional[slice] = None,
-        masked: bool = False,
+        masked: bool | None = None,
     ):
         """Read in the SLC stack."""
+        if masked is None:
+            masked = self._read_masked
         return io.load_gdal(
             self.outfile,
             band=band,
