@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 from __future__ import annotations
 
+import contextlib
 import multiprocessing as mp
 from collections import defaultdict
 from concurrent.futures import ProcessPoolExecutor
@@ -13,18 +14,9 @@ from typing import Mapping, NamedTuple, Sequence
 from opera_utils import get_dates, group_by_burst, group_by_date
 from tqdm.auto import tqdm
 
-from dolphin import __version__, timeseries
+from dolphin import __version__, io, timeseries, utils
 from dolphin._log import get_log, log_runtime
 from dolphin.atmosphere import estimate_ionospheric_delay, estimate_tropospheric_delay
-from dolphin.io import get_raster_bounds, get_raster_crs
-from dolphin.utils import (
-    DummyProcessPoolExecutor,
-    disable_gpu,
-    flatten,
-    get_max_memory_usage,
-    prepare_geometry,
-    set_num_threads,
-)
 
 from . import stitching_bursts, unwrapping, wrapped_phase
 from ._utils import _create_burst_cfg, _remove_dir_if_empty
@@ -69,8 +61,8 @@ def run(
     logger.debug(pformat(cfg.model_dump()))
 
     if not cfg.worker_settings.gpu_enabled:
-        disable_gpu()
-    set_num_threads(cfg.worker_settings.threads_per_worker)
+        utils.disable_gpu()
+    utils.set_num_threads(cfg.worker_settings.threads_per_worker)
 
     try:
         grouped_slc_files = group_by_burst(cfg.cslc_file_list)
@@ -151,7 +143,7 @@ def run(
     Executor = (
         ProcessPoolExecutor
         if cfg.worker_settings.n_parallel_bursts > 1
-        else DummyProcessPoolExecutor
+        else utils.DummyProcessPoolExecutor
     )
     mw = cfg.worker_settings.n_parallel_bursts
     ctx = mp.get_context("spawn")
@@ -270,10 +262,10 @@ def run(
         # Prepare frame geometry files
         geometry_dir = out_dir / "geometry"
         geometry_dir.mkdir(exist_ok=True)
-        crs = get_raster_crs(ifg_filenames[0])
+        crs = io.get_raster_crs(ifg_filenames[0])
         epsg = crs.to_epsg()
-        out_bounds = get_raster_bounds(ifg_filenames[0])
-        frame_geometry_files = prepare_geometry(
+        out_bounds = io.get_raster_bounds(ifg_filenames[0])
+        frame_geometry_files = utils.prepare_geometry(
             geometry_dir=geometry_dir,
             geo_files=cfg.correction_options.geometry_files,
             matching_file=ifg_filenames[0],
@@ -338,7 +330,7 @@ def run(
 
 def _print_summary(cfg):
     """Print the maximum memory usage and version info."""
-    max_mem = get_max_memory_usage(units="GB")
+    max_mem = utils.get_max_memory_usage(units="GB")
     logger.info(f"Maximum memory usage: {max_mem:.2f} GB")
     logger.info(f"Config file dolphin version: {cfg._dolphin_version}")
     logger.info(f"Current running dolphin version: {__version__}")
@@ -364,11 +356,12 @@ def run_timeseries(
     )
 
     ifg_date_pairs = [get_dates(f) for f in unwrapped_paths]
-    sar_dates = sorted(set(flatten(ifg_date_pairs)))
+    sar_dates = sorted(set(utils.flatten(ifg_date_pairs)))
     # if we did single-reference interferograms, for `n` sar dates, we will only have
     # `n-1` interferograms. Any more than n-1 ifgs means we need to invert
     needs_inversion = len(unwrapped_paths) > len(sar_dates) - 1
     # check if we even need to invert, or if it was single reference
+    inverted_phase_paths: list[Path] = []
     if needs_inversion:
         logger.info("Selecting a reference point for unwrapped interferograms")
 
@@ -379,8 +372,23 @@ def run_timeseries(
             output_dir=ts_opts._directory,
         )
     else:
-        logger.info("Skipping inversion step, as there is only one reference")
-        inverted_phase_paths = list(unwrapped_paths)
+        logger.info(
+            "Skipping inversion step: only single reference interferograms exist."
+        )
+        # Symlink the unwrapped paths to `timeseries/`
+        for p in unwrapped_paths:
+            target = ts_opts._directory / p.name
+            with contextlib.suppress(FileExistsError):
+                target.symlink_to(p)
+            inverted_phase_paths.append(target)
+        # Make extra "0" raster so that the number of rasters matches len(sar_dates)
+        ref_raster = ts_opts._directory / (
+            utils.format_dates(sar_dates[0], sar_dates[0]) + ".tif"
+        )
+        io.write_arr(
+            arr=None, output_name=ref_raster, like_filename=inverted_phase_paths[0]
+        )
+        inverted_phase_paths.append(ref_raster)
 
     if ts_opts.run_velocity:
         logger.info("Estimating phase velocity")
