@@ -171,27 +171,16 @@ def multiscale_unwrap(
         # Note that if they gave an arbitrary callback, we dont know the logger
         _redirect_unwrapping_log(unw_filename, unwrap_method.value)
 
-    if ntiles == (1, 1):
-        # Just call the unwrap function directly, no need to split
-        unwrap_callback(
-            igram=igram_rb,
-            coherence=coherence_rb,
-            unw=unw_rb,
-            conncomp=conncomp_rb,
-            nlooks=nlooks,
-            scratchdir=scratchdir,
-        )
-    else:
-        tophu.multiscale_unwrap(
-            unw_rb,
-            conncomp_rb,
-            igram_rb,
-            coherence_rb,
-            nlooks=nlooks,
-            unwrap_func=unwrap_callback,
-            downsample_factor=downsample_factor,
-            ntiles=ntiles,
-            scratchdir=scratchdir,
-        )
+    tophu.multiscale_unwrap(
+        unw_rb,
+        conncomp_rb,
+        igram_rb,
+        coherence_rb,
+        nlooks=nlooks,
+        unwrap_func=unwrap_callback,
+        downsample_factor=downsample_factor,
+        ntiles=ntiles,
+        scratchdir=scratchdir,
+    )
 
     return Path(unw_filename), Path(conncomp_filename)
