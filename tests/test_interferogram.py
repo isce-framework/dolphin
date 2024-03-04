@@ -136,119 +136,143 @@ def _get_pair_stems(slc_file_pairs):
     ]
 
 
-def test_single_reference_network(tmp_path, four_slc_files):
-    n = Network(four_slc_files, reference_idx=0, outdir=tmp_path)
+class TestNetwork:
+    def test_single_reference_network(self, tmp_path, four_slc_files):
+        n = Network(four_slc_files, reference_idx=0, outdir=tmp_path)
 
-    assert n.slc_file_pairs[0][0] == four_slc_files[0]
-    assert n.slc_file_pairs[0][1] == four_slc_files[1]
+        assert n.slc_file_pairs[0][0] == four_slc_files[0]
+        assert n.slc_file_pairs[0][1] == four_slc_files[1]
 
-    assert _get_pair_stems(n.slc_file_pairs) == [
-        ("20220101", "20220102"),
-        ("20220101", "20220103"),
-        ("20220101", "20220104"),
-    ]
-    # check the written out files:
-    assert Path(tmp_path / "20220101_20220102.int.vrt").exists()
-    assert Path(tmp_path / "20220101_20220103.int.vrt").exists()
-    assert Path(tmp_path / "20220101_20220104.int.vrt").exists()
+        assert _get_pair_stems(n.slc_file_pairs) == [
+            ("20220101", "20220102"),
+            ("20220101", "20220103"),
+            ("20220101", "20220104"),
+        ]
+        # check the written out files:
+        assert Path(tmp_path / "20220101_20220102.int.vrt").exists()
+        assert Path(tmp_path / "20220101_20220103.int.vrt").exists()
+        assert Path(tmp_path / "20220101_20220104.int.vrt").exists()
 
-    n = Network(four_slc_files, reference_idx=1, outdir=tmp_path)
-    assert _get_pair_stems(n.slc_file_pairs) == [
-        ("20220101", "20220102"),  # still has the same order (early, late)
-        ("20220102", "20220103"),
-        ("20220102", "20220104"),
-    ]
-    assert Path(tmp_path / "20220101_20220102.int.vrt").exists()
-    assert Path(tmp_path / "20220102_20220103.int.vrt").exists()
-    assert Path(tmp_path / "20220102_20220104.int.vrt").exists()
+        n = Network(four_slc_files, reference_idx=1, outdir=tmp_path)
+        assert _get_pair_stems(n.slc_file_pairs) == [
+            ("20220101", "20220102"),  # still has the same order (early, late)
+            ("20220102", "20220103"),
+            ("20220102", "20220104"),
+        ]
+        assert Path(tmp_path / "20220101_20220102.int.vrt").exists()
+        assert Path(tmp_path / "20220102_20220103.int.vrt").exists()
+        assert Path(tmp_path / "20220102_20220104.int.vrt").exists()
 
+    def test_limit_by_bandwidth(self, tmp_path, four_slc_files):
+        n = Network(four_slc_files, max_bandwidth=1, outdir=tmp_path)
+        assert _get_pair_stems(n.slc_file_pairs) == [
+            ("20220101", "20220102"),
+            ("20220102", "20220103"),
+            ("20220103", "20220104"),
+        ]
+        n = Network(four_slc_files, max_bandwidth=2, outdir=tmp_path)
+        assert _get_pair_stems(n.slc_file_pairs) == [
+            ("20220101", "20220102"),
+            ("20220101", "20220103"),
+            ("20220102", "20220103"),
+            ("20220102", "20220104"),
+            ("20220103", "20220104"),
+        ]
+        n = Network(four_slc_files, max_bandwidth=3, outdir=tmp_path)
+        assert _get_pair_stems(n.slc_file_pairs) == [
+            ("20220101", "20220102"),
+            ("20220101", "20220103"),
+            ("20220101", "20220104"),
+            ("20220102", "20220103"),
+            ("20220102", "20220104"),
+            ("20220103", "20220104"),
+        ]
+        with pytest.raises(ValueError):
+            Network(four_slc_files, max_bandwidth=0)
 
-def test_limit_by_bandwidth(tmp_path, four_slc_files):
-    n = Network(four_slc_files, max_bandwidth=1, outdir=tmp_path)
-    assert _get_pair_stems(n.slc_file_pairs) == [
-        ("20220101", "20220102"),
-        ("20220102", "20220103"),
-        ("20220103", "20220104"),
-    ]
-    n = Network(four_slc_files, max_bandwidth=2, outdir=tmp_path)
-    assert _get_pair_stems(n.slc_file_pairs) == [
-        ("20220101", "20220102"),
-        ("20220101", "20220103"),
-        ("20220102", "20220103"),
-        ("20220102", "20220104"),
-        ("20220103", "20220104"),
-    ]
-    n = Network(four_slc_files, max_bandwidth=3, outdir=tmp_path)
-    assert _get_pair_stems(n.slc_file_pairs) == [
-        ("20220101", "20220102"),
-        ("20220101", "20220103"),
-        ("20220101", "20220104"),
-        ("20220102", "20220103"),
-        ("20220102", "20220104"),
-        ("20220103", "20220104"),
-    ]
+    def test_limit_by_temporal_baseline(self, tmp_path, four_slc_files):
+        with pytest.raises(ValueError):
+            Network(four_slc_files, max_temporal_baseline=0)
 
+        n = Network(four_slc_files, max_temporal_baseline=1, outdir=tmp_path)
+        assert _get_pair_stems(n.slc_file_pairs) == [
+            ("20220101", "20220102"),
+            ("20220102", "20220103"),
+            ("20220103", "20220104"),
+        ]
+        n = Network(four_slc_files, max_temporal_baseline=2, outdir=tmp_path)
+        assert _get_pair_stems(n.slc_file_pairs) == [
+            ("20220101", "20220102"),
+            ("20220101", "20220103"),
+            ("20220102", "20220103"),
+            ("20220102", "20220104"),
+            ("20220103", "20220104"),
+        ]
+        n = Network(four_slc_files, max_temporal_baseline=500, outdir=tmp_path)
+        assert _get_pair_stems(n.slc_file_pairs) == [
+            ("20220101", "20220102"),
+            ("20220101", "20220103"),
+            ("20220101", "20220104"),
+            ("20220102", "20220103"),
+            ("20220102", "20220104"),
+            ("20220103", "20220104"),
+        ]
 
-def test_limit_by_temporal_baseline(tmp_path, four_slc_files):
-    n = Network(four_slc_files, max_temporal_baseline=0, outdir=tmp_path)
-    assert _get_pair_stems(n.slc_file_pairs) == []
+    def test_annual_ifgs(self):
+        dates = [
+            datetime(2021, 1, 1),
+            datetime(2021, 2, 1),
+            datetime(2022, 1, 4),
+            datetime(2022, 6, 1),
+        ]
+        slcs = [d.strftime("%Y%m%d") for d in dates]
+        assert Network._find_annuals(slcs, dates) == [
+            (slcs[0], slcs[2]),
+            (slcs[1], slcs[2]),
+        ]
+        assert Network._find_annuals(slcs, dates, buffer_days=10) == [
+            (slcs[0], slcs[2])
+        ]
 
-    n = Network(four_slc_files, max_temporal_baseline=1, outdir=tmp_path)
-    assert _get_pair_stems(n.slc_file_pairs) == [
-        ("20220101", "20220102"),
-        ("20220102", "20220103"),
-        ("20220103", "20220104"),
-    ]
-    n = Network(four_slc_files, max_temporal_baseline=2, outdir=tmp_path)
-    assert _get_pair_stems(n.slc_file_pairs) == [
-        ("20220101", "20220102"),
-        ("20220101", "20220103"),
-        ("20220102", "20220103"),
-        ("20220102", "20220104"),
-        ("20220103", "20220104"),
-    ]
-    n = Network(four_slc_files, max_temporal_baseline=500, outdir=tmp_path)
-    assert _get_pair_stems(n.slc_file_pairs) == [
-        ("20220101", "20220102"),
-        ("20220101", "20220103"),
-        ("20220101", "20220104"),
-        ("20220102", "20220103"),
-        ("20220102", "20220104"),
-        ("20220103", "20220104"),
-    ]
+        assert Network._find_annuals(slcs[1:], dates[1:], buffer_days=10) == []
 
+    def test_manual_indexes(self, tmp_path, four_slc_files):
+        n = Network(four_slc_files, indexes=[(0, 1)], outdir=tmp_path)
+        assert _get_pair_stems(n.slc_file_pairs) == [
+            ("20220101", "20220102"),
+        ]
 
-def test_annual_ifgs():
-    dates = [
-        datetime(2021, 1, 1),
-        datetime(2021, 2, 1),
-        datetime(2022, 1, 4),
-        datetime(2022, 6, 1),
-    ]
-    slcs = [d.strftime("%Y%m%d") for d in dates]
-    assert Network._find_annuals(slcs, dates) == [
-        (slcs[0], slcs[2]),
-        (slcs[1], slcs[2]),
-    ]
-    assert Network._find_annuals(slcs, dates, buffer_days=10) == [(slcs[0], slcs[2])]
+        n = Network(four_slc_files, indexes=[(0, -1), (0, 1)], outdir=tmp_path)
+        assert _get_pair_stems(n.slc_file_pairs) == [
+            # It should still always come back sorted
+            ("20220101", "20220102"),
+            ("20220101", "20220104"),
+        ]
 
-    assert Network._find_annuals(slcs[1:], dates[1:], buffer_days=10) == []
+    def test_empty_error(self, four_slc_files):
+        with pytest.raises(ValueError):
+            Network(four_slc_files)
+            Network(four_slc_files, indexes=[])
+            Network(four_slc_files, max_bandwidth=0)
+            Network(four_slc_files, max_temporal_baseline=0)
 
+    def test_combination(self, four_slc_files):
+        n1 = Network(four_slc_files, reference_idx=0, write=False)
+        single_ref_pairs = [
+            ("20220101", "20220102"),
+            ("20220101", "20220103"),
+            ("20220101", "20220104"),
+        ]
+        assert _get_pair_stems(n1.slc_file_pairs) == single_ref_pairs
 
-def test_manual_indexes(tmp_path, four_slc_files):
-    n = Network(four_slc_files, indexes=[], outdir=tmp_path)
-    assert _get_pair_stems(n.slc_file_pairs) == []
-
-    n = Network(four_slc_files, indexes=[(0, 1)], outdir=tmp_path)
-    assert _get_pair_stems(n.slc_file_pairs) == [
-        ("20220101", "20220102"),
-    ]
-
-    n = Network(four_slc_files, indexes=[(0, -1), (0, 1)], outdir=tmp_path)
-    assert _get_pair_stems(n.slc_file_pairs) == [
-        ("20220101", "20220104"),
-        ("20220101", "20220102"),
-    ]
+        n2 = Network(
+            four_slc_files, reference_idx=0, indexes=[(1, 2), (1, 3)], write=False
+        )
+        new_ifgs = [
+            ("20220102", "20220103"),
+            ("20220102", "20220104"),
+        ]
+        assert _get_pair_stems(n2.slc_file_pairs) == sorted(single_ref_pairs + new_ifgs)
 
 
 @pytest.fixture()
@@ -332,7 +356,7 @@ def test_network_no_verify():
 
 def test_network_from_ifgs():
     """Check that the `Network` can work when passing in ifgs"""
-    ifg_files = ["20210101_20210107", "202010101_20210108", "20210101_20210109"]
+    ifg_files = ["20210101_20210107", "20210101_20210108", "20210101_20210109"]
     n = Network(
         ifg_files,
         max_bandwidth=10,

@@ -2,7 +2,7 @@ import logging
 from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from typing import NamedTuple, Protocol, Sequence, TypeVar
+from typing import Callable, Protocol, Sequence, TypeVar
 
 import jax.numpy as jnp
 import numpy as np
@@ -12,17 +12,19 @@ from opera_utils import get_dates
 from tqdm.auto import tqdm
 
 from dolphin import DateOrDatetime, io
-from dolphin._types import PathOrStr
+from dolphin._overviews import ImageType, create_overviews
+from dolphin._types import PathOrStr, ReferencePoint
 from dolphin.utils import DummyProcessPoolExecutor, flatten, format_dates
 
 __all__ = [
-    "weighted_lstsq_single",
     "invert_stack",
     "get_incidence_matrix",
     "estimate_velocity",
     "create_velocity",
     "create_temporal_average",
     "invert_unw_network",
+    "correlation_to_variance",
+    "select_reference_point",
 ]
 
 T = TypeVar("T")
@@ -285,12 +287,11 @@ def process_blocks(
     block_shape: tuple[int, int] = (512, 512),
     num_threads: int = 5,
 ):
-    """Perform block-wise processing over blocks in `readers`, writing to `writer`."""
-    # reader = RasterStackReader.from_file_list(file_list=file_list)
-    # writer = io.GdalStackWriter(
-    #     file_list=output_files, like_filename=like_filename or file_list[0]
-    # )
-    # shape = io.get_raster_xysize(file_list[0])[::-1]
+    """Perform block-wise processing over blocks in `readers`, writing to `writer`.
+
+    Extracts the common functionality from several routines to read and process
+    a stack of rasters in parallel.
+    """
     shape = readers[0].shape[-2:]
     slices = list(io.iter_blocks(shape, block_shape=block_shape))
 
@@ -312,21 +313,82 @@ def process_blocks(
 def create_velocity(
     unw_file_list: Sequence[PathOrStr],
     output_file: PathOrStr,
+    reference: ReferencePoint,
     date_list: Sequence[DateOrDatetime] | None = None,
     cor_file_list: Sequence[PathOrStr] | None = None,
     cor_threshold: float = 0.2,
     block_shape: tuple[int, int] = (512, 512),
     num_threads: int = 5,
+    add_overviews: bool = True,
 ) -> None:
-    """Perform pixel-wise (weighted) linear regression to estimate velocity."""
+    """Perform pixel-wise (weighted) linear regression to estimate velocity.
+
+    Parameters
+    ----------
+    unw_file_list : Sequence[PathOrStr]
+        List of unwrapped phase files.
+    output_file : PathOrStr
+        The output file to save the velocity to.
+    reference : ReferencePoint
+        The (row, col) to use as reference before fitting the velocity.
+        This point will be subtracted from all other points before solving.
+    date_list : Sequence[DateOrDatetime], optional
+        List of dates corresponding to the unwrapped phase files.
+        If not provided, will be parsed from filenames in `unw_file_list`.
+    cor_file_list : Sequence[PathOrStr], optional
+        List of correlation files to use for weighting the velocity estimation.
+        If not provided, all weights are set to 1.
+    cor_threshold : float, optional
+        The correlation threshold to use for weighting the velocity estimation.
+        Default is 0.2.
+    block_shape : tuple[int, int], optional
+        The shape of the blocks to process in parallel.
+        Default is (512, 512)
+    num_threads : int, optional
+        The parallel blocks to process at once.
+        Default is 5.
+    add_overviews : bool, optional
+        If True, creates overviews of the new velocity raster.
+        Default is True.
+
+    """
+    if Path(output_file).exists():
+        logger.info(f"Output file {output_file} already exists, skipping velocity")
+        return
+
     if date_list is None:
         date_list = [get_dates(f)[1] for f in unw_file_list]
-        # TODO: need the relative one?
     x_arr = datetime_to_float(date_list)
+
+    # Set up the input data readers
+    out_dir = Path(output_file).parent
+    unw_reader = io.VRTStack(
+        file_list=unw_file_list,
+        outfile=out_dir / "velocity_inputs.vrt",
+        skip_size_check=True,
+    )
+    if cor_file_list is not None:
+        if len(cor_file_list) != len(unw_file_list):
+            msg = "Mismatch in number of input files provided:"
+            msg += f"{len(cor_file_list) = }, but {len(unw_file_list) = }"
+            raise ValueError(msg)
+
+        cor_reader = io.VRTStack(
+            file_list=cor_file_list,
+            outfile=out_dir / "cor_inputs.vrt",
+            skip_size_check=True,
+        )
+    else:
+        cor_reader = None
+
+    # Read in the reference point
+    ref_row, ref_col = reference
+    ref_data = unw_reader[:, ref_row, ref_col].reshape(-1, 1, 1)
 
     def read_and_fit(
         readers: Sequence[io.StackReader], rows: slice, cols: slice
     ) -> tuple[slice, slice, np.ndarray]:
+        # Only use the cor_reader if it's the same shape as the unw_reader
         if len(readers) == 2:
             unw_reader, cor_reader = readers
             unw_stack = unw_reader[:, rows, cols]
@@ -335,45 +397,44 @@ def create_velocity(
         else:
             unw_stack = readers[0][:, rows, cols]
             weights = np.ones_like(unw_stack)
+        # Reference the data
+        unw_stack = unw_stack - ref_data
         # Fit a line to each pixel with weighted least squares
         return (
             rows,
             cols,
-            estimate_velocity(x_arr=x_arr, stack=unw_stack, weight_stack=weights),
+            estimate_velocity(x_arr=x_arr, unw_stack=unw_stack, weight_stack=weights),
         )
 
-    # Note: For some reason, the `RasterStackReader` is much slower than the VRT:
+    # Note: For some reason, the `RasterStackReader` is much slower than the VRT
+    # for files on S3:
     # ~300 files takes >2 min to open, >2 min to read each block
     # VRTStack seems to take ~30 secs to open, 1 min to read
     # Very possible there's a tuning param/rasterio config to fix, but not sure.
-    # unw_reader = io.RasterStackReader.from_file_list(file_list=unw_file_list)
-    # cor_reader = io.RasterStackReader.from_file_list(file_list=cor_file_list)
-    with NamedTemporaryFile(mode="w", suffix=".vrt") as f1, NamedTemporaryFile(
-        mode="w", suffix=".vrt"
-    ) as f2:
-        unw_reader = io.VRTStack(
-            file_list=unw_file_list, outfile=f1.name, skip_size_check=True
-        )
-        if cor_file_list is not None:
-            cor_reader = io.VRTStack(
-                file_list=cor_file_list, outfile=f2.name, skip_size_check=True
-            )
-            readers = [unw_reader, cor_reader]
-        else:
-            readers = [unw_reader]
+    readers = [unw_reader]
+    if cor_reader is not None:
+        readers.append(cor_reader)
 
-        writer = io.BackgroundRasterWriter(output_file, like_filename=unw_file_list[0])
-        process_blocks(
-            # file_list=unw_file_list,
-            # output_files=[output_file],
-            readers=readers,
-            writer=writer,
-            func=read_and_fit,
-            block_shape=block_shape,
-            num_threads=num_threads,
-        )
+    writer = io.BackgroundRasterWriter(output_file, like_filename=unw_file_list[0])
+    process_blocks(
+        readers=readers,
+        writer=writer,
+        func=read_and_fit,
+        block_shape=block_shape,
+        num_threads=num_threads,
+    )
 
     writer.notify_finished()
+    if add_overviews:
+        logger.info("Creating overviews for velocity image")
+        create_overviews([output_file])
+
+
+class AverageFunc(Protocol):
+    """Protocol for temporally averaging a block of data."""
+
+    def __call__(self, ArrayLike, axis: int) -> ArrayLike:
+        ...
 
 
 def create_temporal_average(
@@ -381,21 +442,48 @@ def create_temporal_average(
     output_file: PathOrStr,
     block_shape: tuple[int, int] = (512, 512),
     num_threads: int = 5,
+    average_func: Callable[[ArrayLike, int], np.ndarray] = np.nanmean,
+    read_masked: bool = False,
 ) -> None:
-    """Average all images in `reader` to create a 2D image in `output_file`."""
+    """Average all images in `reader` to create a 2D image in `output_file`.
+
+    Parameters
+    ----------
+    file_list : Sequence[PathOrStr]
+        List of files to average
+    output_file : PathOrStr
+        The output file to save the average to
+    block_shape : tuple[int, int], optional
+        The shape of the blocks to process in parallel.
+        Default is (512, 512)
+    num_threads : int, optional
+        The parallel blocks to process at once.
+        Default is 5.
+    average_func : Callable[[ArrayLike, int], np.ndarray], optional
+        The function to use to average the images.
+        Default is `np.nanmean`, which calls `np.nanmean(arr, axis=0)` on each block.
+    read_masked : bool, optional
+        If True, reads the data as a masked array based on the rasters' nodata values.
+        Default is False.
+
+    """
 
     def read_and_average(
         readers: Sequence[io.StackReader], rows: slice, cols: slice
     ) -> tuple[slice, slice, np.ndarray]:
-        return rows, cols, np.nanmean(readers[0][:, rows, cols], axis=0)
+        chunk = readers[0][:, rows, cols]
+        return rows, cols, average_func(chunk, 0)
 
     writer = io.BackgroundRasterWriter(output_file, like_filename=file_list[0])
     with NamedTemporaryFile(mode="w", suffix=".vrt") as f:
-        reader = io.VRTStack(file_list=file_list, outfile=f.name, skip_size_check=True)
+        reader = io.VRTStack(
+            file_list=file_list,
+            outfile=f.name,
+            skip_size_check=True,
+            read_masked=read_masked,
+        )
 
         process_blocks(
-            # file_list=file_list,
-            # output_files=[output_file],
             readers=[reader],
             writer=writer,
             func=read_and_average,
@@ -406,20 +494,17 @@ def create_temporal_average(
     writer.notify_finished()
 
 
-class ReferencePoint(NamedTuple):
-    row: int
-    col: int
-
-
 def invert_unw_network(
     unw_file_list: Sequence[PathOrStr],
     reference: ReferencePoint,
     output_dir: PathOrStr,
     cor_file_list: Sequence[PathOrStr] | None = None,
     cor_threshold: float = 0.2,
+    n_cor_looks: int = 1,
     ifg_date_pairs: Sequence[Sequence[DateOrDatetime]] | None = None,
     block_shape: tuple[int, int] = (512, 512),
     num_threads: int = 5,
+    add_overviews: bool = True,
 ) -> list[Path]:
     """Perform pixel-wise inversion of unwrapped network to get phase per date.
 
@@ -442,8 +527,17 @@ def invert_unw_network(
         List of correlation files to use for weighting the inversion
     cor_threshold : float, optional
         The correlation threshold to use for weighting the inversion
+        Default is 0.2
+    n_cor_looks : int, optional
+        The number of looks used to form the input correlation data, used
+        to convert correlation to phase variance.
+        Default is 1.
     num_threads : int, optional
         The parallel blocks to process at once.
+        Default is 5.
+    add_overviews : bool, optional
+        If True, creates overviews of the new unwrapped phase rasters.
+        Default is True.
 
     Returns
     -------
@@ -462,14 +556,18 @@ def invert_unw_network(
             "Each item in `ifg_date_pairs` must be a sequence of length 2"
         ) from e
 
-    sar_dates = sorted(set(flatten(ifg_tuples)))
-    A = get_incidence_matrix(ifg_pairs=ifg_tuples, sar_idxs=sar_dates)
     # Make the names of the output files from the SAR dates to solve for
+    sar_dates = sorted(set(flatten(ifg_tuples)))
     ref_date = sar_dates[0]
     suffix = ".tif"
     out_paths = [
         Path(output_dir) / (format_dates(ref_date, d) + suffix) for d in sar_dates
     ]
+    if all(p.exists() for p in out_paths):
+        logger.info("All output files already exist, skipping inversion")
+        return out_paths
+
+    A = get_incidence_matrix(ifg_pairs=ifg_tuples, sar_idxs=sar_dates)
 
     out_vrt_name = Path(output_dir) / "unw_network.vrt"
     unw_reader = io.VRTStack(
@@ -487,8 +585,9 @@ def invert_unw_network(
         if len(readers) == 2:
             unw_reader, cor_reader = readers
             stack = unw_reader[:, rows, cols]
-            weights = cor_reader[:, rows, cols]
-            weights[weights < cor_threshold] = 0
+            cor = cor_reader[:, rows, cols]
+            weights = correlation_to_variance(cor, n_cor_looks)
+            weights[cor < cor_threshold] = 0
         else:
             stack = readers[0][:, rows, cols]
             weights = np.ones_like(stack)
@@ -520,5 +619,103 @@ def invert_unw_network(
         num_threads=num_threads,
     )
     writer.notify_finished()
-    # Return the output files
+
+    if add_overviews:
+        logger.info("Creating overviews for unwrapped images")
+        create_overviews(out_paths, image_type=ImageType.UNWRAPPED)
     return out_paths
+
+
+def correlation_to_variance(correlation: ArrayLike, nlooks: int) -> Array:
+    r"""Convert interferometric correlation to phase variance.
+
+    Uses the CRLB formula from Rodriguez, 1992 [1]_ to get the phase variance,
+    \sigma_{\phi}^2:
+
+    \[
+        \sigma_{\phi}^{2} = \frac{1}{2N_{L}} \frac{1 - \gamma^{2}}{\gamma^{2}}
+    \]
+
+    where \gamma is the correlation and N_L is the effective number of looks.
+
+    References
+    ----------
+    .. [1] Rodriguez, E., and J. M. Martin. "Theory and design of interferometric
+    synthetic aperture radars." IEEE Proceedings of Radar and Signal Processing.
+    Vol. 139. No. 2. IET Digital Library, 1992.
+
+    """
+    return (1 - correlation**2) / (2 * nlooks * correlation**2 + 1e-6)
+
+
+def select_reference_point(
+    ccl_file_list: Sequence[PathOrStr],
+    amp_dispersion_file: PathOrStr,
+    output_dir: Path,
+    block_shape: tuple[int, int] = (512, 512),
+    num_threads: int = 5,
+) -> ReferencePoint:
+    """Automatically select a reference point for a stack of unwrapped interferograms.
+
+    Uses the amplitude dispersion and connected component labels, the point is selected
+    which
+
+    1. is within intersection of all nonzero connected component labels (always valid)
+    2. has the lowest amplitude dispersion
+    """
+    conncomp_intersection_file = Path(output_dir) / "conncomp_intersection.tif"
+
+    def intersect_conncomp(arr: np.ma.MaskedArray, axis: int) -> np.ndarray:
+        # Track where input is nodata
+        any_masked = np.any(arr.mask, axis=axis)
+        # Get the logical AND of all nonzero conncomp labels
+        fillval = arr.fill_value
+        is_valid_conncomp = arr.filled(0) > 0
+        all_are_valid = np.all(is_valid_conncomp, axis=axis).astype(arr.dtype)
+        # Reset nodata
+        all_are_valid[any_masked] = fillval
+        return all_are_valid
+
+    if not conncomp_intersection_file.exists():
+        logger.info("Creating intersection of connected components")
+        create_temporal_average(
+            file_list=ccl_file_list,
+            output_file=conncomp_intersection_file,
+            block_shape=block_shape,
+            num_threads=num_threads,
+            average_func=intersect_conncomp,
+            read_masked=True,
+        )
+
+    logger.info("Selecting reference point")
+    conncomp_intersection = io.load_gdal(conncomp_intersection_file, masked=True)
+
+    # Find the largest conncomp region in the intersection
+    isin_largest_conncomp = get_largest_conncomp(conncomp_intersection)
+
+    amp_dispersion = io.load_gdal(amp_dispersion_file, masked=True)
+    # Mask out where the conncomps aren't equal to the largest
+    amp_dispersion.mask = amp_dispersion.mask | (~isin_largest_conncomp)
+
+    # Pick the (unmasked) point with the lowest amplitude dispersion
+    ref_row, ref_col = np.unravel_index(np.argmin(amp_dispersion), amp_dispersion.shape)
+
+    # Cast to `int` to avoid having `np.int64` types
+    return ReferencePoint(int(ref_row), int(ref_col))
+
+
+def get_largest_conncomp(conncomp_intersection: ArrayLike) -> np.ndarray:
+    """Get a max for the largest nonzero connected component in the intersection."""
+    from scipy import ndimage
+
+    label, nlabels = ndimage.label(
+        conncomp_intersection.filled(0), structure=np.ones((3, 3))
+    )
+    logger.info("Found %d connected components in intersection", nlabels)
+    # Find the label with the most pixels using bincount
+    label_counts = np.bincount(label.ravel())
+    # (ignore the 0 label)
+    largest_idx = np.argmax(label_counts[1:]) + 1
+
+    # Make a mask of the largest conncomp
+    return label == largest_idx

@@ -4,13 +4,16 @@
 - Added `dolphin.timeseries` module with basic functionality:
   - Invert a stack of unwrapped interferograms to a timeseries (using correlation weighting optionally)
   - Estimate a (weighted) linear velocity from a timeseries
+- Added inversion and velocity estimation as options to `DisplacementWorkflow`
 - Create `DatasetStackWriter` protocol, with `BackgroundStackWriter` implementation
 
 **Changed**
 - Rename `GdalWriter` to `BackgroundBlockWriter`
+- Displacement workflow now also creates/returns a stitched, multi-looked version of the amplitude dispersion
 
 **Fixed**
 - `BackgroundRasterWriter`  was not creating the files necessary before writing
+- Allow user to specify more than one type of interferogram in `Network` configuration
 
 # [0.15.3](https://github.com/isce-framework/dolphin/compare/v0.15.2...0.15.3) - 2024-02-27
 

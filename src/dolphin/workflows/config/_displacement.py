@@ -22,6 +22,7 @@ from ._common import (
     OutputOptions,
     PhaseLinkingOptions,
     PsOptions,
+    TimeseriesOptions,
     UnwrapOptions,
     WorkflowBase,
     _read_file_list_or_glob,
@@ -133,6 +134,7 @@ class DisplacementWorkflow(WorkflowBase):
         default_factory=InterferogramNetwork
     )
     unwrap_options: UnwrapOptions = Field(default_factory=UnwrapOptions)
+    timeseries_options: TimeseriesOptions = Field(default_factory=TimeseriesOptions)
     correction_options: CorrectionOptions = Field(default_factory=CorrectionOptions)
 
     # internal helpers
@@ -197,6 +199,7 @@ class DisplacementWorkflow(WorkflowBase):
             "phase_linking",
             "interferogram_network",
             "unwrap_options",
+            "timeseries_options",
         ]:
             opts = getattr(self, step)
             if isinstance(opts, dict):
@@ -218,6 +221,7 @@ class DisplacementWorkflow(WorkflowBase):
             self.phase_linking._directory,
             self.interferogram_network._directory,
             self.unwrap_options._directory,
+            self.timeseries_options._directory,
         ]
         # Add the output PS files we'll create to the `PS` directory, making
         # sure they're inside the work directory
@@ -225,3 +229,7 @@ class DisplacementWorkflow(WorkflowBase):
         ps_opts._amp_dispersion_file = work_dir / ps_opts._amp_dispersion_file
         ps_opts._amp_mean_file = work_dir / ps_opts._amp_mean_file
         ps_opts._output_file = work_dir / ps_opts._output_file
+
+        self.timeseries_options._velocity_file = (
+            work_dir / self.timeseries_options._velocity_file
+        )

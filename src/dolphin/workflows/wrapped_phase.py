@@ -18,7 +18,7 @@ from .config import DisplacementWorkflow
 @log_runtime
 def run(
     cfg: DisplacementWorkflow, debug: bool = False, tqdm_kwargs=None
-) -> tuple[list[Path], list[Path], Path, Path]:
+) -> tuple[list[Path], list[Path], Path, Path, Path]:
     """Run the displacement workflow on a stack of SLCs.
 
     Parameters
@@ -44,6 +44,8 @@ def run(
         In the case of sequential phase linking, this is the average of all ministacks.
     ps_looked_file : Path
         The multilooked boolean persistent scatterer file.
+    amp_disp_looked_file : Path
+        The multilooked amplitude dispersion file.
 
     """
     if tqdm_kwargs is None:
@@ -95,8 +97,10 @@ def run(
 
     # Save a looked version of the PS mask too
     strides = cfg.output_options.strides
-    ps_looked_file = ps.multilook_ps_mask(
-        strides=strides, ps_mask_file=cfg.ps_options._output_file
+    ps_looked_file, amp_disp_looked_file = ps.multilook_ps_files(
+        strides=strides,
+        ps_mask_file=cfg.ps_options._output_file,
+        amp_dispersion_file=cfg.ps_options._amp_dispersion_file,
     )
 
     # #########################
@@ -178,16 +182,28 @@ def run(
     # ###################################################
 
     ifg_network = cfg.interferogram_network
-    existing_ifgs = list(ifg_network._directory.glob("*.int.*"))
+    existing_ifgs = list(ifg_network._directory.glob("*.int.vrt"))
     if len(existing_ifgs) > 0:
         logger.info(f"Skipping interferogram step, {len(existing_ifgs)} exists")
-        return existing_ifgs, comp_slc_list, temp_coh_file, ps_looked_file
+        return (
+            existing_ifgs,
+            comp_slc_list,
+            temp_coh_file,
+            ps_looked_file,
+            amp_disp_looked_file,
+        )
 
     logger.info(f"Creating virtual interferograms from {len(phase_linked_slcs)} files")
     ifg_file_list = create_ifgs(
         ifg_network, phase_linked_slcs, any(is_compressed), reference_date
     )
-    return ifg_file_list, comp_slc_list, temp_coh_file, ps_looked_file
+    return (
+        ifg_file_list,
+        comp_slc_list,
+        temp_coh_file,
+        ps_looked_file,
+        amp_disp_looked_file,
+    )
 
 
 def create_ifgs(

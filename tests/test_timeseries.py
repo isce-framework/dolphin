@@ -217,7 +217,6 @@ class TestVelocity:
 
 
 if __name__ == "__main__":
-    # import the fixtures
     sar_dates = make_sar_dates()
     sar_phases = make_sar_phases(sar_dates)
     ifg_date_pairs = make_ifg_date_pairs(sar_dates)
