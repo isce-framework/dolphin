@@ -391,13 +391,19 @@ def run_timeseries(
         inverted_phase_paths.append(ref_raster)
 
     if ts_opts.run_velocity:
+        #  We can't pass the correlations after an inversion- the numbers don't match
+        # TODO:
+        # Is there a better weighting then?
+        cor_file_list = (
+            cor_paths if len(cor_paths) == len(inverted_phase_paths) else None
+        )
         logger.info("Estimating phase velocity")
         timeseries.create_velocity(
             unw_file_list=inverted_phase_paths,
             output_file=ts_opts._velocity_file,
             reference=reference,
             date_list=sar_dates,
-            cor_file_list=cor_paths,
+            cor_file_list=cor_file_list,
             cor_threshold=ts_opts.correlation_threshold,
             num_threads=num_threads,
         )
