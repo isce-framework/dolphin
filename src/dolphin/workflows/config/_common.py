@@ -164,7 +164,7 @@ class UnwrapOptions(BaseModel, extra="forbid"):
         ),
     )
     run_goldstein: bool = Field(
-        True,
+        False,
         description=(
             "Whether to run Goldstein filtering step on wrapped interferogram."
         ),
