@@ -352,7 +352,7 @@ def run_timeseries(
     reference = timeseries.select_reference_point(
         conncomp_paths,
         stitched_amp_dispersion_file,
-        output_dir=ts_opts._directory,
+        output_dir=output_path,
     )
 
     ifg_date_pairs = [get_dates(f) for f in unwrapped_paths]
@@ -369,7 +369,7 @@ def run_timeseries(
         inverted_phase_paths = timeseries.invert_unw_network(
             unw_file_list=unwrapped_paths,
             reference=reference,
-            output_dir=ts_opts._directory,
+            output_dir=output_path,
         )
     else:
         logger.info(
@@ -377,12 +377,12 @@ def run_timeseries(
         )
         # Symlink the unwrapped paths to `timeseries/`
         for p in unwrapped_paths:
-            target = ts_opts._directory / p.name
+            target = output_path / p.name
             with contextlib.suppress(FileExistsError):
                 target.symlink_to(p)
             inverted_phase_paths.append(target)
         # Make extra "0" raster so that the number of rasters matches len(sar_dates)
-        ref_raster = ts_opts._directory / (
+        ref_raster = output_path / (
             utils.format_dates(sar_dates[0], sar_dates[0]) + ".tif"
         )
         io.write_arr(

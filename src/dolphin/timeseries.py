@@ -367,7 +367,12 @@ def create_velocity(
         outfile=out_dir / "velocity_inputs.vrt",
         skip_size_check=True,
     )
-    if cor_file_list is not None and len(cor_file_list) == len(unw_file_list):
+    if cor_file_list is not None:
+        if len(cor_file_list) != len(unw_file_list):
+            msg = "Mismatch in number of input files provided:"
+            msg += f"{len(cor_file_list) = }, but {len(unw_file_list) = }"
+            raise ValueError(msg)
+
         cor_reader = io.VRTStack(
             file_list=cor_file_list,
             outfile=out_dir / "cor_inputs.vrt",
