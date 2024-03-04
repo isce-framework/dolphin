@@ -57,6 +57,7 @@ def goldstein(phase, alpha, psize=32):
         Returns
         -------
             2D numpy array of filtered data.
+
         """
         # Calculate alpha
         data = np.fft.fft2(data, s=(psize, psize))

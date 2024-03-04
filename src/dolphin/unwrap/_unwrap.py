@@ -4,8 +4,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Optional, Sequence, Union
 
-from tqdm.auto import tqdm
 import numpy as np
+from tqdm.auto import tqdm
 
 from dolphin import goldstein, io
 from dolphin._log import get_log, log_runtime
