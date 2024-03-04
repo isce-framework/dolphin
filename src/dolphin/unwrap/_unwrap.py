@@ -294,7 +294,7 @@ def unwrap(
 
         ifg = io.load_gdal(ifg_filename)
         logger.info(f"Goldstein filtering {ifg_filename} -> {filt_ifg_filename}")
-        filt_ifg = goldstein(ifg, alpha=0.5, psize=32)
+        filt_ifg = goldstein(ifg, alpha=alpha)
         logger.info(f"Writing filtered output to {filt_ifg_filename}")
         io.write_arr(
             arr=filt_ifg,
@@ -311,6 +311,7 @@ def unwrap(
 
     if unwrap_method == UnwrapMethod.SNAPHU:
         from ._snaphu_py import unwrap_snaphu_py
+
         # Pass everything to snaphu-py
         unw_path, conncomp_path = unwrap_snaphu_py(
             unwrapper_ifg_filename,
@@ -358,7 +359,9 @@ def unwrap(
     # Transfer ambiguity numbers from filtered unwrapped interferogram
     # back to original interferogram
     if run_goldstein:
-        logger.info(f"Transferring ambiguity numbers from filtered ifg {scratch_unw_filename}")
+        logger.info(
+            f"Transferring ambiguity numbers from filtered ifg {scratch_unw_filename}"
+        )
         unw_arr = io.load_gdal(scratch_unw_filename)
 
         final_arr = np.angle(ifg) + (unw_arr - np.angle(filt_ifg))
