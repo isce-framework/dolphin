@@ -1,0 +1,44 @@
+{
+  "@context": "https://raw.githubusercontent.com/codemeta/codemeta/master/codemeta.jsonld",
+  "@type": "Code",
+  "author": [
+    {
+      "@id": "https://orcid.org/0000-0002-3055-5731",
+      "@type": "Person",
+      "email": "scott.j.staniewicz@jpl.nasa.gov",
+      "name": "Scott Staniewicz",
+      "affiliation": "NASA Jet Propulsion Laboratory"
+    },
+    {
+      "@id": "",
+      "@type": "Person",
+      "email": "",
+      "name": "Sara Mirzaee",
+      "affiliation": "NASA Jet Propulsion Laboratory"
+    },
+    {
+      "@id": "",
+      "@type": "Person",
+      "email": "",
+      "name": "Geoffrey Gunter",
+      "affiliation": "NASA Jet Propulsion Laboratory"
+    },
+    {
+      "@id": "",
+      "@type": "Person",
+      "email": "",
+      "name": "Heresh Fattahi",
+      "affiliation": "NASA Jet Propulsion Laboratory"
+    }
+  ],
+  "identifier": "",
+  "codeRepository": "https://github.com/isce-framework/dolphin",
+  "datePublished": "2024-03-05",
+  "dateModified": "2024-03-05",
+  "dateCreated": "2024-03-05",
+  "description": "An InSAR phase linking library for large scale PS/DS processing",
+  "keywords": "insar, time series, remote sensing, phase linking, deformation, persistent scatterers",
+  "license": "BSD-3 OR Apache 2.0",
+  "title": "dolphin",
+  "version": "v0.16.0"
+}
