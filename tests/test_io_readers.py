@@ -328,6 +328,10 @@ def test_read_stack_1_file(tmp_path, slc_file_list):
     assert data.ndim == v.ndim
     assert data.shape == v.shape
 
+    data = v[:, :, :]
+    assert data.ndim == v.ndim
+    assert data.shape == v.shape
+
 
 def test_sort_order(tmp_path, slc_file_list):
     random_order = [Path(f) for f in np.random.permutation(slc_file_list)]

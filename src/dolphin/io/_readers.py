@@ -902,7 +902,7 @@ class VRTStack(StackReader):
                     )
                 data = np.stack(list(results), axis=0)
 
-        return data.squeeze()
+        return data
 
     def read_stack(
         self,

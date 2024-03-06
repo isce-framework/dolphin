@@ -58,10 +58,9 @@ def test_displacement_run_single_official_opera_naming(
     with tmpdir.as_cwd():
         cfg = config.DisplacementWorkflow(
             cslc_file_list=opera_slc_files_official,
-            input_options={"subdataset": "/data/VV", "strides": {"x": 2, "y": 2}},
-            interferogram_network={
-                "indexes": [(0, -1)],
-            },
+            input_options={"subdataset": "/data/VV"},
+            output_options={"strides": {"x": 2, "y": 2}},
+            interferogram_network={"max_bandwidth": 1},
             phase_linking={
                 "ministack_size": 500,
             },
