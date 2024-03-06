@@ -124,12 +124,12 @@ class InterferogramNetwork(BaseModel, extra="forbid"):
     max_bandwidth: Optional[int] = Field(
         None,
         description="Max `n` to form the nearest-`n` interferograms by index.",
-        gt=1,
+        ge=1,
     )
     max_temporal_baseline: Optional[int] = Field(
         None,
         description="Maximum temporal baseline of interferograms.",
-        gt=0,
+        ge=0,
     )
     indexes: Optional[list[tuple[int, int]]] = Field(
         None,
