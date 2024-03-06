@@ -21,7 +21,7 @@ def phase_similarity(x1: ArrayLike, x2: ArrayLike):
 
 
 def median_similarity(
-    ifg_stack: ArrayLike, search_radius: int, weights: ArrayLike | None
+    ifg_stack: ArrayLike, search_radius: int, weights: ArrayLike | None = None
 ):
     """Compute the median similarity of each pixel and its neighbors.
 
@@ -49,11 +49,15 @@ def median_similarity(
 
     """
     n_ifg, rows, cols = ifg_stack.shape
+    if not np.iscomplexobj(ifg_stack):
+        raise ValueError("ifg_stack must be complex")
+
+    unit_ifgs = np.exp(1j * np.angle(ifg_stack))
     out_similarity = np.zeros((rows, cols), dtype="float32")
     if weights is None:
         weights = np.ones((rows, cols), dtype="float32")
     idxs = get_circle_idxs(search_radius)
-    return _median_sim_loop(ifg_stack, idxs, weights, out_similarity)
+    return _median_sim_loop(unit_ifgs, idxs, weights, out_similarity)
 
 
 @numba.njit(nogil=True, parallel=True)
