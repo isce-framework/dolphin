@@ -4,7 +4,7 @@
 - 3D readers would squeeze out a dimension for length one inputs (i.e. they would give an array with `.ndim=2`)
 - `max_bandwidth` config can now be 1 to specify only nearest neighbor interferograms.
 
-# [Unreleased](https://github.com/isce-framework/dolphin/compare/v0.15.3...v0.16.0)
+# [v0.16.0](https://github.com/isce-framework/dolphin/compare/v0.15.3...v0.16.0) - 2024-03-03
 
 **Added**
 - Added `dolphin.timeseries` module with basic functionality:
