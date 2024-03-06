@@ -9,6 +9,7 @@ import numpy as np
 from jax import Array, jit, vmap
 from numpy.typing import ArrayLike
 from opera_utils import get_dates
+from scipy import ndimage
 from tqdm.auto import tqdm
 
 from dolphin import DateOrDatetime, io
@@ -30,6 +31,10 @@ __all__ = [
 T = TypeVar("T")
 
 logger = logging.getLogger(__name__)
+
+
+class ReferencePointError(ValueError):
+    pass
 
 
 @jit
@@ -662,6 +667,34 @@ def select_reference_point(
 
     1. is within intersection of all nonzero connected component labels (always valid)
     2. has the lowest amplitude dispersion
+
+    Parameters
+    ----------
+    ccl_file_list : Sequence[PathOrStr]
+        List of connected component label phase files.
+    amp_dispersion_file: PathOrStr
+        Amplitude dispersion, stitched and multilooked to the same size each raster
+        in `ccl_file_list`
+    output_dir: Path
+        Path to store the computed "conncomp_intersection.tif" raster
+    block_shape: tuple[int, int]
+        Size of blocks to read from while processing `ccl_file_list`
+        Default = (512, 512)
+    num_threads: int
+        Number of parallel blocks to process.
+        Default = 5
+
+    Returns
+    -------
+    ReferencePoint
+        The select (row, col) as a namedtuple
+
+    Raises
+    ------
+    ReferencePointError
+        Raised f no valid region is found in the intersection of the connected component
+        label files
+
     """
     conncomp_intersection_file = Path(output_dir) / "conncomp_intersection.tif"
 
@@ -691,7 +724,22 @@ def select_reference_point(
     conncomp_intersection = io.load_gdal(conncomp_intersection_file, masked=True)
 
     # Find the largest conncomp region in the intersection
-    isin_largest_conncomp = get_largest_conncomp(conncomp_intersection)
+    label, nlabels = ndimage.label(
+        conncomp_intersection.filled(0), structure=np.ones((3, 3))
+    )
+    if nlabels == 0:
+        raise ReferencePointError(
+            "Connected components intersection left no valid regions"
+        )
+    logger.info("Found %d connected components in intersection", nlabels)
+
+    # Make a mask of the largest conncomp:
+    # Find the label with the most pixels using bincount
+    label_counts = np.bincount(conncomp_intersection.ravel())
+    # (ignore the 0 label)
+    largest_idx = np.argmax(label_counts[1:]) + 1
+    # Create a mask of pixels with this label
+    isin_largest_conncomp = label == largest_idx
 
     amp_dispersion = io.load_gdal(amp_dispersion_file, masked=True)
     # Mask out where the conncomps aren't equal to the largest
@@ -702,20 +750,3 @@ def select_reference_point(
 
     # Cast to `int` to avoid having `np.int64` types
     return ReferencePoint(int(ref_row), int(ref_col))
-
-
-def get_largest_conncomp(conncomp_intersection: ArrayLike) -> np.ndarray:
-    """Get a max for the largest nonzero connected component in the intersection."""
-    from scipy import ndimage
-
-    label, nlabels = ndimage.label(
-        conncomp_intersection.filled(0), structure=np.ones((3, 3))
-    )
-    logger.info("Found %d connected components in intersection", nlabels)
-    # Find the label with the most pixels using bincount
-    label_counts = np.bincount(label.ravel())
-    # (ignore the 0 label)
-    largest_idx = np.argmax(label_counts[1:]) + 1
-
-    # Make a mask of the largest conncomp
-    return label == largest_idx
