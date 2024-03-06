@@ -307,7 +307,11 @@ def test_read_stack(vrt_stack, slc_stack):
     ds = gdal.Open(str(vrt_stack.outfile))
     loaded = ds.ReadAsArray()
     npt.assert_array_almost_equal(loaded, slc_stack)
-    npt.assert_array_almost_equal(vrt_stack.read_stack(), slc_stack)
+
+    data = vrt_stack.read_stack()
+    npt.assert_array_almost_equal(data, slc_stack)
+    assert data.ndim == vrt_stack.ndim
+    assert data.shape == vrt_stack.shape
 
 
 def test_read_stack_nc(vrt_stack_nc, slc_stack):
@@ -315,6 +319,14 @@ def test_read_stack_nc(vrt_stack_nc, slc_stack):
     loaded = ds.ReadAsArray()
     npt.assert_array_almost_equal(loaded, slc_stack)
     npt.assert_array_almost_equal(vrt_stack_nc.read_stack(), slc_stack)
+
+
+def test_read_stack_1_file(tmp_path, slc_file_list):
+    vrt_file = tmp_path / "test_1file.vrt"
+    v = VRTStack(slc_file_list[:1], outfile=vrt_file)
+    data = v.read_stack()
+    assert data.ndim == v.ndim
+    assert data.shape == v.shape
 
 
 def test_sort_order(tmp_path, slc_file_list):
