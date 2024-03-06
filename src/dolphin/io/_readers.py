@@ -902,7 +902,7 @@ class VRTStack(StackReader):
                     )
                 data = np.stack(list(results), axis=0)
 
-        return data.squeeze()
+        return data
 
     def read_stack(
         self,
@@ -911,11 +911,12 @@ class VRTStack(StackReader):
         rows: Optional[slice] = None,
         cols: Optional[slice] = None,
         masked: bool | None = None,
+        keepdims: bool = True,
     ):
         """Read in the SLC stack."""
         if masked is None:
             masked = self._read_masked
-        return io.load_gdal(
+        data = io.load_gdal(
             self.outfile,
             band=band,
             subsample_factor=subsample_factor,
@@ -923,6 +924,11 @@ class VRTStack(StackReader):
             cols=cols,
             masked=masked,
         )
+        # Check to get around gdal `ds.ReadAsArray()` squashing dimensions
+        if len(self) == 1 and keepdims:
+            # Add the front (1,) dimension which is missing for a single file
+            data = data[None]
+        return data
 
 
 def _parse_vrt_file(vrt_file):

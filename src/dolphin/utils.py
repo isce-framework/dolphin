@@ -131,7 +131,7 @@ def disable_gpu():
     """Disable GPU usage."""
     import os
 
-    import jax.config
+    import jax
 
     os.environ["CUDA_VISIBLE_DEVICES"] = ""
     jax.config.update("jax_platform_name", "cpu")
