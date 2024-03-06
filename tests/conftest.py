@@ -316,9 +316,17 @@ def opera_slc_files_official(tmp_path) -> list[Path]:
     start = datetime.datetime(2022, 1, 1, 1, 2, 3)
     dt = datetime.timedelta(days=1)
     shape = (4, 128, 128)
-    slc_stack = (np.random.rand(*shape) + 1j * np.random.rand(*shape)).astype(
+    phase_stack = np.empty((4, 128, 128), dtype="float32")
+    ramp0 = np.ones((128, 1)) * np.arange(128).reshape(1, -1)
+    ramp0 /= 128
+    for idx in range(len(phase_stack)):
+        cur_slope = 0.5 * 12 * idx
+        phase_stack[idx] = cur_slope * ramp0
+    # Add a little noise
+    noise = 0.05 * (np.random.rand(*shape) + 1j * np.random.rand(*shape)).astype(
         np.complex64
     )
+    slc_stack = np.exp(1j * phase_stack) + noise
 
     d = tmp_path / "input_slcs"
     d.mkdir()
