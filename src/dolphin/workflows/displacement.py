@@ -234,8 +234,7 @@ def run(
     # ##############################################
 
     ts_opts = cfg.timeseries_options
-    # Skip if we only have 1 unwrapped, or if we didn't ask for inversion/velocity
-    if len(unwrapped_paths) > 1 and (ts_opts.run_inversion or ts_opts.run_velocity):
+    if not ts_opts.run_inversion:
         inverted_phase_paths = run_timeseries(
             ts_opts=ts_opts,
             unwrapped_paths=unwrapped_paths,
@@ -371,7 +370,6 @@ def run_timeseries(
             unw_file_list=unwrapped_paths,
             reference=reference,
             output_dir=output_path,
-            num_threads=num_threads,
         )
     else:
         logger.info(
