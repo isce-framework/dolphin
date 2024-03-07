@@ -22,7 +22,7 @@ class BlockProcessor(Protocol):
 
     def __call__(
         self, readers: Sequence[StackReader], rows: slice, cols: slice
-    ) -> ArrayLike:
+    ) -> tuple[ArrayLike, slice, slice]:
         ...
 
 

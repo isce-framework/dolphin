@@ -345,7 +345,7 @@ def create_velocity(
 
     def read_and_fit(
         readers: Sequence[io.StackReader], rows: slice, cols: slice
-    ) -> tuple[slice, slice, np.ndarray]:
+    ) -> tuple[np.ndarray, slice, slice]:
         # Only use the cor_reader if it's the same shape as the unw_reader
         if len(readers) == 2:
             unw_reader, cor_reader = readers
@@ -359,9 +359,9 @@ def create_velocity(
         unw_stack = unw_stack - ref_data
         # Fit a line to each pixel with weighted least squares
         return (
+            estimate_velocity(x_arr=x_arr, unw_stack=unw_stack, weight_stack=weights),
             rows,
             cols,
-            estimate_velocity(x_arr=x_arr, unw_stack=unw_stack, weight_stack=weights),
         )
 
     # Note: For some reason, the `RasterStackReader` is much slower than the VRT
@@ -430,7 +430,7 @@ def create_temporal_average(
         readers: Sequence[io.StackReader], rows: slice, cols: slice
     ) -> tuple[slice, slice, np.ndarray]:
         chunk = readers[0][:, rows, cols]
-        return rows, cols, average_func(chunk, 0)
+        return average_func(chunk, 0), rows, cols
 
     writer = io.BackgroundRasterWriter(output_file, like_filename=file_list[0])
     with NamedTemporaryFile(mode="w", suffix=".vrt") as f:
