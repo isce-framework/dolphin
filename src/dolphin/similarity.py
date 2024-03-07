@@ -103,6 +103,10 @@ def _create_loop_and_run(
     out_similarity = np.zeros((rows, cols), dtype="float32")
     if mask is None:
         mask = np.ones((rows, cols), dtype="bool")
+
+    if mask.shape != (rows, cols):
+        raise ValueError(f"{ifg_stack.shape = }, but {mask.shape = }")
+
     idxs = get_circle_idxs(search_radius)
     loop_func = _make_loop_function(func)
     return loop_func(unit_ifgs, idxs, mask, out_similarity)
@@ -122,7 +126,7 @@ def _make_loop_function(
     def _masked_median_sim_loop(
         ifg_stack: np.ndarray,
         idxs: np.ndarray,
-        masks: np.ndarray,
+        mask: np.ndarray,
         out_similarity: np.ndarray,
     ) -> np.ndarray:
         """Loop over each pixel, make a masked phase similarity to its neighbors."""
@@ -135,8 +139,8 @@ def _make_loop_function(
         for r0 in numba.prange(rows):
             for c0 in range(cols):
                 # Get the current pixel
-                w0 = masks[r0, c0]
-                if not w0:
+                m0 = mask[r0, c0]
+                if not m0:
                     continue
                 x0 = ifg_stack[:, r0, c0]
                 cur_sim_vec = cur_sim[r0, c0]
@@ -148,11 +152,11 @@ def _make_loop_function(
                     # Clip to the image bounds
                     r = max(min(r0 + ir, rows - 1), 0)
                     c = max(min(c0 + ic, cols - 1), 0)
+                    if r == r0 and c == c0:
+                        continue
 
-                    w = masks[r, c]
-
-                    # Ignore pixels with nan/0
-                    if not w:
+                    # Check for a pixel to ignore
+                    if not mask[r, c]:
                         continue
 
                     x = ifg_stack[:, r, c]
@@ -287,17 +291,19 @@ def create_similarities(
 
     def calc_sim(readers, rows, cols):
         block = readers[0][:, rows, cols]
-        np.nan_to_num(block, copy=False)
-        if np.sum(block) == 0:
+        if np.sum(block) == 0 or np.isnan(block).all():
             return zero_block[rows, cols], rows, cols
 
         out_avg = sim_function(ifg_stack=block, search_radius=search_radius)
+        logger.debug(f"{rows = }, {cols = }, {block.shape = }, {out_avg.shape = }")
         return out_avg, rows, cols
 
     out_dir = Path(output_file).parent
     reader = VRTStack(ifg_file_list, outfile=out_dir / "sim_inputs.vrt")
-    if reader.dtype != np.complex64 or reader.dtype != np.complex128:
-        raise ValueError("ifg_file_list must be complex interferograms")
+    if reader.dtype not in (np.complex64, np.complex128):
+        raise ValueError(
+            f"ifg_file_list must be complex interferograms. Got {reader.dtype}"
+        )
 
     writer = BackgroundRasterWriter(
         output_file,

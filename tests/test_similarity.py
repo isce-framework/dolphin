@@ -3,6 +3,11 @@ import pytest
 
 from dolphin import similarity
 
+# Dataset has no geotransform, gcps, or rpcs. The identity matrix will be returned.
+pytestmark = pytest.mark.filterwarnings(
+    "ignore::rasterio.errors.NotGeoreferencedWarning",
+)
+
 
 def test_get_circle_idxs():
     idxs = similarity.get_circle_idxs(3)
@@ -65,6 +70,12 @@ class TestMedianSimilarity:
         assert np.all(sim >= -1)
         assert np.all(sim <= 1)
 
+    def test_create_similarity(self, tmp_path, slc_file_list):
+        outfile = tmp_path / "med_sim.tif"
+        similarity.create_similarities(
+            slc_file_list, output_file=outfile, num_threads=1, block_shape=(64, 64)
+        )
+
 
 class TestMaxSimilarity:
     @pytest.fixture
@@ -74,8 +85,8 @@ class TestMaxSimilarity:
     @pytest.mark.parametrize("radius", [2, 5, 9])
     def test_basic(self, ifg_stack, radius):
         sim = similarity.max_similarity(ifg_stack, search_radius=radius)
-        assert np.all(sim >= -1)
-        assert np.all(sim <= 1)
+        assert np.all(sim > -1)
+        assert np.all(sim < 1)
 
     @pytest.mark.parametrize("radius", [2, 5, 9])
     def test_max_similarity_masked(self, ifg_stack, radius):
