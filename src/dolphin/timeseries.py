@@ -557,7 +557,7 @@ def invert_unw_network(
         # TODO: do i want to write residuals too? Do i need
         # to have multiple writers then?
         phases = invert_stack(A, stack, weights)[0]
-        return rows, cols, np.asarray(phases)
+        return np.asarray(phases), rows, cols
 
     if cor_file_list is not None:
         cor_reader = io.VRTStack(
