@@ -1,7 +1,8 @@
 import numpy as np
+from numpy.typing import ArrayLike
 
 
-def goldstein(phase: np.ArrayLike, alpha: float, psize: int = 32) -> np.ndarray:
+def goldstein(phase: ArrayLike, alpha: float, psize: int = 32) -> np.ndarray:
     """Apply the Goldstein adaptive filter to the given data.
 
     Parameters
@@ -21,7 +22,7 @@ def goldstein(phase: np.ArrayLike, alpha: float, psize: int = 32) -> np.ndarray:
 
     """
 
-    def apply_pspec(data: np.ArrayLike):
+    def apply_pspec(data: ArrayLike):
         # NaN is allowed value
         assert not (alpha < 0), f"Invalid parameter value {alpha} < 0"
         wgt = np.power(np.abs(data) ** 2, alpha / 2)
@@ -45,7 +46,7 @@ def goldstein(phase: np.ArrayLike, alpha: float, psize: int = 32) -> np.ndarray:
         return wgt
 
     def patch_goldstein_filter(
-        data: np.ArrayLike, wgt: np.ArrayLike, psize: int
+        data: ArrayLike, wgt: ArrayLike, psize: int
     ) -> np.ndarray:
         """Apply the filter to a single patch of data.
 
@@ -69,7 +70,7 @@ def goldstein(phase: np.ArrayLike, alpha: float, psize: int = 32) -> np.ndarray:
         data = np.fft.ifft2(data, s=(psize, psize))
         return wgt * data
 
-    def apply_goldstein_filter(data: np.ArrayLike) -> np.ndarray:
+    def apply_goldstein_filter(data: ArrayLike) -> np.ndarray:
         # Create an empty array for the output
         out = np.zeros(data.shape, dtype=np.complex64)
         # ignore processing for empty chunks
