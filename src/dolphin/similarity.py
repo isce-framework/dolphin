@@ -3,14 +3,20 @@
 Uses metric from @[Wang2022AccuratePersistentScatterer] for similarity.
 """
 
+import logging
+from pathlib import Path
+from typing import Callable, Literal, Sequence
+
 import numba
 import numpy as np
 from numpy.typing import ArrayLike
 
-# from dolphin.io import iter_blocks
+from dolphin._types import PathOrStr
+
+logger = logging.getLogger(__name__)
 
 
-@numba.njit
+@numba.njit(nogil=True)
 def phase_similarity(x1: ArrayLike, x2: ArrayLike):
     """Compute the similarity between two complex 1D vectors."""
     n = len(x1)
@@ -21,7 +27,7 @@ def phase_similarity(x1: ArrayLike, x2: ArrayLike):
 
 
 def median_similarity(
-    ifg_stack: ArrayLike, search_radius: int, weights: ArrayLike | None = None
+    ifg_stack: ArrayLike, search_radius: int, mask: ArrayLike | None = None
 ):
     """Compute the median similarity of each pixel and its neighbors.
 
@@ -34,13 +40,8 @@ def median_similarity(
         Shape is (n_ifg, rows, cols)
     search_radius: int
         maximum radius (in pixels) to search for neighbors when comparing each pixel.
-        max_radius = 51 by default
-    weights: ArrayLike (optional)
-        Array of weights from 0 to 1 indicating how strongly to weigh
-        the ifg values when interpolating.
-        A special case of this is a PS mask where
-            weights[i,j] = True if radar pixel (i,j) is a PS
-            weights[i,j] = False if radar pixel (i,j) is not a PS
+    mask: ArrayLike (optional)
+        Array of mask from True/False indicating whether to ignore the pixel
 
     Returns
     -------
@@ -48,59 +49,126 @@ def median_similarity(
         2D array (shape (rows, cols)) of the median similarity at each pixel.
 
     """
+    return _create_loop_and_run(
+        ifg_stack=ifg_stack,
+        search_radius=search_radius,
+        mask=mask,
+        func=np.nanmedian,
+    )
+
+
+def max_similarity(
+    ifg_stack: ArrayLike, search_radius: int, mask: ArrayLike | None = None
+):
+    """Compute the maximum similarity of each pixel and its neighbors.
+
+    Resulting similarity matches Equation (6) of @[Wang2022AccuratePersistentScatterer]
+
+    Parameters
+    ----------
+    ifg_stack : ArrayLike
+        3D stack of complex interferograms.
+        Shape is (n_ifg, rows, cols)
+    search_radius: int
+        maximum radius (in pixels) to search for neighbors when comparing each pixel.
+    mask: ArrayLike (optional)
+        Array of mask from True/False indicating whether to ignore the pixel
+
+    Returns
+    -------
+    np.ndarray
+        2D array (shape (rows, cols)) of the maximum similarity for any neighrbor
+        at a pixel.
+
+    """
+    return _create_loop_and_run(
+        ifg_stack=ifg_stack,
+        search_radius=search_radius,
+        mask=mask,
+        func=np.nanmax,
+    )
+
+
+def _create_loop_and_run(
+    ifg_stack: ArrayLike,
+    search_radius: int,
+    mask: ArrayLike,
+    func: Callable[[ArrayLike], np.ndarray],
+):
     n_ifg, rows, cols = ifg_stack.shape
     if not np.iscomplexobj(ifg_stack):
         raise ValueError("ifg_stack must be complex")
 
     unit_ifgs = np.exp(1j * np.angle(ifg_stack))
     out_similarity = np.zeros((rows, cols), dtype="float32")
-    if weights is None:
-        weights = np.ones((rows, cols), dtype="float32")
+    if mask is None:
+        mask = np.ones((rows, cols), dtype="bool")
     idxs = get_circle_idxs(search_radius)
-    return _median_sim_loop(unit_ifgs, idxs, weights, out_similarity)
+    loop_func = _make_loop_function(func)
+    return loop_func(unit_ifgs, idxs, mask, out_similarity)
 
 
-@numba.njit(nogil=True, parallel=True)
-def _median_sim_loop(
-    ifg_stack: np.ndarray,
-    idxs: np.ndarray,
-    weights: np.ndarray,
-    out_similarity: np.ndarray,
+def _make_loop_function(
+    summary_func: Callable[[ArrayLike], np.ndarray],
+):
+    """Create a JIT-ed function for some summary of the neighbors's similarity.
+
+    E.g.: for median similarity, call
+
+        median_sim = _make_loop_function(np.median)
+    """
+
+    @numba.njit(nogil=True, parallel=True)
+    def _masked_median_sim_loop(
+        ifg_stack: np.ndarray,
+        idxs: np.ndarray,
+        masks: np.ndarray,
+        out_similarity: np.ndarray,
+    ) -> np.ndarray:
+        """Loop over each pixel, make a masked phase similarity to its neighbors."""
+        _, rows, cols = ifg_stack.shape
+
+        num_compare_pixels = len(idxs)
+        # Buffer to hold all comparison during the parallel loop
+        cur_sim = np.zeros((rows, cols, num_compare_pixels))
+
+        for r0 in numba.prange(rows):
+            for c0 in range(cols):
+                # Get the current pixel
+                w0 = masks[r0, c0]
+                if not w0:
+                    continue
+                x0 = ifg_stack[:, r0, c0]
+                cur_sim_vec = cur_sim[r0, c0]
+                count = 0
+
+                # compare to all pixels in the circle around it
+                for i_idx in range(num_compare_pixels):
+                    ir, ic = idxs[i_idx]
+                    # Clip to the image bounds
+                    r = max(min(r0 + ir, rows - 1), 0)
+                    c = max(min(c0 + ic, cols - 1), 0)
+
+                    w = masks[r, c]
+
+                    # Ignore pixels with nan/0
+                    if not w:
+                        continue
+
+                    x = ifg_stack[:, r, c]
+                    # cur_sim_vec[count] = w * phase_similarity(x0, x)
+                    cur_sim_vec[count] = phase_similarity(x0, x)
+                    count += 1
+                    # Assuming `summary_func` is nan-aware
+                out_similarity[r0, c0] = summary_func(cur_sim_vec[:count])
+        return out_similarity
+
+    return _masked_median_sim_loop
+
+
+def get_circle_idxs(
+    max_radius: int, min_radius: int = 0, sort_output: bool = True
 ) -> np.ndarray:
-    """Loop common to SHP tests using only mean and variance."""
-    _, rows, cols = ifg_stack.shape
-
-    num_compare_pixels = len(idxs)
-    # Buffer to hold all comparison during the parallel loop
-    cur_sim = np.zeros((rows, cols, num_compare_pixels))
-
-    for r0 in numba.prange(rows):
-        for c0 in range(cols):
-            # Get the current pixel
-            x0 = ifg_stack[:, r0, c0]
-            cur_sim_vec = cur_sim[r0, c0]
-
-            w_sum = 0.0
-            # compare to all pixels in the circle around it
-            for i_idx in range(num_compare_pixels):
-                ir, ic = idxs[i_idx]
-                # Clip to the image bounds
-                r = max(min(r0 + ir, rows - 1), 0)
-                c = max(min(c0 + ic, cols - 1), 0)
-
-                x = ifg_stack[:, r, c]
-                w = weights[r, c]
-
-                cur_sim_vec[i_idx] = w * phase_similarity(x0, x)
-                w_sum += w
-
-            # Scale back based on the total weight
-            scale = num_compare_pixels / w_sum
-            out_similarity[r0, c0] = np.median(cur_sim_vec * scale)
-    return out_similarity
-
-
-def get_circle_idxs(max_radius: int, min_radius: int = 0) -> np.ndarray:
     """Get the relative indices of neighboring pixels in a circle.
 
     Adapted from c++ version of `psps` package:
@@ -166,5 +234,86 @@ def get_circle_idxs(max_radius: int, min_radius: int = 0) -> np.ndarray:
             if flag > 0:
                 x += 1
 
-    # Sorting makes it run faster, better data access patterns
-    return np.array(sorted(indices))
+    if sort_output:
+        # Sorting makes it run faster, better data access patterns
+        return np.array(sorted(indices))
+    else:
+        # Indices run from middle outward
+        return np.array(indices)
+
+
+def create_similarities(
+    ifg_file_list: Sequence[PathOrStr],
+    output_file: PathOrStr,
+    search_radius: int = 7,
+    sim_type: Literal["median", "max"] = "median",
+    block_shape: tuple[int, int] = (512, 512),
+    num_threads: int = 5,
+    add_overviews: bool = True,
+):
+    """Create a similarity raster from as stack of ifg files.
+
+    Parameters
+    ----------
+    ifg_file_list : Sequence[PathOrStr]
+        Paths to input interferograms
+    output_file : PathOrStr
+        Output raster path
+    search_radius : int, optional
+        Maximum radius to search for pixels, by default 7
+    sim_type : str, optional
+        Type of similarity function to run, by default "median"
+        Choices: "median", "max"
+    block_shape : tuple[int, int], optional
+        Size of blocks to process at one time from `ifg_file_list`
+        by default (512, 512)
+    num_threads : int, optional
+        Number of parallel blocks to process, by default 5
+    add_overviews : bool, optional
+        Whether to create overviews in `output_file` by default True
+
+    """
+    from dolphin._overviews import Resampling, create_image_overviews
+    from dolphin.io import BackgroundRasterWriter, VRTStack, process_blocks
+
+    if sim_type == "median":
+        sim_function = median_similarity
+    elif sim_type == "max":
+        sim_function = max_similarity
+    else:
+        raise ValueError(f"Unrecognized {sim_type = }")
+
+    zero_block = np.zeros(block_shape, dtype="float32")
+
+    def calc_sim(readers, rows, cols):
+        block = readers[0][:, rows, cols]
+        np.nan_to_num(block, copy=False)
+        if np.sum(block) == 0:
+            return zero_block[rows, cols], rows, cols
+
+        out_avg = sim_function(ifg_stack=block, search_radius=search_radius)
+        return out_avg, rows, cols
+
+    out_dir = Path(output_file).parent
+    reader = VRTStack(ifg_file_list, outfile=out_dir / "sim_inputs.vrt")
+    if reader.dtype != np.complex64 or reader.dtype != np.complex128:
+        raise ValueError("ifg_file_list must be complex interferograms")
+
+    writer = BackgroundRasterWriter(
+        output_file,
+        like_filename=ifg_file_list[0],
+        dtype="float32",
+        driver="GTiff",
+    )
+    process_blocks(
+        [reader],
+        writer,
+        func=calc_sim,
+        block_shape=block_shape,
+        num_threads=num_threads,
+    )
+    writer.notify_finished()
+
+    if add_overviews:
+        logger.info("Creating overviews for unwrapped images")
+        create_image_overviews(Path(output_file), resampling=Resampling.AVERAGE)

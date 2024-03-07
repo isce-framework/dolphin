@@ -48,7 +48,7 @@ def process_blocks(
 
     # Define the callback to write the result to an output DatasetWrite
     def write_callback(fut: Future):
-        rows, cols, data = fut.result()
+        data, rows, cols = fut.result()
         writer[..., rows, cols] = data
         pbar.update()
 

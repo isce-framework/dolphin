@@ -42,7 +42,7 @@ def test_pixel_similarity():
     sim_full = similarity.phase_similarity(x1, x2)
     assert np.abs(sim_full) < np.abs(sim)
 
-    # self similarty == 1
+    # self similarity == 1
     assert similarity.phase_similarity(x1, x1) == 1
 
 
@@ -58,11 +58,29 @@ class TestMedianSimilarity:
         assert np.all(sim <= 1)
 
     @pytest.mark.parametrize("radius", [2, 5, 9])
-    def test_median_similarity_weighted(self, ifg_stack, radius):
+    def test_median_similarity_masked(self, ifg_stack, radius):
         rows, cols = ifg_stack.shape[-2:]
-        weights = np.random.rand(rows, cols)
-        sim = similarity.median_similarity(
-            ifg_stack, search_radius=radius, weights=weights
-        )
+        mask = np.random.rand(rows, cols).round().astype(bool)
+        sim = similarity.median_similarity(ifg_stack, search_radius=radius, mask=mask)
+        assert np.all(sim >= -1)
+        assert np.all(sim <= 1)
+
+
+class TestMaxSimilarity:
+    @pytest.fixture
+    def ifg_stack(self, slc_stack):
+        return slc_stack * slc_stack[[0]].conj()
+
+    @pytest.mark.parametrize("radius", [2, 5, 9])
+    def test_basic(self, ifg_stack, radius):
+        sim = similarity.max_similarity(ifg_stack, search_radius=radius)
+        assert np.all(sim >= -1)
+        assert np.all(sim <= 1)
+
+    @pytest.mark.parametrize("radius", [2, 5, 9])
+    def test_max_similarity_masked(self, ifg_stack, radius):
+        rows, cols = ifg_stack.shape[-2:]
+        mask = np.random.rand(rows, cols).round().astype(bool)
+        sim = similarity.max_similarity(ifg_stack, search_radius=radius, mask=mask)
         assert np.all(sim >= -1)
         assert np.all(sim <= 1)
