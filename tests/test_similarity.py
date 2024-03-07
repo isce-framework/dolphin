@@ -59,16 +59,16 @@ class TestMedianSimilarity:
     @pytest.mark.parametrize("radius", [2, 5, 9])
     def test_basic(self, ifg_stack, radius):
         sim = similarity.median_similarity(ifg_stack, search_radius=radius)
-        assert np.all(sim >= -1)
-        assert np.all(sim <= 1)
+        assert np.all(sim > -1)
+        assert np.all(sim < 1)
 
     @pytest.mark.parametrize("radius", [2, 5, 9])
     def test_median_similarity_masked(self, ifg_stack, radius):
         rows, cols = ifg_stack.shape[-2:]
         mask = np.random.rand(rows, cols).round().astype(bool)
         sim = similarity.median_similarity(ifg_stack, search_radius=radius, mask=mask)
-        assert np.all(sim >= -1)
-        assert np.all(sim <= 1)
+        assert np.all(sim > -1)
+        assert np.all(sim < 1)
 
     def test_create_similarity(self, tmp_path, slc_file_list):
         outfile = tmp_path / "med_sim.tif"
