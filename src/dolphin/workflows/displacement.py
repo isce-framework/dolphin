@@ -234,7 +234,8 @@ def run(
     # ##############################################
 
     ts_opts = cfg.timeseries_options
-    if not ts_opts.run_inversion:
+    # Skip if we only have 1 unwrapped, or if we didn't ask for inversion/velocity
+    if len(unwrapped_paths) > 1 and (ts_opts.run_inversion or ts_opts.run_velocity):
         inverted_phase_paths = run_timeseries(
             ts_opts=ts_opts,
             unwrapped_paths=unwrapped_paths,
