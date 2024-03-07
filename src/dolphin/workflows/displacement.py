@@ -371,6 +371,7 @@ def run_timeseries(
             unw_file_list=unwrapped_paths,
             reference=reference,
             output_dir=output_path,
+            num_threads=num_threads,
         )
     else:
         logger.info(
