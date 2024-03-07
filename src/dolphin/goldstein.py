@@ -1,32 +1,34 @@
-def goldstein(phase, alpha, psize=32):
+import numpy as np
+
+
+def goldstein(phase: np.ArrayLike, alpha: float, psize: int = 32) -> np.ndarray:
     """Apply the Goldstein adaptive filter to the given data.
 
     Parameters
     ----------
-        phase : np.ndarray
-            2D complex array containing the data to be filtered.
-        alpha : float
-            Filtering parameter for Goldstein algorithm
-            Must be between 0 (no filtering) and 1 (maximum filtering)
-        psize : int, optional
-            edge length of square patch
-            Default = 32
+    phase : np.ndarray
+        2D complex array containing the data to be filtered.
+    alpha : float
+        Filtering parameter for Goldstein algorithm
+        Must be between 0 (no filtering) and 1 (maximum filtering)
+    psize : int, optional
+        edge length of square patch
+        Default = 32
 
     Returns
     -------
         2D numpy array of filtered data.
 
     """
-    import numpy as np
 
-    def apply_pspec(data):
+    def apply_pspec(data: np.ArrayLike):
         # NaN is allowed value
         assert not (alpha < 0), f"Invalid parameter value {alpha} < 0"
         wgt = np.power(np.abs(data) ** 2, alpha / 2)
         data = wgt * data
         return data
 
-    def make_wgt(nxp, nyp):
+    def make_wgt(nxp: int, nyp: int) -> np.ndarray:
         # Create arrays of horizontal and vertical weights
         wx = 1.0 - np.abs(np.arange(nxp // 2) - (nxp / 2.0 - 1.0)) / (nxp / 2.0 - 1.0)
         wy = 1.0 - np.abs(np.arange(nyp // 2) - (nyp / 2.0 - 1.0)) / (nyp / 2.0 - 1.0)
@@ -42,17 +44,19 @@ def goldstein(phase, alpha, psize=32):
         )
         return wgt
 
-    def patch_goldstein_filter(data, wgt, psize):
+    def patch_goldstein_filter(
+        data: np.ArrayLike, wgt: np.ArrayLike, psize: int
+    ) -> np.ndarray:
         """Apply the filter to a single patch of data.
 
         Parameters
         ----------
-            data : np.ndarray
-                2D complex array containing the data to be filtered.
-            wgt : np.ndarray
-                weight matrix for summing neighboring data
-            psize : int
-                edge length of square FFT area
+        data : np.ndarray
+            2D complex array containing the data to be filtered.
+        wgt : np.ndarray
+            weight matrix for summing neighboring data
+        psize : int
+            edge length of square FFT area
 
         Returns
         -------
@@ -65,7 +69,7 @@ def goldstein(phase, alpha, psize=32):
         data = np.fft.ifft2(data, s=(psize, psize))
         return wgt * data
 
-    def apply_goldstein_filter(data):
+    def apply_goldstein_filter(data: np.ArrayLike) -> np.ndarray:
         # Create an empty array for the output
         out = np.zeros(data.shape, dtype=np.complex64)
         # ignore processing for empty chunks

@@ -47,7 +47,7 @@ def run(
     ccl_nodata: int | None = DEFAULT_CCL_NODATA,
     scratchdir: Optional[Filename] = None,
     overwrite: bool = False,
-    run_goldstein: bool = True,
+    run_goldstein: bool = False,
     alpha: float = 0.5,
 ) -> tuple[list[Path], list[Path]]:
     """Run snaphu on all interferograms in a directory.
@@ -99,6 +99,10 @@ def run(
         If None, uses `tophu`'s `/tmp/...` default.
     overwrite : bool, optional, default = False
         Overwrite existing unwrapped files.
+    run_goldstein : bool, optional, default = False
+        Whether to run Goldstein filtering on interferogram
+    alpha : float, optional, default = 0.5
+        Alpha parameter for Goldstein filtering
 
     Returns
     -------
@@ -194,7 +198,7 @@ def unwrap(
     unw_nodata: float | None = DEFAULT_UNW_NODATA,
     ccl_nodata: int | None = DEFAULT_CCL_NODATA,
     scratchdir: Optional[Filename] = None,
-    run_goldstein: bool = True,
+    run_goldstein: bool = False,
     alpha: float = 0.5,
 ) -> tuple[Path, Path]:
     """Unwrap a single interferogram using snaphu, isce3, or tophu.
@@ -250,6 +254,10 @@ def unwrap(
     scratchdir : Filename, optional
         Path to scratch directory to hold intermediate files.
         If None, uses `tophu`'s `/tmp/...` default.
+    run_goldstein : bool, optional, default = False
+        Whether to run Goldstein filtering on interferogram
+    alpha : float, optional, default = 0.5
+        Alpha parameter for Goldstein filtering
 
     Returns
     -------
@@ -289,8 +297,10 @@ def unwrap(
 
         # If we're running Goldstein filtering, the intermediate
         # filtered/unwrapped rasters are temporary rasters in the scratch dir.
-        filt_ifg_filename = scratchdir / ifg_filename.with_suffix(".filt" + suf).name
-        scratch_unw_filename = unw_filename.with_suffix(".filt.unw" + suf)
+        filt_ifg_filename = (
+            Path(scratchdir or ".") / Path(ifg_filename).with_suffix(".filt" + suf).name
+        )
+        scratch_unw_filename = Path(unw_filename).with_suffix(".filt.unw" + suf)
 
         ifg = io.load_gdal(ifg_filename)
         logger.info(f"Goldstein filtering {ifg_filename} -> {filt_ifg_filename}")
@@ -306,8 +316,8 @@ def unwrap(
         unwrapper_ifg_filename = filt_ifg_filename
         unwrapper_unw_filename = scratch_unw_filename
     else:
-        unwrapper_ifg_filename = ifg_filename
-        unwrapper_unw_filename = unw_filename
+        unwrapper_ifg_filename = Path(ifg_filename)
+        unwrapper_unw_filename = Path(unw_filename)
 
     if unwrap_method == UnwrapMethod.SNAPHU:
         from ._snaphu_py import unwrap_snaphu_py
