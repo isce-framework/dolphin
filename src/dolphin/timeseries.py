@@ -1,5 +1,4 @@
 import logging
-from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Callable, Protocol, Sequence, TypeVar
@@ -10,12 +9,11 @@ from jax import Array, jit, vmap
 from numpy.typing import ArrayLike
 from opera_utils import get_dates
 from scipy import ndimage
-from tqdm.auto import tqdm
 
 from dolphin import DateOrDatetime, io
 from dolphin._overviews import ImageType, create_overviews
 from dolphin._types import PathOrStr, ReferencePoint
-from dolphin.utils import DummyProcessPoolExecutor, flatten, format_dates
+from dolphin.utils import flatten, format_dates
 
 __all__ = [
     "invert_stack",
@@ -270,51 +268,6 @@ def datetime_to_float(dates: Sequence[DateOrDatetime]) -> np.ndarray:
     return date_arr.astype(float) / sec_per_day
 
 
-class BlockProcessor(Protocol):
-    """Protocol for a block-wise processing function.
-
-    Reads a block of data from each reader, processes it, and returns the result
-    as an array-like object.
-    """
-
-    def __call__(
-        self, readers: Sequence[io.StackReader], rows: slice, cols: slice
-    ) -> ArrayLike:
-        ...
-
-
-def process_blocks(
-    readers: Sequence[io.StackReader],
-    writer: io.DatasetWriter,
-    func: BlockProcessor,
-    # output_files: Sequence[PathOrStr],
-    # like_filename: PathOrStr | None = None,
-    block_shape: tuple[int, int] = (512, 512),
-    num_threads: int = 5,
-):
-    """Perform block-wise processing over blocks in `readers`, writing to `writer`.
-
-    Extracts the common functionality from several routines to read and process
-    a stack of rasters in parallel.
-    """
-    shape = readers[0].shape[-2:]
-    slices = list(io.iter_blocks(shape, block_shape=block_shape))
-
-    pbar = tqdm(total=len(slices))
-
-    # Define the callback to write the result to an output DatasetWrite
-    def write_callback(fut: Future):
-        rows, cols, data = fut.result()
-        writer[..., rows, cols] = data
-        pbar.update()
-
-    Executor = ThreadPoolExecutor if num_threads > 1 else DummyProcessPoolExecutor
-    with Executor(num_threads) as exc:
-        for rows, cols in slices:
-            future = exc.submit(func, readers=readers, rows=rows, cols=cols)
-            future.add_done_callback(write_callback)
-
-
 def create_velocity(
     unw_file_list: Sequence[PathOrStr],
     output_file: PathOrStr,
@@ -392,7 +345,7 @@ def create_velocity(
 
     def read_and_fit(
         readers: Sequence[io.StackReader], rows: slice, cols: slice
-    ) -> tuple[slice, slice, np.ndarray]:
+    ) -> tuple[np.ndarray, slice, slice]:
         # Only use the cor_reader if it's the same shape as the unw_reader
         if len(readers) == 2:
             unw_reader, cor_reader = readers
@@ -406,9 +359,9 @@ def create_velocity(
         unw_stack = unw_stack - ref_data
         # Fit a line to each pixel with weighted least squares
         return (
+            estimate_velocity(x_arr=x_arr, unw_stack=unw_stack, weight_stack=weights),
             rows,
             cols,
-            estimate_velocity(x_arr=x_arr, unw_stack=unw_stack, weight_stack=weights),
         )
 
     # Note: For some reason, the `RasterStackReader` is much slower than the VRT
@@ -421,7 +374,7 @@ def create_velocity(
         readers.append(cor_reader)
 
     writer = io.BackgroundRasterWriter(output_file, like_filename=unw_file_list[0])
-    process_blocks(
+    io.process_blocks(
         readers=readers,
         writer=writer,
         func=read_and_fit,
@@ -477,7 +430,7 @@ def create_temporal_average(
         readers: Sequence[io.StackReader], rows: slice, cols: slice
     ) -> tuple[slice, slice, np.ndarray]:
         chunk = readers[0][:, rows, cols]
-        return rows, cols, average_func(chunk, 0)
+        return average_func(chunk, 0), rows, cols
 
     writer = io.BackgroundRasterWriter(output_file, like_filename=file_list[0])
     with NamedTemporaryFile(mode="w", suffix=".vrt") as f:
@@ -488,7 +441,7 @@ def create_temporal_average(
             read_masked=read_masked,
         )
 
-        process_blocks(
+        io.process_blocks(
             readers=[reader],
             writer=writer,
             func=read_and_average,
@@ -604,7 +557,7 @@ def invert_unw_network(
         # TODO: do i want to write residuals too? Do i need
         # to have multiple writers then?
         phases = invert_stack(A, stack, weights)[0]
-        return rows, cols, np.asarray(phases)
+        return np.asarray(phases), rows, cols
 
     if cor_file_list is not None:
         cor_reader = io.VRTStack(
@@ -616,7 +569,7 @@ def invert_unw_network(
 
     writer = io.BackgroundStackWriter(out_paths, like_filename=unw_file_list[0])
 
-    process_blocks(
+    io.process_blocks(
         readers=readers,
         writer=writer,
         func=read_and_solve,

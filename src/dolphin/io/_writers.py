@@ -15,6 +15,7 @@ from typing import (
 
 import numpy as np
 import rasterio
+import rasterio.errors
 from numpy.typing import ArrayLike, DTypeLike
 from rasterio.windows import Window
 
@@ -304,13 +305,18 @@ class RasterWriter(DatasetWriter, AbstractContextManager["RasterWriter"]):
             elif len(key) == 3:
                 _, rows, cols = _unpack_3d_slices(key)
             else:
-                raise ValueError(f"Invalid key: {key!r}")
-            window = Window.from_slices(
-                rows,
-                cols,
-                height=dataset.height,
-                width=dataset.width,
-            )
+                raise ValueError(
+                    f"Invalid key for {self.__class__!r}.__setitem__: {key!r}"
+                )
+            try:
+                window = Window.from_slices(
+                    rows,
+                    cols,
+                    height=dataset.height,
+                    width=dataset.width,
+                )
+            except rasterio.errors.WindowError as e:
+                raise ValueError(f"Error creating window: {key = }, {value = }") from e
             return dataset.write(value, self.band, window=window)
 
 
