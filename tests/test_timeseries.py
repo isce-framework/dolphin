@@ -171,8 +171,6 @@ class TestInvert:
         return out
 
     def test_invert_unw_network(self, data, unw_files, tmp_path):
-        """"""
-
         output_dir = tmp_path / "output"
         output_dir.mkdir()
         ref_point = (0, 0)
