@@ -1,4 +1,5 @@
 """Estimate wrapped phase for one ministack of SLCs."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
