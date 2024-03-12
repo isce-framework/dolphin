@@ -185,7 +185,7 @@ def multiscale_unwrap(
     if zero_where_masked and mask_file is not None:
         logger.info(f"Zeroing unw/conncomp of pixels masked in {mask_file}")
         unw_filename, conncomp_filename = _zero_from_mask(
-            unw_filename, conncomp_filename, mask_file
+            str(unw_filename), str(conncomp_filename), mask_file
         )
 
     return Path(unw_filename), Path(conncomp_filename)
