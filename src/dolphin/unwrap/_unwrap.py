@@ -35,6 +35,7 @@ def run(
     *,
     nlooks: float = 5,
     mask_file: Optional[Filename] = None,
+    zero_where_masked: bool = False,
     unwrap_method: UnwrapMethod = UnwrapMethod.SNAPHU,
     init_method: str = "mst",
     cost: str = "smooth",
@@ -63,6 +64,10 @@ def run(
     mask_file : Filename, optional
         Path to binary byte mask file, by default None.
         Assumes that 1s are valid pixels and 0s are invalid.
+    zero_where_masked : bool, optional
+        Set wrapped phase/correlation to 0 where mask is 0 before unwrapping.
+        If not mask is provided, this is ignored.
+        By default True.
     unwrap_method : UnwrapMethod or str, optional, default = "snaphu"
         Choice of unwrapping algorithm to use.
         Choices: {"snaphu", "icu", "phass"}
@@ -152,6 +157,7 @@ def run(
                 cost=cost,
                 unwrap_method=unwrap_method,
                 mask_file=mask_file,
+                zero_where_masked=zero_where_masked,
                 downsample_factor=downsample_factor,
                 ntiles=ntiles,
                 tile_overlap=tile_overlap,

@@ -241,6 +241,8 @@ def merge_images(
     if out_dtype is not None:
         out_gdal_dtype = gdal.GetDataTypeName(utils.numpy_to_gdal_type(out_dtype))
         args.extend(["-ot", out_gdal_dtype])
+    if target_aligned_pixels:
+        args.append("-tap")
     if create_only:
         args.append("-create")
     if options is not None:
@@ -251,7 +253,7 @@ def merge_images(
     logger.info(f"Running {' '.join(arg_list)}")
     subprocess.check_call(arg_list)
 
-    # Now clip to the provided bounding box
+    # Now clip to
     gdal.Translate(
         destName=fspath(outfile),
         srcDS=fspath(merge_output),

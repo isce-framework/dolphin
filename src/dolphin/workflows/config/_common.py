@@ -204,6 +204,13 @@ class UnwrapOptions(BaseModel, extra="forbid"):
         "smooth",
         description="Statistical cost mode method for SNAPHU.",
     )
+    zero_where_masked: bool = Field(
+        False,
+        description=(
+            "Set wrapped phase/correlation to 0 where mask is 0 before unwrapping. "
+            " a single-reference network is used."
+        ),
+    )
 
     @field_validator("ntiles", "downsample_factor", mode="before")
     @classmethod
