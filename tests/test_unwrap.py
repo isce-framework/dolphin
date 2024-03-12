@@ -97,6 +97,20 @@ class TestUnwrapSingle:
         assert u_path.exists()
         assert c_path.exists()
 
+    @pytest.mark.parametrize("method", [UnwrapMethod.SNAPHU, UnwrapMethod.PHASS])
+    def test_goldstein(self, tmp_path, list_of_gtiff_ifgs, corr_raster, method):
+        # test other init_method
+        unw_filename = tmp_path / "unwrapped.unw.tif"
+        unw_path, conncomp_path = dolphin.unwrap.unwrap(
+            ifg_filename=list_of_gtiff_ifgs[0],
+            corr_filename=corr_raster,
+            unw_filename=unw_filename,
+            nlooks=1,
+            unwrap_method=method,
+            run_goldstein=True,
+        )
+        assert unw_path.exists()
+        assert conncomp_path.exists()
 
 class TestUnwrapRun:
     def test_run_gtiff(self, list_of_gtiff_ifgs, corr_raster):
