@@ -1,4 +1,43 @@
-# [Unreleased](https://github.com/isce-framework/dolphin/compare/v0.15.0...main)
+# [Unreleased](https://github.com/isce-framework/dolphin/compare/v0.16.0...main)
+**Fixed**
+
+- 3D readers would squeeze out a dimension for length one inputs (i.e. they would give an array with `.ndim=2`)
+- `max_bandwidth` config can now be 1 to specify only nearest neighbor interferograms.
+
+# [v0.16.0](https://github.com/isce-framework/dolphin/compare/v0.15.3...v0.16.0) - 2024-03-03
+
+**Added**
+- Added `dolphin.timeseries` module with basic functionality:
+  - Invert a stack of unwrapped interferograms to a timeseries (using correlation weighting optionally)
+  - Estimate a (weighted) linear velocity from a timeseries
+- Added inversion and velocity estimation as options to `DisplacementWorkflow`
+- Create `DatasetStackWriter` protocol, with `BackgroundStackWriter` implementation
+
+**Changed**
+- Rename `GdalWriter` to `BackgroundBlockWriter`
+- Displacement workflow now also creates/returns a stitched, multi-looked version of the amplitude dispersion
+
+**Fixed**
+- `BackgroundRasterWriter`  was not creating the files necessary before writing
+- Allow user to specify more than one type of interferogram in `Network` configuration
+
+# [0.15.3](https://github.com/isce-framework/dolphin/compare/v0.15.2...0.15.3) - 2024-02-27
+
+**Changed**
+- Return the output paths created by the ionosphere/troposphere modules to make it easier to use afterward
+
+# [0.15.2](https://github.com/isce-framework/dolphin/compare/v0.15.1...0.15.2) - 2024-02-27
+
+**Fixed**
+
+- Fixes to ionosphere/troposphere correction in for `DisplacementWorkflow` and `PsWorkflow`
+- Correct the nodata value passed through to snaphu-py
+
+# [0.15.1](https://github.com/isce-framework/dolphin/compare/v0.15.0...0.15.1) - 2024-02-26
+
+**Fixed**
+
+- PHASS now uses the Tophu wrapper to avoid isce3 inconsistencies between argument order
 
 # [0.15.0](https://github.com/isce-framework/dolphin/compare/v0.14.1...0.15.0) - 2024-02-16
 
@@ -10,7 +49,7 @@
 
 **Fixed**
 
-- Intersection of nodata regions for SLC stack are now all set to `nan` during phase linking
+- Intersection of nodata regions for SLC stack are now all set to `nan` during phase linking, avoiding 0 gaps between bursts
 
 # [0.14.1](https://github.com/isce-framework/dolphin/compare/v0.14.0...0.14.1) - 2024-02-15
 

@@ -36,6 +36,7 @@ def create_config(
     ntiles: tuple[int, int] = (1, 1),
     downsample_factor: tuple[int, int] = (1, 1),
     no_unwrap: bool = False,
+    no_inversion: bool = False,
     n_parallel_unwrap: int = 1,
     unwrap_method: UnwrapMethod = UnwrapMethod.SNAPHU,
     troposphere_files: Optional[list[str]] = None,
@@ -101,6 +102,9 @@ def create_config(
             "downsample_factor": downsample_factor,
             "n_parallel_jobs": n_parallel_unwrap,
             "run_unwrap": not no_unwrap,
+        },
+        timeseries_options={
+            "run_inversion": not no_inversion,
         },
         correction_options={
             "troposphere_files": troposphere_files,

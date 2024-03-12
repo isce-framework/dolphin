@@ -32,6 +32,7 @@ __all__ = [
     "PsOptions",
     "PhaseLinkingOptions",
     "InterferogramNetwork",
+    "TimeseriesOptions",
     "UnwrapOptions",
 ]
 
@@ -123,12 +124,12 @@ class InterferogramNetwork(BaseModel, extra="forbid"):
     max_bandwidth: Optional[int] = Field(
         None,
         description="Max `n` to form the nearest-`n` interferograms by index.",
-        gt=1,
+        ge=1,
     )
     max_temporal_baseline: Optional[int] = Field(
         None,
         description="Maximum temporal baseline of interferograms.",
-        gt=0,
+        ge=0,
     )
     indexes: Optional[list[tuple[int, int]]] = Field(
         None,
@@ -225,6 +226,39 @@ class UnwrapOptions(BaseModel, extra="forbid"):
         elif isinstance(v, int):
             return (v, v)
         return v
+
+
+class TimeseriesOptions(BaseModel, extra="forbid"):
+    """Options for inversion/time series fitting."""
+
+    _directory: Path = PrivateAttr(Path("timeseries"))
+    _velocity_file: Path = PrivateAttr(Path("timeseries/velocity.tif"))
+    run_inversion: bool = Field(
+        True,
+        description=(
+            "Whether to run the inversion step after unwrapping, if more than "
+            " a single-reference network is used."
+        ),
+    )
+    reference_point: Optional[tuple[int, int]] = Field(
+        None,
+        description=(
+            "Reference point (row, col) used if performing a time series inversion. "
+            "If not provided, a point will be selected from a consistent connected "
+            "component with low amplitude dispersion."
+        ),
+    )
+
+    run_velocity: bool = Field(
+        True,
+        description="Run the velocity estimation from the phase time series.",
+    )
+    correlation_threshold: float = Field(
+        0.2,
+        description="Pixels with correlation below this value will be masked out.",
+        ge=0.0,
+        le=1.0,
+    )
 
 
 class WorkerSettings(BaseModel, extra="forbid"):

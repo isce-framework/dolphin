@@ -66,9 +66,18 @@ def test_interferogram_network_types():
     assert opts.max_bandwidth == 2
     assert opts.max_temporal_baseline is None
 
+    opts = config.InterferogramNetwork(max_bandwidth=1)
+    assert opts.max_bandwidth == 1
+
     opts = config.InterferogramNetwork(max_temporal_baseline=30)
     assert opts.max_temporal_baseline == 30
     assert opts.max_bandwidth is None
+
+    with pytest.raises(pydantic.ValidationError):
+        config.InterferogramNetwork(max_bandwidth=0)
+        config.InterferogramNetwork(max_temporal_baseline=0)
+        config.InterferogramNetwork(max_bandwidth=-1)
+        config.InterferogramNetwork(max_temporal_baseline="asdf")
 
 
 def test_unwrap_options_defaults():

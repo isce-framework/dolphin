@@ -75,6 +75,11 @@ P = ParamSpec("P")
 DateOrDatetime = Union[datetime.datetime, datetime.date]
 
 
+class ReferencePoint(NamedTuple):
+    row: int
+    col: int
+
+
 class TropoModel(str, Enum):
     """Enumeration representing different tropospheric models."""
 

@@ -1,4 +1,5 @@
 import warnings
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -6,7 +7,12 @@ import rasterio as rio
 from rasterio.errors import NotGeoreferencedWarning
 
 from dolphin.io._core import load_gdal
-from dolphin.io._writers import BackgroundRasterWriter, RasterWriter
+from dolphin.io._writers import (
+    BackgroundBlockWriter,
+    BackgroundRasterWriter,
+    BackgroundStackWriter,
+    RasterWriter,
+)
 
 # Note: uses the fixtures from conftest.py
 
@@ -26,6 +32,27 @@ def suppress_not_georeferenced_warning():
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", category=NotGeoreferencedWarning)
         yield
+
+
+@pytest.fixture
+def output_file_list(slc_file_list):
+    suffix = Path(slc_file_list[0]).suffix
+    return [f"{f}_out{suffix}" for f in slc_file_list]
+
+
+def test_background_block_writer(output_file_list, slc_file_list):
+    from dolphin.io import write_arr
+
+    write_arr(arr=None, output_name=output_file_list[0], like_filename=slc_file_list[0])
+    data = np.random.randn(5, 10)
+    w = BackgroundBlockWriter()
+    rows, cols = slice(0, 5), slice(0, 10)
+    w.queue_write(data, output_file_list[0], 0, 0)
+    # Make sure we dont write too late
+    w.notify_finished()
+    assert w._thread.is_alive() is False
+
+    assert np.allclose(load_gdal(output_file_list[0], rows=rows, cols=cols), data)
 
 
 # #### RasterReader Tests ####
@@ -74,7 +101,7 @@ class TestBackgroundRasterWriter:
         brw.close()
         assert brw.closed is True
 
-    def test_write(self, slc_file_list):
+    def test_setitem(self, slc_file_list):
         data = np.random.randn(5, 10)
         w = BackgroundRasterWriter(slc_file_list[0])
         rows, cols = slice(0, 5), slice(0, 10)
@@ -95,3 +122,31 @@ class TestBackgroundRasterWriter:
         assert w.closed is True
         assert w._thread.is_alive() is False
         assert np.allclose(load_gdal(slc_file_list[0], rows=rows, cols=cols), data)
+
+
+class TestBackgroundStackWriter:
+    def test_stack(self, slc_file_list, output_file_list):
+        w = BackgroundStackWriter(output_file_list, like_filename=slc_file_list[0])
+        with rio.open(output_file_list[0]) as src:
+            shape_3d = (len(slc_file_list), *src.shape)
+            assert w.shape == shape_3d
+            assert w.dtype == src.dtypes[0]
+
+        assert w.ndim == 3
+        assert w.closed is False
+        w.close()
+        assert w.closed is True
+
+    def test_setitem(self, output_file_list, slc_file_list):
+        data = np.random.randn(len(output_file_list), 5, 10)
+        w = BackgroundStackWriter(output_file_list, like_filename=slc_file_list[0])
+        rows, cols = slice(0, 5), slice(0, 10)
+        w[:, rows, cols] = data
+        # Make sure we dont write too late
+        w.close()
+        assert w._thread.is_alive() is False
+
+        for i in range(len(output_file_list)):
+            assert np.allclose(
+                load_gdal(output_file_list[i], rows=rows, cols=cols), data[i]
+            )

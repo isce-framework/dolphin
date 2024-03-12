@@ -8,7 +8,6 @@ dependencies:
   - gdal>=3.3
   - h5py>=3.6
   - hdf5!=1.12.2 # https://github.com/SciTools/iris/issues/5187 and https://github.com/pydata/xarray/issues/7549
-  - jax>=0.4.19
   - numba>=0.56
   - numpy>=1.23
   - opera-utils>=0.1.5
@@ -17,7 +16,9 @@ dependencies:
   - rasterio>=1.3
   - ruamel.yaml>=0.15
   - scipy>=1.9 # "scipy 0.16+ is required for linear algebra", numba. 1.9 is the oldest version working with jax=0.4.19
-  - shapely>=1.8
   - threadpoolctl>=3.0
   - tqdm>=4.60
   - typing_extensions>=3.10
+  - pip:
+      - jax>=0.4.19
+      - jaxlib>=0.4.19

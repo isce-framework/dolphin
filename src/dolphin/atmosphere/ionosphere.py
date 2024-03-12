@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import datetime
 import re
-from os import fspath
 from pathlib import Path
 from typing import Mapping, Sequence
 
@@ -39,7 +38,7 @@ def estimate_ionospheric_delay(
     output_dir: Path,
     epsg: int,
     bounds: Bbox,
-):
+) -> list[Path]:
     """Estimate the range delay caused by ionosphere for each interferogram.
 
     Parameters
@@ -60,6 +59,11 @@ def estimate_ionospheric_delay(
     bounds : Bbox
         Output bounds.
 
+    Returns
+    -------
+    list[Path]
+        List of newly created ionospheric phase delay corrections.
+
     """
     if epsg != 4326:
         left, bottom, right, top = transform_bounds(
@@ -73,7 +77,7 @@ def estimate_ionospheric_delay(
     lonc = (left + right) / 2
 
     # Read the incidence angle
-    if "lost_east" in geom_files:
+    if "los_east" in geom_files:
         # ISCE3 geocoded products
         los_east = io.load_gdal(geom_files["los_east"])
         los_north = io.load_gdal(geom_files["los_north"])
@@ -85,7 +89,11 @@ def estimate_ionospheric_delay(
     iono_inc_angle = incidence_angle_ground_to_iono(inc_angle)
 
     # frequency
-    first_date = next(iter(slc_files))
+    for key in slc_files:
+        if len(key) == 1:
+            first_date = key
+            break
+
     wavelength = oput.get_radar_wavelength(slc_files[first_date][0])
     freq = SPEED_OF_LIGHT / wavelength
 
@@ -93,15 +101,16 @@ def estimate_ionospheric_delay(
     output_iono = output_dir / "ionosphere"
     output_iono.mkdir(exist_ok=True)
 
+    output_paths: list[Path] = []
+
     for ifg in ifg_file_list:
         ref_date, sec_date = get_dates(ifg)
 
-        iono_delay_product_name = (
-            fspath(output_iono)
-            + f"/{format_date_pair(ref_date, sec_date)}_ionoDelay.tif"
-        )
+        name = f"{format_date_pair(ref_date, sec_date)}_ionoDelay.tif"
+        iono_delay_product_name = output_iono / name
 
-        if Path(iono_delay_product_name).exists():
+        output_paths.append(iono_delay_product_name)
+        if iono_delay_product_name.exists():
             logger.info(
                 "Tropospheric correction for interferogram "
                 f"{format_date_pair(ref_date, sec_date)} already exists, skipping"
@@ -111,15 +120,23 @@ def estimate_ionospheric_delay(
         reference_date = (ref_date,)
         secondary_date = (sec_date,)
 
+        secondary_time = oput.get_zero_doppler_time(slc_files[secondary_date][0])
+        if len(slc_files[reference_date]) == 0:
+            # this is for when we have compressed slcs but the actual
+            # reference date does not exist in the input data
+            reference_time = secondary_time
+        else:
+            reference_time = oput.get_zero_doppler_time(slc_files[reference_date][0])
+
         reference_vtec = read_zenith_tec(
-            slc_file=slc_files[reference_date][0],
+            time=reference_time,
             tec_file=tec_files[reference_date][0],
             lat=latc,
             lon=lonc,
         )
 
         secondary_vtec = read_zenith_tec(
-            slc_file=slc_files[secondary_date][0],
+            time=secondary_time,
             tec_file=tec_files[secondary_date][0],
             lat=latc,
             lon=lonc,
@@ -141,7 +158,7 @@ def estimate_ionospheric_delay(
             like_filename=ifg,
         )
 
-    return
+    return output_paths
 
 
 def incidence_angle_ground_to_iono(inc_angle: ArrayLike, iono_height: float = 450e3):
@@ -175,14 +192,14 @@ def incidence_angle_ground_to_iono(inc_angle: ArrayLike, iono_height: float = 45
 
 
 def read_zenith_tec(
-    slc_file: Filename, tec_file: Filename, lat: float, lon: float
+    time: datetime.datetime, tec_file: Filename, lat: float, lon: float
 ) -> float:
     """Read and interpolate zenith TEC for the latitude and longitude of scene center.
 
     Parameters
     ----------
-    slc_file: Filename
-        path to the SLC file
+    time: datetime
+        datetime of the acquisition
     tec_file: Filename
         path to the tec file corresponding to slc date
     lat: float
@@ -196,7 +213,6 @@ def read_zenith_tec(
         zenith TEC of the scene center in TECU.
 
     """
-    time = oput.get_zero_doppler_time(slc_file)
     utc_seconds = time.hour * 3600.0 + time.minute * 60.0 + time.second
 
     return get_ionex_value(tec_file=tec_file, utc_sec=utc_seconds, lat=lat, lon=lon)

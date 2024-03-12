@@ -375,33 +375,44 @@ class Network:
     def _make_ifg_pairs(self) -> list[IfgPairT]:
         """Form interferogram pairs from a list of SLC files sorted by date."""
         assert self.dates is not None
+        ifgs: list[IfgPairT] = []
+        # For each type of possible network, add the ifgs to the list
         if self.indexes is not None:
             # Give the option to select exactly which interferograms to create
-            ifgs = [
-                (self.slc_list[ref_idx], self.slc_list[sec_idx])
-                for ref_idx, sec_idx in self.indexes
-            ]
-        elif self.max_bandwidth is not None:
-            ifgs = Network._limit_by_bandwidth(self.slc_list, self.max_bandwidth)
-        elif self.max_temporal_baseline is not None:
-            ifgs = Network._limit_by_temporal_baseline(
-                self.slc_list,
-                dates=self.dates,
-                max_temporal_baseline=self.max_temporal_baseline,
+            ifgs.extend(
+                [
+                    (self.slc_list[ref_idx], self.slc_list[sec_idx])
+                    for ref_idx, sec_idx in self.indexes
+                ]
             )
-        elif self.reference_idx is not None:
-            ifgs = Network._single_reference_network(self.slc_list, self.reference_idx)
-        else:
+        if self.max_bandwidth is not None:
+            ifgs.extend(Network._limit_by_bandwidth(self.slc_list, self.max_bandwidth))
+        if self.max_temporal_baseline is not None:
+            ifgs.extend(
+                Network._limit_by_temporal_baseline(
+                    self.slc_list,
+                    dates=self.dates,
+                    max_temporal_baseline=self.max_temporal_baseline,
+                )
+            )
+        if self.reference_idx is not None:
+            ifgs.extend(
+                Network._single_reference_network(self.slc_list, self.reference_idx)
+            )
+
+        if self.include_annual:
+            # Add in the annual pairs, then re-sort
+            annual_ifgs = Network._find_annuals(
+                self.slc_list, self.dates, buffer_days=self.annual_buffer_days
+            )
+            ifgs.extend(annual_ifgs)
+
+        if not ifgs:
             msg = "No valid ifg list generation method specified"
             raise ValueError(msg)
 
-        if not self.include_annual:
-            return ifgs
-        # Add in the annual pairs, then re-sort
-        annual_ifgs = Network._find_annuals(
-            self.slc_list, self.dates, buffer_days=self.annual_buffer_days
-        )
-        return sorted(ifgs + annual_ifgs)
+        # Sort and dedupe them
+        return sorted(set(ifgs))
 
     def _create_vrt_ifgs(self) -> list[VRTInterferogram]:
         """Write out a VRTInterferogram for each ifg."""
