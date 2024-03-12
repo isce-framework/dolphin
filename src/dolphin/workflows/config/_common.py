@@ -170,6 +170,10 @@ class UnwrapOptions(BaseModel, extra="forbid"):
             "Whether to run Goldstein filtering step on wrapped interferogram."
         ),
     )
+    run_interpolation: bool = Field(
+        False,
+        description=("Whether to run interpolation step on wrapped interferogram."),
+    )
     _directory: Path = PrivateAttr(Path("unwrapped"))
     unwrap_method: UnwrapMethod = UnwrapMethod.SNAPHU
     n_parallel_jobs: int = Field(
@@ -210,12 +214,15 @@ class UnwrapOptions(BaseModel, extra="forbid"):
         "smooth",
         description="Statistical cost mode method for SNAPHU.",
     )
-
     alpha: float = Field(
         0.5,
         description=(
             "(for Goldstein filtering) Power parameter for Goldstein algorithm."
         ),
+    )
+    max_radius: int = Field(
+        51,
+        description=("(for interpolation) maximum radius to find scatterers."),
     )
 
     @field_validator("ntiles", "downsample_factor", mode="before")

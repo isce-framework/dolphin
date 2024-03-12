@@ -7,7 +7,7 @@ from typing import Optional, Sequence, Union
 import numpy as np
 from tqdm.auto import tqdm
 
-from dolphin import goldstein, io
+from dolphin import goldstein, interpolate, io
 from dolphin._log import get_log, log_runtime
 from dolphin._types import Filename
 from dolphin.utils import DummyProcessPoolExecutor, full_suffix
@@ -49,6 +49,8 @@ def run(
     overwrite: bool = False,
     run_goldstein: bool = False,
     alpha: float = 0.5,
+    run_interpolation: bool = False,
+    max_radius: int = 51,
 ) -> tuple[list[Path], list[Path]]:
     """Run snaphu on all interferograms in a directory.
 
@@ -103,6 +105,10 @@ def run(
         Whether to run Goldstein filtering on interferogram
     alpha : float, optional, default = 0.5
         Alpha parameter for Goldstein filtering
+    run_interpolation : bool, optional, default = False
+        Whether to run interpolation on interferogram
+    max_radius : int, optional, default = 51
+        maximum radius (in pixel) for scatterer searching for interpolation
 
     Returns
     -------
@@ -167,6 +173,8 @@ def run(
                 scratchdir=scratchdir,
                 run_goldstein=run_goldstein,
                 alpha=alpha,
+                run_interpolation=run_interpolation,
+                max_radius=max_radius,
             )
             for ifg_file, out_file, cor_file in zip(in_files, out_files, cor_filenames)
         ]
@@ -200,6 +208,8 @@ def unwrap(
     scratchdir: Optional[Filename] = None,
     run_goldstein: bool = False,
     alpha: float = 0.5,
+    run_interpolation: bool = False,
+    max_radius: int = 51,
 ) -> tuple[Path, Path]:
     """Unwrap a single interferogram using snaphu, isce3, or tophu.
 
@@ -258,6 +268,10 @@ def unwrap(
         Whether to run Goldstein filtering on interferogram
     alpha : float, optional, default = 0.5
         Alpha parameter for Goldstein filtering
+    run_interpolation : bool, optional, default = False
+        Whether to run interpolation on interferogram
+    max_radius : int, optional, default = 51
+        maximum radius (in pixel) for scatterer searching for interpolation
 
     Returns
     -------
@@ -265,6 +279,9 @@ def unwrap(
         Path to output unwrapped phase file.
     conncomp_path : Path
         Path to output connected component label file.
+
+    Attention: If both interpolation and goldstein filter are true,
+    only goldstein filter will apply and interpolation will be skipped
 
     """
     if isinstance(downsample_factor, int):
@@ -286,6 +303,9 @@ def unwrap(
             output_filename=combined_mask_file,
         )
 
+    unwrapper_ifg_filename = Path(ifg_filename)
+    unwrapper_unw_filename = Path(unw_filename)
+
     if run_goldstein:
         suf = Path(unw_filename).suffix
         if suf == ".tif":
@@ -304,10 +324,10 @@ def unwrap(
 
         ifg = io.load_gdal(ifg_filename)
         logger.info(f"Goldstein filtering {ifg_filename} -> {filt_ifg_filename}")
-        filt_ifg = goldstein(ifg, alpha=alpha)
+        modified_ifg = goldstein(ifg, alpha=alpha)
         logger.info(f"Writing filtered output to {filt_ifg_filename}")
         io.write_arr(
-            arr=filt_ifg,
+            arr=modified_ifg,
             output_name=filt_ifg_filename,
             like_filename=ifg_filename,
             driver=driver,
@@ -315,9 +335,41 @@ def unwrap(
         )
         unwrapper_ifg_filename = filt_ifg_filename
         unwrapper_unw_filename = scratch_unw_filename
-    else:
-        unwrapper_ifg_filename = Path(ifg_filename)
-        unwrapper_unw_filename = Path(unw_filename)
+
+    elif run_interpolation:
+        suf = Path(ifg_filename).suffix
+        if suf == ".tif":
+            driver = "GTiff"
+            opts = list(io.DEFAULT_TIFF_OPTIONS)
+        else:
+            driver = "ENVI"
+            opts = list(io.DEFAULT_ENVI_OPTIONS)
+
+        # temporarily storing the intermediate interpolated rasters in the scratch dir.
+        interp_ifg_filename = (
+            Path(scratchdir or ".")
+            / Path(ifg_filename).with_suffix(".interp" + suf).name
+        )
+        scratch_unw_filename = Path(unw_filename).with_suffix(".interp.unw" + suf)
+
+        ifg = io.load_gdal(ifg_filename)
+        corr = io.load_gdal(corr_filename)
+        logger.info("Masking pixels with correlation above 0.7")
+        coherent_pixel_mask = corr[:] >= 0.7
+        logger.info(f"Interpolating {ifg_filename} -> {interp_ifg_filename}")
+        modified_ifg = interpolate(
+            ifg=ifg, weights=coherent_pixel_mask, max_radius=max_radius
+        )
+        logger.info(f"Writing interpolated output to {interp_ifg_filename}")
+        io.write_arr(
+            arr=modified_ifg,
+            output_name=interp_ifg_filename,
+            like_filename=ifg_filename,
+            driver=driver,
+            options=opts,
+        )
+        unwrapper_ifg_filename = interp_ifg_filename
+        unwrapper_unw_filename = scratch_unw_filename
 
     if unwrap_method == UnwrapMethod.SNAPHU:
         from ._snaphu_py import unwrap_snaphu_py
@@ -370,15 +422,16 @@ def unwrap(
         filename=conncomp_path, output_nodata=ccl_nodata, like_filename=ifg_filename
     )
 
-    # Transfer ambiguity numbers from filtered unwrapped interferogram
+    # Transfer ambiguity numbers from filtered/interpolated unwrapped interferogram
     # back to original interferogram
-    if run_goldstein:
+    if run_goldstein or run_interpolation:
         logger.info(
-            f"Transferring ambiguity numbers from filtered ifg {scratch_unw_filename}"
+            "Transferring ambiguity numbers from filtered/interpolated"
+            "ifg {scratch_unw_filename}"
         )
         unw_arr = io.load_gdal(scratch_unw_filename)
 
-        final_arr = np.angle(ifg) + (unw_arr - np.angle(filt_ifg))
+        final_arr = np.angle(ifg) + (unw_arr - np.angle(modified_ifg))
 
         io.write_arr(
             arr=final_arr,
