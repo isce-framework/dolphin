@@ -145,8 +145,7 @@ def unwrap_snaphu_py(
         if mask is not None:
             mask.close()
         if zero_where_masked and mask_file is not None:
-            logger.info("Zeroing unw/conncomp of pixels masked in "
-                        f"{mask_file}")
+            logger.info("Zeroing unw/conncomp of pixels masked in " f"{mask_file}")
             unw_filename, cc_filename = _zero_from_mask(
                 unw_filename, cc_filename, mask_file
             )
