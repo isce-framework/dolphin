@@ -98,7 +98,6 @@ def _interp_loop(
     nrow, ncol = weights.shape
     nindices = len(indices)
     for r0 in numba.prange(nrow):
-        # convert linear idx to row, col
         for c0 in range(ncol):
             if weights[r0, c0] >= weight_cutoff:
                 interpolated_ifg[r0, c0] = ifg[r0, c0]
