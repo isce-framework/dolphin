@@ -12,11 +12,11 @@ logger = get_log(__name__)
 def interpolate(
     ifg: ArrayLike,
     weights: ArrayLike,
+    weight_cutoff: float = 0.5,
     num_neighbors: int = 20,
     max_radius: int = 51,
     min_radius: int = 0,
     alpha: float = 0.75,
-    weight_cutoff: float = 0.0,
 ) -> np.ndarray:
     """Interpolate a complex interferogram based on pixel weights.
 
@@ -36,6 +36,12 @@ def interpolate(
             weights[i,j] = True if radar pixel (i,j) is a PS
             weights[i,j] = False if radar pixel (i,j) is not a PS
         Can also pass a coherence image to use as weights.
+    weight_cutoff: float
+        Threshold to use on `weights` so that pixels where
+        `weight[i, j] < weight_cutoff` have phase values replaced by
+        an interpolated value.
+        The default is 0.5: pixels with weight less than 0.5 are replaced with a
+        smoothed version of the surrounding pixels.
     num_neighbors: int (optional)
         number of nearest PS pixels used for interpolation
         num_neighbors = 20 by default
@@ -49,14 +55,6 @@ def interpolate(
         hyperparameter controlling the weight of PS in interpolation: smaller
         alpha means more weight is assigned to PS closer to the center pixel.
         alpha = 0.75 by default
-    weight_cutoff: float
-        Threshold to use on `weights` so that pixels where
-        `weight[i, j] < weight_cutoff` have phase values replaced by
-        an interpolated value.
-        If `weight_cutoff = 0` (default),  All pixels are replaced with a
-        smoothed version of the surrounding pixels.
-        If `weight_cutoff = 1`, only pixels with exactly weight=1
-        are kept, and the rest are replaced with an interpolated value.
 
     Returns
     -------

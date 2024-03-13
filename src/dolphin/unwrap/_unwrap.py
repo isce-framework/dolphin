@@ -51,6 +51,7 @@ def run(
     alpha: float = 0.5,
     run_interpolation: bool = False,
     max_radius: int = 51,
+    interpolation_cor_threshold: float = 0.5,
 ) -> tuple[list[Path], list[Path]]:
     """Run snaphu on all interferograms in a directory.
 
@@ -109,6 +110,10 @@ def run(
         Whether to run interpolation on interferogram
     max_radius : int, optional, default = 51
         maximum radius (in pixel) for scatterer searching for interpolation
+    interpolation_cor_threshold : float, optional, default = 0.5
+        Threshold on the correlation raster to use for interpolation.
+        Pixels with less than this value are replaced by a weighted
+        combination of neighboring pixels.
 
     Returns
     -------
@@ -175,6 +180,7 @@ def run(
                 alpha=alpha,
                 run_interpolation=run_interpolation,
                 max_radius=max_radius,
+                interpolation_cor_threshold=interpolation_cor_threshold,
             )
             for ifg_file, out_file, cor_file in zip(in_files, out_files, cor_filenames)
         ]
@@ -210,6 +216,7 @@ def unwrap(
     alpha: float = 0.5,
     run_interpolation: bool = False,
     max_radius: int = 51,
+    interpolation_cor_threshold: float = 0.5,
 ) -> tuple[Path, Path]:
     """Unwrap a single interferogram using snaphu, isce3, or tophu.
 
@@ -272,6 +279,10 @@ def unwrap(
         Whether to run interpolation on interferogram
     max_radius : int, optional, default = 51
         maximum radius (in pixel) for scatterer searching for interpolation
+    interpolation_cor_threshold : float, optional, default = 0.5
+        Threshold on the correlation raster to use for interpolation.
+        Pixels with less than this value are replaced by a weighted
+        combination of neighboring pixels.
 
     Returns
     -------
@@ -354,11 +365,16 @@ def unwrap(
 
         ifg = io.load_gdal(ifg_filename)
         corr = io.load_gdal(corr_filename)
-        logger.info("Masking pixels with correlation above 0.7")
-        coherent_pixel_mask = corr[:] >= 0.7
+        logger.info(
+            f"Masking pixels with correlation below {interpolation_cor_threshold}"
+        )
+        coherent_pixel_mask = corr[:] >= interpolation_cor_threshold
         logger.info(f"Interpolating {ifg_filename} -> {interp_ifg_filename}")
         modified_ifg = interpolate(
-            ifg=ifg, weights=coherent_pixel_mask, max_radius=max_radius
+            ifg=ifg,
+            weights=coherent_pixel_mask,
+            weight_cutoff=interpolation_cor_threshold,
+            max_radius=max_radius,
         )
         logger.info(f"Writing interpolated output to {interp_ifg_filename}")
         io.write_arr(

@@ -222,7 +222,16 @@ class UnwrapOptions(BaseModel, extra="forbid"):
     )
     max_radius: int = Field(
         51,
+        ge=0.0,
         description=("(for interpolation) maximum radius to find scatterers."),
+    )
+    interpolation_cor_threshold: float = Field(
+        0.5,
+        description=" Threshold on the correlation raster to use for interpolation. "
+        "Pixels with less than this value are replaced by a weighted "
+        "combination of neighboring pixels.",
+        ge=0.0,
+        le=1.0,
     )
 
     @field_validator("ntiles", "downsample_factor", mode="before")
