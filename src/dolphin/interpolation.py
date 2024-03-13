@@ -128,7 +128,8 @@ def _interp_loop(
                     if counter >= num_neighbors:
                         break
 
-            # TODO : why use the "counter - 1" here to normalize?
+            # `counter` got up to one more than the number of elements
+            # The last one will be the largest radius
             r2_norm = (r2[counter - 1] ** alpha) / 2
             for i in range(counter):
                 csum += np.exp(-r2[i] / r2_norm) * cphase[i]
