@@ -1,5 +1,6 @@
 import numba
 import numpy as np
+from numpy.typing import ArrayLike
 
 from dolphin._log import get_log
 
@@ -9,15 +10,20 @@ logger = get_log(__name__)
 
 
 def interpolate(
-    ifg: np.ndarray,
-    weights: np.ndarray,
+    ifg: ArrayLike,
+    weights: ArrayLike,
     num_neighbors: int = 20,
     max_radius: int = 51,
     min_radius: int = 0,
     alpha: float = 0.75,
     weight_cutoff: float = 0.0,
 ) -> np.ndarray:
-    r"""Interpolation of persistent scatterers.
+    """Interpolate a complex interferogram based on pixel weights.
+
+    Build upon persistent scatterer interpolation used in
+    [@Chen2015PersistentScattererInterpolation] and
+    [@Wang2022AccuratePersistentScatterer] by allowing floating-point weights
+    instead of 0/1 PS weights.
 
     Parameters
     ----------
@@ -58,12 +64,6 @@ def interpolate(
         interpolated interferogram with the same amplitude, but different
         wrapped phase at non-ps pixels.
 
-    References
-    ----------
-    "A persistent scatterer interpolation for retrieving accurate ground
-    deformation over InSAR\-decorrelated agricultural fields"
-    Chen et al., 2015, https://doi.org/10.1002/2015GL065031
-
     """
     nrow, ncol = weights.shape
 
@@ -79,13 +79,13 @@ def interpolate(
             f"Range of values as weights, using weight_cutoff = {weight_cutoff}"
         )
 
-    # Ensure weights are between 0 and 1
-    if np.any(weights.astype(np.float32) > 1):
-        logger.warning("weights array has values greater than 1. Clipping to 1.")
-    if np.any(weights.astype(np.float32) < 0):
-        logger.warning("weights array has negative values. Clipping to 0.")
-    # Make shared versions of the input arrays to avoid copying in each thread
     weights_float = np.clip(weights.astype(np.float32), 0, 1)
+    # Ensure weights are between 0 and 1
+    if np.any(weights_float > 1):
+        logger.warning("weights array has values greater than 1. Clipping to 1.")
+    if np.any(weights_float < 0):
+        logger.warning("weights array has negative values. Clipping to 0.")
+    weights_float = np.clip(weights_float, 0, 1)
 
     interpolated_ifg = np.zeros((nrow, ncol), dtype=np.complex64)
 
