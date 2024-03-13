@@ -164,6 +164,12 @@ class UnwrapOptions(BaseModel, extra="forbid"):
             "Whether to run the unwrapping step after wrapped phase estimation."
         ),
     )
+    run_goldstein: bool = Field(
+        False,
+        description=(
+            "Whether to run Goldstein filtering step on wrapped interferogram."
+        ),
+    )
     _directory: Path = PrivateAttr(Path("unwrapped"))
     unwrap_method: UnwrapMethod = UnwrapMethod.SNAPHU
     n_parallel_jobs: int = Field(
@@ -209,6 +215,13 @@ class UnwrapOptions(BaseModel, extra="forbid"):
         description=(
             "Set wrapped phase/correlation to 0 where mask is 0 before unwrapping. "
             " a single-reference network is used."
+        ),
+    )
+
+    alpha: float = Field(
+        0.5,
+        description=(
+            "(for Goldstein filtering) Power parameter for Goldstein algorithm."
         ),
     )
 

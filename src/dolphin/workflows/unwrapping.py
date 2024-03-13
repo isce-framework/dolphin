@@ -1,4 +1,5 @@
 """Stitch burst interferograms (optional) and unwrap them."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -88,6 +89,8 @@ def run(
         downsample_factor=unwrap_options.downsample_factor,
         unwrap_method=unwrap_options.unwrap_method,
         scratchdir=unwrap_scratchdir,
+        run_goldstein=unwrap_options.run_goldstein,
+        alpha=unwrap_options.alpha,
     )
 
     if add_overviews:

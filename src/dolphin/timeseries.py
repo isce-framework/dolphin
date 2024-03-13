@@ -391,8 +391,7 @@ def create_velocity(
 class AverageFunc(Protocol):
     """Protocol for temporally averaging a block of data."""
 
-    def __call__(self, ArrayLike, axis: int) -> ArrayLike:
-        ...
+    def __call__(self, ArrayLike, axis: int) -> ArrayLike: ...
 
 
 def create_temporal_average(

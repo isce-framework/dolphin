@@ -4,9 +4,10 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Optional, Sequence, Union
 
+import numpy as np
 from tqdm.auto import tqdm
 
-from dolphin import io
+from dolphin import goldstein, io
 from dolphin._log import get_log, log_runtime
 from dolphin._types import Filename
 from dolphin.utils import DummyProcessPoolExecutor, full_suffix
@@ -18,7 +19,6 @@ from ._constants import (
     DEFAULT_UNW_NODATA,
     UNW_SUFFIX,
 )
-from ._snaphu_py import unwrap_snaphu_py
 from ._tophu import multiscale_unwrap
 from ._utils import create_combined_mask, set_nodata_values
 
@@ -48,6 +48,8 @@ def run(
     ccl_nodata: int | None = DEFAULT_CCL_NODATA,
     scratchdir: Optional[Filename] = None,
     overwrite: bool = False,
+    run_goldstein: bool = False,
+    alpha: float = 0.5,
 ) -> tuple[list[Path], list[Path]]:
     """Run snaphu on all interferograms in a directory.
 
@@ -102,6 +104,10 @@ def run(
         If None, uses `tophu`'s `/tmp/...` default.
     overwrite : bool, optional, default = False
         Overwrite existing unwrapped files.
+    run_goldstein : bool, optional, default = False
+        Whether to run Goldstein filtering on interferogram
+    alpha : float, optional, default = 0.5
+        Alpha parameter for Goldstein filtering
 
     Returns
     -------
@@ -165,6 +171,8 @@ def run(
                 unw_nodata=unw_nodata,
                 ccl_nodata=ccl_nodata,
                 scratchdir=scratchdir,
+                run_goldstein=run_goldstein,
+                alpha=alpha,
             )
             for ifg_file, out_file, cor_file in zip(in_files, out_files, cor_filenames)
         ]
@@ -196,6 +204,8 @@ def unwrap(
     unw_nodata: float | None = DEFAULT_UNW_NODATA,
     ccl_nodata: int | None = DEFAULT_CCL_NODATA,
     scratchdir: Optional[Filename] = None,
+    run_goldstein: bool = False,
+    alpha: float = 0.5,
 ) -> tuple[Path, Path]:
     """Unwrap a single interferogram using snaphu, isce3, or tophu.
 
@@ -250,6 +260,10 @@ def unwrap(
     scratchdir : Filename, optional
         Path to scratch directory to hold intermediate files.
         If None, uses `tophu`'s `/tmp/...` default.
+    run_goldstein : bool, optional, default = False
+        Whether to run Goldstein filtering on interferogram
+    alpha : float, optional, default = 0.5
+        Alpha parameter for Goldstein filtering
 
     Returns
     -------
@@ -278,12 +292,47 @@ def unwrap(
             output_filename=combined_mask_file,
         )
 
+    if run_goldstein:
+        suf = Path(unw_filename).suffix
+        if suf == ".tif":
+            driver = "GTiff"
+            opts = list(io.DEFAULT_TIFF_OPTIONS)
+        else:
+            driver = "ENVI"
+            opts = list(io.DEFAULT_ENVI_OPTIONS)
+
+        # If we're running Goldstein filtering, the intermediate
+        # filtered/unwrapped rasters are temporary rasters in the scratch dir.
+        filt_ifg_filename = (
+            Path(scratchdir or ".") / Path(ifg_filename).with_suffix(".filt" + suf).name
+        )
+        scratch_unw_filename = Path(unw_filename).with_suffix(".filt.unw" + suf)
+
+        ifg = io.load_gdal(ifg_filename)
+        logger.info(f"Goldstein filtering {ifg_filename} -> {filt_ifg_filename}")
+        filt_ifg = goldstein(ifg, alpha=alpha)
+        logger.info(f"Writing filtered output to {filt_ifg_filename}")
+        io.write_arr(
+            arr=filt_ifg,
+            output_name=filt_ifg_filename,
+            like_filename=ifg_filename,
+            driver=driver,
+            options=opts,
+        )
+        unwrapper_ifg_filename = filt_ifg_filename
+        unwrapper_unw_filename = scratch_unw_filename
+    else:
+        unwrapper_ifg_filename = Path(ifg_filename)
+        unwrapper_unw_filename = Path(unw_filename)
+
     if unwrap_method == UnwrapMethod.SNAPHU:
+        from ._snaphu_py import unwrap_snaphu_py
+
         # Pass everything to snaphu-py
         unw_path, conncomp_path = unwrap_snaphu_py(
-            ifg_filename,
+            unwrapper_ifg_filename,
             corr_filename,
-            unw_filename,
+            unwrapper_unw_filename,
             nlooks,
             ntiles=ntiles,
             tile_overlap=tile_overlap,
@@ -298,9 +347,9 @@ def unwrap(
         )
     else:
         unw_path, conncomp_path = multiscale_unwrap(
-            ifg_filename,
+            unwrapper_ifg_filename,
             corr_filename,
-            unw_filename,
+            unwrapper_unw_filename,
             downsample_factor,
             ntiles=ntiles,
             nlooks=nlooks,
@@ -326,5 +375,23 @@ def unwrap(
     set_nodata_values(
         filename=conncomp_path, output_nodata=ccl_nodata, like_filename=ifg_filename
     )
+
+    # Transfer ambiguity numbers from filtered unwrapped interferogram
+    # back to original interferogram
+    if run_goldstein:
+        logger.info(
+            f"Transferring ambiguity numbers from filtered ifg {scratch_unw_filename}"
+        )
+        unw_arr = io.load_gdal(scratch_unw_filename)
+
+        final_arr = np.angle(ifg) + (unw_arr - np.angle(filt_ifg))
+
+        io.write_arr(
+            arr=final_arr,
+            output_name=unw_filename,
+            dtype=np.float32,
+            driver=driver,
+            options=opts,
+        )
 
     return unw_path, conncomp_path
