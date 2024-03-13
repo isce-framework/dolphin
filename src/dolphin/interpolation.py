@@ -1,5 +1,6 @@
 import numba
 import numpy as np
+from numpy.typing import ArrayLike
 
 from dolphin._log import get_log
 
@@ -9,15 +10,20 @@ logger = get_log(__name__)
 
 
 def interpolate(
-    ifg: np.ndarray,
-    weights: np.ndarray,
+    ifg: ArrayLike,
+    weights: ArrayLike,
+    weight_cutoff: float = 0.5,
     num_neighbors: int = 20,
     max_radius: int = 51,
     min_radius: int = 0,
     alpha: float = 0.75,
-    weight_cutoff: float = 0.0,
 ) -> np.ndarray:
-    r"""Interpolation of persistent scatterers.
+    """Interpolate a complex interferogram based on pixel weights.
+
+    Build upon persistent scatterer interpolation used in
+    [@Chen2015PersistentScattererInterpolation] and
+    [@Wang2022AccuratePersistentScatterer] by allowing floating-point weights
+    instead of 0/1 PS weights.
 
     Parameters
     ----------
@@ -30,6 +36,12 @@ def interpolate(
             weights[i,j] = True if radar pixel (i,j) is a PS
             weights[i,j] = False if radar pixel (i,j) is not a PS
         Can also pass a coherence image to use as weights.
+    weight_cutoff: float
+        Threshold to use on `weights` so that pixels where
+        `weight[i, j] < weight_cutoff` have phase values replaced by
+        an interpolated value.
+        The default is 0.5: pixels with weight less than 0.5 are replaced with a
+        smoothed version of the surrounding pixels.
     num_neighbors: int (optional)
         number of nearest PS pixels used for interpolation
         num_neighbors = 20 by default
@@ -43,14 +55,6 @@ def interpolate(
         hyperparameter controlling the weight of PS in interpolation: smaller
         alpha means more weight is assigned to PS closer to the center pixel.
         alpha = 0.75 by default
-    weight_cutoff: float
-        Threshold to use on `weights` so that pixels where
-        `weight[i, j] < weight_cutoff` have phase values replaced by
-        an interpolated value.
-        If `weight_cutoff = 0` (default),  All pixels are replaced with a
-        smoothed version of the surrounding pixels.
-        If `weight_cutoff = 1`, only pixels with exactly weight=1
-        are kept, and the rest are replaced with an interpolated value.
 
     Returns
     -------
@@ -58,34 +62,16 @@ def interpolate(
         interpolated interferogram with the same amplitude, but different
         wrapped phase at non-ps pixels.
 
-    References
-    ----------
-    "A persistent scatterer interpolation for retrieving accurate ground
-    deformation over InSAR\-decorrelated agricultural fields"
-    Chen et al., 2015, https://doi.org/10.1002/2015GL065031
-
     """
     nrow, ncol = weights.shape
 
-    if np.all(
-        np.logical_or(
-            np.logical_or(weights == 0, weights == 1),
-            np.logical_or(weights is True, weights is False),
-        )
-    ):
-        logger.info("Binary weights, using PS-like interpolation.")
-    else:
-        logger.info(
-            f"Range of values as weights, using weight_cutoff = {weight_cutoff}"
-        )
-
-    # Ensure weights are between 0 and 1
-    if np.any(weights.astype(np.float32) > 1):
-        logger.warning("weights array has values greater than 1. Clipping to 1.")
-    if np.any(weights.astype(np.float32) < 0):
-        logger.warning("weights array has negative values. Clipping to 0.")
-    # Make shared versions of the input arrays to avoid copying in each thread
     weights_float = np.clip(weights.astype(np.float32), 0, 1)
+    # Ensure weights are between 0 and 1
+    if np.any(weights_float > 1):
+        logger.warning("weights array has values greater than 1. Clipping to 1.")
+    if np.any(weights_float < 0):
+        logger.warning("weights array has negative values. Clipping to 0.")
+    weights_float = np.clip(weights_float, 0, 1)
 
     interpolated_ifg = np.zeros((nrow, ncol), dtype=np.complex64)
 
@@ -110,7 +96,6 @@ def _interp_loop(
     nrow, ncol = weights.shape
     nindices = len(indices)
     for r0 in numba.prange(nrow):
-        # convert linear idx to row, col
         for c0 in range(ncol):
             if weights[r0, c0] >= weight_cutoff:
                 interpolated_ifg[r0, c0] = ifg[r0, c0]
@@ -141,7 +126,8 @@ def _interp_loop(
                     if counter >= num_neighbors:
                         break
 
-            # TODO : why use the "counter - 1" here to normalize?
+            # `counter` got up to one more than the number of elements
+            # The last one will be the largest radius
             r2_norm = (r2[counter - 1] ** alpha) / 2
             for i in range(counter):
                 csum += np.exp(-r2[i] / r2_norm) * cphase[i]
