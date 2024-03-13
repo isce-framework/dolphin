@@ -67,18 +67,6 @@ def interpolate(
     """
     nrow, ncol = weights.shape
 
-    if np.all(
-        np.logical_or(
-            np.logical_or(weights == 0, weights == 1),
-            np.logical_or(weights is True, weights is False),
-        )
-    ):
-        logger.info("Binary weights, using PS-like interpolation.")
-    else:
-        logger.info(
-            f"Range of values as weights, using weight_cutoff = {weight_cutoff}"
-        )
-
     weights_float = np.clip(weights.astype(np.float32), 0, 1)
     # Ensure weights are between 0 and 1
     if np.any(weights_float > 1):
