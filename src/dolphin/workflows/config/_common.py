@@ -214,7 +214,6 @@ class UnwrapOptions(BaseModel, extra="forbid"):
         False,
         description=(
             "Set wrapped phase/correlation to 0 where mask is 0 before unwrapping. "
-            " a single-reference network is used."
         ),
     )
 
