@@ -22,19 +22,17 @@ High resolution wrapped phase estimation for InSAR using combined PS/DS processi
 `dolphin` is available on conda:
 
 ```bash
-# if mamba is not already installed: conda install -n base mamba
+# if mamba is not already installed, see here: https://mamba.readthedocs.io/en/latest/
 mamba install -c conda-forge dolphin
 ```
 
-(Note: [using `mamba`](https://mamba.readthedocs.io/en/latest/mamba-installation.html#mamba-install) is recommended for conda-forge packages, but miniconda can also be used.)
+`dolphin` has the ability to unwrap interferograms using several options:
 
-`dolphin` has the ability to unwrap interferograms using `isce3`'s python bindings to [SNAPHU](https://web.stanford.edu/group/radar/softwareandlinks/sw/snaphu/).
-It is also integrated with [`tophu`](https://github.com/isce-framework/tophu) to unwrap large interferograms in parallel tiles at multiple resolution.
-To install both dolphin and tophu through conda-forge, run
+1. The [`snaphu-py`](https://github.com/isce-framework/snaphu-py), a lightweight Python bindings to SNAPHU. Available on both pip and conda.
+2.  `isce3`'s python bindings to [SNAPHU](https://web.stanford.edu/group/radar/softwareandlinks/sw/snaphu/), PHASS, or ICU
+3. [`tophu`](https://github.com/isce-framework/tophu), a multi-scale unwrapper designed to unwrap large interferograms in parallel tiles at multiple resolution.
 
-```bash
-mamba install -c conda-forge tophu dolphin
-```
+These may be installed via conda or (in the case of `snaphu-py`) pip.
 
 
 To install locally:
