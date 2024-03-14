@@ -184,26 +184,17 @@ def run(
 
     if zero_where_masked and mask_file is not None:
         all_out_files = [
-            Path(
-                str(outf).replace(
-                    UNW_SUFFIX, 
-                    UNW_SUFFIX_ZEROED
-                )
-            )
+            Path(str(outf).replace(UNW_SUFFIX, UNW_SUFFIX_ZEROED))
             for outf in all_out_files
         ]
         conncomp_files = [
-            Path(
-                str(outf).replace(
-                    UNW_SUFFIX_ZEROED, 
-                    CONNCOMP_SUFFIX_ZEROED
-                )
-            )
-        for outf in all_out_files
+            Path(str(outf).replace(UNW_SUFFIX_ZEROED, CONNCOMP_SUFFIX_ZEROED))
+            for outf in all_out_files
         ]
     else:
         conncomp_files = [
-            Path(str(outf).replace(UNW_SUFFIX, CONNCOMP_SUFFIX)) for outf in all_out_files
+            Path(str(outf).replace(UNW_SUFFIX, CONNCOMP_SUFFIX))
+            for outf in all_out_files
         ]
     return all_out_files, conncomp_files
 
@@ -341,11 +332,9 @@ def unwrap(
             driver=driver,
             options=opts,
         )
-        unwrapper_ifg_filename = filt_ifg_filename
-        unwrapper_unw_filename = scratch_unw_filename
     else:
-        unwrapper_ifg_filename = Path(ifg_filename)
-        unwrapper_unw_filename = Path(unw_filename)
+        Path(ifg_filename)
+        Path(unw_filename)
 
     if unwrap_method == UnwrapMethod.SNAPHU:
         # Pass everything to snaphu-py
@@ -395,7 +384,6 @@ def unwrap(
     set_nodata_values(
         filename=conncomp_path, output_nodata=ccl_nodata, like_filename=ifg_filename
     )
-
 
     # Transfer ambiguity numbers from filtered unwrapped interferogram
     # back to original interferogram
