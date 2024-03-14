@@ -176,26 +176,17 @@ def run(
 
     if zero_where_masked and mask_file is not None:
         all_out_files = [
-            Path(
-                str(outf).replace(
-                    UNW_SUFFIX, 
-                    UNW_SUFFIX_ZEROED
-                )
-            )
+            Path(str(outf).replace(UNW_SUFFIX, UNW_SUFFIX_ZEROED))
             for outf in all_out_files
         ]
         conncomp_files = [
-            Path(
-                str(outf).replace(
-                    UNW_SUFFIX_ZEROED, 
-                    CONNCOMP_SUFFIX_ZEROED
-                )
-            )
-        for outf in all_out_files
+            Path(str(outf).replace(UNW_SUFFIX_ZEROED, CONNCOMP_SUFFIX_ZEROED))
+            for outf in all_out_files
         ]
     else:
         conncomp_files = [
-            Path(str(outf).replace(UNW_SUFFIX, CONNCOMP_SUFFIX)) for outf in all_out_files
+            Path(str(outf).replace(UNW_SUFFIX, CONNCOMP_SUFFIX))
+            for outf in all_out_files
         ]
     return all_out_files, conncomp_files
 
