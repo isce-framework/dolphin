@@ -1,7 +1,5 @@
---8<-- "README.md:19:82"
+--8<-- "README.md:19:84"
 
+For a more complete tutorial, see our [notebooks](notebooks)
 
-<!-- TODO: Test the JAX GPU setup more thoroughly, verify it actually provides good speedup -->
-<!-- ### GPU setup -->
-
-For help with installing locally and full developer setup, see [[developer-setup.md]]
+For help with installing locally and contributing, see the [full developer setup instructions](developer-setup.md).
