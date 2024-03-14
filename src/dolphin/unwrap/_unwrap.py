@@ -291,9 +291,6 @@ def unwrap(
     conncomp_path : Path
         Path to output connected component label file.
 
-    Attention: If both interpolation and goldstein filter are true,
-    only goldstein filter will apply and interpolation will be skipped
-
     """
     if isinstance(downsample_factor, int):
         downsample_factor = (downsample_factor, downsample_factor)
@@ -316,6 +313,7 @@ def unwrap(
 
     unwrapper_ifg_filename = Path(ifg_filename)
     unwrapper_unw_filename = Path(unw_filename)
+    name_change = "."
 
     if run_goldstein:
         suf = Path(unw_filename).suffix
@@ -326,12 +324,15 @@ def unwrap(
             driver = "ENVI"
             opts = list(io.DEFAULT_ENVI_OPTIONS)
 
+        name_change = ".filt" + name_change
         # If we're running Goldstein filtering, the intermediate
         # filtered/unwrapped rasters are temporary rasters in the scratch dir.
-        filt_ifg_filename = (
-            Path(scratchdir or ".") / Path(ifg_filename).with_suffix(".filt" + suf).name
+        filt_ifg_filename = Path(scratchdir or ".") / (
+            Path(ifg_filename).stem.split(".")[0] + (name_change + "int" + suf)
         )
-        scratch_unw_filename = Path(unw_filename).with_suffix(".filt.unw" + suf)
+        filt_unw_filename = Path(
+            str(unw_filename).split(".")[0] + (name_change + "unw" + suf)
+        )
 
         ifg = io.load_gdal(ifg_filename)
         logger.info(f"Goldstein filtering {ifg_filename} -> {filt_ifg_filename}")
@@ -345,9 +346,9 @@ def unwrap(
             options=opts,
         )
         unwrapper_ifg_filename = filt_ifg_filename
-        unwrapper_unw_filename = scratch_unw_filename
+        unwrapper_unw_filename = filt_unw_filename
 
-    elif run_interpolation:
+    if run_interpolation:
         suf = Path(ifg_filename).suffix
         if suf == ".tif":
             driver = "GTiff"
@@ -356,20 +357,25 @@ def unwrap(
             driver = "ENVI"
             opts = list(io.DEFAULT_ENVI_OPTIONS)
 
-        # temporarily storing the intermediate interpolated rasters in the scratch dir.
-        interp_ifg_filename = (
-            Path(scratchdir or ".")
-            / Path(ifg_filename).with_suffix(".interp" + suf).name
-        )
-        scratch_unw_filename = Path(unw_filename).with_suffix(".interp.unw" + suf)
+        pre_interp_ifg_filename = unwrapper_ifg_filename
+        pre_interp_unw_filename = unwrapper_unw_filename
+        name_change = ".interp" + name_change
 
-        ifg = io.load_gdal(ifg_filename)
+        # temporarily storing the intermediate interpolated rasters in the scratch dir.
+        interp_ifg_filename = Path(scratchdir or ".") / (
+            pre_interp_ifg_filename.stem.split(".")[0] + (name_change + "int" + suf)
+        )
+        interp_unw_filename = Path(
+            str(pre_interp_unw_filename).split(".")[0] + (name_change + "unw" + suf)
+        )
+
+        ifg = io.load_gdal(pre_interp_ifg_filename)
         corr = io.load_gdal(corr_filename)
         logger.info(
             f"Masking pixels with correlation below {interpolation_cor_threshold}"
         )
         coherent_pixel_mask = corr[:] >= interpolation_cor_threshold
-        logger.info(f"Interpolating {ifg_filename} -> {interp_ifg_filename}")
+        logger.info(f"Interpolating {pre_interp_ifg_filename} -> {interp_ifg_filename}")
         modified_ifg = interpolate(
             ifg=ifg,
             weights=coherent_pixel_mask,
@@ -385,7 +391,7 @@ def unwrap(
             options=opts,
         )
         unwrapper_ifg_filename = interp_ifg_filename
-        unwrapper_unw_filename = scratch_unw_filename
+        unwrapper_unw_filename = interp_unw_filename
 
     if unwrap_method == UnwrapMethod.SNAPHU:
         from ._snaphu_py import unwrap_snaphu_py
@@ -445,7 +451,7 @@ def unwrap(
             "Transferring ambiguity numbers from filtered/interpolated"
             "ifg {scratch_unw_filename}"
         )
-        unw_arr = io.load_gdal(scratch_unw_filename)
+        unw_arr = io.load_gdal(unwrapper_unw_filename)
 
         final_arr = np.angle(ifg) + (unw_arr - np.angle(modified_ifg))
 

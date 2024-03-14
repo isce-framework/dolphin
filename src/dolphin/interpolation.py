@@ -75,7 +75,9 @@ def interpolate(
 
     interpolated_ifg = np.zeros((nrow, ncol), dtype=np.complex64)
 
-    indices = np.array(get_circle_idxs(max_radius, min_radius=min_radius))
+    indices = np.array(
+        get_circle_idxs(max_radius, min_radius=min_radius, sort_output=False)
+    )
 
     _interp_loop(
         ifg,
