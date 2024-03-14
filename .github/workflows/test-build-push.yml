@@ -63,6 +63,9 @@ jobs:
   dockerize: # Based on Mintpy: https://github.com/insarlab/MintPy/blob/5ca554fef324b816f9130feec567e2cf463e41d2/.github/workflows/build-n-publish-to-pypi.yml
     name: Build Docker image and push to GitHub Container Registry
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
