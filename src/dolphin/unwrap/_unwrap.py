@@ -4,9 +4,10 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Optional, Sequence, Union
 
+import numpy as np
 from tqdm.auto import tqdm
 
-from dolphin import io
+from dolphin import goldstein, io
 from dolphin._log import get_log, log_runtime
 from dolphin._types import Filename
 from dolphin.utils import DummyProcessPoolExecutor, full_suffix
@@ -184,17 +185,26 @@ def run(
 
     if zero_where_masked and mask_file is not None:
         all_out_files = [
-            Path(str(outf).replace(UNW_SUFFIX, UNW_SUFFIX_ZEROED))
+            Path(
+                str(outf).replace(
+                    UNW_SUFFIX, 
+                    UNW_SUFFIX_ZEROED
+                )
+            )
             for outf in all_out_files
         ]
         conncomp_files = [
-            Path(str(outf).replace(UNW_SUFFIX_ZEROED, CONNCOMP_SUFFIX_ZEROED))
-            for outf in all_out_files
+            Path(
+                str(outf).replace(
+                    UNW_SUFFIX_ZEROED, 
+                    CONNCOMP_SUFFIX_ZEROED
+                )
+            )
+        for outf in all_out_files
         ]
     else:
         conncomp_files = [
-            Path(str(outf).replace(UNW_SUFFIX, CONNCOMP_SUFFIX))
-            for outf in all_out_files
+            Path(str(outf).replace(UNW_SUFFIX, CONNCOMP_SUFFIX)) for outf in all_out_files
         ]
     return all_out_files, conncomp_files
 
@@ -386,6 +396,7 @@ def unwrap(
     set_nodata_values(
         filename=conncomp_path, output_nodata=ccl_nodata, like_filename=ifg_filename
     )
+
 
     # Transfer ambiguity numbers from filtered unwrapped interferogram
     # back to original interferogram
