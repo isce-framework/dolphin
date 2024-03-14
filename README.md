@@ -28,8 +28,8 @@ mamba install -c conda-forge dolphin
 
 `dolphin` has the ability to unwrap interferograms using several options:
 
-1. The [`snaphu-py`](https://github.com/isce-framework/snaphu-py), a lightweight Python bindings to SNAPHU. Available on both pip and conda.
-2.  `isce3`'s python bindings to [SNAPHU](https://web.stanford.edu/group/radar/softwareandlinks/sw/snaphu/), PHASS, or ICU
+1. [`snaphu-py`](https://github.com/isce-framework/snaphu-py), a lightweight Python bindings to [SNAPHU](https://web.stanford.edu/group/radar/softwareandlinks/sw/snaphu/). Available on both pip and conda.
+2. [`isce3`](https://github.com/isce-framework/isce3)'s python bindings to SNAPHU, PHASS, or ICU
 3. [`tophu`](https://github.com/isce-framework/tophu), a multi-scale unwrapper designed to unwrap large interferograms in parallel tiles at multiple resolution.
 
 These may be installed via conda or (in the case of `snaphu-py`) pip.
@@ -38,26 +38,31 @@ These may be installed via conda or (in the case of `snaphu-py`) pip.
 To install locally:
 
 1. Download source code:
+
 ```bash
 git clone https://github.com/isce-framework/dolphin.git && cd dolphin
 ```
+
 2. Install dependencies:
+
 ```bash
 mamba env create --file conda-env.yml
 ```
 
 or if you have an existing environment:
+
 ```bash
 mamba env update --name my-existing-env --file conda-env.yml
 ```
 
 3. Install `dolphin` via pip:
+
 ```bash
 conda activate dolphin-env
 python -m pip install .
 ```
 
-Dolphin can also take advantage of CUDA-compatible GPUS for faster processing. [See the docs](dolphin-insar.readthedocs.io/gpu-setup.md) for installation instructions and configuratin.
+Dolphin can also take advantage of CUDA-compatible GPUs for faster processing. [See the docs](dolphin-insar.readthedocs.io/gpu-setup.md) for installation instructions and configuration.
 
 ## Usage
 
@@ -73,7 +78,7 @@ dolphin config --slc-files /path/to/slcs/*tif
 dolphin run dolphin_config.yaml
 ```
 
-The `config` command creates a YAML file (by default `dolphin_config.yaml` in the current directory).
+The `config` command creates a YAML file (by default `dolphin_config.yaml` in the current directory). If you'd like to see an empty YAML with all defaults filled in, you can run `dolphin config --print-empty`
 
 The only required inputs for the workflow are the paths to the coregistered SLC files (in either geographic or radar coordinates).
 If the SLC files are spread over multiple files, you can either
