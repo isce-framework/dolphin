@@ -29,7 +29,7 @@ def interpolate(
     ----------
     ifg : np.ndarray, 2D complex array
         wrapped interferogram to interpolate
-    weights : 2D float array 
+    weights : 2D float array
         Array of weights from 0 to 1 indicating how strongly to weigh
         the ifg values when interpolating.
         A special case of this is a PS mask where
