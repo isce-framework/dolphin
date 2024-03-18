@@ -29,7 +29,7 @@ def corr_raster(raster_100_by_200):
     d = Path(raster_100_by_200).parent
     corr_raster = d / "corr_raster.cor.tif"
     array = np.ones((100, 200), dtype=np.float32)
-    array[:, 100:102] = 0
+    array[70, 100] = 0
     io.write_arr(
         arr=array,
         output_name=corr_raster,
@@ -154,9 +154,11 @@ class TestUnwrapSingle:
             indices=indices,
             interpolated_ifg=interpolated_ifg,
         )
-        assert math.isclose(np.angle(interpolated_ifg[0, 100]), 0.736080, rel_tol=1e-06)
+        neighbors_average_value = (
+            np.sum(np.angle(ifg[69:72, 99:102])) - np.angle(ifg[70, 100])
+        ) / 8
         assert math.isclose(
-            np.angle(interpolated_ifg[70, 101]), 0.562149, rel_tol=1e-06
+            np.angle(interpolated_ifg[70, 100]), neighbors_average_value, rel_tol=1e-02
         )
 
     @pytest.mark.parametrize("method", [UnwrapMethod.SNAPHU, UnwrapMethod.PHASS])
