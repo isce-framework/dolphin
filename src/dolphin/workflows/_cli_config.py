@@ -24,6 +24,7 @@ def create_config(
     keep_paths_relative: bool = False,
     work_directory: Optional[Path] = Path(),
     mask_file: Optional[str] = None,
+    zero_where_masked: bool = False,
     ministack_size: Optional[int] = 15,
     half_window_size: tuple[int, int] = (11, 5),
     shp_method: ShpMethod = ShpMethod.GLRT,
@@ -102,6 +103,7 @@ def create_config(
             "downsample_factor": downsample_factor,
             "n_parallel_jobs": n_parallel_unwrap,
             "run_unwrap": not no_unwrap,
+            "zero_where_masked": zero_where_masked,
         },
         timeseries_options={
             "run_inversion": not no_inversion,

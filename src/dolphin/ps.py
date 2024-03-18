@@ -1,4 +1,5 @@
 """Find the persistent scatterers in a stack of SLCS."""
+
 from __future__ import annotations
 
 import shutil
