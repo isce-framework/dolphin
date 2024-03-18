@@ -1,3 +1,4 @@
+import math
 import os
 from pathlib import Path
 
@@ -27,8 +28,10 @@ def corr_raster(raster_100_by_200):
     # Make a correlation raster of all 1s in the same directory as the raster
     d = Path(raster_100_by_200).parent
     corr_raster = d / "corr_raster.cor.tif"
+    array = np.ones((100, 200), dtype=np.float32)
+    array[:, 100:102] = 0
     io.write_arr(
-        arr=np.ones((100, 200), dtype=np.float32),
+        arr=array,
         output_name=corr_raster,
         like_filename=raster_100_by_200,
         driver="GTiff",
@@ -119,6 +122,8 @@ class TestUnwrapSingle:
     def test_goldstein(self, tmp_path, list_of_gtiff_ifgs, corr_raster, method):
         # test other init_method
         unw_filename = tmp_path / "unwrapped.unw.tif"
+        scratch_dir = tmp_path / "scratch"
+        scratch_dir.mkdir()
         unw_path, conncomp_path = dolphin.unwrap.unwrap(
             ifg_filename=list_of_gtiff_ifgs[0],
             corr_filename=corr_raster,
@@ -126,14 +131,42 @@ class TestUnwrapSingle:
             nlooks=1,
             unwrap_method=method,
             run_goldstein=True,
+            scratchdir=scratch_dir,
         )
         assert unw_path.exists()
         assert conncomp_path.exists()
+
+    def test_interp_loop(self, list_of_gtiff_ifgs, corr_raster):
+        ifg = io.load_gdal(list_of_gtiff_ifgs[0])
+        corr = io.load_gdal(corr_raster)
+        interpolated_ifg = np.zeros((100, 200), dtype=np.complex64)
+        indices = np.array(
+            dolphin.similarity.get_circle_idxs(
+                max_radius=51, min_radius=0, sort_output=False
+            )
+        )
+        dolphin.interpolation._interp_loop(
+            ifg,
+            corr,
+            weight_cutoff=0.5,
+            num_neighbors=20,
+            alpha=0.75,
+            indices=indices,
+            interpolated_ifg=interpolated_ifg,
+        )
+        assert math.isclose(
+            np.angle(interpolated_ifg[0, 100]), 0.73608005, rel_tol=0.0000001
+        )
+        assert math.isclose(
+            np.angle(interpolated_ifg[70, 101]), 0.56214905, rel_tol=0.0000001
+        )
 
     @pytest.mark.parametrize("method", [UnwrapMethod.SNAPHU, UnwrapMethod.PHASS])
     def test_interpolation(self, tmp_path, list_of_gtiff_ifgs, corr_raster, method):
         # test other init_method
         unw_filename = tmp_path / "unwrapped.unw.tif"
+        scratch_dir = tmp_path / "scratch"
+        scratch_dir.mkdir()
         unw_path, conncomp_path = dolphin.unwrap.unwrap(
             ifg_filename=list_of_gtiff_ifgs[0],
             corr_filename=corr_raster,
@@ -141,6 +174,7 @@ class TestUnwrapSingle:
             nlooks=1,
             unwrap_method=method,
             run_interpolation=True,
+            scratchdir=scratch_dir,
         )
         assert unw_path.exists()
         assert conncomp_path.exists()
