@@ -457,11 +457,21 @@ def dem_file(tmp_path, slc_stack):
 @pytest.fixture()
 def list_of_gtiff_ifgs(tmp_path, raster_100_by_200):
     ifg_list = []
+    constants = [10, 15, 5]
     for i in range(3):
         # Create a copy of the raster in the same directory
         f = tmp_path / f"ifg_{i}.int.tif"
+        array = np.exp(
+            1j
+            * np.arange(
+                -constants[i] * np.pi,
+                constants[i] * np.pi,
+                2 * constants[i] * np.pi / 20000,
+            )
+        ).reshape(100, 200)
+        array[20:70, 50:150] *= constants[i] + 1j * constants[i]
         write_arr(
-            arr=np.ones((100, 200), dtype=np.complex64),
+            arr=array,
             output_name=f,
             like_filename=raster_100_by_200,
             driver="GTiff",
