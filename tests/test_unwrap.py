@@ -154,9 +154,7 @@ class TestUnwrapSingle:
             indices=indices,
             interpolated_ifg=interpolated_ifg,
         )
-        assert math.isclose(
-            np.angle(interpolated_ifg[0, 100]), 0.736080, rel_tol=1e-06
-        )
+        assert math.isclose(np.angle(interpolated_ifg[0, 100]), 0.736080, rel_tol=1e-06)
         assert math.isclose(
             np.angle(interpolated_ifg[70, 101]), 0.562149, rel_tol=1e-06
         )
