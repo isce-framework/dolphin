@@ -15,10 +15,13 @@ from dolphin.workflows import UnwrapMethod
 
 from ._constants import (
     CONNCOMP_SUFFIX,
+    CONNCOMP_SUFFIX_ZEROED,
     DEFAULT_CCL_NODATA,
     DEFAULT_UNW_NODATA,
     UNW_SUFFIX,
+    UNW_SUFFIX_ZEROED,
 )
+from ._snaphu_py import unwrap_snaphu_py
 from ._tophu import multiscale_unwrap
 from ._utils import create_combined_mask, set_nodata_values
 
@@ -35,6 +38,7 @@ def run(
     *,
     nlooks: float = 5,
     mask_file: Optional[Filename] = None,
+    zero_where_masked: bool = False,
     unwrap_method: UnwrapMethod = UnwrapMethod.SNAPHU,
     init_method: str = "mst",
     cost: str = "smooth",
@@ -65,6 +69,10 @@ def run(
     mask_file : Filename, optional
         Path to binary byte mask file, by default None.
         Assumes that 1s are valid pixels and 0s are invalid.
+    zero_where_masked : bool, optional
+        Set wrapped phase/correlation to 0 where mask is 0 before unwrapping.
+        If not mask is provided, this is ignored.
+        By default True.
     unwrap_method : UnwrapMethod or str, optional, default = "snaphu"
         Choice of unwrapping algorithm to use.
         Choices: {"snaphu", "icu", "phass"}
@@ -158,6 +166,7 @@ def run(
                 cost=cost,
                 unwrap_method=unwrap_method,
                 mask_file=mask_file,
+                zero_where_masked=zero_where_masked,
                 downsample_factor=downsample_factor,
                 ntiles=ntiles,
                 tile_overlap=tile_overlap,
@@ -174,9 +183,20 @@ def run(
             # We're not passing all the unw files in, so we need to tally up below
             _unw_path, _cc_path = fut.result()
 
-    conncomp_files = [
-        Path(str(outf).replace(UNW_SUFFIX, CONNCOMP_SUFFIX)) for outf in all_out_files
-    ]
+    if zero_where_masked and mask_file is not None:
+        all_out_files = [
+            Path(str(outf).replace(UNW_SUFFIX, UNW_SUFFIX_ZEROED))
+            for outf in all_out_files
+        ]
+        conncomp_files = [
+            Path(str(outf).replace(UNW_SUFFIX_ZEROED, CONNCOMP_SUFFIX_ZEROED))
+            for outf in all_out_files
+        ]
+    else:
+        conncomp_files = [
+            Path(str(outf).replace(UNW_SUFFIX, CONNCOMP_SUFFIX))
+            for outf in all_out_files
+        ]
     return all_out_files, conncomp_files
 
 
@@ -320,8 +340,6 @@ def unwrap(
         unwrapper_unw_filename = Path(unw_filename)
 
     if unwrap_method == UnwrapMethod.SNAPHU:
-        from ._snaphu_py import unwrap_snaphu_py
-
         # Pass everything to snaphu-py
         unw_path, conncomp_path = unwrap_snaphu_py(
             unwrapper_ifg_filename,

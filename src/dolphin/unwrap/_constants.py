@@ -1,7 +1,9 @@
 from typing import Final
 
 CONNCOMP_SUFFIX = ".unw.conncomp.tif"
+CONNCOMP_SUFFIX_ZEROED = ".unw.conncomp.zeroed.cor.tif"
 UNW_SUFFIX = ".unw.tif"
+UNW_SUFFIX_ZEROED = ".unw.zeroed.tif"
 
 UINT16_MAX: Final = 65535
 
