@@ -210,6 +210,12 @@ class UnwrapOptions(BaseModel, extra="forbid"):
         "smooth",
         description="Statistical cost mode method for SNAPHU.",
     )
+    zero_where_masked: bool = Field(
+        False,
+        description=(
+            "Set wrapped phase/correlation to 0 where mask is 0 before unwrapping. "
+        ),
+    )
 
     alpha: float = Field(
         0.5,

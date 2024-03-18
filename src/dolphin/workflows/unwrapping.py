@@ -79,6 +79,7 @@ def run(
         output_path=output_path,
         nlooks=nlooks,
         mask_file=output_mask,
+        zero_where_masked=unwrap_options.zero_where_masked,
         max_jobs=unwrap_options.n_parallel_jobs,
         ntiles=unwrap_options.ntiles,
         tile_overlap=unwrap_options.tile_overlap,
