@@ -456,19 +456,16 @@ def dem_file(tmp_path, slc_stack):
 # For unwrapping/overviews
 @pytest.fixture()
 def list_of_gtiff_ifgs(tmp_path, raster_100_by_200):
+    x, y = np.meshgrid(np.arange(200), np.arange(100))
+    # simulate a simple phase ramp
+    phase = 0.003 * x + 0.002 * y
     ifg_list = []
+    # simulate three interferograms
     constants = [1, 2, 3]
     for i in range(3):
         # Create a copy of the raster in the same directory
         f = tmp_path / f"ifg_{i}.int.tif"
-        array = np.exp(
-            1j
-            * np.arange(
-                -constants[i],
-                constants[i],
-                2 * constants[i] / 20000,
-            )
-        ).reshape(100, 200)
+        array = np.exp(1j * (phase + constants[i]))
         write_arr(
             arr=array,
             output_name=f,
