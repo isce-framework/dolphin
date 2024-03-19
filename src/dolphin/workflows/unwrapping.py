@@ -91,6 +91,9 @@ def run(
         scratchdir=unwrap_scratchdir,
         run_goldstein=unwrap_options.run_goldstein,
         alpha=unwrap_options.alpha,
+        run_interpolation=unwrap_options.run_interpolation,
+        max_radius=unwrap_options.max_radius,
+        interpolation_cor_threshold=unwrap_options.interpolation_cor_threshold,
     )
 
     if add_overviews:

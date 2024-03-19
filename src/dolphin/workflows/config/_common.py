@@ -170,6 +170,10 @@ class UnwrapOptions(BaseModel, extra="forbid"):
             "Whether to run Goldstein filtering step on wrapped interferogram."
         ),
     )
+    run_interpolation: bool = Field(
+        False,
+        description=("Whether to run interpolation step on wrapped interferogram."),
+    )
     _directory: Path = PrivateAttr(Path("unwrapped"))
     unwrap_method: UnwrapMethod = UnwrapMethod.SNAPHU
     n_parallel_jobs: int = Field(
@@ -216,12 +220,24 @@ class UnwrapOptions(BaseModel, extra="forbid"):
             "Set wrapped phase/correlation to 0 where mask is 0 before unwrapping. "
         ),
     )
-
     alpha: float = Field(
         0.5,
         description=(
             "(for Goldstein filtering) Power parameter for Goldstein algorithm."
         ),
+    )
+    max_radius: int = Field(
+        51,
+        ge=0.0,
+        description=("(for interpolation) maximum radius to find scatterers."),
+    )
+    interpolation_cor_threshold: float = Field(
+        0.5,
+        description=" Threshold on the correlation raster to use for interpolation. "
+        "Pixels with less than this value are replaced by a weighted "
+        "combination of neighboring pixels.",
+        ge=0.0,
+        le=1.0,
     )
 
     @field_validator("ntiles", "downsample_factor", mode="before")

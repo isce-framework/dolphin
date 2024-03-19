@@ -6,3 +6,4 @@ from ._log import *
 from ._show_versions import *
 from ._types import *
 from .goldstein import goldstein
+from .interpolation import interpolate
