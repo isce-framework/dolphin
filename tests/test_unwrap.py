@@ -27,8 +27,10 @@ def corr_raster(raster_100_by_200):
     # Make a correlation raster of all 1s in the same directory as the raster
     d = Path(raster_100_by_200).parent
     corr_raster = d / "corr_raster.cor.tif"
+    array = np.ones((100, 200), dtype=np.float32)
+    array[70, 100] = 0
     io.write_arr(
-        arr=np.ones((100, 200), dtype=np.float32),
+        arr=array,
         output_name=corr_raster,
         like_filename=raster_100_by_200,
         driver="GTiff",
@@ -119,6 +121,8 @@ class TestUnwrapSingle:
     def test_goldstein(self, tmp_path, list_of_gtiff_ifgs, corr_raster, method):
         # test other init_method
         unw_filename = tmp_path / "unwrapped.unw.tif"
+        scratch_dir = tmp_path / "scratch"
+        scratch_dir.mkdir()
         unw_path, conncomp_path = dolphin.unwrap.unwrap(
             ifg_filename=list_of_gtiff_ifgs[0],
             corr_filename=corr_raster,
@@ -126,6 +130,61 @@ class TestUnwrapSingle:
             nlooks=1,
             unwrap_method=method,
             run_goldstein=True,
+            scratchdir=scratch_dir,
+        )
+        assert unw_path.exists()
+        assert conncomp_path.exists()
+
+    def test_interp_loop(self):
+        x, y = np.meshgrid(np.arange(200), np.arange(100))
+        # simulate a simple phase ramp
+        phase = 0.003 * x + 0.002 * y
+        # interferogram with the simulated phase ramp and with a constant amplitude
+        ifg = np.exp(1j * phase)
+        corr = np.ones(ifg.shape)
+        # mask out the ifg/corr at a given pixel for example at pixel 50,40
+        # index of the pixel of interest
+        x_idx = 50
+        y_idx = 40
+        corr[y_idx, x_idx] = 0
+        # generate indices for the pixels to be used in interpolation
+        indices = np.array(
+            dolphin.similarity.get_circle_idxs(
+                max_radius=51, min_radius=0, sort_output=False
+            )
+        )
+        # interpolate pixels with zero in the corr and write to interpolated_ifg
+        interpolated_ifg = np.zeros((100, 200), dtype=np.complex64)
+        dolphin.interpolation._interp_loop(
+            ifg,
+            corr,
+            weight_cutoff=0.5,
+            num_neighbors=20,
+            alpha=0.75,
+            indices=indices,
+            interpolated_ifg=interpolated_ifg,
+        )
+        # expected phase based on the model above used for simulation
+        expected_phase = 0.003 * x_idx + 0.002 * y_idx
+        phase_error = np.angle(
+            interpolated_ifg[y_idx, x_idx] * np.exp(-1j * expected_phase)
+        )
+        assert np.allclose(phase_error, 0.0, atol=1e-3)
+
+    @pytest.mark.parametrize("method", [UnwrapMethod.SNAPHU, UnwrapMethod.PHASS])
+    def test_interpolation(self, tmp_path, list_of_gtiff_ifgs, corr_raster, method):
+        # test other init_method
+        unw_filename = tmp_path / "unwrapped.unw.tif"
+        scratch_dir = tmp_path / "scratch"
+        scratch_dir.mkdir()
+        unw_path, conncomp_path = dolphin.unwrap.unwrap(
+            ifg_filename=list_of_gtiff_ifgs[0],
+            corr_filename=corr_raster,
+            unw_filename=unw_filename,
+            nlooks=1,
+            unwrap_method=method,
+            run_interpolation=True,
+            scratchdir=scratch_dir,
         )
         assert unw_path.exists()
         assert conncomp_path.exists()
