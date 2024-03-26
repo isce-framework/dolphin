@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from numpy.typing import ArrayLike
 
 from dolphin._log import get_log
 from dolphin._types import Filename
@@ -151,3 +152,73 @@ def unwrap_snaphu_py(
         return _zero_from_mask(unw_filename, cc_filename, mask_file)
 
     return Path(unw_filename), Path(cc_filename)
+
+def grow_conncomp_snaphu(unw_filename: Filename,
+                         corr_filename: Filename,
+                         nlooks: float,
+                         mask: ArrayLike | None = None,
+                         ccl_nodata: int | None = DEFAULT_CCL_NODATA,
+                         cost: str = "smooth",
+                         min_conncomp_frac: float = 0.0001,
+                         scratchdir: Filename | None = None,) -> Filename:
+    
+    """Compute connected component labels using SNAPHU.
+
+    Parameters
+    ----------
+    unw_filename : Filename
+        Path to output unwrapped phase file.
+    corr_filename : Filename
+        Path to input correlation file.
+    nlooks : float
+        Effective number of looks used to form the input correlation data.
+    mask_file : Filename, optional
+        Path to binary byte mask file, by default None.
+        Assumes that 1s are valid pixels and 0s are invalid.
+    ccl_nodata : float, optional
+        Nodata value for the connected component labels.
+    cost : str
+        Statistical cost mode.
+        Default = "smooth"
+    min_conncomp_frac : float, optional
+        Minimum size of a single connected component, as a fraction of the total number
+        of pixels in the array. Defaults to 0.0001.
+    scratchdir : Filename, optional
+        If provided, uses a scratch directory to save the intermediate files
+        during unwrapping.
+
+    Returns
+    -------
+    conncomp_path : Path
+        Path to output connected component label file.
+    """
+    
+    import snaphu
+
+    unw_suffix = full_suffix(unw_filename)
+    cc_filename = str(unw_filename).replace(unw_suffix, CONNCOMP_SUFFIX)
+    
+    unw = snaphu.io.Raster(unw_filename)
+    corr = snaphu.io.Raster(corr_filename)
+    
+    try:
+        with snaphu.io.Raster.create(
+                    cc_filename,
+                    like=unw,
+                    nodata=ccl_nodata,
+                    dtype="u2",
+                    **DEFAULT_TIFF_OPTIONS_RIO,
+                ) as conncomp:
+            snaphu.grow_conncomps(unw=unw,
+                                  corr=corr,
+                                  nlooks=nlooks,
+                                  mask=mask,
+                                  cost=cost,
+                                  min_conncomp_frac=min_conncomp_frac,
+                                  scratchdir=scratchdir,
+                                  conncomp=conncomp)
+    finally:
+        unw.close()
+        corr.close()
+    
+    return Path(cc_filename)

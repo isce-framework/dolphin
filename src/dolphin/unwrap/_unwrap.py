@@ -21,7 +21,7 @@ from ._constants import (
     UNW_SUFFIX,
     UNW_SUFFIX_ZEROED,
 )
-from ._snaphu_py import unwrap_snaphu_py
+from ._snaphu_py import unwrap_snaphu_py, grow_conncomp_snaphu
 from ._tophu import multiscale_unwrap
 from ._utils import create_combined_mask, set_nodata_values
 
@@ -37,7 +37,7 @@ def run(
     output_path: Filename,
     *,
     nlooks: float = 5,
-    mask_file: Optional[Filename] = None,
+    mask_filename: Optional[Filename] = None,
     zero_where_masked: bool = False,
     unwrap_method: UnwrapMethod = UnwrapMethod.SNAPHU,
     init_method: str = "mst",
@@ -69,7 +69,7 @@ def run(
         Path to output directory.
     nlooks : int, optional
         Effective number of looks used to form the input correlation data.
-    mask_file : Filename, optional
+    mask_filename : Filename, optional
         Path to binary byte mask file, by default None.
         Assumes that 1s are valid pixels and 0s are invalid.
     zero_where_masked : bool, optional
@@ -160,8 +160,8 @@ def run(
         out_files.append(outf)
     logger.info(f"{len(out_files)} left to unwrap")
 
-    if mask_file:
-        mask_file = Path(mask_file).resolve()
+    if mask_filename:
+        mask_filename = Path(mask_filename).resolve()
 
     # This keeps it from spawning a new process for a single job.
     Executor = ThreadPoolExecutor if max_jobs > 1 else DummyProcessPoolExecutor
@@ -176,7 +176,7 @@ def run(
                 init_method=init_method,
                 cost=cost,
                 unwrap_method=unwrap_method,
-                mask_file=mask_file,
+                mask_filename=mask_filename,
                 zero_where_masked=zero_where_masked,
                 downsample_factor=downsample_factor,
                 ntiles=ntiles,
@@ -197,7 +197,7 @@ def run(
             # We're not passing all the unw files in, so we need to tally up below
             _unw_path, _cc_path = fut.result()
 
-    if zero_where_masked and mask_file is not None:
+    if zero_where_masked and mask_filename is not None:
         all_out_files = [
             Path(str(outf).replace(UNW_SUFFIX, UNW_SUFFIX_ZEROED))
             for outf in all_out_files
@@ -219,7 +219,7 @@ def unwrap(
     corr_filename: Filename,
     unw_filename: Filename,
     nlooks: float,
-    mask_file: Optional[Filename] = None,
+    mask_filename: Optional[Filename] = None,
     zero_where_masked: bool = False,
     ntiles: Union[int, tuple[int, int]] = 1,
     tile_overlap: tuple[int, int] = (0, 0),
@@ -250,7 +250,7 @@ def unwrap(
         Path to output unwrapped phase file.
     nlooks : float
         Effective number of looks used to form the input correlation data.
-    mask_file : Filename, optional
+    mask_filename : Filename, optional
         Path to binary byte mask file, by default None.
         Assumes that 1s are valid pixels and 0s are invalid.
     zero_where_masked : bool, optional
@@ -320,13 +320,13 @@ def unwrap(
     unwrap_method = UnwrapMethod(unwrap_method)
 
     # Check for a nodata mask
-    if io.get_raster_nodata(ifg_filename) is None or mask_file is None:
+    if io.get_raster_nodata(ifg_filename) is None or mask_filename is None:
         # With no marked `nodata`, just use the passed in mask
-        combined_mask_file = mask_file
+        combined_mask_file = mask_filename
     else:
         combined_mask_file = Path(ifg_filename).with_suffix(".mask.tif")
         create_combined_mask(
-            mask_filename=mask_file,
+            mask_filename=mask_filename,
             image_filename=ifg_filename,
             output_filename=combined_mask_file,
         )
@@ -395,6 +395,7 @@ def unwrap(
             f"Masking pixels with correlation below {interpolation_cor_threshold}"
         )
         coherent_pixel_mask = corr[:] >= interpolation_cor_threshold
+
         logger.info(f"Interpolating {pre_interp_ifg_filename} -> {interp_ifg_filename}")
         modified_ifg = interpolate(
             ifg=ifg,
@@ -402,6 +403,7 @@ def unwrap(
             weight_cutoff=interpolation_cor_threshold,
             max_radius=max_radius,
         )
+        del ifg, corr
         logger.info(f"Writing interpolated output to {interp_ifg_filename}")
         io.write_arr(
             arr=modified_ifg,
@@ -451,7 +453,7 @@ def unwrap(
         )
 
     # TODO: post-processing steps go here:
-
+    
     # Reset the input nodata values to be nodata in the unwrapped and CCL
     logger.info(f"Setting nodata values of {unw_path} file")
     set_nodata_values(
@@ -480,5 +482,20 @@ def unwrap(
             driver=driver,
             options=opts,
         )
+        
+        # Regrow connected components after phase modification
+        corr = io.load_gdal(corr_filename)
+        mask = corr[:]>0
+        # TODO decide whether we want to have the 
+        # 'min_conncomp_frac' option in the config  
+        conncomp_path = grow_conncomp_snaphu(unw_filename=unw_filename,
+                                             corr_filename=corr_filename,
+                                             nlooks=nlooks,
+                                             mask=mask,
+                                             ccl_nodata=ccl_nodata,
+                                             cost=cost,
+                                             scratchdir=scratchdir)
+
+    
 
     return unw_path, conncomp_path
