@@ -21,7 +21,7 @@ from ._constants import (
     UNW_SUFFIX,
     UNW_SUFFIX_ZEROED,
 )
-from ._snaphu_py import unwrap_snaphu_py, grow_conncomp_snaphu
+from ._snaphu_py import grow_conncomp_snaphu, unwrap_snaphu_py
 from ._tophu import multiscale_unwrap
 from ._utils import create_combined_mask, set_nodata_values
 
@@ -237,7 +237,7 @@ def unwrap(
     run_interpolation: bool = False,
     max_radius: int = 51,
     interpolation_cor_threshold: float = 0.5,
-) -> tuple[Path, Path]:
+) -> tuple[Filename, Filename]:
     """Unwrap a single interferogram using snaphu, isce3, or tophu.
 
     Parameters
@@ -306,9 +306,9 @@ def unwrap(
 
     Returns
     -------
-    unw_path : Path
+    unw_path : Filename
         Path to output unwrapped phase file.
-    conncomp_path : Path
+    conncomp_path : Filename
         Path to output connected component label file.
 
     """
@@ -453,7 +453,7 @@ def unwrap(
         )
 
     # TODO: post-processing steps go here:
-    
+
     # Reset the input nodata values to be nodata in the unwrapped and CCL
     logger.info(f"Setting nodata values of {unw_path} file")
     set_nodata_values(
@@ -482,20 +482,20 @@ def unwrap(
             driver=driver,
             options=opts,
         )
-        
+
         # Regrow connected components after phase modification
         corr = io.load_gdal(corr_filename)
-        mask = corr[:]>0
-        # TODO decide whether we want to have the 
-        # 'min_conncomp_frac' option in the config  
-        conncomp_path = grow_conncomp_snaphu(unw_filename=unw_filename,
-                                             corr_filename=corr_filename,
-                                             nlooks=nlooks,
-                                             mask=mask,
-                                             ccl_nodata=ccl_nodata,
-                                             cost=cost,
-                                             scratchdir=scratchdir)
-
-    
+        mask = corr[:] > 0
+        # TODO decide whether we want to have the
+        # 'min_conncomp_frac' option in the config
+        conncomp_path = grow_conncomp_snaphu(
+            unw_filename=unw_filename,
+            corr_filename=corr_filename,
+            nlooks=nlooks,
+            mask=mask,
+            ccl_nodata=ccl_nodata,
+            cost=cost,
+            scratchdir=scratchdir,
+        )
 
     return unw_path, conncomp_path

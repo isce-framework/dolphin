@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Optional
+
 from numpy.typing import ArrayLike
 
 from dolphin._log import get_log
@@ -22,13 +24,13 @@ def unwrap_snaphu_py(
     ntiles: tuple[int, int] = (1, 1),
     tile_overlap: tuple[int, int] = (0, 0),
     nproc: int = 1,
-    mask_file: Filename | None = None,
+    mask_file: Optional[Filename] = None,
     zero_where_masked: bool = False,
-    unw_nodata: float | None = DEFAULT_UNW_NODATA,
-    ccl_nodata: int | None = DEFAULT_CCL_NODATA,
+    unw_nodata: Optional[float] = DEFAULT_UNW_NODATA,
+    ccl_nodata: Optional[int] = DEFAULT_CCL_NODATA,
     init_method: str = "mst",
     cost: str = "smooth",
-    scratchdir: Filename | None = None,
+    scratchdir: Optional[Filename] = None,
 ) -> tuple[Path, Path]:
     """Unwrap an interferogram using at multiple scales using `tophu`.
 
@@ -153,15 +155,17 @@ def unwrap_snaphu_py(
 
     return Path(unw_filename), Path(cc_filename)
 
-def grow_conncomp_snaphu(unw_filename: Filename,
-                         corr_filename: Filename,
-                         nlooks: float,
-                         mask: ArrayLike | None = None,
-                         ccl_nodata: int | None = DEFAULT_CCL_NODATA,
-                         cost: str = "smooth",
-                         min_conncomp_frac: float = 0.0001,
-                         scratchdir: Filename | None = None,) -> Filename:
-    
+
+def grow_conncomp_snaphu(
+    unw_filename: Filename,
+    corr_filename: Filename,
+    nlooks: float,
+    mask: Optional[ArrayLike] = None,
+    ccl_nodata: Optional[int] = DEFAULT_CCL_NODATA,
+    cost: str = "smooth",
+    min_conncomp_frac: float = 0.0001,
+    scratchdir: Optional[Filename] = None,
+) -> Path:
     """Compute connected component labels using SNAPHU.
 
     Parameters
@@ -172,8 +176,8 @@ def grow_conncomp_snaphu(unw_filename: Filename,
         Path to input correlation file.
     nlooks : float
         Effective number of looks used to form the input correlation data.
-    mask_file : Filename, optional
-        Path to binary byte mask file, by default None.
+    mask : Array, optional
+        binary byte mask array, by default None.
         Assumes that 1s are valid pixels and 0s are invalid.
     ccl_nodata : float, optional
         Nodata value for the connected component labels.
@@ -189,36 +193,38 @@ def grow_conncomp_snaphu(unw_filename: Filename,
 
     Returns
     -------
-    conncomp_path : Path
+    conncomp_path : Filename
         Path to output connected component label file.
+
     """
-    
     import snaphu
 
     unw_suffix = full_suffix(unw_filename)
     cc_filename = str(unw_filename).replace(unw_suffix, CONNCOMP_SUFFIX)
-    
+
     unw = snaphu.io.Raster(unw_filename)
     corr = snaphu.io.Raster(corr_filename)
-    
+
     try:
         with snaphu.io.Raster.create(
-                    cc_filename,
-                    like=unw,
-                    nodata=ccl_nodata,
-                    dtype="u2",
-                    **DEFAULT_TIFF_OPTIONS_RIO,
-                ) as conncomp:
-            snaphu.grow_conncomps(unw=unw,
-                                  corr=corr,
-                                  nlooks=nlooks,
-                                  mask=mask,
-                                  cost=cost,
-                                  min_conncomp_frac=min_conncomp_frac,
-                                  scratchdir=scratchdir,
-                                  conncomp=conncomp)
+            cc_filename,
+            like=unw,
+            nodata=ccl_nodata,
+            dtype="u2",
+            **DEFAULT_TIFF_OPTIONS_RIO,
+        ) as conncomp:
+            snaphu.grow_conncomps(
+                unw=unw,
+                corr=corr,
+                nlooks=nlooks,
+                mask=mask,
+                cost=cost,
+                min_conncomp_frac=min_conncomp_frac,
+                scratchdir=scratchdir,
+                conncomp=conncomp,
+            )
     finally:
         unw.close()
         corr.close()
-    
+
     return Path(cc_filename)

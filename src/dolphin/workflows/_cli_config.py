@@ -107,7 +107,7 @@ def create_config(
             "run_unwrap": not no_unwrap,
             "zero_where_masked": zero_where_masked,
             "run_goldstein": run_goldstein,
-            "run_interpolation": run_interpolation
+            "run_interpolation": run_interpolation,
         },
         timeseries_options={
             "run_inversion": not no_inversion,
