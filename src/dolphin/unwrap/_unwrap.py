@@ -237,7 +237,7 @@ def unwrap(
     run_interpolation: bool = False,
     max_radius: int = 51,
     interpolation_cor_threshold: float = 0.5,
-) -> tuple[Filename, Filename]:
+) -> tuple[Path, Path]:
     """Unwrap a single interferogram using snaphu, isce3, or tophu.
 
     Parameters
@@ -403,7 +403,7 @@ def unwrap(
             weight_cutoff=interpolation_cor_threshold,
             max_radius=max_radius,
         )
-        del ifg, corr
+      
         logger.info(f"Writing interpolated output to {interp_ifg_filename}")
         io.write_arr(
             arr=modified_ifg,
