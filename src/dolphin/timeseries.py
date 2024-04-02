@@ -609,7 +609,7 @@ def select_reference_point(
     ccl_file_list: Sequence[PathOrStr],
     condition_file: PathOrStr,
     output_dir: Path,
-    condition_func: Callable = np.argmin,
+    condition_func: Callable = argmin_index,
     block_shape: tuple[int, int] = (512, 512),
     num_threads: int = 5,
 ) -> ReferencePoint:
