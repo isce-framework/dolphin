@@ -237,7 +237,7 @@ def unwrap(
     run_interpolation: bool = False,
     max_radius: int = 51,
     interpolation_cor_threshold: float = 0.5,
-) -> tuple[Path, Path]:
+) -> tuple[Filename, Filename]:
     """Unwrap a single interferogram using snaphu, isce3, or tophu.
 
     Parameters
