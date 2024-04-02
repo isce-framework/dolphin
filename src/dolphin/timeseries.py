@@ -34,6 +34,24 @@ logger = logging.getLogger(__name__)
 class ReferencePointError(ValueError):
     pass
 
+def argmin_index(arr: ArrayLike) -> tuple[int, ...]:
+    """Get the index tuple of the minimum value of the array.
+
+    If multiple occurrences of the minimum value exist, returns
+    the index of the first such occurrence in the flattened array.
+
+    Parameters
+    ----------
+    arr : array_like
+        The input array.
+
+    Returns
+    -------
+    tuple of int
+        The index of the minimum value.
+    """
+    return np.unravel_index(np.argmin(arr), np.shape(arr))
+
 
 @jit
 def weighted_lstsq_single(
@@ -609,7 +627,7 @@ def select_reference_point(
     ccl_file_list: Sequence[PathOrStr],
     condition_file: PathOrStr,
     output_dir: Path,
-    condition_func: Callable = argmin_index,
+    condition_func: Callable[[ArrayLike], tuple[int, ...]] = argmin_index,
     block_shape: tuple[int, int] = (512, 512),
     num_threads: int = 5,
 ) -> ReferencePoint:
@@ -703,9 +721,7 @@ def select_reference_point(
     condition_file_values.mask = condition_file_values.mask | (~isin_largest_conncomp)
 
     # Pick the (unmasked) point with the condition applied to condition file
-    ref_row, ref_col = np.unravel_index(
-        condition_func(condition_file_values), condition_file_values.shape
-    )
-
+    ref_row, ref_col = condition_func(condition_file_values)
+    
     # Cast to `int` to avoid having `np.int64` types
     return ReferencePoint(int(ref_row), int(ref_col))
