@@ -294,7 +294,10 @@ def opera_slc_files(tmp_path) -> list[Path]:
     group = "/".join(group_parts)
     for burst_id in ["t087_185683_iw2", "t087_185684_iw2"]:
         for i in range(len(slc_stack)):
-            fname = d / f"{burst_id}_{start_date + i}.h5"
+            fname = d / f"{burst_id}_{start_date + i}_20231201.h5"
+            if i == 0:
+                datestr = f"{start_date}_{start_date + i}_{start_date + len(slc_stack)}"
+                fname = d / f"COMPRESSED_{burst_id}_{datestr}.h5"
             yoff = Y0 + i * shape[0] / 2
             create_test_nc(
                 fname,
