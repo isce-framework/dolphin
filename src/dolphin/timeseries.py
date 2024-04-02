@@ -35,6 +35,26 @@ class ReferencePointError(ValueError):
     pass
 
 
+def argmin_index(arr: ArrayLike) -> tuple[int, ...]:
+    """Get the index tuple of the minimum value of the array.
+
+    If multiple occurrences of the minimum value exist, returns
+    the index of the first such occurrence in the flattened array.
+
+    Parameters
+    ----------
+    arr : array_like
+        The input array.
+
+    Returns
+    -------
+    tuple of int
+        The index of the minimum value.
+
+    """
+    return np.unravel_index(np.argmin(arr), np.shape(arr))
+
+
 @jit
 def weighted_lstsq_single(
     A: ArrayLike,
@@ -607,28 +627,33 @@ def correlation_to_variance(correlation: ArrayLike, nlooks: int) -> Array:
 
 def select_reference_point(
     ccl_file_list: Sequence[PathOrStr],
-    amp_dispersion_file: PathOrStr,
+    condition_file: PathOrStr,
     output_dir: Path,
+    condition_func: Callable[[ArrayLike], tuple[int, ...]] = argmin_index,
     block_shape: tuple[int, int] = (512, 512),
     num_threads: int = 5,
 ) -> ReferencePoint:
     """Automatically select a reference point for a stack of unwrapped interferograms.
 
-    Uses the amplitude dispersion and connected component labels, the point is selected
+    Uses the condition file and connected component labels, the point is selected
     which
 
     1. is within intersection of all nonzero connected component labels (always valid)
-    2. has the lowest amplitude dispersion
+    2. has the condition applied to condition file. for example: has the lowest
+       amplitude dispersion
 
     Parameters
     ----------
     ccl_file_list : Sequence[PathOrStr]
         List of connected component label phase files.
-    amp_dispersion_file: PathOrStr
-        Amplitude dispersion, stitched and multilooked to the same size each raster
-        in `ccl_file_list`
+    condition_file: PathOrStr
+        A file with the same size as each raster, like amplitude dispersion or
+        temporal coherence in `ccl_file_list`
     output_dir: Path
         Path to store the computed "conncomp_intersection.tif" raster
+    condition_func: Callable[[ArrayLike, ]]
+        The function to apply to the condition file,
+        for example numpy.argmin which finds the pixel with lowest value
     block_shape: tuple[int, int]
         Size of blocks to read from while processing `ccl_file_list`
         Default = (512, 512)
@@ -693,12 +718,12 @@ def select_reference_point(
     # Create a mask of pixels with this label
     isin_largest_conncomp = label == largest_idx
 
-    amp_dispersion = io.load_gdal(amp_dispersion_file, masked=True)
+    condition_file_values = io.load_gdal(condition_file, masked=True)
     # Mask out where the conncomps aren't equal to the largest
-    amp_dispersion.mask = amp_dispersion.mask | (~isin_largest_conncomp)
+    condition_file_values.mask = condition_file_values.mask | (~isin_largest_conncomp)
 
-    # Pick the (unmasked) point with the lowest amplitude dispersion
-    ref_row, ref_col = np.unravel_index(np.argmin(amp_dispersion), amp_dispersion.shape)
+    # Pick the (unmasked) point with the condition applied to condition file
+    ref_row, ref_col = condition_func(condition_file_values)
 
     # Cast to `int` to avoid having `np.int64` types
     return ReferencePoint(int(ref_row), int(ref_col))
