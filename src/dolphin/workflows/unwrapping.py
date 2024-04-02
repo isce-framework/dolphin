@@ -78,7 +78,7 @@ def run(
         cor_filenames=cor_file_list,
         output_path=output_path,
         nlooks=nlooks,
-        mask_file=output_mask,
+        mask_filename=output_mask,
         zero_where_masked=unwrap_options.zero_where_masked,
         max_jobs=unwrap_options.n_parallel_jobs,
         ntiles=unwrap_options.ntiles,
