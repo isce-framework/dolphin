@@ -202,29 +202,26 @@ def grow_conncomp_snaphu(
     unw_suffix = full_suffix(unw_filename)
     cc_filename = str(unw_filename).replace(unw_suffix, CONNCOMP_SUFFIX)
 
-    unw = snaphu.io.Raster(unw_filename)
-    corr = snaphu.io.Raster(corr_filename)
-
-    try:
-        with snaphu.io.Raster.create(
+    with (
+        snaphu.io.Raster(unw_filename) as unw,
+        snaphu.io.Raster(corr_filename) as corr,
+        snaphu.io.Raster.create(
             cc_filename,
             like=unw,
             nodata=ccl_nodata,
             dtype="u2",
             **DEFAULT_TIFF_OPTIONS_RIO,
-        ) as conncomp:
-            snaphu.grow_conncomps(
-                unw=unw,
-                corr=corr,
-                nlooks=nlooks,
-                mask=mask,
-                cost=cost,
-                min_conncomp_frac=min_conncomp_frac,
-                scratchdir=scratchdir,
-                conncomp=conncomp,
-            )
-    finally:
-        unw.close()
-        corr.close()
+        ) as conncomp,
+    ):
+        snaphu.grow_conncomps(
+            unw=unw,
+            corr=corr,
+            nlooks=nlooks,
+            mask=mask,
+            cost=cost,
+            min_conncomp_frac=min_conncomp_frac,
+            scratchdir=scratchdir,
+            conncomp=conncomp,
+        )
 
     return Path(cc_filename)

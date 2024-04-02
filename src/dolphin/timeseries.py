@@ -34,6 +34,7 @@ logger = logging.getLogger(__name__)
 class ReferencePointError(ValueError):
     pass
 
+
 def argmin_index(arr: ArrayLike) -> tuple[int, ...]:
     """Get the index tuple of the minimum value of the array.
 
@@ -49,6 +50,7 @@ def argmin_index(arr: ArrayLike) -> tuple[int, ...]:
     -------
     tuple of int
         The index of the minimum value.
+
     """
     return np.unravel_index(np.argmin(arr), np.shape(arr))
 
@@ -722,6 +724,6 @@ def select_reference_point(
 
     # Pick the (unmasked) point with the condition applied to condition file
     ref_row, ref_col = condition_func(condition_file_values)
-    
+
     # Cast to `int` to avoid having `np.int64` types
     return ReferencePoint(int(ref_row), int(ref_col))
