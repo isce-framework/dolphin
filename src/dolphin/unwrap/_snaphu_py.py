@@ -138,7 +138,7 @@ def unwrap_snaphu_py(
                 # (500, 100) for (tile_cost_thresh, min_region_size) lead to
                 # "Exceeded maximum number of secondary arcs"
                 # "Decrease TILECOSTTHRESH and/or increase MINREGIONSIZE"
-                tile_cost_thresh=200,
+                tile_cost_thresh=500,
                 # ... "and/or increase MINREGIONSIZE"
                 min_region_size=300,
             )
