@@ -90,11 +90,11 @@ def estimate_ionospheric_delay(
 
     # frequency
     for key in slc_files:
-        if len(key) == 1:
-            first_date = key
+        if "compressed" not in str(slc_files[key][0]).lower():
+            one_of_slcs = slc_files[key][0]
             break
 
-    wavelength = oput.get_radar_wavelength(slc_files[first_date][0])
+    wavelength = oput.get_radar_wavelength(one_of_slcs)
     freq = SPEED_OF_LIGHT / wavelength
 
     # output folder

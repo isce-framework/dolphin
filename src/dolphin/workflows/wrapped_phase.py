@@ -110,7 +110,7 @@ def run(
     pl_path.mkdir(parents=True, exist_ok=True)
 
     # Mark any files beginning with "compressed" as compressed
-    is_compressed = [f.name.startswith("compressed") for f in input_file_list]
+    is_compressed = ["compressed" in str(f).lower() for f in input_file_list]
     input_dates = _get_input_dates(
         input_file_list, is_compressed, cfg.input_options.cslc_date_fmt
     )
@@ -352,7 +352,7 @@ def _get_reference_date_idx(
     is_compressed: Sequence[bool],
     input_dates: Sequence[Sequence[datetime.datetime]],
 ) -> tuple[datetime.datetime, int]:
-    is_compressed = [f.name.startswith("compressed") for f in input_file_list]
+    is_compressed = ["compressed" in str(f).lower() for f in input_file_list]
     if not is_compressed[0]:
         return input_dates[0][0], 0
 
