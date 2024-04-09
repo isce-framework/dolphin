@@ -236,7 +236,9 @@ def run(
     ts_opts = cfg.timeseries_options
     # Skip if we only have 1 unwrapped, or if we didn't ask for inversion/velocity
     if len(unwrapped_paths) > 1 and (ts_opts.run_inversion or ts_opts.run_velocity):
-        inverted_phase_paths = run_timeseries(
+        # the output of run_timeseries is not currently used so pre-commit removes it
+        # let's add back if we need it
+        run_timeseries(
             ts_opts=ts_opts,
             unwrapped_paths=unwrapped_paths,
             conncomp_paths=conncomp_paths,
@@ -246,7 +248,7 @@ def run(
             # num_threads=cfg.worker_settings....?
         )
     else:
-        inverted_phase_paths = unwrapped_paths
+        pass
 
     # ##############################################
     # 5. Estimate corrections for each interferogram
@@ -321,8 +323,12 @@ def run(
         stitched_temp_coh_file=stitched_temp_coh_file,
         stitched_ps_file=stitched_ps_file,
         stitched_amp_dispersion_file=stitched_amp_dispersion_file,
-        # unwrapped_paths=unwrapped_paths,
-        unwrapped_paths=inverted_phase_paths,
+        unwrapped_paths=unwrapped_paths,
+        # TODO: Let's keep the uwrapped_paths since all the outputs are
+        # corresponding to those and if we have a network unwrapping, the
+        # inversion would create different single-reference network and we need
+        # to update other products like conncomp
+        # unwrapped_paths=inverted_phase_paths,
         conncomp_paths=conncomp_paths,
         tropospheric_corrections=tropo_paths,
         ionospheric_corrections=iono_paths,
