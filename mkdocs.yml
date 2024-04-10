@@ -32,10 +32,13 @@ plugins:
         - https://docs.scipy.org/doc/scipy/objects.inv  # scipy doc objects
 - mkdocs-jupyter:
     include: ["docs/notebooks/*.ipynb"]
+    ignore: ["docs/notebooks/data/*"]
 
 markdown_extensions:
   - pymdownx.arithmatex:
       generic: true
+  - pymdownx.snippets:
+      check_paths: true
   - footnotes
   - mdx_bib:
       bibtex_file: docs/references.bib
@@ -53,11 +56,13 @@ watch:
 nav:
 - index.md
 - getting-started.md
-- Tutorials:
-  - Notebook page: notebooks/walkthrough-basic.ipynb
-  # - Notebook page2: notebooks/walkthrough-basic.html
+- tutorials.md
+# - Tutorials:
+#   - Notebook page: notebooks/walkthrough-basic.ipynb
+#   # - Notebook page2: notebooks/walkthrough-basic.html
 # - how-to-guides.md
 # https://mkdocstrings.github.io/recipes/#generate-a-literate-navigation-file
 # trailing slash: that mkdocs-literate-nav knows a summary.md file is in that folder.
+- developer-setup.md
 - Code Reference: reference/
-- background-theory.md
+# - background-theory.md

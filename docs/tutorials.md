@@ -1,4 +1,8 @@
-This part of the project documentation will contain step-by-step instructions for learning about generating displacement using Dolphin.
+# Tutorials
+
+1. [Basic walkthrough notebook](notebooks/walkthrough-basic.ipynb)
+
+<!-- This part of the project documentation will contain step-by-step instructions for learning about generating displacement using Dolphin. -->
 
 <!-- **learning-oriented** approach. You'll learn how to
 get started with the code in this project.
