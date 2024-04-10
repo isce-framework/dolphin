@@ -3,7 +3,7 @@
 **Added**
 - Added Goldstein filtering for unwrapping
 - Added Interpolation for unwrapping
-- Added the regrow connected components for the modified phase 
+- Added the regrow connected components for the modified phase
 - Added option to toggle off inversion
 - Added similarity module
 
@@ -12,7 +12,7 @@
 - `max_bandwidth` config can now be 1 to specify only nearest neighbor interferograms.
 - Use the 'compressed' key term to find compressed slcs and regular slcs instead of number of dates in ionosphere
 - Consider the compressed SLCs have different naming convention with capital letters
-- Enforce consistency between jax and jaxlib 
+- Enforce consistency between jax and jaxlib
 - Disable corrections part of pytest, add one for timeseries
 
 # [v0.16.0](https://github.com/isce-framework/dolphin/compare/v0.15.3...v0.16.0) - 2024-03-03
