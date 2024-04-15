@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 from __future__ import annotations
 
-import contextlib
+#import contextlib
 import multiprocessing as mp
 from collections import defaultdict
 from concurrent.futures import ProcessPoolExecutor
@@ -11,7 +11,7 @@ from pathlib import Path
 from pprint import pformat
 from typing import Mapping, NamedTuple, Sequence
 
-from opera_utils import get_dates, group_by_burst, group_by_date
+from opera_utils import group_by_burst, group_by_date #, get_dates
 from tqdm.auto import tqdm
 
 from dolphin import __version__, io, timeseries, utils
@@ -20,7 +20,7 @@ from dolphin.atmosphere import estimate_ionospheric_delay, estimate_tropospheric
 
 from . import stitching_bursts, unwrapping, wrapped_phase
 from ._utils import _create_burst_cfg, _remove_dir_if_empty
-from .config import DisplacementWorkflow, TimeseriesOptions
+from .config import DisplacementWorkflow #, TimeseriesOptions
 
 logger = get_log(__name__)
 
@@ -238,12 +238,16 @@ def run(
     if len(unwrapped_paths) > 1 and (ts_opts.run_inversion or ts_opts.run_velocity):
         # the output of run_timeseries is not currently used so pre-commit removes it
         # let's add back if we need it
-        run_timeseries(
-            ts_opts=ts_opts,
+        timeseries.run(
             unwrapped_paths=unwrapped_paths,
             conncomp_paths=conncomp_paths,
-            cor_paths=stitched_cor_paths,
-            stitched_amp_dispersion_file=stitched_amp_dispersion_file,
+            corr_paths=stitched_cor_paths,
+            condition_file=stitched_amp_dispersion_file,
+            condition='min',
+            output_dir=ts_opts._directory,
+            run_velocity=ts_opts.run_velocity,
+            velocity_file=ts_opts._velocity_file,
+            correlation_threshold=ts_opts.correlation_threshold,
             # TODO: do i care to configure block shape, or num threads from somewhere?
             # num_threads=cfg.worker_settings....?
         )
@@ -342,78 +346,3 @@ def _print_summary(cfg):
     logger.info(f"Config file dolphin version: {cfg._dolphin_version}")
     logger.info(f"Current running dolphin version: {__version__}")
 
-
-def run_timeseries(
-    ts_opts: TimeseriesOptions,
-    unwrapped_paths: Sequence[Path],
-    conncomp_paths: Sequence[Path],
-    cor_paths: Sequence[Path],
-    stitched_amp_dispersion_file: Path,
-    num_threads: int = 5,
-) -> list[Path]:
-    """Invert the unwrapped interferograms, estimate timeseries and phase velocity."""
-    output_path = ts_opts._directory
-    output_path.mkdir(exist_ok=True, parents=True)
-
-    # First we find the reference point for the unwrapped interferograms
-    reference = timeseries.select_reference_point(
-        conncomp_paths,
-        stitched_amp_dispersion_file,
-        output_dir=output_path,
-    )
-
-    ifg_date_pairs = [get_dates(f) for f in unwrapped_paths]
-    sar_dates = sorted(set(utils.flatten(ifg_date_pairs)))
-    # if we did single-reference interferograms, for `n` sar dates, we will only have
-    # `n-1` interferograms. Any more than n-1 ifgs means we need to invert
-    needs_inversion = len(unwrapped_paths) > len(sar_dates) - 1
-    # check if we even need to invert, or if it was single reference
-    inverted_phase_paths: list[Path] = []
-    if needs_inversion:
-        logger.info("Selecting a reference point for unwrapped interferograms")
-
-        logger.info("Inverting network of %s unwrapped ifgs", len(unwrapped_paths))
-        inverted_phase_paths = timeseries.invert_unw_network(
-            unw_file_list=unwrapped_paths,
-            reference=reference,
-            output_dir=output_path,
-            num_threads=num_threads,
-        )
-    else:
-        logger.info(
-            "Skipping inversion step: only single reference interferograms exist."
-        )
-        # Symlink the unwrapped paths to `timeseries/`
-        for p in unwrapped_paths:
-            target = output_path / p.name
-            with contextlib.suppress(FileExistsError):
-                target.symlink_to(p)
-            inverted_phase_paths.append(target)
-        # Make extra "0" raster so that the number of rasters matches len(sar_dates)
-        ref_raster = output_path / (
-            utils.format_dates(sar_dates[0], sar_dates[0]) + ".tif"
-        )
-        io.write_arr(
-            arr=None, output_name=ref_raster, like_filename=inverted_phase_paths[0]
-        )
-        inverted_phase_paths.append(ref_raster)
-
-    if ts_opts.run_velocity:
-        #  We can't pass the correlations after an inversion- the numbers don't match
-        # TODO:
-        # Is there a better weighting then?
-        cor_file_list = (
-            cor_paths if len(cor_paths) == len(inverted_phase_paths) else None
-        )
-        logger.info("Estimating phase velocity")
-        timeseries.create_velocity(
-            unw_file_list=inverted_phase_paths,
-            output_file=ts_opts._velocity_file,
-            reference=reference,
-            date_list=sar_dates,
-            cor_file_list=cor_file_list,
-            cor_threshold=ts_opts.correlation_threshold,
-            num_threads=num_threads,
-        )
-
-    return inverted_phase_paths
