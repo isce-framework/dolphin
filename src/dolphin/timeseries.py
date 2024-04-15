@@ -1,9 +1,9 @@
 from __future__ import annotations
 
+import contextlib
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from typing import Callable, Protocol, Sequence, TypeVar, Optional
-import contextlib
+from typing import Callable, Optional, Protocol, Sequence, TypeVar
 
 import jax.numpy as jnp
 import numpy as np
@@ -12,17 +12,23 @@ from numpy.typing import ArrayLike
 from opera_utils import get_dates
 from scipy import ndimage
 
-from dolphin._log import get_log, log_runtime
-from dolphin.workflows import CallFunc
 from dolphin import DateOrDatetime, io, utils
+from dolphin._log import get_log, log_runtime
 from dolphin._overviews import ImageType, create_overviews
 from dolphin._types import PathOrStr, ReferencePoint
 from dolphin.utils import flatten, format_dates
-
+from dolphin.workflows import CallFunc
 
 T = TypeVar("T")
 
 logger = get_log(__name__)
+
+__all__ = ["run"]
+
+
+class ReferencePointError(ValueError):
+    pass
+
 
 @log_runtime
 def run(
@@ -33,11 +39,11 @@ def run(
     condition: CallFunc,
     output_dir: PathOrStr,
     run_velocity: bool = False,
-    velocity_file: Optional[PathOrStr]=None,
-    correlation_threshold: float=0.2,
+    velocity_file: Optional[PathOrStr] = None,
+    correlation_threshold: float = 0.2,
     num_threads: int = 5,
-    reference_point: Optional[tuple[int, int]] = None,
-)-> list[PathOrStr]:
+    reference_point: Optional[ReferencePoint] = None,
+) -> list[Path]:
     """Invert the unwrapped interferograms, estimate timeseries and phase velocity.
 
     Parameters
@@ -50,7 +56,7 @@ def run(
         Sequence connected component files, one per file in `unwrapped_paths`
     condition_file: PathOrStr
         A file with the same size as each raster, like amplitude dispersion or
-        temporal coherence 
+        temporal coherence
     condition: CallFunc
         The function to apply to the condition file,
         for example numpy.argmin which finds the pixel with lowest value
@@ -67,8 +73,8 @@ def run(
         The parallel blocks to process at once.
         Default is 5.
     reference_point : tuple[int, int], optional
-        Reference point (row, col) used if performing a time series inversion. 
-        If not provided, a point will be selected from a consistent connected 
+        Reference point (row, col) used if performing a time series inversion.
+        If not provided, a point will be selected from a consistent connected
         component with low amplitude dispersion or high temporal coherence.
 
     Returns
@@ -77,19 +83,17 @@ def run(
         list of Paths to inverted interferograms (single reference phase series).
 
     """
-    if condition == CallFunc.MAX:
-        condition_func = argmax_index
-    else: condition_func = argmin_index
+    condition_func = argmax_index if condition == CallFunc.MAX else argmin_index
 
-    output_dir.mkdir(exist_ok=True, parents=True)
+    Path(output_dir).mkdir(exist_ok=True, parents=True)
 
     # First we find the reference point for the unwrapped interferograms
     if reference_point is None:
         reference = select_reference_point(
             conncomp_paths,
             condition_file,
-            output_dir=output_dir,
-            condition_func=condition_func
+            output_dir=Path(output_dir),
+            condition_func=condition_func,
         )
     else:
         reference = reference_point
@@ -117,12 +121,12 @@ def run(
         )
         # Symlink the unwrapped paths to `timeseries/`
         for p in unwrapped_paths:
-            target = output_dir / Path(p).name
+            target = Path(output_dir) / Path(p).name
             with contextlib.suppress(FileExistsError):
                 target.symlink_to(p)
             inverted_phase_paths.append(target)
         # Make extra "0" raster so that the number of rasters matches len(sar_dates)
-        ref_raster = output_dir / (
+        ref_raster = Path(output_dir) / (
             utils.format_dates(sar_dates[0], sar_dates[0]) + ".tif"
         )
         io.write_arr(
@@ -139,7 +143,7 @@ def run(
         )
         logger.info("Estimating phase velocity")
         if velocity_file is None:
-            velocity_file = output_dir / "velocity.tif"
+            velocity_file = Path(output_dir) / "velocity.tif"
         create_velocity(
             unw_file_list=inverted_phase_paths,
             output_file=velocity_file,
@@ -151,11 +155,6 @@ def run(
         )
 
     return inverted_phase_paths
-
-
-
-class ReferencePointError(ValueError):
-    pass
 
 
 def argmin_index(arr: ArrayLike) -> tuple[int, ...]:
@@ -177,6 +176,7 @@ def argmin_index(arr: ArrayLike) -> tuple[int, ...]:
     """
     return np.unravel_index(np.argmin(arr), np.shape(arr))
 
+
 def argmax_index(arr: ArrayLike) -> tuple[int, ...]:
     """Get the index tuple of the maximum value of the array.
 
@@ -195,7 +195,6 @@ def argmax_index(arr: ArrayLike) -> tuple[int, ...]:
 
     """
     return np.unravel_index(np.argmax(arr), np.shape(arr))
-
 
 
 @jit

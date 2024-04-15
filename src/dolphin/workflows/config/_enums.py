@@ -31,4 +31,3 @@ class CallFunc(str, Enum):
 
     MIN = "min"
     MAX = "max"
-   

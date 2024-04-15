@@ -1,10 +1,10 @@
 import argparse
 import sys
 
+import dolphin._cli_timeseries
 import dolphin._cli_unwrap
 import dolphin.workflows._cli_config
 import dolphin.workflows._cli_run
-import dolphin._cli_timeseries
 from dolphin import __version__
 
 

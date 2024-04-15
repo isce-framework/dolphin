@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 from __future__ import annotations
 
-#import contextlib
+# import contextlib
 import multiprocessing as mp
 from collections import defaultdict
 from concurrent.futures import ProcessPoolExecutor
@@ -11,16 +11,17 @@ from pathlib import Path
 from pprint import pformat
 from typing import Mapping, NamedTuple, Sequence
 
-from opera_utils import group_by_burst, group_by_date #, get_dates
+from opera_utils import group_by_burst, group_by_date  # , get_dates
 from tqdm.auto import tqdm
 
 from dolphin import __version__, io, timeseries, utils
 from dolphin._log import get_log, log_runtime
 from dolphin.atmosphere import estimate_ionospheric_delay, estimate_tropospheric_delay
+from dolphin.workflows import CallFunc
 
 from . import stitching_bursts, unwrapping, wrapped_phase
 from ._utils import _create_burst_cfg, _remove_dir_if_empty
-from .config import DisplacementWorkflow #, TimeseriesOptions
+from .config import DisplacementWorkflow  # , TimeseriesOptions
 
 logger = get_log(__name__)
 
@@ -243,7 +244,7 @@ def run(
             conncomp_paths=conncomp_paths,
             corr_paths=stitched_cor_paths,
             condition_file=stitched_amp_dispersion_file,
-            condition='min',
+            condition=CallFunc.MIN,
             output_dir=ts_opts._directory,
             run_velocity=ts_opts.run_velocity,
             velocity_file=ts_opts._velocity_file,
@@ -345,4 +346,3 @@ def _print_summary(cfg):
     logger.info(f"Maximum memory usage: {max_mem:.2f} GB")
     logger.info(f"Config file dolphin version: {cfg._dolphin_version}")
     logger.info(f"Current running dolphin version: {__version__}")
-
