@@ -1,6 +1,6 @@
 import argparse
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any
 
 from dolphin.workflows import CallFunc
 
@@ -82,8 +82,10 @@ def get_parser(subparser=None, subcommand_name="timeseries") -> argparse.Argumen
     )
     parser.add_argument(
         "--reference-point",
-        type=Optional[tuple[int, int]],
-        default=None,
+        type=int,
+        nargs=2,
+        metavar=("ROW", "COL"),
+        default=(-1, -1),
         help="Reference point (row, col) used if performing a time series inversion. "
         "If not provided, a point will be selected from a consistent connected "
         "component with low amplitude dispersion or high temporal coherence.",
