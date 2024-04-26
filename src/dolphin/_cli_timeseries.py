@@ -92,9 +92,8 @@ def get_parser(subparser=None, subcommand_name="timeseries") -> argparse.Argumen
     )
     parser.add_argument(
         "--correlation-threshold",
-        type=float,
+        type=range_limited_float_type,
         default=0.2,
-        choices=range(1),
         metavar="[0-1]",
         help="Pixels with correlation below this value will be masked out.",
     )
@@ -102,6 +101,16 @@ def get_parser(subparser=None, subcommand_name="timeseries") -> argparse.Argumen
     parser.set_defaults(run_func=_run_timeseries)
 
     return parser
+
+def range_limited_float_type(arg):
+    """ Type function for argparse - a float within some predefined bounds """
+    try:
+        f = float(arg)
+    except ValueError:    
+        raise argparse.ArgumentTypeError("Must be a floating point number")
+    if f < 0 or f > 1:
+        raise argparse.ArgumentTypeError("Argument must be < " + str(1) + "and > " + str(0))
+    return f
 
 
 def _run_timeseries(*args, **kwargs):
