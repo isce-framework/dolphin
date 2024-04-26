@@ -102,14 +102,17 @@ def get_parser(subparser=None, subcommand_name="timeseries") -> argparse.Argumen
 
     return parser
 
+
 def range_limited_float_type(arg):
-    """ Type function for argparse - a float within some predefined bounds """
+    """Type function for argparse - a float within some predefined bounds."""
     try:
         f = float(arg)
-    except ValueError:    
+    except ValueError:
         raise argparse.ArgumentTypeError("Must be a floating point number")
     if f < 0 or f > 1:
-        raise argparse.ArgumentTypeError("Argument must be < " + str(1) + "and > " + str(0))
+        raise argparse.ArgumentTypeError(
+            "Argument must be < " + str(1) + "and > " + str(0)
+        )
     return f
 
 
