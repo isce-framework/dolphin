@@ -34,6 +34,7 @@ def perpendicular_baseline(
     -------
     float
         Perpendicular baseline, in meters
+
     """
     az, ref_rng = isce3.geometry.geo2rdr(llh, ell, ref_orbit, dop, wvl, side)
     ref_pos, vel = ref_orbit.interpolate(az)
