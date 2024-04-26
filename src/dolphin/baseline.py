@@ -11,6 +11,30 @@ def perpendicular_baseline(
     ref_orbit: isce3.core.Orbit,
     sec_orbit: isce3.core.Orbit,
 ):
+    """Compute perpendicular baseline at a given geometric position.
+
+    Parameters
+    ----------
+    llh :
+        Lon/Lat/Height vector specifying target position
+    ell : isce3.core.Ellipsoid
+        Ellipsoid for the target surface
+    dop : isce3.core.LUT2d
+        Doppler LUT
+    side : isce3.core.LookSide
+        Look side
+    wvl : float
+        Wavelength
+    ref_orbit : isce3.core.Orbit
+        Reference orbit
+    sec_orbit : isce3.core.Orbit
+        Secondary orbit
+
+    Returns
+    -------
+    float
+        Perpendicular baseline, in meters
+    """
     az, ref_rng = isce3.geometry.geo2rdr(llh, ell, ref_orbit, dop, wvl, side)
     ref_pos, vel = ref_orbit.interpolate(az)
 
@@ -26,7 +50,7 @@ def perpendicular_baseline(
 
     sintheta = numpy.sqrt(1 - costheta**2)
     perp = baseline * sintheta
-    par = baseline * costheta
+    # par = baseline * costheta
 
     targ_xyz = ell.lon_lat_to_xyz(llh)
     direction = numpy.sign(
