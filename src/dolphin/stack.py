@@ -282,7 +282,7 @@ class CompressedSlcInfo(BaseModel):
     ) -> CompressedSlcInfo:
         """Parse just the dates from a compressed SLC filename."""
         try:
-            ref, start, end = get_dates(filename, fmt=date_fmt)
+            ref, start, end = get_dates(filename, fmt=date_fmt)[0:3]
         except IndexError as e:
             msg = f"{filename} does not have 3 dates like {date_fmt}"
             raise ValueError(msg) from e

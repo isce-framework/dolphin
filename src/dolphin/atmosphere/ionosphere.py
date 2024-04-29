@@ -117,11 +117,11 @@ def estimate_ionospheric_delay(
             )
             continue
 
-        reference_date = (ref_date,)
-        secondary_date = (sec_date,)
+        reference_date = next(key for key in slc_files if ref_date in key)
+        secondary_date = next(key for key in slc_files if sec_date in key)
 
         secondary_time = oput.get_zero_doppler_time(slc_files[secondary_date][0])
-        if len(slc_files[reference_date]) == 0:
+        if "compressed" in str(slc_files[reference_date][0]).lower():
             # this is for when we have compressed slcs but the actual
             # reference date does not exist in the input data
             reference_time = secondary_time
@@ -130,14 +130,14 @@ def estimate_ionospheric_delay(
 
         reference_vtec = read_zenith_tec(
             time=reference_time,
-            tec_file=tec_files[reference_date][0],
+            tec_file=tec_files[(ref_date,)][0],
             lat=latc,
             lon=lonc,
         )
 
         secondary_vtec = read_zenith_tec(
             time=secondary_time,
-            tec_file=tec_files[secondary_date][0],
+            tec_file=tec_files[(sec_date,)][0],
             lat=latc,
             lon=lonc,
         )
