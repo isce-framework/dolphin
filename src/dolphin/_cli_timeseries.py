@@ -1,6 +1,6 @@
 import argparse
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any
 
 from dolphin.workflows import CallFunc
 
@@ -82,17 +82,18 @@ def get_parser(subparser=None, subcommand_name="timeseries") -> argparse.Argumen
     )
     parser.add_argument(
         "--reference-point",
-        type=Optional[tuple[int, int]],
-        default=None,
+        type=int,
+        nargs=2,
+        metavar=("ROW", "COL"),
+        default=(-1, -1),
         help="Reference point (row, col) used if performing a time series inversion. "
         "If not provided, a point will be selected from a consistent connected "
         "component with low amplitude dispersion or high temporal coherence.",
     )
     parser.add_argument(
         "--correlation-threshold",
-        type=float,
+        type=range_limited_float_type,
         default=0.2,
-        choices=range(1),
         metavar="[0-1]",
         help="Pixels with correlation below this value will be masked out.",
     )
@@ -100,6 +101,19 @@ def get_parser(subparser=None, subcommand_name="timeseries") -> argparse.Argumen
     parser.set_defaults(run_func=_run_timeseries)
 
     return parser
+
+
+def range_limited_float_type(arg):
+    """Type function for argparse - a float within some predefined bounds."""
+    try:
+        f = float(arg)
+    except ValueError as err:
+        raise argparse.ArgumentTypeError("Must be a floating point number") from err
+    if f < 0 or f > 1:
+        raise argparse.ArgumentTypeError(
+            "Argument must be < " + str(1) + "and > " + str(0)
+        )
+    return f
 
 
 def _run_timeseries(*args, **kwargs):
