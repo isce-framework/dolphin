@@ -42,7 +42,7 @@ def run(
     velocity_file: Optional[PathOrStr] = None,
     correlation_threshold: float = 0.2,
     num_threads: int = 5,
-    reference_point: Optional[ReferencePoint] = None,
+    reference_point: tuple[int, int] = (-1, -1),
 ) -> list[Path]:
     """Invert the unwrapped interferograms, estimate timeseries and phase velocity.
 
@@ -88,7 +88,7 @@ def run(
     Path(output_dir).mkdir(exist_ok=True, parents=True)
 
     # First we find the reference point for the unwrapped interferograms
-    if reference_point is None:
+    if reference_point == (-1, -1):
         reference = select_reference_point(
             conncomp_paths,
             condition_file,
@@ -96,7 +96,7 @@ def run(
             condition_func=condition_func,
         )
     else:
-        reference = reference_point
+        reference = ReferencePoint(row=reference_point[0], col=reference_point[1])
 
     ifg_date_pairs = [get_dates(f) for f in unwrapped_paths]
     sar_dates = sorted(set(utils.flatten(ifg_date_pairs)))
