@@ -135,10 +135,11 @@ def estimate_tropospheric_delay(
     tropo_height_levels = np.concatenate(([-100], np.arange(0, 9000, 500)))
 
     for key in slc_files:
-        if len(key) == 1:
-            first_date = key
+        if "compressed" not in str(slc_files[key][0]).lower():
+            one_of_slcs = slc_files[key][0]
             break
-    wavelength = oput.get_radar_wavelength(slc_files[first_date][0])
+
+    wavelength = oput.get_radar_wavelength(one_of_slcs)
 
     tropo_run = compute_pyaps if tropo_package.lower() == "pyaps" else compute_raider
 
@@ -154,7 +155,7 @@ def estimate_tropospheric_delay(
     output_tropo_dir.mkdir(exist_ok=True)
     output_paths: list[Path] = []
     for ifg in ifg_file_list:
-        ref_date, sec_date = get_dates(ifg)
+        ref_date, sec_date = get_dates(ifg)[0:2]
 
         date_str = format_date_pair(ref_date, sec_date)
         name = f"{date_str}_tropoDelay_pyaps_{tropo_model.value}_LOS_{delay_type}.tif"
@@ -165,18 +166,15 @@ def estimate_tropospheric_delay(
             logger.info(f"{tropo_delay_product_path} exists, skipping")
             continue
 
-        reference_date = (ref_date,)
-        secondary_date = (sec_date,)
+        reference_date = next(key for key in slc_files if ref_date in key)
+        secondary_date = next(key for key in slc_files if sec_date in key)
 
-        if (
-            reference_date not in troposphere_files
-            or secondary_date not in troposphere_files
-        ):
+        if (ref_date,) not in troposphere_files or (sec_date,) not in troposphere_files:
             logger.warning(f"Weather-model files do not exist for {date_str}, skipping")
             continue
 
         secondary_time = oput.get_zero_doppler_time(slc_files[secondary_date][0])
-        if len(slc_files[reference_date]) == 0:
+        if "compressed" in str(slc_files[reference_date][0]).lower():
             # this is for when we have compressed slcs but the actual
             # reference date does not exist in the input data
             reference_time = datetime.datetime.combine(
@@ -196,8 +194,8 @@ def estimate_tropospheric_delay(
             wavelength=wavelength,
             shape=(ysize, xsize),
             geotransform=gt,
-            reference_file=troposphere_files[reference_date],
-            secondary_file=troposphere_files[secondary_date],
+            reference_file=troposphere_files[(ref_date,)],
+            secondary_file=troposphere_files[(sec_date,)],
             reference_time=reference_time,
             secondary_time=secondary_time,
             interferogram=format_date_pair(ref_date, sec_date),
