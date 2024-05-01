@@ -117,6 +117,16 @@ def estimate_ionospheric_delay(
             )
             continue
 
+        # The keys in slc_files do not necessarily have one date,
+        # it means with the production file naming convention,
+        # there will be multiple dates stored in the keys from get_dates
+        # function. So in the following if we set reference_date = (ref_date, ),
+        # there will be an error that it does not find the key.
+        # Examples of the file naming convention for CSLC and compressed cslc is:
+        # OPERA_L2_CSLC-S1_T042-088905-IW1\
+        #                       _20221119T000000Z_20221120T000000Z_S1A_VV_v1.0.h5
+        # OPERA_L2_COMPRESSED-CSLC-S1_T042-088905-IW1_20221107T000000Z_\
+        #           20221107T000000Z_20230506T000000Z_20230507T000000Z_VV_v1.0.h5
         reference_date = next(key for key in slc_files if ref_date in key)
         secondary_date = next(key for key in slc_files if sec_date in key)
 
