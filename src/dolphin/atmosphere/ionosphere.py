@@ -128,9 +128,13 @@ def estimate_ionospheric_delay(
         # OPERA_L2_COMPRESSED-CSLC-S1_T042-088905-IW1_20221107T000000Z_\
         #           20221107T000000Z_20230506T000000Z_20230507T000000Z_VV_v1.0.h5
         reference_date = next(key for key in slc_files if ref_date in key)
-         # temporary fix for compressed SLCs while the required metadata i not included in them
+        # temporary fix for compressed SLCs while the required metadata i not included in them
         # there will be modification in a future PR to add metadata to compressed SLCs
-        secondary_date = next(key for key in slc_files if sec_date in key and not 'compressed' in str(slc_files[key][0]).lower())
+        secondary_date = next(
+            key
+            for key in slc_files
+            if sec_date in key and "compressed" not in str(slc_files[key][0]).lower()
+        )
 
         secondary_time = oput.get_zero_doppler_time(slc_files[secondary_date][0])
         if "compressed" in str(slc_files[reference_date][0]).lower():
