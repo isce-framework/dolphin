@@ -1,7 +1,7 @@
 from typing import Final
 
 CONNCOMP_SUFFIX = ".unw.conncomp.tif"
-CONNCOMP_SUFFIX_ZEROED = ".unw.conncomp.zeroed.cor.tif"
+CONNCOMP_SUFFIX_ZEROED = ".unw.conncomp.zeroed.tif"
 UNW_SUFFIX = ".unw.tif"
 UNW_SUFFIX_ZEROED = ".unw.zeroed.tif"
 
