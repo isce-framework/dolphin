@@ -167,7 +167,14 @@ def estimate_tropospheric_delay(
             continue
 
         reference_date = next(key for key in slc_files if ref_date in key)
-        secondary_date = next(key for key in slc_files if sec_date in key)
+        # temporary fix for compressed SLCs while the required metadata i not included
+        # in them. there will be modification in a future PR to add metadata to
+        # compressed SLCs
+        secondary_date = next(
+            key
+            for key in slc_files
+            if sec_date in key and "compressed" not in str(slc_files[key][0]).lower()
+        )
 
         if (ref_date,) not in troposphere_files or (sec_date,) not in troposphere_files:
             logger.warning(f"Weather-model files do not exist for {date_str}, skipping")
