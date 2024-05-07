@@ -167,9 +167,14 @@ def estimate_tropospheric_delay(
             continue
 
         reference_date = next(key for key in slc_files if ref_date in key)
+<<<<<<< HEAD
         # temporary fix for compressed SLCs while the required metadata i not included
         # in them. there will be modification in a future PR to add metadata to
         # compressed SLCs
+=======
+        # temporary fix for compressed SLCs while the required metadata i not included in them
+        # there will be modification in a future PR to add metadata to compressed SLCs
+>>>>>>> 003647bd7ad88d26982ade054b7af7be73cfedc6
         secondary_date = next(
             key
             for key in slc_files
