@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Optional
+
+from numpy.typing import ArrayLike
 
 from dolphin._log import get_log
 from dolphin._types import Filename
@@ -21,13 +24,13 @@ def unwrap_snaphu_py(
     ntiles: tuple[int, int] = (1, 1),
     tile_overlap: tuple[int, int] = (0, 0),
     nproc: int = 1,
-    mask_file: Filename | None = None,
+    mask_file: Optional[Filename] = None,
     zero_where_masked: bool = False,
-    unw_nodata: float | None = DEFAULT_UNW_NODATA,
-    ccl_nodata: int | None = DEFAULT_CCL_NODATA,
+    unw_nodata: Optional[float] = DEFAULT_UNW_NODATA,
+    ccl_nodata: Optional[int] = DEFAULT_CCL_NODATA,
     init_method: str = "mst",
     cost: str = "smooth",
-    scratchdir: Filename | None = None,
+    scratchdir: Optional[Filename] = None,
 ) -> tuple[Path, Path]:
     """Unwrap an interferogram using at multiple scales using `tophu`.
 
@@ -135,7 +138,7 @@ def unwrap_snaphu_py(
                 # (500, 100) for (tile_cost_thresh, min_region_size) lead to
                 # "Exceeded maximum number of secondary arcs"
                 # "Decrease TILECOSTTHRESH and/or increase MINREGIONSIZE"
-                tile_cost_thresh=200,
+                tile_cost_thresh=500,
                 # ... "and/or increase MINREGIONSIZE"
                 min_region_size=300,
             )
@@ -145,4 +148,80 @@ def unwrap_snaphu_py(
         if mask is not None:
             mask.close()
 
+    if zero_where_masked and mask_file is not None:
+        logger.info("Zeroing unw/conncomp of pixels masked in " f"{mask_file}")
+
+        return _zero_from_mask(unw_filename, cc_filename, mask_file)
+
     return Path(unw_filename), Path(cc_filename)
+
+
+def grow_conncomp_snaphu(
+    unw_filename: Filename,
+    corr_filename: Filename,
+    nlooks: float,
+    mask: Optional[ArrayLike] = None,
+    ccl_nodata: Optional[int] = DEFAULT_CCL_NODATA,
+    cost: str = "smooth",
+    min_conncomp_frac: float = 0.0001,
+    scratchdir: Optional[Filename] = None,
+) -> Path:
+    """Compute connected component labels using SNAPHU.
+
+    Parameters
+    ----------
+    unw_filename : Filename
+        Path to output unwrapped phase file.
+    corr_filename : Filename
+        Path to input correlation file.
+    nlooks : float
+        Effective number of looks used to form the input correlation data.
+    mask : Array, optional
+        binary byte mask array, by default None.
+        Assumes that 1s are valid pixels and 0s are invalid.
+    ccl_nodata : float, optional
+        Nodata value for the connected component labels.
+    cost : str
+        Statistical cost mode.
+        Default = "smooth"
+    min_conncomp_frac : float, optional
+        Minimum size of a single connected component, as a fraction of the total number
+        of pixels in the array. Defaults to 0.0001.
+    scratchdir : Filename, optional
+        If provided, uses a scratch directory to save the intermediate files
+        during unwrapping.
+
+    Returns
+    -------
+    conncomp_path : Filename
+        Path to output connected component label file.
+
+    """
+    import snaphu
+
+    unw_suffix = full_suffix(unw_filename)
+    cc_filename = str(unw_filename).replace(unw_suffix, CONNCOMP_SUFFIX)
+
+    with (
+        snaphu.io.Raster(unw_filename) as unw,
+        snaphu.io.Raster(corr_filename) as corr,
+        snaphu.io.Raster.create(
+            cc_filename,
+            like=unw,
+            nodata=ccl_nodata,
+            dtype="u2",
+            **DEFAULT_TIFF_OPTIONS_RIO,
+        ) as conncomp,
+    ):
+        snaphu.grow_conncomps(
+            unw=unw,
+            corr=corr,
+            nlooks=nlooks,
+            mask=mask,
+            cost=cost,
+            min_conncomp_frac=min_conncomp_frac,
+            scratchdir=scratchdir,
+            conncomp=conncomp,
+        )
+
+    return Path(cc_filename)

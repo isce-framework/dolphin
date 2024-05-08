@@ -1,13 +1,5 @@
-"""Estimate wrapped phase for one ministack of SLCs.
+"""Estimate wrapped phase for one ministack of SLCs."""
 
-References
-----------
-    .. [1] Mirzaee, Sara, Falk Amelung, and Heresh Fattahi. "Non-linear phase
-    linking using joined distributed and persistent scatterers." Computers &
-    Geosciences (2022): 105291.
-
-
-"""
 from __future__ import annotations
 
 from dataclasses import dataclass

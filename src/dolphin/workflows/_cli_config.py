@@ -24,6 +24,7 @@ def create_config(
     keep_paths_relative: bool = False,
     work_directory: Optional[Path] = Path(),
     mask_file: Optional[str] = None,
+    zero_where_masked: bool = False,
     ministack_size: Optional[int] = 15,
     half_window_size: tuple[int, int] = (11, 5),
     shp_method: ShpMethod = ShpMethod.GLRT,
@@ -36,7 +37,10 @@ def create_config(
     ntiles: tuple[int, int] = (1, 1),
     downsample_factor: tuple[int, int] = (1, 1),
     no_unwrap: bool = False,
+    no_inversion: bool = False,
     n_parallel_unwrap: int = 1,
+    run_goldstein: bool = False,
+    run_interpolation: bool = False,
     unwrap_method: UnwrapMethod = UnwrapMethod.SNAPHU,
     troposphere_files: Optional[list[str]] = None,
     tropo_date_fmt: str = "%Y%m%d",
@@ -101,6 +105,12 @@ def create_config(
             "downsample_factor": downsample_factor,
             "n_parallel_jobs": n_parallel_unwrap,
             "run_unwrap": not no_unwrap,
+            "zero_where_masked": zero_where_masked,
+            "run_goldstein": run_goldstein,
+            "run_interpolation": run_interpolation,
+        },
+        timeseries_options={
+            "run_inversion": not no_inversion,
         },
         correction_options={
             "troposphere_files": troposphere_files,
@@ -267,6 +277,16 @@ def get_parser(subparser=None, subcommand_name="run"):
         type=int,
         default=1,
         help="Number of interferograms to unwrap in parallel.",
+    )
+    unwrap_group.add_argument(
+        "--run-goldstein",
+        action="store_true",
+        help="Run Goldstein filter before unwrapping.",
+    )
+    unwrap_group.add_argument(
+        "--run-interpolation",
+        action="store_true",
+        help="Run interpolation before unwrapping.",
     )
 
     # Correction options

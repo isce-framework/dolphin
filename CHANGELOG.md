@@ -1,4 +1,21 @@
-# [Unreleased](https://github.com/isce-framework/dolphin/compare/v0.15.3...main)
+# [Unreleased](https://github.com/isce-framework/dolphin/compare/v0.17.0...main)
+# [v0.17.0](https://github.com/isce-framework/dolphin/compare/v0.16.3...v0.17.0) - 2024-04-10)
+**Added**
+- Added Goldstein filtering for unwrapping
+- Added Interpolation for unwrapping
+- Added the regrow connected components for the modified phase
+- Added option to toggle off inversion
+- Added similarity module
+
+**Fixed**
+- 3D readers would squeeze out a dimension for length one inputs (i.e. they would give an array with `.ndim=2`)
+- `max_bandwidth` config can now be 1 to specify only nearest neighbor interferograms.
+- Use the 'compressed' key term to find compressed slcs and regular slcs instead of number of dates in ionosphere
+- Consider the compressed SLCs have different naming convention with capital letters
+- Enforce consistency between jax and jaxlib
+- Disable corrections part of pytest, add one for timeseries
+
+# [v0.16.0](https://github.com/isce-framework/dolphin/compare/v0.15.3...v0.16.0) - 2024-03-03
 
 **Added**
 - Added `dolphin.timeseries` module with basic functionality:

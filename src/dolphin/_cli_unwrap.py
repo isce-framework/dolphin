@@ -77,6 +77,16 @@ def get_parser(subparser=None, subcommand_name="unwrap") -> argparse.ArgumentPar
         default=UnwrapMethod.SNAPHU.value,
         help="Choice of unwrapping algorithm to use.",
     )
+    algorithm_opts.add_argument(
+        "--run-goldstein",
+        action="store_true",
+        help="Run Goldstein filter before unwrapping.",
+    )
+    algorithm_opts.add_argument(
+        "--run-interpolation",
+        action="store_true",
+        help="Run interpolation before unwrapping.",
+    )
 
     tophu_opts = parser.add_argument_group("Tophu options")
     # Add ability for downsampling/tiling with tophu

@@ -1,35 +1,200 @@
-import logging
-from concurrent.futures import Future, ThreadPoolExecutor
+from __future__ import annotations
+
+import contextlib
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from typing import Callable, Protocol, Sequence, TypeVar
+from typing import Callable, Optional, Protocol, Sequence, TypeVar
 
 import jax.numpy as jnp
 import numpy as np
 from jax import Array, jit, vmap
 from numpy.typing import ArrayLike
 from opera_utils import get_dates
-from tqdm.auto import tqdm
+from scipy import ndimage
 
-from dolphin import DateOrDatetime, io
+from dolphin import DateOrDatetime, io, utils
+from dolphin._log import get_log, log_runtime
 from dolphin._overviews import ImageType, create_overviews
 from dolphin._types import PathOrStr, ReferencePoint
-from dolphin.utils import DummyProcessPoolExecutor, flatten, format_dates
-
-__all__ = [
-    "invert_stack",
-    "get_incidence_matrix",
-    "estimate_velocity",
-    "create_velocity",
-    "create_temporal_average",
-    "invert_unw_network",
-    "correlation_to_variance",
-    "select_reference_point",
-]
+from dolphin.utils import flatten, format_dates
+from dolphin.workflows import CallFunc
 
 T = TypeVar("T")
 
-logger = logging.getLogger(__name__)
+logger = get_log(__name__)
+
+__all__ = ["run"]
+
+
+class ReferencePointError(ValueError):
+    pass
+
+
+@log_runtime
+def run(
+    unwrapped_paths: Sequence[PathOrStr],
+    conncomp_paths: Sequence[PathOrStr],
+    corr_paths: Sequence[PathOrStr],
+    condition_file: PathOrStr,
+    condition: CallFunc,
+    output_dir: PathOrStr,
+    run_velocity: bool = False,
+    velocity_file: Optional[PathOrStr] = None,
+    correlation_threshold: float = 0.2,
+    num_threads: int = 5,
+    reference_point: tuple[int, int] = (-1, -1),
+) -> list[Path]:
+    """Invert the unwrapped interferograms, estimate timeseries and phase velocity.
+
+    Parameters
+    ----------
+    unwrapped_paths : Sequence[Path]
+        Sequence unwrapped interferograms to invert.
+    corr_paths : Sequence[Path]
+        Sequence interferometric correlation files, one per file in `unwrapped_paths`
+    conncomp_paths : Sequence[Path]
+        Sequence connected component files, one per file in `unwrapped_paths`
+    condition_file: PathOrStr
+        A file with the same size as each raster, like amplitude dispersion or
+        temporal coherence
+    condition: CallFunc
+        The function to apply to the condition file,
+        for example numpy.argmin which finds the pixel with lowest value
+        the options are [min, max]
+    output_dir : Path
+        Path to the output directory.
+    run_velocity : bool
+        Whether to run velocity estimation on the inverted phase series
+    velocity_file : Path, Optional
+        The output velocity file
+    correlation_threshold : float
+        Pixels with correlation below this value will be masked out
+    num_threads : int
+        The parallel blocks to process at once.
+        Default is 5.
+    reference_point : tuple[int, int], optional
+        Reference point (row, col) used if performing a time series inversion.
+        If not provided, a point will be selected from a consistent connected
+        component with low amplitude dispersion or high temporal coherence.
+
+    Returns
+    -------
+    inverted_phase_paths : list[Path]
+        list of Paths to inverted interferograms (single reference phase series).
+
+    """
+    condition_func = argmax_index if condition == CallFunc.MAX else argmin_index
+
+    Path(output_dir).mkdir(exist_ok=True, parents=True)
+
+    # First we find the reference point for the unwrapped interferograms
+    if reference_point == (-1, -1):
+        reference = select_reference_point(
+            conncomp_paths,
+            condition_file,
+            output_dir=Path(output_dir),
+            condition_func=condition_func,
+        )
+    else:
+        reference = ReferencePoint(row=reference_point[0], col=reference_point[1])
+
+    ifg_date_pairs = [get_dates(f) for f in unwrapped_paths]
+    sar_dates = sorted(set(utils.flatten(ifg_date_pairs)))
+    # if we did single-reference interferograms, for `n` sar dates, we will only have
+    # `n-1` interferograms. Any more than n-1 ifgs means we need to invert
+    needs_inversion = len(unwrapped_paths) > len(sar_dates) - 1
+    # check if we even need to invert, or if it was single reference
+    inverted_phase_paths: list[Path] = []
+    if needs_inversion:
+        logger.info("Selecting a reference point for unwrapped interferograms")
+
+        logger.info("Inverting network of %s unwrapped ifgs", len(unwrapped_paths))
+        inverted_phase_paths = invert_unw_network(
+            unw_file_list=unwrapped_paths,
+            reference=reference,
+            output_dir=output_dir,
+            num_threads=num_threads,
+        )
+    else:
+        logger.info(
+            "Skipping inversion step: only single reference interferograms exist."
+        )
+        # Symlink the unwrapped paths to `timeseries/`
+        for p in unwrapped_paths:
+            target = Path(output_dir) / Path(p).name
+            with contextlib.suppress(FileExistsError):
+                target.symlink_to(p)
+            inverted_phase_paths.append(target)
+        # Make extra "0" raster so that the number of rasters matches len(sar_dates)
+        ref_raster = Path(output_dir) / (
+            utils.format_dates(sar_dates[0], sar_dates[0]) + ".tif"
+        )
+        io.write_arr(
+            arr=None, output_name=ref_raster, like_filename=inverted_phase_paths[0]
+        )
+        inverted_phase_paths.append(ref_raster)
+
+    if run_velocity:
+        #  We can't pass the correlations after an inversion- the numbers don't match
+        # TODO:
+        # Is there a better weighting then?
+        cor_file_list = (
+            corr_paths if len(corr_paths) == len(inverted_phase_paths) else None
+        )
+        logger.info("Estimating phase velocity")
+        if velocity_file is None:
+            velocity_file = Path(output_dir) / "velocity.tif"
+        create_velocity(
+            unw_file_list=inverted_phase_paths,
+            output_file=velocity_file,
+            reference=reference,
+            date_list=sar_dates,
+            cor_file_list=cor_file_list,
+            cor_threshold=correlation_threshold,
+            num_threads=num_threads,
+        )
+
+    return inverted_phase_paths
+
+
+def argmin_index(arr: ArrayLike) -> tuple[int, ...]:
+    """Get the index tuple of the minimum value of the array.
+
+    If multiple occurrences of the minimum value exist, returns
+    the index of the first such occurrence in the flattened array.
+
+    Parameters
+    ----------
+    arr : array_like
+        The input array.
+
+    Returns
+    -------
+    tuple of int
+        The index of the minimum value.
+
+    """
+    return np.unravel_index(np.argmin(arr), np.shape(arr))
+
+
+def argmax_index(arr: ArrayLike) -> tuple[int, ...]:
+    """Get the index tuple of the maximum value of the array.
+
+    If multiple occurrences of the maximum value exist, returns
+    the index of the first such occurrence in the flattened array.
+
+    Parameters
+    ----------
+    arr : array_like
+        The input array.
+
+    Returns
+    -------
+    tuple of int
+        The index of the maximum value.
+
+    """
+    return np.unravel_index(np.argmax(arr), np.shape(arr))
 
 
 @jit
@@ -265,51 +430,6 @@ def datetime_to_float(dates: Sequence[DateOrDatetime]) -> np.ndarray:
     return date_arr.astype(float) / sec_per_day
 
 
-class BlockProcessor(Protocol):
-    """Protocol for a block-wise processing function.
-
-    Reads a block of data from each reader, processes it, and returns the result
-    as an array-like object.
-    """
-
-    def __call__(
-        self, readers: Sequence[io.StackReader], rows: slice, cols: slice
-    ) -> ArrayLike:
-        ...
-
-
-def process_blocks(
-    readers: Sequence[io.StackReader],
-    writer: io.DatasetWriter,
-    func: BlockProcessor,
-    # output_files: Sequence[PathOrStr],
-    # like_filename: PathOrStr | None = None,
-    block_shape: tuple[int, int] = (512, 512),
-    num_threads: int = 5,
-):
-    """Perform block-wise processing over blocks in `readers`, writing to `writer`.
-
-    Extracts the common functionality from several routines to read and process
-    a stack of rasters in parallel.
-    """
-    shape = readers[0].shape[-2:]
-    slices = list(io.iter_blocks(shape, block_shape=block_shape))
-
-    pbar = tqdm(total=len(slices))
-
-    # Define the callback to write the result to an output DatasetWrite
-    def write_callback(fut: Future):
-        rows, cols, data = fut.result()
-        writer[..., rows, cols] = data
-        pbar.update()
-
-    Executor = ThreadPoolExecutor if num_threads > 1 else DummyProcessPoolExecutor
-    with Executor(num_threads) as exc:
-        for rows, cols in slices:
-            future = exc.submit(func, readers=readers, rows=rows, cols=cols)
-            future.add_done_callback(write_callback)
-
-
 def create_velocity(
     unw_file_list: Sequence[PathOrStr],
     output_file: PathOrStr,
@@ -387,7 +507,7 @@ def create_velocity(
 
     def read_and_fit(
         readers: Sequence[io.StackReader], rows: slice, cols: slice
-    ) -> tuple[slice, slice, np.ndarray]:
+    ) -> tuple[np.ndarray, slice, slice]:
         # Only use the cor_reader if it's the same shape as the unw_reader
         if len(readers) == 2:
             unw_reader, cor_reader = readers
@@ -401,9 +521,9 @@ def create_velocity(
         unw_stack = unw_stack - ref_data
         # Fit a line to each pixel with weighted least squares
         return (
+            estimate_velocity(x_arr=x_arr, unw_stack=unw_stack, weight_stack=weights),
             rows,
             cols,
-            estimate_velocity(x_arr=x_arr, unw_stack=unw_stack, weight_stack=weights),
         )
 
     # Note: For some reason, the `RasterStackReader` is much slower than the VRT
@@ -416,7 +536,7 @@ def create_velocity(
         readers.append(cor_reader)
 
     writer = io.BackgroundRasterWriter(output_file, like_filename=unw_file_list[0])
-    process_blocks(
+    io.process_blocks(
         readers=readers,
         writer=writer,
         func=read_and_fit,
@@ -433,8 +553,7 @@ def create_velocity(
 class AverageFunc(Protocol):
     """Protocol for temporally averaging a block of data."""
 
-    def __call__(self, ArrayLike, axis: int) -> ArrayLike:
-        ...
+    def __call__(self, ArrayLike, axis: int) -> ArrayLike: ...
 
 
 def create_temporal_average(
@@ -472,7 +591,7 @@ def create_temporal_average(
         readers: Sequence[io.StackReader], rows: slice, cols: slice
     ) -> tuple[slice, slice, np.ndarray]:
         chunk = readers[0][:, rows, cols]
-        return rows, cols, average_func(chunk, 0)
+        return average_func(chunk, 0), rows, cols
 
     writer = io.BackgroundRasterWriter(output_file, like_filename=file_list[0])
     with NamedTemporaryFile(mode="w", suffix=".vrt") as f:
@@ -483,7 +602,7 @@ def create_temporal_average(
             read_masked=read_masked,
         )
 
-        process_blocks(
+        io.process_blocks(
             readers=[reader],
             writer=writer,
             func=read_and_average,
@@ -532,7 +651,7 @@ def invert_unw_network(
         The number of looks used to form the input correlation data, used
         to convert correlation to phase variance.
         Default is 1.
-    num_threads : int, optional
+    num_threads : int
         The parallel blocks to process at once.
         Default is 5.
     add_overviews : bool, optional
@@ -599,7 +718,7 @@ def invert_unw_network(
         # TODO: do i want to write residuals too? Do i need
         # to have multiple writers then?
         phases = invert_stack(A, stack, weights)[0]
-        return rows, cols, np.asarray(phases)
+        return np.asarray(phases), rows, cols
 
     if cor_file_list is not None:
         cor_reader = io.VRTStack(
@@ -611,7 +730,7 @@ def invert_unw_network(
 
     writer = io.BackgroundStackWriter(out_paths, like_filename=unw_file_list[0])
 
-    process_blocks(
+    io.process_blocks(
         readers=readers,
         writer=writer,
         func=read_and_solve,
@@ -650,18 +769,51 @@ def correlation_to_variance(correlation: ArrayLike, nlooks: int) -> Array:
 
 def select_reference_point(
     ccl_file_list: Sequence[PathOrStr],
-    amp_dispersion_file: PathOrStr,
+    condition_file: PathOrStr,
     output_dir: Path,
+    condition_func: Callable[[ArrayLike], tuple[int, ...]] = argmin_index,
     block_shape: tuple[int, int] = (512, 512),
     num_threads: int = 5,
 ) -> ReferencePoint:
     """Automatically select a reference point for a stack of unwrapped interferograms.
 
-    Uses the amplitude dispersion and connected component labels, the point is selected
+    Uses the condition file and connected component labels, the point is selected
     which
 
     1. is within intersection of all nonzero connected component labels (always valid)
-    2. has the lowest amplitude dispersion
+    2. has the condition applied to condition file. for example: has the lowest
+       amplitude dispersion
+
+    Parameters
+    ----------
+    ccl_file_list : Sequence[PathOrStr]
+        List of connected component label phase files.
+    condition_file: PathOrStr
+        A file with the same size as each raster, like amplitude dispersion or
+        temporal coherence in `ccl_file_list`
+    output_dir: Path
+        Path to store the computed "conncomp_intersection.tif" raster
+    condition_func: Callable[[ArrayLike, ]]
+        The function to apply to the condition file,
+        for example numpy.argmin which finds the pixel with lowest value
+    block_shape: tuple[int, int]
+        Size of blocks to read from while processing `ccl_file_list`
+        Default = (512, 512)
+    num_threads: int
+        Number of parallel blocks to process.
+        Default = 5
+
+    Returns
+    -------
+    ReferencePoint
+        The select (row, col) as a namedtuple
+
+    Raises
+    ------
+    ReferencePointError
+        Raised f no valid region is found in the intersection of the connected component
+        label files
+
     """
     conncomp_intersection_file = Path(output_dir) / "conncomp_intersection.tif"
 
@@ -691,31 +843,29 @@ def select_reference_point(
     conncomp_intersection = io.load_gdal(conncomp_intersection_file, masked=True)
 
     # Find the largest conncomp region in the intersection
-    isin_largest_conncomp = get_largest_conncomp(conncomp_intersection)
-
-    amp_dispersion = io.load_gdal(amp_dispersion_file, masked=True)
-    # Mask out where the conncomps aren't equal to the largest
-    amp_dispersion.mask = amp_dispersion.mask | (~isin_largest_conncomp)
-
-    # Pick the (unmasked) point with the lowest amplitude dispersion
-    ref_row, ref_col = np.unravel_index(np.argmin(amp_dispersion), amp_dispersion.shape)
-
-    # Cast to `int` to avoid having `np.int64` types
-    return ReferencePoint(int(ref_row), int(ref_col))
-
-
-def get_largest_conncomp(conncomp_intersection: ArrayLike) -> np.ndarray:
-    """Get a max for the largest nonzero connected component in the intersection."""
-    from scipy import ndimage
-
     label, nlabels = ndimage.label(
         conncomp_intersection.filled(0), structure=np.ones((3, 3))
     )
+    if nlabels == 0:
+        raise ReferencePointError(
+            "Connected components intersection left no valid regions"
+        )
     logger.info("Found %d connected components in intersection", nlabels)
+
+    # Make a mask of the largest conncomp:
     # Find the label with the most pixels using bincount
-    label_counts = np.bincount(label.ravel())
+    label_counts = np.bincount(conncomp_intersection.ravel())
     # (ignore the 0 label)
     largest_idx = np.argmax(label_counts[1:]) + 1
+    # Create a mask of pixels with this label
+    isin_largest_conncomp = label == largest_idx
 
-    # Make a mask of the largest conncomp
-    return label == largest_idx
+    condition_file_values = io.load_gdal(condition_file, masked=True)
+    # Mask out where the conncomps aren't equal to the largest
+    condition_file_values.mask = condition_file_values.mask | (~isin_largest_conncomp)
+
+    # Pick the (unmasked) point with the condition applied to condition file
+    ref_row, ref_col = condition_func(condition_file_values)
+
+    # Cast to `int` to avoid having `np.int64` types
+    return ReferencePoint(int(ref_row), int(ref_col))
