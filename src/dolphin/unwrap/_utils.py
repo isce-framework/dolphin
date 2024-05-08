@@ -131,7 +131,7 @@ def _zero_from_mask(
     ifg_filename: Filename, corr_filename: Filename, mask_filename: Filename
 ) -> tuple[Path, Path]:
     zeroed_ifg_file = Path(ifg_filename).with_suffix(".zeroed.tif")
-    zeroed_corr_file = Path(corr_filename).with_suffix(".zeroed.cor.tif")
+    zeroed_corr_file = Path(corr_filename).with_suffix(".zeroed.tif")
 
     if io.get_raster_xysize(ifg_filename) != io.get_raster_xysize(mask_filename):
         msg = f"Mask {mask_filename} and {ifg_filename} shapes don't match"
