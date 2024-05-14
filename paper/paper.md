@@ -21,10 +21,10 @@ authors:
   - name: Geoffrey M. Gunter
     orcid:
     affiliation: 1
-  - Talib Oliver-Cabrera
+  - name: Talib Oliver-Cabrera
     orcid:
     affiliation: 1
-  - Emre Havazli
+  - name: Emre Havazli
     orcid:
     affiliation: 1
   - name: Heresh Fattahi
