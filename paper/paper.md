@@ -35,7 +35,7 @@ affiliations:
  - name: NASA Jet Propulsion Laboratory, California Institute of Technology
    index: 1
 date: 5 March 2024
-bibliography: paper.bib
+bibliography: references.bib
 ---
 
 # Summary

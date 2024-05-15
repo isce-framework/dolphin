@@ -6,4 +6,4 @@ To build the paper locally:
 make build
 ```
 
-If running this on an OS which is not Arm OSX, you will need to specify the `PLATFORM` variable.
+If running this on machine OS which is not Arm OSX, you will need to specify the `PLATFORM` variable.

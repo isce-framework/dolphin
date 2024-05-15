@@ -1,4 +1,4 @@
-DOCKER_CMD = docker run --rm -it -v $(PWD):/data -u $(id -u):$(id -g)
+DOCKER_CMD = docker run --rm -it -v $(PWD):/data -u $$(id -u):$$(id -g)
 PLATFORM = linux/amd64
 
 .PHONY: build
