@@ -49,23 +49,37 @@ bibliography: references.bib
 # Statement of need
 <!-- A Statement of need section that clearly illustrates the research purpose of the software and places it in the context of related work. -->
 
-The Sentinel-1 satellite from the European Space Agency (ESA) has been providing free and open access to Synthetic Aperture Radar (SAR) data since 2014. This has led to a rapid increase in the availability of SAR data, and has enabled a wide range of applications in Earth and environmental sciences. InSAR has been used to study a wide range of geophysical processes, including earthquakes, volcanic activity, and land subsidence. However, processing InSAR data can be challenging, particularly for large-scale time series analysis, and many existing tools are not designed to run at continental scale in a cloud computing environment. Moreover, while the set of multi-temporal InSAR techniques known as phase linking have been around for over a decade [@Guarnieri2008ExploitationTargetStatistics; @Ferretti2011NewAlgorithmProcessing], most implementations are proprietary. @Guarnieri2008ExploitationTargetStatistics.
+The Sentinel-1 satellite from the European Space Agency (ESA) has provided free and open access to Synthetic Aperture Radar (SAR) data since 2014. This has led to a rapid increase in the availability of SAR data and has enabled a wide range of applications in Earth and environmental sciences. InSAR has been used to study a wide range of geophysical processes, including earthquakes, volcanic activity, and land subsidence. However, processing InSAR data can be challenging, particularly for large-scale time series analysis, and many existing tools are not designed to run at continental scale in a cloud computing environment. Moreover, while the set of multi-temporal InSAR techniques known as phase linking have been around for over a decade [@Guarnieri2008ExploitationTargetStatistics; @Ferretti2011NewAlgorithmProcessing], most implementations are proprietary. @Guarnieri2008ExploitationTargetStatistics.
+
+
+`dolphin` has been developed as part of the InSAR Scientific computing environment (ISCE) organization to be used in the Observational Products for End-Users from Remote Sensing Analysis (OPERA) project.
+OPERA is a Jet Propulsion Laboratory project funded by the Satellite Needs Working Group (SNWG) tasked with generating a North America Displacement product.
+
 
 # Overview of Dolphin
 
-`dolphin` has a core library containing the InSAR algorithms and several pre-made applications accessible through command line tools.
-The core library is modular and extensible, allowing easy integration of new algorithms and methods.
+`dolphin` has the ability to process stacks of coregistered single-look complex (SLC) radar images into a time series of surface displacement, or an average surface velocity over the input time period. The software has pre-made workflows accessible through command line tools which call core InSAR algorithm modules from the core library.
+The software uses combined persistent scatterer (PS) and distributed scatterer (DS) processing
+
+Figure \autoref{fig:mojave} shows an example output created 4 years of Sentinel-1 data over the Mojave Desert.
+
+<!-- The core library is modular and extensible, allowing easy integration of new algorithms and methods. -->
 
 The command line tools are user-friendly and provide a simple interface for processing large sets (hundreds of SAR images) with minimal required configuration.
-![caption?](figures/bristol-velocity-sequential.png)
+![Average surface displacement velocity along the radar line-of-sight between February, 2017 and December, 2020. Red (blue) indicates motion towards (away from) the satellite.\label{fig:mojave}](figures/bristol-velocity-sequential.png)
 
-\autoref{fig:mojave}
+While `dolphin` is written in Python, it leverages the `jax` library [@jax] to accelerate linear algebra operations. With only an extra installation, users can accelerate processing speeds by 5-20x on machines with a compatible GPU.
 
 ## Related work
 
 <!-- A list of key references, including to other software addressing related needs. Note that the references should include full names of venues, e.g., journals and conferences, not abbreviations only understood in the context of a specific discipline. -->
+- Fringe: https://github.com/isce-framework/fringe
+	- First open source library implementing phase linking algorithms [@Fattahi2019].  Written in C++ with Cython bindings.
+- Miaplpy: https://github.com/insarlab/MiaplPy
+	- Open
+- TomoSAR: https://github.com/DinhHoTongMinh/TomoSAR
+	- MATLAB library for processing long time series. Also implements phase linking and an algorithm similar to [@Ansari2018] called ComSAR [@...]
 
-<!-- Mention (if applicable) a representative set of past or ongoing research projects using the software and recent scholarly publications enabled by it. -->
 
 # Acknowledgements
 
