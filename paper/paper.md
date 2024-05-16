@@ -42,6 +42,7 @@ affiliations:
 date: 5 March 2024
 bibliography: references.bib
 ---
+
 # Summary
 
 <!-- JOSS welcomes submissions from broadly diverse research areas. For this reason, we require that authors include in the paper some sentences that explain the software functionality and domain of use to a non-specialist reader. We also require that authors explain the research applications of the software. The paper should be between 250-1000 words. Authors submitting papers significantly longer than 1000 words may be asked to reduce the length of their paper. -->
@@ -51,6 +52,7 @@ bibliography: references.bib
 `dolphin` is a Python library for creating maps of land surface displacement using the remote sensing technique called Interferometric Synthetic Aperture Radar (InSAR). Conventional InSAR uses pairs of SAR images to get a single map of the relative displacement between the two acquisition times. Since conventional techniques are prone to multiple noise sources, `dolphin` uses state-of-the-art multi-temporal algorithms to produce long time series of displacement at fine resolution.
 
 ![Average surface displacement velocity along the radar line-of-sight between February, 2017 and December, 2020. Red (blue) indicates motion towards (away from) the satellite.\label{fig:mojave}](figures/bristol-velocity-sequential.png)
+
 # Statement of need
 <!-- A Statement of need section that clearly illustrates the research purpose of the software and places it in the context of related work. -->
 
@@ -74,7 +76,6 @@ While phase linking algorithms have been known for over a decade [@Guarnieri2008
 While `dolphin` has been primarily tested on CPU-based workstations and cloud environments, the compute-intensive routines leverage the `jax` library for its accelerated linear algebra (XLA) just-in-time compiler [@Bradbury2018JAXComposableTransformations]. This means that with only an extra installation, users can accelerate their processing by 5-20x on machines with a compatible GPU.
 
 The command line tools provide a simple interface for processing large datasets (hundreds of full-frame Sentinel-1 images) with minimal required configuration. As an example, Figure \autoref{fig:mojave} shows the final average surface velocity map created from Sentinel-1 data between February 2017 - December 2020 over the Mojave Desert.
-
 
 # Acknowledgements
 
