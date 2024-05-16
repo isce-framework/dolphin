@@ -3,10 +3,10 @@ name: Pytest, build docker image, push to GHCR
 on:
   push:
     branches-ignore:
-      - 'Joss'
+      - 'joss'
   pull_request:
     branches-ignore:
-      - 'Joss'
+      - 'joss'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref }}
