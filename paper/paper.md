@@ -87,18 +87,19 @@ The outputs of `dolphin` are also compatible with the Miami INsar Time-series so
 While `dolphin` has been primarily tested on CPU-based workstations and cloud environments, the compute-intensive routines leverage the `jax` library for its accelerated linear algebra (XLA) just-in-time compiler [@Bradbury2018JAXComposableTransformations]. This means that with only an extra installation, users can accelerate their processing by 5-20x on machines with a compatible GPU.
 
 The command line tools provide an interface for running the end-to-end displacement workflow on large datasets (hundreds of full-frame Sentinel-1 images) with minimal required configuration.
-If a user has a stack of coregistered SLCs in a `data/` directory, running the full workflow with all default parameters requires two steps:
+A user with a stack of coregistered SLCs in a `data/` directory needs only two steps to run the full workflow with all default parameters:
 
-1. Configure to use these images with the `config` command:
+1. Configure the workflow with the `config` command, indicating the location of the SLCs:
 ```python
 dolphin config --slc-files data/*
 ```
-2. Run the workflow using the saved YAML file with the `run` command:
+
+2. Run the workflow using the saved YAML configuration file with the `run` command:
 ```python
 dolphin run dolphin_config.yaml
 ```
 
-\autoref{fig:mojave} shows an example result of the final average surface velocity map created  by `dolphin`. The inputs were OPERA Coregistered Single-Look Complex (CSLC) geocoded images from Sentinel-1 data between February 2017 - December 2020 over the Mojave Desert.
+\autoref{fig:mojave} shows an example result of the final average surface velocity map created by `dolphin`. The inputs were OPERA Coregistered Single-Look Complex (CSLC) geocoded images from Sentinel-1 data between February 2017 - December 2020 over the Mojave Desert.
 
 
 
