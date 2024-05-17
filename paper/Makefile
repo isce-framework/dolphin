@@ -4,4 +4,4 @@ PLATFORM = linux/amd64
 .PHONY: build
 
 build:
-	$(DOCKER_CMD) openjournals/inara -o pdf,crossref paper.md
+	$(DOCKER_CMD) --platform $(PLATFORM) openjournals/inara -o pdf,crossref paper.md
