@@ -141,7 +141,7 @@ def invert_stack(
     n_ifgs, n_rows, n_cols = dphi.shape
 
     if weights is None:
-        # Can use ordinate least squares with no weights
+        # Can use ordinary least squares with no weights
         # Reshape to be size (M, K) instead of 3D
         b = dphi.reshape(n_ifgs, -1)
         phase_cols, residuals_cols, _, _ = jnp.linalg.lstsq(A, b)
