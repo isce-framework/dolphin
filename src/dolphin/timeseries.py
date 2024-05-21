@@ -716,7 +716,7 @@ def invert_unw_network(
             weights[cor < cor_threshold] = 0
         else:
             stack = readers[0][:, rows, cols]
-            weights = np.ones_like(stack)
+            weights = None
 
         # subtract the reference
         stack = stack - ref_data
