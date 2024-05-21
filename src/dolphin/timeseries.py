@@ -282,21 +282,28 @@ def invert_stack(
     """
     n_ifgs, n_rows, n_cols = dphi.shape
 
-    # vectorize the solve function to work on 2D and 3D arrays
-    # We are not vectorizing over the A matrix, only the dphi vector
-    # Solve 2d shapes: (nrows, n_ifgs) -> (nrows, n_sar_dates)
-    # invert_2d = vmap(invert_single, in_axes=(None, 1, 1), out_axes=1)
-    invert_2d = vmap(weighted_lstsq_single, in_axes=(None, 1, 1), out_axes=(1, 1))
-    # Solve 3d shapes: (nrows, ncols, n_ifgs) -> (nrows, ncols, n_sar_dates)
-    invert_3d = vmap(invert_2d, in_axes=(None, 2, 2), out_axes=(2, 2))
-
     if weights is None:
-        weights = jnp.ones_like(dphi)
-    phase, residuals = invert_3d(A, dphi, weights)
+        # Can use ordinary least squares with no weights
+        # Reshape to be size (M, K) instead of 3D
+        b = dphi.reshape(n_ifgs, -1)
+        phase_cols, residuals_cols, _, _ = jnp.linalg.lstsq(A, b)
+        # Reshape the phase and residuals to be 3D
+        phase = phase_cols.reshape(-1, n_rows, n_cols)
+        residuals = residuals_cols.reshape(n_rows, n_cols)
+    else:
+        # vectorize the solve function to work on 2D and 3D arrays
+        # We are not vectorizing over the A matrix, only the dphi vector
+        # Solve 2d shapes: (nrows, n_ifgs) -> (nrows, n_sar_dates)
+        invert_2d = vmap(weighted_lstsq_single, in_axes=(None, 1, 1), out_axes=(1, 1))
+        # Solve 3d shapes: (nrows, ncols, n_ifgs) -> (nrows, ncols, n_sar_dates)
+        invert_3d = vmap(invert_2d, in_axes=(None, 2, 2), out_axes=(2, 2))
+        phase, residuals = invert_3d(A, dphi, weights)
+        # Reshape the residuals to be 2D
+        residuals = residuals[0]
+
     # Add 0 for the reference date to the front
     phase = jnp.concatenate([jnp.zeros((1, n_rows, n_cols)), phase], axis=0)
-    # Reshape the residuals to be 2D
-    return phase, residuals[0]
+    return phase, residuals
 
 
 def get_incidence_matrix(
@@ -709,7 +716,7 @@ def invert_unw_network(
             weights[cor < cor_threshold] = 0
         else:
             stack = readers[0][:, rows, cols]
-            weights = np.ones_like(stack)
+            weights = None
 
         # subtract the reference
         stack = stack - ref_data
