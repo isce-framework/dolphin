@@ -142,6 +142,7 @@ def invert_stack(
 
     if weights is None:
         # Can use ordinate least squares with no weights
+        # Reshape to be size (M, K) instead of 3D
         b = dphi.reshape(n_ifgs, -1)
         phase_cols, residuals_cols, _, _ = jnp.linalg.lstsq(A, b)
         # Reshape the phase and residuals to be 3D
@@ -151,7 +152,6 @@ def invert_stack(
         # vectorize the solve function to work on 2D and 3D arrays
         # We are not vectorizing over the A matrix, only the dphi vector
         # Solve 2d shapes: (nrows, n_ifgs) -> (nrows, n_sar_dates)
-        # invert_2d = vmap(invert_single, in_axes=(None, 1, 1), out_axes=1)
         invert_2d = vmap(weighted_lstsq_single, in_axes=(None, 1, 1), out_axes=(1, 1))
         # Solve 3d shapes: (nrows, ncols, n_ifgs) -> (nrows, ncols, n_sar_dates)
         invert_3d = vmap(invert_2d, in_axes=(None, 2, 2), out_axes=(2, 2))
