@@ -94,7 +94,7 @@ def run_displacement_stack(
     displacement.run(cfg)
 
 
-def test_stack_with_compressed(opera_slc_files, tmpdir):
+def test_stack_with_compSLCs(opera_slc_files, tmpdir):
     with tmpdir.as_cwd():
         p1 = Path("first_run")
         run_displacement_stack(p1, opera_slc_files)

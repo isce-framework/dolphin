@@ -1,7 +1,9 @@
-import logging
+from __future__ import annotations
+
+import contextlib
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from typing import Callable, Protocol, Sequence, TypeVar
+from typing import Callable, Optional, Protocol, Sequence, TypeVar
 
 import jax.numpy as jnp
 import numpy as np
@@ -10,29 +12,149 @@ from numpy.typing import ArrayLike
 from opera_utils import get_dates
 from scipy import ndimage
 
-from dolphin import DateOrDatetime, io
+from dolphin import DateOrDatetime, io, utils
+from dolphin._log import get_log, log_runtime
 from dolphin._overviews import ImageType, create_overviews
 from dolphin._types import PathOrStr, ReferencePoint
 from dolphin.utils import flatten, format_dates
-
-__all__ = [
-    "invert_stack",
-    "get_incidence_matrix",
-    "estimate_velocity",
-    "create_velocity",
-    "create_temporal_average",
-    "invert_unw_network",
-    "correlation_to_variance",
-    "select_reference_point",
-]
+from dolphin.workflows import CallFunc
 
 T = TypeVar("T")
 
-logger = logging.getLogger(__name__)
+logger = get_log(__name__)
+
+__all__ = ["run"]
 
 
 class ReferencePointError(ValueError):
     pass
+
+
+@log_runtime
+def run(
+    unwrapped_paths: Sequence[PathOrStr],
+    conncomp_paths: Sequence[PathOrStr],
+    corr_paths: Sequence[PathOrStr],
+    condition_file: PathOrStr,
+    condition: CallFunc,
+    output_dir: PathOrStr,
+    run_velocity: bool = False,
+    velocity_file: Optional[PathOrStr] = None,
+    correlation_threshold: float = 0.2,
+    num_threads: int = 5,
+    reference_point: tuple[int, int] = (-1, -1),
+) -> list[Path]:
+    """Invert the unwrapped interferograms, estimate timeseries and phase velocity.
+
+    Parameters
+    ----------
+    unwrapped_paths : Sequence[Path]
+        Sequence unwrapped interferograms to invert.
+    corr_paths : Sequence[Path]
+        Sequence interferometric correlation files, one per file in `unwrapped_paths`
+    conncomp_paths : Sequence[Path]
+        Sequence connected component files, one per file in `unwrapped_paths`
+    condition_file: PathOrStr
+        A file with the same size as each raster, like amplitude dispersion or
+        temporal coherence
+    condition: CallFunc
+        The function to apply to the condition file,
+        for example numpy.argmin which finds the pixel with lowest value
+        the options are [min, max]
+    output_dir : Path
+        Path to the output directory.
+    run_velocity : bool
+        Whether to run velocity estimation on the inverted phase series
+    velocity_file : Path, Optional
+        The output velocity file
+    correlation_threshold : float
+        Pixels with correlation below this value will be masked out
+    num_threads : int
+        The parallel blocks to process at once.
+        Default is 5.
+    reference_point : tuple[int, int], optional
+        Reference point (row, col) used if performing a time series inversion.
+        If not provided, a point will be selected from a consistent connected
+        component with low amplitude dispersion or high temporal coherence.
+
+    Returns
+    -------
+    inverted_phase_paths : list[Path]
+        list of Paths to inverted interferograms (single reference phase series).
+
+    """
+    condition_func = argmax_index if condition == CallFunc.MAX else argmin_index
+
+    Path(output_dir).mkdir(exist_ok=True, parents=True)
+
+    # First we find the reference point for the unwrapped interferograms
+    if reference_point == (-1, -1):
+        reference = select_reference_point(
+            conncomp_paths,
+            condition_file,
+            output_dir=Path(output_dir),
+            condition_func=condition_func,
+        )
+    else:
+        reference = ReferencePoint(row=reference_point[0], col=reference_point[1])
+
+    ifg_date_pairs = [get_dates(f) for f in unwrapped_paths]
+    sar_dates = sorted(set(utils.flatten(ifg_date_pairs)))
+    # if we did single-reference interferograms, for `n` sar dates, we will only have
+    # `n-1` interferograms. Any more than n-1 ifgs means we need to invert
+    needs_inversion = len(unwrapped_paths) > len(sar_dates) - 1
+    # check if we even need to invert, or if it was single reference
+    inverted_phase_paths: list[Path] = []
+    if needs_inversion:
+        logger.info("Selecting a reference point for unwrapped interferograms")
+
+        logger.info("Inverting network of %s unwrapped ifgs", len(unwrapped_paths))
+        inverted_phase_paths = invert_unw_network(
+            unw_file_list=unwrapped_paths,
+            reference=reference,
+            output_dir=output_dir,
+            num_threads=num_threads,
+        )
+    else:
+        logger.info(
+            "Skipping inversion step: only single reference interferograms exist."
+        )
+        # Symlink the unwrapped paths to `timeseries/`
+        for p in unwrapped_paths:
+            target = Path(output_dir) / Path(p).name
+            with contextlib.suppress(FileExistsError):
+                target.symlink_to(p)
+            inverted_phase_paths.append(target)
+        # Make extra "0" raster so that the number of rasters matches len(sar_dates)
+        ref_raster = Path(output_dir) / (
+            utils.format_dates(sar_dates[0], sar_dates[0]) + ".tif"
+        )
+        io.write_arr(
+            arr=None, output_name=ref_raster, like_filename=inverted_phase_paths[0]
+        )
+        inverted_phase_paths.append(ref_raster)
+
+    if run_velocity:
+        #  We can't pass the correlations after an inversion- the numbers don't match
+        # TODO:
+        # Is there a better weighting then?
+        cor_file_list = (
+            corr_paths if len(corr_paths) == len(inverted_phase_paths) else None
+        )
+        logger.info("Estimating phase velocity")
+        if velocity_file is None:
+            velocity_file = Path(output_dir) / "velocity.tif"
+        create_velocity(
+            unw_file_list=inverted_phase_paths,
+            output_file=velocity_file,
+            reference=reference,
+            date_list=sar_dates,
+            cor_file_list=cor_file_list,
+            cor_threshold=correlation_threshold,
+            num_threads=num_threads,
+        )
+
+    return inverted_phase_paths
 
 
 def argmin_index(arr: ArrayLike) -> tuple[int, ...]:
@@ -53,6 +175,26 @@ def argmin_index(arr: ArrayLike) -> tuple[int, ...]:
 
     """
     return np.unravel_index(np.argmin(arr), np.shape(arr))
+
+
+def argmax_index(arr: ArrayLike) -> tuple[int, ...]:
+    """Get the index tuple of the maximum value of the array.
+
+    If multiple occurrences of the maximum value exist, returns
+    the index of the first such occurrence in the flattened array.
+
+    Parameters
+    ----------
+    arr : array_like
+        The input array.
+
+    Returns
+    -------
+    tuple of int
+        The index of the maximum value.
+
+    """
+    return np.unravel_index(np.argmax(arr), np.shape(arr))
 
 
 @jit
@@ -516,7 +658,7 @@ def invert_unw_network(
         The number of looks used to form the input correlation data, used
         to convert correlation to phase variance.
         Default is 1.
-    num_threads : int, optional
+    num_threads : int
         The parallel blocks to process at once.
         Default is 5.
     add_overviews : bool, optional

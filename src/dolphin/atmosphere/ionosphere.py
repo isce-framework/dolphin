@@ -90,11 +90,11 @@ def estimate_ionospheric_delay(
 
     # frequency
     for key in slc_files:
-        if len(key) == 1:
-            first_date = key
+        if "compressed" not in str(slc_files[key][0]).lower():
+            one_of_slcs = slc_files[key][0]
             break
 
-    wavelength = oput.get_radar_wavelength(slc_files[first_date][0])
+    wavelength = oput.get_radar_wavelength(one_of_slcs)
     freq = SPEED_OF_LIGHT / wavelength
 
     # output folder
@@ -117,11 +117,28 @@ def estimate_ionospheric_delay(
             )
             continue
 
-        reference_date = (ref_date,)
-        secondary_date = (sec_date,)
+        # The keys in slc_files do not necessarily have one date,
+        # it means with the production file naming convention,
+        # there will be multiple dates stored in the keys from get_dates
+        # function. So in the following if we set reference_date = (ref_date, ),
+        # there will be an error that it does not find the key.
+        # Examples of the file naming convention for CSLC and compressed cslc is:
+        # OPERA_L2_CSLC-S1_T042-088905-IW1\
+        #                       _20221119T000000Z_20221120T000000Z_S1A_VV_v1.0.h5
+        # OPERA_L2_COMPRESSED-CSLC-S1_T042-088905-IW1_20221107T000000Z_\
+        #           20221107T000000Z_20230506T000000Z_20230507T000000Z_VV_v1.0.h5
+        reference_date = next(key for key in slc_files if ref_date in key)
+        # temporary fix for compressed SLCs while the required metadata i not included
+        # in them. there will be modification in a future PR to add metadata to
+        # compressed SLCs
+        secondary_date = next(
+            key
+            for key in slc_files
+            if sec_date in key and "compressed" not in str(slc_files[key][0]).lower()
+        )
 
         secondary_time = oput.get_zero_doppler_time(slc_files[secondary_date][0])
-        if len(slc_files[reference_date]) == 0:
+        if "compressed" in str(slc_files[reference_date][0]).lower():
             # this is for when we have compressed slcs but the actual
             # reference date does not exist in the input data
             reference_time = secondary_time
@@ -130,14 +147,14 @@ def estimate_ionospheric_delay(
 
         reference_vtec = read_zenith_tec(
             time=reference_time,
-            tec_file=tec_files[reference_date][0],
+            tec_file=tec_files[(ref_date,)][0],
             lat=latc,
             lon=lonc,
         )
 
         secondary_vtec = read_zenith_tec(
             time=secondary_time,
-            tec_file=tec_files[secondary_date][0],
+            tec_file=tec_files[(sec_date,)][0],
             lat=latc,
             lon=lonc,
         )
