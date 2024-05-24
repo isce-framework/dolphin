@@ -5,6 +5,7 @@
 
 **Fixed**
 - `reproject_bounds` uses the `rasterio` version, which densifies points along edges for a more accurate bounding box
+- The output SHP rasters now output 0 if there was no valid input data
 
 **Changed**
 - Unweighted time series inversion will make one batch call, providing a large speedup over the `vmap` version for weighted least squares
