@@ -1,4 +1,5 @@
 """Stitch burst interferograms (optional) and unwrap them."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -20,11 +21,12 @@ def run(
     ifg_file_list: Sequence[Path],
     temp_coh_file_list: Sequence[Path],
     ps_file_list: Sequence[Path],
+    amp_dispersion_list: Sequence[Path],
     stitched_ifg_dir: Path,
     output_options: OutputOptions,
     file_date_fmt: str = "%Y%m%d",
     corr_window_size: tuple[int, int] = (11, 11),
-) -> tuple[list[Path], list[Path], Path, Path]:
+) -> tuple[list[Path], list[Path], Path, Path, Path]:
     """Run the displacement workflow on a stack of SLCs.
 
     Parameters
@@ -35,6 +37,8 @@ def run(
         Sequence of paths to the burst-wise temporal coherence files.
     ps_file_list : Sequence[Path]
         Sequence of paths to the (looked) burst-wise ps mask files.
+    amp_dispersion_list : Sequence[Path]
+        Sequence of paths to the (looked) burst-wise amplitude dispersion files.
     stitched_ifg_dir : Path
         Location to store the output stitched ifgs and correlations
     output_options : OutputOptions
@@ -57,6 +61,8 @@ def run(
         Path to temporal correlation file created.
     stitched_ps_file : Path
         Path to ps mask file created.
+    stitched_amp_disp_file : Path
+        Path to amplitude dispersion file created.
 
     """
     stitched_ifg_dir.mkdir(exist_ok=True, parents=True)
@@ -101,16 +107,28 @@ def run(
         out_bounds_epsg=output_options.bounds_epsg,
     )
 
+    # Stitch the amp dispersion files
+    stitched_amp_disp_file = stitched_ifg_dir / "amp_dispersion_looked.tif"
+    stitching.merge_images(
+        amp_dispersion_list,
+        outfile=stitched_amp_disp_file,
+        driver="GTiff",
+        out_bounds=out_bounds,
+        out_bounds_epsg=output_options.bounds_epsg,
+    )
+
     if output_options.add_overviews:
         logger.info("Creating overviews for stitched images")
         create_overviews(stitched_ifg_paths, image_type=ImageType.INTERFEROGRAM)
         create_overviews(interferometric_corr_paths, image_type=ImageType.CORRELATION)
         create_image_overviews(stitched_ps_file, image_type=ImageType.PS)
         create_image_overviews(stitched_temp_coh_file, image_type=ImageType.CORRELATION)
+        create_image_overviews(stitched_amp_disp_file, image_type=ImageType.CORRELATION)
 
     return (
         stitched_ifg_paths,
         interferometric_corr_paths,
         stitched_temp_coh_file,
         stitched_ps_file,
+        stitched_amp_disp_file,
     )

@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 from __future__ import annotations
 
+# import contextlib
 import multiprocessing as mp
 from collections import defaultdict
 from concurrent.futures import ProcessPoolExecutor
@@ -10,24 +11,17 @@ from pathlib import Path
 from pprint import pformat
 from typing import Mapping, NamedTuple, Sequence
 
-from opera_utils import group_by_burst, group_by_date
+from opera_utils import group_by_burst, group_by_date  # , get_dates
 from tqdm.auto import tqdm
 
-from dolphin import __version__
+from dolphin import __version__, io, timeseries, utils
 from dolphin._log import get_log, log_runtime
 from dolphin.atmosphere import estimate_ionospheric_delay, estimate_tropospheric_delay
-from dolphin.io import get_raster_bounds, get_raster_crs
-from dolphin.utils import (
-    DummyProcessPoolExecutor,
-    disable_gpu,
-    get_max_memory_usage,
-    prepare_geometry,
-    set_num_threads,
-)
+from dolphin.workflows import CallFunc
 
 from . import stitching_bursts, unwrapping, wrapped_phase
 from ._utils import _create_burst_cfg, _remove_dir_if_empty
-from .config import DisplacementWorkflow
+from .config import DisplacementWorkflow  # , TimeseriesOptions
 
 logger = get_log(__name__)
 
@@ -40,6 +34,7 @@ class OutputPaths(NamedTuple):
     stitched_cor_paths: list[Path]
     stitched_temp_coh_file: Path
     stitched_ps_file: Path
+    stitched_amp_dispersion_file: Path
     unwrapped_paths: list[Path] | None
     conncomp_paths: list[Path] | None
     tropospheric_corrections: list[Path] | None
@@ -67,8 +62,8 @@ def run(
     logger.debug(pformat(cfg.model_dump()))
 
     if not cfg.worker_settings.gpu_enabled:
-        disable_gpu()
-    set_num_threads(cfg.worker_settings.threads_per_worker)
+        utils.disable_gpu()
+    utils.set_num_threads(cfg.worker_settings.threads_per_worker)
 
     try:
         grouped_slc_files = group_by_burst(cfg.cslc_file_list)
@@ -140,6 +135,7 @@ def run(
     ifg_file_list: list[Path] = []
     temp_coh_file_list: list[Path] = []
     ps_file_list: list[Path] = []
+    amp_dispersion_file_list: list[Path] = []
     # The comp_slc tracking object is a dict, since we'll need to organize
     # multiple comp slcs by burst (they'll have the same filename)
     comp_slc_dict: dict[str, list[Path]] = {}
@@ -148,7 +144,7 @@ def run(
     Executor = (
         ProcessPoolExecutor
         if cfg.worker_settings.n_parallel_bursts > 1
-        else DummyProcessPoolExecutor
+        else utils.DummyProcessPoolExecutor
     )
     mw = cfg.worker_settings.n_parallel_bursts
     ctx = mp.get_context("spawn")
@@ -173,11 +169,12 @@ def run(
         for fut in fut_to_burst:
             burst = fut_to_burst[fut]
 
-            cur_ifg_list, comp_slcs, temp_coh, ps_file = fut.result()
+            cur_ifg_list, comp_slcs, temp_coh, ps_file, amp_disp_file = fut.result()
             ifg_file_list.extend(cur_ifg_list)
             comp_slc_dict[burst] = comp_slcs
             temp_coh_file_list.append(temp_coh)
             ps_file_list.append(ps_file)
+            amp_dispersion_file_list.append(amp_disp_file)
 
     # ###################################
     # 2. Stitch burst-wise interferograms
@@ -192,10 +189,12 @@ def run(
         stitched_cor_paths,
         stitched_temp_coh_file,
         stitched_ps_file,
+        stitched_amp_dispersion_file,
     ) = stitching_bursts.run(
         ifg_file_list=ifg_file_list,
         temp_coh_file_list=temp_coh_file_list,
         ps_file_list=ps_file_list,
+        amp_dispersion_list=amp_dispersion_file_list,
         stitched_ifg_dir=cfg.interferogram_network._directory,
         output_options=cfg.output_options,
         file_date_fmt=cfg.input_options.cslc_date_fmt,
@@ -214,6 +213,7 @@ def run(
             stitched_cor_paths=stitched_cor_paths,
             stitched_temp_coh_file=stitched_temp_coh_file,
             stitched_ps_file=stitched_ps_file,
+            stitched_amp_dispersion_file=stitched_amp_dispersion_file,
             unwrapped_paths=None,
             conncomp_paths=None,
             tropospheric_corrections=None,
@@ -231,7 +231,32 @@ def run(
     )
 
     # ##############################################
-    # 4. Estimate corrections for each interferogram
+    # 4. If a network was unwrapped, invert it
+    # ##############################################
+
+    ts_opts = cfg.timeseries_options
+    # Skip if we only have 1 unwrapped, or if we didn't ask for inversion/velocity
+    if len(unwrapped_paths) > 1 and (ts_opts.run_inversion or ts_opts.run_velocity):
+        # the output of run_timeseries is not currently used so pre-commit removes it
+        # let's add back if we need it
+        timeseries.run(
+            unwrapped_paths=unwrapped_paths,
+            conncomp_paths=conncomp_paths,
+            corr_paths=stitched_cor_paths,
+            condition_file=stitched_amp_dispersion_file,
+            condition=CallFunc.MIN,
+            output_dir=ts_opts._directory,
+            run_velocity=ts_opts.run_velocity,
+            velocity_file=ts_opts._velocity_file,
+            correlation_threshold=ts_opts.correlation_threshold,
+            # TODO: do i care to configure block shape, or num threads from somewhere?
+            # num_threads=cfg.worker_settings....?
+        )
+    else:
+        pass
+
+    # ##############################################
+    # 5. Estimate corrections for each interferogram
     # ##############################################
     tropo_paths: list[Path] | None = None
     iono_paths: list[Path] | None = None
@@ -245,10 +270,10 @@ def run(
         # Prepare frame geometry files
         geometry_dir = out_dir / "geometry"
         geometry_dir.mkdir(exist_ok=True)
-        crs = get_raster_crs(ifg_filenames[0])
+        crs = io.get_raster_crs(ifg_filenames[0])
         epsg = crs.to_epsg()
-        out_bounds = get_raster_bounds(ifg_filenames[0])
-        frame_geometry_files = prepare_geometry(
+        out_bounds = io.get_raster_bounds(ifg_filenames[0])
+        frame_geometry_files = utils.prepare_geometry(
             geometry_dir=geometry_dir,
             geo_files=cfg.correction_options.geometry_files,
             matching_file=ifg_filenames[0],
@@ -302,7 +327,13 @@ def run(
         stitched_cor_paths=stitched_cor_paths,
         stitched_temp_coh_file=stitched_temp_coh_file,
         stitched_ps_file=stitched_ps_file,
+        stitched_amp_dispersion_file=stitched_amp_dispersion_file,
         unwrapped_paths=unwrapped_paths,
+        # TODO: Let's keep the uwrapped_paths since all the outputs are
+        # corresponding to those and if we have a network unwrapping, the
+        # inversion would create different single-reference network and we need
+        # to update other products like conncomp
+        # unwrapped_paths=inverted_phase_paths,
         conncomp_paths=conncomp_paths,
         tropospheric_corrections=tropo_paths,
         ionospheric_corrections=iono_paths,
@@ -311,7 +342,7 @@ def run(
 
 def _print_summary(cfg):
     """Print the maximum memory usage and version info."""
-    max_mem = get_max_memory_usage(units="GB")
+    max_mem = utils.get_max_memory_usage(units="GB")
     logger.info(f"Maximum memory usage: {max_mem:.2f} GB")
     logger.info(f"Config file dolphin version: {cfg._dolphin_version}")
     logger.info(f"Current running dolphin version: {__version__}")

@@ -1,13 +1,5 @@
-"""Estimate wrapped phase for one ministack of SLCs.
+"""Estimate wrapped phase for one ministack of SLCs."""
 
-References
-----------
-    .. [1] Mirzaee, Sara, Falk Amelung, and Heresh Fattahi. "Non-linear phase
-    linking using joined distributed and persistent scatterers." Computers &
-    Geosciences (2022): 105291.
-
-
-"""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -103,7 +95,7 @@ def run_wrapped_phase_single(
     logger.info(msg)
 
     # Create the background writer for this ministack
-    writer = io.GdalWriter()
+    writer = io.BackgroundBlockWriter()
 
     logger.info(f"Total stack size (in pixels): {vrt.shape}")
     # Set up the output folder with empty files to write into

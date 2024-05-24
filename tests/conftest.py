@@ -272,6 +272,11 @@ def raster_with_zero_block(tmp_path, tiled_raster_100_by_200):
 # For displacement/workflow tests
 
 
+DX, DY = 5, -10
+X0, Y0 = 246362.5, 3422995.0
+GRID_MAPPING_DSET = "spatial_ref"
+
+
 @pytest.fixture()
 def opera_slc_files(tmp_path) -> list[Path]:
     """Save the slc stack as a series of NetCDF files."""
@@ -289,8 +294,11 @@ def opera_slc_files(tmp_path) -> list[Path]:
     group = "/".join(group_parts)
     for burst_id in ["t087_185683_iw2", "t087_185684_iw2"]:
         for i in range(len(slc_stack)):
-            fname = d / f"{burst_id}_{start_date + i}.h5"
-            yoff = i * shape[0] / 2
+            fname = d / f"{burst_id}_{start_date + i}_20231201.h5"
+            if i == 0:
+                datestr = f"{start_date}_{start_date + i}_{start_date + len(slc_stack)}"
+                fname = d / f"COMPRESSED_{burst_id}_{datestr}.h5"
+            yoff = Y0 + i * shape[0] / 2
             create_test_nc(
                 fname,
                 epsg=32615,
@@ -299,6 +307,7 @@ def opera_slc_files(tmp_path) -> list[Path]:
                 # otherwise GDAL doesn't respect the NETCDF:file:/path/to/nested/data
                 subdir=[group, "dummy"],
                 data=slc_stack[i],
+                xoff=X0,
                 yoff=yoff,
             )
             file_list.append(Path(fname))
@@ -316,9 +325,17 @@ def opera_slc_files_official(tmp_path) -> list[Path]:
     start = datetime.datetime(2022, 1, 1, 1, 2, 3)
     dt = datetime.timedelta(days=1)
     shape = (4, 128, 128)
-    slc_stack = (np.random.rand(*shape) + 1j * np.random.rand(*shape)).astype(
+    phase_stack = np.empty((4, 128, 128), dtype="float32")
+    ramp0 = np.ones((128, 1)) * np.arange(128).reshape(1, -1)
+    ramp0 /= 128
+    for idx in range(len(phase_stack)):
+        cur_slope = 0.5 * 12 * idx
+        phase_stack[idx] = cur_slope * ramp0
+    # Add a little noise
+    noise = 0.05 * (np.random.rand(*shape) + 1j * np.random.rand(*shape)).astype(
         np.complex64
     )
+    slc_stack = np.exp(1j * phase_stack) + noise
 
     d = tmp_path / "input_slcs"
     d.mkdir()
@@ -330,7 +347,7 @@ def opera_slc_files_official(tmp_path) -> list[Path]:
         for i in range(len(slc_stack)):
             date_str = (start + i * dt).strftime("%Y%m%dT%H%M%S")
             fname = d / f"{base}_{burst_id}_{date_str}_{ending}.h5"
-            yoff = i * shape[0] / 2
+            yoff = Y0 + i * shape[0] / 2
             create_test_nc(
                 fname,
                 epsg=32615,
@@ -340,6 +357,9 @@ def opera_slc_files_official(tmp_path) -> list[Path]:
                 subdir=[group, "corrections"],
                 data=slc_stack[i],
                 yoff=yoff,
+                xoff=X0,
+                dx=DX,
+                dy=DY,
             )
             file_list.append(Path(fname))
 
@@ -384,22 +404,29 @@ def create_static_layer_h5(filename):
                 "los_north", shape, dtype=np.float32, data=-0.11 * np.ones(shape)
             )
         )
-        dsets.append(grp.create_dataset("projection", data=32615))
-
+        # Make the "grid_mapping" dataset
+        # https://github.com/corteva/rioxarray/blob/21284f67db536d9c104aa872ab0bbc261259e59e/rioxarray/rioxarray.py#L34
+        # grid_ds = grp.create_dataset(GRID_MAPPING_DSET, data=32615)
+        grid_ds = f.create_dataset(GRID_MAPPING_DSET, data=32615)
+        grid_ds.attrs.update(CRS.from_epsg(32615).to_cf())
         crs_wkt = CRS.from_epsg(32615).to_wkt()
-        for ds in dsets:
-            ds.attrs.update(CRS.from_epsg(32615).to_cf())
-            crs_attrs = {"crs_wkt": crs_wkt, "spatial_ref": crs_wkt}
-            ds.attrs.update(crs_attrs)
+        crs_attrs = {"crs_wkt": crs_wkt, "spatial_ref": crs_wkt}
+        grid_ds.attrs.update(crs_attrs)
 
-        dx, dy = 5, -10
-        x0, y0 = 246362.5, 3422995.0
-        xs = np.arange(x0, x0 + shape[1] * dx, dx)
-        ys = np.arange(y0, y0 + shape[0] * dy, dy)
-        grp.create_dataset("x_coordinates", (shape[1],), dtype=np.float32, data=xs)
-        grp.create_dataset("x_spacing", data=dx)
-        grp.create_dataset("y_coordinates", (shape[0],), dtype=np.float32, data=ys)
-        grp.create_dataset("y_spacing", data=abs(dy))
+        xs = np.arange(X0, X0 + shape[1] * DX, DX)
+        ys = np.arange(Y0, Y0 + shape[0] * DY, DY)
+        x_ds = grp.create_dataset(
+            "x_coordinates", (shape[1],), dtype=np.float32, data=xs
+        )
+        y_ds = grp.create_dataset(
+            "y_coordinates", (shape[0],), dtype=np.float32, data=ys
+        )
+        x_ds.make_scale()
+        y_ds.make_scale()
+        for ds in dsets:
+            ds.attrs.update({"grid_mapping": GRID_MAPPING_DSET})
+            ds.dims[1].attach_scale(x_ds)
+            ds.dims[0].attach_scale(y_ds)
 
 
 @pytest.fixture()
@@ -432,12 +459,18 @@ def dem_file(tmp_path, slc_stack):
 # For unwrapping/overviews
 @pytest.fixture()
 def list_of_gtiff_ifgs(tmp_path, raster_100_by_200):
+    x, y = np.meshgrid(np.arange(200), np.arange(100))
+    # simulate a simple phase ramp
+    phase = 0.003 * x + 0.002 * y
     ifg_list = []
+    # simulate three interferograms
+    constants = [1, 2, 3]
     for i in range(3):
         # Create a copy of the raster in the same directory
         f = tmp_path / f"ifg_{i}.int.tif"
+        array = np.exp(1j * (phase + constants[i]))
         write_arr(
-            arr=np.ones((100, 200), dtype=np.complex64),
+            arr=array,
             output_name=f,
             like_filename=raster_100_by_200,
             driver="GTiff",

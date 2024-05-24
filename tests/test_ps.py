@@ -98,7 +98,10 @@ def test_multilook_ps_file(tmp_path, vrt_stack):
         output_amp_mean_file=amp_mean_file,
         output_file=ps_mask_file,
     )
-    output_file = dolphin.ps.multilook_ps_mask(
-        strides={"x": 5, "y": 3}, ps_mask_file=ps_mask_file
+    output_ps_file, output_amp_disp_file = dolphin.ps.multilook_ps_files(
+        strides={"x": 5, "y": 3},
+        ps_mask_file=ps_mask_file,
+        amp_dispersion_file=amp_dispersion_file,
     )
-    assert io.get_raster_dtype(output_file) == np.uint8
+    assert io.get_raster_dtype(output_ps_file) == np.uint8
+    assert io.get_raster_dtype(output_amp_disp_file) == np.float32

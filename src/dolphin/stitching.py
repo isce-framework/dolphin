@@ -1,4 +1,5 @@
 """stitching.py: utilities for combining interferograms into larger images."""
+
 from __future__ import annotations
 
 import math
@@ -13,7 +14,7 @@ import numpy as np
 from numpy.typing import DTypeLike
 from opera_utils import group_by_date
 from osgeo import gdal, osr
-from pyproj import Transformer
+from rasterio.warp import transform_bounds
 
 from dolphin import io, utils
 from dolphin._log import get_log
@@ -241,8 +242,6 @@ def merge_images(
     if out_dtype is not None:
         out_gdal_dtype = gdal.GetDataTypeName(utils.numpy_to_gdal_type(out_dtype))
         args.extend(["-ot", out_gdal_dtype])
-    if target_aligned_pixels:
-        args.append("-tap")
     if create_only:
         args.append("-create")
     if options is not None:
@@ -253,7 +252,7 @@ def merge_images(
     logger.info(f"Running {' '.join(arg_list)}")
     subprocess.check_call(arg_list)
 
-    # Now clip to
+    # Now clip to the provided bounding box
     gdal.Translate(
         destName=fspath(outfile),
         srcDS=fspath(merge_output),
@@ -482,7 +481,7 @@ def get_combined_bounds_nodata(
     if out_bounds is not None:
         if out_bounds_epsg is not None:
             dst_epsg = io.get_raster_crs(filenames[0]).to_epsg()
-            bounds = _reproject_bounds(out_bounds, out_bounds_epsg, dst_epsg)
+            bounds = Bbox(*transform_bounds(out_bounds_epsg, dst_epsg, *out_bounds))
         else:
             bounds = out_bounds
     else:
@@ -505,42 +504,6 @@ def _align_bounds(bounds: Bbox, res: tuple[float, float]) -> Bbox:
     bottom = math.floor(bottom / res[1]) * res[1]
     top = math.ceil(top / res[1]) * res[1]
     return Bbox(left, bottom, right, top)
-
-
-def _reproject_bounds(bounds: Bbox, src_epsg: int, dst_epsg: int) -> Bbox:
-    t = Transformer.from_crs(src_epsg, dst_epsg, always_xy=True)
-    left, bottom, right, top = bounds
-    b = (*t.transform(left, bottom), *t.transform(right, top))
-    return Bbox(*b)
-
-
-def get_transformed_bounds(filename: Filename, epsg_code: Optional[int] = None):
-    """Get the bounds of a raster, possibly in a different CRS.
-
-    Parameters
-    ----------
-    filename : str
-        Path to the raster file.
-    epsg_code : Optional[int]
-        EPSG code of the CRS to transform to.
-        If not provided, or the raster is already in the desired CRS,
-        the bounds will not be transformed.
-
-    Returns
-    -------
-    tuple
-        The bounds of the raster as (left, bottom, right, top)
-
-    """
-    bounds = io.get_raster_bounds(filename)
-    if epsg_code is None:
-        return bounds
-    from_epsg = io.get_raster_crs(filename=filename).to_epsg()
-    assert from_epsg is not None
-    if from_epsg == epsg_code:
-        return bounds
-
-    return _reproject_bounds(bounds, from_epsg, epsg_code)
 
 
 def _copy_set_nodata(
