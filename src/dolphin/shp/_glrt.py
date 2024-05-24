@@ -118,7 +118,7 @@ def get_cutoff(alpha: float, N: int) -> float:
         Cutoff value for the GLRT test statistic.
 
     """
-    n_alpha_to_cutoff = _read_cutoff_csv("glrt")
+    n_alpha_to_cutoff = _read_cutoff_csv()
     try:
         return n_alpha_to_cutoff[(N, alpha)]
     except KeyError as e:
@@ -164,6 +164,9 @@ def _loop_over_pixels(
             (r_start, r_end), (c_start, c_end) = _get_slices(
                 half_row, half_col, in_r, in_c, in_rows, in_cols
             )
+            if mean[in_r, in_c] == 0:
+                # Skip nodata pixels
+                continue
 
             for in_r2 in range(r_start, r_end):
                 for in_c2 in range(c_start, c_end):
@@ -188,9 +191,8 @@ def _loop_over_pixels(
 
 
 @lru_cache
-def _read_cutoff_csv(test_name):
-    # Replace with the actual filename
-    filename = Path(__file__).parent / f"{test_name}_cutoffs.csv"
+def _read_cutoff_csv():
+    filename = Path(__file__).parent / "glrt_cutoffs.csv"
 
     result = {}
     with open(filename) as file:
