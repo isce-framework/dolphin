@@ -9,7 +9,7 @@ from dolphin.shp._common import remove_unconnected
 simulate._seed(1234)
 
 
-@pytest.mark.parametrize("method", ["glrt", "ks", "kld"])
+@pytest.mark.parametrize("method", ["glrt", "ks"])
 def test_shp_glrt_tf_smoketest(method):
     shape = (5, 50, 50)
     slcs = 20 * (np.random.rand(*shape) + 1j * np.random.rand(*shape))
@@ -34,9 +34,8 @@ def slcs(shape=(30, 11, 11)):
     return 20 * (np.random.rand(*shape) + 1j * np.random.rand(*shape))
 
 
-# the KLD and GLRT methods have same API for estimate_neighbors
-@pytest.mark.parametrize("method", ["kld", "glrt"])
-def test_shp_glrt_kld(slcs, method):
+def test_shp_glrt(slcs):
+    method = "glrt"
     amp_stack = np.abs(slcs)
     mean = np.mean(amp_stack, axis=0)
     var = np.var(amp_stack, axis=0)
@@ -99,9 +98,9 @@ def test_shp_ks(slcs):
     assert shps_mid_pixel[5, 5] == 1
 
 
-@pytest.mark.parametrize("method", ["kld", "glrt"])
-def test_shp_half_mean_different(slcs, method):
+def test_shp_half_mean_different(slcs):
     """Run a test where half the image has different mean"""
+    method = "glrt"
     amp_stack = np.abs(slcs)
     mean = np.mean(amp_stack, axis=0)
     var = np.var(amp_stack, axis=0)
@@ -129,9 +128,9 @@ def test_shp_half_mean_different(slcs, method):
     assert not shps_mid_pixel[:5, :].any()
 
 
-@pytest.mark.parametrize("method", ["kld", "glrt"])
-def test_shp_half_var_different(slcs, method):
+def test_shp_half_var_different(slcs):
     """Run a test where half the image has different variance"""
+    method = "glrt"
     amp_stack = np.abs(slcs)
     mean = np.mean(amp_stack, axis=0)
     var = np.var(amp_stack, axis=0)
@@ -159,7 +158,7 @@ def test_shp_half_var_different(slcs, method):
     assert not shps_mid_pixel[:5, :].any()
 
 
-@pytest.mark.parametrize("method", ["glrt", "kld", "ks"])
+@pytest.mark.parametrize("method", ["glrt", "ks"])
 @pytest.mark.parametrize("alpha", [0.01, 0.05])
 @pytest.mark.parametrize("strides", [{"x": 1, "y": 1}, {"x": 2, "y": 2}])
 def test_shp_statistics(method, alpha, strides):

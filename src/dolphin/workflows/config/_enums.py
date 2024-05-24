@@ -12,7 +12,6 @@ class ShpMethod(str, Enum):
 
     GLRT = "glrt"
     KS = "ks"
-    KLD = "kld"
     RECT = "rect"
     # Alias for no SHP search
     NONE = "rect"
