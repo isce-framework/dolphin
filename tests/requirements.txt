@@ -1,5 +1,6 @@
 asv
 black
+boto3
 flake8
 pooch
 pre-commit
