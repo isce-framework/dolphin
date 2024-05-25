@@ -1,0 +1,108 @@
+interactions:
+- request:
+    body: null
+    headers:
+      Authorization:
+      - !!binary |
+        QVdTNC1ITUFDLVNIQTI1NiBDcmVkZW50aWFsPUFLSUFTSVhHSERJR05EU09HTFA0LzIwMjQwNTI1
+        L3VzLXdlc3QtMi9zMy9hd3M0X3JlcXVlc3QsIFNpZ25lZEhlYWRlcnM9aG9zdDt4LWFtei1jb250
+        ZW50LXNoYTI1Njt4LWFtei1kYXRlLCBTaWduYXR1cmU9ZmU4Yzg1NGY3OGZkYjExMDkwNTcwN2Mz
+        ZjhiMDRiNTkzMWIxNWJhN2ZhMzU3MGU4N2Q2ODBlOTRiZDQzYmNjZQ==
+      User-Agent:
+      - !!binary |
+        Qm90bzMvMS4zNC40NyBtZC9Cb3RvY29yZSMxLjM0LjQ3IHVhLzIuMCBvcy9saW51eCM2LjUuMC0z
+        NS1nZW5lcmljIG1kL2FyY2gjeDg2XzY0IGxhbmcvcHl0aG9uIzMuMTEuOCBtZC9weWltcGwjQ1B5
+        dGhvbiBjZmcvcmV0cnktbW9kZSNsZWdhY3kgQm90b2NvcmUvMS4zNC40Nw==
+      X-Amz-Content-SHA256:
+      - !!binary |
+        ZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3
+        ODUyYjg1NQ==
+      X-Amz-Date:
+      - !!binary |
+        MjAyNDA1MjVUMDAyMzM3Wg==
+      amz-sdk-invocation-id:
+      - !!binary |
+        MmM5MzdlNjgtNGI5NS00NWVmLThhODktNTQ1NWJmZGQ0MDE1
+      amz-sdk-request:
+      - !!binary |
+        YXR0ZW1wdD0x
+    method: GET
+    uri: https://testzarr-insar-plotting.s3.us-west-2.amazonaws.com/?list-type=2&prefix=unwrapped%2F20231009_20231021.unw.conncomp.tif&max-keys=1&encoding-type=url
+  response:
+    body:
+      string: '<?xml version="1.0" encoding="UTF-8"?>
+
+        <Error><Code>PermanentRedirect</Code><Message>The bucket you are attempting
+        to access must be addressed using the specified endpoint. Please send all
+        future requests to this endpoint.</Message><Endpoint>s3.amazonaws.com</Endpoint><Bucket>testzarr-insar-plotting</Bucket><RequestId>JM3S2X1S4CNJDCHB</RequestId><HostId>S6LV1xe4021nUKHNl97VLMKQRiXoinGgMo1iQrUZ7uJJ0QlZURJbUsgcNQXsdGEfsGNk7zalo7A=</HostId></Error>'
+    headers:
+      Content-Type:
+      - application/xml
+      Date:
+      - Sat, 25 May 2024 00:23:38 GMT
+      Server:
+      - AmazonS3
+      Transfer-Encoding:
+      - chunked
+      x-amz-bucket-region:
+      - us-east-1
+      x-amz-id-2:
+      - S6LV1xe4021nUKHNl97VLMKQRiXoinGgMo1iQrUZ7uJJ0QlZURJbUsgcNQXsdGEfsGNk7zalo7A=
+      x-amz-request-id:
+      - JM3S2X1S4CNJDCHB
+    status:
+      code: 301
+      message: Moved Permanently
+- request:
+    body: null
+    headers:
+      Authorization:
+      - !!binary |
+        QVdTNC1ITUFDLVNIQTI1NiBDcmVkZW50aWFsPUFLSUFTSVhHSERJR05EU09HTFA0LzIwMjQwNTI1
+        L3VzLWVhc3QtMS9zMy9hd3M0X3JlcXVlc3QsIFNpZ25lZEhlYWRlcnM9aG9zdDt4LWFtei1jb250
+        ZW50LXNoYTI1Njt4LWFtei1kYXRlLCBTaWduYXR1cmU9NDVkNTY2NDcyNDg2M2RiNGQ5ZjAzM2Vm
+        NWM0NTJkM2RhYjNhNTk5ODFjNDE1MDg3NzI2NDJlNjE1MDZmZThkOA==
+      User-Agent:
+      - !!binary |
+        Qm90bzMvMS4zNC40NyBtZC9Cb3RvY29yZSMxLjM0LjQ3IHVhLzIuMCBvcy9saW51eCM2LjUuMC0z
+        NS1nZW5lcmljIG1kL2FyY2gjeDg2XzY0IGxhbmcvcHl0aG9uIzMuMTEuOCBtZC9weWltcGwjQ1B5
+        dGhvbiBjZmcvcmV0cnktbW9kZSNsZWdhY3kgQm90b2NvcmUvMS4zNC40Nw==
+      X-Amz-Content-SHA256:
+      - !!binary |
+        ZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3
+        ODUyYjg1NQ==
+      X-Amz-Date:
+      - !!binary |
+        MjAyNDA1MjVUMDAyMzM4Wg==
+      amz-sdk-invocation-id:
+      - !!binary |
+        MmM5MzdlNjgtNGI5NS00NWVmLThhODktNTQ1NWJmZGQ0MDE1
+      amz-sdk-request:
+      - !!binary |
+        dHRsPTIwMjQwNTI1VDAwMjQzOFo7IGF0dGVtcHQ9MjsgbWF4PTU=
+    method: GET
+    uri: https://testzarr-insar-plotting.s3.us-east-1.amazonaws.com/?list-type=2&prefix=unwrapped%2F20231009_20231021.unw.conncomp.tif&max-keys=1&encoding-type=url
+  response:
+    body:
+      string: '<?xml version="1.0" encoding="UTF-8"?>
+
+        <ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/"><Name>testzarr-insar-plotting</Name><Prefix>unwrapped/20231009_20231021.unw.conncomp.tif</Prefix><KeyCount>1</KeyCount><MaxKeys>1</MaxKeys><EncodingType>url</EncodingType><IsTruncated>false</IsTruncated><Contents><Key>unwrapped/20231009_20231021.unw.conncomp.tif</Key><LastModified>2024-05-24T23:52:56.000Z</LastModified><ETag>&quot;adce42fcf6d326752742058b7b2aecbc&quot;</ETag><Size>164048</Size><StorageClass>STANDARD</StorageClass></Contents></ListBucketResult>'
+    headers:
+      Content-Type:
+      - application/xml
+      Date:
+      - Sat, 25 May 2024 00:23:39 GMT
+      Server:
+      - AmazonS3
+      Transfer-Encoding:
+      - chunked
+      x-amz-bucket-region:
+      - us-east-1
+      x-amz-id-2:
+      - o20Q0yXcBpGWgysuBxHaebmSFeYypyQhbx4+ylrD04xrFSGkTfxvxLnWdgLWlx8quJWidvCONo0=
+      x-amz-request-id:
+      - JM3Q8AVWRGYKRMM1
+    status:
+      code: 200
+      message: OK
+version: 1

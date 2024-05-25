@@ -16,20 +16,15 @@ logger = logging.getLogger(__name__)
 class GeneralPath(Protocol):
     """A protocol to handle paths that can be either local or S3 paths."""
 
-    def parent(self):
-        ...
+    def parent(self): ...
 
-    def suffix(self):
-        ...
+    def suffix(self): ...
 
-    def read_text(self):
-        ...
+    def read_text(self): ...
 
-    def __truediv__(self, other):
-        ...
+    def __truediv__(self, other): ...
 
-    def __str__(self) -> str:
-        ...
+    def __str__(self) -> str: ...
 
     def __fspath__(self) -> str:
         return str(self)
@@ -64,7 +59,7 @@ class S3Path(GeneralPath):
     >>> s3_path.parent
     S3Path("s3://bucket/path/to/")
     >>> str(s3_path.parent)
-    's3://bucket/path/to'
+    's3://bucket/path/to/'
 
     """
 
@@ -177,6 +172,14 @@ class S3Path(GeneralPath):
         new._trailing_slash = "/" if str(other).endswith("/") else ""
         return new
 
+    def __eq__(self, other):
+        if isinstance(other, S3Path):
+            return self.get_path() == other.get_path()
+        elif isinstance(other, str):
+            return self.get_path() == other
+        else:
+            return False
+
     def __repr__(self):
         return f'S3Path("{self.get_path()}")'
 
@@ -189,6 +192,10 @@ class S3Path(GeneralPath):
         full_pattern = str(self) + pattern
         logger.debug(f"Searching {full_pattern}")
         return list_bucket(full_bucket_glob=full_pattern)
+
+    def to_gdal(self):
+        """Convert this S3Path to a GDAL URL."""
+        return f"/vsis3/{self.bucket}/{self.key}"
 
 
 def fix_s3_url(url):
