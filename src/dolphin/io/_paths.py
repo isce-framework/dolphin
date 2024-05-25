@@ -171,13 +171,6 @@ class S3Path(GeneralPath):
     def __str__(self):
         return self.get_path()
 
-    def glob(self, pattern):
-        from ._s3 import list_bucket
-
-        full_pattern = str(self) + pattern
-        logger.debug(f"Searching {full_pattern}")
-        return list_bucket(full_bucket_glob=full_pattern)
-
     def to_gdal(self):
         """Convert this S3Path to a GDAL URL."""
         return f"/vsis3/{self.bucket}/{self.key}"
