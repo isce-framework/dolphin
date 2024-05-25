@@ -820,10 +820,9 @@ class VRTStack(StackReader):
         out = []
         for f in self.file_list:
             if isinstance(f, S3Path):
-                s = str(f).replace("s3://", "/vsis3/")
+                out.append(f.to_gdal())
             else:
-                s = io.format_nc_filename(f, self.subdataset)
-            out.append(s)
+                out.append(io.format_nc_filename(f, self.subdataset))
         return out
 
     def __fspath__(self):

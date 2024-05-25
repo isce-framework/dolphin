@@ -4,7 +4,7 @@ import datetime
 import sys
 from enum import Enum
 from os import PathLike
-from typing import TYPE_CHECKING, NamedTuple, TypeVar, Union
+from typing import TYPE_CHECKING, NamedTuple, Protocol, TypeVar, Union
 
 if sys.version_info >= (3, 10):
     from typing import ParamSpec
@@ -20,12 +20,6 @@ if TYPE_CHECKING:
     PathLikeStr = PathLike[str]
 else:
     PathLikeStr = PathLike
-
-
-PathOrStr = Union[str, PathLikeStr]
-Filename = PathOrStr  # May add a deprecation notice for `Filename`
-# TypeVar added for generic functions which should return the same type as the input
-PathLikeT = TypeVar("PathLikeT", str, PathLikeStr)
 
 
 class Bbox(NamedTuple):
@@ -104,3 +98,26 @@ class TropoType(str, Enum):
     """Hydrostatic (same as dry, named differently in raider)"""
     COMB = "comb"
     """Combined wet + dry delay."""
+
+
+class GeneralPath(Protocol):
+    """A protocol to handle paths that can be either local or S3 paths."""
+
+    def parent(self): ...
+
+    def suffix(self): ...
+
+    def read_text(self): ...
+
+    def __truediv__(self, other): ...
+
+    def __str__(self) -> str: ...
+
+    def __fspath__(self) -> str:
+        return str(self)
+
+
+PathOrStr = Union[str, PathLikeStr, GeneralPath]
+Filename = PathOrStr  # May add a deprecation notice for `Filename`
+# TypeVar added for generic functions which should return the same type as the input
+PathLikeT = TypeVar("PathLikeT", str, PathLikeStr, GeneralPath)

@@ -4,30 +4,15 @@ import copy
 import logging
 import re
 from pathlib import Path
-from typing import Protocol, Union
+from typing import Union
 from urllib.parse import ParseResult, urlparse
+
+from dolphin._types import GeneralPath
 
 __all__ = ["S3Path"]
 
 
 logger = logging.getLogger(__name__)
-
-
-class GeneralPath(Protocol):
-    """A protocol to handle paths that can be either local or S3 paths."""
-
-    def parent(self): ...
-
-    def suffix(self): ...
-
-    def read_text(self): ...
-
-    def __truediv__(self, other): ...
-
-    def __str__(self) -> str: ...
-
-    def __fspath__(self) -> str:
-        return str(self)
 
 
 class S3Path(GeneralPath):
