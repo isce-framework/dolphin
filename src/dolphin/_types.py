@@ -4,7 +4,14 @@ import datetime
 import sys
 from enum import Enum
 from os import PathLike
-from typing import TYPE_CHECKING, NamedTuple, Protocol, TypeVar, Union
+from typing import (
+    TYPE_CHECKING,
+    NamedTuple,
+    Protocol,
+    TypeVar,
+    Union,
+    runtime_checkable,
+)
 
 if sys.version_info >= (3, 10):
     from typing import ParamSpec
@@ -100,6 +107,7 @@ class TropoType(str, Enum):
     """Combined wet + dry delay."""
 
 
+@runtime_checkable
 class GeneralPath(Protocol):
     """A protocol to handle paths that can be either local or S3 paths."""
 
