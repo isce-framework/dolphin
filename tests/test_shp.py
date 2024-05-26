@@ -29,26 +29,37 @@ def test_shp_glrt_tf_smoketest(method):
     )
 
 
+NUM_SLCS = 30
+
+
 @pytest.fixture(scope="module")
-def slcs(shape=(30, 11, 11)):
+def slcs(shape=(NUM_SLCS, 11, 11)):
     return 20 * (np.random.rand(*shape) + 1j * np.random.rand(*shape))
 
 
-def test_shp_glrt(slcs):
-    method = "glrt"
+@pytest.fixture(scope="module")
+def mean(slcs):
     amp_stack = np.abs(slcs)
-    mean = np.mean(amp_stack, axis=0)
-    var = np.var(amp_stack, axis=0)
+    return np.mean(amp_stack, axis=0)
+
+
+@pytest.fixture(scope="module")
+def var(slcs):
+    amp_stack = np.abs(slcs)
+    return np.var(amp_stack, axis=0)
+
+
+def test_shp_glrt(mean, var):
+    method = "glrt"
 
     halfwin_rowcol = (5, 5)  # Looking at the entire stack
-    nslc = slcs.shape[0]
 
     # First try a small alpha
     neighbors = shp.estimate_neighbors(
         mean=mean,
         var=var,
         halfwin_rowcol=halfwin_rowcol,
-        nslc=nslc,
+        nslc=NUM_SLCS,
         alpha=0.005,
         method=method,
     )
@@ -65,13 +76,12 @@ def test_shp_glrt(slcs):
 def test_shp_ks(slcs):
     amp_stack = np.abs(slcs)
     halfwin_rowcol = (5, 5)  # Looking at the entire stack
-    nslc = slcs.shape[0]
 
     # First try a tiny alpha
     neighbors = shp.estimate_neighbors(
         amp_stack=amp_stack,
         halfwin_rowcol=halfwin_rowcol,
-        nslc=nslc,
+        nslc=NUM_SLCS,
         alpha=1e-6,
         method="ks",
     )
@@ -89,7 +99,7 @@ def test_shp_ks(slcs):
     neighbors = shp.estimate_neighbors(
         amp_stack=amp_stack,
         halfwin_rowcol=halfwin_rowcol,
-        nslc=nslc,
+        nslc=NUM_SLCS,
         alpha=1.0,
         method="ks",
     )
@@ -98,13 +108,9 @@ def test_shp_ks(slcs):
     assert shps_mid_pixel[5, 5] == 1
 
 
-def test_shp_half_mean_different(slcs):
+def test_shp_half_mean_different(mean, var):
     """Run a test where half the image has different mean"""
     method = "glrt"
-    amp_stack = np.abs(slcs)
-    mean = np.mean(amp_stack, axis=0)
-    var = np.var(amp_stack, axis=0)
-    nslc = slcs.shape[0]
 
     halfwin_rowcol = (5, 5)
     # make the top half different amplitude
@@ -118,7 +124,7 @@ def test_shp_half_mean_different(slcs):
         mean=mean2,
         var=var,
         halfwin_rowcol=halfwin_rowcol,
-        nslc=nslc,
+        nslc=NUM_SLCS,
         alpha=0.01,
         method=method,
     )
@@ -128,13 +134,9 @@ def test_shp_half_mean_different(slcs):
     assert not shps_mid_pixel[:5, :].any()
 
 
-def test_shp_half_var_different(slcs):
+def test_shp_half_var_different(mean, var):
     """Run a test where half the image has different variance"""
     method = "glrt"
-    amp_stack = np.abs(slcs)
-    mean = np.mean(amp_stack, axis=0)
-    var = np.var(amp_stack, axis=0)
-    nslc = slcs.shape[0]
 
     halfwin_rowcol = (5, 5)
     # make the top half different amplitude
@@ -148,7 +150,7 @@ def test_shp_half_var_different(slcs):
         mean=mean,
         var=var2,
         halfwin_rowcol=halfwin_rowcol,
-        nslc=nslc,
+        nslc=NUM_SLCS,
         alpha=0.01,
         method=method,
     )
@@ -156,6 +158,29 @@ def test_shp_half_var_different(slcs):
     # Check that everything is counted as a neighbor
     assert shps_mid_pixel[5:, :].all()
     assert not shps_mid_pixel[:5, :].any()
+
+
+@pytest.mark.parametrize("strides", [{"x": 1, "y": 1}, {"x": 2, "y": 2}])
+def test_shp_glrt_nodata_0(mean, var, strides):
+    """Ensure"""
+    method = "glrt"
+
+    halfwin_rowcol = (5, 5)  # Looking at the entire stack
+
+    mean = mean.copy()
+    mean[:4, :4] = 0
+    # First try a small alpha
+    neighbors = shp.estimate_neighbors(
+        mean=mean,
+        var=var,
+        halfwin_rowcol=halfwin_rowcol,
+        strides=strides,
+        nslc=NUM_SLCS,
+        alpha=0.005,
+        method=method,
+    )
+    out_col, out_row = 2 // strides["x"], 2 // strides["x"]
+    assert neighbors[:out_row, :out_col, :, :].sum() == 0
 
 
 @pytest.mark.parametrize("method", ["glrt", "ks"])
@@ -174,13 +199,13 @@ def test_shp_statistics(method, alpha, strides):
         amp_stack = amp_stack_sims[i]
         mean = np.mean(amp_stack, axis=0)
         var = np.var(amp_stack, axis=0)
-        nslc = amp_stack.shape[0]
+        amp_stack.shape[0]
 
         neighbors = shp.estimate_neighbors(
             mean=mean,
             var=var,
             halfwin_rowcol=halfwin_rowcol,
-            nslc=nslc,
+            nslc=NUM_SLCS,
             strides=strides,
             alpha=alpha,
             method=method,
