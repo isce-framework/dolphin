@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
+import h5py
 import numpy as np
 from numpy.typing import DTypeLike
 from tqdm.auto import tqdm
@@ -135,6 +136,11 @@ def run_wrapped_phase_single(
             nodata=0,
         )
 
+    cslc_tif = output_folder / comp_slc_info.filename
+    cslc_filename = cslc_tif.with_suffix(".h5")
+    with h5py.File(cslc_filename, "w") as hf:
+        hf.create_dataset("data", (nrows, ncols), dtype="c8")
+
     # Iterate over the output grid
     block_manager = StridedBlockManager(
         arr_shape=(nrows, ncols),
@@ -252,6 +258,13 @@ def run_wrapped_phase_single(
             in_no_pad_rows.start,
             in_no_pad_cols.start,
         )
+        with h5py.File(cslc_filename, "a") as hf:
+            nrows, ncols = cur_comp_slc.shape
+            row_start = in_no_pad_rows.start
+            col_start = in_no_pad_cols.start
+            row_slice = slice(row_start, row_start + nrows)
+            col_slice = slice(col_start, col_start + ncols)
+            hf["data"][(row_slice, col_slice)] = cur_comp_slc
 
         # All other outputs are strided (smaller in size)
         out_datas = [
