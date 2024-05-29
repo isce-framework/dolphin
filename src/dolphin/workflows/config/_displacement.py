@@ -14,7 +14,7 @@ from pydantic import (
 )
 
 from dolphin._log import get_log
-from dolphin._types import GeneralPath, TropoModel, TropoType
+from dolphin._types import TropoModel, TropoType
 
 from ._common import (
     InputOptions,
@@ -98,20 +98,15 @@ class CorrectionOptions(BaseModel, extra="forbid"):
         return v if v is not None else []
 
 
-import json
-
 from pydantic import (
     PlainSerializer,
-    WithJsonSchema,
-    field_serializer,
 )
 from typing_extensions import Annotated
 
+from dolphin.io import S3Path
+
 CslcFileList = Annotated[
-    list[GeneralPath],
-    # PlainSerializer(lambda x: f"{x:.1e}", return_type=str),
-    PlainSerializer(lambda x: json.dumps([str(f) for f in x]), return_type=str),
-    WithJsonSchema({"type": "string"}, mode="serialization"),
+    list[S3Path | Path], PlainSerializer(lambda x: [str(f) for f in x])
 ]
 
 
@@ -127,10 +122,6 @@ class DisplacementWorkflow(WorkflowBase):
             "containing list of CSLC files."
         ),
     )
-
-    @field_serializer("cslc_file_list")
-    def _serialize_cslc_file_list(self, cslc_file_list: list[GeneralPath]) -> str:
-        return json.dumps([str(f) for f in cslc_file_list])
 
     output_options: OutputOptions = Field(default_factory=OutputOptions)
 
@@ -183,7 +174,7 @@ class DisplacementWorkflow(WorkflowBase):
         input_options = self.input_options
         date_fmt = input_options.cslc_date_fmt
         # Filter out files that don't have dates in the filename
-        files_matching_date = [Path(f) for f in file_list if get_dates(f, fmt=date_fmt)]
+        files_matching_date = [f for f in file_list if get_dates(f, fmt=date_fmt)]
         if len(files_matching_date) < len(file_list):
             msg = (
                 f"Found {len(files_matching_date)} files with dates like {date_fmt} in"
@@ -200,9 +191,13 @@ class DisplacementWorkflow(WorkflowBase):
                 raise ValueError(msg)
 
         # Coerce the file_list to a sorted list of Path objects
-        self.cslc_file_list = [
-            Path(f) for f in sort_files_by_date(file_list, file_date_fmt=date_fmt)[0]
-        ]
+        out: list[S3Path | Path] = []
+        for f in sort_files_by_date(file_list, file_date_fmt=date_fmt)[0]:
+            try:
+                out.append(S3Path(f))
+            except ValueError:
+                out.append(Path(f))
+        self.cslc_file_list = out
 
         return self
 

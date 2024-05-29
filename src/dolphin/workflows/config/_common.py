@@ -17,7 +17,7 @@ from pydantic import (
 from dolphin import __version__ as _dolphin_version
 from dolphin._log import get_log
 from dolphin._types import Bbox
-from dolphin.io import DEFAULT_HDF5_OPTIONS, DEFAULT_TIFF_OPTIONS
+from dolphin.io import DEFAULT_HDF5_OPTIONS, DEFAULT_TIFF_OPTIONS, S3Path
 
 from ._enums import ShpMethod, UnwrapMethod
 from ._yaml_model import YamlModel
@@ -518,4 +518,10 @@ def _read_file_list_or_glob(cls, value):  # noqa: ARG001:
             msg = f"Input file list {v_path} does not exist or is not a file."
             raise ValueError(msg)
 
-    return list(value)
+    out = []
+    for v in list(value):
+        try:
+            out.append(S3Path(v))
+        except ValueError:
+            out.append(Path(v))
+    return out
