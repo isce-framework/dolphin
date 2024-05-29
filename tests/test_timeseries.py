@@ -213,6 +213,13 @@ class TestVelocity:
         assert velocities.shape == (SHAPE[0], SHAPE[1])
         npt.assert_allclose(velocities, expected_velo, atol=1e-5)
 
+    def test_stack_unweighted(self, data, x_arr, expected_velo):
+        sar_dates, sar_phases, ifg_date_pairs, ifgs = data
+
+        velocities = timeseries.estimate_velocity(x_arr, sar_phases, None)
+        assert velocities.shape == (SHAPE[0], SHAPE[1])
+        npt.assert_allclose(velocities, expected_velo, atol=1e-5)
+
 
 if __name__ == "__main__":
     sar_dates = make_sar_dates()
