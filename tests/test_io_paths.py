@@ -11,6 +11,13 @@ BUCKET_NAME = "fake-bucket"
 KEY = "unwrapped/20231009_20231021.unw.tif"
 URL = f"s3://{BUCKET_NAME}/{KEY}"
 
+pytestmark = pytest.mark.filterwarnings(
+    # Dataset has no geotransform, gcps, or rpcs. The identity matrix will be returned.
+    "ignore::rasterio.errors.NotGeoreferencedWarning",
+    # Botocore: DeprecationWarning: datetime.datetime.utcnow()
+    "ignore:.*datetime.*:DeprecationWarning:botocore",
+)
+
 
 @pytest.fixture(scope="module")
 def monkeymodule():
