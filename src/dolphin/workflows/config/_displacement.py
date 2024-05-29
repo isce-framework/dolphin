@@ -8,13 +8,16 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    PlainSerializer,
     StringConstraints,
+    WithJsonSchema,
     field_validator,
     model_validator,
 )
 
 from dolphin._log import get_log
-from dolphin._types import TropoModel, TropoType
+from dolphin._types import GeneralPath, TropoModel, TropoType
+from dolphin.io import S3Path
 
 from ._common import (
     InputOptions,
@@ -98,15 +101,14 @@ class CorrectionOptions(BaseModel, extra="forbid"):
         return v if v is not None else []
 
 
-from pydantic import (
-    PlainSerializer,
-)
-from typing_extensions import Annotated
-
-from dolphin.io import S3Path
-
 CslcFileList = Annotated[
-    list[S3Path | Path], PlainSerializer(lambda x: [str(f) for f in x])
+    # Any Path-like object is acceptable
+    list[GeneralPath],
+    # All Paths will be serialized to strings:
+    PlainSerializer(lambda x: [str(f) for f in x]),
+    # Let Pydantic know what the JSON Schema should be for this custom protocol:
+    # https://docs.pydantic.dev/latest/concepts/json_schema/#withjsonschema-annotation
+    WithJsonSchema({"type": "array", "items": {"type": "string", "format": "uri"}}),
 ]
 
 
