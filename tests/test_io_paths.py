@@ -1,7 +1,9 @@
+import tempfile
+
 import boto3
+import numpy as np
 import pytest
 from moto import mock_aws
-import numpy as np
 
 from dolphin import io
 
@@ -20,7 +22,12 @@ def monkeymodule():
 def moto_server_handler(monkeymodule):
     from moto.server import ThreadedMotoServer
 
-    arr_bytes = np.random.random((10, 10)).astype(np.float32).tobytes()
+    arr = np.random.random((10, 10)).astype(np.float32)
+    # Save to a tiff
+    with tempfile.NamedTemporaryFile(suffix=".tif") as f:
+        io.write_arr(arr=arr, output_name=f.name)
+        with open(f.name, "rb") as fout:
+            arr_bytes = fout.read()
 
     local_server = ThreadedMotoServer(ip_address="127.0.0.1", port=5000)
     local_server.start()
@@ -32,15 +39,6 @@ def moto_server_handler(monkeymodule):
     monkeymodule.setenv("AWS_DEFAULT_REGION", "us-east-1")
     monkeymodule.setenv("AWS_ENDPOINT_URL", "http://localhost:5000")
 
-    # import os
-
-    # os.environ["AWS_ACCESS_KEY_ID"] = "testing"
-    # os.environ["AWS_SECRET_ACCESS_KEY"] = "testing"
-    # os.environ["AWS_SECURITY_TOKEN"] = "testing"
-    # os.environ["AWS_SESSION_TOKEN"] = "testing"
-    # os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
-    # os.environ["AWS_ENDPOINT_URL"] = "http://localhost:5000"
-
     # Post the dummy file to the local server
     with mock_aws():
         s3 = boto3.resource(
@@ -49,14 +47,12 @@ def moto_server_handler(monkeymodule):
             endpoint_url="http://localhost:5000",
         )
 
-        # s3.Bucket('gentle-persuader-emoji').put_object(Key=emoji_png_file, Body=image, ACL='public-read')
-
         b = s3.create_bucket(Bucket=BUCKET_NAME)
         b.Acl().put(ACL="public-read")
         o = s3.Object(BUCKET_NAME, KEY)
         o.put(Body=arr_bytes)
 
-    yield  # Run any test logic
+        yield  # Run any test logic
 
     local_server.stop()
 
@@ -85,8 +81,6 @@ class TestS3Path:
         s3path = io.S3Path.from_bucket_key(bucket, key)
         assert str(s3path) == str(io.S3Path(URL))
 
-    # @pytest.mark.vcr
-    @mock_aws
     def test_rasterio_open(self, s3path):
         import rasterio as rio
 

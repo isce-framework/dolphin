@@ -2,14 +2,13 @@ from __future__ import annotations
 
 import datetime
 import os
+import warnings
 from pathlib import Path
 
 import numpy as np
 import pytest
 from make_netcdf import create_test_nc
 from osgeo import gdal
-
-import warnings
 from rasterio.errors import NotGeoreferencedWarning
 
 # https://numba.readthedocs.io/en/stable/user/threading-layer.html#example-of-limiting-the-number-of-threads
