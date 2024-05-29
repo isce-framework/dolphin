@@ -9,10 +9,10 @@ from numpy.linalg import lstsq as lstsq_numpy
 from dolphin import io, timeseries
 from dolphin.utils import format_dates
 
-NUM_DATES = 100
+NUM_DATES = 10
 DT = 12
 START_DATE = datetime(2020, 1, 1)
-SHAPE = 500, 500
+SHAPE = 50, 50
 VELO_RAD_PER_DAY = 0.2  # rad / day
 
 
