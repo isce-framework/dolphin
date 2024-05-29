@@ -48,13 +48,15 @@ class S3Path(GeneralPath):
 
     """
 
-    def __init__(self, s3_url: Union[str, "S3Path"]):
+    def __init__(self, s3_url: Union[str, "S3Path"], unsigned: bool = False):
         """Create an S3Path.
 
         Parameters
         ----------
         s3_url : str or S3Path
             The S3 url to parse.
+        unsigned : bool, optional
+            If True, disable signing requests to S3.
 
         """
         # Names come from the urllib.parse.ParseResult
@@ -74,6 +76,8 @@ class S3Path(GeneralPath):
 
         if self._scheme != "s3":
             raise ValueError(f"{s3_url} is not an S3 url")
+
+        self._unsigned = unsigned
 
     @classmethod
     def from_bucket_key(cls, bucket: str, key: str):
@@ -117,8 +121,13 @@ class S3Path(GeneralPath):
 
     def _get_client(self):
         import boto3
+        from botocore import UNSIGNED
+        from botocore.config import Config
 
-        return boto3.client("s3")
+        if self._unsigned:
+            return boto3.client("s3", config=Config(signature_version=UNSIGNED))
+        else:
+            return boto3.client("s3")
 
     def exists(self) -> bool:
         """Whether this path exists on S3."""
