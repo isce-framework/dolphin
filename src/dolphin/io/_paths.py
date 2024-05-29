@@ -37,7 +37,7 @@ class S3Path(GeneralPath):
 
     Examples
     --------
-    >>> from orca.paths import S3Path
+    >>> from dolphin.paths import S3Path
     >>> s3_path = S3Path("s3://bucket/path/to/file.txt")
     >>> str(s3_path)
     's3://bucket/path/to/file.txt'
