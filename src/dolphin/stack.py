@@ -51,6 +51,12 @@ class BaseStack(BaseModel):
         description="Index of the SLC to use as reference during phase linking",
     )
 
+    model_config = {
+        # For the `Filename, so it can handle the `GeneralPath` protocol`
+        # https://github.com/pydantic/pydantic/discussions/5767
+        "arbitrary_types_allowed": True
+    }
+
     @field_validator("dates", mode="before")
     @classmethod
     def _check_if_not_tuples(cls, v):
@@ -189,6 +195,12 @@ class CompressedSlcInfo(BaseModel):
         Path(),
         description="Folder/location where ministack will write outputs to.",
     )
+
+    model_config = {
+        # For the `Filename, so it can handle the `GeneralPath` protocol`
+        # https://github.com/pydantic/pydantic/discussions/5767
+        "arbitrary_types_allowed": True
+    }
 
     @field_validator("real_slc_dates", mode="before")
     @classmethod

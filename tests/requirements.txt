@@ -1,10 +1,12 @@
 asv
 black
+boto3
 flake8
 pooch
 pre-commit
 pytest
 pytest-cov
 pytest-randomly # control random seed
+pytest-vcr # record and replay HTTP requests
 pytest-xdist # parallel tests: https://pytest-xdist.readthedocs.io/en/latest/
 shapely

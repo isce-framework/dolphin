@@ -28,6 +28,7 @@ from dolphin._types import Filename
 from dolphin.io._blocks import iter_blocks
 
 from ._background import _DEFAULT_TIMEOUT, BackgroundReader
+from ._paths import S3Path
 from ._utils import _ensure_slices, _unpack_3d_slices
 
 logger = logging.getLogger(__name__)
@@ -715,7 +716,10 @@ class VRTStack(StackReader):
 
         # files: list[Filename] = [Path(f) for f in file_list]
         self._use_abs_path = use_abs_path
-        if use_abs_path:
+        files: list[Filename | S3Path]
+        if any(str(f).startswith("s3://") for f in file_list):
+            files = [S3Path(str(f)) for f in file_list]
+        elif use_abs_path:
             files = [utils._resolve_gdal_path(p) for p in file_list]
         else:
             files = list(file_list)
@@ -808,12 +812,18 @@ class VRTStack(StackReader):
         ds = None
 
     @property
-    def _gdal_file_strings(self):
+    def _gdal_file_strings(self) -> list[str]:
         """Get the GDAL-compatible paths to write to the VRT.
 
         If we're not using .h5 or .nc, this will just be the file_list as is.
         """
-        return [io.format_nc_filename(f, self.subdataset) for f in self.file_list]
+        out = []
+        for f in self.file_list:
+            if isinstance(f, S3Path):
+                out.append(f.to_gdal())
+            else:
+                out.append(io.format_nc_filename(f, self.subdataset))
+        return out
 
     def __fspath__(self):
         # Allows os.fspath() to work on the object, enabling rasterio.open()
