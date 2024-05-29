@@ -14,7 +14,7 @@ from pydantic import (
 )
 
 from dolphin._log import get_log
-from dolphin._types import TropoModel, TropoType
+from dolphin._types import GeneralPath, TropoModel, TropoType
 
 from ._common import (
     InputOptions,
@@ -98,18 +98,40 @@ class CorrectionOptions(BaseModel, extra="forbid"):
         return v if v is not None else []
 
 
+import json
+
+from pydantic import (
+    PlainSerializer,
+    WithJsonSchema,
+    field_serializer,
+)
+from typing_extensions import Annotated
+
+CslcFileList = Annotated[
+    list[GeneralPath],
+    # PlainSerializer(lambda x: f"{x:.1e}", return_type=str),
+    PlainSerializer(lambda x: json.dumps([str(f) for f in x]), return_type=str),
+    WithJsonSchema({"type": "string"}, mode="serialization"),
+]
+
+
 class DisplacementWorkflow(WorkflowBase):
     """Configuration for the workflow."""
 
     # Paths to input/output files
     input_options: InputOptions = Field(default_factory=InputOptions)
-    cslc_file_list: list[Path] = Field(
+    cslc_file_list: CslcFileList = Field(
         default_factory=list,
         description=(
             "list of CSLC files, or newline-delimited file "
             "containing list of CSLC files."
         ),
     )
+
+    @field_serializer("cslc_file_list")
+    def _serialize_cslc_file_list(self, cslc_file_list: list[GeneralPath]) -> str:
+        return json.dumps([str(f) for f in cslc_file_list])
+
     output_options: OutputOptions = Field(default_factory=OutputOptions)
 
     # Options for each step in the workflow
@@ -140,7 +162,9 @@ class DisplacementWorkflow(WorkflowBase):
     # internal helpers
     # Stores the list of directories to be created by the workflow
     model_config = ConfigDict(
-        extra="allow", json_schema_extra={"required": ["cslc_file_list"]}
+        extra="allow",
+        json_schema_extra={"required": ["cslc_file_list"]},
+        arbitrary_types_allowed=True,
     )
 
     # validators
