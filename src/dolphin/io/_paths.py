@@ -37,7 +37,7 @@ class S3Path(GeneralPath):
 
     Examples
     --------
-    >>> from dolphin.paths import S3Path
+    >>> from dolphin.io import S3Path
     >>> s3_path = S3Path("s3://bucket/path/to/file.txt")
     >>> str(s3_path)
     's3://bucket/path/to/file.txt'
@@ -118,6 +118,10 @@ class S3Path(GeneralPath):
     @property
     def suffix(self):
         return self.path.suffix
+
+    def resolve(self) -> S3Path:
+        """Resolve the path to an absolute path- S3 paths are always absolute."""
+        return self
 
     def _get_client(self):
         import boto3
