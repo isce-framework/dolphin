@@ -9,10 +9,10 @@ from numpy.linalg import lstsq as lstsq_numpy
 from dolphin import io, timeseries
 from dolphin.utils import format_dates
 
-NUM_DATES = 10
+NUM_DATES = 100
 DT = 12
 START_DATE = datetime(2020, 1, 1)
-SHAPE = 50, 50
+SHAPE = 500, 500
 VELO_RAD_PER_DAY = 0.2  # rad / day
 
 
@@ -210,6 +210,13 @@ class TestVelocity:
 
         weights = np.ones_like(sar_phases)
         velocities = timeseries.estimate_velocity(x_arr, sar_phases, weights)
+        assert velocities.shape == (SHAPE[0], SHAPE[1])
+        npt.assert_allclose(velocities, expected_velo, atol=1e-5)
+
+    def test_stack_unweighted(self, data, x_arr, expected_velo):
+        sar_dates, sar_phases, ifg_date_pairs, ifgs = data
+
+        velocities = timeseries.estimate_velocity(x_arr, sar_phases, None)
         assert velocities.shape == (SHAPE[0], SHAPE[1])
         npt.assert_allclose(velocities, expected_velo, atol=1e-5)
 

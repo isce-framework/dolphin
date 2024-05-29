@@ -377,7 +377,7 @@ def estimate_velocity_pixel(x: ArrayLike, y: ArrayLike, w: ArrayLike) -> Array:
 
 @jit
 def estimate_velocity(
-    x_arr: ArrayLike, unw_stack: ArrayLike, weight_stack: ArrayLike
+    x_arr: ArrayLike, unw_stack: ArrayLike, weight_stack: ArrayLike | None
 ) -> Array:
     """Estimate the velocity from a stack of unwrapped interferograms.
 
@@ -388,9 +388,9 @@ def estimate_velocity(
         Length must match `unw_stack.shape[0]`.
     unw_stack : ArrayLike
         Array of unwrapped phase values at each pixel, shape=`(n_time, n_rows, n_cols)`.
-    weight_stack : ArrayLike
+    weight_stack : ArrayLike, optional
         Array of weights for each pixel, shape=`(n_time, n_rows, n_cols)`.
-        If not provided, all weights are set to 1.
+        If not provided, performs one batch unweighted linear fit.
 
     Returns
     -------
@@ -402,15 +402,18 @@ def estimate_velocity(
     # TODO: weighted least squares using correlation?
     n_time, n_rows, n_cols = unw_stack.shape
 
-    # We use the same x inputs for all output pixels
-    assert unw_stack.shape == weight_stack.shape
     unw_pixels = unw_stack.reshape(n_time, -1)
-    weights_pixels = weight_stack.reshape(n_time, 1, -1)
+    if weight_stack is None:
+        # For jnp.polyfit(...), coeffs[0] is slope, coeffs[1] is the intercept
+        velos = jnp.polyfit(x_arr, unw_pixels, deg=1, rcond=None)[0]
+    else:
+        # We use the same x inputs for all output pixels
+        assert unw_stack.shape == weight_stack.shape
+        weights_pixels = weight_stack.reshape(n_time, 1, -1)
 
-    # coeffs = jnp.polyfit(x_arr, unw_pixels, deg=1, rcond=None)
-    velos = vmap(estimate_velocity_pixel, in_axes=(None, -1, -1))(
-        x_arr, unw_pixels, weights_pixels
-    )
+        velos = vmap(estimate_velocity_pixel, in_axes=(None, -1, -1))(
+            x_arr, unw_pixels, weights_pixels
+        )
     return velos.reshape(n_rows, n_cols)
 
 
@@ -510,6 +513,7 @@ def create_velocity(
 
     # Read in the reference point
     ref_row, ref_col = reference
+    logger.info(f"Reading phase reference pixel {reference}")
     ref_data = unw_reader[:, ref_row, ref_col].reshape(-1, 1, 1)
 
     def read_and_fit(
@@ -523,7 +527,8 @@ def create_velocity(
             weights[weights < cor_threshold] = 0
         else:
             unw_stack = readers[0][:, rows, cols]
-            weights = np.ones_like(unw_stack)
+            # weights = np.ones_like(unw_stack)
+            weights = None
         # Reference the data
         unw_stack = unw_stack - ref_data
         # Fit a line to each pixel with weighted least squares
