@@ -1,4 +1,3 @@
-import warnings
 from pathlib import Path
 
 import numpy as np
@@ -6,7 +5,6 @@ import numpy.testing as npt
 import pytest
 import rasterio as rio
 from osgeo import gdal
-from rasterio.errors import NotGeoreferencedWarning
 
 from dolphin.io._readers import (
     BinaryReader,
@@ -25,20 +23,6 @@ from dolphin.utils import _get_path_from_gdal_str
 
 # Get combinations of slices
 slices_to_test = [slice(None), 1, slice(0, 10, 2)]
-
-
-# Filter rasterio georeferencing warnings
-@pytest.fixture(autouse=True)
-def suppress_not_georeferenced_warning():
-    """
-    Pytest fixture to suppress NotGeoreferencedWarning in tests.
-
-    This fixture automatically applies to all test functions in the module
-    where it's defined, suppressing the specified warning.
-    """
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", category=NotGeoreferencedWarning)
-        yield
 
 
 @pytest.fixture(scope="module")

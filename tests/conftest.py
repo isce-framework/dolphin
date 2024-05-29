@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import datetime
 import os
+import warnings
 from pathlib import Path
 
 import numpy as np
 import pytest
 from make_netcdf import create_test_nc
 from osgeo import gdal
+from rasterio.errors import NotGeoreferencedWarning
 
 # https://numba.readthedocs.io/en/stable/user/threading-layer.html#example-of-limiting-the-number-of-threads
 if not os.environ.get("NUMBA_NUM_THREADS"):
@@ -19,6 +21,20 @@ from dolphin.io import load_gdal, write_arr
 from dolphin.phase_link import simulate
 
 NUM_ACQ = 30
+
+
+# Filter rasterio georeferencing warnings
+@pytest.fixture(autouse=True)
+def suppress_not_georeferenced_warning():
+    """
+    Pytest fixture to suppress NotGeoreferencedWarning in tests.
+
+    This fixture automatically applies to all test functions in the module
+    where it's defined, suppressing the specified warning.
+    """
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", category=NotGeoreferencedWarning)
+        yield
 
 
 # https://github.com/pytest-dev/pytest/issues/667#issuecomment-112206152
