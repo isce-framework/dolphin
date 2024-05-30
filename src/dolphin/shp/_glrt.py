@@ -174,9 +174,9 @@ def _loop_over_pixels(
                     r_off = in_r2 - r_start
                     c_off = in_c2 - c_start
 
-                    # itself is always a neighbor
+                    # Don't count itself as a neighbor
                     if in_r2 == in_r and in_c2 == in_c:
-                        is_shp[out_r, out_c, r_off, c_off] = True
+                        is_shp[out_r, out_c, r_off, c_off] = False
                         continue
                     scale_2 = scale_squared[in_r2, in_c2]
 
