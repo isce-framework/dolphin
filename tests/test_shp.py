@@ -69,7 +69,7 @@ def test_shp_glrt(mean, var):
 
     # Check the edges are cut off
     top_left = neighbors[0, 0]
-    assert top_left[:5, :5].all()
+    assert top_left[:5, :5].sum() == 5 * 5 - 1
     assert top_left[6:, :].sum() == top_left[:, 6:].sum() == 0
 
 
@@ -87,7 +87,7 @@ def test_shp_ks(slcs):
     )
     shps_mid_pixel = neighbors[5, 5]
     # Check that everything is counted as a neighbor
-    assert shps_mid_pixel.all()
+    assert shps_mid_pixel.sum() == shps_mid_pixel.size - 1
 
     # Check the edges are cut off and all zeros
     # NOTE: this is different than TF test since KS is slower
@@ -104,8 +104,7 @@ def test_shp_ks(slcs):
         method="ks",
     )
     shps_mid_pixel = neighbors[5, 5]
-    assert shps_mid_pixel.sum() == 1  # only itself
-    assert shps_mid_pixel[5, 5] == 1
+    assert shps_mid_pixel.sum() == 0  # only itself
 
 
 def test_shp_half_mean_different(mean, var):
@@ -130,7 +129,8 @@ def test_shp_half_mean_different(mean, var):
     )
     shps_mid_pixel = neighbors[5, 5]
     # Check that everything is counted as a neighbor
-    assert shps_mid_pixel[5:, :].all()
+    top_block = shps_mid_pixel[5:, :]
+    assert top_block.sum() == top_block.size - 1
     assert not shps_mid_pixel[:5, :].any()
 
 
@@ -155,8 +155,8 @@ def test_shp_half_var_different(mean, var):
         method=method,
     )
     shps_mid_pixel = neighbors[5, 5]
-    # Check that everything is counted as a neighbor
-    assert shps_mid_pixel[5:, :].all()
+    top_block = shps_mid_pixel[5:, :]
+    assert top_block.sum() == top_block.size - 1
     assert not shps_mid_pixel[:5, :].any()
 
 

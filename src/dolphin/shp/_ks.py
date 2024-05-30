@@ -156,7 +156,7 @@ def _set_neighbors(amp_block, halfwin_rowcol, ecdf_dist_cutoff, neighbors):
     for i in range(rows):
         for j in range(cols):
             if i == r_c and j == c_c:
-                neighbors[i, j] = True
+                neighbors[i, j] = False
                 continue
             x2 = amp_block[:, i, j]
 
