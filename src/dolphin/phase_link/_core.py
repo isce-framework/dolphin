@@ -45,6 +45,9 @@ class PhaseLinkOutput(NamedTuple):
     A goodness of fit parameter from 0 to 1 at each pixel.
     """
 
+    shp_counts: np.ndarray
+    """Number of neighbor pixels used in adaptive multilooking."""
+
     eigenvalues: np.ndarray
     """The smallest (largest) eigenvalue resulting from EMI (EVD)."""
 
@@ -186,6 +189,12 @@ def run_phase_linking(
     else:
         cpx_phase = np.exp(1j * np.angle(cpl_out.cpx_phase))
 
+    # Get the SHP counts for each pixel (if not using Rect window)
+    if neighbor_arrays is None:
+        shp_counts = np.zeros(cpl_out.cpx_phase.shape[-2:], dtype=np.int16)
+    else:
+        shp_counts = np.sum(neighbor_arrays, axis=(-2, -1))
+
     # Get the smaller, looked versions of the masks
     # We zero out nodata if all pixels within the window had nodata
     mask_looked = take_looks(nodata_mask, *strides, func_type="all")
@@ -210,12 +219,13 @@ def run_phase_linking(
     temp_coh[mask_looked] = np.nan
 
     return PhaseLinkOutput(
-        cpx_phase,
-        temp_coh,
+        cpx_phase=cpx_phase,
+        temp_coh=temp_coh,
+        shp_counts=shp_counts,
         # Convert the rest to numpy for writing
-        np.array(cpl_out.eigenvalues),
-        np.array(cpl_out.estimator),
-        cpl_out.avg_coh,
+        eigenvalues=np.array(cpl_out.eigenvalues),
+        estimator=np.array(cpl_out.estimator),
+        avg_coh=cpl_out.avg_coh,
     )
 
 

@@ -119,10 +119,10 @@ def run_wrapped_phase_single(
         OutputFile(
             output_folder / f"temporal_coherence_{start_end}.tif", np.float32, strides
         ),
+        OutputFile(output_folder / f"shp_counts_{start_end}.tif", np.uint16, strides),
         OutputFile(output_folder / f"eigenvalues_{start_end}.tif", np.float32, strides),
         OutputFile(output_folder / f"estimator_{start_end}.tif", np.int8, strides),
         OutputFile(output_folder / f"avg_coh_{start_end}.tif", np.uint16, strides),
-        OutputFile(output_folder / f"shp_counts_{start_end}.tif", np.uint16, strides),
     ]
     for op in output_files:
         io.write_arr(
@@ -230,12 +230,6 @@ def run_wrapped_phase_single(
         ):
             writer.queue_write(img, f, out_rows.start, out_cols.start)
 
-        # Get the SHP counts for each pixel (if not using Rect window)
-        if neighbor_arrays is None:
-            shp_counts = np.zeros(pl_output.cpx_phase.shape[-2:], dtype=np.int16)
-        else:
-            shp_counts = np.sum(neighbor_arrays, axis=(-2, -1))
-
         # Compress the ministack using only the non-compressed SLCs
         cur_comp_slc = compress(
             # Get the inner portion of the full-res SLC data
@@ -256,10 +250,10 @@ def run_wrapped_phase_single(
         # All other outputs are strided (smaller in size)
         out_datas = [
             pl_output.temp_coh,
+            pl_output.shp_counts,
             pl_output.eigenvalues,
             pl_output.estimator,
             pl_output.avg_coh,
-            shp_counts,
         ]
         for data, output_file in zip(out_datas, output_files[1:]):
             if data is None:  # May choose to skip some outputs, e.g. "avg_coh"
