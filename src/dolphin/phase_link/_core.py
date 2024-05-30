@@ -309,7 +309,7 @@ def run_cpl(
 
     # Get the SHP counts for each pixel (if not using Rect window)
     if neighbor_arrays is None:
-        shp_counts = jnp.zeros(slc_stack.shape[-2:], dtype=np.int16)
+        shp_counts = jnp.zeros(temp_coh.shape, dtype=np.int16)
     else:
         shp_counts = jnp.sum(neighbor_arrays, axis=(-2, -1))
 
