@@ -148,6 +148,7 @@ def run(
         logger.info(f"Skipping EVD step, {len(phase_linked_slcs)} files already exist")
         comp_slc_list = sorted(pl_path.glob("compressed*tif"))
         temp_coh_file = next(pl_path.glob("temporal_coherence*tif"))
+        shp_count_file = next(pl_path.glob("shp_count*tif"))
     else:
         logger.info(f"Running sequential EMI step in {pl_path}")
         kwargs = tqdm_kwargs | {"desc": f"Phase linking ({pl_path})"}
