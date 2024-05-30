@@ -8,7 +8,7 @@ from numpy.typing import ArrayLike
 from dolphin._log import get_log
 from dolphin.workflows import ShpMethod
 
-from . import _glrt, _kld, _ks
+from . import _glrt, _ks
 
 logger = get_log(__name__)
 
@@ -66,7 +66,7 @@ def estimate_neighbors(
     Raises
     ------
     ValueError
-        - nslc is not provided for GLRT/KLD methods
+        - nslc is not provided for GLRT method
         - amp_stack is not provided for the KS method.
         - `method` not a valid `ShpMethod`
 
@@ -76,11 +76,6 @@ def estimate_neighbors(
     if strides is None:
         strides = {"x": 1, "y": 1}
     logger.debug(f"NUMBA THREADS: {numba.get_num_threads()}")
-    if method.lower() in (ShpMethod.KLD, ShpMethod.GLRT):
-        if mean is None:
-            mean = np.mean(amp_stack, axis=0)
-        if var is None:
-            var = np.var(amp_stack, axis=0)
 
     if method == ShpMethod.RECT:
         # No estimation needed
@@ -90,21 +85,11 @@ def estimate_neighbors(
         if nslc is None:
             msg = "`nslc` must be provided for GLRT method"
             raise ValueError(msg)
+        if mean is None:
+            mean = np.mean(amp_stack, axis=0)
+        if var is None:
+            var = np.var(amp_stack, axis=0)
         neighbor_arrays = _glrt.estimate_neighbors(
-            mean=mean,
-            var=var,
-            halfwin_rowcol=halfwin_rowcol,
-            strides=strides,
-            nslc=nslc,
-            alpha=alpha,
-            prune_disconnected=prune_disconnected,
-        )
-    elif method.lower() == ShpMethod.KLD:
-        logger.debug("Estimating SHP neighbors using KLD")
-        if nslc is None:
-            msg = "`nslc` must be provided for GLRT method"
-            raise ValueError(msg)
-        neighbor_arrays = _kld.estimate_neighbors(
             mean=mean,
             var=var,
             halfwin_rowcol=halfwin_rowcol,

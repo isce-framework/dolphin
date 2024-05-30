@@ -45,6 +45,9 @@ class PhaseLinkOutput(NamedTuple):
     A goodness of fit parameter from 0 to 1 at each pixel.
     """
 
+    shp_counts: np.ndarray
+    """Number of neighbor pixels used in adaptive multilooking."""
+
     eigenvalues: np.ndarray
     """The smallest (largest) eigenvalue resulting from EMI (EVD)."""
 
@@ -210,12 +213,13 @@ def run_phase_linking(
     temp_coh[mask_looked] = np.nan
 
     return PhaseLinkOutput(
-        cpx_phase,
-        temp_coh,
+        cpx_phase=cpx_phase,
+        temp_coh=temp_coh,
+        shp_counts=np.asarray(cpl_out.shp_counts),
         # Convert the rest to numpy for writing
-        np.array(cpl_out.eigenvalues),
-        np.array(cpl_out.estimator),
-        cpl_out.avg_coh,
+        eigenvalues=np.asarray(cpl_out.eigenvalues),
+        estimator=np.asarray(cpl_out.estimator),
+        avg_coh=cpl_out.avg_coh,
     )
 
 
@@ -300,6 +304,15 @@ def run_cpl(
     # Get the temporal coherence
     temp_coh = metrics.estimate_temp_coh(cpx_phase, C_arrays)
 
+    # Reshape the (rows, cols, nslcs) output to be same as input stack
+    cpx_phase_reshaped = jnp.moveaxis(cpx_phase, -1, 0)
+
+    # Get the SHP counts for each pixel (if not using Rect window)
+    if neighbor_arrays is None:
+        shp_counts = jnp.zeros(temp_coh.shape, dtype=np.int16)
+    else:
+        shp_counts = jnp.sum(neighbor_arrays, axis=(-2, -1))
+
     if calc_average_coh:
         # If requested, average the Cov matrix at each row for reference selection
         avg_coh_per_date = jnp.abs(C_arrays).mean(axis=3)
@@ -307,10 +320,13 @@ def run_cpl(
     else:
         avg_coh = None
 
-    # Reshape the (rows, cols, nslcs) output to be same as input stack
-    cpx_phase_reshaped = jnp.moveaxis(cpx_phase, -1, 0)
     return PhaseLinkOutput(
-        cpx_phase_reshaped, temp_coh, eigenvalues, estimator, avg_coh
+        cpx_phase=cpx_phase_reshaped,
+        temp_coh=temp_coh,
+        shp_counts=shp_counts,
+        eigenvalues=eigenvalues,
+        estimator=estimator,
+        avg_coh=avg_coh,
     )
 
 
