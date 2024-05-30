@@ -1,9 +1,19 @@
 from __future__ import annotations
 
+import shutil
+import tempfile
+from os import fspath
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from dolphin._types import Index
+
+__all__ = [
+    "get_gtiff_options",
+    "repack_raster",
+    "repack_rasters",
+]
 
 
 def _ensure_slices(rows: Index, cols: Index) -> tuple[slice, slice]:
@@ -34,3 +44,138 @@ def _unpack_3d_slices(key: tuple[Index, ...]) -> tuple[Index, slice, slice]:
     # convert the rows/cols to slices
     r_slice, c_slice = _ensure_slices(rows, cols)
     return bands, r_slice, c_slice
+
+
+def get_gtiff_options(
+    max_error: float | None = None,
+    compression_type: str = "lzw",
+    chunk_size: int = 256,
+    predictor: int | None = None,
+    zlevel: int | None = 1,
+    gdal_format: bool = True,
+) -> list[str] | dict[str, str]:
+    """Generate GTiff creation options for GDAL translate.
+
+    Parameters
+    ----------
+    max_error : float
+        Maximum compression error.
+    compression_type : str, optional
+        Compression type to use (default is "lzw").
+    chunk_size : int, optional
+        Size of the chunks for blockxsize and blockysize (default is 256).
+    predictor : int or None, optional
+        Predictor type to use (default is 3). Use None to omit the predictor.
+    zlevel : int or None, optional
+        Compression level for the 'deflate' and 'zstd' compression types (default is 1).
+        Use None to omit the zlevel.
+    gdal_format: bool, default = True
+        Output as a list of -co strings for creation options.
+        Otherwise, outputs a dict usable in rasterio.
+
+    Returns
+    -------
+    dict[str, str] | list[str]
+        List of GTiff creation options formatted for GDAL (if `gdal_format=True`)
+        Otherwise, a dict mapping option to value for rasterio.
+
+    """
+    options = {
+        "bigtiff": "yes",
+        "tiled": "yes",
+        "blockxsize": str(chunk_size),
+        "blockysize": str(chunk_size),
+        "compress": compression_type,
+    }
+    if zlevel is not None:
+        options["zlevel"] = str(zlevel)
+    if predictor is not None:
+        options["predictor"] = str(predictor)
+    if compression_type.lower().startswith("lerc") and max_error is not None:
+        options["max_z_error"] = str(max_error)
+
+    if gdal_format:
+        return [f"{k.upper()}={v}" for k, v in options.items()]
+    else:
+        return options
+
+
+def repack_raster(
+    raster_path: Path, output_dir: Path | None = None, **output_options
+) -> Path:
+    """Repack a single raster file with GDAL Translate using provided options.
+
+    Parameters
+    ----------
+    raster_path : Path
+        Path to the input raster file.
+    output_dir : Path, optional
+        Directory to save the repacked rasters or None for in-place repacking.
+    **output_options
+        Keyword args passed to `get_gtiff_options`
+
+    Returns
+    -------
+    output_path : Path
+        Path to newly created file.
+        If `output_dir` is None, this will be the same filename as `raster_path`
+
+    """
+    from osgeo import gdal
+
+    if output_dir is None:
+        output_file = tempfile.NamedTemporaryFile(
+            suffix=raster_path.suffix, dir=output_dir, delete=False
+        )
+        output_path = Path(output_file.name)
+    else:
+        output_dir.mkdir(parents=True, exist_ok=True)
+        output_path = output_dir / raster_path.name
+
+    options = get_gtiff_options(**output_options, gdal_format=True)
+    gdal.Translate(fspath(output_path), fspath(raster_path), creationOptions=options)
+
+    if output_dir is None:
+        # Overwrite the original
+        shutil.move(output_path, raster_path)
+        output_path = raster_path
+    return output_path
+
+
+def repack_rasters(
+    raster_files: list[Path],
+    output_dir: Path | None = None,
+    num_threads: int = 4,
+    **output_options,
+):
+    """Recreate and compress a list of raster files.
+
+    Useful for rasters which were created in block and lost
+    the full effect of compression.
+
+    Parameters
+    ----------
+    raster_files : List[Path]
+        List of paths to the input raster files.
+    output_dir : Path, optional
+        Directory to save the processed rasters or None for in-place processing.
+    num_threads : int, optional
+        Number of threads to use (default is 4).
+    **output_options
+        Creation options to pass to `get_gtiff_options`
+
+    Returns
+    -------
+    output_path : Path
+        Path to newly created file.
+        If `output_dir` is None, this will be the same as `raster_paths`
+
+    """
+    from tqdm.contrib.concurrent import thread_map
+
+    thread_map(
+        lambda raster: repack_raster(raster, output_dir, **output_options),
+        raster_files,
+        max_workers=num_threads,
+        desc="Processing Rasters",
+    )
