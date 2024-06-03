@@ -52,8 +52,7 @@ def get_gtiff_options(
     chunk_size: int = 256,
     predictor: int | None = None,
     zlevel: int | None = 1,
-    gdal_format: bool = True,
-) -> list[str] | dict[str, str]:
+) -> dict[str, str]:
     """Generate GTiff creation options for GDAL translate.
 
     Parameters
@@ -70,8 +69,6 @@ def get_gtiff_options(
         Compression level for the 'deflate' and 'zstd' compression types (default is 1).
         Use None to omit the zlevel.
     gdal_format: bool, default = True
-        Output as a list of -co strings for creation options.
-        Otherwise, outputs a dict usable in rasterio.
 
     Returns
     -------
@@ -94,10 +91,24 @@ def get_gtiff_options(
     if compression_type.lower().startswith("lerc") and max_error is not None:
         options["max_z_error"] = str(max_error)
 
-    if gdal_format:
-        return [f"{k.upper()}={v}" for k, v in options.items()]
-    else:
-        return options
+    return options
+
+
+def _format_for_gdal(options: dict[str, str]) -> list[str]:
+    """Output creation options as a list of -co strings for GDAL.
+
+    Parameters
+    ----------
+    options : dict[str, str]
+        Dict of creation options usable in Rasterio.
+
+    Returns
+    -------
+    list[str]
+        List -co options for GDAL.
+
+    """
+    return [f"{k.upper()}={v}" for k, v in options.items()]
 
 
 def repack_raster(
@@ -132,7 +143,7 @@ def repack_raster(
         output_dir.mkdir(parents=True, exist_ok=True)
         output_path = output_dir / raster_path.name
 
-    options = get_gtiff_options(**output_options, gdal_format=True)
+    options = _format_for_gdal(get_gtiff_options(**output_options))
     gdal.Translate(fspath(output_path), fspath(raster_path), creationOptions=options)
 
     if output_dir is None:

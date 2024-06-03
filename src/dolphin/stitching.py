@@ -259,6 +259,7 @@ def merge_images(
         projWin=proj_win,
         resampleAlg=resample_alg,
         format=driver,
+        creationOptions=options,
     )
 
     temp_dir.cleanup()
