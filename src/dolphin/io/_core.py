@@ -567,6 +567,7 @@ def write_block(
     filename: Filename,
     row_start: int,
     col_start: int,
+    dset: str | None = None,
 ):
     """Write out an ndarray to a subset of the pre-made `filename`.
 
@@ -580,6 +581,9 @@ def write_block(
         Row index to start writing at.
     col_start : int
         Column index to start writing at.
+    dset : str
+        (For writing to HDF5/NetCDF files) The name of the string dataset
+        withing `filename` to write to.
 
     Raises
     ------
@@ -597,7 +601,9 @@ def write_block(
         raise ValueError(msg)
 
     if filename.suffix in (".h5", ".hdf5", ".nc"):
-        _write_hdf5(cur_block, filename, row_start, col_start)
+        if dset is None:
+            raise ValueError("Missing `dset` argument for writing to HDF5")
+        _write_hdf5(cur_block, filename, row_start, col_start, dset)
     else:
         _write_gdal(cur_block, filename, row_start, col_start)
 
@@ -624,12 +630,16 @@ def _write_hdf5(
     filename: Filename,
     row_start: int,
     col_start: int,
+    dset: str,
 ):
     nrows, ncols = cur_block.shape[-2:]
     row_slice = slice(row_start, row_start + nrows)
     col_slice = slice(col_start, col_start + ncols)
     with h5py.File(filename, "a") as hf:
-        hf[row_slice, col_slice] = cur_block
+        ds = hf[dset]
+        ds.write_direct(
+            cur_block, source_sel=None, dest_sel=np.s_[row_slice, col_slice]
+        )
 
 
 @dataclass
