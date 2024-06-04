@@ -338,7 +338,7 @@ def run(
         stitched_amp_dispersion_file=stitched_amp_dispersion_file,
         stitched_shp_count_file=stitched_shp_count_file,
         unwrapped_paths=unwrapped_paths,
-        # TODO: Let's keep the uwrapped_paths since all the outputs are
+        # TODO: Let's keep the unwrapped_paths since all the outputs are
         # corresponding to those and if we have a network unwrapping, the
         # inversion would create different single-reference network and we need
         # to update other products like conncomp

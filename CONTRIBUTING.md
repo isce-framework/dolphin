@@ -49,12 +49,13 @@ pre-commit install
 
 This will set up the linters and formatters to run on any staged files before you commit them.
 
-It is recommended to install [`ruff]`(https://docs.astral.sh/ruff/) into your editor so that the linting/formatting problems will be evident to you before you try to commit.
+It is recommended to install [`ruff`](https://docs.astral.sh/ruff/) into your editor so that the linting/formatting problems will be evident to you before you try to commit.
 
 ## Running tests
 
 After making functional changes, you can rerun the existing tests using [`pytest`](https://docs.pytest.org).
 The extra packages required for testing can be installed:
+
 ```bash
 # Run "pip install -e" to install with extra development requirements
 python -m pip install -e ".[test]"
