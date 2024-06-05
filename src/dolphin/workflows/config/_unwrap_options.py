@@ -126,21 +126,6 @@ class TophuOptions(BaseModel, extra="forbid"):
     _to_tuple = field_validator("ntiles", "downsample_factor", mode="before")(to_tuple)
 
 
-class SpurtOptions(BaseModel, extra="forbid"):
-    """Options for running 3D unwrapping on a set of interferograms.
-
-    Uses [`spurt`](https://github.com/isce-framework/spurt) to run the
-    temporal/spatial unwrapping. Options are passed through to `spurt`
-    library.
-
-    """
-
-    general_settings: SpurtGeneralSettings
-    tiler_settings: SpurtTilerSettings
-    solver_settings: SpurtSolverSettings
-    merger_settings: SpurtMergerSettings
-
-
 @dataclass
 class SpurtGeneralSettings:
     """Settings associated with breaking data into tiles.
@@ -286,6 +271,21 @@ class SpurtMergerSettings:
             raise ValueError(errmsg)
 
 
+class SpurtOptions(BaseModel, extra="forbid"):
+    """Options for running 3D unwrapping on a set of interferograms.
+
+    Uses [`spurt`](https://github.com/isce-framework/spurt) to run the
+    temporal/spatial unwrapping. Options are passed through to `spurt`
+    library.
+
+    """
+
+    general_settings: SpurtGeneralSettings = Field(default_factory=SpurtGeneralSettings)
+    tiler_settings: SpurtTilerSettings = Field(default_factory=SpurtTilerSettings)
+    solver_settings: SpurtSolverSettings = Field(default_factory=SpurtSolverSettings)
+    merger_settings: SpurtMergerSettings = Field(default_factory=SpurtMergerSettings)
+
+
 class UnwrapOptions(BaseModel, extra="forbid"):
     """Options for unwrapping after wrapped phase estimation."""
 
@@ -319,4 +319,4 @@ class UnwrapOptions(BaseModel, extra="forbid"):
     preprocess_options: PreprocessOptions = Field(default_factory=PreprocessOptions)
     snaphu_options: SnaphuOptions = Field(default_factory=SnaphuOptions)
     tophu_options: TophuOptions = Field(default_factory=TophuOptions)
-    # spurt_options: SpurtOptions = Field(default_factory=SpurtOptions)
+    spurt_options: SpurtOptions = Field(default_factory=SpurtOptions)
