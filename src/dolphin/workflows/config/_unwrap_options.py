@@ -61,6 +61,8 @@ class PreprocessOptions(BaseModel, extra="forbid"):
         description=(
             "(for Goldstein filtering) Power parameter for Goldstein algorithm."
         ),
+        ge=0.0,
+        le=1.0,
     )
     max_radius: int = Field(
         51,
