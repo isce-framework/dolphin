@@ -68,21 +68,29 @@ def filtering(
         n_zeros = np.count_nonzero(
             unw_ifg_interp[0 : NE[0] + 1, k] == 0
         )  # count zeros in North direction
+        if n_zeros == 0:
+            continue
         EV_fill[0:n_zeros, k] = EV_fill[n_zeros, k]
     for k in range(SW[1], SE[1] + 1):
         n_zeros = np.count_nonzero(
             unw_ifg_interp[SW[0] + 1 :, k] == 0
         )  # count zeros in South direction
+        if n_zeros == 0:
+            continue
         EV_fill[-n_zeros:, k] = EV_fill[-n_zeros - 1, k]
     for k in range(NW[0], SW[0] + 1):
         n_zeros = np.count_nonzero(
             unw_ifg_interp[k, 0 : NW[1] + 1] == 0
         )  # count zeros in North direction
+        if n_zeros == 0:
+            continue
         EV_fill[k, 0:n_zeros] = EV_fill[k, n_zeros]
     for k in range(NE[0], SE[0] + 1):
         n_zeros = np.count_nonzero(
             unw_ifg_interp[k, SE[1] + 1 :] == 0
         )  # count zeros in North direction
+        if n_zeros == 0:
+            continue
         EV_fill[k, -n_zeros:] = EV_fill[k, -n_zeros - 1]
 
     # Fill the boundary area reflecting the pixel values
@@ -92,11 +100,15 @@ def filtering(
         n_zeros = np.count_nonzero(
             unw_ifg_interp[0 : NE[0] + 1, k] == 0
         )  # count zeros in North direction
+        if n_zeros == 0:
+            continue
         Reflect_fill[0:n_zeros, k] = np.flipud(EV_fill[n_zeros : n_zeros + n_zeros, k])
     for k in range(SW[1], SE[1] + 1):
         n_zeros = np.count_nonzero(
             unw_ifg_interp[SW[0] + 1 :, k] == 0
         )  # count zeros in South direction
+        if n_zeros == 0:
+            continue
         Reflect_fill[-n_zeros:, k] = np.flipud(
             EV_fill[-n_zeros - n_zeros : -n_zeros, k]
         )
@@ -104,11 +116,15 @@ def filtering(
         n_zeros = np.count_nonzero(
             unw_ifg_interp[k, 0 : NW[1] + 1] == 0
         )  # count zeros in North direction
+        if n_zeros == 0:
+            continue
         Reflect_fill[k, 0:n_zeros] = np.flipud(EV_fill[k, n_zeros : n_zeros + n_zeros])
     for k in range(NE[0], SE[0] + 1):
         n_zeros = np.count_nonzero(
             unw_ifg_interp[k, SE[1] + 1 :] == 0
         )  # count zeros in North direction
+        if n_zeros == 0:
+            continue
         Reflect_fill[k, -n_zeros:] = np.flipud(
             EV_fill[k, -n_zeros - n_zeros : -n_zeros]
         )
