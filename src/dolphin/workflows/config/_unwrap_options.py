@@ -17,74 +17,46 @@ from ._enums import UnwrapMethod
 
 logger = get_log(__name__)
 
-__all__ = ["UnwrapOptions", "Unwrap3DOptions"]
+__all__ = [
+    "UnwrapOptions",
+    "PreprocessOptions",
+    "SnaphuOptions",
+    "TophuOptions",
+    "SpurtOptions",
+]
 
 
-class UnwrapOptions(BaseModel, extra="forbid"):
-    """Options for unwrapping after wrapped phase estimation."""
+def to_tuple(v: int | tuple[int, int] | None) -> tuple[int, int]:
+    """Convert the input value to a tuple of two integers.
 
-    run_unwrap: bool = Field(
-        True,
-        description=(
-            "Whether to run the unwrapping step after wrapped phase estimation."
-        ),
-    )
-    run_goldstein: bool = Field(
-        False,
-        description=(
-            "Whether to run Goldstein filtering step on wrapped interferogram."
-        ),
-    )
-    run_interpolation: bool = Field(
-        False,
-        description=("Whether to run interpolation step on wrapped interferogram."),
-    )
-    _directory: Path = PrivateAttr(Path("unwrapped"))
-    unwrap_method: UnwrapMethod = UnwrapMethod.SNAPHU
-    n_parallel_jobs: int = Field(
-        1, description="Number of interferograms to unwrap in parallel."
-    )
-    ntiles: tuple[int, int] = Field(
-        (1, 1),
-        description=(
-            "(`snaphu-py` or multiscale unwrapping) Number of tiles to split "
-            "the inputs into"
-        ),
-    )
-    downsample_factor: tuple[int, int] = Field(
-        (1, 1),
-        description=(
-            "(for multiscale unwrapping) Extra multilook factor to use for the coarse"
-            " unwrap."
-        ),
-    )
-    tile_overlap: tuple[int, int] = Field(
-        (0, 0),
-        description=(
-            "(for use in `snaphu-py`) Amount of tile overlap (in pixels) along the"
-            " (row, col) directions."
-        ),
-    )
-    n_parallel_tiles: int = Field(
-        1,
-        description=(
-            "(for snaphu) Number of tiles to unwrap in parallel for each interferogram."
-        ),
-    )
-    init_method: Literal["mcf", "mst"] = Field(
-        "mcf",
-        description="Initialization method for SNAPHU.",
-    )
-    cost: Literal["defo", "smooth"] = Field(
-        "smooth",
-        description="Statistical cost mode method for SNAPHU.",
-    )
-    zero_where_masked: bool = Field(
-        False,
-        description=(
-            "Set wrapped phase/correlation to 0 where mask is 0 before unwrapping. "
-        ),
-    )
+    Parameters
+    ----------
+    v : Union[int, Tuple[int, int], None]
+        The value to be converted.
+
+    Returns
+    -------
+    Tuple[int, int]
+        Tuple containing two integers.
+
+    Examples
+    --------
+    >>> to_tuple(3)
+    (3, 3)
+    >>> to_tuple((2, 4))
+    (2, 4)
+    >>> to_tuple(None)
+    (1, 1)
+
+    """
+    if v is None:
+        return (1, 1)
+    if isinstance(v, int):
+        return (v, v)
+    return v
+
+
+class PreprocessOptions(BaseModel, extra="forbid"):
     alpha: float = Field(
         0.5,
         description=(
@@ -105,20 +77,61 @@ class UnwrapOptions(BaseModel, extra="forbid"):
         le=1.0,
     )
 
-    @field_validator("ntiles", "downsample_factor", mode="before")
-    @classmethod
-    def _to_tuple(cls, v):
-        if v is None:
-            return (1, 1)
-        elif isinstance(v, int):
-            return (v, v)
-        return v
+
+class SnaphuOptions(BaseModel, extra="forbid"):
+    ntiles: tuple[int, int] = Field(
+        (1, 1),
+        description=(
+            "Number of tiles to split the inputs into using SNAPHU's internal tiling"
+        ),
+    )
+    tile_overlap: tuple[int, int] = Field(
+        (0, 0),
+        description=(
+            "Amount of tile overlap (in pixels) along the (row, col) directions."
+        ),
+    )
+    n_parallel_tiles: int = Field(
+        1,
+        description="Number of tiles to unwrap in parallel for each interferogram.",
+    )
+    init_method: Literal["mcf", "mst"] = Field(
+        "mcf",
+        description="Initialization method for SNAPHU.",
+    )
+    cost: Literal["defo", "smooth"] = Field(
+        "smooth",
+        description="Statistical cost mode method for SNAPHU.",
+    )
 
 
-class Unwrap3DOptions(BaseModel, extra="forbid"):
+class TophuOptions(BaseModel, extra="forbid"):
+    ntiles: tuple[int, int] = Field(
+        (1, 1),
+        description="Number of tiles to split the inputs into",
+    )
+    downsample_factor: tuple[int, int] = Field(
+        (1, 1),
+        description="Extra multilook factor to use for the coarse unwrap.",
+    )
+    init_method: Literal["mcf", "mst"] = Field(
+        "mcf",
+        description="Initialization method for SNAPHU.",
+    )
+    cost: Literal["defo", "smooth"] = Field(
+        "smooth",
+        description="Statistical cost mode method for SNAPHU.",
+    )
+
+    _to_tuple = field_validator("ntiles", "downsample_factor", mode="before")(to_tuple)
+
+
+class SpurtOptions(BaseModel, extra="forbid"):
     """Options for running 3D unwrapping on a set of interferograms.
 
-    Currently used in [`spurt`](https://github.com/isce-framework/spurt) only.
+    Uses [`spurt`](https://github.com/isce-framework/spurt) to run the
+    temporal/spatial unwrapping. Options are passed through to `spurt`
+    library.
 
     """
 
@@ -271,3 +284,39 @@ class SpurtMergerSettings:
         if self.method != "dirichlet":
             errmsg = f"'dirichlet' is the only valid option, got {self.method}"
             raise ValueError(errmsg)
+
+
+class UnwrapOptions(BaseModel, extra="forbid"):
+    """Options for unwrapping after wrapped phase estimation."""
+
+    run_unwrap: bool = Field(
+        True,
+        description=(
+            "Whether to run the unwrapping step after wrapped phase estimation."
+        ),
+    )
+    run_goldstein: bool = Field(
+        False,
+        description=(
+            "Whether to run Goldstein filtering step on wrapped interferogram."
+        ),
+    )
+    run_interpolation: bool = Field(
+        False,
+        description=("Whether to run interpolation step on wrapped interferogram."),
+    )
+    _directory: Path = PrivateAttr(Path("unwrapped"))
+    unwrap_method: UnwrapMethod = UnwrapMethod.SNAPHU
+    n_parallel_jobs: int = Field(
+        1, description="Number of interferograms to unwrap in parallel."
+    )
+    zero_where_masked: bool = Field(
+        False,
+        description=(
+            "Set wrapped phase/correlation to 0 where mask is 0 before unwrapping. "
+        ),
+    )
+    preprocess_options: PreprocessOptions = Field(default_factory=PreprocessOptions)
+    snaphu_options: SnaphuOptions = Field(default_factory=SnaphuOptions)
+    tophu_options: TophuOptions = Field(default_factory=TophuOptions)
+    # spurt_options: SpurtOptions = Field(default_factory=SpurtOptions)

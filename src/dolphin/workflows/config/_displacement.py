@@ -23,10 +23,10 @@ from ._common import (
     PhaseLinkingOptions,
     PsOptions,
     TimeseriesOptions,
-    UnwrapOptions,
     WorkflowBase,
     _read_file_list_or_glob,
 )
+from ._unwrap_options import UnwrapOptions
 
 __all__ = [
     "DisplacementWorkflow",
