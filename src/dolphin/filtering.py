@@ -49,16 +49,7 @@ def filtering(
     mask_boundary = ~(corr == 0).astype("bool")
 
     # Ramp plane fitting
-    Y = unw_ifg[mask]  # get data of non NaN & masked pixels
-    Xdata = np.argwhere(mask)  # get indices of non NaN & masked pixels
-    X = np.c_[np.ones((len(Xdata))), Xdata]
-    theta = np.dot(np.dot(np.linalg.pinv(np.dot(X.transpose(), X)), X.transpose()), Y)
-    X1_, X2_ = np.mgrid[:nrow, :ncol]
-    X_ = np.hstack(
-        (np.reshape(X1_, (nrow * ncol, 1)), np.reshape(X2_, (nrow * ncol, 1)))
-    )
-    X_ = np.hstack((np.ones((nrow * ncol, 1)), X_))
-    plane = np.reshape(np.dot(X_, theta), (nrow, ncol))
+    plane = fit_ramp_plane(unw_ifg, mask)
 
     # Replace masked out pixels with the ramp plane
     unw_ifg_interp = np.copy(unw_ifg)
@@ -67,6 +58,7 @@ def filtering(
     # Copy the edge pixels for the boundary area before filling them by reflection
     EV_fill = np.copy(unw_ifg_interp)
 
+    Xdata = np.argwhere(mask)  # Get indices of non-NaN & masked pixels
     NW = Xdata[np.argmin(Xdata[:, 0])]  # Get indices of upper left corner pixel
     SE = Xdata[np.argmax(Xdata[:, 0])]  # Get indices of lower right corner pixel
     SW = Xdata[np.argmin(Xdata[:, 1])]  # Get indices of lower left corner pixel
@@ -148,3 +140,43 @@ def filtering(
     filtered_ifg = unw_ifg - lowpass_filtered * mask_boundary
 
     return filtered_ifg
+
+
+def fit_ramp_plane(unw_ifg: ArrayLike, mask: ArrayLike) -> np.ndarray:
+    """Fit a ramp plane to the given data.
+
+    Parameters
+    ----------
+    unw_ifg : ArrayLike
+        2D array where the unwrapped interferogram data is stored.
+    mask : ArrayLike
+        2D boolean array indicating the valid (non-NaN) pixels.
+
+    Returns
+    -------
+    np.ndarray
+        2D array of the fitted ramp plane.
+
+    """
+    # Extract data for non-NaN & masked pixels
+    Y = unw_ifg[mask]
+    Xdata = np.argwhere(mask)  # Get indices of non-NaN & masked pixels
+
+    # Include the intercept term (bias) in the model
+    X = np.c_[np.ones((len(Xdata))), Xdata]
+
+    # Compute the parameter vector theta using the least squares solution
+    theta = np.linalg.pinv(X.T @ X) @ X.T @ Y
+
+    # Prepare grid for the entire image
+    nrow, ncol = unw_ifg.shape
+    X1_, X2_ = np.mgrid[:nrow, :ncol]
+    X_ = np.hstack(
+        (np.reshape(X1_, (nrow * ncol, 1)), np.reshape(X2_, (nrow * ncol, 1)))
+    )
+    X_ = np.hstack((np.ones((nrow * ncol, 1)), X_))
+
+    # Compute the fitted plane
+    plane = np.reshape(X_ @ theta, (nrow, ncol))
+
+    return plane
