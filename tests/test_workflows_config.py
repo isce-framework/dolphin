@@ -81,7 +81,7 @@ def test_interferogram_network_types():
 
 
 def test_unwrap_options_defaults():
-    opts = config.UnwrapOptions()
+    opts = config.UnwrapOptions().snaphu_options
     assert opts.unwrap_method == UnwrapMethod.SNAPHU
     assert opts.init_method == "mcf"
     assert opts._directory == Path("unwrapped")

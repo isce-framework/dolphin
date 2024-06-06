@@ -22,5 +22,5 @@ def unwrap_spurt(
         assert len(ifg_filenames) == len(cor_filenames)
     if mask_filename is not None:
         _mask = io.load_gdal(mask_filename)
-    assert options is not None  # Remove opon implementing
+    assert options is not None  # Remove upon implementing
     raise NotImplementedError()
