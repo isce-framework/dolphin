@@ -101,13 +101,18 @@ def create_config(
         },
         unwrap_options={
             "unwrap_method": unwrap_method,
-            "ntiles": ntiles,
-            "downsample_factor": downsample_factor,
-            "n_parallel_jobs": n_parallel_unwrap,
             "run_unwrap": not no_unwrap,
             "zero_where_masked": zero_where_masked,
             "run_goldstein": run_goldstein,
             "run_interpolation": run_interpolation,
+            "n_parallel_jobs": n_parallel_unwrap,
+            "snaphu_options": {
+                "ntiles": ntiles,
+            },
+            "tophu_options": {
+                "ntiles": ntiles,
+                "downsample_factor": downsample_factor,
+            },
         },
         timeseries_options={
             "run_inversion": not no_inversion,
