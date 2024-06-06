@@ -105,6 +105,8 @@ class SnaphuOptions(BaseModel, extra="forbid"):
         description="Statistical cost mode method for SNAPHU.",
     )
 
+    _to_tuple = field_validator("ntiles", "downsample_factor", mode="before")(to_tuple)
+
 
 class TophuOptions(BaseModel, extra="forbid"):
     ntiles: tuple[int, int] = Field(
@@ -129,12 +131,7 @@ class TophuOptions(BaseModel, extra="forbid"):
 
 class SpurtGeneralSettings(BaseModel):
     use_tiles: bool = Field(default=True, description="Tile up data spatially.")
-    intermediate_folder: Path = Field(
-        default=Path("./emcf_tmp"), description="Path to intermediate folder."
-    )
-    output_folder: Path = Field(
-        default=Path("./emcf"), description="Path to output folder."
-    )
+    _intermediate_folder: Path = PrivateAttr(Path("emcf_tmp"))
 
 
 class SpurtTilerSettings(BaseModel):
@@ -170,8 +167,8 @@ class SpurtSolverSettings(BaseModel):
     links_per_batch: int = Field(
         default=10000,
         description=(
-            "Temporal unwrapping operations over spatial links are performed in"
-            " batches and each batch is solved in parallel."
+            "Temporal unwrapping operations over spatial links are performed in "
+            "batches and each batch is solved in parallel."
         ),
         gt=0,
     )
