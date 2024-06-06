@@ -69,9 +69,11 @@ class PreprocessOptions(BaseModel, extra="forbid"):
     )
     interpolation_cor_threshold: float = Field(
         0.5,
-        description=" Threshold on the correlation raster to use for interpolation. "
-        "Pixels with less than this value are replaced by a weighted "
-        "combination of neighboring pixels.",
+        description=(
+            "Threshold on the correlation raster to use for interpolation. "
+            "Pixels with less than this value are replaced by a weighted "
+            "combination of neighboring pixels."
+        ),
         ge=0.0,
         le=1.0,
     )
@@ -81,7 +83,7 @@ class SnaphuOptions(BaseModel, extra="forbid"):
     ntiles: tuple[int, int] = Field(
         (1, 1),
         description=(
-            "Number of tiles to split the inputs into using SNAPHU's internal tiling"
+            "Number of tiles to split the inputs into using SNAPHU's internal tiling."
         ),
     )
     tile_overlap: tuple[int, int] = Field(
@@ -173,18 +175,18 @@ class SpurtSolverSettings(BaseModel):
         ),
         gt=0,
     )
-    t_cost_type: Literal["constant", "distance", "centroid"] = Field(
+    temp_cost_type: Literal["constant", "distance", "centroid"] = Field(
         default="constant", description="Temporal unwrapping costs."
     )
-    t_cost_scale: float = Field(
+    temp_cost_scale: float = Field(
         default=100.0,
         description="Scale factor used to compute edge costs for temporal unwrapping.",
         gt=0.0,
     )
-    s_cost_type: Literal["constant", "distance", "centroid"] = Field(
+    spatial_cost_type: Literal["constant", "distance", "centroid"] = Field(
         default="constant", description="Spatial unwrapping costs."
     )
-    s_cost_scale: float = Field(
+    spatial_cost_scale: float = Field(
         default=100.0,
         description="Scale factor used to compute edge costs for spatial unwrapping.",
         gt=0.0,
@@ -236,7 +238,7 @@ class UnwrapOptions(BaseModel, extra="forbid"):
     )
     run_interpolation: bool = Field(
         False,
-        description=("Whether to run interpolation step on wrapped interferogram."),
+        description="Whether to run interpolation step on wrapped interferogram.",
     )
     _directory: Path = PrivateAttr(Path("unwrapped"))
     unwrap_method: UnwrapMethod = UnwrapMethod.SNAPHU
