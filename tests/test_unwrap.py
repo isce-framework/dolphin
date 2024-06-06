@@ -6,7 +6,7 @@ import pytest
 
 import dolphin.unwrap
 from dolphin import io
-from dolphin.workflows import UnwrapMethod
+from dolphin.workflows import TophuOptions, UnwrapMethod, UnwrapOptions
 
 try:
     import tophu
@@ -38,6 +38,11 @@ def corr_raster(raster_100_by_200):
     return corr_raster
 
 
+@pytest.fixture()
+def unwrap_options():
+    return UnwrapOptions()
+
+
 class TestUnwrapSingle:
     def test_unwrap_snaphu_default(self, tmp_path, list_of_gtiff_ifgs, corr_raster):
         unw_filename = tmp_path / "unwrapped.unw.tif"
@@ -57,16 +62,17 @@ class TestUnwrapSingle:
 
     @pytest.mark.parametrize("init_method", ["mst", "mcf"])
     def test_unwrap_snaphu(
-        self, tmp_path, list_of_gtiff_ifgs, corr_raster, init_method
+        self, tmp_path, list_of_gtiff_ifgs, corr_raster, init_method, unwrap_options
     ):
         # test other init_method
         unw_filename = tmp_path / "unwrapped.unw.tif"
+        unwrap_options.snaphu_options.init_method = init_method
         unw_path, conncomp_path = dolphin.unwrap.unwrap(
             ifg_filename=list_of_gtiff_ifgs[0],
             corr_filename=corr_raster,
             unw_filename=unw_filename,
             nlooks=1,
-            init_method=init_method,
+            unwrap_options=unwrap_options,
         )
         assert unw_path.exists()
         assert conncomp_path.exists()
@@ -76,24 +82,26 @@ class TestUnwrapSingle:
     @pytest.mark.parametrize("method", [UnwrapMethod.ICU, UnwrapMethod.PHASS])
     def test_unwrap_methods(self, tmp_path, raster_100_by_200, corr_raster, method):
         unw_filename = tmp_path / f"{method.value}_unwrapped.unw.tif"
+        unwrap_options = UnwrapOptions(unwrap_method=method)
         u_path, c_path = dolphin.unwrap.unwrap(
             ifg_filename=raster_100_by_200,
             corr_filename=corr_raster,
             unw_filename=unw_filename,
             nlooks=1,
-            unwrap_method=method,
+            unwrap_options=unwrap_options,
         )
         assert u_path.exists()
         assert c_path.exists()
 
     def test_unwrap_logfile(self, tmp_path, raster_100_by_200, corr_raster):
         unw_filename = tmp_path / "unwrapped.unw.tif"
+        unwrap_options = UnwrapOptions(unwrap_method="icu")
         u_path, c_path = dolphin.unwrap.unwrap(
             ifg_filename=raster_100_by_200,
             corr_filename=corr_raster,
             unw_filename=unw_filename,
+            unwrap_options=unwrap_options,
             nlooks=1,
-            unwrap_method="icu",
             log_to_file=True,
         )
         logfile_name = str(unw_filename).replace(".unw.tif", ".unw.log")
@@ -101,13 +109,16 @@ class TestUnwrapSingle:
         assert u_path.exists()
         assert c_path.exists()
 
-    def test_unwrap_snaphu_nodata(self, tmp_path, list_of_gtiff_ifgs, corr_raster):
+    def test_unwrap_snaphu_nodata(
+        self, tmp_path, list_of_gtiff_ifgs, corr_raster, unwrap_options
+    ):
         # test other init_method
         unw_filename = tmp_path / "unwrapped.unw.tif"
         unw_path, conncomp_path = dolphin.unwrap.unwrap(
             ifg_filename=list_of_gtiff_ifgs[0],
             corr_filename=corr_raster,
             unw_filename=unw_filename,
+            unwrap_options=unwrap_options,
             nlooks=1,
             ccl_nodata=123,
             unw_nodata=np.nan,
@@ -118,18 +129,21 @@ class TestUnwrapSingle:
         assert io.get_raster_nodata(conncomp_path) == 123
 
     @pytest.mark.parametrize("method", [UnwrapMethod.SNAPHU, UnwrapMethod.PHASS])
-    def test_goldstein(self, tmp_path, list_of_gtiff_ifgs, corr_raster, method):
+    def test_goldstein(
+        self, tmp_path, list_of_gtiff_ifgs, corr_raster, unwrap_options, method
+    ):
         # test other init_method
         unw_filename = tmp_path / "unwrapped.unw.tif"
         scratch_dir = tmp_path / "scratch"
         scratch_dir.mkdir()
+        unwrap_options.unwrap_method = method
+        unwrap_options.run_goldstein = True
         unw_path, conncomp_path = dolphin.unwrap.unwrap(
             ifg_filename=list_of_gtiff_ifgs[0],
             corr_filename=corr_raster,
             unw_filename=unw_filename,
             nlooks=1,
-            unwrap_method=method,
-            run_goldstein=True,
+            unwrap_options=unwrap_options,
             scratchdir=scratch_dir,
         )
         assert unw_path.exists()
@@ -177,13 +191,13 @@ class TestUnwrapSingle:
         unw_filename = tmp_path / "unwrapped.unw.tif"
         scratch_dir = tmp_path / "scratch"
         scratch_dir.mkdir()
+        unwrap_options = UnwrapOptions(unwrap_method=method, run_interpolation=True)
         unw_path, conncomp_path = dolphin.unwrap.unwrap(
             ifg_filename=list_of_gtiff_ifgs[0],
             corr_filename=corr_raster,
             unw_filename=unw_filename,
             nlooks=1,
-            unwrap_method=method,
-            run_interpolation=True,
+            unwrap_options=unwrap_options,
             scratchdir=scratch_dir,
         )
         assert unw_path.exists()
@@ -191,28 +205,27 @@ class TestUnwrapSingle:
 
 
 class TestUnwrapRun:
-    def test_run_gtiff(self, list_of_gtiff_ifgs, corr_raster):
+    def test_run_gtiff(self, list_of_gtiff_ifgs, corr_raster, unwrap_options):
         ifg_path = list_of_gtiff_ifgs[0].parent
         u_paths, c_paths = dolphin.unwrap.run(
             ifg_filenames=list_of_gtiff_ifgs,
             cor_filenames=[corr_raster] * len(list_of_gtiff_ifgs),
             output_path=ifg_path,
             nlooks=1,
-            init_method="mst",
-            max_jobs=1,
+            unwrap_options=unwrap_options,
         )
         assert all(p.exists() for p in u_paths)
         assert all(p.exists() for p in c_paths)
 
-    def test_run_envi(self, list_of_envi_ifgs, corr_raster):
+    def test_run_envi(self, list_of_envi_ifgs, corr_raster, unwrap_options):
         ifg_path = list_of_envi_ifgs[0].parent
+        unwrap_options.snaphu_options.init_method = "mst"
         u_paths, c_paths = dolphin.unwrap.run(
             ifg_filenames=list_of_envi_ifgs,
             cor_filenames=[corr_raster] * len(list_of_envi_ifgs),
             output_path=ifg_path,
             nlooks=1,
-            init_method="mst",
-            max_jobs=1,
+            unwrap_options=unwrap_options,
         )
         assert all(p.exists() for p in u_paths)
         assert all(p.exists() for p in c_paths)
@@ -224,14 +237,15 @@ class TestTophu:
     )
     def test_unwrap_multiscale(self, tmp_path, raster_100_by_200, corr_raster):
         unw_filename = tmp_path / "unwrapped.unw.tif"
+
+        to = TophuOptions(ntiles=(2, 2), downsample_factor=(3, 3))
+        unwrap_options = UnwrapOptions(unwrap_method="phass", tophu_options=to)
         out_path, conncomp_path = dolphin.unwrap.unwrap(
             ifg_filename=raster_100_by_200,
             corr_filename=corr_raster,
             unw_filename=unw_filename,
+            unwrap_options=unwrap_options,
             nlooks=1,
-            ntiles=(2, 2),
-            downsample_factor=(3, 3),
-            unwrap_method="phass",
         )
         assert out_path.exists()
         assert conncomp_path.exists()
@@ -248,11 +262,11 @@ class TestTophu:
             ifg_filename=raster_100_by_200,
             corr_filename=corr_raster,
             unw_filename=unw_filename,
+            downsample_factor=(2, 2),
+            ntiles=(2, 2),
             unwrap_callback=unwrap_callback,
             unw_nodata=0,
             nlooks=1,
-            ntiles=(2, 2),
-            downsample_factor=(3, 3),
         )
         assert out_path.exists()
         assert conncomp_path.exists()
