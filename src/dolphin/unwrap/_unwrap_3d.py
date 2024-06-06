@@ -8,7 +8,7 @@ from dolphin.workflows.config import UnwrapOptions
 logger = logging.getLogger(__name__)
 
 
-def unwrap_3d(
+def unwrap_spurt(
     ifg_filenames: Sequence[PathOrStr],
     cor_filenames: Sequence[PathOrStr] | None,
     unwrap_options: UnwrapOptions,
