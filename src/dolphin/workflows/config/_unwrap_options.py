@@ -105,7 +105,7 @@ class SnaphuOptions(BaseModel, extra="forbid"):
         description="Statistical cost mode method for SNAPHU.",
     )
 
-    _to_tuple = field_validator("ntiles", "downsample_factor", mode="before")(to_tuple)
+    _to_tuple = field_validator("ntiles", "tile_overlap", mode="before")(to_tuple)
 
 
 class TophuOptions(BaseModel, extra="forbid"):
