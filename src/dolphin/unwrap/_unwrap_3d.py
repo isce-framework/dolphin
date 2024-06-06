@@ -2,22 +2,25 @@ import logging
 from pathlib import Path
 from typing import Sequence
 
+from dolphin import io
 from dolphin._types import PathOrStr
-from dolphin.workflows.config import UnwrapOptions
+from dolphin.workflows.config import SpurtOptions
 
 logger = logging.getLogger(__name__)
+
+DEFAULT_OPTIONS = SpurtOptions()
 
 
 def unwrap_spurt(
     ifg_filenames: Sequence[PathOrStr],
     cor_filenames: Sequence[PathOrStr] | None,
-    unwrap_options: UnwrapOptions,
+    mask_filename: PathOrStr | None = None,
+    options: SpurtOptions = DEFAULT_OPTIONS,
 ) -> tuple[list[Path], list[Path]]:
     """Perform 3D unwrapping using `spurt`."""
-    if unwrap_options.run_goldstein:
-        logger.warning("Goldstein filtering not implemented for 3D unwrapping")
-    if unwrap_options.run_interpolation:
-        logger.warning("Interpolation not implemented for 3D unwrapping")
     if cor_filenames is not None:
         assert len(ifg_filenames) == len(cor_filenames)
+    if mask_filename is not None:
+        _mask = io.load_gdal(mask_filename)
+    assert options is not None  # Remove opon implementing
     raise NotImplementedError()
