@@ -59,7 +59,7 @@ class PreprocessOptions(BaseModel, extra="forbid"):
     alpha: float = Field(
         0.5,
         description=(
-            "(for Goldstein filtering) Power parameter for Goldstein algorithm."
+            "Adaptive phase (Goldstein) filter exponent parameter."
         ),
         ge=0.0,
         le=1.0,
