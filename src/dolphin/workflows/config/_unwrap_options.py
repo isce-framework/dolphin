@@ -67,7 +67,7 @@ class PreprocessOptions(BaseModel, extra="forbid"):
     max_radius: int = Field(
         51,
         ge=0.0,
-        description=("(for interpolation) maximum radius to find scatterers."),
+        description=("(for interpolation) Maximum radius to find scatterers."),
     )
     interpolation_cor_threshold: float = Field(
         0.5,
