@@ -14,6 +14,9 @@ def _ccg_noise(N: int) -> np.array:
     return (np.random.randn(N) + 1j * np.random.randn(N)) / np.sqrt(2)
 
 
+rng = np.random.default_rng()
+
+
 @njit(cache=True)
 def _seed(a):
     """Seed the random number generator for numba.
@@ -46,6 +49,14 @@ def simulate_sample(corr_matrix: np.array) -> np.array:
     z = _ccg_noise(corr_matrix.shape[0])
     z = z.astype(C.dtype)
     return C @ z
+
+
+def ccg_noise(N: int) -> np.array:
+    return (
+        rng.normal(scale=1 / np.sqrt(2), size=2 * N)
+        .astype(np.float32)
+        .view(np.complex64)
+    )
 
 
 @njit(cache=True)
@@ -205,3 +216,38 @@ def evd(cov_mat):
     evd_estimate = v[:, -1] * np.conjugate(v[0, -1])
 
     return evd_estimate.astype(cov_mat.dtype)
+
+
+def make_defo_stack(
+    shape: tuple[int, int, int],
+    defo_shape="gaussian",
+    max_amplitude: float = 1,
+    **kwargs,
+):
+    """Create the time series of deformation to add to each SAR date.
+
+    Parameters
+    ----------
+    defo_shape : str
+        Name of a function from `troposim.synthetic`. Defaults to "gaussian".
+
+    Returns
+    -------
+    defo_stack : np.ndarray (3D)
+
+    """
+    from troposim.deformation import synthetic
+
+    try:
+        defo_func = getattr(synthetic, defo_shape)
+    except AttributeError:
+        raise ValueError(f"{defo_shape} is not a valid deformation shape")
+
+    num_time_steps, *shape2d = shape
+    # Get shape of deformation in final form (normalized to 1 max)
+    final_defo = defo_func(shape=shape2d, **kwargs).reshape((1, *shape2d))
+    final_defo *= max_amplitude / np.max(final_defo)
+    # Broadcast this shape with linear evolution
+    num_time_steps = shape[0]
+    time_evolution = np.linspace(0, 1, num=num_time_steps)[:, None, None]
+    return final_defo * time_evolution
