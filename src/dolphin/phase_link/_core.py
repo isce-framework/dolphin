@@ -8,13 +8,14 @@ from typing import NamedTuple, Optional
 import jax.numpy as jnp
 import numpy as np
 from jax import Array, jit, lax, vmap
-from jax.scipy.linalg import cho_factor, cho_solve, eigh
+from jax.scipy.linalg import cho_factor, cho_solve
 from jax.typing import ArrayLike
 
 from dolphin._types import HalfWindow, Strides
 from dolphin.utils import take_looks
 
 from . import covariance, metrics
+from ._eigs import inverse_iteration, power_iteration
 from ._ps_filling import fill_ps_pixels
 
 logger = logging.getLogger(__name__)
@@ -371,9 +372,13 @@ def process_coherence_matrices(
 
     """
     rows, cols, n, _ = C_arrays.shape
+    # For EVD, or places where inverting |Gamma| failed: fall back to computing EVD
+    evd_eig_vals, evd_eig_vecs = eigh_largest_stack(C_arrays)
+
+    # jax.debug.print("{}, {}", evd_eig_vecs.shape, evd_eig_vecs.dtype)
     if use_evd:
         # EVD
-        eig_vals, eig_vecs = eigh_largest_stack(C_arrays)
+        eig_vals, eig_vecs = evd_eig_vals, evd_eig_vecs
         estimator = jnp.zeros(eig_vals.shape, dtype=bool)
     else:
         # EMI
@@ -389,6 +394,7 @@ def process_coherence_matrices(
         if beta > 0:
             # Perform regularization
             Gamma = (1 - beta) * Gamma + beta * Id
+
         # Attempt to invert Gamma
         cho, is_lower = cho_factor(Gamma)
 
@@ -396,7 +402,12 @@ def process_coherence_matrices(
         # we should just fall back to EVD
         # Use the already- factored |Gamma|^-1, solving Ax = I gives the inverse
         Gamma_inv = cho_solve((cho, is_lower), Id)
-        emi_eig_vals, emi_eig_vecs = eigh_smallest_stack(Gamma_inv * C_arrays)
+        # We're looking for the lambda nearest to 1. So shift by 0.99
+        # Also, use the evd vectors as iteration starting point:
+        mu = 0.99
+        emi_eig_vals, emi_eig_vecs = eigh_smallest_stack(
+            Gamma_inv * C_arrays, mu, evd_eig_vecs
+        )
         # From the EMI paper, normalize the eigenvectors to have norm sqrt(n)
         emi_eig_vecs = (
             jnp.sqrt(n)
@@ -404,9 +415,6 @@ def process_coherence_matrices(
             / jnp.linalg.norm(emi_eig_vecs, axis=-1, keepdims=True)
         )
         # is the output is the inverse of the eigenvectors? or inverse conj?
-
-        # For places where inverting |Gamma| failed: fall back to computing EVD
-        evd_eig_vals, evd_eig_vecs = eigh_largest_stack(C_arrays)
 
         # Use https://jax.readthedocs.io/en/latest/_autosummary/jax.lax.select.html
         # Note that `if` would fail the jit tracing
@@ -442,32 +450,29 @@ def process_coherence_matrices(
     return evd_estimate, eig_vals, estimator
 
 
-# The eigenvalues are in ascending order
-# Column j of `eig_vecs` is the normalized eigenvector corresponding
-# to eigenvalue `lam[j]``
-@jit
-def _get_smallest_eigenpair(C) -> tuple[Array, Array]:
-    lam, eig_vecs = eigh(C)
-    return lam[0], eig_vecs[:, 0]
-
-
-@jit
-def _get_largest_eigenpair(C) -> tuple[Array, Array]:
-    lam, eig_vecs = eigh(C)
-    return lam[-1], eig_vecs[:, -1]
-
-
 # We map over the first two dimensions, so now instead of one scalar eigenvalue,
 # we have (rows, cols) eigenvalues
-@jit
-def eigh_smallest_stack(C_arrays: ArrayLike) -> tuple[Array, Array]:
+@partial(jit, static_argnames=("mu"))
+def eigh_smallest_stack(
+    C_arrays: ArrayLike, mu: float, v0: ArrayLike | None
+) -> tuple[Array, Array]:
     """Get the smallest (eigenvalue, eigenvector) for each pixel in a 3D stack.
+
+    Uses shift inverse iteration to find the eigenvalue closest to `mu`.
+    Pick `mu` to be slightly below the smallest eigenvalue for fastest convergence.
 
     Parameters
     ----------
     C_arrays : ArrayLike
         The stack of coherence matrices.
         Shape = (rows, cols, nslc, nslc)
+    mu : float
+        The value to use for the shift inverse iteration.
+        The eigenvalue closest to this value is returned.
+    v0 : ArrayLike, optional
+        The initial guess for the eigenvector.
+        If None, a vector of 1s is used.
+        Shape = (rows, cols, nslc)
 
     Returns
     -------
@@ -479,7 +484,10 @@ def eigh_smallest_stack(C_arrays: ArrayLike) -> tuple[Array, Array]:
         Shape = (rows, cols, nslc)
 
     """
-    return vmap(vmap(_get_smallest_eigenpair))(C_arrays)
+    in_axes = (0, None, 0)
+    return vmap(vmap(inverse_iteration, in_axes=in_axes), in_axes=in_axes)(
+        C_arrays, mu, v0
+    )
 
 
 @jit
@@ -502,7 +510,8 @@ def eigh_largest_stack(C_arrays: ArrayLike) -> tuple[Array, Array]:
         Shape = (rows, cols, nslc)
 
     """
-    return vmap(vmap(_get_largest_eigenpair))(C_arrays)
+    eigvals, eigvecs = vmap(vmap(power_iteration))(C_arrays)
+    return eigvals.real, eigvecs
 
 
 def decimate(arr: ArrayLike, strides: Strides) -> Array:

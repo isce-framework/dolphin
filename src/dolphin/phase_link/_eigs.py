@@ -2,8 +2,9 @@ from functools import partial
 
 import jax
 import jax.numpy as jnp
-from jax import jit
+from jax import Array, jit, lax
 from jax.lax import while_loop
+from jax.typing import ArrayLike
 
 
 @partial(jit, static_argnames=("tol",))
@@ -54,13 +55,21 @@ def power_iteration(
     return eigenvalue, vk
 
 
-@partial(jit, static_argnames=("tol", "max_iters"))
-def shifted_inverse_iteration(
-    A: jnp.array, mu: float, tol: float = 1e-3, max_iters: int = 50
-) -> tuple[jnp.array, jnp.array]:
+@partial(jit, static_argnames=("mu", "tol", "max_iters"))
+def inverse_iteration(
+    A: ArrayLike,
+    mu: float,
+    v0: ArrayLike | None = None,
+    tol: float = 1e-3,
+    max_iters: int = 50,
+    # v0: ArrayLike | None = None,
+) -> tuple[Array, Array]:
     """Compute the eigenvalue of A closest to mu."""
     n = A.shape[0]
-    vk = jnp.ones(n, dtype=A.dtype)
+    # Equivalent to "if v0 is None, (arg1), else (arg2)"
+    # vk = lax.select(v0 is None, jnp.ones(n, dtype=A.dtype), v0)
+    vk = lax.cond(v0 is None, lambda _: jnp.ones(n, dtype=A.dtype), lambda _: v0, None)
+
     vk = vk / jnp.linalg.norm(vk)
     Id = jnp.eye(A.shape[0], dtype=A.dtype)
     cho_fact = jax.scipy.linalg.cho_factor(A - mu * Id)
