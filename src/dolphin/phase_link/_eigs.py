@@ -59,6 +59,42 @@ def power_iteration(
 def inverse_iteration(
     A: ArrayLike,
     mu: float,
+    tol: float = 1e-3,
+    max_iters: int = 50,
+    # v0: ArrayLike | None = None,
+) -> tuple[Array, Array]:
+    """Compute the eigenvalue of A closest to mu."""
+    n = A.shape[0]
+    # Equivalent to "if v0 is None, (arg1), else (arg2)"
+    # vk = lax.select(v0 is None, jnp.ones(n, dtype=A.dtype), v0)
+    vk = jnp.ones(n, dtype=A.dtype)
+
+    vk = vk / jnp.linalg.norm(vk)
+    Id = jnp.eye(A.shape[0], dtype=A.dtype)
+    cho_fact = jax.scipy.linalg.cho_factor(A - mu * Id)
+
+    def body_fun(val):
+        vk_cur, _, iters = val
+        vk_new = jax.scipy.linalg.cho_solve(cho_fact, vk_cur)
+        vk_new = vk_new / jnp.linalg.norm(vk_new)
+        diff = jnp.linalg.norm(vk_new - vk_cur)
+        return vk_new, diff, iters + 1
+
+    def cond_fun(val):
+        _, diff, iters = val
+        return jnp.logical_and(diff > tol, iters < max_iters)
+
+    init_val = (vk, 1.0, 1)
+    vk_sol, _, end_iters = while_loop(cond_fun, body_fun, init_val)
+
+    eigenvalue = (vk_sol.conj() @ A @ vk_sol).real
+    return eigenvalue, vk_sol
+
+
+@partial(jit, static_argnames=("mu", "tol", "max_iters"))
+def inverse_iteration_v0(
+    A: ArrayLike,
+    mu: float,
     v0: ArrayLike | None = None,
     tol: float = 1e-3,
     max_iters: int = 50,

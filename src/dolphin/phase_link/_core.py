@@ -373,11 +373,11 @@ def process_coherence_matrices(
     """
     rows, cols, n, _ = C_arrays.shape
     # For EVD, or places where inverting |Gamma| failed: fall back to computing EVD
-    evd_eig_vals, evd_eig_vecs = eigh_largest_stack(C_arrays)
 
     # jax.debug.print("{}, {}", evd_eig_vecs.shape, evd_eig_vecs.dtype)
     if use_evd:
         # EVD
+        evd_eig_vals, evd_eig_vecs = eigh_largest_stack(C_arrays)
         eig_vals, eig_vecs = evd_eig_vals, evd_eig_vecs
         estimator = jnp.zeros(eig_vals.shape, dtype=bool)
     else:
@@ -405,9 +405,7 @@ def process_coherence_matrices(
         # We're looking for the lambda nearest to 1. So shift by 0.99
         # Also, use the evd vectors as iteration starting point:
         mu = 0.99
-        emi_eig_vals, emi_eig_vecs = eigh_smallest_stack(
-            Gamma_inv * C_arrays, mu, evd_eig_vecs
-        )
+        emi_eig_vals, emi_eig_vecs = eigh_smallest_stack(Gamma_inv * C_arrays, mu)
         # From the EMI paper, normalize the eigenvectors to have norm sqrt(n)
         emi_eig_vecs = (
             jnp.sqrt(n)
@@ -424,6 +422,7 @@ def process_coherence_matrices(
         # Must broadcast the 2D boolean array so it's the same size as the outputs
         inv_has_nans_3d = jnp.tile(inv_has_nans[:, :, None], (1, 1, n))
 
+        evd_eig_vals, evd_eig_vecs = eigh_largest_stack(C_arrays)
         eig_vecs = lax.select(
             inv_has_nans_3d,
             # Run this on True: EVD, since we failed to invert:
@@ -454,7 +453,8 @@ def process_coherence_matrices(
 # we have (rows, cols) eigenvalues
 @partial(jit, static_argnames=("mu"))
 def eigh_smallest_stack(
-    C_arrays: ArrayLike, mu: float, v0: ArrayLike | None
+    C_arrays: ArrayLike,
+    mu: float,  # v0: ArrayLike | None
 ) -> tuple[Array, Array]:
     """Get the smallest (eigenvalue, eigenvector) for each pixel in a 3D stack.
 
@@ -484,10 +484,13 @@ def eigh_smallest_stack(
         Shape = (rows, cols, nslc)
 
     """
-    in_axes = (0, None, 0)
-    return vmap(vmap(inverse_iteration, in_axes=in_axes), in_axes=in_axes)(
-        C_arrays, mu, v0
-    )
+    # in_axes = (0, None, 0)
+    # return vmap(vmap(inverse_iteration, in_axes=in_axes), in_axes=in_axes)(
+    #     C_arrays, mu, v0
+    # )
+    # return vmap(vmap(inverse_iteration))(C_arrays, mu=mu)
+    in_axes = (0, None)
+    return vmap(vmap(inverse_iteration, in_axes=in_axes), in_axes=in_axes)(C_arrays, mu)
 
 
 @jit
