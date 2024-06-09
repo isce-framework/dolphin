@@ -6,6 +6,7 @@ full CPU/GPU stack implementations.
 
 import numpy as np
 import numpy.linalg as la
+import scipy.ndimage as ndi
 from numba import njit
 
 
@@ -162,9 +163,15 @@ def _sim_signal(
     return signal_phase.astype(np.float64), truth.astype(np.float64)
 
 
-def rmse(x, y):
-    """Calculate the root mean squared error between two arrays."""
-    return np.sqrt(np.mean((x - y) ** 2))
+def rmse(x, y, axis=None):
+    """Calculate the root mean squared error between two arrays.
+
+    If x and y are complex, the RMSE is calculated using the angle between them.
+    """
+    if np.iscomplexobj(x) and np.iscomplexobj(y):
+        return np.sqrt(np.mean((np.angle(x * y.conj()) ** 2), axis=axis))
+
+    return np.sqrt(np.mean((x - y) ** 2, axis=axis))
 
 
 @njit(cache=True)
@@ -219,35 +226,147 @@ def evd(cov_mat):
 
 
 def make_defo_stack(
-    shape: tuple[int, int, int],
-    defo_shape="gaussian",
-    max_amplitude: float = 1,
-    **kwargs,
-):
+    shape: tuple[int, int, int], sigma: float, max_amplitude: float = 1
+) -> np.ndarray:
     """Create the time series of deformation to add to each SAR date.
 
     Parameters
     ----------
-    defo_shape : str
-        Name of a function from `troposim.synthetic`. Defaults to "gaussian".
+    shape : tuple[int, int, int]
+        Shape of the deformation stack (num_time_steps, rows, cols).
+    sigma : float
+        Standard deviation of the Gaussian deformation.
+    max_amplitude : float, optional
+        Maximum amplitude of the final deformation. Defaults to 1.
 
     Returns
     -------
-    defo_stack : np.ndarray (3D)
+    np.ndarray
+        Deformation stack with time series, shape (num_time_steps, rows, cols).
 
     """
-    from troposim.deformation import synthetic
-
-    try:
-        defo_func = getattr(synthetic, defo_shape)
-    except AttributeError:
-        raise ValueError(f"{defo_shape} is not a valid deformation shape")
-
     num_time_steps, *shape2d = shape
     # Get shape of deformation in final form (normalized to 1 max)
-    final_defo = defo_func(shape=shape2d, **kwargs).reshape((1, *shape2d))
+    final_defo = make_gaussian(shape=shape2d, sigma=sigma).reshape((1, *shape2d))
     final_defo *= max_amplitude / np.max(final_defo)
     # Broadcast this shape with linear evolution
-    num_time_steps = shape[0]
     time_evolution = np.linspace(0, 1, num=num_time_steps)[:, None, None]
-    return final_defo * time_evolution
+    return (final_defo * time_evolution).astype(np.float32)
+
+
+def create_noisy_deformation(C: np.ndarray, defo_stack: np.ndarray) -> np.ndarray:
+    """Create noisy deformation samples given a covariance matrix and deformation stack.
+
+    Parameters
+    ----------
+    C : np.ndarray
+        Covariance matrix of shape (num_time, num_time).
+    defo_stack : np.ndarray
+        Deformation stack of shape (num_time, rows, cols).
+
+    Returns
+    -------
+    np.ndarray
+        Noisy deformation samples of shape (num_time, rows, cols).
+
+    """
+
+    def _get_diffs(stack: np.ndarray) -> np.ndarray:
+        """Create all differences between the deformation stack.
+
+        Parameters
+        ----------
+        stack : np.ndarray
+            Signal stack of shape (num_time, rows, cols).
+
+        Returns
+        -------
+        np.ndarray, complex64
+            Covariance phases of shape (rows, cols, num_time, num_time).
+
+        """
+        # Step 1: Create difference stack using broadcasting
+        stack_i = np.exp(
+            1j * stack[:, np.newaxis, :, :]
+        )  # shape: (num_time, 1, rows, cols)
+        stack_j = np.exp(
+            1j * stack[np.newaxis, :, :, :]
+        )  # shape: (1, num_time, rows, cols)
+        diff_stack = stack_i * stack_j.conj()  # shape: (num_time, num_time, rows, cols)
+
+        # Step 2: Transpose to get shape (rows, cols, num_time, num_time)
+        diff_stack = diff_stack.transpose(
+            2, 3, 0, 1
+        )  # shape: (rows, cols, num_time, num_time)
+        return diff_stack
+
+    num_time, *shape2d = defo_stack.shape
+    num_pixels = np.prod(shape2d)
+
+    assert C.shape == (num_time, num_time)
+
+    C_tiled = np.tile(C, (*shape2d, 1, 1))
+    signal_cov = _get_diffs(defo_stack)
+    C_tiled_with_signal = C_tiled * signal_cov
+    C_unstacked = C_tiled_with_signal.reshape(num_pixels, num_time, num_time)
+
+    noise = ccg_noise(num_time * num_pixels)
+    noise_unstacked = noise.reshape(num_pixels, num_time, 1)
+
+    L_unstacked = np.linalg.cholesky(C_unstacked)
+    samps = L_unstacked @ noise_unstacked
+
+    samps3d = samps.reshape(*shape2d, num_time)
+    return np.moveaxis(samps3d, -1, 0)
+
+
+def make_gaussian(
+    shape: tuple[int, int],
+    sigma: float,
+    row: int | None = None,
+    col: int | None = None,
+    normalize: bool = False,
+    amp: float | None = None,
+    noise_sigma: float = 0.0,
+) -> np.ndarray:
+    """Create a Gaussian blob of given shape and width.
+
+    Parameters
+    ----------
+    shape : tuple[int, int]
+        (rows, cols)
+    sigma : float
+        Standard deviation of the Gaussian.
+    row : int, optional
+        Center row of the blob. Defaults to None.
+    col : int, optional
+        Center column of the blob. Defaults to None.
+    normalize : bool, optional
+        Normalize the amplitude peak to 1. Defaults to False.
+    amp : float, optional
+        Peak height of the Gaussian. Defaults to None.
+    noise_sigma : float, optional
+        Standard deviation of random Gaussian noise added to the image. Defaults to 0.0.
+
+    Returns
+    -------
+    ndarray
+        Gaussian blob.
+
+    """
+    delta = np.zeros(shape)
+    rows, cols = shape
+    if col is None:
+        col = cols // 2
+    if row is None:
+        row = rows // 2
+    delta[row, col] = 1
+
+    out = ndi.gaussian_filter(delta, sigma, mode="constant") * sigma**2
+    if normalize or amp is not None:
+        out /= out.max()
+    if amp is not None:
+        out *= amp
+    if noise_sigma > 0:
+        out += noise_sigma * np.random.standard_normal(shape)
+    return out
