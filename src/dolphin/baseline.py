@@ -1,6 +1,14 @@
 import isce3
 import numpy as np
 from numpy.typing import ArrayLike
+from opera_utils import (
+    get_cslc_orbit,
+    get_lonlat_grid,
+    get_radar_wavelength,
+    get_xy_coords,
+)
+
+from dolphin._types import Filename
 
 
 def compute(
@@ -54,3 +62,93 @@ def compute(
     )
 
     return direction * perp
+
+
+def compute_baselines(
+    h5file_ref: Filename,
+    h5file_sec: Filename,
+    height: float = 0.0,
+    latlon_subsample: int = 100,
+    threshold: float = 1e-08,
+    maxiter: int = 50,
+    delta_range: float = 10.0,
+):
+    """Compute the perpendicular baseline at a subsampled grid for two CSLCs.
+    Parameters
+    ----------
+    h5file_ref : Filename
+        Path to reference OPERA S1 CSLC HDF5 file.
+    h5file_sec : Filename
+        Path to secondary OPERA S1 CSLC HDF5 file.
+    height: float
+        Target height to use for baseline computation.
+        Default = 0.0
+    latlon_subsample: int
+        Factor by which to subsample the CSLC latitude/longitude grids.
+        Default = 30
+    threshold : float
+        isce3 geo2rdr: azimuth time convergence threshold in meters
+        Default = 1e-8
+    maxiter : int
+        isce3 geo2rdr: Maximum number of Newton-Raphson iterations
+        Default = 50
+    delta_range : float
+        isce3 geo2rdr: Step size used for computing derivative of doppler
+        Default = 10.0
+    Returns
+    -------
+    lon : np.ndarray
+        2D array of longitude coordinates in degrees.
+    lat : np.ndarray
+        2D array of latitude coordinates in degrees.
+    baselines : np.ndarray
+        2D array of perpendicular baselines
+    """
+    lon_grid, lat_grid = get_lonlat_grid(h5file_ref, subsample=latlon_subsample)
+    lon_arr = lon_grid.ravel()
+    lat_arr = lat_grid.ravel()
+
+    ellipsoid = isce3.core.Ellipsoid()
+    zero_doppler = isce3.core.LUT2d()
+    wavelength = get_radar_wavelength(h5file_ref)
+    side = isce3.core.LookSide.Right
+
+    orbit_ref = get_cslc_orbit(h5file_ref)
+    orbit_sec = get_cslc_orbit(h5file_sec)
+
+    baselines = []
+    for lon, lat in zip(lon_arr, lat_arr):
+        llh_rad = np.array([lon, lat, height]).reshape((3, 1))
+        az_time_ref, range_ref = isce3.geometry.geo2rdr(
+            llh_rad,
+            ellipsoid,
+            orbit_ref,
+            zero_doppler,
+            wavelength,
+            side,
+            threshold=threshold,
+            maxiter=maxiter,
+            delta_range=delta_range,
+        )
+        az_time_sec, range_sec = isce3.geometry.geo2rdr(
+            llh_rad,
+            ellipsoid,
+            orbit_sec,
+            zero_doppler,
+            wavelength,
+            side,
+            threshold=threshold,
+            maxiter=maxiter,
+            delta_range=delta_range,
+        )
+
+        pos_ref, velocity = orbit_ref.interpolate(az_time_ref)
+        pos_sec, _ = orbit_sec.interpolate(az_time_sec)
+        b = compute(
+            llh_rad, pos_ref, pos_sec, range_ref, range_sec, velocity, ellipsoid
+        )
+
+        baselines.append(b)
+
+    baseline_cube = np.array(baselines).reshape(lon_grid.shape)
+    return lon_grid, lat_grid, baseline_cube
