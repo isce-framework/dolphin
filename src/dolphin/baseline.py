@@ -5,7 +5,6 @@ from opera_utils import (
     get_cslc_orbit,
     get_lonlat_grid,
     get_radar_wavelength,
-    get_xy_coords,
 )
 
 from dolphin._types import Filename
@@ -74,7 +73,8 @@ def compute_baselines(
     delta_range: float = 10.0,
 ):
     """Compute the perpendicular baseline at a subsampled grid for two CSLCs.
-    Parameters
+
+    Parameters.
     ----------
     h5file_ref : Filename
         Path to reference OPERA S1 CSLC HDF5 file.
@@ -95,6 +95,7 @@ def compute_baselines(
     delta_range : float
         isce3 geo2rdr: Step size used for computing derivative of doppler
         Default = 10.0
+
     Returns
     -------
     lon : np.ndarray
@@ -103,6 +104,7 @@ def compute_baselines(
         2D array of latitude coordinates in degrees.
     baselines : np.ndarray
         2D array of perpendicular baselines
+
     """
     lon_grid, lat_grid = get_lonlat_grid(h5file_ref, subsample=latlon_subsample)
     lon_arr = lon_grid.ravel()
