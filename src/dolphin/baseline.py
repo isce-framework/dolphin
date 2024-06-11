@@ -53,7 +53,7 @@ def compute(
 
     sin_theta = np.sqrt(1 - cos_theta**2)
     perp = baseline * sin_theta
-    # par = baseline * cos_theta
+    # parallel_baseline = baseline * cosine_theta
 
     target_xyz = ell.lon_lat_to_xyz(llh)
     direction = np.sign(
