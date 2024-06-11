@@ -4,11 +4,11 @@ from scipy import ndimage
 
 
 def filtering(
-    unw_ifg: ArrayLike,
-    corr: ArrayLike,
+    unwrapped_phase: ArrayLike,
+    correlation: ArrayLike,
     mask_cutoff: float = 0.5,
     wavelength_cutoff: float = 50 * 1e3,
-    dx: float = 30,
+    pixel_spacing: float = 30,
 ) -> np.ndarray:
     """Filter out signals with spatial wavelength longer than a threshold.
 
