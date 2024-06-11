@@ -14,7 +14,7 @@ def filtering(
 
     Parameters
     ----------
-    unw_ifg : np.ndarray, 2D complex array
+    unwrapped_phase : np.ndarray, 2D complex array
         Unwrapped interferogram phase to filter.
        correlation : Arraylike, 2D
         Array of interferometric correlation from 0 to 1.
