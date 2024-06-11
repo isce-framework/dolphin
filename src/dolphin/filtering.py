@@ -45,7 +45,7 @@ def filtering(
 
     # Create Boolean mask for Zero-filled boundary area to be False
     # and the rest to be True
-    mask_boundary = ~(corr == 0).astype("bool")
+    mask_boundary = ~(correlation == 0).astype("bool")
 
     # Ramp plane fitting
     plane = fit_ramp_plane(unw_ifg, mask)
