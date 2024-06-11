@@ -39,10 +39,9 @@ def filtering(
         longer than a threshold.
 
     """
-    nrow, ncol = corr.shape
+    nrow, ncol = correlation.shape
 
-    # Create Boolean mask for corr > mask_cutoff to be True and the rest to be False
-    mask = (corr > mask_cutoff).astype("bool")
+    mask = (correlation > mask_cutoff).astype("bool")
 
     # Create Boolean mask for Zero-filled boundary area to be False
     # and the rest to be True
