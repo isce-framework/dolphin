@@ -16,7 +16,8 @@ def filtering(
     ----------
     unw_ifg : np.ndarray, 2D complex array
         Unwrapped interferogram phase to filter.
-    corr : 2D float array
+       correlation : Arraylike, 2D
+        Array of interferometric correlation from 0 to 1.
         Array of interferometric correlation from 0 to 1.
     mask_cutoff: float
         Threshold to use on `corr` so that pixels where
