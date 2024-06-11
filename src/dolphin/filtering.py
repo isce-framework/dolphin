@@ -20,8 +20,8 @@ def filtering(
         Array of interferometric correlation from 0 to 1.
         Array of interferometric correlation from 0 to 1.
     mask_cutoff: float
-        Threshold to use on `corr` so that pixels where
-        `corr[i, j] > mask_cutoff` are True and the rest are False.
+        Threshold to use on `correlation` so that pixels where
+        `correlation[i, j] > mask_cutoff` are used and the rest are ignored.
         The default is 0.5.
     wavelength_cutoff: float
         Spatial wavelength threshold to filter unw_ifg.
