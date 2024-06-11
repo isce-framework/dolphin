@@ -25,8 +25,7 @@ def filtering(
         The default is 0.5.
     wavelength_cutoff: float
         Spatial wavelength threshold to filter the unwrapped phase.
-        Signals with wavelength longer than 'wavelength_cutoff' in unw_ifg will be
-        filtered out.
+        Signals with wavelength longer than 'wavelength_cutoff' are filtered out.
         The default is 50*1e3 (m).
     dx : float
         Pixel spatial spacing. Assume same spacing for x, y axes.
