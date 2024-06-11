@@ -47,7 +47,6 @@ def filtering(
     # and the rest to be True
     mask_boundary = ~(correlation == 0).astype("bool")
 
-    # Ramp plane fitting
     plane = fit_ramp_plane(unw_ifg, mask)
 
     # Replace masked out pixels with the ramp plane
