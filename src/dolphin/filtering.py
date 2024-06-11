@@ -3,7 +3,7 @@ from numpy.typing import ArrayLike
 from scipy import ndimage
 
 
-def filtering(
+def filter_long_wavelength(
     unwrapped_phase: ArrayLike,
     correlation: ArrayLike,
     mask_cutoff: float = 0.5,
