@@ -3,7 +3,7 @@ import numpy as np
 from dolphin import filtering
 
 
-def test_filtering_unwrapped_phase():
+def test_filter_long_wavelegnth():
     # Check filtering with ramp phase
     y, x = np.ogrid[-3:3:512j, -3:3:512j]
     unw_ifg = np.pi * (x + y)
