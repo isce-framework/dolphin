@@ -27,7 +27,7 @@ def filtering(
         Spatial wavelength threshold to filter the unwrapped phase.
         Signals with wavelength longer than 'wavelength_cutoff' are filtered out.
         The default is 50*1e3 (m).
-    dx : float
+    pixel_spacing : float
         Pixel spatial spacing. Assume same spacing for x, y axes.
         The default is 30 (m).
 
