@@ -47,10 +47,10 @@ def filtering(
     # and the rest to be True
     mask_boundary = ~(correlation == 0).astype("bool")
 
-    plane = fit_ramp_plane(unw_ifg, mask)
+    plane = fit_ramp_plane(unwrapped_phase, mask)
 
     # Replace masked out pixels with the ramp plane
-    unw_ifg_interp = np.copy(unw_ifg)
+    unw_ifg_interp = np.copy(unwrapped_phase)
     unw_ifg_interp[~mask * mask_boundary] = plane[~mask * mask_boundary]
 
     # Copy the edge pixels for the boundary area before filling them by reflection
