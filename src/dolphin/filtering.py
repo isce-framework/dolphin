@@ -24,7 +24,7 @@ def filtering(
         `correlation[i, j] > mask_cutoff` are used and the rest are ignored.
         The default is 0.5.
     wavelength_cutoff: float
-        Spatial wavelength threshold to filter unw_ifg.
+        Spatial wavelength threshold to filter the unwrapped phase.
         Signals with wavelength longer than 'wavelength_cutoff' in unw_ifg will be
         filtered out.
         The default is 50*1e3 (m).
