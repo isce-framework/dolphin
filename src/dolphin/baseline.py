@@ -14,8 +14,8 @@ def compute(
     llh: ArrayLike,
     ref_pos: ArrayLike,
     sec_pos: ArrayLike,
-    ref_rng: float,
-    sec_rng: float,
+    ref_range: float,
+    sec_range: float,
     ref_vel: ArrayLike,
     ell: isce3.core.Ellipsoid,
 ):
@@ -29,9 +29,9 @@ def compute(
         Reference position vector (x, y, z) in ECEF coordinates.
     sec_pos : ArrayLike
         Secondary position vector (x, y, z) in ECEF coordinates.
-    ref_rng : float
+    ref_range : float
         Range from the reference satellite to the target.
-    sec_rng : float
+    sec_range : float
         Range from the secondary satellite to the target.
     ref_vel : ArrayLike
         Velocity vector (vx, vy, vz) of the reference satellite in ECEF coordinates.
@@ -49,15 +49,15 @@ def compute(
 
     # Compute angle between LOS vector and baseline vector
     # via the law of cosines
-    costheta = (ref_rng**2 + baseline**2 - sec_rng**2) / (2 * ref_rng * baseline)
+    cos_theta = (ref_range**2 + baseline**2 - sec_range**2) / (2 * ref_range * baseline)
 
-    sintheta = np.sqrt(1 - costheta**2)
-    perp = baseline * sintheta
-    # par = baseline * costheta
+    sin_theta = np.sqrt(1 - cos_theta**2)
+    perp = baseline * sin_theta
+    # par = baseline * cos_theta
 
-    targ_xyz = ell.lon_lat_to_xyz(llh)
+    target_xyz = ell.lon_lat_to_xyz(llh)
     direction = np.sign(
-        np.dot(np.cross(targ_xyz - ref_pos, sec_pos - ref_pos), ref_vel)
+        np.dot(np.cross(target_xyz - ref_pos, sec_pos - ref_pos), ref_vel)
     )
 
     return direction * perp
@@ -152,5 +152,5 @@ def compute_baselines(
 
         baselines.append(b)
 
-    baseline_cube = np.array(baselines).reshape(lon_grid.shape)
-    return lon_grid, lat_grid, baseline_cube
+    baseline_grid = np.array(baselines).reshape(lon_grid.shape)
+    return lon_grid, lat_grid, baseline_grid
