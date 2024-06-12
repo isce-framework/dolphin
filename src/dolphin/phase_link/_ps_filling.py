@@ -77,13 +77,6 @@ def fill_ps_pixels(
             new_value = cur_amp * np.exp(1j * slc_phase) * ref
             cpx_phase[i][ps_mask_looked] = new_value
 
-            # cpx_phase[i][ps_mask_looked] = slc_stack[i][slc_r_idxs, slc_c_idxs] * ref
-
-            # ps_phases[i][ps_mask_looked] = np.angle(
-            #     slc_stack[i][slc_r_idxs, slc_c_idxs] * ref
-            # )
-
-        # ps_phases = ps_phases[:, ps_mask_looked]
         ps_phases = np.angle(cpx_phase[:, ps_mask_looked])
     else:
         # Get the average of all PS pixels within each look window
