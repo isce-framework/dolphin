@@ -23,10 +23,10 @@ from ._common import (
     PhaseLinkingOptions,
     PsOptions,
     TimeseriesOptions,
-    UnwrapOptions,
     WorkflowBase,
     _read_file_list_or_glob,
 )
+from ._unwrap_options import UnwrapOptions
 
 __all__ = [
     "DisplacementWorkflow",
@@ -66,8 +66,10 @@ class CorrectionOptions(BaseModel, extra="forbid"):
 
     tropo_delay_type: TropoType = Field(
         TropoType.COMB,
-        description="Tropospheric delay type to calculate, comb contains both wet "
-        "and dry delays.",
+        description=(
+            "Tropospheric delay type to calculate, comb contains both wet "
+            "and dry delays."
+        ),
     )
 
     ionosphere_files: list[Path] = Field(

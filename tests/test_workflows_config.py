@@ -83,10 +83,15 @@ def test_interferogram_network_types():
 def test_unwrap_options_defaults():
     opts = config.UnwrapOptions()
     assert opts.unwrap_method == UnwrapMethod.SNAPHU
-    assert opts.init_method == "mcf"
     assert opts._directory == Path("unwrapped")
-    assert opts.ntiles == (1, 1)
-    assert opts.downsample_factor == (1, 1)
+    sn_opts = opts.snaphu_options
+    assert sn_opts.init_method == "mcf"
+    assert sn_opts.ntiles == (1, 1)
+    assert sn_opts.cost == "smooth"
+    tophu_opts = opts.tophu_options
+    assert tophu_opts.downsample_factor == (1, 1)
+    assert tophu_opts.ntiles == (1, 1)
+    assert tophu_opts.cost == "smooth"
 
 
 def test_outputs_defaults():

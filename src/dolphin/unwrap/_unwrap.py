@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import Optional, Sequence, Union
+from typing import Optional, Sequence
 
 import numpy as np
 from tqdm.auto import tqdm
@@ -11,7 +11,7 @@ from dolphin import goldstein, interpolate, io
 from dolphin._log import get_log, log_runtime
 from dolphin._types import Filename
 from dolphin.utils import DummyProcessPoolExecutor, full_suffix
-from dolphin.workflows import UnwrapMethod
+from dolphin.workflows import UnwrapMethod, UnwrapOptions
 
 from ._constants import (
     CONNCOMP_SUFFIX,
@@ -23,11 +23,14 @@ from ._constants import (
 )
 from ._snaphu_py import grow_conncomp_snaphu, unwrap_snaphu_py
 from ._tophu import multiscale_unwrap
+from ._unwrap_3d import unwrap_spurt
 from ._utils import create_combined_mask, set_nodata_values
 
 logger = get_log(__name__)
 
 __all__ = ["run", "unwrap"]
+
+DEFAULT_OPTIONS = UnwrapOptions()
 
 
 @log_runtime
@@ -36,26 +39,13 @@ def run(
     cor_filenames: Sequence[Filename],
     output_path: Filename,
     *,
+    unwrap_options: UnwrapOptions = DEFAULT_OPTIONS,
     nlooks: float = 5,
-    mask_filename: Optional[Filename] = None,
-    zero_where_masked: bool = False,
-    unwrap_method: UnwrapMethod = UnwrapMethod.SNAPHU,
-    init_method: str = "mst",
-    cost: str = "smooth",
-    max_jobs: int = 1,
-    ntiles: Union[int, tuple[int, int]] = 1,
-    tile_overlap: tuple[int, int] = (0, 0),
-    n_parallel_tiles: int = 1,
-    downsample_factor: Union[int, tuple[int, int]] = 1,
+    mask_filename: Filename | None = None,
     unw_nodata: float | None = DEFAULT_UNW_NODATA,
     ccl_nodata: int | None = DEFAULT_CCL_NODATA,
-    scratchdir: Optional[Filename] = None,
+    scratchdir: Filename | None = None,
     overwrite: bool = False,
-    run_goldstein: bool = False,
-    alpha: float = 0.5,
-    run_interpolation: bool = False,
-    max_radius: int = 51,
-    interpolation_cor_threshold: float = 0.5,
 ) -> tuple[list[Path], list[Path]]:
     """Run snaphu on all interferograms in a directory.
 
@@ -67,38 +57,14 @@ def run(
         Paths to input correlation files. Order must match `ifg_filenames`.
     output_path : Filename
         Path to output directory.
+    unwrap_options : UnwrapOptions, optional
+        [`UnwrapOptions`][dolphin.workflows.config.UnwrapOptions] config object
+        with parameters and settings for unwrapping.
     nlooks : int, optional
         Effective number of looks used to form the input correlation data.
     mask_filename : Filename, optional
         Path to binary byte mask file, by default None.
         Assumes that 1s are valid pixels and 0s are invalid.
-    zero_where_masked : bool, optional
-        Set wrapped phase/correlation to 0 where mask is 0 before unwrapping.
-        If not mask is provided, this is ignored.
-        By default True.
-    unwrap_method : UnwrapMethod or str, optional, default = "snaphu"
-        Choice of unwrapping algorithm to use.
-        Choices: {"snaphu", "icu", "phass"}
-    init_method : str, choices = {"mcf", "mst"}
-        SNAPHU initialization method, by default "mst".
-    cost : str, choices = {"smooth", "defo", "p-norm",}
-        SNAPHU cost function, by default "smooth"
-    max_jobs : int, optional, default = 1
-        Maximum parallel processes.
-    ntiles : int or tuple[int, int], optional, default = (1, 1)
-        Use multi-resolution unwrapping with `tophu` on the interferograms.
-        If 1 or (1, 1), doesn't use tophu and unwraps the interferogram as
-        one single image.
-    tile_overlap : tuple[int, int], optional
-        (For snaphu-py tiling): Number of pixels to overlap in the (row, col) direction.
-        Default = (0, 0)
-    n_parallel_tiles : int, optional
-        (For snaphu-py tiling) If specifying `ntiles`, number of tiles to unwrap
-        in parallel for each interferogram.
-        Default = 1, which unwraps each tile in serial.
-    downsample_factor : int, optional, default = 1
-        (For tophu/multi-scale unwrapping): Downsample the interferograms by this
-        factor to unwrap faster, then upsample to full resolution.
     unw_nodata : float , optional.
         Requested nodata value for the unwrapped phase.
         Default = 0
@@ -110,18 +76,6 @@ def run(
         If None, uses `tophu`'s `/tmp/...` default.
     overwrite : bool, optional, default = False
         Overwrite existing unwrapped files.
-    run_goldstein : bool, optional, default = False
-        Whether to run Goldstein filtering on interferogram
-    alpha : float, optional, default = 0.5
-        Alpha parameter for Goldstein filtering
-    run_interpolation : bool, optional, default = False
-        Whether to run interpolation on interferogram
-    max_radius : int, optional, default = 51
-        maximum radius (in pixel) for scatterer searching for interpolation
-    interpolation_cor_threshold : float, optional, default = 0.5
-        Threshold on the correlation raster to use for interpolation.
-        Pixels with less than this value are replaced by a weighted
-        combination of neighboring pixels.
 
     Returns
     -------
@@ -137,10 +91,6 @@ def run(
             f" Found {len(cor_filenames)} correlation files and"
             f" {len(ifg_filenames)} interferograms."
         )
-        raise ValueError(msg)
-
-    if init_method.lower() not in ("mcf", "mst"):
-        msg = f"Invalid init_method {init_method}"
         raise ValueError(msg)
 
     output_path = Path(output_path)
@@ -163,7 +113,17 @@ def run(
     if mask_filename:
         mask_filename = Path(mask_filename).resolve()
 
+    if unwrap_options.unwrap_method == UnwrapMethod.SPURT:
+        unw_paths, conncomp_paths = unwrap_spurt(
+            ifg_filenames=in_files,
+            cor_filenames=cor_filenames,
+            mask_filename=mask_filename,
+            options=unwrap_options.spurt_options,
+        )
+        return unw_paths, conncomp_paths
+
     # This keeps it from spawning a new process for a single job.
+    max_jobs = unwrap_options.n_parallel_jobs
     Executor = ThreadPoolExecutor if max_jobs > 1 else DummyProcessPoolExecutor
     with Executor(max_workers=max_jobs) as exc:
         futures = [
@@ -173,23 +133,24 @@ def run(
                 corr_filename=cor_file,
                 unw_filename=out_file,
                 nlooks=nlooks,
-                init_method=init_method,
-                cost=cost,
-                unwrap_method=unwrap_method,
                 mask_filename=mask_filename,
-                zero_where_masked=zero_where_masked,
-                downsample_factor=downsample_factor,
-                ntiles=ntiles,
-                tile_overlap=tile_overlap,
-                n_parallel_tiles=n_parallel_tiles,
+                unwrap_options=unwrap_options,
+                # init_method=init_method,
+                # cost=cost,
+                # unwrap_method=unwrap_method,
+                # zero_where_masked=zero_where_masked,
+                # downsample_factor=downsample_factor,
+                # ntiles=ntiles,
+                # tile_overlap=tile_overlap,
+                # n_parallel_tiles=n_parallel_tiles,
                 unw_nodata=unw_nodata,
                 ccl_nodata=ccl_nodata,
                 scratchdir=scratchdir,
-                run_goldstein=run_goldstein,
-                alpha=alpha,
-                run_interpolation=run_interpolation,
-                max_radius=max_radius,
-                interpolation_cor_threshold=interpolation_cor_threshold,
+                # run_goldstein=run_goldstein,
+                # alpha=alpha,
+                # run_interpolation=run_interpolation,
+                # max_radius=max_radius,
+                # interpolation_cor_threshold=interpolation_cor_threshold,
             )
             for ifg_file, out_file, cor_file in zip(in_files, out_files, cor_filenames)
         ]
@@ -197,7 +158,7 @@ def run(
             # We're not passing all the unw files in, so we need to tally up below
             _unw_path, _cc_path = fut.result()
 
-    if zero_where_masked and mask_filename is not None:
+    if unwrap_options.zero_where_masked and mask_filename is not None:
         all_out_files = [
             Path(str(outf).replace(UNW_SUFFIX, UNW_SUFFIX_ZEROED))
             for outf in all_out_files
@@ -220,24 +181,12 @@ def unwrap(
     unw_filename: Filename,
     nlooks: float,
     mask_filename: Optional[Filename] = None,
-    zero_where_masked: bool = False,
-    ntiles: Union[int, tuple[int, int]] = 1,
-    tile_overlap: tuple[int, int] = (0, 0),
-    n_parallel_tiles: int = 1,
-    unwrap_method: UnwrapMethod = UnwrapMethod.SNAPHU,
-    init_method: str = "mst",
-    cost: str = "smooth",
+    unwrap_options: UnwrapOptions = DEFAULT_OPTIONS,
     log_to_file: bool = True,
-    downsample_factor: Union[int, tuple[int, int]] = 1,
     unw_nodata: float | None = DEFAULT_UNW_NODATA,
     ccl_nodata: int | None = DEFAULT_CCL_NODATA,
     scratchdir: Optional[Filename] = None,
-    run_goldstein: bool = False,
-    alpha: float = 0.5,
-    run_interpolation: bool = False,
-    max_radius: int = 51,
-    interpolation_cor_threshold: float = 0.5,
-) -> tuple[Filename, Filename]:
+) -> tuple[Path, Path]:
     """Unwrap a single interferogram using snaphu, isce3, or tophu.
 
     Parameters
@@ -248,40 +197,16 @@ def unwrap(
         Path to input correlation file.
     unw_filename : Filename
         Path to output unwrapped phase file.
+    unwrap_options : UnwrapOptions, optional
+        [`UnwrapOptions`][dolphin.workflows.config.UnwrapOptions] config object
+        with parameters and settings for unwrapping.
     nlooks : float
         Effective number of looks used to form the input correlation data.
     mask_filename : Filename, optional
         Path to binary byte mask file, by default None.
         Assumes that 1s are valid pixels and 0s are invalid.
-    zero_where_masked : bool, optional
-        Set wrapped phase/correlation to 0 where mask is 0 before unwrapping.
-        If not mask is provided, this is ignored.
-        By default True.
-    unwrap_method : UnwrapMethod or str, optional, default = "snaphu"
-        Choice of unwrapping algorithm to use.
-        Choices: {"snaphu", "icu", "phass"}
-    ntiles : int or tuple[int, int], optional, default = (1, 1)
-        For either snaphu-py or tophu: divide the interferogram into tiles
-        and unwrap each separately, then combine.
-        If 1 or (1, 1), no tiling is performed, unwraps the interferogram as
-        one single image.
-    tile_overlap : tuple[int, int], optional
-        (For snaphu-py tiling): Number of pixels to overlap in the (row, col) direction.
-        Default = (0, 0)
-    n_parallel_tiles : int, optional
-        (For snaphu-py tiling) If specifying `ntiles`, number of processes to spawn
-        to unwrap the tiles in parallel.
-        Default = 1, which unwraps each tile in serial.
-    init_method : str, choices = {"mcf", "mst"}
-        SNAPHU initialization method, by default "mst"
-    cost : str, choices = {"smooth", "defo", "p-norm",}
-        SNAPHU cost function, by default "smooth"
     log_to_file : bool, optional
         Redirect isce3 logging output to file, by default True
-    downsample_factor : int, optional, default = 1
-        Downsample the interferograms by this factor to unwrap faster, then upsample
-        to full resolution.
-        If 1, doesn't use coarse_unwrap and unwraps as normal.
     unw_nodata : float , optional.
         Requested nodata value for the unwrapped phase.
         Default = 0
@@ -291,33 +216,17 @@ def unwrap(
     scratchdir : Filename, optional
         Path to scratch directory to hold intermediate files.
         If None, uses `tophu`'s `/tmp/...` default.
-    run_goldstein : bool, optional, default = False
-        Whether to run Goldstein filtering on interferogram
-    alpha : float, optional, default = 0.5
-        Alpha parameter for Goldstein filtering
-    run_interpolation : bool, optional, default = False
-        Whether to run interpolation on interferogram
-    max_radius : int, optional, default = 51
-        maximum radius (in pixel) for scatterer searching for interpolation
-    interpolation_cor_threshold : float, optional, default = 0.5
-        Threshold on the correlation raster to use for interpolation.
-        Pixels with less than this value are replaced by a weighted
-        combination of neighboring pixels.
 
     Returns
     -------
-    unw_path : Filename
+    unw_path : Path
         Path to output unwrapped phase file.
-    conncomp_path : Filename
+    conncomp_path : Path
         Path to output connected component label file.
 
     """
-    if isinstance(downsample_factor, int):
-        downsample_factor = (downsample_factor, downsample_factor)
-    if isinstance(ntiles, int):
-        ntiles = (ntiles, ntiles)
-    # Coerce to the enum
-    unwrap_method = UnwrapMethod(unwrap_method)
+    unwrap_method = unwrap_options.unwrap_method
+    preproc_options = unwrap_options.preprocess_options
 
     # Check for a nodata mask
     if io.get_raster_nodata(ifg_filename) is None or mask_filename is None:
@@ -335,7 +244,7 @@ def unwrap(
     unwrapper_unw_filename = Path(unw_filename)
     name_change = "."
 
-    if run_goldstein:
+    if unwrap_options.run_goldstein:
         suf = Path(unw_filename).suffix
         if suf == ".tif":
             driver = "GTiff"
@@ -356,7 +265,7 @@ def unwrap(
 
         ifg = io.load_gdal(ifg_filename)
         logger.info(f"Goldstein filtering {ifg_filename} -> {filt_ifg_filename}")
-        modified_ifg = goldstein(ifg, alpha=alpha)
+        modified_ifg = goldstein(ifg, alpha=preproc_options.alpha)
         logger.info(f"Writing filtered output to {filt_ifg_filename}")
         io.write_arr(
             arr=modified_ifg,
@@ -368,7 +277,7 @@ def unwrap(
         unwrapper_ifg_filename = filt_ifg_filename
         unwrapper_unw_filename = filt_unw_filename
 
-    if run_interpolation:
+    if unwrap_options.run_interpolation:
         suf = Path(ifg_filename).suffix
         if suf == ".tif":
             driver = "GTiff"
@@ -391,17 +300,16 @@ def unwrap(
 
         ifg = io.load_gdal(pre_interp_ifg_filename)
         corr = io.load_gdal(corr_filename)
-        logger.info(
-            f"Masking pixels with correlation below {interpolation_cor_threshold}"
-        )
-        coherent_pixel_mask = corr[:] >= interpolation_cor_threshold
+        cutoff = preproc_options.interpolation_cor_threshold
+        logger.info(f"Masking pixels with correlation below {cutoff}")
+        coherent_pixel_mask = corr[:] >= cutoff
 
         logger.info(f"Interpolating {pre_interp_ifg_filename} -> {interp_ifg_filename}")
         modified_ifg = interpolate(
             ifg=ifg,
             weights=coherent_pixel_mask,
-            weight_cutoff=interpolation_cor_threshold,
-            max_radius=max_radius,
+            weight_cutoff=cutoff,
+            max_radius=preproc_options.max_radius,
         )
 
         logger.info(f"Writing interpolated output to {interp_ifg_filename}")
@@ -416,37 +324,39 @@ def unwrap(
         unwrapper_unw_filename = interp_unw_filename
 
     if unwrap_method == UnwrapMethod.SNAPHU:
+        snaphu_opts = unwrap_options.snaphu_options
         # Pass everything to snaphu-py
         unw_path, conncomp_path = unwrap_snaphu_py(
             unwrapper_ifg_filename,
             corr_filename,
             unwrapper_unw_filename,
             nlooks,
-            ntiles=ntiles,
-            tile_overlap=tile_overlap,
+            ntiles=snaphu_opts.ntiles,
+            tile_overlap=snaphu_opts.tile_overlap,
             mask_file=combined_mask_file,
-            nproc=n_parallel_tiles,
-            zero_where_masked=zero_where_masked,
+            nproc=snaphu_opts.n_parallel_tiles,
+            zero_where_masked=unwrap_options.zero_where_masked,
             unw_nodata=unw_nodata,
             ccl_nodata=ccl_nodata,
-            init_method=init_method,
-            cost=cost,
+            init_method=snaphu_opts.init_method,
+            cost=snaphu_opts.cost,
             scratchdir=scratchdir,
         )
     else:
+        tophu_opts = unwrap_options.tophu_options
         unw_path, conncomp_path = multiscale_unwrap(
             unwrapper_ifg_filename,
             corr_filename,
             unwrapper_unw_filename,
-            downsample_factor,
-            ntiles=ntiles,
+            tophu_opts.downsample_factor,
+            ntiles=tophu_opts.ntiles,
             nlooks=nlooks,
             mask_file=combined_mask_file,
-            zero_where_masked=zero_where_masked,
+            zero_where_masked=unwrap_options.zero_where_masked,
             unw_nodata=unw_nodata,
             ccl_nodata=ccl_nodata,
-            init_method=init_method,
-            cost=cost,
+            init_method=tophu_opts.init_method,
+            cost=tophu_opts.cost,
             unwrap_method=unwrap_method,
             scratchdir=scratchdir,
             log_to_file=log_to_file,
@@ -466,7 +376,7 @@ def unwrap(
 
     # Transfer ambiguity numbers from filtered/interpolated unwrapped interferogram
     # back to original interferogram
-    if run_goldstein or run_interpolation:
+    if unwrap_options.run_goldstein or unwrap_options.run_interpolation:
         logger.info(
             "Transferring ambiguity numbers from filtered/interpolated"
             "ifg {scratch_unw_filename}"
@@ -494,7 +404,7 @@ def unwrap(
             nlooks=nlooks,
             mask=mask,
             ccl_nodata=ccl_nodata,
-            cost=cost,
+            cost=unwrap_options.snaphu_options.cost,
             scratchdir=scratchdir,
         )
 

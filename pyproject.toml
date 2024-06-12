@@ -105,6 +105,9 @@ exclude = ["scripts"]
 ignore-variadic-names = true
 
 
+[tool.black]
+preview = true
+
 [tool.mypy]
 python_version = "3.10"
 ignore_missing_imports = true

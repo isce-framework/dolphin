@@ -199,6 +199,8 @@ def _add_comments(
             # Join the options with a pipe, like Python types
             type_str = " | ".join(d["type"] for d in val["anyOf"])
             type_str.replace("null", "None")
+        elif "const" in val:
+            type_str = val["const"]
         else:
             type_str = val["type"]
         type_line = f"\n  Type: {type_str}."
