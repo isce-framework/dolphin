@@ -28,6 +28,7 @@ def create_config(
     ministack_size: Optional[int] = 15,
     half_window_size: tuple[int, int] = (11, 5),
     shp_method: ShpMethod = ShpMethod.GLRT,
+    baseline_lag: Optional[int] = None,
     amp_dispersion_threshold: float = 0.25,
     strides: tuple[int, int],
     block_shape: tuple[int, int] = (512, 512),
@@ -95,6 +96,7 @@ def create_config(
             "ministack_size": ministack_size,
             "half_window": {"x": half_window_size[0], "y": half_window_size[1]},
             "shp_method": shp_method,
+            "baseline_lag": baseline_lag,
         },
         ps_options={
             "amp_dispersion_threshold": amp_dispersion_threshold,
@@ -233,6 +235,12 @@ def get_parser(subparser=None, subcommand_name="run"):
         choices=[s.value for s in ShpMethod],
         default=ShpMethod.GLRT,
         help="Method used to calculate the SHP.",
+    )
+    pl_group.add_argument(
+        "--baseline_lag",
+        type=Optional[int],
+        default=None,
+        help="Half window size for the phase linking algorithm",
     )
 
     # PS options
