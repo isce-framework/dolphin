@@ -109,7 +109,7 @@ def run_phase_linking(
     use_max_ps : bool, optional
         Whether to use the maximum PS phase for the first pixel, or average all
         PS within the look window.
-        By default False.
+        By default True.
     neighbor_arrays : np.ndarray, optional
         The neighbor arrays to use for SHP, shape = (n_rows, n_cols, *window_shape).
         If None, a rectangular window is used. By default None.
