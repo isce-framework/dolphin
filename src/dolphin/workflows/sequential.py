@@ -43,6 +43,7 @@ def run_wrapped_phase_sequential(
     use_evd: bool = False,
     beta: float = 0.00,
     block_shape: tuple[int, int] = (512, 512),
+    baseline_lag: Optional[int] = None,
     **tqdm_kwargs,
 ) -> tuple[list[Path], list[Path], Path, Path]:
     """Estimate wrapped phase using batches of ministacks."""
@@ -111,6 +112,7 @@ def run_wrapped_phase_sequential(
                 shp_alpha=shp_alpha,
                 shp_nslc=shp_nslc,
                 block_shape=block_shape,
+                baseline_lag=baseline_lag,
                 **tqdm_kwargs,
             )
 

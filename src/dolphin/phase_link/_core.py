@@ -71,6 +71,7 @@ def run_phase_linking(
     avg_mag: Optional[np.ndarray] = None,
     use_slc_amp: bool = True,
     calc_average_coh: bool = False,
+    baseline_lag: Optional[int] = None,
 ) -> PhaseLinkOutput:
     """Estimate the linked phase for a stack of SLCs.
 
@@ -117,6 +118,9 @@ def run_phase_linking(
         or to set the SLC amplitude to 1.0. By default True.
     calc_average_coh : bool, optional, default = False
         Whether to calculate the average coherence for each SLC date.
+    baseline_lag : int, optional, default=None
+        lag for temporal baseline to do short temporal baseline inversion (STBAS)
+
 
     Returns
     -------
@@ -178,6 +182,7 @@ def run_phase_linking(
         reference_idx=reference_idx,
         neighbor_arrays=neighbor_arrays,
         calc_average_coh=calc_average_coh,
+        baseline_lag=baseline_lag,
     )
 
     if use_slc_amp:
@@ -232,6 +237,7 @@ def run_cpl(
     reference_idx: int = 0,
     neighbor_arrays: Optional[np.ndarray] = None,
     calc_average_coh: bool = False,
+    baseline_lag: Optional[int] = None,
 ) -> PhaseLinkOutput:
     """Run the Combined Phase Linking (CPL) algorithm.
 
@@ -264,6 +270,8 @@ def run_cpl(
     calc_average_coh : bool, default=False
         If requested, the average of each row of the covariance matrix is computed
         for the purposes of finding the best reference (highest coherence) date
+    baseline_lag : int, optional, default=None
+        lag for temporal baseline to do short temporal baseline inversion (STBAS)
 
     Returns
     -------
@@ -294,6 +302,11 @@ def run_cpl(
         strides,
         neighbor_arrays=neighbor_arrays,
     )
+    if baseline_lag:
+        iu = np.triu_indices(C_arrays.shape[0], baseline_lag)
+        il = np.tril_indices(C_arrays.shape[0], -baseline_lag)
+        C_arrays[iu] = 0
+        C_arrays[il] = 0
 
     cpx_phase, eigenvalues, estimator = process_coherence_matrices(
         C_arrays,

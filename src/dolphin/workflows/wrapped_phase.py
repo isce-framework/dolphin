@@ -174,6 +174,7 @@ def run(
                 shp_alpha=cfg.phase_linking.shp_alpha,
                 shp_nslc=shp_nslc,
                 block_shape=cfg.worker_settings.block_shape,
+                baseline_lag=cfg.phase_linking.baseline_lag,
                 **kwargs,
             )
         )

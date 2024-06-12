@@ -104,6 +104,13 @@ class PhaseLinkingOptions(BaseModel, extra="forbid"):
         gt=0.0,
         lt=1.0,
     )
+    baseline_lag: Optional[int] = Field(
+        None,
+        description=(
+            "lag for temporal baseline to do short temporal baseline"
+            " inversion (STBAS)"
+        ),
+    )
 
 
 class InterferogramNetwork(BaseModel, extra="forbid"):

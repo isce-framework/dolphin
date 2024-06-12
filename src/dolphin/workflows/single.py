@@ -51,6 +51,7 @@ def run_wrapped_phase_single(
     shp_alpha: float = 0.05,
     shp_nslc: Optional[int] = None,
     block_shape: tuple[int, int] = (1024, 1024),
+    baseline_lag: Optional[int] = None,
     **tqdm_kwargs,
 ):
     """Estimate wrapped phase for one ministack.
@@ -199,6 +200,7 @@ def run_wrapped_phase_single(
                 nodata_mask=nodata_mask[in_rows, in_cols],
                 ps_mask=ps_mask[in_rows, in_cols],
                 neighbor_arrays=neighbor_arrays,
+                baseline_lag=baseline_lag,
                 avg_mag=amp_mean[in_rows, in_cols] if amp_mean is not None else None,
             )
         except PhaseLinkRuntimeError as e:
