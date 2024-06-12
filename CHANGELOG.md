@@ -7,6 +7,7 @@
 - `baseline` module for computing the perpendicular baseline. Initial version has logic for OPERA CSLCs, uses `isce3`
 - Interface only for 3D unwrapping
 - Faster correlated noise simulation, along with 3d stack simulation with synthetic deformation
+- Added ability to read rasters on S3 using `VRTStack` object
 
 **Removed**
 - the KL-divergence SHP estimator has been removed. GLRT is recommended instead.
