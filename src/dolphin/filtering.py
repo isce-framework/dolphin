@@ -16,7 +16,7 @@ def filter_long_wavelength(
     ----------
     unwrapped_phase : np.ndarray, 2D complex array
         Unwrapped interferogram phase to filter.
-       correlation : Arraylike, 2D
+    correlation : Arraylike, 2D
         Array of interferometric correlation from 0 to 1.
         Array of interferometric correlation from 0 to 1.
     mask_cutoff: float
