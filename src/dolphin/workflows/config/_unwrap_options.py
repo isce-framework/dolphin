@@ -70,9 +70,9 @@ class PreprocessOptions(BaseModel, extra="forbid"):
     interpolation_cor_threshold: float = Field(
         0.5,
         description=(
-            "Threshold on the correlation raster to use for interpolation. "
-            "Pixels with less than this value are replaced by a weighted "
-            "combination of neighboring pixels."
+            "Threshold on the correlation raster to use for interpolation. Pixels with"
+            " less than this value are replaced by a weighted combination of"
+            " neighboring pixels."
         ),
         ge=0.0,
         le=1.0,
@@ -149,8 +149,8 @@ class SpurtTilerSettings(BaseModel):
     dilation_factor: float = Field(
         0.05,
         description=(
-            "Dilation factor of non-overlapping tiles. "
-            "0.05 would lead to 5 percent dilation of the tile."
+            "Dilation factor of non-overlapping tiles. 0.05 would lead to 5 percent"
+            " dilation of the tile."
         ),
         ge=0.0,
     )
@@ -160,15 +160,15 @@ class SpurtSolverSettings(BaseModel):
     worker_count: int = Field(
         default=0,
         description=(
-            "Number of workers for temporal unwrapping in parallel. "
-            "Set value to <=0 to let workflow use default workers (ncpus - 1)."
+            "Number of workers for temporal unwrapping in parallel. Set value to <=0 to"
+            " let workflow use default workers (ncpus - 1)."
         ),
     )
     links_per_batch: int = Field(
         default=10000,
         description=(
-            "Temporal unwrapping operations over spatial links are performed in "
-            "batches and each batch is solved in parallel."
+            "Temporal unwrapping operations over spatial links are performed in batches"
+            " and each batch is solved in parallel."
         ),
         gt=0,
     )
@@ -229,9 +229,7 @@ class UnwrapOptions(BaseModel, extra="forbid"):
     )
     run_goldstein: bool = Field(
         False,
-        description=(
-            "Whether to run Goldstein filtering step on wrapped interferogram."
-        ),
+        description="Whether to run Goldstein filtering step on wrapped interferogram.",
     )
     run_interpolation: bool = Field(
         False,
