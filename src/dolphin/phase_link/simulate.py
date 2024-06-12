@@ -257,20 +257,15 @@ def create_noisy_deformation(C: np.ndarray, defo_stack: np.ndarray) -> np.ndarra
             Covariance phases of shape (rows, cols, num_time, num_time).
 
         """
-        # Step 1: Create difference stack using broadcasting
-        stack_i = np.exp(
-            1j * stack[:, np.newaxis, :, :]
-        )  # shape: (num_time, 1, rows, cols)
-        stack_j = np.exp(
-            1j * stack[np.newaxis, :, :, :]
-        )  # shape: (1, num_time, rows, cols)
-        diff_stack = stack_i * stack_j.conj()  # shape: (num_time, num_time, rows, cols)
+        # Create all possible differences using broadcasting
+        # shape: (num_time, 1, rows, cols)
+        stack_i = np.exp(1j * stack[:, np.newaxis, :, :])
+        # shape: (1, num_time, rows, cols)
+        stack_j = np.exp(1j * stack[np.newaxis, :, :, :])
+        diff_stack = stack_i * stack_j.conj()
 
-        # Step 2: Transpose to get shape (rows, cols, num_time, num_time)
-        diff_stack = diff_stack.transpose(
-            2, 3, 0, 1
-        )  # shape: (rows, cols, num_time, num_time)
-        return diff_stack
+        # Reshape to (rows, cols, num_time, num_time)
+        return diff_stack.transpose(2, 3, 0, 1)
 
     num_time, rows, cols = defo_stack.shape
     shape2d = (rows, cols)
