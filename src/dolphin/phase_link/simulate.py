@@ -8,6 +8,7 @@ import numpy as np
 import numpy.linalg as la
 import scipy.ndimage as ndi
 from numba import njit
+from numpy.typing import ArrayLike
 
 
 @njit(cache=True)
@@ -27,32 +28,8 @@ def _seed(a):
     np.random.seed(a)
 
 
-@njit(cache=True)
-def simulate_sample(corr_matrix: np.array) -> np.array:
-    """Simulate one sample from a given correlation matrix.
-
-    Parameters
-    ----------
-    corr_matrix : np.array
-        The correlation matrix
-
-    Returns
-    -------
-    np.array
-
-    """
-    w, v = la.eigh(corr_matrix)
-    w[w < 1e-3] = 0.0
-    w = w.astype(v.dtype)
-
-    v_star = np.conj(v.T)  # Hermitian
-    C = v @ np.diag(np.sqrt(w)) @ v_star
-    z = _ccg_noise(corr_matrix.shape[0])
-    z = z.astype(C.dtype)
-    return C @ z
-
-
 def ccg_noise(N: int) -> np.array:
+    """Create N samples of standard complex circular Gaussian noise."""
     return (
         rng.normal(scale=1 / np.sqrt(2), size=2 * N)
         .astype(np.float32)
@@ -60,38 +37,32 @@ def ccg_noise(N: int) -> np.array:
     )
 
 
-@njit(cache=True)
 def simulate_neighborhood_stack(
-    corr_matrix: np.array, neighbor_samples: int = 200
+    corr_matrix: ArrayLike, neighbor_samples: int = 200
 ) -> np.array:
-    """Simulate a matrix of neighborhood samples (num_slc, num_samples).
+    """Simulate a stack of samples from a given correlation matrix.
 
     Parameters
     ----------
-    corr_matrix : np.array
-        The correlation matrix to use for the simulation.
-        Size is (num_slc, num_slc)
-    neighbor_samples : int, optional
-        Number of samples to simulate, by default 200
+    corr_matrix : ArrayLike
+        The correlation matrix to use for generating the samples.
+    neighbor_samples : int
+        The number of samples to generate for each pixel in the neighborhood.
 
     Returns
     -------
     np.array
-        A stack of neighborhood samples
-        size (corr_matrix.shape[0], neighbor_samples)
+        A 2D array of shape (N, neighbor_samples) containing the simulated samples,
+        where N is the number of pixels in the neighborhood.
 
     """
-    nslc = corr_matrix.shape[0]
-    # A 2D matrix for a neighborhood over time.
-    # Each column is the neighborhood complex data for each acquisition date
-    neighbor_stack = np.zeros((nslc, neighbor_samples), dtype=np.complex64)
-    for ii in range(neighbor_samples):
-        slcs = simulate_sample(corr_matrix)
-        # To ensure that the neighborhood is homogeneous,
-        # we set the amplitude of all SLCs to one
-        neighbor_stack[:, ii] = np.exp(1j * np.angle(slcs))
+    N = corr_matrix.shape[0]
+    noise = ccg_noise(neighbor_samples * N)
+    noise_as_columns = noise.reshape(N, neighbor_samples)
 
-    return neighbor_stack
+    L = np.linalg.cholesky(corr_matrix)
+    samps = L @ noise_as_columns
+    return samps
 
 
 @njit(cache=True)
@@ -245,7 +216,8 @@ def make_defo_stack(
         Deformation stack with time series, shape (num_time_steps, rows, cols).
 
     """
-    num_time_steps, *shape2d = shape
+    num_time_steps, rows, cols = shape
+    shape2d = (rows, cols)
     # Get shape of deformation in final form (normalized to 1 max)
     final_defo = make_gaussian(shape=shape2d, sigma=sigma).reshape((1, *shape2d))
     final_defo *= max_amplitude / np.max(final_defo)
@@ -300,7 +272,8 @@ def create_noisy_deformation(C: np.ndarray, defo_stack: np.ndarray) -> np.ndarra
         )  # shape: (rows, cols, num_time, num_time)
         return diff_stack
 
-    num_time, *shape2d = defo_stack.shape
+    num_time, rows, cols = defo_stack.shape
+    shape2d = (rows, cols)
     num_pixels = np.prod(shape2d)
 
     assert C.shape == (num_time, num_time)
