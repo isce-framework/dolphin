@@ -148,10 +148,10 @@ def filter_long_wavelength(
         1 / wavelength_cutoff / np.sqrt(np.log(1 / cutoff_value))
     )  # fc = sqrt(ln(1/cutoff_value))*sigma_f
     sigma_x = 1 / np.pi / 2 / sigma_f
-    sigma = sigma_x / dx
+    sigma = sigma_x / pixel_spacing
 
     lowpass_filtered = ndimage.gaussian_filter(Reflect_fill, sigma)
-    filtered_ifg = unw_ifg - lowpass_filtered * mask_boundary
+    filtered_ifg = unwrapped_phase - lowpass_filtered * mask_boundary
 
     return filtered_ifg
 
