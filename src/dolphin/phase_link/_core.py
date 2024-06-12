@@ -213,7 +213,7 @@ def run_phase_linking(
         # account for the strides when grabbing original data
         # we need to match `io.compute_out_shape` here
         slcs_decimated = decimate(slc_stack, strides)
-        cpx_phase = np.exp(1j * np.angle(cpl_out.cpx_phase)) * np.abs(slcs_decimated)
+        cpx_phase = np.exp(1j * np.angle(cpx_phase)) * np.abs(slcs_decimated)
 
     # Finally, ensure the nodata regions are 0
     cpx_phase[:, mask_looked] = np.nan

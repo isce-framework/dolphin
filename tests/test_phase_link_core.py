@@ -1,4 +1,5 @@
 import os
+import warnings
 
 import numpy as np
 import numpy.testing as npt
@@ -162,21 +163,24 @@ def test_ps_fill(slc_samples, strides):
     rows, cols = 11, 11
     slc_stack = slc_samples.copy().reshape(NUM_ACQ, 11, 11)
 
-    mle_est = np.zeros((NUM_ACQ, rows // strides, cols // strides), dtype=np.complex64)
+    mle_est = np.ones((NUM_ACQ, rows // strides, cols // strides), dtype=np.complex64)
     temp_coh = np.zeros(mle_est.shape[1:])
 
     ps_idx = 2
     ps_mask = np.zeros((11, 11), dtype=bool)
     ps_mask[ps_idx, ps_idx] = True
 
-    fill_ps_pixels(
-        mle_est,
-        temp_coh,
-        slc_stack,
-        ps_mask,
-        Strides(strides, strides),
-        None,  # avg_mag
-    )
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)
+        fill_ps_pixels(
+            mle_est,
+            temp_coh,
+            slc_stack,
+            ps_mask,
+            Strides(strides, strides),
+            None,  # avg_mag
+            use_max_ps=True,
+        )
 
     ps_phase = slc_stack[:, ps_idx, ps_idx]
     ps_phase *= ps_phase[0].conj()  # Reference to first acquisition
@@ -195,12 +199,17 @@ def test_run_phase_linking_ps_fill(slc_samples, strides):
     ps_idx = 2
     ps_mask = np.zeros((11, 11), dtype=bool)
     ps_mask[ps_idx, ps_idx] = True
-    pl_out = _core.run_phase_linking(
-        slc_stack,
-        half_window=HalfWindow(5, 5),
-        strides=Strides(strides, strides),
-        ps_mask=ps_mask,
-    )
+    # Ignore RuntimeWarning
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)
+        pl_out = _core.run_phase_linking(
+            slc_stack,
+            half_window=HalfWindow(5, 5),
+            strides=Strides(strides, strides),
+            ps_mask=ps_mask,
+            # use_max_ps=True,
+            use_max_ps=True,
+        )
     ps_phase = slc_stack[:, ps_idx, ps_idx]
     ps_phase *= ps_phase[0].conj()  # Reference to first acquisition
 
