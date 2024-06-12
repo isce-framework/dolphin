@@ -56,14 +56,14 @@ class Bbox(NamedTuple):
 
 
 class Strides(NamedTuple):
-    """Decimation/striding factor in the y (column) and x (row) directions."""
+    """Decimation/striding factor in the y (row) and x (column) directions."""
 
     y: int
     x: int
 
 
 class HalfWindow(NamedTuple):
-    """Half-window size in the y (column) and x (row) directions."""
+    """Half-window size in the y (row) and x (column) directions."""
 
     y: int
     x: int
