@@ -103,30 +103,23 @@ def test_run_phase_linking(slc_samples):
     )
 
 
-def test_run_phase_linking_use_slc_amp(slc_samples):
+@pytest.mark.parametrize("use_slc_amp", [False, True])
+@pytest.mark.parametrize("use_max_ps", [False, True])
+def test_run_phase_linking_use_slc_amp(slc_samples, use_slc_amp, use_max_ps):
     slc_stack = slc_samples.copy().reshape(NUM_ACQ, 11, 11)
     ps_mask = np.zeros((11, 11), dtype=bool)
-    # Specify at least 1 ps
-    ps_mask[0, 0] = True
-    pl_out = _core.run_phase_linking(
-        slc_stack,
-        half_window=HalfWindow(5, 5),
-        ps_mask=ps_mask,
-        use_slc_amp=False,
-    )
-    # The output should still all have modulus of 1 except the PS pixel
-    assert np.allclose(np.abs(pl_out.cpx_phase[:, 1:, 1:]), 1)
-
     # Specify at least 1 ps
     ps_mask[1, 1] = True
     pl_out = _core.run_phase_linking(
         slc_stack,
         half_window=HalfWindow(5, 5),
         ps_mask=ps_mask,
-        use_slc_amp=True,
+        use_slc_amp=use_slc_amp,
+        use_max_ps=use_max_ps,
     )
-    # The output should still all have modulus equal to the SLC
-    assert np.allclose(np.abs(pl_out.cpx_phase), np.abs(slc_stack))
+
+    expected = np.abs(slc_stack) if use_slc_amp else 1
+    assert np.allclose(np.abs(pl_out.cpx_phase), expected)
 
 
 def test_run_phase_linking_with_shift(slc_samples):
