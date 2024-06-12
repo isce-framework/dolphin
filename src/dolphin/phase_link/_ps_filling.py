@@ -19,7 +19,7 @@ def fill_ps_pixels(
     strides: Strides,
     avg_mag: np.ndarray,
     reference_idx: int = 0,
-    use_max_ps: bool = False,
+    use_max_ps: bool = True,
 ):
     """Fill in the PS locations in the MLE estimate with the original SLC data.
 
@@ -43,14 +43,9 @@ def fill_ps_pixels(
     reference_idx : int, default = 0
         SLC to use as reference for PS pixels. All pixel values are multiplied
         by the conjugate of this index
-    use_max_ps : bool, optional, default = False
+    use_max_ps : bool, optional, default = True
         If True, use the brightest PS pixel in each look window to fill in the
         MLE estimate. If False, use the average of all PS pixels in each look window.
-
-    Returns
-    -------
-    ps_masked_looked : ndarray
-        boolean array of PS, multilooked (using "any") to same size as `cpx_phase`
 
     """
     if avg_mag is None:
@@ -73,17 +68,27 @@ def fill_ps_pixels(
         logger.info("Using max PS pixel to fill in MLE estimate")
         # Get the indices of the brightest pixels within each look window
         slc_r_idxs, slc_c_idxs = _get_max_idxs(mag, *strides)
+
         # we're only filling where there are PS pixels
         ref = np.exp(-1j * np.angle(slc_stack[reference_idx][slc_r_idxs, slc_c_idxs]))
         for i in range(len(slc_stack)):
-            cpx_phase[i][ps_mask_looked] = slc_stack[i][slc_r_idxs, slc_c_idxs] * ref
+            slc_phase = np.angle(slc_stack[i][slc_r_idxs, slc_c_idxs])
+            cur_amp = np.abs(cpx_phase[i][ps_mask_looked])
+            new_value = np.exp(1j * slc_phase) * ref
+            cpx_phase[i][ps_mask_looked] = cur_amp * new_value
+
     else:
         # Get the average of all PS pixels within each look window
         # The referencing to SLC 0 is done in _get_avg_ps
         avg_ps = _get_avg_ps(slc_stack, ps_mask, strides)[
             :, : cpx_phase.shape[1], : cpx_phase.shape[2]
         ]
-        cpx_phase[:, ps_mask_looked] = avg_ps[:, ps_mask_looked]
+        ps_phases = np.angle(avg_ps[:, ps_mask_looked])
+
+        # Set the angle only, don't change magnitude
+        cpx_phase[:, ps_mask_looked] = np.abs(cpx_phase[:, ps_mask_looked]) * np.exp(
+            1j * ps_phases
+        )
 
     # Force PS pixels to have high temporal coherence
     temp_coh[ps_mask_looked] = 1

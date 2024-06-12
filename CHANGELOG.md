@@ -1,4 +1,13 @@
-# [Unreleased](https://github.com/isce-framework/dolphin/compare/v0.18.0...main)
+# [Unreleased](https://github.com/isce-framework/dolphin/compare/v0.19.0...main)
+
+# [Unreleased](https://github.com/isce-framework/dolphin/compare/v0.18.0...v0.19.0) - 2024-06-12
+
+**Added**
+- `filtering` module for filtering out long wavelength signals from the unwrapped phase
+- `baseline` module for computing the perpendicular baseline. Initial version has logic for OPERA CSLCs, uses `isce3`
+- Interface only for 3D unwrapping
+- Faster correlated noise simulation, along with 3d stack simulation with synthetic deformation
+- Added ability to read rasters on S3 using `VRTStack` object
 
 **Removed**
 - the KL-divergence SHP estimator has been removed. GLRT is recommended instead.
@@ -6,11 +15,14 @@
 **Fixed**
 - `reproject_bounds` uses the `rasterio` version, which densifies points along edges for a more accurate bounding box
 - The output SHP rasters now output 0 if there was no valid input data
+- Logic for filling PS pixels, with and without setting the amplitudes to be the original SLC amplitudes
 
 **Changed**
+- The configuration options for unwrapping have been refactored. Options unique to each unwrapper are grouped into subclasses.
+  - Note that older `dolphin_config.yaml` files will error after this refactor.
 - Unweighted time series inversion will make one batch call, providing a large speedup over the `vmap` version for weighted least squares
 
-# [v0.18.0](https://github.com/isce-framework/dolphin/compare/v0.17.0...v0.18.0)
+# [v0.18.0](https://github.com/isce-framework/dolphin/compare/v0.17.0...v0.18.0) - 2024-05-07
 
 **Added**
 - `dolphin timeseries` command line tool for inverting unwrapped interferogram network and estimating velocity
@@ -19,7 +31,7 @@
 - Parse the file names correctly to find compressed SLCs and read dates based on production file naming convention
 
 
-# [v0.17.0](https://github.com/isce-framework/dolphin/compare/v0.16.3...v0.17.0) - 2024-04-10)
+# [v0.17.0](https://github.com/isce-framework/dolphin/compare/v0.16.3...v0.17.0) - 2024-04-10
 **Added**
 - Added Goldstein filtering for unwrapping
 - Added Interpolation for unwrapping

@@ -67,6 +67,7 @@ def run_phase_linking(
     reference_idx: int = 0,
     nodata_mask: np.ndarray = None,
     ps_mask: Optional[np.ndarray] = None,
+    use_max_ps: bool = True,
     neighbor_arrays: Optional[np.ndarray] = None,
     avg_mag: Optional[np.ndarray] = None,
     use_slc_amp: bool = True,
@@ -105,6 +106,10 @@ def run_phase_linking(
         (combined with `nodata_mask`).
         The phase from these pixels will be inserted back
         into the final estimate directly from `slc_stack`.
+    use_max_ps : bool, optional
+        Whether to use the maximum PS phase for the first pixel, or average all
+        PS within the look window.
+        By default True.
     neighbor_arrays : np.ndarray, optional
         The neighbor arrays to use for SHP, shape = (n_rows, n_cols, *window_shape).
         If None, a rectangular window is used. By default None.
@@ -180,15 +185,6 @@ def run_phase_linking(
         calc_average_coh=calc_average_coh,
     )
 
-    if use_slc_amp:
-        # use the amplitude from the original SLCs
-        # account for the strides when grabbing original data
-        # we need to match `io.compute_out_shape` here
-        slcs_decimated = decimate(slc_stack, strides)
-        cpx_phase = np.exp(1j * np.angle(cpl_out.cpx_phase)) * np.abs(slcs_decimated)
-    else:
-        cpx_phase = np.exp(1j * np.angle(cpl_out.cpx_phase))
-
     # Get the smaller, looked versions of the masks
     # We zero out nodata if all pixels within the window had nodata
     mask_looked = take_looks(nodata_mask, *strides, func_type="all")
@@ -196,6 +192,8 @@ def run_phase_linking(
     # Convert from jax array back to np
     temp_coh = np.array(cpl_out.temp_coh)
 
+    # Set as unit-magnitude
+    cpx_phase = np.exp(1j * np.angle(cpl_out.cpx_phase))
     # Fill in the PS pixels from the original SLC stack, if it was given
     if np.any(ps_mask):
         fill_ps_pixels(
@@ -206,7 +204,16 @@ def run_phase_linking(
             strides,
             avg_mag,
             reference_idx,
+            use_max_ps=use_max_ps,
         )
+
+    assert np.abs(np.abs(cpx_phase) - 1).max() < 1e-6
+    if use_slc_amp:
+        # use the amplitude from the original SLCs
+        # account for the strides when grabbing original data
+        # we need to match `io.compute_out_shape` here
+        slcs_decimated = decimate(slc_stack, strides)
+        cpx_phase = np.exp(1j * np.angle(cpx_phase)) * np.abs(slcs_decimated)
 
     # Finally, ensure the nodata regions are 0
     cpx_phase[:, mask_looked] = np.nan
