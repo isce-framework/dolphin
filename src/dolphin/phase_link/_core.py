@@ -305,8 +305,8 @@ def run_cpl(
     if baseline_lag:
         iu = np.triu_indices(C_arrays.shape[0], baseline_lag)
         il = np.tril_indices(C_arrays.shape[0], -baseline_lag)
-        C_arrays[iu] = 0
-        C_arrays[il] = 0
+        C_arrays = C_arrays.at[iu].set(0)
+        C_arrays = C_arrays.at[il].set(0)
 
     cpx_phase, eigenvalues, estimator = process_coherence_matrices(
         C_arrays,
