@@ -11,10 +11,10 @@ from dolphin._log import get_log
 from ._common import (
     InputOptions,
     OutputOptions,
-    UnwrapOptions,
     WorkflowBase,
     _read_file_list_or_glob,
 )
+from ._unwrap_options import UnwrapOptions
 
 __all__ = [
     "UnwrappingWorkflow",

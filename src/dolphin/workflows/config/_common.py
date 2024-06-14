@@ -3,7 +3,7 @@ from __future__ import annotations
 import glob
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Literal, Optional
+from typing import Any, Optional
 
 from pydantic import (
     BaseModel,
@@ -19,7 +19,7 @@ from dolphin._log import get_log
 from dolphin._types import Bbox
 from dolphin.io import DEFAULT_HDF5_OPTIONS, DEFAULT_TIFF_OPTIONS
 
-from ._enums import ShpMethod, UnwrapMethod
+from ._enums import ShpMethod
 from ._yaml_model import YamlModel
 
 logger = get_log(__name__)
@@ -33,7 +33,6 @@ __all__ = [
     "PhaseLinkingOptions",
     "InterferogramNetwork",
     "TimeseriesOptions",
-    "UnwrapOptions",
 ]
 
 
@@ -153,101 +152,6 @@ class InterferogramNetwork(BaseModel, extra="forbid"):
             )
             self.reference_idx = 0
         return self
-
-
-class UnwrapOptions(BaseModel, extra="forbid"):
-    """Options for unwrapping after wrapped phase estimation."""
-
-    run_unwrap: bool = Field(
-        True,
-        description=(
-            "Whether to run the unwrapping step after wrapped phase estimation."
-        ),
-    )
-    run_goldstein: bool = Field(
-        False,
-        description=(
-            "Whether to run Goldstein filtering step on wrapped interferogram."
-        ),
-    )
-    run_interpolation: bool = Field(
-        False,
-        description=("Whether to run interpolation step on wrapped interferogram."),
-    )
-    _directory: Path = PrivateAttr(Path("unwrapped"))
-    unwrap_method: UnwrapMethod = UnwrapMethod.SNAPHU
-    n_parallel_jobs: int = Field(
-        1, description="Number of interferograms to unwrap in parallel."
-    )
-    ntiles: tuple[int, int] = Field(
-        (1, 1),
-        description=(
-            "(`snaphu-py` or multiscale unwrapping) Number of tiles to split "
-            "the inputs into"
-        ),
-    )
-    downsample_factor: tuple[int, int] = Field(
-        (1, 1),
-        description=(
-            "(for multiscale unwrapping) Extra multilook factor to use for the coarse"
-            " unwrap."
-        ),
-    )
-    tile_overlap: tuple[int, int] = Field(
-        (0, 0),
-        description=(
-            "(for use in `snaphu-py`) Amount of tile overlap (in pixels) along the"
-            " (row, col) directions."
-        ),
-    )
-    n_parallel_tiles: int = Field(
-        1,
-        description=(
-            "(for snaphu) Number of tiles to unwrap in parallel for each interferogram."
-        ),
-    )
-    init_method: Literal["mcf", "mst"] = Field(
-        "mcf",
-        description="Initialization method for SNAPHU.",
-    )
-    cost: Literal["defo", "smooth"] = Field(
-        "smooth",
-        description="Statistical cost mode method for SNAPHU.",
-    )
-    zero_where_masked: bool = Field(
-        False,
-        description=(
-            "Set wrapped phase/correlation to 0 where mask is 0 before unwrapping. "
-        ),
-    )
-    alpha: float = Field(
-        0.5,
-        description=(
-            "(for Goldstein filtering) Power parameter for Goldstein algorithm."
-        ),
-    )
-    max_radius: int = Field(
-        51,
-        ge=0.0,
-        description=("(for interpolation) maximum radius to find scatterers."),
-    )
-    interpolation_cor_threshold: float = Field(
-        0.5,
-        description=" Threshold on the correlation raster to use for interpolation. "
-        "Pixels with less than this value are replaced by a weighted "
-        "combination of neighboring pixels.",
-        ge=0.0,
-        le=1.0,
-    )
-
-    @field_validator("ntiles", "downsample_factor", mode="before")
-    @classmethod
-    def _to_tuple(cls, v):
-        if v is None:
-            return (1, 1)
-        elif isinstance(v, int):
-            return (v, v)
-        return v
 
 
 class TimeseriesOptions(BaseModel, extra="forbid"):

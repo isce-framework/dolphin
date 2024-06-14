@@ -93,13 +93,17 @@ class VRTInterferogram(BaseModel, extra="allow"):
     )
     ref_date: Optional[DateOrDatetime] = Field(
         None,
-        description="Reference date of the interferogram. If not specified,"
-        "will be parsed from `ref_slc` using `date_format`.",
+        description=(
+            "Reference date of the interferogram. If not specified,"
+            "will be parsed from `ref_slc` using `date_format`."
+        ),
     )
     sec_date: Optional[DateOrDatetime] = Field(
         None,
-        description="Secondary date of the interferogram. If not specified,"
-        "will be parsed from `sec_slc` using `date_format`.",
+        description=(
+            "Secondary date of the interferogram. If not specified,"
+            "will be parsed from `sec_slc` using `date_format`."
+        ),
     )
     resolve_paths: bool = Field(
         True, description="Resolve paths of `ref_slc`/`sec_slc` when saving the VRT"
