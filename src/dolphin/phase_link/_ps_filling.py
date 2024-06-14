@@ -123,7 +123,10 @@ def _get_max_idxs(arr, row_looks, col_looks):
     windows = np.lib.stride_tricks.sliding_window_view(arr, (row_looks, col_looks))[
         ::row_looks, ::col_looks
     ]
-    maxvals = np.nanmax(windows, axis=(2, 3))
+    with warnings.catch_warnings():
+        # https://stackoverflow.com/questions/29688168/mean-nanmean-and-warning-mean-of-empty-slice
+        warnings.simplefilter("ignore", RuntimeWarning)
+        maxvals = np.nanmax(windows, axis=(2, 3))
     indx = np.array((windows == np.expand_dims(maxvals, axis=(2, 3))).nonzero())
 
     # In [82]: (windows == np.expand_dims(maxvals, axis = (2, 3))).nonzero()
