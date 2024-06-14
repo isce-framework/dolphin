@@ -408,7 +408,13 @@ def estimate_velocity(
         velos = jnp.polyfit(x_arr, unw_pixels, deg=1, rcond=None)[0]
     else:
         # We use the same x inputs for all output pixels
-        assert unw_stack.shape == weight_stack.shape
+        if unw_stack.shape != weight_stack.shape:
+            msg = (
+                "unw_stack and weight_stack must have the same shape,"
+                f" got {unw_stack.shape} and {weight_stack.shape}"
+            )
+            raise ValueError(msg)
+
         weights_pixels = weight_stack.reshape(n_time, 1, -1)
 
         velos = vmap(estimate_velocity_pixel, in_axes=(None, -1, -1))(
