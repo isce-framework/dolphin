@@ -16,13 +16,13 @@ pytestmark = pytest.mark.filterwarnings(
 
 @pytest.mark.parametrize("use_max_ps", [True, False])
 @pytest.mark.parametrize("strides", [1, 2, 3, 4])
-@pytest.mark.parametrize("shape", [(5, 6), (10, 10), (10, 11)])
-def test_ps_fill(C_truth, use_max_ps, strides, shape):
+@pytest.mark.parametrize("rows", list(range(10, 16)))
+@pytest.mark.parametrize("cols", list(range(10, 12)))
+def test_ps_fill(C_truth, use_max_ps, strides, rows, cols):
     """Test substituting the PS pixel phases into the phase linking result."""
-    num_acq = 10
+    num_acq = 9
     C = C_truth[0][:num_acq, :num_acq]
 
-    rows, cols = shape
     slc_stack = simulate.simulate_neighborhood_stack(C, rows * cols).reshape(
         num_acq, rows, cols
     )
@@ -32,7 +32,7 @@ def test_ps_fill(C_truth, use_max_ps, strides, shape):
     temp_coh = np.zeros(pl_est.shape[1:])
 
     ps_idx = 2
-    ps_mask = np.zeros((11, 11), dtype=bool)
+    ps_mask = np.zeros((rows, cols), dtype=bool)
     ps_mask[ps_idx, ps_idx] = True
 
     fill_ps_pixels(
