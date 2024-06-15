@@ -7,7 +7,7 @@ from typing import NamedTuple, Optional
 
 import jax.numpy as jnp
 import numpy as np
-from jax import Array, jit, lax, vmap
+from jax import Array, jit, lax
 from jax.scipy.linalg import cho_factor, cho_solve
 from jax.typing import ArrayLike
 
@@ -15,7 +15,7 @@ from dolphin._types import HalfWindow, Strides
 from dolphin.utils import take_looks
 
 from . import covariance, metrics
-from ._eigs import inverse_iteration, power_iteration
+from ._eigs import eigh_largest_stack, eigh_smallest_stack
 from ._ps_filling import fill_ps_pixels
 
 logger = logging.getLogger(__name__)
@@ -453,74 +453,6 @@ def process_coherence_matrices(
     evd_estimate = eig_vecs * jnp.exp(-1j * jnp.angle(ref[:, :, None]))
 
     return evd_estimate, eig_vals, estimator
-
-
-# We map over the first two dimensions, so now instead of one scalar eigenvalue,
-# we have (rows, cols) eigenvalues
-@partial(jit, static_argnames=("mu"))
-def eigh_smallest_stack(
-    C_arrays: ArrayLike,
-    mu: float,  # v0: ArrayLike | None
-) -> tuple[Array, Array]:
-    """Get the smallest (eigenvalue, eigenvector) for each pixel in a 3D stack.
-
-    Uses shift inverse iteration to find the eigenvalue closest to `mu`.
-    Pick `mu` to be slightly below the smallest eigenvalue for fastest convergence.
-
-    Parameters
-    ----------
-    C_arrays : ArrayLike
-        The stack of coherence matrices.
-        Shape = (rows, cols, nslc, nslc)
-    mu : float
-        The value to use for the shift inverse iteration.
-        The eigenvalue closest to this value is returned.
-    v0 : ArrayLike, optional
-        The initial guess for the eigenvector.
-        If None, a vector of 1s is used.
-        Shape = (rows, cols, nslc)
-
-    Returns
-    -------
-    eigenvalues : Array
-        The smallest eigenvalue for each pixel's matrix
-        Shape = (rows, cols)
-    eigenvectors : Array
-        The normalized eigenvector corresponding to the smallest eigenvalue
-        Shape = (rows, cols, nslc)
-
-    """
-    # in_axes = (0, None, 0)
-    # return vmap(vmap(inverse_iteration, in_axes=in_axes), in_axes=in_axes)(
-    #     C_arrays, mu, v0
-    # )
-    # return vmap(vmap(inverse_iteration))(C_arrays, mu=mu)
-    in_axes = (0, None)
-    return vmap(vmap(inverse_iteration, in_axes=in_axes), in_axes=in_axes)(C_arrays, mu)
-
-
-@jit
-def eigh_largest_stack(C_arrays: ArrayLike) -> tuple[Array, Array]:
-    """Get the largest (eigenvalue, eigenvector) for each pixel in a 3D stack.
-
-    Parameters
-    ----------
-    C_arrays : ArrayLike
-        The stack of coherence matrices.
-        Shape = (rows, cols, nslc, nslc)
-
-    Returns
-    -------
-    eigenvalues : Array
-        The largest eigenvalue for each pixel's matrix
-        Shape = (rows, cols)
-    eigenvectors : Array
-        The normalized eigenvector corresponding to the largest eigenvalue
-        Shape = (rows, cols, nslc)
-
-    """
-    eigvals, eigvecs = vmap(vmap(power_iteration))(C_arrays)
-    return eigvals.real, eigvecs
 
 
 def decimate(arr: ArrayLike, strides: Strides) -> Array:
