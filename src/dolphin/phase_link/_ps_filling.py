@@ -4,6 +4,7 @@ import logging
 import warnings
 
 import numpy as np
+from numpy.typing import ArrayLike
 
 from dolphin._types import Strides
 from dolphin.utils import take_looks
@@ -67,7 +68,7 @@ def fill_ps_pixels(
     if use_max_ps:
         logger.info("Using max PS pixel to fill in MLE estimate")
         # Get the indices of the brightest pixels within each look window
-        slc_r_idxs, slc_c_idxs = _get_max_idxs(mag, *strides)
+        slc_r_idxs, slc_c_idxs = get_max_idxs(mag, *strides)
 
         # we're only filling where there are PS pixels
         ref = np.exp(-1j * np.angle(slc_stack[reference_idx][slc_r_idxs, slc_c_idxs]))
@@ -113,7 +114,7 @@ def _get_avg_ps(
     )
 
 
-def _get_max_idxs(arr, row_looks, col_looks):
+def get_max_idxs(arr: ArrayLike, row_looks: int, col_looks: int):
     """Get the indices of the maximum value in each look window."""
     if row_looks == 1 and col_looks == 1:
         # No need to pad if we're not looking
