@@ -1,5 +1,4 @@
 import os
-import warnings
 
 import numpy as np
 import numpy.testing as npt
@@ -7,7 +6,6 @@ import pytest
 
 from dolphin._types import HalfWindow, Strides
 from dolphin.phase_link import _core, covariance, simulate
-from dolphin.phase_link._ps_filling import fill_ps_pixels
 from dolphin.utils import gpu_is_available
 
 GPU_AVAILABLE = gpu_is_available() and os.environ.get("NUMBA_DISABLE_JIT") != "1"
@@ -158,43 +156,9 @@ def test_strides_window_sizes(strides, half_window, shape):
     )
 
 
-@pytest.mark.parametrize("strides", [1, 2, 3, 4])
-def test_ps_fill(slc_samples, strides):
-    rows, cols = 11, 11
-    slc_stack = slc_samples.copy().reshape(NUM_ACQ, 11, 11)
-
-    mle_est = np.ones((NUM_ACQ, rows // strides, cols // strides), dtype=np.complex64)
-    temp_coh = np.zeros(mle_est.shape[1:])
-
-    ps_idx = 2
-    ps_mask = np.zeros((11, 11), dtype=bool)
-    ps_mask[ps_idx, ps_idx] = True
-
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", RuntimeWarning)
-        fill_ps_pixels(
-            mle_est,
-            temp_coh,
-            slc_stack,
-            ps_mask,
-            Strides(strides, strides),
-            None,  # avg_mag
-            use_max_ps=True,
-        )
-
-    ps_phase = slc_stack[:, ps_idx, ps_idx]
-    ps_phase *= ps_phase[0].conj()  # Reference to first acquisition
-
-    out_idx = ps_idx // strides
-    npt.assert_array_almost_equal(
-        np.angle(ps_phase), np.angle(mle_est[:, out_idx, out_idx])
-    )
-
-    assert temp_coh[out_idx, out_idx] == 1
-
-
+@pytest.mark.parametrize("use_max_ps", [True, False])
 @pytest.mark.parametrize("strides", [1, 2, 3])
-def test_run_phase_linking_ps_fill(slc_samples, strides):
+def test_run_phase_linking_ps_fill(slc_samples, use_max_ps, strides):
     slc_stack = slc_samples.copy().reshape(NUM_ACQ, 11, 11)
     ps_idx = 2
     ps_mask = np.zeros((11, 11), dtype=bool)
@@ -205,8 +169,7 @@ def test_run_phase_linking_ps_fill(slc_samples, strides):
         half_window=HalfWindow(5, 5),
         strides=Strides(strides, strides),
         ps_mask=ps_mask,
-        # use_max_ps=True,
-        use_max_ps=True,
+        use_max_ps=use_max_ps,
     )
     ps_phase = slc_stack[:, ps_idx, ps_idx]
     ps_phase *= ps_phase[0].conj()  # Reference to first acquisition
