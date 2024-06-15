@@ -24,7 +24,9 @@ def goldstein(phase: ArrayLike, alpha: float, psize: int = 32) -> np.ndarray:
 
     def apply_pspec(data: ArrayLike):
         # NaN is allowed value
-        assert not (alpha < 0), f"Invalid parameter value {alpha} < 0"
+        if alpha < 0:
+            raise ValueError(f"alpha must be >= 0, got {alpha = }")
+
         wgt = np.power(np.abs(data) ** 2, alpha / 2)
         data = wgt * data
         return data

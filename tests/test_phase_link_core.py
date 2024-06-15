@@ -1,5 +1,4 @@
 import os
-import warnings
 
 import numpy as np
 import numpy.testing as npt
@@ -165,15 +164,13 @@ def test_run_phase_linking_ps_fill(slc_samples, use_max_ps, strides):
     ps_mask = np.zeros((11, 11), dtype=bool)
     ps_mask[ps_idx, ps_idx] = True
     # Ignore RuntimeWarning
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", RuntimeWarning)
-        pl_out = _core.run_phase_linking(
-            slc_stack,
-            half_window=HalfWindow(5, 5),
-            strides=Strides(strides, strides),
-            ps_mask=ps_mask,
-            use_max_ps=use_max_ps,
-        )
+    pl_out = _core.run_phase_linking(
+        slc_stack,
+        half_window=HalfWindow(5, 5),
+        strides=Strides(strides, strides),
+        ps_mask=ps_mask,
+        use_max_ps=use_max_ps,
+    )
     ps_phase = slc_stack[:, ps_idx, ps_idx]
     ps_phase *= ps_phase[0].conj()  # Reference to first acquisition
 

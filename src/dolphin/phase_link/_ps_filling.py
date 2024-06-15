@@ -126,6 +126,7 @@ def get_max_idxs(arr: ArrayLike, row_looks: int, col_looks: int):
     ]
     with warnings.catch_warnings():
         # ignore the warning about nansum/nanmean of empty slice
+        # https://stackoverflow.com/questions/29688168/mean-nanmean-and-warning-mean-of-empty-slice
         warnings.simplefilter("ignore", category=RuntimeWarning)
         maxvals = np.nanmax(windows, axis=(2, 3))
     indx = np.array((windows == np.expand_dims(maxvals, axis=(2, 3))).nonzero())

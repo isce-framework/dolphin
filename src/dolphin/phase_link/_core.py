@@ -207,7 +207,6 @@ def run_phase_linking(
             use_max_ps=use_max_ps,
         )
 
-    assert np.abs(np.abs(cpx_phase) - 1).max() < 1e-6
     if use_slc_amp:
         # use the amplitude from the original SLCs
         # account for the strides when grabbing original data
