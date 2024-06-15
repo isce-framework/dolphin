@@ -1,3 +1,5 @@
+"""Eigenvalue solvers specialized for the phase linking use case."""
+
 from __future__ import annotations
 
 from functools import partial
@@ -21,6 +23,8 @@ def eigh_smallest_stack(
 
     Uses shift inverse iteration to find the eigenvalue closest to `mu`.
     Pick `mu` to be slightly below the smallest eigenvalue for fastest convergence.
+
+    Returns real eigenvalues, assuming the arrays are Hermitian.
 
     Parameters
     ----------
@@ -130,21 +134,62 @@ def inverse_iteration(
     mu: float,
     tol: float = 1e-5,
     max_iters: int = 50,
-    # v0: ArrayLike | None = None,
 ) -> tuple[Array, Array]:
-    """Compute the eigenvalue of A closest to mu."""
+    """Compute the eigenvalue of the positive definite matrix `A` closest to `mu`.
+
+    Inverse iteration (or inverse power iteration) is an iterative method used to
+    find the eigenvalue of a matrix A that is closest to a given scalar mu.
+
+    Parameters
+    ----------
+    A : ArrayLike
+        Square matrix of which we seek an eigenvalue and eigenvector.
+    mu : float
+        The shift value, around which we seek the closest eigenvalue of A.
+    tol : float, optional
+        Tolerance for convergence of the method. The default is 1e-5.
+    max_iters : int, optional
+        Maximum number of iterations to perform. The default is 50.
+
+    Returns
+    -------
+    eigenvalue : jnp.array
+        The eigenvalue of the matrix closest to `mu`.
+    vk : jnp.array
+        The corresponding eigenvector.
+
+    Notes
+    -----
+    This method may not converge with a poor guess of `mu`.
+    The close the guess of `mu` is to your eigenvalue, the quicker the convergence.
+    However, picking the exact eigenvalue may lead to numerical instability.
+
+    Example
+    -------
+    >>> A = np.array([[4, 1], [1, 3]])
+    >>> mu = 2.5
+    >>> eigenvector, eigenvalue = inverse_iteration(A, mu)
+    >>> print("Eigenvector:", eigenvector)
+    >>> print("Eigenvalue:", eigenvalue)
+
+    References
+    ----------
+    [1] https://services.math.duke.edu/~jtwong/math361-2019/lectures/Lec10eigenvalues.pdf
+
+    """
     n = A.shape[0]
-    # Equivalent to "if v0 is None, (arg1), else (arg2)"
-    # vk = lax.select(v0 is None, jnp.ones(n, dtype=A.dtype), v0)
     vk = jnp.ones(n, dtype=A.dtype)
 
     vk = vk / jnp.linalg.norm(vk)
     Id = jnp.eye(A.shape[0], dtype=A.dtype)
-    cho_fact = jax.scipy.linalg.cho_factor(A - mu * Id)
+    # Prefactor A - mu I to quickly solve each iteration
+    lu_and_pivots = jax.scipy.linalg.lu_factor(A - mu * Id)
 
     def body_fun(val):
         vk_cur, _, iters = val
-        vk_new = jax.scipy.linalg.cho_solve(cho_fact, vk_cur)
+        # Perform power iteration on (A - mu I)^{-1} ,
+        # which is the same as solving (A - mu I)x = v_k
+        vk_new = jax.scipy.linalg.lu_solve(lu_and_pivots, vk_cur)
         vk_new = vk_new / jnp.linalg.norm(vk_new)
         diff = jnp.linalg.norm(vk_new - vk_cur)
         return vk_new, diff, iters + 1

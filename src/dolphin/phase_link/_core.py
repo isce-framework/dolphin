@@ -15,7 +15,7 @@ from dolphin._types import HalfWindow, Strides
 from dolphin.utils import take_looks
 
 from . import covariance, metrics
-from ._eigs import eigh_largest_stack, eigh_smallest_stack
+from ._eigenvalues import eigh_largest_stack, eigh_smallest_stack
 from ._ps_filling import fill_ps_pixels
 
 logger = logging.getLogger(__name__)

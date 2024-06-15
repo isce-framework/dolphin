@@ -2,7 +2,7 @@ import numpy as np
 import numpy.testing as npt
 import pytest
 
-from dolphin.phase_link._eigs import (
+from dolphin.phase_link._eigenvalues import (
     eigh_largest_stack,
     eigh_smallest_stack,
 )
