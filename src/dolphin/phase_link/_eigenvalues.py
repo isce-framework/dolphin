@@ -1,4 +1,12 @@
-"""Eigenvalue solvers specialized for the phase linking use case."""
+"""Eigenvalue solvers specialized for the phase linking use case.
+
+|                 | EVD               |         | EMI               |         |
+| --------------- | ----------------- | ------- | ----------------- | ------- |
+|                 | Runtime (seconds) | Speedup | Runtime (seconds) | Speedup |
+| `scipy.eigh`    | 185               | -       | 398               | -       |
+| Power iteration | 19                | 9.7     | 57                | 6.8     |
+
+"""
 
 from __future__ import annotations
 
@@ -17,7 +25,7 @@ from jax.typing import ArrayLike
 @partial(jit, static_argnames=("mu"))
 def eigh_smallest_stack(
     C_arrays: ArrayLike,
-    mu: float,  # v0: ArrayLike | None
+    mu: float,
 ) -> tuple[Array, Array]:
     """Get the smallest (eigenvalue, eigenvector) for each pixel in a 3D stack.
 
