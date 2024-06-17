@@ -25,6 +25,7 @@ def compute(
     ----------
     llh : ArrayLike
         Lon/Lat/Height vector specifying the target position.
+        Lon and Lat must be in radians, not degrees.
     ref_pos : ArrayLike
         Reference position vector (x, y, z) in ECEF coordinates.
     sec_pos : ArrayLike
