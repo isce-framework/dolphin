@@ -25,6 +25,7 @@ def compute(
     ----------
     llh : ArrayLike
         Lon/Lat/Height vector specifying the target position.
+        Lon and Lat must be in radians, not degrees.
     ref_pos : ArrayLike
         Reference position vector (x, y, z) in ECEF coordinates.
     sec_pos : ArrayLike
@@ -120,7 +121,7 @@ def compute_baselines(
 
     baselines = []
     for lon, lat in zip(lon_arr, lat_arr):
-        llh_rad = np.array([lon, lat, height]).reshape((3, 1))
+        llh_rad = np.deg2rad([lon, lat, height]).reshape((3, 1))
         az_time_ref, range_ref = isce3.geometry.geo2rdr(
             llh_rad,
             ellipsoid,

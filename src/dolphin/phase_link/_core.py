@@ -59,16 +59,17 @@ class PhaseLinkOutput(NamedTuple):
 
 
 def run_phase_linking(
-    slc_stack: np.ndarray,
+    slc_stack: ArrayLike,
     half_window: HalfWindow,
     strides: Strides = DEFAULT_STRIDES,
     use_evd: bool = False,
     beta: float = 0.0,
     reference_idx: int = 0,
-    nodata_mask: np.ndarray = None,
-    ps_mask: Optional[np.ndarray] = None,
-    neighbor_arrays: Optional[np.ndarray] = None,
-    avg_mag: Optional[np.ndarray] = None,
+    nodata_mask: ArrayLike | None = None,
+    ps_mask: ArrayLike | None = None,
+    use_max_ps: bool = True,
+    neighbor_arrays: ArrayLike | None = None,
+    avg_mag: ArrayLike | None = None,
     use_slc_amp: bool = True,
     calc_average_coh: bool = False,
     baseline_lag: Optional[int] = None,
@@ -80,7 +81,7 @@ def run_phase_linking(
 
     Parameters
     ----------
-    slc_stack : np.ndarray
+    slc_stack : ArrayLike
         The SLC stack, with shape (n_images, n_rows, n_cols)
     half_window : HalfWindow, or tuple[int, int]
         A (named) tuple of (y, x) sizes for the half window.
@@ -95,21 +96,25 @@ def run_phase_linking(
         The regularization parameter, by default 0 (no regularization).
     reference_idx : int, optional
         The index of the (non compressed) reference SLC, by default 0
-    nodata_mask : np.ndarray, optional
+    nodata_mask : ArrayLike, optional
         A mask of bad/nodata pixels to ignore when estimating the covariance.
         Pixels with `True` (or 1) are ignored, by default None
         If None, all pixels are used, by default None.
-    ps_mask : np.ndarray, optional
+    ps_mask : ArrayLike, optional
         A mask of pixels marking persistent scatterers (PS) to
         skip when multilooking.
         Pixels with `True` (or 1) are PS and will be ignored
         (combined with `nodata_mask`).
         The phase from these pixels will be inserted back
         into the final estimate directly from `slc_stack`.
-    neighbor_arrays : np.ndarray, optional
+    use_max_ps : bool, optional
+        Whether to use the maximum PS phase for the first pixel, or average all
+        PS within the look window.
+        By default True.
+    neighbor_arrays : ArrayLike, optional
         The neighbor arrays to use for SHP, shape = (n_rows, n_cols, *window_shape).
         If None, a rectangular window is used. By default None.
-    avg_mag : np.ndarray, optional
+    avg_mag : ArrayLike, optional
         The average magnitude of the SLC stack, used to to find the brightest
         PS pixels to fill within each look window.
         If None, the average magnitude will be computed from `slc_stack`.
@@ -185,15 +190,6 @@ def run_phase_linking(
         baseline_lag=baseline_lag,
     )
 
-    if use_slc_amp:
-        # use the amplitude from the original SLCs
-        # account for the strides when grabbing original data
-        # we need to match `io.compute_out_shape` here
-        slcs_decimated = decimate(slc_stack, strides)
-        cpx_phase = np.exp(1j * np.angle(cpl_out.cpx_phase)) * np.abs(slcs_decimated)
-    else:
-        cpx_phase = np.exp(1j * np.angle(cpl_out.cpx_phase))
-
     # Get the smaller, looked versions of the masks
     # We zero out nodata if all pixels within the window had nodata
     mask_looked = take_looks(nodata_mask, *strides, func_type="all")
@@ -201,6 +197,8 @@ def run_phase_linking(
     # Convert from jax array back to np
     temp_coh = np.array(cpl_out.temp_coh)
 
+    # Set as unit-magnitude
+    cpx_phase = np.exp(1j * np.angle(cpl_out.cpx_phase))
     # Fill in the PS pixels from the original SLC stack, if it was given
     if np.any(ps_mask):
         fill_ps_pixels(
@@ -211,7 +209,15 @@ def run_phase_linking(
             strides,
             avg_mag,
             reference_idx,
+            use_max_ps=use_max_ps,
         )
+
+    if use_slc_amp:
+        # use the amplitude from the original SLCs
+        # account for the strides when grabbing original data
+        # we need to match `io.compute_out_shape` here
+        slcs_decimated = decimate(slc_stack, strides)
+        cpx_phase = np.exp(1j * np.angle(cpx_phase)) * np.abs(slcs_decimated)
 
     # Finally, ensure the nodata regions are 0
     cpx_phase[:, mask_looked] = np.nan
