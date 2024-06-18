@@ -158,7 +158,7 @@ class SpurtTilerSettings(BaseModel):
 
 class SpurtSolverSettings(BaseModel):
     worker_count: int = Field(
-        default=0,
+        default=1,
         description=(
             "Number of workers for temporal unwrapping in parallel. Set value to <=0 to"
             " let workflow use default workers (ncpus - 1)."
@@ -173,20 +173,24 @@ class SpurtSolverSettings(BaseModel):
         gt=0,
     )
     temp_cost_type: Literal["constant", "distance", "centroid"] = Field(
-        default="constant", description="Temporal unwrapping costs."
+        default="constant",
+        description="Temporal unwrapping costs.",
+        alias="t_cost_type",
     )
     temp_cost_scale: float = Field(
         default=100.0,
         description="Scale factor used to compute edge costs for temporal unwrapping.",
         gt=0.0,
+        alias="t_cost_scale",
     )
     spatial_cost_type: Literal["constant", "distance", "centroid"] = Field(
-        default="constant", description="Spatial unwrapping costs."
+        default="constant", description="Spatial unwrapping costs.", alias="s_cost_type"
     )
     spatial_cost_scale: float = Field(
         default=100.0,
         description="Scale factor used to compute edge costs for spatial unwrapping.",
         gt=0.0,
+        alias="s_cost_scale",
     )
 
 
@@ -212,6 +216,12 @@ class SpurtOptions(BaseModel, extra="forbid"):
 
     """
 
+    temporal_coherence_threshold: float = Field(
+        0.6,
+        description="Temporal coherence to pick pixels used on an irregular grid",
+        ge=0.0,
+        lt=1.0,
+    )
     general_settings: SpurtGeneralSettings = Field(default_factory=SpurtGeneralSettings)
     tiler_settings: SpurtTilerSettings = Field(default_factory=SpurtTilerSettings)
     solver_settings: SpurtSolverSettings = Field(default_factory=SpurtSolverSettings)

@@ -21,6 +21,7 @@ def run(
     cor_file_list: Sequence[Path],
     nlooks: float,
     unwrap_options: UnwrapOptions,
+    temporal_coherence_file: PathOrStr | None = None,
     mask_file: PathOrStr | None = None,
     add_overviews: bool = True,
 ) -> tuple[list[Path], list[Path]]:
@@ -37,6 +38,8 @@ def run(
     unwrap_options : UnwrapOptions
         [`UnwrapOptions`][dolphin.workflows.config.UnwrapOptions] config object
         with parameters for running unwrapping jobs.
+    temporal_coherence_file : Filename, optional
+        Path to temporal coherence file from phase linking.
     mask_file : PathOrStr, optional
         Path to boolean mask indicating nodata areas.
         1 indicates valid data, 0 indicates missing data.
@@ -79,6 +82,7 @@ def run(
         output_path=output_path,
         unwrap_options=unwrap_options,
         nlooks=nlooks,
+        temporal_coherence_file=temporal_coherence_file,
         mask_filename=output_mask,
         scratchdir=unwrap_scratchdir,
     )
