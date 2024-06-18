@@ -41,6 +41,7 @@ def run(
     *,
     unwrap_options: UnwrapOptions = DEFAULT_OPTIONS,
     nlooks: float = 5,
+    temporal_coherence_file: Filename | None,
     mask_filename: Filename | None = None,
     unw_nodata: float | None = DEFAULT_UNW_NODATA,
     ccl_nodata: int | None = DEFAULT_CCL_NODATA,
@@ -62,6 +63,8 @@ def run(
         with parameters and settings for unwrapping.
     nlooks : int, optional
         Effective number of looks used to form the input correlation data.
+    temporal_coherence_file : Filename, optional
+        Path to temporal coherence file from phase linking.
     mask_filename : Filename, optional
         Path to binary byte mask file, by default None.
         Assumes that 1s are valid pixels and 0s are invalid.
@@ -114,10 +117,15 @@ def run(
         mask_filename = Path(mask_filename).resolve()
 
     if unwrap_options.unwrap_method == UnwrapMethod.SPURT:
+        if temporal_coherence_file is None:
+            # TODO: we should make this a mask, instead of requiring this.
+            # we'll need to change spurt
+            raise ValueError("temporal coherence required for spurt unwrapping")
         unw_paths, conncomp_paths = unwrap_spurt(
             ifg_filenames=in_files,
             cor_filenames=cor_filenames,
             mask_filename=mask_filename,
+            temporal_coherence_file=temporal_coherence_file,
             options=unwrap_options.spurt_options,
         )
         return unw_paths, conncomp_paths
