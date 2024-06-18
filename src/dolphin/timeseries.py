@@ -130,7 +130,10 @@ def run(
             utils.format_dates(sar_dates[0], sar_dates[0]) + ".tif"
         )
         io.write_arr(
-            arr=None, output_name=ref_raster, like_filename=inverted_phase_paths[0]
+            arr=None,
+            output_name=ref_raster,
+            like_filename=inverted_phase_paths[0],
+            nodata=0,
         )
         inverted_phase_paths.append(ref_raster)
 
