@@ -141,6 +141,9 @@ def simulate_coh_stack(
         Coherence decay time constant for each pixel.
     signal : np.ndarray
         Simulated signal phase for each pixel.
+    amplitudes: ArrayLike, optional
+        If provided, set the amplitudes of the output pixels.
+        Default is to use all ones.
 
     Returns
     -------
@@ -156,18 +159,11 @@ def simulate_coh_stack(
     Tau0 = np.atleast_2d(Tau0)[:, :, None, None]
     if amplitudes is None:
         amplitudes = np.ones((num_time, 1, 1), dtype=np.float32)
-    # if amplitudes.ndim == 1:
-    #     amplitudes = amplitudes[:, None, None]
 
     gamma = (gamma0 - gamma_inf) * np.exp(time_diff / Tau0) + gamma_inf
     phase_diff = signal[:, None] - signal[None, :]
     # Multiply each pixel by (a a^T)
-    # print(amplitudes.shape)
     A = np.einsum("irc,jrc->rcij", amplitudes, amplitudes)
-    # print(A.shape)
-    # A = np.squeeze(amplitudes[:, None] * amplitudes[None, :])
-    # A = 1
-    # C = amplitudes[:, None] * amplitudes[None, :] * gamma * np.exp(1j * phase_diff)
     C = A * gamma * np.exp(1j * phase_diff)
 
     rl, cl = np.tril_indices(num_time, k=-1)
