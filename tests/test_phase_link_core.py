@@ -25,8 +25,9 @@ def slc_samples(C_truth):
     return simulate.simulate_neighborhood_stack(C, ns)
 
 
+@pytest.mark.parametrize("baseline_lag", [None, 3])
 @pytest.mark.parametrize("use_evd", [False, True])
-def test_estimation(C_truth, slc_samples, use_evd):
+def test_estimation(C_truth, slc_samples, use_evd, baseline_lag):
     _, truth = C_truth
 
     C_hat = np.array(covariance.coh_mat_single(slc_samples))
@@ -43,7 +44,11 @@ def test_estimation(C_truth, slc_samples, use_evd):
 
     # cpx_phase, temp_coh, eigs, _ = _core.run_cpl(
     pl_out = _core.run_cpl(
-        slc_stack, HalfWindow(x=5, y=5), Strides(x=1, y=1), use_evd=use_evd
+        slc_stack,
+        HalfWindow(x=5, y=5),
+        Strides(x=1, y=1),
+        use_evd=use_evd,
+        baseline_lag=baseline_lag,
     )
     assert pl_out.cpx_phase.shape == (len(est_mle_verify), 11, 11)
     assert pl_out.temp_coh.shape == (11, 11)

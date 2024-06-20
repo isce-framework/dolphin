@@ -108,9 +108,9 @@ class PhaseLinkingOptions(BaseModel, extra="forbid"):
         None,
         gt=0,
         description=(
-            "StBAS parameter to include only nearest-N interferograms for phase linking."
-            "A `baseline_lag` of `n` will only include the closest `n` interferograms."
-            "`baseline_line` must be positive."
+            "StBAS parameter to include only nearest-N interferograms for"
+            "phase linking. A `baseline_lag` of `n` will only include the closest"
+            "`n` interferograms. `baseline_line` must be positive."
         ),
     )
 
