@@ -277,7 +277,9 @@ def run_cpl(
         If requested, the average of each row of the covariance matrix is computed
         for the purposes of finding the best reference (highest coherence) date
     baseline_lag : int, optional, default=None
-        lag for temporal baseline to do short temporal baseline inversion (STBAS)
+        StBAS parameter to include only nearest-N interferograms for phase linking.
+        A `baseline_lag` of `n` will only include the closest `n` interferograms.
+        `baseline_line` must be positive.
 
     Returns
     -------
@@ -311,8 +313,8 @@ def run_cpl(
     if baseline_lag:
         iu = np.triu_indices(C_arrays.shape[0], baseline_lag)
         il = np.tril_indices(C_arrays.shape[0], -baseline_lag)
-        C_arrays = C_arrays.at[iu].set(0)
-        C_arrays = C_arrays.at[il].set(0)
+        C_arrays = C_arrays.at[:, :, iu].set(0)
+        C_arrays = C_arrays.at[:, :, il].set(0)
 
     cpx_phase, eigenvalues, estimator = process_coherence_matrices(
         C_arrays,

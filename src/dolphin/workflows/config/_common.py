@@ -106,6 +106,7 @@ class PhaseLinkingOptions(BaseModel, extra="forbid"):
     )
     baseline_lag: Optional[int] = Field(
         None,
+        gt=0,
         description=(
             "lag for temporal baseline to do short temporal baseline"
             " inversion (STBAS)"
