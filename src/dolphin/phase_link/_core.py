@@ -380,7 +380,6 @@ def process_coherence_matrices(
     rows, cols, n, _ = C_arrays.shape
     # For EVD, or places where inverting |Gamma| failed: fall back to computing EVD
 
-    # jax.debug.print("{}, {}", evd_eig_vecs.shape, evd_eig_vecs.dtype)
     if use_evd:
         # EVD
         evd_eig_vals, evd_eig_vecs = eigh_largest_stack(C_arrays)
