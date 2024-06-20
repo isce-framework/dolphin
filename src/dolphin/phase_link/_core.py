@@ -378,7 +378,6 @@ def process_coherence_matrices(
 
     """
     rows, cols, n, _ = C_arrays.shape
-    # For EVD, or places where inverting |Gamma| failed: fall back to computing EVD
 
     if use_evd:
         # EVD
@@ -427,6 +426,7 @@ def process_coherence_matrices(
         # Must broadcast the 2D boolean array so it's the same size as the outputs
         inv_has_nans_3d = jnp.tile(inv_has_nans[:, :, None], (1, 1, n))
 
+        # For EVD, or places where inverting |Gamma| failed: fall back to computing EVD
         evd_eig_vals, evd_eig_vecs = eigh_largest_stack(C_arrays)
         eig_vecs = lax.select(
             inv_has_nans_3d,
