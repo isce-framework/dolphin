@@ -97,6 +97,21 @@ def run(
         raise ValueError(msg)
 
     output_path = Path(output_path)
+    if unwrap_options.unwrap_method == UnwrapMethod.SPURT:
+        if temporal_coherence_file is None:
+            # TODO: we should make this a mask, instead of requiring this.
+            # we'll need to change spurt
+            raise ValueError("temporal coherence required for spurt unwrapping")
+        unw_paths, conncomp_paths = unwrap_spurt(
+            ifg_filenames=ifg_filenames,
+            output_path=output_path,
+            temporal_coherence_file=temporal_coherence_file,
+            cor_filenames=cor_filenames,
+            mask_filename=mask_filename,
+            options=unwrap_options.spurt_options,
+            scratchdir=scratchdir,
+        )
+        return unw_paths, conncomp_paths
 
     ifg_suffixes = [full_suffix(f) for f in ifg_filenames]
     all_out_files = [
@@ -115,22 +130,6 @@ def run(
 
     if mask_filename:
         mask_filename = Path(mask_filename).resolve()
-
-    if unwrap_options.unwrap_method == UnwrapMethod.SPURT:
-        if temporal_coherence_file is None:
-            # TODO: we should make this a mask, instead of requiring this.
-            # we'll need to change spurt
-            raise ValueError("temporal coherence required for spurt unwrapping")
-        unw_paths, conncomp_paths = unwrap_spurt(
-            ifg_filenames=in_files,
-            output_path=output_path,
-            temporal_coherence_file=temporal_coherence_file,
-            cor_filenames=cor_filenames,
-            mask_filename=mask_filename,
-            options=unwrap_options.spurt_options,
-            scratchdir=scratchdir,
-        )
-        return unw_paths, conncomp_paths
 
     # This keeps it from spawning a new process for a single job.
     max_jobs = unwrap_options.n_parallel_jobs
