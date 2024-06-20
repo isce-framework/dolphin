@@ -172,14 +172,6 @@ def inverse_iteration(
     The close the guess of `mu` is to your eigenvalue, the quicker the convergence.
     However, picking the exact eigenvalue may lead to numerical instability.
 
-    Example
-    -------
-    >>> A = np.array([[4, 1], [1, 3]])
-    >>> mu = 2.5
-    >>> eigenvector, eigenvalue = inverse_iteration(A, mu)
-    >>> print("Eigenvector:", eigenvector)
-    >>> print("Eigenvalue:", eigenvalue)
-
     References
     ----------
     [1] https://services.math.duke.edu/~jtwong/math361-2019/lectures/Lec10eigenvalues.pdf
