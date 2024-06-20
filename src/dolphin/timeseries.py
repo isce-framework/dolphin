@@ -90,10 +90,10 @@ def run(
     # First we find the reference point for the unwrapped interferograms
     if reference_point == (-1, -1):
         reference = select_reference_point(
-            conncomp_paths,
-            condition_file,
+            condition_file=condition_file,
             output_dir=Path(output_dir),
             condition_func=condition_func,
+            ccl_file_list=conncomp_paths,
         )
     else:
         reference = ReferencePoint(row=reference_point[0], col=reference_point[1])
@@ -130,7 +130,10 @@ def run(
             utils.format_dates(sar_dates[0], sar_dates[0]) + ".tif"
         )
         io.write_arr(
-            arr=None, output_name=ref_raster, like_filename=inverted_phase_paths[0]
+            arr=None,
+            output_name=ref_raster,
+            like_filename=inverted_phase_paths[0],
+            nodata=0,
         )
         inverted_phase_paths.append(ref_raster)
 
@@ -786,26 +789,25 @@ def correlation_to_variance(correlation: ArrayLike, nlooks: int) -> Array:
 
 
 def select_reference_point(
-    ccl_file_list: Sequence[PathOrStr],
+    *,
     condition_file: PathOrStr,
     output_dir: Path,
     condition_func: Callable[[ArrayLike], tuple[int, ...]] = argmin_index,
+    ccl_file_list: Sequence[PathOrStr] | None = None,
     block_shape: tuple[int, int] = (512, 512),
     num_threads: int = 5,
 ) -> ReferencePoint:
     """Automatically select a reference point for a stack of unwrapped interferograms.
 
-    Uses the condition file and connected component labels, the point is selected
-    which
+    Uses the condition file and (optionally) connected component labels.
+    The point is selected which
 
-    1. is within intersection of all nonzero connected component labels (always valid)
-    2. has the condition applied to condition file. for example: has the lowest
+    1. has the condition applied to condition file. for example: has the lowest
        amplitude dispersion
+    2. (optionally) is within intersection of all nonzero connected component labels
 
     Parameters
     ----------
-    ccl_file_list : Sequence[PathOrStr]
-        List of connected component label phase files.
     condition_file: PathOrStr
         A file with the same size as each raster, like amplitude dispersion or
         temporal coherence in `ccl_file_list`
@@ -814,6 +816,8 @@ def select_reference_point(
     condition_func: Callable[[ArrayLike, ]]
         The function to apply to the condition file,
         for example numpy.argmin which finds the pixel with lowest value
+    ccl_file_list : Sequence[PathOrStr]
+        List of connected component label phase files.
     block_shape: tuple[int, int]
         Size of blocks to read from while processing `ccl_file_list`
         Default = (512, 512)
@@ -829,12 +833,43 @@ def select_reference_point(
     Raises
     ------
     ReferencePointError
-        Raised f no valid region is found in the intersection of the connected component
-        label files
+        Raised if no valid region is found in the intersection of the connected
+        component label files
 
     """
-    conncomp_intersection_file = Path(output_dir) / "conncomp_intersection.tif"
+    logger.info("Selecting reference point")
+    condition_file_values = io.load_gdal(condition_file, masked=True)
 
+    isin_largest_conncomp = np.ones(condition_file_values.shape, dtype=bool)
+    if ccl_file_list:
+        try:
+            isin_largest_conncomp = _get_largest_conncomp_mask(
+                ccl_file_list=ccl_file_list,
+                output_dir=output_dir,
+                block_shape=block_shape,
+                num_threads=num_threads,
+            )
+        except ReferencePointError:
+            msg = "Unable to find find a connected component intersection."
+            msg += f"Proceeding using only {condition_file = }"
+            logger.warning(msg, exc_info=True)
+
+    # Mask out where the conncomps aren't equal to the largest
+    condition_file_values.mask = condition_file_values.mask | (~isin_largest_conncomp)
+
+    # Pick the (unmasked) point with the condition applied to condition file
+    ref_row, ref_col = condition_func(condition_file_values)
+
+    # Cast to `int` to avoid having `np.int64` types
+    return ReferencePoint(int(ref_row), int(ref_col))
+
+
+def _get_largest_conncomp_mask(
+    output_dir: Path,
+    ccl_file_list: Sequence[PathOrStr] | None = None,
+    block_shape: tuple[int, int] = (512, 512),
+    num_threads: int = 5,
+) -> np.ndarray:
     def intersect_conncomp(arr: np.ma.MaskedArray, axis: int) -> np.ndarray:
         # Track where input is nodata
         any_masked = np.any(arr.mask, axis=axis)
@@ -846,7 +881,8 @@ def select_reference_point(
         all_are_valid[any_masked] = fillval
         return all_are_valid
 
-    if not conncomp_intersection_file.exists():
+    conncomp_intersection_file = Path(output_dir) / "conncomp_intersection.tif"
+    if ccl_file_list and not conncomp_intersection_file.exists():
         logger.info("Creating intersection of connected components")
         create_temporal_average(
             file_list=ccl_file_list,
@@ -877,13 +913,4 @@ def select_reference_point(
     largest_idx = np.argmax(label_counts[1:]) + 1
     # Create a mask of pixels with this label
     isin_largest_conncomp = label == largest_idx
-
-    condition_file_values = io.load_gdal(condition_file, masked=True)
-    # Mask out where the conncomps aren't equal to the largest
-    condition_file_values.mask = condition_file_values.mask | (~isin_largest_conncomp)
-
-    # Pick the (unmasked) point with the condition applied to condition file
-    ref_row, ref_col = condition_func(condition_file_values)
-
-    # Cast to `int` to avoid having `np.int64` types
-    return ReferencePoint(int(ref_row), int(ref_col))
+    return isin_largest_conncomp

@@ -233,6 +233,7 @@ def run(
     unwrapped_paths, conncomp_paths = unwrapping.run(
         ifg_file_list=stitched_ifg_paths,
         cor_file_list=stitched_cor_paths,
+        temporal_coherence_file=stitched_temp_coh_file,
         nlooks=nlooks,
         unwrap_options=cfg.unwrap_options,
         mask_file=cfg.mask_file,
@@ -251,8 +252,8 @@ def run(
             unwrapped_paths=unwrapped_paths,
             conncomp_paths=conncomp_paths,
             corr_paths=stitched_cor_paths,
-            condition_file=stitched_amp_dispersion_file,
-            condition=CallFunc.MIN,
+            condition_file=stitched_temp_coh_file,
+            condition=CallFunc.MAX,
             output_dir=ts_opts._directory,
             run_velocity=ts_opts.run_velocity,
             velocity_file=ts_opts._velocity_file,
