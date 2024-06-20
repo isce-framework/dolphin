@@ -123,9 +123,10 @@ def run(
             raise ValueError("temporal coherence required for spurt unwrapping")
         unw_paths, conncomp_paths = unwrap_spurt(
             ifg_filenames=in_files,
+            output_path=output_path,
+            temporal_coherence_file=temporal_coherence_file,
             cor_filenames=cor_filenames,
             mask_filename=mask_filename,
-            temporal_coherence_file=temporal_coherence_file,
             options=unwrap_options.spurt_options,
             scratchdir=scratchdir,
         )

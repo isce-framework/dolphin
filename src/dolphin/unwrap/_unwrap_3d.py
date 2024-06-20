@@ -15,6 +15,7 @@ DEFAULT_OPTIONS = SpurtOptions()
 
 def unwrap_spurt(
     ifg_filenames: Sequence[PathOrStr],
+    output_path: PathOrStr,
     temporal_coherence_file: PathOrStr,
     cor_filenames: Sequence[PathOrStr] | None = None,
     mask_filename: PathOrStr | None = None,
@@ -41,7 +42,10 @@ def unwrap_spurt(
     if mask_filename is not None:
         _mask = io.load_gdal(mask_filename)
 
-    gen_settings = GeneralSettings(**options.general_settings.model_dump(by_alias=True))
+    gen_settings = GeneralSettings(
+        output_folder=output_path, **options.general_settings.model_dump(by_alias=True)
+    )
+
     if scratchdir is not None:
         gen_settings.intermediate_folder = scratchdir
     tile_settings = TilerSettings(**options.tiler_settings.model_dump(by_alias=True))
