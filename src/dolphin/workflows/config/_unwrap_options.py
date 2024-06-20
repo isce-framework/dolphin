@@ -131,7 +131,6 @@ class TophuOptions(BaseModel, extra="forbid"):
 
 class SpurtGeneralSettings(BaseModel):
     use_tiles: bool = Field(default=True, description="Tile up data spatially.")
-    _intermediate_folder: Path = PrivateAttr(Path("emcf_tmp"))
 
 
 class SpurtTilerSettings(BaseModel):

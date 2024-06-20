@@ -76,7 +76,7 @@ def run(
         Default = max value of UInt16 (65535)
     scratchdir : Filename, optional
         Path to scratch directory to hold intermediate files.
-        If None, uses `tophu`'s `/tmp/...` default.
+        If None, uses the unwrapper's default.
     overwrite : bool, optional, default = False
         Overwrite existing unwrapped files.
 
@@ -127,6 +127,7 @@ def run(
             mask_filename=mask_filename,
             temporal_coherence_file=temporal_coherence_file,
             options=unwrap_options.spurt_options,
+            scratchdir=scratchdir,
         )
         return unw_paths, conncomp_paths
 

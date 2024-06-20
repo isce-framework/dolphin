@@ -19,6 +19,7 @@ def unwrap_spurt(
     cor_filenames: Sequence[PathOrStr] | None = None,
     mask_filename: PathOrStr | None = None,
     options: SpurtOptions = DEFAULT_OPTIONS,
+    scratchdir: PathOrStr | None = None,
 ) -> tuple[list[Path], list[Path]]:
     """Perform 3D unwrapping using `spurt`."""
     from spurt.graph import Hop3Graph
@@ -39,9 +40,10 @@ def unwrap_spurt(
         assert len(ifg_filenames) == len(cor_filenames)
     if mask_filename is not None:
         _mask = io.load_gdal(mask_filename)
-    # assert options is not None  # Remove upon implementing
 
     gen_settings = GeneralSettings(**options.general_settings.model_dump(by_alias=True))
+    if scratchdir is not None:
+        gen_settings.intermediate_folder = scratchdir
     tile_settings = TilerSettings(**options.tiler_settings.model_dump(by_alias=True))
     slv_settings = SolverSettings(**options.solver_settings.model_dump(by_alias=True))
     mrg_settings = MergerSettings(**options.merger_settings.model_dump(by_alias=True))
@@ -55,7 +57,6 @@ def unwrap_spurt(
 
     date_str_to_file = _map_date_str_to_file(ifg_filenames)
     stack = SLCStackReader(
-        # slc_files=ifg_filenames,
         slc_files=date_str_to_file,
         temp_coh_file=temporal_coherence_file,
         temp_coh_threshold=options.temporal_coherence_threshold,
