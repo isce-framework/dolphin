@@ -41,6 +41,7 @@ def run(
     *,
     unwrap_options: UnwrapOptions = DEFAULT_OPTIONS,
     nlooks: float = 5,
+    temporal_coherence_file: Filename | None = None,
     mask_filename: Filename | None = None,
     unw_nodata: float | None = DEFAULT_UNW_NODATA,
     ccl_nodata: int | None = DEFAULT_CCL_NODATA,
@@ -62,6 +63,8 @@ def run(
         with parameters and settings for unwrapping.
     nlooks : int, optional
         Effective number of looks used to form the input correlation data.
+    temporal_coherence_file : Filename, optional
+        Path to temporal coherence file from phase linking.
     mask_filename : Filename, optional
         Path to binary byte mask file, by default None.
         Assumes that 1s are valid pixels and 0s are invalid.
@@ -73,7 +76,7 @@ def run(
         Default = max value of UInt16 (65535)
     scratchdir : Filename, optional
         Path to scratch directory to hold intermediate files.
-        If None, uses `tophu`'s `/tmp/...` default.
+        If None, uses the unwrapper's default.
     overwrite : bool, optional, default = False
         Overwrite existing unwrapped files.
 
@@ -94,6 +97,21 @@ def run(
         raise ValueError(msg)
 
     output_path = Path(output_path)
+    if unwrap_options.unwrap_method == UnwrapMethod.SPURT:
+        if temporal_coherence_file is None:
+            # TODO: we should make this a mask, instead of requiring this.
+            # we'll need to change spurt
+            raise ValueError("temporal coherence required for spurt unwrapping")
+        unw_paths, conncomp_paths = unwrap_spurt(
+            ifg_filenames=ifg_filenames,
+            output_path=output_path,
+            temporal_coherence_file=temporal_coherence_file,
+            cor_filenames=cor_filenames,
+            mask_filename=mask_filename,
+            options=unwrap_options.spurt_options,
+            scratchdir=scratchdir,
+        )
+        return unw_paths, conncomp_paths
 
     ifg_suffixes = [full_suffix(f) for f in ifg_filenames]
     all_out_files = [
@@ -112,15 +130,6 @@ def run(
 
     if mask_filename:
         mask_filename = Path(mask_filename).resolve()
-
-    if unwrap_options.unwrap_method == UnwrapMethod.SPURT:
-        unw_paths, conncomp_paths = unwrap_spurt(
-            ifg_filenames=in_files,
-            cor_filenames=cor_filenames,
-            mask_filename=mask_filename,
-            options=unwrap_options.spurt_options,
-        )
-        return unw_paths, conncomp_paths
 
     # This keeps it from spawning a new process for a single job.
     max_jobs = unwrap_options.n_parallel_jobs
