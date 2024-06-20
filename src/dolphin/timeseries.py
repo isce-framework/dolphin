@@ -833,22 +833,26 @@ def select_reference_point(
     Raises
     ------
     ReferencePointError
-        Raised f no valid region is found in the intersection of the connected component
-        label files
+        Raised if no valid region is found in the intersection of the connected
+        component label files
 
     """
     logger.info("Selecting reference point")
     condition_file_values = io.load_gdal(condition_file, masked=True)
 
+    isin_largest_conncomp = np.ones(condition_file_values.shape, dtype=bool)
     if ccl_file_list:
-        isin_largest_conncomp = _get_largest_conncomp_mask(
-            ccl_file_list=ccl_file_list,
-            output_dir=output_dir,
-            block_shape=block_shape,
-            num_threads=num_threads,
-        )
-    else:
-        isin_largest_conncomp = np.ones(condition_file_values.shape, dtype=bool)
+        try:
+            isin_largest_conncomp = _get_largest_conncomp_mask(
+                ccl_file_list=ccl_file_list,
+                output_dir=output_dir,
+                block_shape=block_shape,
+                num_threads=num_threads,
+            )
+        except ReferencePointError:
+            msg = "Unable to find find a connected component intersection."
+            msg += f"Proceeding using only {condition_file = }"
+            logger.warning(msg, exc_info=True)
 
     # Mask out where the conncomps aren't equal to the largest
     condition_file_values.mask = condition_file_values.mask | (~isin_largest_conncomp)

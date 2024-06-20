@@ -8,6 +8,7 @@ docs/reference
 
 # Testing data dir
 data/
+docs/**/*.h5
 
 # MacOS
 .DS_Store
@@ -147,7 +148,6 @@ venv.bak/
 # mkdocs documentation
 site
 docs/reference
-
 
 # mypy
 .mypy_cache/
