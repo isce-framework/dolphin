@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import itertools
+import shutil
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Optional, Sequence
@@ -46,6 +48,7 @@ def run(
     unw_nodata: float | None = DEFAULT_UNW_NODATA,
     ccl_nodata: int | None = DEFAULT_CCL_NODATA,
     scratchdir: Filename | None = None,
+    delete_intermediate: bool = True,
     overwrite: bool = False,
 ) -> tuple[list[Path], list[Path]]:
     """Run snaphu on all interferograms in a directory.
@@ -77,6 +80,11 @@ def run(
     scratchdir : Filename, optional
         Path to scratch directory to hold intermediate files.
         If None, uses the unwrapper's default.
+    delete_intermediate : bool, default = True
+        Delete the temporary files made in the scratchdir after completion.
+        If True, will make separate folders inside `scratchdir` for cleaner
+        removals (in case `scratchdir`) has other contents.
+        Must specify `scratchdir` for this option to be used.
     overwrite : bool, optional, default = False
         Overwrite existing unwrapped files.
 
@@ -88,6 +96,9 @@ def run(
         list of connected-component-label files names
 
     """
+    if scratchdir is None:
+        delete_intermediate = False
+
     if len(cor_filenames) != len(ifg_filenames):
         msg = (
             "Number of correlation files does not match number of interferograms."
@@ -131,8 +142,16 @@ def run(
     if mask_filename:
         mask_filename = Path(mask_filename).resolve()
 
+    if delete_intermediate:
+        assert scratchdir is not None  # can't be none from the previous check
+        scratch_dirs: list[Path | None] = [
+            Path(scratchdir) / Path(ifg_file).name for ifg_file in in_files
+        ]
+    else:
+        scratch_dirs = itertools.repeat(scratchdir)  # type: ignore[assignment]
     # This keeps it from spawning a new process for a single job.
     max_jobs = unwrap_options.n_parallel_jobs
+
     Executor = ThreadPoolExecutor if max_jobs > 1 else DummyProcessPoolExecutor
     with Executor(max_workers=max_jobs) as exc:
         futures = [
@@ -146,9 +165,12 @@ def run(
                 unwrap_options=unwrap_options,
                 unw_nodata=unw_nodata,
                 ccl_nodata=ccl_nodata,
-                scratchdir=scratchdir,
+                scratchdir=cur_scratch,
+                delete_scratch=delete_intermediate,
             )
-            for ifg_file, out_file, cor_file in zip(in_files, out_files, cor_filenames)
+            for ifg_file, out_file, cor_file, cur_scratch in zip(
+                in_files, out_files, cor_filenames, scratch_dirs
+            )
         ]
         for fut in tqdm(as_completed(futures)):
             # We're not passing all the unw files in, so we need to tally up below
@@ -182,6 +204,7 @@ def unwrap(
     unw_nodata: float | None = DEFAULT_UNW_NODATA,
     ccl_nodata: int | None = DEFAULT_CCL_NODATA,
     scratchdir: Optional[Filename] = None,
+    delete_scratch: bool = False,
 ) -> tuple[Path, Path]:
     """Unwrap a single interferogram using snaphu, isce3, or tophu.
 
@@ -212,6 +235,8 @@ def unwrap(
     scratchdir : Filename, optional
         Path to scratch directory to hold intermediate files.
         If None, uses `tophu`'s `/tmp/...` default.
+    delete_scratch : bool, default = False
+        After unwrapping, delete the contents inside `scratchdir`.
 
     Returns
     -------
@@ -223,6 +248,11 @@ def unwrap(
     """
     unwrap_method = unwrap_options.unwrap_method
     preproc_options = unwrap_options.preprocess_options
+    if scratchdir is None:
+        # Let the unwrappers handle the scratch if we don't specify.
+        delete_scratch = False
+    else:
+        Path(scratchdir).mkdir(parents=True, exist_ok=True)
 
     # Check for a nodata mask
     if io.get_raster_nodata(ifg_filename) is None or mask_filename is None:
@@ -404,5 +434,9 @@ def unwrap(
             cost=unwrap_options.snaphu_options.cost,
             scratchdir=scratchdir,
         )
+
+    if delete_scratch:
+        assert scratchdir is not None
+        shutil.rmtree(scratchdir)
 
     return unw_path, conncomp_path
