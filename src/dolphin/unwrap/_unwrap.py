@@ -144,22 +144,9 @@ def run(
                 nlooks=nlooks,
                 mask_filename=mask_filename,
                 unwrap_options=unwrap_options,
-                # init_method=init_method,
-                # cost=cost,
-                # unwrap_method=unwrap_method,
-                # zero_where_masked=zero_where_masked,
-                # downsample_factor=downsample_factor,
-                # ntiles=ntiles,
-                # tile_overlap=tile_overlap,
-                # n_parallel_tiles=n_parallel_tiles,
                 unw_nodata=unw_nodata,
                 ccl_nodata=ccl_nodata,
                 scratchdir=scratchdir,
-                # run_goldstein=run_goldstein,
-                # alpha=alpha,
-                # run_interpolation=run_interpolation,
-                # max_radius=max_radius,
-                # interpolation_cor_threshold=interpolation_cor_threshold,
             )
             for ifg_file, out_file, cor_file in zip(in_files, out_files, cor_filenames)
         ]
