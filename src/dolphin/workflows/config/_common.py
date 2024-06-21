@@ -104,6 +104,15 @@ class PhaseLinkingOptions(BaseModel, extra="forbid"):
         gt=0.0,
         lt=1.0,
     )
+    baseline_lag: Optional[int] = Field(
+        None,
+        gt=0,
+        description=(
+            "StBAS parameter to include only nearest-N interferograms for"
+            "phase linking. A `baseline_lag` of `n` will only include the closest"
+            "`n` interferograms. `baseline_line` must be positive."
+        ),
+    )
 
 
 class InterferogramNetwork(BaseModel, extra="forbid"):
