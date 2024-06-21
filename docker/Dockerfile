@@ -71,7 +71,7 @@ COPY --chown=$MAMBA_USER:$MAMBA_USER . .
 # https://github.com/mamba-org/micromamba-docker#running-commands-in-dockerfile-within-the-conda-environment
 ARG MAMBA_DOCKERFILE_ACTIVATE=1
 # For now, manually install tophu/snaphu from git/pip
-RUN python -m pip install --no-deps "snaphu>=0.2" git+https://github.com/isce-framework/tophu@66df96fc4645f6977421336ed96c553833216c07
+RUN python -m pip install --no-deps "snaphu>=0.4" git+https://github.com/isce-framework/tophu@66df96fc4645f6977421336ed96c553833216c07 git+https://github.com/isce-framework/spurt@main
 
 # --no-deps because they are installed with conda
 RUN python -m pip install --no-deps .
