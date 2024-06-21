@@ -5,5 +5,4 @@ build/
 data/
 tests/data/*
 dist/
-benchmarks
 .nox/
