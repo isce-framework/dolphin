@@ -397,6 +397,7 @@ def unwrap(
         io.write_arr(
             arr=final_arr,
             output_name=unw_filename,
+            like_filename=unwrapper_unw_filename,
             dtype=np.float32,
             driver=driver,
             options=opts,
