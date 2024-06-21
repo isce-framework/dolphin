@@ -1,5 +1,11 @@
 # [Unreleased](https://github.com/isce-framework/dolphin/compare/v0.19.0...main)
 
+**Changed**
+- Delete unwrap scratch difrectories by default during displacement workflow
+
+**Fixed**
+- Pass through the raster metadata when running filtering/interpolation
+
 # [v0.19.0](https://github.com/isce-framework/dolphin/compare/v0.18.0...v0.19.0) - 2024-06-21
 
 **Added**
