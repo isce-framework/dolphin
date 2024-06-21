@@ -358,7 +358,7 @@ def unwrap(
             log_to_file=log_to_file,
         )
 
-    # TODO: post-processing steps go here:
+    # post-processing steps go here:
 
     # Reset the input nodata values to be nodata in the unwrapped and CCL
     logger.info(f"Setting nodata values of {unw_path} file")
