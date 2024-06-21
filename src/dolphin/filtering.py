@@ -18,7 +18,6 @@ def filter_long_wavelength(
         Unwrapped interferogram phase to filter.
     correlation : Arraylike, 2D
         Array of interferometric correlation from 0 to 1.
-        Array of interferometric correlation from 0 to 1.
     mask_cutoff: float
         Threshold to use on `correlation` so that pixels where
         `correlation[i, j] > mask_cutoff` are used and the rest are ignored.
@@ -30,7 +29,6 @@ def filter_long_wavelength(
     pixel_spacing : float
         Pixel spatial spacing. Assume same spacing for x, y axes.
         The default is 30 (m).
-
 
     Returns
     -------
