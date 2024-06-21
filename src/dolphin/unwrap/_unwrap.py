@@ -405,7 +405,7 @@ def unwrap(
     if unwrap_options.run_goldstein or unwrap_options.run_interpolation:
         logger.info(
             "Transferring ambiguity numbers from filtered/interpolated"
-            "ifg {scratch_unw_filename}"
+            f" ifg {unwrapper_unw_filename}"
         )
         unw_arr = io.load_gdal(unwrapper_unw_filename)
 
