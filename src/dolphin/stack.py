@@ -29,14 +29,17 @@ class BaseStack(BaseModel):
     )
     dates: list[Sequence[datetime]] = Field(
         ...,
-        description="List of date sequences, one for each SLC in the ministack. "
-        "Each item is a list/tuple of datetime.date or datetime.datetime objects, "
-        "as returned by [opera_utils.get_dates][].",
+        description=(
+            "List of date sequences, one for each SLC in the ministack. "
+            "Each item is a list/tuple of datetime.date or datetime.datetime objects, "
+            "as returned by [opera_utils.get_dates][]."
+        ),
     )
     is_compressed: list[bool] = Field(
         ...,
-        description="List of booleans indicating whether each "
-        "SLC is compressed or real.",
+        description=(
+            "List of booleans indicating whether each SLC is compressed or real."
+        ),
     )
     file_date_fmt: str = Field(
         DEFAULT_DATETIME_FORMAT,
@@ -50,6 +53,12 @@ class BaseStack(BaseModel):
         0,
         description="Index of the SLC to use as reference during phase linking",
     )
+
+    model_config = {
+        # For the `Filename, so it can handle the `GeneralPath` protocol`
+        # https://github.com/pydantic/pydantic/discussions/5767
+        "arbitrary_types_allowed": True
+    }
 
     @field_validator("dates", mode="before")
     @classmethod
@@ -153,9 +162,11 @@ class CompressedSlcInfo(BaseModel):
 
     reference_date: datetime = Field(
         ...,
-        description="Reference date for understanding output interferograms. "
-        "Note that this may be different from `start_date` (the first real SLC which "
-        " was used in the compression).",
+        description=(
+            "Reference date for understanding output interferograms. Note that this may"
+            " be different from `start_date` (the first real SLC which  was used in the"
+            " compression)."
+        ),
     )
     start_date: datetime = Field(
         ..., description="Datetime of the first real SLC used in the compression."
@@ -170,8 +181,10 @@ class CompressedSlcInfo(BaseModel):
     )
     real_slc_dates: list[datetime] | None = Field(
         None,
-        description="List of date sequences, one for each SLC in the ministack. "
-        "Each item is a list/tuple of datetime.date or datetime.datetime objects.",
+        description=(
+            "List of date sequences, one for each SLC in the ministack. "
+            "Each item is a list/tuple of datetime.date or datetime.datetime objects."
+        ),
     )
     compressed_slc_file_list: list[Filename] | None = Field(
         None,
@@ -189,6 +202,12 @@ class CompressedSlcInfo(BaseModel):
         Path(),
         description="Folder/location where ministack will write outputs to.",
     )
+
+    model_config = {
+        # For the `Filename, so it can handle the `GeneralPath` protocol`
+        # https://github.com/pydantic/pydantic/discussions/5767
+        "arbitrary_types_allowed": True
+    }
 
     @field_validator("real_slc_dates", mode="before")
     @classmethod

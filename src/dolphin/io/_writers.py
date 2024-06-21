@@ -41,10 +41,10 @@ class BackgroundBlockWriter(BackgroundWriter):
     """Class to write data to multiple files in the background using `gdal` bindings."""
 
     def __init__(self, *, max_queue: int = 0, debug: bool = False, **kwargs):
-        if debug is False:
-            super().__init__(nq=max_queue, name="Writer", **kwargs)
-        else:
-            # Don't start a background thread. Just synchronously write data
+        super().__init__(nq=max_queue, name="Writer")
+        if debug:
+            #  background thread. Just synchronously write data
+            self.notify_finished()
             self.queue_write = self.write  # type: ignore[assignment]
 
     def write(
@@ -326,11 +326,12 @@ class BackgroundRasterWriter(BackgroundWriter, DatasetWriter):
     def __init__(
         self, filename: Filename, *, max_queue: int = 0, debug: bool = False, **kwargs
     ):
-        if debug is False:
-            super().__init__(nq=max_queue, name="Writer")
-        else:
-            # Don't start a background thread. Just synchronously write data
+        super().__init__(nq=max_queue, name="Writer")
+        if debug:
+            #  background thread. Just synchronously write data
+            self.notify_finished()
             self.queue_write = self.write  # type: ignore[assignment]
+
         if Path(filename).exists():
             self._raster = RasterWriter(filename)
         else:
@@ -397,10 +398,10 @@ class BackgroundStackWriter(BackgroundWriter, DatasetStackWriter):
     ):
         from dolphin.io import write_arr
 
-        if debug is False:
-            super().__init__(nq=max_queue, name="GdalStackWriter")
-        else:
-            # Don't start a background thread. Just synchronously write data
+        super().__init__(nq=max_queue, name="GdalStackWriter")
+        if debug:
+            # Stop background thread. Just synchronously write data
+            self.notify_finished()
             self.queue_write = self.write  # type: ignore[assignment]
 
         for fn in file_list:

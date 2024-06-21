@@ -66,8 +66,10 @@ def get_parser(subparser=None, subcommand_name="timeseries") -> argparse.Argumen
         "--condition",
         type=CallFunc,
         default=CallFunc.MIN,
-        help="A condition to apply to condition file to find the reference point"
-        "Options are [min, max]. default=min",
+        help=(
+            "A condition to apply to condition file to find the reference point"
+            "Options are [min, max]. default=min"
+        ),
     )
     parser.add_argument(
         "--num-threads",
@@ -86,9 +88,11 @@ def get_parser(subparser=None, subcommand_name="timeseries") -> argparse.Argumen
         nargs=2,
         metavar=("ROW", "COL"),
         default=(-1, -1),
-        help="Reference point (row, col) used if performing a time series inversion. "
-        "If not provided, a point will be selected from a consistent connected "
-        "component with low amplitude dispersion or high temporal coherence.",
+        help=(
+            "Reference point (row, col) used if performing a time series inversion. "
+            "If not provided, a point will be selected from a consistent connected "
+            "component with low amplitude dispersion or high temporal coherence."
+        ),
     )
     parser.add_argument(
         "--correlation-threshold",

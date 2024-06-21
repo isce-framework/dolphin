@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import contextlib
+import shutil
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Callable, Optional, Protocol, Sequence, TypeVar
@@ -90,10 +90,10 @@ def run(
     # First we find the reference point for the unwrapped interferograms
     if reference_point == (-1, -1):
         reference = select_reference_point(
-            conncomp_paths,
-            condition_file,
+            condition_file=condition_file,
             output_dir=Path(output_dir),
             condition_func=condition_func,
+            ccl_file_list=conncomp_paths,
         )
     else:
         reference = ReferencePoint(row=reference_point[0], col=reference_point[1])
@@ -122,15 +122,18 @@ def run(
         # Symlink the unwrapped paths to `timeseries/`
         for p in unwrapped_paths:
             target = Path(output_dir) / Path(p).name
-            with contextlib.suppress(FileExistsError):
-                target.symlink_to(p)
+            if not target.exists():  # Check to prevent overwriting
+                shutil.copy(p, target)
             inverted_phase_paths.append(target)
         # Make extra "0" raster so that the number of rasters matches len(sar_dates)
         ref_raster = Path(output_dir) / (
             utils.format_dates(sar_dates[0], sar_dates[0]) + ".tif"
         )
         io.write_arr(
-            arr=None, output_name=ref_raster, like_filename=inverted_phase_paths[0]
+            arr=None,
+            output_name=ref_raster,
+            like_filename=inverted_phase_paths[0],
+            nodata=0,
         )
         inverted_phase_paths.append(ref_raster)
 
@@ -282,21 +285,28 @@ def invert_stack(
     """
     n_ifgs, n_rows, n_cols = dphi.shape
 
-    # vectorize the solve function to work on 2D and 3D arrays
-    # We are not vectorizing over the A matrix, only the dphi vector
-    # Solve 2d shapes: (nrows, n_ifgs) -> (nrows, n_sar_dates)
-    # invert_2d = vmap(invert_single, in_axes=(None, 1, 1), out_axes=1)
-    invert_2d = vmap(weighted_lstsq_single, in_axes=(None, 1, 1), out_axes=(1, 1))
-    # Solve 3d shapes: (nrows, ncols, n_ifgs) -> (nrows, ncols, n_sar_dates)
-    invert_3d = vmap(invert_2d, in_axes=(None, 2, 2), out_axes=(2, 2))
-
     if weights is None:
-        weights = jnp.ones_like(dphi)
-    phase, residuals = invert_3d(A, dphi, weights)
+        # Can use ordinary least squares with no weights
+        # Reshape to be size (M, K) instead of 3D
+        b = dphi.reshape(n_ifgs, -1)
+        phase_cols, residuals_cols, _, _ = jnp.linalg.lstsq(A, b)
+        # Reshape the phase and residuals to be 3D
+        phase = phase_cols.reshape(-1, n_rows, n_cols)
+        residuals = residuals_cols.reshape(n_rows, n_cols)
+    else:
+        # vectorize the solve function to work on 2D and 3D arrays
+        # We are not vectorizing over the A matrix, only the dphi vector
+        # Solve 2d shapes: (nrows, n_ifgs) -> (nrows, n_sar_dates)
+        invert_2d = vmap(weighted_lstsq_single, in_axes=(None, 1, 1), out_axes=(1, 1))
+        # Solve 3d shapes: (nrows, ncols, n_ifgs) -> (nrows, ncols, n_sar_dates)
+        invert_3d = vmap(invert_2d, in_axes=(None, 2, 2), out_axes=(2, 2))
+        phase, residuals = invert_3d(A, dphi, weights)
+        # Reshape the residuals to be 2D
+        residuals = residuals[0]
+
     # Add 0 for the reference date to the front
     phase = jnp.concatenate([jnp.zeros((1, n_rows, n_cols)), phase], axis=0)
-    # Reshape the residuals to be 2D
-    return phase, residuals[0]
+    return phase, residuals
 
 
 def get_incidence_matrix(
@@ -370,7 +380,7 @@ def estimate_velocity_pixel(x: ArrayLike, y: ArrayLike, w: ArrayLike) -> Array:
 
 @jit
 def estimate_velocity(
-    x_arr: ArrayLike, unw_stack: ArrayLike, weight_stack: ArrayLike
+    x_arr: ArrayLike, unw_stack: ArrayLike, weight_stack: ArrayLike | None
 ) -> Array:
     """Estimate the velocity from a stack of unwrapped interferograms.
 
@@ -381,9 +391,9 @@ def estimate_velocity(
         Length must match `unw_stack.shape[0]`.
     unw_stack : ArrayLike
         Array of unwrapped phase values at each pixel, shape=`(n_time, n_rows, n_cols)`.
-    weight_stack : ArrayLike
+    weight_stack : ArrayLike, optional
         Array of weights for each pixel, shape=`(n_time, n_rows, n_cols)`.
-        If not provided, all weights are set to 1.
+        If not provided, performs one batch unweighted linear fit.
 
     Returns
     -------
@@ -395,15 +405,24 @@ def estimate_velocity(
     # TODO: weighted least squares using correlation?
     n_time, n_rows, n_cols = unw_stack.shape
 
-    # We use the same x inputs for all output pixels
-    assert unw_stack.shape == weight_stack.shape
     unw_pixels = unw_stack.reshape(n_time, -1)
-    weights_pixels = weight_stack.reshape(n_time, 1, -1)
+    if weight_stack is None:
+        # For jnp.polyfit(...), coeffs[0] is slope, coeffs[1] is the intercept
+        velos = jnp.polyfit(x_arr, unw_pixels, deg=1, rcond=None)[0]
+    else:
+        # We use the same x inputs for all output pixels
+        if unw_stack.shape != weight_stack.shape:
+            msg = (
+                "unw_stack and weight_stack must have the same shape,"
+                f" got {unw_stack.shape} and {weight_stack.shape}"
+            )
+            raise ValueError(msg)
 
-    # coeffs = jnp.polyfit(x_arr, unw_pixels, deg=1, rcond=None)
-    velos = vmap(estimate_velocity_pixel, in_axes=(None, -1, -1))(
-        x_arr, unw_pixels, weights_pixels
-    )
+        weights_pixels = weight_stack.reshape(n_time, 1, -1)
+
+        velos = vmap(estimate_velocity_pixel, in_axes=(None, -1, -1))(
+            x_arr, unw_pixels, weights_pixels
+        )
     return velos.reshape(n_rows, n_cols)
 
 
@@ -503,6 +522,7 @@ def create_velocity(
 
     # Read in the reference point
     ref_row, ref_col = reference
+    logger.info(f"Reading phase reference pixel {reference}")
     ref_data = unw_reader[:, ref_row, ref_col].reshape(-1, 1, 1)
 
     def read_and_fit(
@@ -516,7 +536,8 @@ def create_velocity(
             weights[weights < cor_threshold] = 0
         else:
             unw_stack = readers[0][:, rows, cols]
-            weights = np.ones_like(unw_stack)
+            # weights = np.ones_like(unw_stack)
+            weights = None
         # Reference the data
         unw_stack = unw_stack - ref_data
         # Fit a line to each pixel with weighted least squares
@@ -709,7 +730,7 @@ def invert_unw_network(
             weights[cor < cor_threshold] = 0
         else:
             stack = readers[0][:, rows, cols]
-            weights = np.ones_like(stack)
+            weights = None
 
         # subtract the reference
         stack = stack - ref_data
@@ -768,26 +789,25 @@ def correlation_to_variance(correlation: ArrayLike, nlooks: int) -> Array:
 
 
 def select_reference_point(
-    ccl_file_list: Sequence[PathOrStr],
+    *,
     condition_file: PathOrStr,
     output_dir: Path,
     condition_func: Callable[[ArrayLike], tuple[int, ...]] = argmin_index,
+    ccl_file_list: Sequence[PathOrStr] | None = None,
     block_shape: tuple[int, int] = (512, 512),
     num_threads: int = 5,
 ) -> ReferencePoint:
     """Automatically select a reference point for a stack of unwrapped interferograms.
 
-    Uses the condition file and connected component labels, the point is selected
-    which
+    Uses the condition file and (optionally) connected component labels.
+    The point is selected which
 
-    1. is within intersection of all nonzero connected component labels (always valid)
-    2. has the condition applied to condition file. for example: has the lowest
+    1. has the condition applied to condition file. for example: has the lowest
        amplitude dispersion
+    2. (optionally) is within intersection of all nonzero connected component labels
 
     Parameters
     ----------
-    ccl_file_list : Sequence[PathOrStr]
-        List of connected component label phase files.
     condition_file: PathOrStr
         A file with the same size as each raster, like amplitude dispersion or
         temporal coherence in `ccl_file_list`
@@ -796,6 +816,8 @@ def select_reference_point(
     condition_func: Callable[[ArrayLike, ]]
         The function to apply to the condition file,
         for example numpy.argmin which finds the pixel with lowest value
+    ccl_file_list : Sequence[PathOrStr]
+        List of connected component label phase files.
     block_shape: tuple[int, int]
         Size of blocks to read from while processing `ccl_file_list`
         Default = (512, 512)
@@ -811,12 +833,43 @@ def select_reference_point(
     Raises
     ------
     ReferencePointError
-        Raised f no valid region is found in the intersection of the connected component
-        label files
+        Raised if no valid region is found in the intersection of the connected
+        component label files
 
     """
-    conncomp_intersection_file = Path(output_dir) / "conncomp_intersection.tif"
+    logger.info("Selecting reference point")
+    condition_file_values = io.load_gdal(condition_file, masked=True)
 
+    isin_largest_conncomp = np.ones(condition_file_values.shape, dtype=bool)
+    if ccl_file_list:
+        try:
+            isin_largest_conncomp = _get_largest_conncomp_mask(
+                ccl_file_list=ccl_file_list,
+                output_dir=output_dir,
+                block_shape=block_shape,
+                num_threads=num_threads,
+            )
+        except ReferencePointError:
+            msg = "Unable to find find a connected component intersection."
+            msg += f"Proceeding using only {condition_file = }"
+            logger.warning(msg, exc_info=True)
+
+    # Mask out where the conncomps aren't equal to the largest
+    condition_file_values.mask = condition_file_values.mask | (~isin_largest_conncomp)
+
+    # Pick the (unmasked) point with the condition applied to condition file
+    ref_row, ref_col = condition_func(condition_file_values)
+
+    # Cast to `int` to avoid having `np.int64` types
+    return ReferencePoint(int(ref_row), int(ref_col))
+
+
+def _get_largest_conncomp_mask(
+    output_dir: Path,
+    ccl_file_list: Sequence[PathOrStr] | None = None,
+    block_shape: tuple[int, int] = (512, 512),
+    num_threads: int = 5,
+) -> np.ndarray:
     def intersect_conncomp(arr: np.ma.MaskedArray, axis: int) -> np.ndarray:
         # Track where input is nodata
         any_masked = np.any(arr.mask, axis=axis)
@@ -828,7 +881,8 @@ def select_reference_point(
         all_are_valid[any_masked] = fillval
         return all_are_valid
 
-    if not conncomp_intersection_file.exists():
+    conncomp_intersection_file = Path(output_dir) / "conncomp_intersection.tif"
+    if ccl_file_list and not conncomp_intersection_file.exists():
         logger.info("Creating intersection of connected components")
         create_temporal_average(
             file_list=ccl_file_list,
@@ -859,13 +913,4 @@ def select_reference_point(
     largest_idx = np.argmax(label_counts[1:]) + 1
     # Create a mask of pixels with this label
     isin_largest_conncomp = label == largest_idx
-
-    condition_file_values = io.load_gdal(condition_file, masked=True)
-    # Mask out where the conncomps aren't equal to the largest
-    condition_file_values.mask = condition_file_values.mask | (~isin_largest_conncomp)
-
-    # Pick the (unmasked) point with the condition applied to condition file
-    ref_row, ref_col = condition_func(condition_file_values)
-
-    # Cast to `int` to avoid having `np.int64` types
-    return ReferencePoint(int(ref_row), int(ref_col))
+    return isin_largest_conncomp

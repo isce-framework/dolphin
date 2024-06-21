@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import csv
+from functools import lru_cache
 from math import log
+from pathlib import Path
 from typing import Optional
 
 import numba
@@ -8,19 +11,11 @@ import numpy as np
 from numpy.typing import ArrayLike
 
 from dolphin._types import Strides
-from dolphin.utils import compute_out_shape
+from dolphin.utils import _get_slices, compute_out_shape
 
-from ._common import _make_loop_function, _read_cutoff_csv
+from ._common import remove_unconnected
 
-
-@numba.njit(nogil=True)
-def _compute_glrt_test_stat(scale_1, scale_2):
-    """Compute the GLRT test statistic."""
-    scale_pooled = (scale_1 + scale_2) / 2
-    return 2 * log(scale_pooled) - log(scale_1) - log(scale_2)
-
-
-_loop_over_pixels = _make_loop_function(_compute_glrt_test_stat)
+_get_slices = numba.njit(_get_slices)
 
 
 def estimate_neighbors(
@@ -123,9 +118,89 @@ def get_cutoff(alpha: float, N: int) -> float:
         Cutoff value for the GLRT test statistic.
 
     """
-    n_alpha_to_cutoff = _read_cutoff_csv("glrt")
+    n_alpha_to_cutoff = _read_cutoff_csv()
     try:
         return n_alpha_to_cutoff[(N, alpha)]
     except KeyError as e:
         msg = f"Not implemented for {N = }, {alpha = }"
         raise NotImplementedError(msg) from e
+
+
+@numba.njit(nogil=True)
+def _compute_glrt_test_stat(scale_1, scale_2):
+    """Compute the GLRT test statistic."""
+    scale_pooled = (scale_1 + scale_2) / 2
+    return 2 * log(scale_pooled) - log(scale_1) - log(scale_2)
+
+
+@numba.njit(nogil=True, parallel=True)
+def _loop_over_pixels(
+    mean: ArrayLike,
+    var: ArrayLike,
+    halfwin_rowcol: tuple[int, int],
+    strides_rowcol: tuple[int, int],
+    threshold: float,
+    prune_disconnected: bool,
+    is_shp: np.ndarray,
+) -> np.ndarray:
+    """Loop common to SHP tests using only mean and variance."""
+    half_row, half_col = halfwin_rowcol
+    row_strides, col_strides = strides_rowcol
+    # location to start counting from in the larger input
+    r0, c0 = row_strides // 2, col_strides // 2
+    in_rows, in_cols = mean.shape
+    out_rows, out_cols = is_shp.shape[:2]
+
+    # Convert mean/var to the Rayleigh scale parameter
+    scale_squared = (var + mean**2) / 2
+
+    for out_r in numba.prange(out_rows):
+        for out_c in range(out_cols):
+            in_r = r0 + out_r * row_strides
+            in_c = c0 + out_c * col_strides
+
+            scale_1 = scale_squared[in_r, in_c]
+            # Clamp the window to the image bounds
+            (r_start, r_end), (c_start, c_end) = _get_slices(
+                half_row, half_col, in_r, in_c, in_rows, in_cols
+            )
+            if mean[in_r, in_c] == 0:
+                # Skip nodata pixels
+                continue
+
+            for in_r2 in range(r_start, r_end):
+                for in_c2 in range(c_start, c_end):
+                    # window offsets for dims 3,4 of `is_shp`
+                    r_off = in_r2 - r_start
+                    c_off = in_c2 - c_start
+
+                    # Don't count itself as a neighbor
+                    if in_r2 == in_r and in_c2 == in_c:
+                        is_shp[out_r, out_c, r_off, c_off] = False
+                        continue
+                    scale_2 = scale_squared[in_r2, in_c2]
+
+                    T = _compute_glrt_test_stat(scale_1, scale_2)
+
+                    is_shp[out_r, out_c, r_off, c_off] = threshold > T
+            if prune_disconnected:
+                # For this pixel, prune the groups not connected to the center
+                remove_unconnected(is_shp[out_r, out_c], inplace=True)
+
+    return is_shp
+
+
+@lru_cache
+def _read_cutoff_csv():
+    filename = Path(__file__).parent / "glrt_cutoffs.csv"
+
+    result = {}
+    with open(filename) as file:
+        reader = csv.DictReader(file)
+        for row in reader:
+            n = int(row["N"])
+            alpha = float(row["alpha"])
+            cutoff = float(row["cutoff"])
+            result[(n, alpha)] = cutoff
+
+    return result

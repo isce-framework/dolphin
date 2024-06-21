@@ -44,7 +44,7 @@ def run_wrapped_phase_sequential(
     beta: float = 0.00,
     block_shape: tuple[int, int] = (512, 512),
     **tqdm_kwargs,
-) -> tuple[list[Path], list[Path], Path]:
+) -> tuple[list[Path], list[Path], Path, Path]:
     """Estimate wrapped phase using batches of ministacks."""
     if strides is None:
         strides = {"x": 1, "y": 1}
@@ -62,8 +62,9 @@ def run_wrapped_phase_sequential(
 
     # list where each item is [output_slc_files] from a ministack
     output_slc_files: list[list] = []
-    # Each item is the temp_coh file from a ministack
+    # Each item is the temp_coh/shp_count file from a ministack
     temp_coh_files: list[Path] = []
+    shp_count_files: list[Path] = []
 
     # function to check if a ministack has already been processed
     def already_processed(d: Path, search_ext: str = ".tif") -> bool:
@@ -113,34 +114,24 @@ def run_wrapped_phase_sequential(
                 **tqdm_kwargs,
             )
 
-        cur_output_files, cur_comp_slc_file, temp_coh_file = _get_outputs_from_folder(
-            cur_output_folder
+        cur_output_files, cur_comp_slc_file, temp_coh_file, shp_count_file = (
+            _get_outputs_from_folder(cur_output_folder)
         )
         output_slc_files.append(cur_output_files)
         temp_coh_files.append(temp_coh_file)
+        shp_count_files.append(shp_count_file)
 
     ##############################################
 
     # Average the temporal coherence files in each ministack
     full_span = ministack_planner.real_slc_date_range_str
     output_temp_coh_file = output_folder / f"temporal_coherence_average_{full_span}.tif"
+    output_shp_count_file = output_folder / f"shp_counts_average_{full_span}.tif"
+
     # we can pass the list of files to gdal_calc, which interprets it
     # as a multi-band file
-    if len(temp_coh_files) > 1:
-        logger.info(f"Averaging temporal coherence files into: {output_temp_coh_file}")
-        gdal_calc.Calc(
-            NoDataValue=0,
-            format="GTiff",
-            outfile=fspath(output_temp_coh_file),
-            type="Float32",
-            quiet=True,
-            overwrite=True,
-            creation_options=io.DEFAULT_TIFF_OPTIONS,
-            A=temp_coh_files,
-            calc="numpy.nanmean(A, axis=0)",
-        )
-    else:
-        temp_coh_files[0].rename(output_temp_coh_file)
+    _average_rasters(temp_coh_files, output_temp_coh_file, "Float32")
+    _average_rasters(shp_count_files, output_shp_count_file, "Int16")
 
     # Combine the separate SLC output lists into a single list
     all_slc_files = list(chain.from_iterable(output_slc_files))
@@ -151,16 +142,40 @@ def run_wrapped_phase_sequential(
         slc_fname.rename(output_folder / slc_fname.name)
         out_pl_slcs.append(output_folder / slc_fname.name)
 
-    comp_outputs = []
+    comp_slc_outputs = []
     for p in all_comp_slc_files:
         p.rename(output_folder / p.name)
-        comp_outputs.append(output_folder / p.name)
+        comp_slc_outputs.append(output_folder / p.name)
 
-    return out_pl_slcs, comp_outputs, output_temp_coh_file
+    return out_pl_slcs, comp_slc_outputs, output_temp_coh_file, output_shp_count_file
 
 
-def _get_outputs_from_folder(output_folder: Path):
+def _get_outputs_from_folder(
+    output_folder: Path,
+) -> tuple[list[Path], Path, Path, Path]:
     cur_output_files = sorted(output_folder.glob("2*.slc.tif"))
     cur_comp_slc_file = next(output_folder.glob("compressed_*"))
     temp_coh_file = next(output_folder.glob("temporal_coherence_*"))
-    return cur_output_files, cur_comp_slc_file, temp_coh_file
+    shp_count_file = next(output_folder.glob("shp_counts_*"))
+    # Currently ignoring to not stitch:
+    # eigenvalues, estimator, avg_coh
+    return cur_output_files, cur_comp_slc_file, temp_coh_file, shp_count_file
+
+
+def _average_rasters(file_list: list[Path], outfile: Path, output_type: str):
+    if len(file_list) == 1:
+        file_list[0].rename(outfile)
+        return
+
+    logger.info(f"Averaging {len(file_list)} files into {outfile}")
+    gdal_calc.Calc(
+        NoDataValue=0,
+        format="GTiff",
+        outfile=fspath(outfile),
+        type=output_type,
+        quiet=True,
+        overwrite=True,
+        creation_options=io.DEFAULT_TIFF_OPTIONS,
+        A=file_list,
+        calc="numpy.nanmean(A, axis=0)",
+    )

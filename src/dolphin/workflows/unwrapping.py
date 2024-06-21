@@ -21,6 +21,7 @@ def run(
     cor_file_list: Sequence[Path],
     nlooks: float,
     unwrap_options: UnwrapOptions,
+    temporal_coherence_file: PathOrStr | None = None,
     mask_file: PathOrStr | None = None,
     add_overviews: bool = True,
 ) -> tuple[list[Path], list[Path]]:
@@ -37,6 +38,8 @@ def run(
     unwrap_options : UnwrapOptions
         [`UnwrapOptions`][dolphin.workflows.config.UnwrapOptions] config object
         with parameters for running unwrapping jobs.
+    temporal_coherence_file : Filename, optional
+        Path to temporal coherence file from phase linking.
     mask_file : PathOrStr, optional
         Path to boolean mask indicating nodata areas.
         1 indicates valid data, 0 indicates missing data.
@@ -77,23 +80,11 @@ def run(
         ifg_filenames=ifg_file_list,
         cor_filenames=cor_file_list,
         output_path=output_path,
+        unwrap_options=unwrap_options,
         nlooks=nlooks,
+        temporal_coherence_file=temporal_coherence_file,
         mask_filename=output_mask,
-        zero_where_masked=unwrap_options.zero_where_masked,
-        max_jobs=unwrap_options.n_parallel_jobs,
-        ntiles=unwrap_options.ntiles,
-        tile_overlap=unwrap_options.tile_overlap,
-        n_parallel_tiles=unwrap_options.n_parallel_tiles,
-        init_method=unwrap_options.init_method,
-        cost=unwrap_options.cost,
-        downsample_factor=unwrap_options.downsample_factor,
-        unwrap_method=unwrap_options.unwrap_method,
         scratchdir=unwrap_scratchdir,
-        run_goldstein=unwrap_options.run_goldstein,
-        alpha=unwrap_options.alpha,
-        run_interpolation=unwrap_options.run_interpolation,
-        max_radius=unwrap_options.max_radius,
-        interpolation_cor_threshold=unwrap_options.interpolation_cor_threshold,
     )
 
     if add_overviews:

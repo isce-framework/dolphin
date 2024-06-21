@@ -7,14 +7,15 @@ from typing import NamedTuple, Optional
 
 import jax.numpy as jnp
 import numpy as np
-from jax import Array, jit, lax, vmap
-from jax.scipy.linalg import cho_factor, cho_solve, eigh
+from jax import Array, jit, lax
+from jax.scipy.linalg import cho_factor, cho_solve
 from jax.typing import ArrayLike
 
 from dolphin._types import HalfWindow, Strides
 from dolphin.utils import take_looks
 
 from . import covariance, metrics
+from ._eigenvalues import eigh_largest_stack, eigh_smallest_stack
 from ._ps_filling import fill_ps_pixels
 
 logger = logging.getLogger(__name__)
@@ -45,6 +46,9 @@ class PhaseLinkOutput(NamedTuple):
     A goodness of fit parameter from 0 to 1 at each pixel.
     """
 
+    shp_counts: np.ndarray
+    """Number of neighbor pixels used in adaptive multilooking."""
+
     eigenvalues: np.ndarray
     """The smallest (largest) eigenvalue resulting from EMI (EVD)."""
 
@@ -56,16 +60,17 @@ class PhaseLinkOutput(NamedTuple):
 
 
 def run_phase_linking(
-    slc_stack: np.ndarray,
+    slc_stack: ArrayLike,
     half_window: HalfWindow,
     strides: Strides = DEFAULT_STRIDES,
     use_evd: bool = False,
     beta: float = 0.0,
     reference_idx: int = 0,
-    nodata_mask: np.ndarray = None,
-    ps_mask: Optional[np.ndarray] = None,
-    neighbor_arrays: Optional[np.ndarray] = None,
-    avg_mag: Optional[np.ndarray] = None,
+    nodata_mask: ArrayLike | None = None,
+    ps_mask: ArrayLike | None = None,
+    use_max_ps: bool = True,
+    neighbor_arrays: ArrayLike | None = None,
+    avg_mag: ArrayLike | None = None,
     use_slc_amp: bool = True,
     calc_average_coh: bool = False,
 ) -> PhaseLinkOutput:
@@ -76,7 +81,7 @@ def run_phase_linking(
 
     Parameters
     ----------
-    slc_stack : np.ndarray
+    slc_stack : ArrayLike
         The SLC stack, with shape (n_images, n_rows, n_cols)
     half_window : HalfWindow, or tuple[int, int]
         A (named) tuple of (y, x) sizes for the half window.
@@ -91,21 +96,25 @@ def run_phase_linking(
         The regularization parameter, by default 0 (no regularization).
     reference_idx : int, optional
         The index of the (non compressed) reference SLC, by default 0
-    nodata_mask : np.ndarray, optional
+    nodata_mask : ArrayLike, optional
         A mask of bad/nodata pixels to ignore when estimating the covariance.
         Pixels with `True` (or 1) are ignored, by default None
         If None, all pixels are used, by default None.
-    ps_mask : np.ndarray, optional
+    ps_mask : ArrayLike, optional
         A mask of pixels marking persistent scatterers (PS) to
         skip when multilooking.
         Pixels with `True` (or 1) are PS and will be ignored
         (combined with `nodata_mask`).
         The phase from these pixels will be inserted back
         into the final estimate directly from `slc_stack`.
-    neighbor_arrays : np.ndarray, optional
+    use_max_ps : bool, optional
+        Whether to use the maximum PS phase for the first pixel, or average all
+        PS within the look window.
+        By default True.
+    neighbor_arrays : ArrayLike, optional
         The neighbor arrays to use for SHP, shape = (n_rows, n_cols, *window_shape).
         If None, a rectangular window is used. By default None.
-    avg_mag : np.ndarray, optional
+    avg_mag : ArrayLike, optional
         The average magnitude of the SLC stack, used to to find the brightest
         PS pixels to fill within each look window.
         If None, the average magnitude will be computed from `slc_stack`.
@@ -177,15 +186,6 @@ def run_phase_linking(
         calc_average_coh=calc_average_coh,
     )
 
-    if use_slc_amp:
-        # use the amplitude from the original SLCs
-        # account for the strides when grabbing original data
-        # we need to match `io.compute_out_shape` here
-        slcs_decimated = decimate(slc_stack, strides)
-        cpx_phase = np.exp(1j * np.angle(cpl_out.cpx_phase)) * np.abs(slcs_decimated)
-    else:
-        cpx_phase = np.exp(1j * np.angle(cpl_out.cpx_phase))
-
     # Get the smaller, looked versions of the masks
     # We zero out nodata if all pixels within the window had nodata
     mask_looked = take_looks(nodata_mask, *strides, func_type="all")
@@ -193,6 +193,8 @@ def run_phase_linking(
     # Convert from jax array back to np
     temp_coh = np.array(cpl_out.temp_coh)
 
+    # Set as unit-magnitude
+    cpx_phase = np.exp(1j * np.angle(cpl_out.cpx_phase))
     # Fill in the PS pixels from the original SLC stack, if it was given
     if np.any(ps_mask):
         fill_ps_pixels(
@@ -203,19 +205,28 @@ def run_phase_linking(
             strides,
             avg_mag,
             reference_idx,
+            use_max_ps=use_max_ps,
         )
+
+    if use_slc_amp:
+        # use the amplitude from the original SLCs
+        # account for the strides when grabbing original data
+        # we need to match `io.compute_out_shape` here
+        slcs_decimated = decimate(slc_stack, strides)
+        cpx_phase = np.exp(1j * np.angle(cpx_phase)) * np.abs(slcs_decimated)
 
     # Finally, ensure the nodata regions are 0
     cpx_phase[:, mask_looked] = np.nan
     temp_coh[mask_looked] = np.nan
 
     return PhaseLinkOutput(
-        cpx_phase,
-        temp_coh,
+        cpx_phase=cpx_phase,
+        temp_coh=temp_coh,
+        shp_counts=np.asarray(cpl_out.shp_counts),
         # Convert the rest to numpy for writing
-        np.array(cpl_out.eigenvalues),
-        np.array(cpl_out.estimator),
-        cpl_out.avg_coh,
+        eigenvalues=np.asarray(cpl_out.eigenvalues),
+        estimator=np.asarray(cpl_out.estimator),
+        avg_coh=cpl_out.avg_coh,
     )
 
 
@@ -300,6 +311,15 @@ def run_cpl(
     # Get the temporal coherence
     temp_coh = metrics.estimate_temp_coh(cpx_phase, C_arrays)
 
+    # Reshape the (rows, cols, nslcs) output to be same as input stack
+    cpx_phase_reshaped = jnp.moveaxis(cpx_phase, -1, 0)
+
+    # Get the SHP counts for each pixel (if not using Rect window)
+    if neighbor_arrays is None:
+        shp_counts = jnp.zeros(temp_coh.shape, dtype=np.int16)
+    else:
+        shp_counts = jnp.sum(neighbor_arrays, axis=(-2, -1))
+
     if calc_average_coh:
         # If requested, average the Cov matrix at each row for reference selection
         avg_coh_per_date = jnp.abs(C_arrays).mean(axis=3)
@@ -307,10 +327,13 @@ def run_cpl(
     else:
         avg_coh = None
 
-    # Reshape the (rows, cols, nslcs) output to be same as input stack
-    cpx_phase_reshaped = jnp.moveaxis(cpx_phase, -1, 0)
     return PhaseLinkOutput(
-        cpx_phase_reshaped, temp_coh, eigenvalues, estimator, avg_coh
+        cpx_phase=cpx_phase_reshaped,
+        temp_coh=temp_coh,
+        shp_counts=shp_counts,
+        eigenvalues=eigenvalues,
+        estimator=estimator,
+        avg_coh=avg_coh,
     )
 
 
@@ -355,9 +378,11 @@ def process_coherence_matrices(
 
     """
     rows, cols, n, _ = C_arrays.shape
+
     if use_evd:
         # EVD
-        eig_vals, eig_vecs = eigh_largest_stack(C_arrays)
+        evd_eig_vals, evd_eig_vecs = eigh_largest_stack(C_arrays)
+        eig_vals, eig_vecs = evd_eig_vals, evd_eig_vecs
         estimator = jnp.zeros(eig_vals.shape, dtype=bool)
     else:
         # EMI
@@ -373,6 +398,7 @@ def process_coherence_matrices(
         if beta > 0:
             # Perform regularization
             Gamma = (1 - beta) * Gamma + beta * Id
+
         # Attempt to invert Gamma
         cho, is_lower = cho_factor(Gamma)
 
@@ -380,7 +406,10 @@ def process_coherence_matrices(
         # we should just fall back to EVD
         # Use the already- factored |Gamma|^-1, solving Ax = I gives the inverse
         Gamma_inv = cho_solve((cho, is_lower), Id)
-        emi_eig_vals, emi_eig_vecs = eigh_smallest_stack(Gamma_inv * C_arrays)
+        # We're looking for the lambda nearest to 1. So shift by 0.99
+        # Also, use the evd vectors as iteration starting point:
+        mu = 0.99
+        emi_eig_vals, emi_eig_vecs = eigh_smallest_stack(Gamma_inv * C_arrays, mu)
         # From the EMI paper, normalize the eigenvectors to have norm sqrt(n)
         emi_eig_vecs = (
             jnp.sqrt(n)
@@ -388,9 +417,6 @@ def process_coherence_matrices(
             / jnp.linalg.norm(emi_eig_vecs, axis=-1, keepdims=True)
         )
         # is the output is the inverse of the eigenvectors? or inverse conj?
-
-        # For places where inverting |Gamma| failed: fall back to computing EVD
-        evd_eig_vals, evd_eig_vecs = eigh_largest_stack(C_arrays)
 
         # Use https://jax.readthedocs.io/en/latest/_autosummary/jax.lax.select.html
         # Note that `if` would fail the jit tracing
@@ -400,6 +426,8 @@ def process_coherence_matrices(
         # Must broadcast the 2D boolean array so it's the same size as the outputs
         inv_has_nans_3d = jnp.tile(inv_has_nans[:, :, None], (1, 1, n))
 
+        # For EVD, or places where inverting |Gamma| failed: fall back to computing EVD
+        evd_eig_vals, evd_eig_vecs = eigh_largest_stack(C_arrays)
         eig_vecs = lax.select(
             inv_has_nans_3d,
             # Run this on True: EVD, since we failed to invert:
@@ -424,69 +452,6 @@ def process_coherence_matrices(
     evd_estimate = eig_vecs * jnp.exp(-1j * jnp.angle(ref[:, :, None]))
 
     return evd_estimate, eig_vals, estimator
-
-
-# The eigenvalues are in ascending order
-# Column j of `eig_vecs` is the normalized eigenvector corresponding
-# to eigenvalue `lam[j]``
-@jit
-def _get_smallest_eigenpair(C) -> tuple[Array, Array]:
-    lam, eig_vecs = eigh(C)
-    return lam[0], eig_vecs[:, 0]
-
-
-@jit
-def _get_largest_eigenpair(C) -> tuple[Array, Array]:
-    lam, eig_vecs = eigh(C)
-    return lam[-1], eig_vecs[:, -1]
-
-
-# We map over the first two dimensions, so now instead of one scalar eigenvalue,
-# we have (rows, cols) eigenvalues
-@jit
-def eigh_smallest_stack(C_arrays: ArrayLike) -> tuple[Array, Array]:
-    """Get the smallest (eigenvalue, eigenvector) for each pixel in a 3D stack.
-
-    Parameters
-    ----------
-    C_arrays : ArrayLike
-        The stack of coherence matrices.
-        Shape = (rows, cols, nslc, nslc)
-
-    Returns
-    -------
-    eigenvalues : Array
-        The smallest eigenvalue for each pixel's matrix
-        Shape = (rows, cols)
-    eigenvectors : Array
-        The normalized eigenvector corresponding to the smallest eigenvalue
-        Shape = (rows, cols, nslc)
-
-    """
-    return vmap(vmap(_get_smallest_eigenpair))(C_arrays)
-
-
-@jit
-def eigh_largest_stack(C_arrays: ArrayLike) -> tuple[Array, Array]:
-    """Get the largest (eigenvalue, eigenvector) for each pixel in a 3D stack.
-
-    Parameters
-    ----------
-    C_arrays : ArrayLike
-        The stack of coherence matrices.
-        Shape = (rows, cols, nslc, nslc)
-
-    Returns
-    -------
-    eigenvalues : Array
-        The largest eigenvalue for each pixel's matrix
-        Shape = (rows, cols)
-    eigenvectors : Array
-        The normalized eigenvector corresponding to the largest eigenvalue
-        Shape = (rows, cols, nslc)
-
-    """
-    return vmap(vmap(_get_largest_eigenpair))(C_arrays)
 
 
 def decimate(arr: ArrayLike, strides: Strides) -> Array:

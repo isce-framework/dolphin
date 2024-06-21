@@ -35,6 +35,7 @@ class OutputPaths(NamedTuple):
     stitched_temp_coh_file: Path
     stitched_ps_file: Path
     stitched_amp_dispersion_file: Path
+    stitched_shp_count_file: Path
     unwrapped_paths: list[Path] | None
     conncomp_paths: list[Path] | None
     tropospheric_corrections: list[Path] | None
@@ -136,6 +137,7 @@ def run(
     temp_coh_file_list: list[Path] = []
     ps_file_list: list[Path] = []
     amp_dispersion_file_list: list[Path] = []
+    shp_count_file_list: list[Path] = []
     # The comp_slc tracking object is a dict, since we'll need to organize
     # multiple comp slcs by burst (they'll have the same filename)
     comp_slc_dict: dict[str, list[Path]] = {}
@@ -169,12 +171,15 @@ def run(
         for fut in fut_to_burst:
             burst = fut_to_burst[fut]
 
-            cur_ifg_list, comp_slcs, temp_coh, ps_file, amp_disp_file = fut.result()
+            cur_ifg_list, comp_slcs, temp_coh, ps_file, amp_disp_file, shp_count = (
+                fut.result()
+            )
             ifg_file_list.extend(cur_ifg_list)
             comp_slc_dict[burst] = comp_slcs
             temp_coh_file_list.append(temp_coh)
             ps_file_list.append(ps_file)
             amp_dispersion_file_list.append(amp_disp_file)
+            shp_count_file_list.append(shp_count)
 
     # ###################################
     # 2. Stitch burst-wise interferograms
@@ -190,11 +195,13 @@ def run(
         stitched_temp_coh_file,
         stitched_ps_file,
         stitched_amp_dispersion_file,
+        stitched_shp_count_file,
     ) = stitching_bursts.run(
         ifg_file_list=ifg_file_list,
         temp_coh_file_list=temp_coh_file_list,
         ps_file_list=ps_file_list,
         amp_dispersion_list=amp_dispersion_file_list,
+        shp_count_file_list=shp_count_file_list,
         stitched_ifg_dir=cfg.interferogram_network._directory,
         output_options=cfg.output_options,
         file_date_fmt=cfg.input_options.cslc_date_fmt,
@@ -214,6 +221,7 @@ def run(
             stitched_temp_coh_file=stitched_temp_coh_file,
             stitched_ps_file=stitched_ps_file,
             stitched_amp_dispersion_file=stitched_amp_dispersion_file,
+            stitched_shp_count_file=stitched_shp_count_file,
             unwrapped_paths=None,
             conncomp_paths=None,
             tropospheric_corrections=None,
@@ -225,6 +233,7 @@ def run(
     unwrapped_paths, conncomp_paths = unwrapping.run(
         ifg_file_list=stitched_ifg_paths,
         cor_file_list=stitched_cor_paths,
+        temporal_coherence_file=stitched_temp_coh_file,
         nlooks=nlooks,
         unwrap_options=cfg.unwrap_options,
         mask_file=cfg.mask_file,
@@ -243,8 +252,8 @@ def run(
             unwrapped_paths=unwrapped_paths,
             conncomp_paths=conncomp_paths,
             corr_paths=stitched_cor_paths,
-            condition_file=stitched_amp_dispersion_file,
-            condition=CallFunc.MIN,
+            condition_file=stitched_temp_coh_file,
+            condition=CallFunc.MAX,
             output_dir=ts_opts._directory,
             run_velocity=ts_opts.run_velocity,
             velocity_file=ts_opts._velocity_file,
@@ -328,8 +337,9 @@ def run(
         stitched_temp_coh_file=stitched_temp_coh_file,
         stitched_ps_file=stitched_ps_file,
         stitched_amp_dispersion_file=stitched_amp_dispersion_file,
+        stitched_shp_count_file=stitched_shp_count_file,
         unwrapped_paths=unwrapped_paths,
-        # TODO: Let's keep the uwrapped_paths since all the outputs are
+        # TODO: Let's keep the unwrapped_paths since all the outputs are
         # corresponding to those and if we have a network unwrapping, the
         # inversion would create different single-reference network and we need
         # to update other products like conncomp

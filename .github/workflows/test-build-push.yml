@@ -49,7 +49,7 @@ jobs:
               - conda-forge
       - name: Install
         run: |
-          pip install --no-deps "snaphu>=0.2.1" "opera-utils>=0.3.0" git+https://github.com/isce-framework/tophu@main
+          pip install --no-deps "snaphu>=0.4.0" "opera-utils>=0.4.1" git+https://github.com/isce-framework/tophu@main
           pip install --no-deps .
       - name: Install test dependencies
         run: |
@@ -61,7 +61,7 @@ jobs:
           echo "TQDM_DISABLE=1" >> $GITHUB_ENV
       - name: Test (with numba boundscheck on)
         run: |
-          pytest -n0
+          pytest -n0 -vv
       # https://community.codecov.com/t/numba-jitted-methods-are-not-captured-by-codecov/2649
       # - name: Coverage report
       #   uses: codecov/codecov-action@v2
@@ -97,7 +97,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build, tag, and push image to Github Container Registry
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: ./docker/Dockerfile

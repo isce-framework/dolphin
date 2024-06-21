@@ -56,6 +56,10 @@ def get_parser(subparser=None, subcommand_name="unwrap") -> argparse.ArgumentPar
             " mask). Convention is 0 for no data/invalid, and 1 for good data."
         ),
     )
+    inputs.add_argument(
+        "--temp-coh-filename",
+        help="Path to temporal coherence file from phase linking",
+    )
     parser.add_argument(
         "--nlooks",
         type=int,
@@ -86,6 +90,13 @@ def get_parser(subparser=None, subcommand_name="unwrap") -> argparse.ArgumentPar
         "--run-interpolation",
         action="store_true",
         help="Run interpolation before unwrapping.",
+    )
+
+    spurt_opts = parser.add_argument_group("Spurt options")
+    spurt_opts.add_argument(
+        "--temp-coh-threshold",
+        type=float,
+        help="Cutoff on temporal_coherence raster to choose pixels for unwrapping.",
     )
 
     tophu_opts = parser.add_argument_group("Tophu options")

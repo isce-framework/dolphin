@@ -18,7 +18,7 @@ from .config import DisplacementWorkflow
 @log_runtime
 def run(
     cfg: DisplacementWorkflow, debug: bool = False, tqdm_kwargs=None
-) -> tuple[list[Path], list[Path], Path, Path, Path]:
+) -> tuple[list[Path], list[Path], Path, Path, Path, Path]:
     """Run the displacement workflow on a stack of SLCs.
 
     Parameters
@@ -46,6 +46,8 @@ def run(
         The multilooked boolean persistent scatterer file.
     amp_disp_looked_file : Path
         The multilooked amplitude dispersion file.
+    shp_count_file : Path
+        Path to the created SHP counts file.
 
     """
     if tqdm_kwargs is None:
@@ -146,6 +148,7 @@ def run(
         logger.info(f"Skipping EVD step, {len(phase_linked_slcs)} files already exist")
         comp_slc_list = sorted(pl_path.glob("compressed*tif"))
         temp_coh_file = next(pl_path.glob("temporal_coherence*tif"))
+        shp_count_file = next(pl_path.glob("shp_count*tif"))
     else:
         logger.info(f"Running sequential EMI step in {pl_path}")
         kwargs = tqdm_kwargs | {"desc": f"Phase linking ({pl_path})"}
@@ -154,27 +157,25 @@ def run(
         # If we pre-compute it from some big stack, we need to use that for SHP
         # finding, not use the size of `slc_vrt_file`
         shp_nslc = None
-        (
-            phase_linked_slcs,
-            comp_slc_list,
-            temp_coh_file,
-        ) = sequential.run_wrapped_phase_sequential(
-            slc_vrt_file=vrt_stack.outfile,
-            ministack_planner=ministack_planner,
-            ministack_size=cfg.phase_linking.ministack_size,
-            half_window=cfg.phase_linking.half_window.model_dump(),
-            strides=strides,
-            use_evd=cfg.phase_linking.use_evd,
-            beta=cfg.phase_linking.beta,
-            mask_file=nodata_mask_file,
-            ps_mask_file=ps_output,
-            amp_mean_file=cfg.ps_options._amp_mean_file,
-            amp_dispersion_file=cfg.ps_options._amp_dispersion_file,
-            shp_method=cfg.phase_linking.shp_method,
-            shp_alpha=cfg.phase_linking.shp_alpha,
-            shp_nslc=shp_nslc,
-            block_shape=cfg.worker_settings.block_shape,
-            **kwargs,
+        (phase_linked_slcs, comp_slc_list, temp_coh_file, shp_count_file) = (
+            sequential.run_wrapped_phase_sequential(
+                slc_vrt_file=vrt_stack.outfile,
+                ministack_planner=ministack_planner,
+                ministack_size=cfg.phase_linking.ministack_size,
+                half_window=cfg.phase_linking.half_window.model_dump(),
+                strides=strides,
+                use_evd=cfg.phase_linking.use_evd,
+                beta=cfg.phase_linking.beta,
+                mask_file=nodata_mask_file,
+                ps_mask_file=ps_output,
+                amp_mean_file=cfg.ps_options._amp_mean_file,
+                amp_dispersion_file=cfg.ps_options._amp_dispersion_file,
+                shp_method=cfg.phase_linking.shp_method,
+                shp_alpha=cfg.phase_linking.shp_alpha,
+                shp_nslc=shp_nslc,
+                block_shape=cfg.worker_settings.block_shape,
+                **kwargs,
+            )
         )
 
     # ###################################################
@@ -191,6 +192,7 @@ def run(
             temp_coh_file,
             ps_looked_file,
             amp_disp_looked_file,
+            shp_count_file,
         )
 
     logger.info(f"Creating virtual interferograms from {len(phase_linked_slcs)} files")
@@ -203,6 +205,7 @@ def run(
         temp_coh_file,
         ps_looked_file,
         amp_disp_looked_file,
+        shp_count_file,
     )
 
 

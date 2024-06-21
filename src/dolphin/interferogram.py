@@ -93,13 +93,17 @@ class VRTInterferogram(BaseModel, extra="allow"):
     )
     ref_date: Optional[DateOrDatetime] = Field(
         None,
-        description="Reference date of the interferogram. If not specified,"
-        "will be parsed from `ref_slc` using `date_format`.",
+        description=(
+            "Reference date of the interferogram. If not specified,"
+            "will be parsed from `ref_slc` using `date_format`."
+        ),
     )
     sec_date: Optional[DateOrDatetime] = Field(
         None,
-        description="Secondary date of the interferogram. If not specified,"
-        "will be parsed from `sec_slc` using `date_format`.",
+        description=(
+            "Secondary date of the interferogram. If not specified,"
+            "will be parsed from `sec_slc` using `date_format`."
+        ),
     )
     resolve_paths: bool = Field(
         True, description="Resolve paths of `ref_slc`/`sec_slc` when saving the VRT"
@@ -653,6 +657,7 @@ def estimate_interferometric_correlations(
     window_size: tuple[int, int],
     out_driver: str = "GTiff",
     out_suffix: str = ".cor.tif",
+    options: Sequence[str] = io.DEFAULT_TIFF_OPTIONS,
 ) -> list[Path]:
     """Estimate correlations for a sequence of interferograms.
 
@@ -668,6 +673,8 @@ def estimate_interferometric_correlations(
         Name of output GDAL driver, by default "GTiff"
     out_suffix : str, optional
         File suffix to use for correlation files, by default ".cor.tif"
+    options : list[str], optional
+        GDAL Creation options for the output array
 
     Returns
     -------
@@ -692,6 +699,7 @@ def estimate_interferometric_correlations(
             output_name=cor_path,
             like_filename=ifg_path,
             driver=out_driver,
+            options=options,
         )
     return corr_paths
 
