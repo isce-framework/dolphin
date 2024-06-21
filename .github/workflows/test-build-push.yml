@@ -1,6 +1,12 @@
 name: Pytest, build docker image, push to GHCR
 
-on: [pull_request, push]
+on:
+  push:
+    branches-ignore:
+      - 'joss'
+  pull_request:
+    branches-ignore:
+      - 'joss'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref }}
