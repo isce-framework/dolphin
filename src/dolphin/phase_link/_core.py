@@ -311,11 +311,12 @@ def run_cpl(
         strides,
         neighbor_arrays=neighbor_arrays,
     )
+    ns = slc_stack.shape[0]
     if baseline_lag:
-        iu = np.triu_indices(C_arrays.shape[0], baseline_lag)
-        il = np.tril_indices(C_arrays.shape[0], -baseline_lag)
-        C_arrays = C_arrays.at[:, :, iu].set(0)
-        C_arrays = C_arrays.at[:, :, il].set(0)
+        u_rows, u_cols = jnp.triu_indices(ns, baseline_lag)
+        l_rows, l_cols = jnp.tril_indices(ns, -baseline_lag)
+        C_arrays = C_arrays.at[:, :, u_rows, u_cols].set(0.0 + 0j)
+        C_arrays = C_arrays.at[:, :, l_rows, l_cols].set(0.0 + 0j)
 
     cpx_phase, eigenvalues, estimator = process_coherence_matrices(
         C_arrays,
@@ -466,7 +467,7 @@ def process_coherence_matrices(
     # Make sure each still has 3 dims, then reference all phases to `ref`
     evd_estimate = eig_vecs * jnp.exp(-1j * jnp.angle(ref[:, :, None]))
 
-    return evd_estimate, eig_vals, estimator
+    return evd_estimate, eig_vals, estimator.astype("uint8")
 
 
 def decimate(arr: ArrayLike, strides: Strides) -> Array:
