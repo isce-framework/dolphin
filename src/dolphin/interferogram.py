@@ -14,6 +14,7 @@ from opera_utils import get_dates
 from osgeo import gdal
 from pydantic import BaseModel, Field, ValidationInfo, field_validator, model_validator
 from scipy.ndimage import uniform_filter
+from tqdm.contrib.concurrent import thread_map
 
 from dolphin import io, utils
 from dolphin._log import get_log
@@ -658,6 +659,7 @@ def estimate_interferometric_correlations(
     out_driver: str = "GTiff",
     out_suffix: str = ".cor.tif",
     options: Sequence[str] = io.DEFAULT_TIFF_OPTIONS,
+    num_workers: int = 3,
 ) -> list[Path]:
     """Estimate correlations for a sequence of interferograms.
 
@@ -675,6 +677,9 @@ def estimate_interferometric_correlations(
         File suffix to use for correlation files, by default ".cor.tif"
     options : list[str], optional
         GDAL Creation options for the output array
+    num_workers : int
+        Number of threads to use for stitching in parallel.
+        Default = 3
 
     Returns
     -------
@@ -691,8 +696,11 @@ def estimate_interferometric_correlations(
         if cor_path.exists():
             logger.info(f"Skipping existing interferometric correlation for {ifg_path}")
             continue
+
+    def process_ifg(args):
+        ifg_path, cor_path = args
+        logger.debug(f"Estimating correlation for {ifg_path}, writing to {cor_path}")
         ifg = io.load_gdal(ifg_path)
-        logger.info(f"Estimating correlation for {ifg_path}, writing to {cor_path}")
         cor = estimate_correlation_from_phase(ifg, window_size=window_size)
         io.write_arr(
             arr=cor,
@@ -701,6 +709,9 @@ def estimate_interferometric_correlations(
             driver=out_driver,
             options=options,
         )
+
+    thread_map(process_ifg, zip(ifg_paths, corr_paths), max_workers=num_workers)
+
     return corr_paths
 
 

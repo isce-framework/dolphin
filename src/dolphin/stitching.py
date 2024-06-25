@@ -15,6 +15,7 @@ from numpy.typing import DTypeLike
 from opera_utils import group_by_date
 from osgeo import gdal, osr
 from rasterio.warp import transform_bounds
+from tqdm.contrib.concurrent import thread_map
 
 from dolphin import io, utils
 from dolphin._log import get_log
@@ -35,6 +36,7 @@ def merge_by_date(
     out_bounds: Optional[Bbox] = None,
     out_bounds_epsg: Optional[int] = None,
     options: Optional[Sequence[str]] = io.DEFAULT_TIFF_OPTIONS,
+    num_workers: int = 1,
     overwrite: bool = False,
 ) -> dict[tuple[datetime, ...], Path]:
     """Group images from the same datetime and merge into one image per datetime.
@@ -65,6 +67,9 @@ def merge_by_date(
     options : Optional[Sequence[str]]
         Driver-specific creation options passed to GDAL.
         Default is [dolphin.io.DEFAULT_TIFF_OPTIONS][].
+    num_workers : int
+        Number of dates to stitch in separate threads in parallel.
+        Default is 1.
     overwrite : bool
         Overwrite existing files. Default is False.
 
@@ -95,7 +100,10 @@ def merge_by_date(
             msg = f"Expected 1 or 2 dates: {dates}."
             raise ValueError(msg)
         outfile = Path(output_dir) / (date_str + output_suffix)
+        stitched_acq_times[dates] = outfile
 
+    def process_date(args):
+        cur_images, outfile = args
         merge_images(
             cur_images,
             outfile=outfile,
@@ -108,7 +116,12 @@ def merge_by_date(
             options=options,
         )
 
-        stitched_acq_times[dates] = outfile
+    # loop over the merging in parallel
+    thread_map(
+        process_date,
+        zip(grouped_images.values(), stitched_acq_times.values()),
+        max_workers=num_workers,
+    )
 
     return stitched_acq_times
 
@@ -232,7 +245,16 @@ def merge_images(
     optfile.write_text("\n".join(map(str, warped_file_list)))
     suffix = Path(outfile).suffix
     merge_output = (tmp_path / "merged").with_suffix(suffix)
-    args = ["gdal_merge.py", "-o", merge_output, "--optfile", optfile, "-of", driver]
+    args = [
+        "gdal_merge.py",
+        "-quiet",
+        "-o",
+        merge_output,
+        "--optfile",
+        optfile,
+        "-of",
+        driver,
+    ]
 
     if out_nodata is not None:
         args.extend(["-a_nodata", str(out_nodata)])
