@@ -25,7 +25,7 @@ def slc_samples(C_truth):
     return simulate.simulate_neighborhood_stack(C, ns)
 
 
-@pytest.mark.parametrize("baseline_lag", [None, 3])
+@pytest.mark.parametrize("baseline_lag", [None, 5])
 @pytest.mark.parametrize("use_evd", [False, True])
 def test_estimation(C_truth, slc_samples, use_evd, baseline_lag):
     _, truth = C_truth
@@ -54,7 +54,8 @@ def test_estimation(C_truth, slc_samples, use_evd, baseline_lag):
     assert pl_out.temp_coh.shape == (11, 11)
     assert pl_out.eigenvalues.shape == (11, 11)
     if use_evd:
-        assert np.all(pl_out.eigenvalues > NUM_ACQ / 3)
+        expected_min_eig = baseline_lag if baseline_lag else NUM_ACQ / 3
+        assert np.all(pl_out.eigenvalues > expected_min_eig)
         assert pl_out
     else:
         # should be 1, but floating point rounding sometimes drops

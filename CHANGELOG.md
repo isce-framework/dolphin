@@ -1,6 +1,12 @@
 # [Unreleased](https://github.com/isce-framework/dolphin/compare/v0.19.0...main)
 
-# [Unreleased](https://github.com/isce-framework/dolphin/compare/v0.18.0...v0.19.0) - 2024-06-12
+**Changed**
+- Delete unwrap scratch difrectories by default during displacement workflow
+
+**Fixed**
+- Pass through the raster metadata when running filtering/interpolation
+
+# [v0.19.0](https://github.com/isce-framework/dolphin/compare/v0.18.0...v0.19.0) - 2024-06-21
 
 **Added**
 - `filtering` module for filtering out long wavelength signals from the unwrapped phase
@@ -8,6 +14,8 @@
 - Interface only for 3D unwrapping
 - Faster correlated noise simulation, along with 3d stack simulation with synthetic deformation
 - Added ability to read rasters on S3 using `VRTStack` object
+- Eigenvalue solver speedups of 3-9x
+- Initial version of 3D unwrapping using `spurt`
 
 **Removed**
 - the KL-divergence SHP estimator has been removed. GLRT is recommended instead.
@@ -16,6 +24,7 @@
 - `reproject_bounds` uses the `rasterio` version, which densifies points along edges for a more accurate bounding box
 - The output SHP rasters now output 0 if there was no valid input data
 - Logic for filling PS pixels, with and without setting the amplitudes to be the original SLC amplitudes
+- `ReferencePointError` during the displacement workflow now will fall back look only at the `condition_file` (i.e. choose the point with highest temporal coherence by default)
 
 **Changed**
 - The configuration options for unwrapping have been refactored. Options unique to each unwrapper are grouped into subclasses.

@@ -28,6 +28,7 @@ def run(
     output_options: OutputOptions,
     file_date_fmt: str = "%Y%m%d",
     corr_window_size: tuple[int, int] = (11, 11),
+    num_workers: int = 3,
 ) -> tuple[list[Path], list[Path], Path, Path, Path, Path]:
     """Run the displacement workflow on a stack of SLCs.
 
@@ -54,6 +55,9 @@ def run(
     corr_window_size : tuple[int, int]
         Size of moving window (rows, cols) to use for estimating correlation.
         Default = (11, 11)
+    num_workers : int
+        Number of threads to use for stitching in parallel.
+        Default = 3
 
     Returns
     -------
@@ -83,6 +87,7 @@ def run(
         driver="GTiff",
         out_bounds=out_bounds,
         out_bounds_epsg=output_options.bounds_epsg,
+        num_workers=num_workers,
     )
     stitched_ifg_paths = list(date_to_ifg_path.values())
 
@@ -91,7 +96,10 @@ def run(
     )
     # Estimate the interferometric correlation from the stitched interferogram
     interferometric_corr_paths = estimate_interferometric_correlations(
-        stitched_ifg_paths, window_size=corr_window_size, options=cor_create_options
+        stitched_ifg_paths,
+        window_size=corr_window_size,
+        options=cor_create_options,
+        num_workers=num_workers,
     )
 
     # Stitch the correlation files

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import contextlib
+import shutil
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Callable, Optional, Protocol, Sequence, TypeVar
@@ -122,8 +122,8 @@ def run(
         # Symlink the unwrapped paths to `timeseries/`
         for p in unwrapped_paths:
             target = Path(output_dir) / Path(p).name
-            with contextlib.suppress(FileExistsError):
-                target.symlink_to(p)
+            if not target.exists():  # Check to prevent overwriting
+                shutil.copy(p, target)
             inverted_phase_paths.append(target)
         # Make extra "0" raster so that the number of rasters matches len(sar_dates)
         ref_raster = Path(output_dir) / (
