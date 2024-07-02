@@ -67,12 +67,13 @@ class S3Path(GeneralPath):
             self.path: Path = s3_url.path
             self._trailing_slash: str = s3_url._trailing_slash
         else:
-            parsed: ParseResult = urlparse(s3_url)
+            s = str(s3_url).strip()
+            parsed: ParseResult = urlparse(str(s))
             self._scheme = parsed.scheme
             self._netloc = self.bucket = parsed.netloc
             self._parsed = parsed
             self.path = Path(parsed.path)
-            self._trailing_slash = "/" if s3_url.endswith("/") else ""
+            self._trailing_slash = "/" if s.endswith("/") else ""
 
         if self._scheme != "s3":
             raise ValueError(f"{s3_url} is not an S3 url")
@@ -119,7 +120,7 @@ class S3Path(GeneralPath):
     def suffix(self):
         return self.path.suffix
 
-    def resolve(self) -> S3Path:
+    def resolve(self, strict: bool = False) -> S3Path:
         """Resolve the path to an absolute path- S3 paths are always absolute."""
         return self
 
