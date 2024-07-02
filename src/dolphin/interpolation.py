@@ -1,6 +1,8 @@
 import numba
 import numpy as np
 from numpy.typing import ArrayLike
+from scipy.interpolate import interp1d
+import pandas as pd
 
 from dolphin._log import get_log
 
@@ -135,3 +137,61 @@ def _interp_loop(
                 csum += np.exp(-r2[i] / r2_norm) * cphase[i]
 
             interpolated_ifg[r0, c0] = np.abs(ifg[r0, c0]) * np.exp(1j * np.angle(csum))
+
+
+
+def interpolate_along_axis(oldCoord, newCoord, data, axis=2, pad=False):
+    '''
+    Interpolate an array of 3-D data along one axis. This function
+    assumes that the x-coordinate increases monotonically.
+    '''
+    if oldCoord.ndim > 1:
+        stackedData = np.concatenate([oldCoord, data, newCoord], axis=axis)
+        out = np.apply_along_axis(interpVector, axis=axis, arr=stackedData, Nx=oldCoord.shape[axis])
+    else:
+        out = np.apply_along_axis(interpV, axis=axis, arr=data, old_x=oldCoord, new_x=newCoord,
+                                  left=np.nan, right=np.nan)
+
+    return out
+
+def interpVector(vec, Nx):
+    '''
+    Interpolate data from a single vector containing the original
+    x, the original y, and the new x, in that order. Nx tells the
+    number of original x-points.
+    '''
+    x = vec[:Nx]
+    y = vec[Nx:2 * Nx]
+    xnew = vec[2 * Nx:]
+    f = interp1d(x, y, bounds_error=False, copy=False, assume_sorted=True)
+    return f(xnew)
+
+def interpV(y, old_x, new_x, left=None, right=None, period=None):
+    '''
+    Rearrange np.interp's arguments
+    '''
+    return np.interp(new_x, old_x, y, left=left, right=right, period=period)
+
+
+def fillna3D(array, axis=-1, fill_value=0.):
+    '''
+    This function fills in NaNs in 3D arrays, specifically using the nearest non-nan value
+    for "low" NaNs and 0s for "high" NaNs. 
+
+    Arguments: 
+        array   - 3D array, where the last axis is the "z" dimension
+    
+    Returns: 
+        3D array with low NaNs filled as nearest neighbors and high NaNs filled as 0s
+    '''
+
+    # fill lower NaNs with nearest neighbor
+    narr = np.moveaxis(array, axis, -1)
+    nars = narr.reshape((np.prod(narr.shape[:-1]),) + (narr.shape[-1],))
+    dfd = pd.DataFrame(data=nars).interpolate(axis=1, limit_direction='backward')
+    out = dfd.values.reshape(array.shape)
+
+    # fill upper NaNs with 0s
+    outmat = np.moveaxis(out, -1, axis)
+    outmat[np.isnan(outmat)] = fill_value
+    return outmat

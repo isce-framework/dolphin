@@ -1,23 +1,24 @@
 from __future__ import annotations
 
 import datetime
-from dataclasses import dataclass
+from dataclasses import dataclass # type: ignore
 from os import fspath
 from pathlib import Path
 from typing import Mapping, Sequence
 
-import numpy as np
+import numpy as np # type: ignore
 import opera_utils as oput
-from opera_utils import get_dates
-from osgeo import gdal
-from rasterio.crs import CRS
-from rasterio.warp import transform_bounds
-from scipy.interpolate import RegularGridInterpolator
+from opera_utils import get_dates, group_by_date, DATE_FORMAT
+from osgeo import gdal # type: ignore
+from rasterio.crs import CRS # type: ignore
+from rasterio.warp import transform_bounds # type: ignore
+from scipy.interpolate import RegularGridInterpolator # type: ignore
 
 from dolphin import io
 from dolphin._log import get_log
 from dolphin._types import Bbox, Filename, TropoModel, TropoType
 from dolphin.utils import format_date_pair
+from ._netcdf import delay_from_netcdf, group_netcdf_by_date
 
 logger = get_log(__name__)
 
@@ -79,10 +80,10 @@ class DelayParams:
 def estimate_tropospheric_delay(
     ifg_file_list: Sequence[Path],
     slc_files: Mapping[tuple[datetime.datetime], Sequence[Filename]],
-    troposphere_files: Mapping[tuple[datetime.datetime], Sequence[Filename]],
+    troposphere_files: Sequence[Filename],
     geom_files: dict[str, Path],
     output_dir: Path,
-    tropo_package: str,
+    file_date_fmt: str,
     tropo_model: TropoModel,
     tropo_delay_type: TropoType,
     epsg: int,
@@ -96,15 +97,16 @@ def estimate_tropospheric_delay(
         List of interferogram files.
     slc_files : Mapping[tuple[datetime.datetime], Sequence[Filename]]
         Dictionary of SLC files indexed by date.
-    troposphere_files : Mapping[tuple[datetime.datetime], Sequence[Filename]]
-        Dictionary of troposphere files indexed by date.
+    troposphere_files : Sequence[Filename]
+        list of troposphere files.
     geom_files : dict[str, Path]
         Dictionary of geometry files with height and incidence angle, or
         los_east and los_north.
     output_dir : Path
         Output directory.
-    tropo_package : str
-        Troposphere processing package ('pyaps' or 'raider').
+    file_date_fmt : str
+        Format of the date in the filename.
+        Default is [dolphin.DEFAULT_DATETIME_FORMAT][]
     tropo_model : TropoModel
         Tropospheric model (ERA5, HRES, ...).
     tropo_delay_type : TropoType
@@ -141,15 +143,21 @@ def estimate_tropospheric_delay(
 
     wavelength = oput.get_radar_wavelength(one_of_slcs)
 
-    tropo_run = compute_pyaps if tropo_package.lower() == "pyaps" else compute_raider
-
-    # comb is short for the summation of wet and dry components
-    if (tropo_delay_type.value == "hydrostatic") and (tropo_package == "raider"):
-        delay_type = "hydro"
-    elif (tropo_delay_type.value == "hydrostatic") and (tropo_package == "pyaps"):
-        delay_type = "dry"
+    delay_type = tropo_delay_type.value
+    
+    if troposphere_files[0].suffix == '.nc':
+        tropo_files = group_netcdf_by_date(troposphere_files)
+        tropo_run = compute_tropo_delay_from_netcdf
+        if (tropo_delay_type.value == "hydrostatic"):
+            delay_type = "hydro"
     else:
-        delay_type = tropo_delay_type.value
+        tropo_files = group_by_date(troposphere_files, 
+                                    ile_date_fmt=file_date_fmt)
+        tropo_run = compute_pyaps
+        if tropo_delay_type.value == "hydrostatic":
+             delay_type = "dry"
+
+    tropo_date_list = [x.date() for x in tropo_files.keys()]
 
     output_tropo_dir = output_dir / "troposphere"
     output_tropo_dir.mkdir(exist_ok=True)
@@ -158,7 +166,7 @@ def estimate_tropospheric_delay(
         ref_date, sec_date = get_dates(ifg)[0:2]
 
         date_str = format_date_pair(ref_date, sec_date)
-        name = f"{date_str}_tropoDelay_pyaps_{tropo_model.value}_LOS_{delay_type}.tif"
+        name = f"{date_str}_tropoDelay_{tropo_model.value}_LOS_{delay_type}.tif"
         tropo_delay_product_path = output_tropo_dir / name
         output_paths.append(tropo_delay_product_path)
 
@@ -175,8 +183,8 @@ def estimate_tropospheric_delay(
             for key in slc_files
             if sec_date in key and "compressed" not in str(slc_files[key][0]).lower()
         )
-
-        if (ref_date,) not in troposphere_files or (sec_date,) not in troposphere_files:
+        
+        if ref_date.date() not in tropo_date_list or sec_date.date() not in tropo_date_list:
             logger.warning(f"Weather-model files do not exist for {date_str}, skipping")
             continue
 
@@ -190,6 +198,13 @@ def estimate_tropospheric_delay(
         else:
             reference_time = oput.get_zero_doppler_time(slc_files[reference_date][0])
 
+        if troposphere_files[0].suffix == '.nc':
+            ref_date = ref_date + datetime.timedelta(hours=reference_time.hour)
+            sec_date = sec_date + datetime.timedelta(hours=secondary_time.hour)
+
+        closest_date_ref = min(tropo_files.keys(), key=lambda x: abs(x - ref_date))
+        closest_date_sec = min(tropo_files.keys(), key=lambda x: abs(x - sec_date))
+
         delay_parameters = DelayParams(
             x_coordinates=xcoord,
             y_coordinates=ycoord,
@@ -201,8 +216,8 @@ def estimate_tropospheric_delay(
             wavelength=wavelength,
             shape=(ysize, xsize),
             geotransform=gt,
-            reference_file=troposphere_files[(ref_date,)],
-            secondary_file=troposphere_files[(sec_date,)],
+            reference_file=tropo_files[closest_date_ref][0],
+            secondary_file=tropo_files[closest_date_sec][0],
             reference_time=reference_time,
             secondary_time=secondary_time,
             interferogram=format_date_pair(ref_date, sec_date),
@@ -296,8 +311,8 @@ def compute_pyaps(delay_parameters: DelayParams) -> np.ndarray:
     return np.ma.masked_invalid(tropo_delay_datacube)
 
 
-def compute_raider(delay_parameters: DelayParams) -> np.ndarray:
-    """Compute tropospheric delay datacube using RAiDER.
+def compute_tropo_delay_from_netcdf(delay_parameters: DelayParams) -> np.ndarray:
+    """Compute tropospheric delay datacube from netcdf tropo file.
 
     Parameters
     ----------
@@ -310,41 +325,29 @@ def compute_raider(delay_parameters: DelayParams) -> np.ndarray:
         tropospheric delay datacube.
 
     """
-    from RAiDER.delay import tropo_delay as raider_tropo_delay
-    from RAiDER.llreader import BoundingBox
-    from RAiDER.losreader import Zenith
 
     reference_weather_model_file = delay_parameters.reference_file
     secondary_weather_model_file = delay_parameters.secondary_file
 
-    aoi = BoundingBox(delay_parameters.SNWE)
-    aoi.xpts = delay_parameters.x_coordinates
-    aoi.ypts = delay_parameters.y_coordinates
-
-    # Zenith
-    delay_direction_obj = Zenith()
-
-    # Troposphere delay computation
     # Troposphere delay datacube computation
-    tropo_delay_reference, _ = raider_tropo_delay(
+    tropo_delay_reference = delay_from_netcdf(
         dt=delay_parameters.reference_time,
         weather_model_file=reference_weather_model_file,
-        aoi=aoi,
-        los=delay_direction_obj,
+        SNWE=delay_parameters.SNWE,
         height_levels=delay_parameters.z_coordinates,
         out_proj=delay_parameters.epsg,
+        weather_model=delay_parameters.tropo_model,
     )
 
-    tropo_delay_secondary, _ = raider_tropo_delay(
+    tropo_delay_secondary = delay_from_netcdf(
         dt=delay_parameters.secondary_time,
         weather_model_file=secondary_weather_model_file,
-        aoi=aoi,
-        los=delay_direction_obj,
+        SNWE=delay_parameters.SNWE,
         height_levels=delay_parameters.z_coordinates,
         out_proj=delay_parameters.epsg,
+        weather_model=delay_parameters.tropo_model,
     )
 
-    # Compute troposphere delay with raider package
     # comb is the summation of wet and hydro components
     if delay_parameters.delay_type == "comb":
         tropo_delay = (
