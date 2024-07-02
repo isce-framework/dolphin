@@ -710,7 +710,7 @@ def estimate_interferometric_correlations(
             options=options,
         )
 
-    thread_map(process_ifg, zip(ifg_paths, corr_paths), max_workers=num_workers)
+    thread_map(process_ifg, list(zip(ifg_paths, corr_paths)), max_workers=num_workers)
 
     return corr_paths
 

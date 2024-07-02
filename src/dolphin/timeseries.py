@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import shutil
 from pathlib import Path
 from tempfile import NamedTemporaryFile
@@ -13,7 +14,6 @@ from opera_utils import get_dates
 from scipy import ndimage
 
 from dolphin import DateOrDatetime, io, utils
-from dolphin._log import get_log, log_runtime
 from dolphin._overviews import ImageType, create_overviews
 from dolphin._types import PathOrStr, ReferencePoint
 from dolphin.utils import flatten, format_dates
@@ -21,7 +21,7 @@ from dolphin.workflows import CallFunc
 
 T = TypeVar("T")
 
-logger = get_log(__name__)
+logger = logging.getLogger(__name__)
 
 __all__ = ["run"]
 
@@ -30,7 +30,6 @@ class ReferencePointError(ValueError):
     pass
 
 
-@log_runtime
 def run(
     unwrapped_paths: Sequence[PathOrStr],
     conncomp_paths: Sequence[PathOrStr],
