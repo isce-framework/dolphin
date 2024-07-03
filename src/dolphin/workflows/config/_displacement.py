@@ -8,13 +8,16 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    PlainSerializer,
     StringConstraints,
+    WithJsonSchema,
     field_validator,
     model_validator,
 )
 
 from dolphin._log import get_log
-from dolphin._types import TropoModel, TropoType
+from dolphin._types import GeneralPath, TropoModel, TropoType
+from dolphin.io import S3Path
 
 from ._common import (
     InputOptions,
@@ -100,18 +103,30 @@ class CorrectionOptions(BaseModel, extra="forbid"):
         return v if v is not None else []
 
 
+CslcFileList = Annotated[
+    # Any Path-like object is acceptable
+    list[GeneralPath],
+    # All Paths will be serialized to strings:
+    PlainSerializer(lambda x: [str(f) for f in x]),
+    # Let Pydantic know what the JSON Schema should be for this custom protocol:
+    # https://docs.pydantic.dev/latest/concepts/json_schema/#withjsonschema-annotation
+    WithJsonSchema({"type": "array", "items": {"type": "string", "format": "uri"}}),
+]
+
+
 class DisplacementWorkflow(WorkflowBase):
     """Configuration for the workflow."""
 
     # Paths to input/output files
     input_options: InputOptions = Field(default_factory=InputOptions)
-    cslc_file_list: list[Path] = Field(
+    cslc_file_list: CslcFileList = Field(
         default_factory=list,
         description=(
             "list of CSLC files, or newline-delimited file "
             "containing list of CSLC files."
         ),
     )
+
     output_options: OutputOptions = Field(default_factory=OutputOptions)
 
     # Options for each step in the workflow
@@ -142,7 +157,9 @@ class DisplacementWorkflow(WorkflowBase):
     # internal helpers
     # Stores the list of directories to be created by the workflow
     model_config = ConfigDict(
-        extra="allow", json_schema_extra={"required": ["cslc_file_list"]}
+        extra="allow",
+        json_schema_extra={"required": ["cslc_file_list"]},
+        arbitrary_types_allowed=True,
     )
 
     # validators
@@ -161,7 +178,7 @@ class DisplacementWorkflow(WorkflowBase):
         input_options = self.input_options
         date_fmt = input_options.cslc_date_fmt
         # Filter out files that don't have dates in the filename
-        files_matching_date = [Path(f) for f in file_list if get_dates(f, fmt=date_fmt)]
+        files_matching_date = [f for f in file_list if get_dates(f, fmt=date_fmt)]
         if len(files_matching_date) < len(file_list):
             msg = (
                 f"Found {len(files_matching_date)} files with dates like {date_fmt} in"
@@ -178,9 +195,13 @@ class DisplacementWorkflow(WorkflowBase):
                 raise ValueError(msg)
 
         # Coerce the file_list to a sorted list of Path objects
-        self.cslc_file_list = [
-            Path(f) for f in sort_files_by_date(file_list, file_date_fmt=date_fmt)[0]
-        ]
+        out: list[S3Path | Path] = []
+        for f in sort_files_by_date(file_list, file_date_fmt=date_fmt)[0]:
+            try:
+                out.append(S3Path(f))
+            except ValueError:
+                out.append(Path(f))
+        self.cslc_file_list = out
 
         return self
 
