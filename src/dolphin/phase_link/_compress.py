@@ -35,6 +35,8 @@ def compress(
     pl_norm[pl_norm == 0] = np.nan
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", message="invalid value encountered")
-        return (
+        phase = np.angle(
             np.nansum(slc_stack * np.conjugate(pl_estimate_upsampled), axis=0) / pl_norm
         )
+    slc_mean = np.nanmean(np.abs(slc_stack), axis=0)
+    return slc_mean * np.exp(1j * phase)
