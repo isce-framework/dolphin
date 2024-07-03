@@ -8,11 +8,6 @@ from dolphin._types import Strides
 from dolphin.phase_link import simulate
 from dolphin.phase_link._ps_filling import fill_ps_pixels, get_max_idxs
 
-# 'Grid size 49 will likely result in GPU under-utilization due to low occupancy.'
-pytestmark = pytest.mark.filterwarnings(
-    "ignore::numba.core.errors.NumbaPerformanceWarning"
-)
-
 RNG = np.random.default_rng()
 
 

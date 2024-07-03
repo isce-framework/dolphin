@@ -8,11 +8,6 @@ import pytest
 from dolphin.io import get_raster_xysize
 from dolphin.workflows import config, ps
 
-# 'Grid size 49 will likely result in GPU under-utilization due to low occupancy.'
-pytestmark = pytest.mark.filterwarnings(
-    "ignore::numba.core.errors.NumbaPerformanceWarning"
-)
-
 
 def test_ps_workflow_run(opera_slc_files_official: list[Path], tmpdir):
     # get the first half of the files, for just one burst stack
