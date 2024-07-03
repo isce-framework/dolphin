@@ -38,6 +38,7 @@ class OutputPaths(NamedTuple):
     stitched_shp_count_file: Path
     unwrapped_paths: list[Path] | None
     conncomp_paths: list[Path] | None
+    timeseries_paths: list[Path] | None
     tropospheric_corrections: list[Path] | None
     ionospheric_corrections: list[Path] | None
 
@@ -224,6 +225,7 @@ def run(
             stitched_shp_count_file=stitched_shp_count_file,
             unwrapped_paths=None,
             conncomp_paths=None,
+            timeseries_paths=None,
             tropospheric_corrections=None,
             ionospheric_corrections=None,
         )
@@ -248,7 +250,7 @@ def run(
     if len(unwrapped_paths) > 1 and (ts_opts.run_inversion or ts_opts.run_velocity):
         # the output of run_timeseries is not currently used so pre-commit removes it
         # let's add back if we need it
-        timeseries.run(
+        timeseries_paths = timeseries.run(
             unwrapped_paths=unwrapped_paths,
             conncomp_paths=conncomp_paths,
             corr_paths=stitched_cor_paths,
@@ -261,8 +263,9 @@ def run(
             # TODO: do i care to configure block shape, or num threads from somewhere?
             # num_threads=cfg.worker_settings....?
         )
+
     else:
-        pass
+        timeseries_paths = None
 
     # ##############################################
     # 5. Estimate corrections for each interferogram
@@ -345,6 +348,7 @@ def run(
         # to update other products like conncomp
         # unwrapped_paths=inverted_phase_paths,
         conncomp_paths=conncomp_paths,
+        timeseries_paths=timeseries_paths,
         tropospheric_corrections=tropo_paths,
         ionospheric_corrections=iono_paths,
     )

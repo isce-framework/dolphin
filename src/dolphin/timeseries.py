@@ -16,7 +16,7 @@ from scipy import ndimage
 from dolphin import DateOrDatetime, io, utils
 from dolphin._overviews import ImageType, create_overviews
 from dolphin._types import PathOrStr, ReferencePoint
-from dolphin.utils import flatten, format_dates
+from dolphin.utils import flatten, format_dates, full_suffix
 from dolphin.workflows import CallFunc
 
 T = TypeVar("T")
@@ -118,9 +118,14 @@ def run(
         logger.info(
             "Skipping inversion step: only single reference interferograms exist."
         )
-        # Symlink the unwrapped paths to `timeseries/`
+        # Copy over the unwrapped paths to `timeseries/`
         for p in unwrapped_paths:
-            target = Path(output_dir) / Path(p).name
+            # if it ends in `.unw.tif`, change to just `.tif` for consistency
+            # with the case where we run an inversion
+            cur_name = Path(p).name
+            unw_suffix = full_suffix(p)
+            target_name = str(cur_name).replace(unw_suffix, ".tif")
+            target = Path(output_dir) / target_name
             if not target.exists():  # Check to prevent overwriting
                 shutil.copy(p, target)
             inverted_phase_paths.append(target)
