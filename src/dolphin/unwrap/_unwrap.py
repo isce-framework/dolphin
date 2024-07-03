@@ -439,4 +439,4 @@ def unwrap(
         assert scratchdir is not None
         shutil.rmtree(scratchdir)
 
-    return unw_path, conncomp_path
+    return Path(unw_filename), conncomp_path
