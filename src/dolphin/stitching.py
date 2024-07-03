@@ -119,7 +119,7 @@ def merge_by_date(
     # loop over the merging in parallel
     thread_map(
         process_date,
-        zip(grouped_images.values(), stitched_acq_times.values()),
+        list(zip(grouped_images.values(), stitched_acq_times.values())),
         max_workers=num_workers,
     )
 
