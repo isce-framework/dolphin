@@ -36,30 +36,24 @@ bibliography: references.bib
 
 # Summary
 
-<!-- JOSS welcomes submissions from broadly diverse research areas. For this reason, we require that authors include in the paper some sentences that explain the software functionality and domain of use to a non-specialist reader. We also require that authors explain the research applications of the software. The paper should be between 250-1000 words. Authors submitting papers significantly longer than 1000 words may be asked to reduce the length of their paper. -->
-
 <!-- A summary describing the high-level functionality and purpose of the software for a diverse, non-specialist audience. -->
-`dolphin` is a Python library for creating maps of land surface displacement using the remote sensing technique called Interferometric Synthetic Aperture Radar (InSAR). Conventional InSAR uses pairs of SAR images to get a single map of the relative displacement between the two acquisition times. `dolphin` uses state-of-the-art multi-temporal algorithms to reduce the impact of noise sources and produce long time series of displacement at fine resolution.
+Interferometric Synthetic Aperture Radar (InSAR) is a remote sensing technique used for measuring land surface deformation.
+Conventional InSAR uses pairs of SAR images to get a single map of the relative displacement between the two acquisition times.
+`dolphin` is a Python library which uses state-of-the-art multi-temporal algorithms to reduce the impact of noise sources and produce long time series of displacement at fine resolution.
 
 ![Average surface displacement velocity along the radar line-of-sight between February, 2017 and December, 2020. Red (blue) indicates motion towards (away from) the satellite.\label{fig:mojave}](figures/bristol-velocity-sequential.png)
 
 # Statement of need
 <!-- A Statement of need section that clearly illustrates the research purpose of the software and places it in the context of related work. -->
 
-The Sentinel-1 satellite from the European Space Agency (ESA) has provided free and open access to Synthetic Aperture Radar (SAR) data since 2014. This has led to a rapid increase in the availability of SAR data and has enabled a wide range of applications in Earth and environmental sciences. However, processing InSAR data has remained a challenge for non-experts.
-Advanced time series algorithms which combine persistent scatterer (PS) and distributed scatterer (DS) (also known as phase linking) have been developed for over a decade [@Guarnieri2008ExploitationTargetStatistics]; however, existing open source tools have not included these techniques until recently.
-<!-- Moreoever, the available tools were generally not designed to run at continental scale in a cloud computing environment. -->
+InSAR has been a powerful tool for decades, both in geophysical studies including tectonics, volcanism, and glacier dynamics, as well as human applications such as urban development, mining, and groundwater extraction. The launch of the European Space Agency's Sentinel-1 satellite in 2014 dramatically increased the availability of free, open-access SAR data. However, processing InSAR data has remained challenging, particularly for non-experts.
 
-<!-- A list of key references, including to other software addressing related needs. Note that the references should include full names of venues, e.g., journals and conferences, not abbreviations only understood in the context of a specific discipline. -->
-<!-- While phase linking algorithms have been known for over a decade until several years ago, there were no open source libraries which could perform .  -->
+Advanced algorithms combining persistent scatterer (PS) and distributed scatterer (DS) techniques, also known as phase linking, have been developed over the past decade to help overcome decorrelation noise in longer time series [@Guarnieri2008ExploitationTargetStatistics]. Despite their potential, these methods have only recently begun to appear in open-source tools
 
-<!-- The original software used in phase linking literature was not made public, but researchers have since made efforts to open source these advanced algorithms. -->
-The first prototype was the [`FRInGE`](https://github.com/isce-framework/fringe) C++ library [@Fattahi2019FRInGEFullResolutionInSAR], which implements algorithms and workflows from [@Ferretti2011NewAlgorithmProcessing] and [@Ansari2018EfficientPhaseEstimation].
-<!-- was created as a proof of concept for multiple phase linking algorithms   -->
-<!-- `FRInGE`, a C++ library with Python bindings,  -->
-The [`Miaplpy`](https://github.com/insarlab/MiaplPy) Python library contains a superset of the features in `FRInGE`, as well as new algorithms developed in [@Mirzaee2023NonlinearPhaseLinking]. The MATLAB [`TomoSAR`](https://github.com/DinhHoTongMinh/TomoSAR) library was also made public in 2022, which implements the "Compressed SAR" (ComSAR) algorithm- a variant of phase linking detailed in [@HoTongMinh2022CompressedSARInterferometry].
+<!-- A list of key references, including to other software addressing related needs. -->
+The phase linking first prototype was the [`FRInGE`](https://github.com/isce-framework/fringe) C++ library [@Fattahi2019FRInGEFullResolutionInSAR], which implements algorithms and workflows from [@Ferretti2011NewAlgorithmProcessing] and [@Ansari2018EfficientPhaseEstimation]. The [`Miaplpy`](https://github.com/insarlab/MiaplPy) Python library contains a superset of the features in `FRInGE`, as well as new algorithms developed in [@Mirzaee2023NonlinearPhaseLinking]. Additionally, the MATLAB [`TomoSAR`](https://github.com/DinhHoTongMinh/TomoSAR) library was made public in 2022, which implements the "Compressed SAR" (ComSAR) algorithm, a variant of phase linking detailed in [@HoTongMinh2022CompressedSARInterferometry].
 
-`dolphin` has been developed for the Observational Products for End-Users from Remote Sensing Analysis (OPERA) project. OPERA is a Jet Propulsion Laboratory project funded by the Satellite Needs Working Group (SNWG) tasked with generating a North American Surface Displacement product. This product is required to cover over 10 million square kilometers of land at 30 meter resolution or finer with under 72 hours of latency; as such, new software was required which could handle the heavy computational demands of the project.
+While these tools represent significant progress, there remained a need for software capable of handling the heavy computational demands of large-scale InSAR processing. `dolphin` was developed to meet this need, specifically for the Observational Products for End-Users from Remote Sensing Analysis (OPERA) project. OPERA, a Jet Propulsion Laboratory project funded by the Satellite Needs Working Group (SNWG), is tasked with generating a North American Surface Displacement product covering over 10 million square kilometers of land at 30 meter resolution or finer, with under 72 hours of latency.
 
 # Overview of Dolphin
 
