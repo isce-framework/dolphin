@@ -30,6 +30,7 @@ class OutputFile:
     filename: Path
     dtype: DTypeLike
     strides: Optional[dict[str, int]] = None
+    nbands: int = 1
 
 
 @atomic_output(output_arg="output_folder", is_dir=True)
@@ -114,8 +115,8 @@ def run_wrapped_phase_single(
     # Use the real-SLC date range for output file naming
     start_end = ministack.real_slc_date_range_str
     output_files: list[OutputFile] = [
-        # The compressed SLC does not used strides
-        OutputFile(output_folder / comp_slc_info.filename, np.complex64),
+        # The compressed SLC does not used strides, but has extra band for dispersion
+        OutputFile(output_folder / comp_slc_info.filename, np.complex64, nbands=2),
         # but all the rest do:
         OutputFile(
             output_folder / f"temporal_coherence_{start_end}.tif", np.float32, strides
@@ -132,7 +133,7 @@ def run_wrapped_phase_single(
             output_name=op.filename,
             dtype=op.dtype,
             strides=op.strides,
-            nbands=1,
+            nbands=op.nbands,
             nodata=0,
         )
 
@@ -232,12 +233,17 @@ def run_wrapped_phase_single(
         ):
             writer.queue_write(img, f, out_rows.start, out_cols.start)
 
+        abs_stack = np.abs(cur_data[first_real_slc_idx:, in_trim_rows, in_trim_cols])
+        cur_data_mean = np.nanmean(abs_stack, axis=0)
         # Compress the ministack using only the non-compressed SLCs
         cur_comp_slc = compress(
             # Get the inner portion of the full-res SLC data
             cur_data[first_real_slc_idx:, in_trim_rows, in_trim_cols],
             pl_output.cpx_phase[first_real_slc_idx:, out_trim_rows, out_trim_cols],
+            slc_mean=cur_data_mean,
         )
+        cur_amp_dispersion = np.std(abs_stack, axis=0) / cur_data_mean
+        # TODO: truncate
 
         # ### Save results ###
 
@@ -247,6 +253,15 @@ def run_wrapped_phase_single(
             output_files[0].filename,
             in_no_pad_rows.start,
             in_no_pad_cols.start,
+            band=1,
+        )
+        # Save the amplitude dispersion of the real SLC data
+        writer.queue_write(
+            cur_amp_dispersion,
+            output_files[0].filename,
+            in_no_pad_rows.start,
+            in_no_pad_cols.start,
+            band=2,
         )
 
         # All other outputs are strided (smaller in size)

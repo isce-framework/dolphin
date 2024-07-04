@@ -1,23 +1,26 @@
 import warnings
 
 import numpy as np
+from numpy.typing import ArrayLike
 
 from dolphin.utils import upsample_nearest
 
 
 def compress(
-    slc_stack: np.ndarray,
-    pl_cpx_phase: np.ndarray,
+    slc_stack: ArrayLike, pl_cpx_phase: ArrayLike, slc_mean: ArrayLike | None = None
 ):
     """Compress the stack of SLC data using the estimated phase.
 
     Parameters
     ----------
-    slc_stack : np.array
+    slc_stack : ArrayLike
         The stack of complex SLC data, shape (nslc, rows, cols)
-    pl_cpx_phase : np.array
+    pl_cpx_phase : ArrayLike
         The estimated complex phase from phase linking.
         shape  = (nslc, rows // strides.y, cols // strides.x)
+    slc_mean : ArrayLike, optional
+        The mean SLC magnitude, shape (rows, cols), to use as output pixel magnitudes.
+        If None, the mean is computed from the input SLC stack.
 
     Returns
     -------
@@ -38,5 +41,6 @@ def compress(
         phase = np.angle(
             np.nansum(slc_stack * np.conjugate(pl_estimate_upsampled), axis=0) / pl_norm
         )
-    slc_mean = np.nanmean(np.abs(slc_stack), axis=0)
+    if slc_mean is None:
+        slc_mean = np.nanmean(np.abs(slc_stack), axis=0)
     return slc_mean * np.exp(1j * phase)
