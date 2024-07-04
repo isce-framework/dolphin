@@ -567,6 +567,7 @@ def write_block(
     filename: Filename,
     row_start: int,
     col_start: int,
+    band: int | None = None,
     dset: str | None = None,
 ):
     """Write out an ndarray to a subset of the pre-made `filename`.
@@ -581,6 +582,9 @@ def write_block(
         Row index to start writing at.
     col_start : int
         Column index to start writing at.
+    band : int, optional
+        Raster band to write to within `filename`.
+        If None, writes to band 1 (for 2D), or all bands if `cur_block.ndim = 3`.
     dset : str
         (For writing to HDF5/NetCDF files) The name of the string dataset
         withing `filename` to write to.
@@ -591,7 +595,7 @@ def write_block(
         If length of `output_files` does not match length of `cur_block`.
 
     """
-    if cur_block.ndim == 2:
+    if cur_block.ndim == 2 and band is None:
         # Make into 3D array shaped (1, rows, cols)
         cur_block = cur_block[np.newaxis, ...]
     # filename must be pre-made
@@ -605,7 +609,7 @@ def write_block(
             raise ValueError("Missing `dset` argument for writing to HDF5")
         _write_hdf5(cur_block, filename, row_start, col_start, dset)
     else:
-        _write_gdal(cur_block, filename, row_start, col_start)
+        _write_gdal(cur_block, filename, row_start, col_start, band)
 
 
 def _write_gdal(
@@ -613,15 +617,21 @@ def _write_gdal(
     filename: Filename,
     row_start: int,
     col_start: int,
+    band: int | None,
 ):
     ds = gdal.Open(fspath(filename), gdal.GA_Update)
-    for b_idx, cur_image in enumerate(cur_block, start=1):
-        bnd = ds.GetRasterBand(b_idx)
-        # only need offset for write:
-        # https://gdal.org/api/python/osgeo.gdal.html#osgeo.gdal.Band.WriteArray
-        bnd.WriteArray(cur_image, col_start, row_start)
-        bnd.FlushCache()
+    if band is not None:
+        bnd = ds.GetRasterBand(band)
+        bnd.WriteArray(cur_block, col_start, row_start)
         bnd = None
+    else:
+        for b_idx, cur_image in enumerate(cur_block, start=1):
+            bnd = ds.GetRasterBand(b_idx)
+            # only need offset for write:
+            # https://gdal.org/api/python/osgeo.gdal.html#osgeo.gdal.Band.WriteArray
+            bnd.WriteArray(cur_image, col_start, row_start)
+            bnd.FlushCache()
+            bnd = None
     ds = None
 
 
