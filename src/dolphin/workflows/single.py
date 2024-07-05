@@ -289,8 +289,12 @@ def run_wrapped_phase_single(
     writer.notify_finished()
     logger.info(f"Finished ministack of size {vrt.shape}.")
 
+    logger.info("Repacking for more compression")
+    io.repack_rasters(phase_linked_slc_files, significant_bits=12)
+
     written_comp_slc = output_files[0]
 
+    io.repack_raster(written_comp_slc.filename, significant_bits=12)
     ccslc_info = ministack.get_compressed_slc_info()
     ccslc_info.write_metadata(output_file=written_comp_slc.filename)
     # TODO: Does it make sense to return anything from this?

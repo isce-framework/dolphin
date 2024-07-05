@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import shutil
 import tempfile
-from os import fspath
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -115,7 +114,10 @@ def _format_for_gdal(options: dict[str, str]) -> list[str]:
 
 
 def repack_raster(
-    raster_path: Path, output_dir: Path | None = None, **output_options
+    raster_path: Path,
+    output_dir: Path | None = None,
+    significant_bits: int | None = None,
+    **output_options,
 ) -> Path:
     """Repack a single raster file with GDAL Translate using provided options.
 
@@ -125,6 +127,9 @@ def repack_raster(
         Path to the input raster file.
     output_dir : Path, optional
         Directory to save the repacked rasters or None for in-place repacking.
+    significant_bits : int, optional
+        Number of bits to preserve in mantissa. Defaults to None.
+        Lower numbers will truncate the mantissa more and enable more compression.
     **output_options
         Keyword args passed to `get_gtiff_options`
 
@@ -135,7 +140,7 @@ def repack_raster(
         If `output_dir` is None, this will be the same filename as `raster_path`
 
     """
-    from osgeo import gdal
+    import rasterio as rio
 
     if output_dir is None:
         output_file = tempfile.NamedTemporaryFile(
@@ -146,8 +151,16 @@ def repack_raster(
         output_dir.mkdir(parents=True, exist_ok=True)
         output_path = output_dir / raster_path.name
 
-    options = _format_for_gdal(get_gtiff_options(**output_options))
-    gdal.Translate(fspath(output_path), fspath(raster_path), creationOptions=options)
+    options = get_gtiff_options(**output_options)
+    with rio.open(raster_path) as src:
+        profile = src.profile
+        profile.update(**options)
+        with rio.open(output_path, "w", **profile) as dst:
+            for i in range(1, src.count + 1):
+                data = src.read(i)
+                if significant_bits is not None:
+                    truncate_mantissa(data, significant_bits)
+                dst.write(data, i)
 
     if output_dir is None:
         # Overwrite the original
@@ -160,6 +173,7 @@ def repack_rasters(
     raster_files: list[Path],
     output_dir: Path | None = None,
     num_threads: int = 4,
+    significant_bits: int | None = None,
     **output_options,
 ):
     """Recreate and compress a list of raster files.
@@ -175,6 +189,9 @@ def repack_rasters(
         Directory to save the processed rasters or None for in-place processing.
     num_threads : int, optional
         Number of threads to use (default is 4).
+    significant_bits : int, optional
+        Number of bits to preserve in mantissa. Defaults to None.
+        Lower numbers will truncate the mantissa more and enable more compression
     **output_options
         Creation options to pass to `get_gtiff_options`
 
@@ -188,14 +205,16 @@ def repack_rasters(
     from tqdm.contrib.concurrent import thread_map
 
     thread_map(
-        lambda raster: repack_raster(raster, output_dir, **output_options),
+        lambda raster: repack_raster(
+            raster, output_dir, significant_bits=significant_bits, **output_options
+        ),
         raster_files,
         max_workers=num_threads,
         desc="Processing Rasters",
     )
 
 
-def truncate_mantissa(z: NDArray, significant_bits=10) -> NDArray:
+def truncate_mantissa(z: NDArray, significant_bits=10):
     """Zero out bits in mantissa of elements of array in place.
 
     Parameters
@@ -210,9 +229,9 @@ def truncate_mantissa(z: NDArray, significant_bits=10) -> NDArray:
     """
     # recurse for complex data
     if np.iscomplexobj(z):
-        out_real = truncate_mantissa(z.real, significant_bits)
-        out_imag = truncate_mantissa(z.imag, significant_bits)
-        return out_real + 1j * out_imag
+        truncate_mantissa(z.real, significant_bits)
+        truncate_mantissa(z.imag, significant_bits)
+        return
 
     if not issubclass(z.dtype.type, np.floating):
         err_str = "argument z is not complex float or float type"
