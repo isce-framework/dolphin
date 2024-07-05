@@ -8,7 +8,7 @@ import opera_utils
 
 import dolphin.ps
 from dolphin import __version__
-from dolphin._log import log_runtime
+from dolphin._log import log_runtime, setup_logging
 from dolphin.io import VRTStack
 from dolphin.utils import get_max_memory_usage
 
@@ -37,6 +37,7 @@ def run(
 
     """
     # Set the logging level for all `dolphin.` modules
+    setup_logging(debug=debug, filename=cfg.log_file)
     logger.debug(pformat(cfg.model_dump()))
 
     output_file_list = [

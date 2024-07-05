@@ -9,7 +9,7 @@ import numpy as np
 from opera_utils import get_dates, make_nodata_mask
 
 from dolphin import interferogram, ps, stack
-from dolphin._log import log_runtime
+from dolphin._log import log_runtime, setup_logging
 from dolphin.io import VRTStack
 
 from . import InterferogramNetwork, sequential
@@ -53,6 +53,7 @@ def run(
         Path to the created SHP counts file.
 
     """
+    setup_logging(debug=debug, filename=cfg.log_file)
     if tqdm_kwargs is None:
         tqdm_kwargs = {}
     work_dir = cfg.work_directory

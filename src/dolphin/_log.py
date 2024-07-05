@@ -1,14 +1,16 @@
-import datetime as dt
+import atexit
 import json
 import logging
+import logging.config
 import os
 import sys
 import time
 from collections.abc import Callable
+from datetime import datetime, timezone
 from functools import wraps
-from logging import Formatter
+from pathlib import Path
 
-from dolphin._types import P, T
+from dolphin._types import P, PathOrStr, T
 
 LOG_RECORD_BUILTIN_ATTRS = {
     "args",
@@ -38,34 +40,43 @@ LOG_RECORD_BUILTIN_ATTRS = {
 __all__ = ["log_runtime"]
 
 
-def setup_logging(debug: bool = False, root_name: str = "dolphin") -> None:
-    """Make the logging output pretty and colored with times.
+def setup_logging(debug: bool = False, filename: PathOrStr | None = None):
+    config_file = Path(__file__).parent / Path("log-config.json")
+    with open(config_file) as f_in:
+        config = json.load(f_in)
 
-    Parameters
-    ----------
-    debug : bool (default = False)
-        If true, sets logging level to DEBUG
-    root_name : str (default = "dolphin")
-        Name of the base logger to configure.
-        All sub-loggers (e.g. modules with <root_name>.<module_name>) will
-        also get access to the handler.
+    if debug:
+        config["loggers"]["dolphin"]["level"] = "DEBUG"
 
-    """
-    # Set for all dolphin modules
-    logger = logging.getLogger(root_name)
-    h = logging.StreamHandler()
-    formatter = Formatter(
-        "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        datefmt="%Y-%m-%dT%H:%M:%S",
-    )
-    h.setFormatter(formatter)
-    logger.addHandler(h)
-    log_level = logging.DEBUG if debug else logging.INFO
-    logger.setLevel(log_level)
+    if filename:
+        config["handlers"]["file_json"]["filename"] = filename
+    else:
+        # If we don't specify a filename, delete the file handler
+        del config["handlers"]["file_json"]
+
     # Temp work around for tqdm on py312
-
     if sys.version_info.major == 3 and sys.version_info.minor == 12:
         os.environ["TQDM_DISABLE"] = "1"
+
+    logging.config.dictConfig(config)
+    queue_handler: logging.Handler | None = None
+    for handler in logging.getLogger().handlers:
+        if handler.name == "queue_handler":
+            queue_handler = handler
+
+    # Only added in Python 3.12
+    # queue_handler = logging.getHandlerByName("queue_handler")
+    queue_handler = _get_handler_by_name("queue_handler")
+    if queue_handler is not None:
+        queue_handler.listener.start()
+        atexit.register(queue_handler.listener.stop)
+
+
+def _get_handler_by_name(name: str = "queue_handler") -> logging.Handler | None:
+    for handler in logging.getLogger().handlers:
+        if handler.name == name:
+            return handler
+    return None
 
 
 def log_runtime(f: Callable[P, T]) -> Callable[P, T]:
@@ -116,8 +127,8 @@ class MyJSONFormatter(logging.Formatter):
     def _prepare_log_dict(self, record: logging.LogRecord):
         always_fields = {
             "message": record.getMessage(),
-            "timestamp": dt.datetime.fromtimestamp(
-                record.created, tz=dt.timezone.utc
+            "timestamp": datetime.fromtimestamp(
+                record.created, tz=timezone.utc
             ).isoformat(),
         }
         if record.exc_info is not None:

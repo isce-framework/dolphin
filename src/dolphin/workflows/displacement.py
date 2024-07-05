@@ -17,7 +17,7 @@ from opera_utils import group_by_burst, group_by_date  # , get_dates
 from tqdm.auto import tqdm
 
 from dolphin import __version__, io, timeseries, utils
-from dolphin._log import log_runtime
+from dolphin._log import log_runtime, setup_logging
 from dolphin.atmosphere import estimate_ionospheric_delay, estimate_tropospheric_delay
 from dolphin.workflows import CallFunc
 
@@ -62,7 +62,7 @@ def run(
 
     """
     # Set the logging level for all `dolphin.` modules
-    # logger = get_log(name="dolphin", debug=debug, filename=cfg.log_file)
+    setup_logging(debug=debug, filename=cfg.log_file)
     # TODO: need to pass the cfg filename for the logger
     logger.debug(pformat(cfg.model_dump()))
 
