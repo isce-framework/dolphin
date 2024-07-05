@@ -1,22 +1,5 @@
-"""Exports a get_log function which sets up easy logging.
-
-Uses the standard python logging utilities, just provides
-nice formatting out of the box across multiple files.
-
-Usage:
-
-    from ._log import get_log
-    logger = get_log(__name__)
-
-    logger.info("Something happened")
-    logger.warning("Something concerning happened")
-    logger.error("Something bad happened")
-    logger.critical("Something just awful happened")
-    logger.debug("Extra printing we often don't need to see.")
-    # Custom output for this module:
-    logger.success("Something great happened: highlight this success")
-"""
-
+import datetime as dt
+import json
 import logging
 import os
 import sys
@@ -24,51 +7,35 @@ import time
 from collections.abc import Callable
 from functools import wraps
 from logging import Formatter
-from pathlib import Path
-from typing import Optional
 
-from dolphin._types import Filename, P, T
+from dolphin._types import P, T
 
-__all__ = ["get_log", "log_runtime"]
-
-
-def get_log(
-    name: str = "dolphin._log", debug: bool = False, filename: Optional[Filename] = None
-) -> logging.Logger:
-    """Create a nice log format for use across multiple files.
-
-    Default logging level is INFO
-
-    Parameters
-    ----------
-    debug : bool, optional
-        If true, sets logging level to DEBUG (Default value = False)
-    name : str, optional
-        The name the logger will use when printing statements
-        (Default value = "dolphin._log")
-    filename : str, optional
-        If provided, will log to this file in addition to stderr.
-
-    Returns
-    -------
-    logging.Logger
-
-    """
-    logger = logging.getLogger(name)
-    if not logger.hasHandlers():
-        setup_logging(debug=debug, root_name=name.split(".")[0])
-    if debug:
-        logger.setLevel(logging.DEBUG)
-
-    # In addition to stderr, log to a file if requested
-    if filename:
-        Path(filename).parent.mkdir(parents=True, exist_ok=True)
-        file_handler = logging.FileHandler(filename)
-        file_handler.setLevel(logging.DEBUG)
-        formatter = Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-        file_handler.setFormatter(formatter)
-        logger.addHandler(file_handler)
-    return logger
+LOG_RECORD_BUILTIN_ATTRS = {
+    "args",
+    "asctime",
+    "created",
+    "exc_info",
+    "exc_text",
+    "filename",
+    "funcName",
+    "levelname",
+    "levelno",
+    "lineno",
+    "module",
+    "msecs",
+    "message",
+    "msg",
+    "name",
+    "pathname",
+    "process",
+    "processName",
+    "relativeCreated",
+    "stack_info",
+    "thread",
+    "threadName",
+    "taskName",
+}
+__all__ = ["log_runtime"]
 
 
 def setup_logging(debug: bool = False, root_name: str = "dolphin") -> None:
@@ -110,7 +77,7 @@ def log_runtime(f: Callable[P, T]) -> Callable[P, T]:
     def test_func():
         return 2 + 4
     """
-    logger = get_log(__name__)
+    logger = logging.getLogger(__name__)
 
     @wraps(f)
     def wrapper(*args: P.args, **kwargs: P.kwargs):
@@ -131,3 +98,46 @@ def log_runtime(f: Callable[P, T]) -> Callable[P, T]:
         return result
 
     return wrapper
+
+
+class MyJSONFormatter(logging.Formatter):
+    def __init__(
+        self,
+        *,
+        fmt_keys: dict[str, str] | None = None,
+    ):
+        super().__init__()
+        self.fmt_keys = fmt_keys if fmt_keys is not None else {}
+
+    def format(self, record: logging.LogRecord) -> str:
+        message = self._prepare_log_dict(record)
+        return json.dumps(message, default=str)
+
+    def _prepare_log_dict(self, record: logging.LogRecord):
+        always_fields = {
+            "message": record.getMessage(),
+            "timestamp": dt.datetime.fromtimestamp(
+                record.created, tz=dt.timezone.utc
+            ).isoformat(),
+        }
+        if record.exc_info is not None:
+            always_fields["exc_info"] = self.formatException(record.exc_info)
+
+        if record.stack_info is not None:
+            always_fields["stack_info"] = self.formatStack(record.stack_info)
+
+        message = {
+            key: (
+                msg_val
+                if (msg_val := always_fields.pop(val, None)) is not None
+                else getattr(record, val)
+            )
+            for key, val in self.fmt_keys.items()
+        }
+        message.update(always_fields)
+
+        for key, val in record.__dict__.items():
+            if key not in LOG_RECORD_BUILTIN_ATTRS:
+                message[key] = val
+
+        return message

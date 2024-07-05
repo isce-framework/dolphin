@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime
+import logging
 import math
 import resource
 import sys
@@ -16,13 +17,12 @@ import numpy as np
 from numpy.typing import ArrayLike, DTypeLike
 from osgeo import gdal, gdal_array, gdalconst
 
-from dolphin._log import get_log
 from dolphin._types import Bbox, Filename, P, Strides, T
 
 DateOrDatetime = Union[datetime.date, datetime.datetime]
 
 gdal.UseExceptions()
-logger = get_log(__name__)
+logger = logging.getLogger(__name__)
 
 
 def numpy_to_gdal_type(np_dtype: DTypeLike) -> int:

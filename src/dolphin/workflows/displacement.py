@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 from __future__ import annotations
 
+import logging
+
 # import contextlib
 import multiprocessing as mp
 from collections import defaultdict
@@ -15,7 +17,7 @@ from opera_utils import group_by_burst, group_by_date  # , get_dates
 from tqdm.auto import tqdm
 
 from dolphin import __version__, io, timeseries, utils
-from dolphin._log import get_log, log_runtime
+from dolphin._log import log_runtime
 from dolphin.atmosphere import estimate_ionospheric_delay, estimate_tropospheric_delay
 from dolphin.workflows import CallFunc
 
@@ -23,7 +25,7 @@ from . import stitching_bursts, unwrapping, wrapped_phase
 from ._utils import _create_burst_cfg, _remove_dir_if_empty
 from .config import DisplacementWorkflow  # , TimeseriesOptions
 
-logger = get_log(__name__)
+logger = logging.getLogger(__name__)
 
 
 class OutputPaths(NamedTuple):
@@ -60,7 +62,8 @@ def run(
 
     """
     # Set the logging level for all `dolphin.` modules
-    logger = get_log(name="dolphin", debug=debug, filename=cfg.log_file)
+    # logger = get_log(name="dolphin", debug=debug, filename=cfg.log_file)
+    # TODO: need to pass the cfg filename for the logger
     logger.debug(pformat(cfg.model_dump()))
 
     if not cfg.worker_settings.gpu_enabled:

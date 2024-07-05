@@ -1,12 +1,11 @@
 from __future__ import annotations
 
+# from dolphin._dates import get_dates, sort_files_by_date
+import logging
 from pathlib import Path
 from typing import Any
 
 from pydantic import ConfigDict, Field, field_validator
-
-# from dolphin._dates import get_dates, sort_files_by_date
-from dolphin._log import get_log
 
 from ._common import (
     InputOptions,
@@ -20,7 +19,7 @@ __all__ = [
     "UnwrappingWorkflow",
 ]
 
-logger = get_log(__name__)
+logger = logging.getLogger(__name__)
 
 
 class UnwrappingWorkflow(WorkflowBase):
