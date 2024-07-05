@@ -38,7 +38,8 @@ def compress(
         phase = np.angle(
             np.nansum(slc_stack * np.conjugate(pl_estimate_upsampled), axis=0)
         )
-        if slc_mean is None:
-            warnings.filterwarnings("ignore", message="Mean of empty slice")
-            slc_mean = np.nanmean(np.abs(slc_stack), axis=0)
+    if slc_mean is None:
+        slc_mean = np.mean(np.abs(slc_stack), axis=0)
+    # If the phase is invalid, set the mean to NaN
+    slc_mean[phase == 0] = np.nan
     return slc_mean * np.exp(1j * phase)
