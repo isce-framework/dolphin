@@ -13,7 +13,6 @@
                 "message": "message",
                 "timestamp": "timestamp",
                 "logger": "name",
-                "module": "module",
                 "function": "funcName",
                 "line": "lineno",
                 "thread_name": "threadName"
@@ -23,31 +22,23 @@
     "handlers": {
         "stderr": {
             "class": "logging.StreamHandler",
-            "level": "WARNING",
+            "level": "INFO",
             "formatter": "simple",
             "stream": "ext://sys.stderr"
         },
-        "file_json": {
+        "file": {
             "class": "logging.handlers.RotatingFileHandler",
             "level": "INFO",
             "formatter": "json",
             "maxBytes": 10000000,
             "backupCount": 3
-        },
-        "queue_handler": {
-            "class": "logging.handlers.QueueHandler",
-            "handlers": [
-                "stderr",
-                "file_json"
-            ],
-            "respect_handler_level": true
         }
     },
     "loggers": {
         "dolphin": {
             "level": "INFO",
             "handlers": [
-                "queue_handler"
+                "stderr"
             ]
         }
     }

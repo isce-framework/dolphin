@@ -362,7 +362,10 @@ class WorkflowBase(YamlModel):
     worker_settings: WorkerSettings = Field(default_factory=WorkerSettings)
     log_file: Optional[Path] = Field(
         default=None,
-        description="Path to output log file (in addition to logging to `stderr`).",
+        description=(
+            "Path to output log file (in addition to logging to `stderr`)."
+            " Default logs to `dolphin.log` within `work_directory`"
+        ),
     )
     creation_time_utc: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),

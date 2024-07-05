@@ -1,4 +1,3 @@
-import atexit
 import json
 import logging
 import logging.config
@@ -49,34 +48,13 @@ def setup_logging(debug: bool = False, filename: PathOrStr | None = None):
         config["loggers"]["dolphin"]["level"] = "DEBUG"
 
     if filename:
-        config["handlers"]["file_json"]["filename"] = filename
-    else:
-        # If we don't specify a filename, delete the file handler
-        del config["handlers"]["file_json"]
+        config["loggers"]["dolphin"]["handlers"].append("file")
+        config["handlers"]["file"]["filename"] = filename
 
+    logging.config.dictConfig(config)
     # Temp work around for tqdm on py312
     if sys.version_info.major == 3 and sys.version_info.minor == 12:
         os.environ["TQDM_DISABLE"] = "1"
-
-    logging.config.dictConfig(config)
-    queue_handler: logging.Handler | None = None
-    for handler in logging.getLogger().handlers:
-        if handler.name == "queue_handler":
-            queue_handler = handler
-
-    # Only added in Python 3.12
-    # queue_handler = logging.getHandlerByName("queue_handler")
-    queue_handler = _get_handler_by_name("queue_handler")
-    if queue_handler is not None:
-        queue_handler.listener.start()
-        atexit.register(queue_handler.listener.stop)
-
-
-def _get_handler_by_name(name: str = "queue_handler") -> logging.Handler | None:
-    for handler in logging.getLogger().handlers:
-        if handler.name == name:
-            return handler
-    return None
 
 
 def log_runtime(f: Callable[P, T]) -> Callable[P, T]:
@@ -111,7 +89,7 @@ def log_runtime(f: Callable[P, T]) -> Callable[P, T]:
     return wrapper
 
 
-class MyJSONFormatter(logging.Formatter):
+class JSONFormatter(logging.Formatter):
     def __init__(
         self,
         *,

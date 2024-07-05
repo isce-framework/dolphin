@@ -10,7 +10,6 @@ from concurrent.futures import ProcessPoolExecutor
 from datetime import datetime
 from os import PathLike
 from pathlib import Path
-from pprint import pformat
 from typing import Mapping, NamedTuple, Sequence
 
 from opera_utils import group_by_burst, group_by_date  # , get_dates
@@ -61,10 +60,12 @@ def run(
         Enable debug logging, by default False.
 
     """
+    if cfg.log_file is None:
+        cfg.log_file = cfg.work_directory / "dolphin.log"
     # Set the logging level for all `dolphin.` modules
     setup_logging(debug=debug, filename=cfg.log_file)
     # TODO: need to pass the cfg filename for the logger
-    logger.debug(pformat(cfg.model_dump()))
+    logger.debug(cfg.model_dump())
 
     if not cfg.worker_settings.gpu_enabled:
         utils.disable_gpu()
