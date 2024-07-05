@@ -5,7 +5,7 @@ from __future__ import annotations
 import shutil
 import warnings
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Sequence
 
 import numpy as np
 from numpy.typing import ArrayLike
@@ -24,8 +24,7 @@ NODATA_VALUES = {"ps": 255, "amp_dispersion": 0.0, "amp_mean": 0.0}
 
 FILE_DTYPES = {"ps": np.uint8, "amp_dispersion": np.float32, "amp_mean": np.float32}
 _EXTRA_COMPRESSION = {
-    "max_error": 0.005,
-    "compression_type": "lerc_deflate",
+    "significant_bits": 10,
     "predictor": 3,
 }
 REPACK_OPTIONS = {
@@ -358,3 +357,121 @@ def multilook_ps_files(
             nodata=NODATA_VALUES["amp_dispersion"],
         )
     return ps_out_path, amp_disp_out_path
+
+
+def combine_amplitude_means(means: ArrayLike, N: ArrayLike) -> np.ndarray:
+    """Compute the combined amplitude mean.
+
+    This function calculates the weighted average of amplitudes based on the
+    number of original images (N) that went into each amplitude value.
+
+    Parameters
+    ----------
+    means : ArrayLike
+        A 3D array of amplitude mean values.
+        Shape: (n_images, rows, cols)
+    N : np.ndarray
+        A list/array of weights indicating the number of original images.
+        Shape: (depth,)
+
+    Returns
+    -------
+    np.ndarray
+        The combined amplitude mean.
+        Shape: (height, width)
+
+    Notes
+    -----
+    The combined amplitude mean is calculated as:
+    sum(N * amplitudes) / sum(N)
+
+    Both input arrays are expected to have the same shape.
+    The operation is performed along axis=0.
+
+    Examples
+    --------
+    >>> amplitudes = np.array([[[1.0, 2.0], [3.0, 4.0]], [[5.0, 6.0], [7.0, 8.0]]])
+    >>> N = np.array([[[9, 9], [9, 9]], [[1, 1], [1, 1]]])
+    >>> compute_combined_amplitude_mean(amplitudes, N)
+    array([[1.4, 2.4],
+           [3.4, 4.4]])
+
+    """
+    N = np.asarray(N)
+    if N.ndim == 1:
+        N = N[:, None, None]
+    # N = np.array(N)[:, None, None]
+    # if N.shape[0] != means.shape[0]:
+    #     raise ValueError("Size of N must match the number of images in means.")
+
+    weighted_sum = np.sum(means * N, axis=0)
+    total_N = np.sum(N, axis=0)
+
+    return weighted_sum / total_N
+
+
+def combine_amplitude_dispersions(
+    dispersions: np.ndarray, means: np.ndarray, N: ArrayLike | Sequence
+) -> np.ndarray:
+    """Compute the combined amplitude dispersion from multiple groups.
+
+    Given several ADs where difference numbers of images, N, went in,
+    the function computes a weighted mean/variance to calculate the combined AD.
+
+    Parameters
+    ----------
+    dispersions : np.ndarray
+        A 3D array of amplitude dispersion values for each group.
+        Shape: (depth, height, width)
+    means : np.ndarray
+        A 3D array of mean values for each group.
+        Shape: (depth, height, width)
+    N : np.ndarray
+        An array sample sizes for each group.
+        Shape: (depth, )
+
+    Returns
+    -------
+    np.ndarray
+        The combined amplitude dispersion.
+        Shape: (height, width)
+    np.ndarray
+        The combined amplitude mean.
+        Shape: (height, width)
+
+    Notes
+    -----
+    The combined variance is calculated using the formula:
+    combined_var = (sum(N * (var + mean^2)) / sum(N)) - combined_mean^2
+
+    Where combined_mean is calculated as:
+    combined_mean = sum(N * mean) / sum(N)
+
+    All input arrays are expected to have the same shape.
+    The operation is performed along axis=0.
+
+    """
+    N = np.asarray(N)
+    if N.ndim == 1:
+        N = N[:, None, None]
+    if not (means.shape == dispersions.shape):
+        raise ValueError("Input arrays must have the same shape.")
+    if means.shape[0] != N.shape[0]:
+        raise ValueError("Size of N must match the number of groups in means.")
+
+    variances = (dispersions * means) ** 2
+    combined_mean, combined_variance = _combine_variances(means, variances, N)
+
+    return np.sqrt(combined_variance) / combined_mean, combined_mean
+
+
+def _combine_variances(means, variances, N):
+    combined_mean = combine_amplitude_means(means, N)
+    total_N = np.sum(N, axis=0).squeeze()
+
+    sum_N_var_meansq = np.sum(N * (variances + means**2), axis=0)
+
+    # Compute combined variance
+    combined_variance = (sum_N_var_meansq / total_N) - combined_mean**2
+
+    return combined_mean, combined_variance
