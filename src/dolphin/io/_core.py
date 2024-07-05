@@ -54,7 +54,7 @@ DEFAULT_DATETIME_FORMAT = "%Y%m%d"
 DEFAULT_TILE_SHAPE = [128, 128]
 # For use in rasterio
 DEFAULT_TIFF_OPTIONS_RIO = {
-    "compress": "deflate",
+    "compress": "lzw",
     "zlevel": 4,
     "bigtiff": "yes",
     "tiled": "yes",
