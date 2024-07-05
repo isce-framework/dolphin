@@ -6,6 +6,9 @@ from os import fspath
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import numpy as np
+from numpy.typing import NDArray
+
 if TYPE_CHECKING:
     from dolphin._types import Index
 
@@ -190,3 +193,54 @@ def repack_rasters(
         max_workers=num_threads,
         desc="Processing Rasters",
     )
+
+
+def truncate_mantissa(z: NDArray, significant_bits=10) -> NDArray:
+    """Zero out bits in mantissa of elements of array in place.
+
+    Parameters
+    ----------
+    z: numpy.array
+        Real or complex array whose mantissas are to be zeroed out
+    significant_bits: int, optional
+        Number of bits to preserve in mantissa. Defaults to 10.
+        Lower numbers will truncate the mantissa more and enable
+        more compression.
+
+    """
+    # recurse for complex data
+    if np.iscomplexobj(z):
+        out_real = truncate_mantissa(z.real, significant_bits)
+        out_imag = truncate_mantissa(z.imag, significant_bits)
+        return out_real + 1j * out_imag
+
+    if not issubclass(z.dtype.type, np.floating):
+        err_str = "argument z is not complex float or float type"
+        raise TypeError(err_str)
+
+    mant_bits = np.finfo(z.dtype).nmant
+    float_bytes = z.dtype.itemsize
+
+    if significant_bits == mant_bits:
+        return
+
+    if not 0 < significant_bits <= mant_bits:
+        err_str = f"Require 0 < {significant_bits=} <= {mant_bits}"
+        raise ValueError(err_str)
+
+    # create integer value whose binary representation is one for all bits in
+    # the floating point type.
+    allbits = (1 << (float_bytes * 8)) - 1
+
+    # Construct bit mask by left shifting by nzero_bits and then truncate.
+    # This works because IEEE 754 specifies that bit order is sign, then
+    # exponent, then mantissa.  So we zero out the least significant mantissa
+    # bits when we AND with this mask.
+    nzero_bits = mant_bits - significant_bits
+    bitmask = (allbits << nzero_bits) & allbits
+
+    utype = np.dtype(f"u{float_bytes}")
+    # view as uint type (can not mask against float)
+    u = z.view(utype)
+    # bitwise-and in-place to mask
+    u &= bitmask

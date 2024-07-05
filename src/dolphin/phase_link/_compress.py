@@ -33,14 +33,12 @@ def compress(
     pl_estimate_upsampled = upsample_nearest(pl_cpx_phase, slc_stack.shape[1:])
     # For each pixel, project the SLCs onto the (normalized) estimated phase
     # by performing a pixel-wise complex dot product
-    pl_norm = np.linalg.norm(pl_estimate_upsampled, axis=0)
-    # Avoid divide by zero (there may be 0s at the upsampled boundary)
-    pl_norm[pl_norm == 0] = np.nan
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", message="invalid value encountered")
         phase = np.angle(
-            np.nansum(slc_stack * np.conjugate(pl_estimate_upsampled), axis=0) / pl_norm
+            np.nansum(slc_stack * np.conjugate(pl_estimate_upsampled), axis=0)
         )
-    if slc_mean is None:
-        slc_mean = np.nanmean(np.abs(slc_stack), axis=0)
+        if slc_mean is None:
+            warnings.filterwarnings("ignore", message="Mean of empty slice")
+            slc_mean = np.nanmean(np.abs(slc_stack), axis=0)
     return slc_mean * np.exp(1j * phase)

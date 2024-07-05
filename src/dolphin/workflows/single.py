@@ -16,6 +16,7 @@ from dolphin._log import get_log
 from dolphin._types import Filename, HalfWindow, Strides
 from dolphin.io import EagerLoader, StridedBlockManager, VRTStack
 from dolphin.phase_link import PhaseLinkRuntimeError, compress, run_phase_linking
+from dolphin.ps import calc_ps_block
 from dolphin.stack import MiniStackInfo
 
 from .config import ShpMethod
@@ -233,16 +234,16 @@ def run_wrapped_phase_single(
         ):
             writer.queue_write(img, f, out_rows.start, out_cols.start)
 
-        abs_stack = np.abs(cur_data[first_real_slc_idx:, in_trim_rows, in_trim_cols])
-        cur_data_mean = np.nanmean(abs_stack, axis=0)
         # Compress the ministack using only the non-compressed SLCs
+        # Get the mean to set as pixel magnitudes
+        abs_stack = np.abs(cur_data[first_real_slc_idx:, in_trim_rows, in_trim_cols])
+        cur_data_mean, cur_amp_dispersion, _ = calc_ps_block(abs_stack)
         cur_comp_slc = compress(
             # Get the inner portion of the full-res SLC data
             cur_data[first_real_slc_idx:, in_trim_rows, in_trim_cols],
             pl_output.cpx_phase[first_real_slc_idx:, out_trim_rows, out_trim_cols],
             slc_mean=cur_data_mean,
         )
-        cur_amp_dispersion = np.std(abs_stack, axis=0) / cur_data_mean
         # TODO: truncate
 
         # ### Save results ###
