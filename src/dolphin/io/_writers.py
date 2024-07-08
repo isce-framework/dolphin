@@ -48,7 +48,12 @@ class BackgroundBlockWriter(BackgroundWriter):
             self.queue_write = self.write  # type: ignore[assignment]
 
     def write(
-        self, data: ArrayLike, filename: Filename, row_start: int, col_start: int
+        self,
+        data: ArrayLike,
+        filename: Filename,
+        row_start: int,
+        col_start: int,
+        band: int | None = None,
     ):
         """Write out an ndarray to a subset of the pre-made `filename`.
 
@@ -62,6 +67,9 @@ class BackgroundBlockWriter(BackgroundWriter):
             Row index to start writing at.
         col_start : int
             Column index to start writing at.
+        band : int, optional
+            Band index in the file to write. Defaults to None, which uses first band,
+            or whole raster for 3D data.
 
         Raises
         ------
@@ -71,7 +79,7 @@ class BackgroundBlockWriter(BackgroundWriter):
         """
         from dolphin.io import write_block
 
-        write_block(data, filename, row_start, col_start)
+        write_block(data, filename, row_start, col_start, band=band)
 
 
 @runtime_checkable
@@ -418,7 +426,9 @@ class BackgroundStackWriter(BackgroundWriter, DatasetStackWriter):
             self.shape = (len(self.file_list), *src.shape)
             self.dtype = src.dtypes[0]
 
-    def write(self, data: ArrayLike, row_start: int, col_start: int):
+    def write(
+        self, data: ArrayLike, row_start: int, col_start: int, band: int | None = None
+    ):
         """Write out an ndarray to a subset of the pre-made `filename`.
 
         Parameters
@@ -431,6 +441,9 @@ class BackgroundStackWriter(BackgroundWriter, DatasetStackWriter):
             Row index to start writing at.
         col_start : int
             Column index to start writing at.
+        band : int, optional
+            Band index in the file to write. Defaults to None, which uses first band,
+            or whole raster for 3D data.
 
         Raises
         ------
@@ -445,7 +458,7 @@ class BackgroundStackWriter(BackgroundWriter, DatasetStackWriter):
         if data.shape[0] != len(self.file_list):
             raise ValueError(f"{data.shape = }, but {len(self.file_list) = }")
         for fn, layer in zip(self.file_list, data):
-            write_block(layer, fn, row_start, col_start)
+            write_block(layer, fn, row_start, col_start, band=band)
 
     def __setitem__(self, key, value):
         # Unpack the slices

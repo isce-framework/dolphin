@@ -14,7 +14,7 @@ from osgeo import gdal
 
 from dolphin import io, utils
 from dolphin._types import Filename
-from dolphin.io import EagerLoader, StackReader
+from dolphin.io import EagerLoader, StackReader, repack_raster
 
 gdal.UseExceptions()
 
@@ -23,6 +23,16 @@ logger = logging.getLogger(__name__)
 NODATA_VALUES = {"ps": 255, "amp_dispersion": 0.0, "amp_mean": 0.0}
 
 FILE_DTYPES = {"ps": np.uint8, "amp_dispersion": np.float32, "amp_mean": np.float32}
+_EXTRA_COMPRESSION = {
+    "max_error": 0.005,
+    "compression_type": "lerc_deflate",
+    "predictor": 3,
+}
+REPACK_OPTIONS = {
+    "ps": {},
+    "amp_dispersion": _EXTRA_COMPRESSION,
+    "amp_mean": _EXTRA_COMPRESSION,
+}
 
 
 def create_ps(
@@ -156,6 +166,11 @@ def create_ps(
 
     logger.info(f"Waiting to write {writer.num_queued} blocks of data.")
     writer.notify_finished()
+    # Repack for better compression
+    logger.info("Repacking PS rasters for better compression")
+    for fn, opt in zip(file_list, REPACK_OPTIONS.values()):
+        # Repack to a temp, then overwrite
+        repack_raster(Path(fn), output_dir=None, **opt)  # type: ignore[arg-type]
     logger.info("Finished writing out PS files")
 
 

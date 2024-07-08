@@ -16,6 +16,7 @@ from dolphin._decorators import atomic_output
 from dolphin._types import Filename, HalfWindow, Strides
 from dolphin.io import EagerLoader, StridedBlockManager, VRTStack
 from dolphin.phase_link import PhaseLinkRuntimeError, compress, run_phase_linking
+from dolphin.ps import calc_ps_block
 from dolphin.stack import MiniStackInfo
 
 from .config import ShpMethod
@@ -30,6 +31,7 @@ class OutputFile:
     filename: Path
     dtype: DTypeLike
     strides: Optional[dict[str, int]] = None
+    nbands: int = 1
 
 
 @atomic_output(output_arg="output_folder", is_dir=True)
@@ -114,8 +116,8 @@ def run_wrapped_phase_single(
     # Use the real-SLC date range for output file naming
     start_end = ministack.real_slc_date_range_str
     output_files: list[OutputFile] = [
-        # The compressed SLC does not used strides
-        OutputFile(output_folder / comp_slc_info.filename, np.complex64),
+        # The compressed SLC does not used strides, but has extra band for dispersion
+        OutputFile(output_folder / comp_slc_info.filename, np.complex64, nbands=2),
         # but all the rest do:
         OutputFile(
             output_folder / f"temporal_coherence_{start_end}.tif", np.float32, strides
@@ -132,7 +134,7 @@ def run_wrapped_phase_single(
             output_name=op.filename,
             dtype=op.dtype,
             strides=op.strides,
-            nbands=1,
+            nbands=op.nbands,
             nodata=0,
         )
 
@@ -233,11 +235,16 @@ def run_wrapped_phase_single(
             writer.queue_write(img, f, out_rows.start, out_cols.start)
 
         # Compress the ministack using only the non-compressed SLCs
+        # Get the mean to set as pixel magnitudes
+        abs_stack = np.abs(cur_data[first_real_slc_idx:, in_trim_rows, in_trim_cols])
+        cur_data_mean, cur_amp_dispersion, _ = calc_ps_block(abs_stack)
         cur_comp_slc = compress(
             # Get the inner portion of the full-res SLC data
             cur_data[first_real_slc_idx:, in_trim_rows, in_trim_cols],
             pl_output.cpx_phase[first_real_slc_idx:, out_trim_rows, out_trim_cols],
+            slc_mean=cur_data_mean,
         )
+        # TODO: truncate
 
         # ### Save results ###
 
@@ -247,6 +254,15 @@ def run_wrapped_phase_single(
             output_files[0].filename,
             in_no_pad_rows.start,
             in_no_pad_cols.start,
+            band=1,
+        )
+        # Save the amplitude dispersion of the real SLC data
+        writer.queue_write(
+            cur_amp_dispersion,
+            output_files[0].filename,
+            in_no_pad_rows.start,
+            in_no_pad_cols.start,
+            band=2,
         )
 
         # All other outputs are strided (smaller in size)
@@ -273,8 +289,12 @@ def run_wrapped_phase_single(
     writer.notify_finished()
     logger.info(f"Finished ministack of size {vrt.shape}.")
 
+    logger.info("Repacking for more compression")
+    io.repack_rasters(phase_linked_slc_files, significant_bits=12)
+
     written_comp_slc = output_files[0]
 
+    io.repack_raster(written_comp_slc.filename, significant_bits=12)
     ccslc_info = ministack.get_compressed_slc_info()
     ccslc_info.write_metadata(output_file=written_comp_slc.filename)
     # TODO: Does it make sense to return anything from this?
