@@ -113,7 +113,7 @@ def test_compute_combined_amplitude_means():
     amplitudes = np.array([[[1.0, 1.0], [1.0, 1.0]], [[6.0, 6.0], [11.0, 21.0]]])
     N = np.array([9, 1])
     expected = np.array([[1.5, 1.5], [2.0, 3.0]])
-    result = dolphin.ps.combine_amplitude_means(amplitudes, N)
+    result = dolphin.ps.combine_means(amplitudes, N)
     assert_allclose(result, expected, rtol=1e-5)
 
     #  Test with multiple groups
@@ -121,16 +121,14 @@ def test_compute_combined_amplitude_means():
     amp_mean_1 = np.mean(amplitudes[:5], axis=0)
     amp_mean_2 = np.mean(amplitudes[5:9], axis=0)
     amp_3 = amplitudes[9]
-    result = dolphin.ps.combine_amplitude_means(
+    result = dolphin.ps.combine_means(
         np.stack([amp_mean_1, amp_mean_2, amp_3]), [5, 4, 1]
     )
     assert_allclose(result, np.mean(amplitudes, axis=0), rtol=1e-5)
 
     # Test with all equal weights
     expected_equal = np.mean(amplitudes, axis=0)
-    result_equal = dolphin.ps.combine_amplitude_means(
-        amplitudes, np.ones(len(amplitudes))
-    )
+    result_equal = dolphin.ps.combine_means(amplitudes, np.ones(len(amplitudes)))
     assert_allclose(result_equal, expected_equal, rtol=1e-5)
 
 
@@ -161,7 +159,7 @@ def test_single_group():
     amplitudes = np.random.randn(10, 2, 2) ** 2
     amp_mean, amp_disp, _ = dolphin.ps.calc_ps_block(amplitudes)
     N = [1] * len(amplitudes)
-    result = dolphin.ps.combine_amplitude_means(amplitudes, N)
+    result = dolphin.ps.combine_means(amplitudes, N)
     assert_allclose(result, amp_mean, rtol=1e-5)
 
     result_disp, result_mean = dolphin.ps.combine_amplitude_dispersions(
