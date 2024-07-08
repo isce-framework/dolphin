@@ -94,14 +94,13 @@ def run_wrapped_phase_sequential(
             # even if this is a compressed SLC.
             # Will need to change this if we want to accommodate the original
             # Sequential Estimator+Datum Adjustment method.
-            reference_idx = 0
             run_wrapped_phase_single(
                 slc_vrt_file=cur_vrt,
                 ministack=ministack,
                 output_folder=cur_output_folder,
                 half_window=half_window,
                 strides=strides,
-                reference_idx=reference_idx,
+                reference_idx=ministack.reference_idx,
                 use_evd=use_evd,
                 beta=beta,
                 mask_file=mask_file,
