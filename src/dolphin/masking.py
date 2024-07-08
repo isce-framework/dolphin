@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from enum import IntEnum
 from os import fspath
 from pathlib import Path
@@ -9,13 +10,12 @@ import numpy as np
 from osgeo import gdal
 
 from dolphin import io
-from dolphin._log import get_log
 from dolphin._types import Filename
 from dolphin.utils import numpy_to_gdal_type
 
 gdal.UseExceptions()
 
-logger = get_log(__name__)
+logger = logging.getLogger(__name__)
 
 
 class MaskConvention(IntEnum):

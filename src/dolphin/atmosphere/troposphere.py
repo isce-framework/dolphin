@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime
+import logging
 from dataclasses import dataclass
 from os import fspath
 from pathlib import Path
@@ -15,11 +16,10 @@ from rasterio.warp import transform_bounds
 from scipy.interpolate import RegularGridInterpolator
 
 from dolphin import io
-from dolphin._log import get_log
 from dolphin._types import Bbox, Filename, TropoModel, TropoType
 from dolphin.utils import format_date_pair
 
-logger = get_log(__name__)
+logger = logging.getLogger(__name__)
 
 ###########
 

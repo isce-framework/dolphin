@@ -6,6 +6,7 @@ wrapper functions to write/iterate over blocks of large raster files.
 
 from __future__ import annotations
 
+import logging
 import math
 from dataclasses import dataclass
 from os import fspath
@@ -18,12 +19,11 @@ from numpy.typing import ArrayLike, DTypeLike
 from osgeo import gdal
 from pyproj import CRS
 
-from dolphin._log import get_log
 from dolphin._types import Bbox, Filename, Strides
 from dolphin.utils import compute_out_shape, gdal_to_numpy_type, numpy_to_gdal_type
 
 gdal.UseExceptions()
-logger = get_log(__name__)
+logger = logging.getLogger(__name__)
 
 __all__ = [
     "load_gdal",

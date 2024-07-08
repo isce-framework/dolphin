@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -12,7 +13,6 @@ from tqdm.auto import tqdm
 
 from dolphin import io, shp
 from dolphin._decorators import atomic_output
-from dolphin._log import get_log
 from dolphin._types import Filename, HalfWindow, Strides
 from dolphin.io import EagerLoader, StridedBlockManager, VRTStack
 from dolphin.phase_link import PhaseLinkRuntimeError, compress, run_phase_linking
@@ -21,7 +21,7 @@ from dolphin.stack import MiniStackInfo
 
 from .config import ShpMethod
 
-logger = get_log(__name__)
+logger = logging.getLogger(__name__)
 
 __all__ = ["run_wrapped_phase_single"]
 
@@ -244,6 +244,7 @@ def run_wrapped_phase_single(
             pl_output.cpx_phase[first_real_slc_idx:, out_trim_rows, out_trim_cols],
             slc_mean=cur_data_mean,
         )
+        # TODO: truncate
 
         # ### Save results ###
 
