@@ -84,13 +84,6 @@ class BaseStack(BaseModel):
             raise ValueError(msg)
         return self
 
-    # @model_validator(mode="after")
-    # def _check_unset_reference_date(self):
-    #     if self.reference_date == _DUMMY_DATE:
-    #         ref_date = self.dates[self.reference_idx][0]
-    #         logger.debug("No reference date provided, using first date: %s", ref_date)
-    #         self.reference_date = ref_date
-    #     return self
     @property
     def reference_date(self):
         """Date of the reference phase of the stack."""
