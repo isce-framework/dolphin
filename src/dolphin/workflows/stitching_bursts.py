@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Sequence
 
 from dolphin import stitching
-from dolphin._log import get_log, log_runtime
+from dolphin._log import log_runtime
 from dolphin._overviews import ImageType, create_image_overviews, create_overviews
 from dolphin._types import Bbox
 from dolphin.interferogram import estimate_interferometric_correlations
@@ -14,7 +15,7 @@ from dolphin.io._utils import _format_for_gdal, get_gtiff_options
 
 from .config import OutputOptions
 
-logger = get_log(__name__)
+logger = logging.getLogger(__name__)
 
 
 @log_runtime

@@ -1,11 +1,11 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Optional
 
 from numpy.typing import ArrayLike
 
-from dolphin._log import get_log
 from dolphin._types import Filename
 from dolphin.io._core import DEFAULT_TIFF_OPTIONS_RIO
 from dolphin.utils import full_suffix
@@ -13,7 +13,7 @@ from dolphin.utils import full_suffix
 from ._constants import CONNCOMP_SUFFIX, DEFAULT_CCL_NODATA, DEFAULT_UNW_NODATA
 from ._utils import _zero_from_mask
 
-logger = get_log(__name__)
+logger = logging.getLogger(__name__)
 
 
 def unwrap_snaphu_py(

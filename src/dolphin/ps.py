@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import shutil
 import warnings
 from pathlib import Path
@@ -12,13 +13,12 @@ from numpy.typing import ArrayLike
 from osgeo import gdal
 
 from dolphin import io, utils
-from dolphin._log import get_log
 from dolphin._types import Filename
 from dolphin.io import EagerLoader, StackReader
 
 gdal.UseExceptions()
 
-logger = get_log(__name__)
+logger = logging.getLogger(__name__)
 
 NODATA_VALUES = {"ps": 255, "amp_dispersion": 0.0, "amp_mean": 0.0}
 

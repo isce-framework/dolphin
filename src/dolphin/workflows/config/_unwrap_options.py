@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Literal
 
@@ -10,11 +11,9 @@ from pydantic import (
     field_validator,
 )
 
-from dolphin._log import get_log
-
 from ._enums import UnwrapMethod
 
-logger = get_log(__name__)
+logger = logging.getLogger(__name__)
 
 __all__ = [
     "UnwrapOptions",
