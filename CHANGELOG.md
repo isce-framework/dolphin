@@ -1,10 +1,26 @@
-# [Unreleased](https://github.com/isce-framework/dolphin/compare/v0.19.0...main)
+# Changelog
+
+# [v0.20.0](https://github.com/isce-framework/dolphin/compare/v0.19.0...v0.20.0)
+
+**Added**
+- Functions in `ps` to combine amplitude dispersions from older rasters
+- `truncate_mantissa` option to `repack` functions for simple compression
+- `band` option to `write_block` and background writers
+- Option to run `merge_dates` and `estimate_interferometric_correlations` with `thread_map` for parallel processing
+- Baseline lag option for "STBAS" phase linking inversion
 
 **Changed**
-- Delete unwrap scratch difrectories by default during displacement workflow
+- Logging now uses `dictConfig` and always logs JSON to a file for the Displacement workflow
+- Set modulus of compressed SLCs to be real SLC magnitude means
+- Updated Docker requirements and specfile
+- Delete intermediate unwrapping `scratchdir`s by default
 
 **Fixed**
-- Pass through the raster metadata when running filtering/interpolation
+- `use_max_ps` would occasionally fail with certain stride/window configurations
+- Unwrapped phase files did not always contain the right geographic metadata
+- Filenames in the `timeseries/` folder were wrong
+- Set upsampled boundary to `nan` in `compress`
+- Unwrapped file output path
 
 # [v0.19.0](https://github.com/isce-framework/dolphin/compare/v0.18.0...v0.19.0) - 2024-06-21
 
