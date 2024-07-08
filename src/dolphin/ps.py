@@ -360,7 +360,7 @@ def multilook_ps_files(
 
 
 def combine_means(means: ArrayLike, N: ArrayLike) -> np.ndarray:
-    """Compute the combined mean from multiple `mu_i` values.
+    r"""Compute the combined mean from multiple `mu_i` values.
 
     This function calculates the weighted average of amplitudes based on the
     number of original data points (N) that went into each mean.
@@ -382,11 +382,14 @@ def combine_means(means: ArrayLike, N: ArrayLike) -> np.ndarray:
 
     Notes
     -----
-    The combined mean is calculated as:
-    sum(N * amplitudes) / sum(N)
-
     Both input arrays are expected to have the same shape.
     The operation is performed along axis=0.
+
+    The combined mean is calculated as
+
+    \begin{equation}
+        E[X] = \frac{\sum_i N_i\mu_i}{\sum_i N_i}
+    \end{equation}
 
     """
     N = np.asarray(N)
@@ -404,7 +407,7 @@ def combine_means(means: ArrayLike, N: ArrayLike) -> np.ndarray:
 def combine_amplitude_dispersions(
     dispersions: np.ndarray, means: np.ndarray, N: ArrayLike | Sequence
 ) -> np.ndarray:
-    """Compute the combined amplitude dispersion from multiple groups.
+    r"""Compute the combined amplitude dispersion from multiple groups.
 
     Given several ADs where difference numbers of images, N, went in,
     the function computes a weighted mean/variance to calculate the combined AD.
@@ -432,14 +435,41 @@ def combine_amplitude_dispersions(
 
     Notes
     -----
-    The combined variance is calculated using the formula:
-    combined_var = (sum(N * (var + mean^2)) / sum(N)) - combined_mean^2
-
-    Where combined_mean is calculated as:
-    combined_mean = sum(N * mean) / sum(N)
-
     All input arrays are expected to have the same shape.
-    The operation is performed along axis=0.
+    The operation is performed along `axis=0`.
+
+    The formula for combining variances across multiple groups is derived from the
+    definition of variance and the properties of expectation.
+    Let $X_i$ be the random variable for group $i$, with mean $\mu_i$ and variance
+    $\sigma_i^2$, and $N_i$ be the number of samples in group $i$.
+
+    The combined variance $\sigma^2$ uses the formula
+
+    \begin{equation}
+        \sigma^2 = E[X^2] - (E[X])^2
+    \end{equation}
+
+    Where $E[X]$ is the combined mean, and $E[X^2]$ is the expected value of
+    the squared random variable.
+
+    The combined mean is calculated as:
+
+    \begin{equation}
+        E[X] = \frac{\sum_i N_i\mu_i}{\sum_i N_i}
+    \end{equation}
+
+    For $E[X^2]$, we use the property $E[X^2] = \sigma^2 + \mu^2$:
+
+    \begin{equation}
+        E[X^2] = \frac{\sum_i N_i(\sigma_i^2 + \mu_i^2)}{\sum_i N_i}
+    \end{equation}
+
+    Substituting these into the variance formula gives:
+
+    \begin{equation}
+        \sigma^2 = \frac{\sum_i N_i(\sigma_i^2 + \mu_i^2)}{\sum_i N_i} -
+        \left(\frac{\sum_i N_i\mu_i}{\sum_i N_i}\right)^2
+    \end{equation}
 
     """
     N = np.asarray(N)
