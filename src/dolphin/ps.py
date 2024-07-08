@@ -438,8 +438,6 @@ def combine_amplitude_dispersions(
     All input arrays are expected to have the same shape.
     The operation is performed along `axis=0`.
 
-    The formula for combining variances across multiple groups is derived from the
-    definition of variance and the properties of expectation.
     Let $X_i$ be the random variable for group $i$, with mean $\mu_i$ and variance
     $\sigma_i^2$, and $N_i$ be the number of samples in group $i$.
 
@@ -449,7 +447,7 @@ def combine_amplitude_dispersions(
         \sigma^2 = E[X^2] - (E[X])^2
     \end{equation}
 
-    Where $E[X]$ is the combined mean, and $E[X^2]$ is the expected value of
+    where $E[X]$ is the combined mean, and $E[X^2]$ is the expected value of
     the squared random variable.
 
     The combined mean is calculated as:
@@ -480,19 +478,12 @@ def combine_amplitude_dispersions(
     if means.shape[0] != N.shape[0]:
         raise ValueError("Size of N must match the number of groups in means.")
 
-    variances = (dispersions * means) ** 2
-    combined_mean, combined_variance = _combine_variances(means, variances, N)
-
-    return np.sqrt(combined_variance) / combined_mean, combined_mean
-
-
-def _combine_variances(means, variances, N):
     combined_mean = combine_means(means, N)
-    total_N = np.sum(N, axis=0).squeeze()
-
-    sum_N_var_meansq = np.sum(N * (variances + means**2), axis=0)
 
     # Compute combined variance
+    variances = (dispersions * means) ** 2
+    total_N = np.sum(N, axis=0).squeeze()
+    sum_N_var_meansq = np.sum(N * (variances + means**2), axis=0)
     combined_variance = (sum_N_var_meansq / total_N) - combined_mean**2
 
-    return combined_mean, combined_variance
+    return np.sqrt(combined_variance) / combined_mean, combined_mean
