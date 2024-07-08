@@ -170,7 +170,7 @@ def create_ps(
     logger.info("Repacking PS rasters for better compression")
     for fn, opt in zip(file_list, REPACK_OPTIONS.values()):
         # Repack to a temp, then overwrite
-        repack_raster(Path(fn), output_dir=None, **opt)
+        repack_raster(Path(fn), output_dir=None, **opt)  # type: ignore[arg-type]
     logger.info("Finished writing out PS files")
 
 
