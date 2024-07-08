@@ -51,6 +51,10 @@ def setup_logging(debug: bool = False, filename: PathOrStr | None = None):
         config["loggers"]["dolphin"]["handlers"].append("file")
         config["handlers"]["file"]["filename"] = filename
 
+    if "filename" not in config["handlers"]["file"]:
+        # We never passed in a filename: don't log to a file
+        config["handlers"].pop("file")
+
     logging.config.dictConfig(config)
     # Temp work around for tqdm on py312
     if sys.version_info.major == 3 and sys.version_info.minor == 12:
