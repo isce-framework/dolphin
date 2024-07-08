@@ -359,16 +359,16 @@ def multilook_ps_files(
     return ps_out_path, amp_disp_out_path
 
 
-def combine_amplitude_means(means: ArrayLike, N: ArrayLike) -> np.ndarray:
-    """Compute the combined amplitude mean.
+def combine_means(means: ArrayLike, N: ArrayLike) -> np.ndarray:
+    """Compute the combined mean from multiple `mu_i` values.
 
     This function calculates the weighted average of amplitudes based on the
-    number of original images (N) that went into each amplitude value.
+    number of original data points (N) that went into each mean.
 
     Parameters
     ----------
     means : ArrayLike
-        A 3D array of amplitude mean values.
+        A 3D array of mean values.
         Shape: (n_images, rows, cols)
     N : np.ndarray
         A list/array of weights indicating the number of original images.
@@ -377,12 +377,12 @@ def combine_amplitude_means(means: ArrayLike, N: ArrayLike) -> np.ndarray:
     Returns
     -------
     np.ndarray
-        The combined amplitude mean.
+        The combined mean.
         Shape: (height, width)
 
     Notes
     -----
-    The combined amplitude mean is calculated as:
+    The combined mean is calculated as:
     sum(N * amplitudes) / sum(N)
 
     Both input arrays are expected to have the same shape.
@@ -390,11 +390,10 @@ def combine_amplitude_means(means: ArrayLike, N: ArrayLike) -> np.ndarray:
 
     """
     N = np.asarray(N)
+    if N.shape[0] != means.shape[0]:
+        raise ValueError("Size of N must match the number of images in means.")
     if N.ndim == 1:
         N = N[:, None, None]
-    # N = np.array(N)[:, None, None]
-    # if N.shape[0] != means.shape[0]:
-    #     raise ValueError("Size of N must match the number of images in means.")
 
     weighted_sum = np.sum(means * N, axis=0)
     total_N = np.sum(N, axis=0)
@@ -458,7 +457,7 @@ def combine_amplitude_dispersions(
 
 
 def _combine_variances(means, variances, N):
-    combined_mean = combine_amplitude_means(means, N)
+    combined_mean = combine_means(means, N)
     total_N = np.sum(N, axis=0).squeeze()
 
     sum_N_var_meansq = np.sum(N * (variances + means**2), axis=0)
