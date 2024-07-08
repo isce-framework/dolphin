@@ -244,7 +244,6 @@ def run_wrapped_phase_single(
             pl_output.cpx_phase[first_real_slc_idx:, out_trim_rows, out_trim_cols],
             slc_mean=cur_data_mean,
         )
-        # TODO: truncate
 
         # ### Save results ###
 

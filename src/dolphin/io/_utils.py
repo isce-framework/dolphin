@@ -159,7 +159,7 @@ def repack_raster(
             for i in range(1, src.count + 1):
                 data = src.read(i)
                 if significant_bits is not None:
-                    truncate_mantissa(data, significant_bits)
+                    round_mantissa(data, significant_bits)
                 dst.write(data, i)
 
     if output_dir is None:
@@ -214,23 +214,28 @@ def repack_rasters(
     )
 
 
-def truncate_mantissa(z: NDArray, significant_bits=10):
+def round_mantissa(z: NDArray, significant_bits=10, truncate: bool = False):
     """Zero out bits in mantissa of elements of array in place.
+
+    Attempts to round the floating point numbers zeroing.
 
     Parameters
     ----------
-    z: numpy.array
+    z : numpy.array
         Real or complex array whose mantissas are to be zeroed out
-    significant_bits: int, optional
+    significant_bits : int, optional
         Number of bits to preserve in mantissa. Defaults to 10.
         Lower numbers will truncate the mantissa more and enable
         more compression.
+    truncate : bool, optional
+        Instead of attempting to round, simply truncate the mantissa.
+        Default = False
 
     """
     # recurse for complex data
     if np.iscomplexobj(z):
-        truncate_mantissa(z.real, significant_bits)
-        truncate_mantissa(z.imag, significant_bits)
+        round_mantissa(z.real, significant_bits)
+        round_mantissa(z.imag, significant_bits)
         return
 
     if not issubclass(z.dtype.type, np.floating):
@@ -261,5 +266,9 @@ def truncate_mantissa(z: NDArray, significant_bits=10):
     utype = np.dtype(f"u{float_bytes}")
     # view as uint type (can not mask against float)
     u = z.view(utype)
+
+    if truncate is False:
+        round_mask = 1 << (nzero_bits - 1)
+        u += round_mask  # Add the rounding mask before applying the bitmask
     # bitwise-and in-place to mask
     u &= bitmask
