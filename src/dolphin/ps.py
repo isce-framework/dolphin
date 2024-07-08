@@ -388,14 +388,6 @@ def combine_amplitude_means(means: ArrayLike, N: ArrayLike) -> np.ndarray:
     Both input arrays are expected to have the same shape.
     The operation is performed along axis=0.
 
-    Examples
-    --------
-    >>> amplitudes = np.array([[[1.0, 2.0], [3.0, 4.0]], [[5.0, 6.0], [7.0, 8.0]]])
-    >>> N = np.array([[[9, 9], [9, 9]], [[1, 1], [1, 1]]])
-    >>> compute_combined_amplitude_mean(amplitudes, N)
-    array([[1.4, 2.4],
-           [3.4, 4.4]])
-
     """
     N = np.asarray(N)
     if N.ndim == 1:
