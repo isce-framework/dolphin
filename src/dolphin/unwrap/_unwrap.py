@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import itertools
+import logging
 import shutil
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -10,7 +11,6 @@ import numpy as np
 from tqdm.auto import tqdm
 
 from dolphin import goldstein, interpolate, io
-from dolphin._log import get_log, log_runtime
 from dolphin._types import Filename
 from dolphin.utils import DummyProcessPoolExecutor, full_suffix
 from dolphin.workflows import UnwrapMethod, UnwrapOptions
@@ -28,14 +28,13 @@ from ._tophu import multiscale_unwrap
 from ._unwrap_3d import unwrap_spurt
 from ._utils import create_combined_mask, set_nodata_values
 
-logger = get_log(__name__)
+logger = logging.getLogger(__name__)
 
 __all__ = ["run", "unwrap"]
 
 DEFAULT_OPTIONS = UnwrapOptions()
 
 
-@log_runtime
 def run(
     ifg_filenames: Sequence[Filename],
     cor_filenames: Sequence[Filename],
@@ -439,4 +438,4 @@ def unwrap(
         assert scratchdir is not None
         shutil.rmtree(scratchdir)
 
-    return unw_path, conncomp_path
+    return Path(unw_filename), conncomp_path

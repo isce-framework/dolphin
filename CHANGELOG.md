@@ -1,14 +1,30 @@
-# [Unreleased](https://github.com/isce-framework/dolphin/compare/v0.19.0...main)
+# Changelog
 
-**Changed**
-- Delete unwrap scratch difrectories by default during displacement workflow
+## [0.20.0](https://github.com/isce-framework/dolphin/compare/v0.19.0...v0.20.0)
 
-**Fixed**
-- Pass through the raster metadata when running filtering/interpolation
+### Added
+- Functions in `ps` to combine amplitude dispersions from older rasters
+- `truncate_mantissa` option to `repack` functions for simple compression
+- `band` option to `write_block` and background writers
+- Option to run `merge_dates` and `estimate_interferometric_correlations` with `thread_map` for parallel processing
+- Baseline lag option for "STBAS" phase linking inversion
 
-# [v0.19.0](https://github.com/isce-framework/dolphin/compare/v0.18.0...v0.19.0) - 2024-06-21
+### Changed
+- Logging now uses `dictConfig` and always logs JSON to a file for the Displacement workflow
+- Set modulus of compressed SLCs to be real SLC magnitude means
+- Updated Docker requirements and specfile
+- Delete intermediate unwrapping `scratchdir`s by default
 
-**Added**
+### Fixed
+- `use_max_ps` would occasionally fail with certain stride/window configurations
+- Unwrapped phase files did not always contain the right geographic metadata
+- Filenames in the `timeseries/` folder were wrong
+- Set upsampled boundary to `nan` in `compress`
+- Unwrapped file output path
+
+## [0.19.0](https://github.com/isce-framework/dolphin/compare/v0.18.0...v0.19.0) - 2024-06-21
+
+### Added
 - `filtering` module for filtering out long wavelength signals from the unwrapped phase
 - `baseline` module for computing the perpendicular baseline. Initial version has logic for OPERA CSLCs, uses `isce3`
 - Interface only for 3D unwrapping
@@ -17,38 +33,38 @@
 - Eigenvalue solver speedups of 3-9x
 - Initial version of 3D unwrapping using `spurt`
 
-**Removed**
+### Removed
 - the KL-divergence SHP estimator has been removed. GLRT is recommended instead.
 
-**Fixed**
+### Fixed
 - `reproject_bounds` uses the `rasterio` version, which densifies points along edges for a more accurate bounding box
 - The output SHP rasters now output 0 if there was no valid input data
 - Logic for filling PS pixels, with and without setting the amplitudes to be the original SLC amplitudes
 - `ReferencePointError` during the displacement workflow now will fall back look only at the `condition_file` (i.e. choose the point with highest temporal coherence by default)
 
-**Changed**
+### Changed
 - The configuration options for unwrapping have been refactored. Options unique to each unwrapper are grouped into subclasses.
   - Note that older `dolphin_config.yaml` files will error after this refactor.
 - Unweighted time series inversion will make one batch call, providing a large speedup over the `vmap` version for weighted least squares
 
-# [v0.18.0](https://github.com/isce-framework/dolphin/compare/v0.17.0...v0.18.0) - 2024-05-07
+## [0.18.0](https://github.com/isce-framework/dolphin/compare/v0.17.0...v0.18.0) - 2024-05-07
 
-**Added**
+### Added
 - `dolphin timeseries` command line tool for inverting unwrapped interferogram network and estimating velocity
 
-**Fixed**
+### Fixed
 - Parse the file names correctly to find compressed SLCs and read dates based on production file naming convention
 
 
-# [v0.17.0](https://github.com/isce-framework/dolphin/compare/v0.16.3...v0.17.0) - 2024-04-10
-**Added**
+## [0.17.0](https://github.com/isce-framework/dolphin/compare/v0.16.3...v0.17.0) - 2024-04-10
+### Added
 - Added Goldstein filtering for unwrapping
 - Added Interpolation for unwrapping
 - Added the regrow connected components for the modified phase
 - Added option to toggle off inversion
 - Added similarity module
 
-**Fixed**
+### Fixed
 - 3D readers would squeeze out a dimension for length one inputs (i.e. they would give an array with `.ndim=2`)
 - `max_bandwidth` config can now be 1 to specify only nearest neighbor interferograms.
 - Use the 'compressed' key term to find compressed slcs and regular slcs instead of number of dates in ionosphere
@@ -56,56 +72,56 @@
 - Enforce consistency between jax and jaxlib
 - Disable corrections part of pytest, add one for timeseries
 
-# [v0.16.0](https://github.com/isce-framework/dolphin/compare/v0.15.3...v0.16.0) - 2024-03-03
+## [0.16.0](https://github.com/isce-framework/dolphin/compare/v0.15.3...v0.16.0) - 2024-03-03
 
-**Added**
+### Added
 - Added `dolphin.timeseries` module with basic functionality:
   - Invert a stack of unwrapped interferograms to a timeseries (using correlation weighting optionally)
   - Estimate a (weighted) linear velocity from a timeseries
 - Added inversion and velocity estimation as options to `DisplacementWorkflow`
 - Create `DatasetStackWriter` protocol, with `BackgroundStackWriter` implementation
 
-**Changed**
+### Changed
 - Rename `GdalWriter` to `BackgroundBlockWriter`
 - Displacement workflow now also creates/returns a stitched, multi-looked version of the amplitude dispersion
 
-**Fixed**
+### Fixed
 - `BackgroundRasterWriter`  was not creating the files necessary before writing
 - Allow user to specify more than one type of interferogram in `Network` configuration
 
 # [0.15.3](https://github.com/isce-framework/dolphin/compare/v0.15.2...0.15.3) - 2024-02-27
 
-**Changed**
+### Changed
 - Return the output paths created by the ionosphere/troposphere modules to make it easier to use afterward
 
 # [0.15.2](https://github.com/isce-framework/dolphin/compare/v0.15.1...0.15.2) - 2024-02-27
 
-**Fixed**
+### Fixed
 
 - Fixes to ionosphere/troposphere correction in for `DisplacementWorkflow` and `PsWorkflow`
 - Correct the nodata value passed through to snaphu-py
 
 # [0.15.1](https://github.com/isce-framework/dolphin/compare/v0.15.0...0.15.1) - 2024-02-26
 
-**Fixed**
+### Fixed
 
 - PHASS now uses the Tophu wrapper to avoid isce3 inconsistencies between argument order
 
 # [0.15.0](https://github.com/isce-framework/dolphin/compare/v0.14.1...0.15.0) - 2024-02-16
 
-**Changed**
+### Changed
 
 - Combine the nodata region with the `mask_file` to pass through to unwrappers
 - Update regions which are nodata in interferograms to be nodata in unwrapped phase
 - Use `uint16` data type for connected component labels
 
-**Fixed**
+### Fixed
 
 - Intersection of nodata regions for SLC stack are now all set to `nan` during phase linking, avoiding 0 gaps between bursts
 
 # [0.14.1](https://github.com/isce-framework/dolphin/compare/v0.14.0...0.14.1) - 2024-02-15
 
-**Fixed**
+### Fixed
 
 - Changed snaphu-py tile defaults to avoid max secondary arcs error in #233
 - Fixed `linalg.norm`` to be pixelwise in `process_coherence_matrices` in #234
@@ -113,12 +129,12 @@
 
 # [0.14.0](https://github.com/isce-framework/dolphin/compare/v0.13.0...0.14.0) - 2024-02-13
 
-**Fixed**
+### Fixed
 - Temporal coherence and eigenvalue rasters were switched in their naming
 - Output a better `estimator` raster to see where we switched to EVD
 - Cap the max number of threads to the CPU count to avoid `numba` config errors
 
-**Changed**
+### Changed
 - refactor temporal coherence calculation to use `vmap`
   - Allows us to start making a weighted temporal coherence metric
 - Turn off default `beta=0.01` regularization now that CPL is in place
@@ -127,24 +143,23 @@
 
 # [0.13.0](https://github.com/isce-framework/dolphin/compare/v0.12.0...v0.13.0) - 2024-02-09
 
-**Added**
+### Added
 
 - `_overviews` module, and workflow configuration to create overviews of the output stitched rasters
 - Configuration to use the [snaphu-py](https://github.com/isce-framework/snaphu-py) wrapper, and drop using `isce3.unwrap.snaphu`
 
-**Fixed**
+### Fixed
 
 - Apply bounds even if only one image is passed to `stitching` (#210)
 - Allow `take_looks` to work with `MaskedArrays` without converting to `np.ndarray`
 
-**Dependencies**
+### Dependencies
 
 - Move back to `tqdm` instead of using `rich` for progress bars.
 
+## [0.12.0](https://github.com/isce-framework/dolphin/compare/v0.11.0...v0.12.0) - 2024-02-01
 
-# [0.12.0](https://github.com/isce-framework/dolphin/compare/v0.11.0...v0.12.0) - 2024-02-01
-
-**Added**
+### Added
 - Added `DatasetWriter` protocol
 - Added `RasterWriter` and `BackgroundRasterWriter` implementations of this protocol
 - Refactored phase linking
@@ -152,7 +167,7 @@
   - This combines the implementation of CPU/GPU, and removes the need for usign `pymp`
 - Added `utils.disable_gpu` to stop the use ofr a GPU even if it's available
 
-**Changed**
+### Changed
 - Internal module organization, including grouping IO modules into `dolphin.io` subpackage
 - Renamed `io.Writer` to `io.GdalWriter` to distinguish from `RasterWriter`
 - Removed the `n_workers` option from the configuration.
@@ -160,60 +175,57 @@
   - The name `threads_per_worker` is kept for consistency; it is still an accurate name for the multi-burst processing case.
 
 
-**Dependencies**
-
-Added
+### Added
 - `jax`>=0.4.19
 - `numpy`=>1.23 (bump to minimum version that they're still supporting)
 - `scipy`>=1.9 (same reason)
 - `numba`>=0.54
 
-Removed:
+### Removed
 - `pymp`
 - `cupy` from optional GPU usage
 
-# [v0.11.0](https://github.com/isce-framework/dolphin/compare/v0.10.0...v0.11.0) - 2024-01-24
+## [0.11.0](https://github.com/isce-framework/dolphin/compare/v0.10.0...v0.11.0) - 2024-01-24
 
-**Added**
+### Added
 - Added ionospheric correction in `dolphin.atmosphere.ionosphere`
   - Included in `DisplacementWorkflow` if TEC files are provided
 
+## [0.10.0](https://github.com/isce-framework/dolphin/compare/v0.9.0...v0.10.0) - 2024-01-22
 
-# [v0.10.0](https://github.com/isce-framework/dolphin/compare/v0.9.0...v0.10.0) - 2024-01-22
-
-**Added**
+### Added
 - Create `dolphin.unwrap` subpackage to split out unwrapping calls, and post-processing modules.
 
-**Removed**
+### Removed
 - the `_dates` module has been removed in favor of using `opera_utils._dates`
 
-**Fixed**
+### Fixed
 - `stitching.merge_images` will now give consistent sizes for provided bounds when `strides` is given
 
-# [v0.9.0](https://github.com/isce-framework/dolphin/compare/v0.8.0...v0.9.0) - 2024-01-10
+## [0.9.0](https://github.com/isce-framework/dolphin/compare/v0.8.0...v0.9.0) - 2024-01-10
 
-**Added**
+### Added
 - `DatasetReader` and `StackReader` protocols for reading in data from different sources
   - `DatasetReader` is for reading in a single dataset, like one raster image.
   - `StackReader` is for reading in a stack of datasets, like a stack of SLCs.
   - Implementations of these have been done for flat binary files (`BinaryReader`), HDF5 files (`HDF5Reader`), and GDAL rasters (`RasterReader`).
 
-**Changed**
+### Changed
 - The `VRTStack` no longer has an `.iter_blocks` method
   - This has been replaced with creating an `EagerLoader` directly and passing it to the `reader` argument
 
-**Dependencies**
+### Dependencies
 - Added `rasterio>=1.3`
 
-# [v0.8.0](https://github.com/isce-framework/dolphin/compare/v0.7.0...v0.8.0) - 2024-01-05
+## [0.8.0](https://github.com/isce-framework/dolphin/compare/v0.7.0...v0.8.0) - 2024-01-05
 
-**Added**
+### Added
 - Ability to unwrap interferograms with the [`snaphu-py`](https://github.com/isce-framework/snaphu-py) (not a required dependency)
 - Added ability to make annual ifgs in `Network`
 - Start of tropospheric corection support in `dolphin.atmosphere` using PyAPS and Raider packages
 - Expose the unwrap skipping with `dolphin config --no-unwrap`
 
-**Changed**
+### Changed
 - The output directory for interferograms is now just "interferograms/" instead of "interferograms/stiched"
   - Even when stitching, the burst-wise interferograms would be in the named phase-linking subfolders.
 - Split apart the `dolphin.workflows.stitch_and_unwrap` module into `stitching_bursts` and `unwrapping`
@@ -222,9 +234,9 @@ Removed:
 - The default extension for conncomps is now `.tif`. Use geotiffs instead of ENVI format for connected components.
 - Using ruff instead of pydocstyle due to archived repo
 
-# [v0.7.0](https://github.com/isce-framework/dolphin/compare/v0.6.1...v0.7.0) - 2023-11-29
+## [0.7.0](https://github.com/isce-framework/dolphin/compare/v0.6.1...v0.7.0) - 2023-11-29
 
-**Added**
+### Added
 - `MiniStackPlanner` and `MiniStackInfo` class which does the planning for how a large stack of SLCs will be processed in batches.
   - Previously this was done at run time in `sequential.py`. We want to separate that out to view the plan in advance/allow us to dispatch the work to multiple machines.
 - `CompressedSlcInfo` class added to track the attributes of a compressed SLC file created during the workflow.
@@ -235,36 +247,36 @@ Removed:
 - config: `phase_linking.max_compressed_slcs` to cap the number of compressed SLCs added during large-stack sequential workflows
 - `interferogram`: Add ability to specify manual dates for a `Network`/`VRTInterferogram`, which lets us re-interfere the phase-linking results
 
-**Changed**
+### Changed
 - Date functions have been moved from `dolphin.utils` to `dolphin._dates`. They are accessible at `dolphin.get_dates`, etc
 - `get_dates` now uses `datetime.datetime` instead of `datetime.date`.
   - This is to allow for more flexibility in the date parsing, and to allow for the use of `datetime.date` or `datetime.datetime` in the output filenames.
 - `VRTStack` has been moved to `_readers.py`. The minstack planning functions have been removed to focus the class on just reading input GDAL rasters.
 
-**Fixed**
+### Fixed
 - When starting with Compressed SLCs in the list of input SLCs, the workflows will now recognize them, find the correct reference date, and form all the correct interferograms
 
-**Removed**
+### Removed
 - Extra subsetting functions from `VRTStack` have been removed, as they are not used in the workflow and the reimplmenent simple GDAL calls.
 - `CPURecorder` and `GPURecorder` have been removed to simplify code. May be moved to separate repo.
 
-# [v0.6.1](https://github.com/isce-framework/dolphin/compare/v0.6.0...v0.6.1) - 2023-11-13
+## [0.6.1](https://github.com/isce-framework/dolphin/compare/v0.6.0...v0.6.1) - 2023-11-13
 
-**Removed**
+### Removed
 - `dolphin.opera_utils` now lives in the separate package
 
-**Dependencies**
+### Dependencies
 - Added `opera_utils`
 
-# [v0.6.0](https://github.com/isce-framework/dolphin/compare/v0.5.1...v0.6.0) - 2023-11-07
+## [0.6.0](https://github.com/isce-framework/dolphin/compare/v0.5.1...v0.6.0) - 2023-11-07
 
-**Added**
+### Added
 - `opera_utils.get_missing_data_options` to parse the full list of SLCs and return possible subsets which have the same dates used for all Burst IDs
 - `PsWorkflow` class for running just the PS estimation workflow
 - `asv` benchmark setup to measure runtime across versions
 - `@atomic_output` decorator for long running write processes, to avoid partially-written output files
 
-**Changed**
+### Changed
 - removed `minimum_images` as an argument from `opera_utils.group_by_burst`. Checking for too-few images now must be done by the caller
 - `opera_utils.group_by_burst` now matches the official product name more robustly, but still returns the lowered version of the burst ID.
 - The `s1_disp` workflow has been renamed to `displacement`, since it is not specific to Sentinel-1.
@@ -273,32 +285,32 @@ Removed:
   - A `PsWorkflow` config class has been added for the PS estimation workflow.
   - A `WorkflowBase` encompasses some of the common configuration options.
 
-**Maintenance**
+### Maintenance
 - `ruff` has replaced `isort`/`black`/`flake8` in the pre-commit checks
 
-# [v0.5.1](https://github.com/isce-framework/dolphin/compare/v0.5.0...v0.5.1) - 2023-10-10
+## [0.5.1](https://github.com/isce-framework/dolphin/compare/v0.5.0...v0.5.1) - 2023-10-10
 
-**Added**
+### Added
 - `stitch_and_unwrap.run` returns the stitch PS mask
 
-# [v0.5.0](https://github.com/isce-framework/dolphin/compare/v0.4.3...v0.5.0) - 2023-10-09
+## [0.5.0](https://github.com/isce-framework/dolphin/compare/v0.4.3...v0.5.0) - 2023-10-09
 
-**Added**
+### Added
 - `CPURecorder` class for fine grained benchmarking of the CPU/memory usage for
 
-**Changed**
+### Changed
 - Docker `specfile` now builds with tophu
 
-# [v0.4.3](https://github.com/isce-framework/dolphin/compare/v0.4.2...v0.4.3) - 2023-10-06
+## [0.4.3](https://github.com/isce-framework/dolphin/compare/v0.4.2...v0.4.3) - 2023-10-06
 
-**Added**
+### Added
 - Ability to unwrap using isce3's `PHASS`
 - `CorrectionOptions` model for specifying the correction options in the `Workflow` config
   - Currently a placeholder for the files which will be used for tropospheric/ionospheric corrections
 - Ability to keep relative files in the `Workflow` config
   - This is useful for keeping the relative paths to the SLCs in the config, and then running the workflow from a different directory
 
-**Changed**
+### Changed
 
 - Instead of specifying the unwrapping algorithm in `dolphin unwrap` as `--use-icu`, the option is not `--unwrap-method`
   - This let's us add `--unwrap-method "phass"`, but also future unwrap methods without a `--use-<name>` for every one
@@ -307,14 +319,13 @@ Removed:
     in certain situations, and does not happen with `spawn`. See https://pythonspeed.com/articles/python-multiprocessing/ for more details.
 
 
-
 # [0.4.2](https://github.com/isce-framework/dolphin/compare/v0.4.1...v0.4.2) - 2023-10-03
 
-**Added**
+### Added
 - `use_evd` option to force the use of eigenvalue decomposition instead of the EMI phase linking algorithm
 - Walkthrough tutorial notebook
 
-**Changed**
+### Changed
 
 - Moved all `OPERA_` variables to a new module `dolphin.opera_utils`.
   - Other OPERA-specific quirks have been moved to the separate `disp-s1` repo,
@@ -326,15 +337,15 @@ Removed:
 - Internals for which functions are called in `sequential.py`
 - Docker image now has `tophu` installed
 
-# [0.4.1](https://github.com/isce-framework/dolphin/compare/v0.4.0...v0.4.1) - 2023-09-08
+## [0.4.1](https://github.com/isce-framework/dolphin/compare/v0.4.0...v0.4.1) - 2023-09-08
 
-**Dependencies**
+### Dependencies
 - Added back isce3
 
-# [0.4.0](https://github.com/isce-framework/dolphin/compare/v0.3.0...v0.4.0) - 2023-09-07
+## [0.4.0](https://github.com/isce-framework/dolphin/compare/v0.3.0...v0.4.0) - 2023-09-07
 
 
-**Changed**
+### Changed
 
 - Split apart OPERA-specific needs from more general library/workflow functionality
 - Removed the final NetCDF product creation
@@ -342,7 +353,7 @@ Removed:
   - Changed folder structure so that there's not longer a top-level `scratch/` and `output/` by default
 - Changed the required dependencies so the `isce3` unwrapper is optional, as people may wish to implement their own custom parallel unwrapping
 
-**Dependencies**
+### Dependencies
 
 Dropped:
 - h5netcdf
@@ -351,26 +362,26 @@ Dropped:
 Now optional:
 - isce3 (for unwrapping)
 
-# [0.3.0](https://github.com/isce-framework/dolphin/compare/v0.2.0...v0.3.0) - 2023-08-23
+## [0.3.0](https://github.com/isce-framework/dolphin/compare/v0.2.0...v0.3.0) - 2023-08-23
 
-**Added**
+### Added
 
 - Save a multilooked version of the PS mask for output inspection
 
-**Changed**
+### Changed
 
 - Pydantic models were upgraded to V2
 - Refactored the blockwise IO into `_blocks.py`.
   - The iteration now happens over the output grid for easier dilating/padding when using `strides`
   - New classes with `BlockIndices` and `BlockManager` for easier mangement of the different slices
 
-**Dependencies**
+### Dependencies
 
 - pydantic >= 2.1
 
-# [0.2.0](https://github.com/isce-framework/dolphin/compare/v0.1.0...v0.2.0) - 2023-07-25
+## [0.2.0](https://github.com/isce-framework/dolphin/compare/v0.1.0...v0.2.0) - 2023-07-25
 
-**Added**
+### Added
 
 - For OPERA CSLC inputs, we now read the nodata polygon and skip loading regions of the SLC stack which are all nodata.
   - This led to a reduction of 30-50% in wrapped phase estimation runtime for each burst stack.
@@ -399,12 +410,12 @@ Now optional:
 - The scratch directory holding unwrapped interferograms is named `unwrapped` instead of `unwrap`
 - Stitching files now can accept downsampled versions and product the correct geo metadata
 
-**Fixed**
+### Fixed
 
 - Calculating the nodata mask using the correct input geotransform
 - Trims the overlapped region of the phase linking step when iterating in blocks
 
-**Dependencies**
+### Dependencies
 
 - shapely >= 1.8
 - Numba now supports Python 3.11, so we can drop the Python<3.11 version restriction.
@@ -414,7 +425,7 @@ Added testing requirements:
 - pillow>=7.0
 
 
-# [0.1.0](https://github.com/isce-framework/dolphin/compare/v0.0.4...v0.1.0) - 2023-03-31
+## [0.1.0](https://github.com/isce-framework/dolphin/compare/v0.0.4...v0.1.0) - 2023-03-31
 
 - First version of the `_product.py` module to output the combined NetCDF product file.
 - `_pge_runconfig.py` module to handle the separate PGE-compatible configuration, which translates to-from the `Workflow` object.
@@ -427,27 +438,27 @@ Added testing requirements:
 - Added a `create_only` option to `write_arr` to create an empty file without writing data (e.g. to check the boundary results of stitching)
 
 
-**Changed**
+### Changed
 - The YAML output/input functions are moved to a `YamlModel` class, which is a subclass of `pydantic.BaseModel`.
   - This allows us to use it in both `config.py` and `_pge_runconfig.py`.
 - Refactoring of the `Workflow` layout to more easily extract the input/output files for the PGE run.
 
-**Fixed**
+### Fixed
 
 - Compressed SLC outputs were getting corrupted upon writing when using strides > 1.
 - Single-update interferograms where the first SLC input is a compressed SLC was broken (using the wrong size raster).
   - Now the result will simply copy over the phase-linking result, which is already referenced to the first raster.
 
-**Dependencies**
+### Dependencies
 
 Added requirements:
 
 - h5netcdf>=1.1
 - Avoid HDF5 version 1.12.1 until NetCDF loading issue is fixed
 
-# [0.0.4](https://github.com/isce-framework/dolphin/compare/v0.0.3...v0.0.4) - 2023-03-17
+## [0.0.4](https://github.com/isce-framework/dolphin/compare/v0.0.3...v0.0.4) - 2023-03-17
 
-**Added**
+### Added
 
 - Created first version of the single-update workflow, usable with `dolphin config --single`
 - `_background.py` module as the abstract classes for background input/output with `EagerLoader` and `Writer`.
@@ -458,7 +469,7 @@ Added requirements:
 - Comments in the YAML file output by the `dolphin config` command.
 
 
-**Changed**
+### Changed
 
 - The main workflow has been renamed to `s1_disp.py` to better reflect the workflow, since it can handle both single and stack workflows.
     - The `sequential.py` and `single.py` are where these differences are handled.
@@ -469,13 +480,13 @@ Added requirements:
 
 - Docs are now using the mkdocs `material` theme.
 
-**Removed**
+### Removed
 
 - `utils.parse_slc_strings` in favor of always using `utils.get_dates`.
 - `io.get_stack_nodata_mask`. This will be done using the nodata polygon, or not at all.
 
 
-**Dependencies**
+### Dependencies
 
 Added requirements:
 
@@ -494,9 +505,9 @@ Removed requirements:
 - tqdm
 
 
-# [0.0.3](https://github.com/isce-framework/dolphin/compare/v0.0.2...v0.0.3) - 2023-01-26
+## [0.0.3](https://github.com/isce-framework/dolphin/compare/v0.0.2...v0.0.3) - 2023-01-26
 
-**Added**
+### Added
 
 - Ability for `VRTStack` to handle HDF5 files with subdatasets.
     - The OPERA specific HDF5 files are now supported without extra configuration.
@@ -504,15 +515,15 @@ Removed requirements:
     - Users can pass multiple SLC burst (like COMPASS bursts) per date, and the workflow will process per stack then stitch per date.
 - More features for `load_gdal` to load in blocks.
 
-**Changed**
+### Changed
 
 - A small amount of regularization on the coherence matrix is done before inversion during phase linking to avoid singular matrices.
 - Renamed module to `_log.py`
 - `workflows/wrapped_phase.py` absorbed much logic formerly in `s1_disp_stack.py`.
 
-# [0.0.2](https://github.com/isce-framework/dolphin/compare/v0.0.1...v0.0.2) - 2023-01-24
+## [0.0.2](https://github.com/isce-framework/dolphin/compare/v0.0.1...v0.0.2) - 2023-01-24
 
-**Added**
+### Added
 
 - Created first version of the `s1_disp_stack.py` workflow.
 - Created the modules necessary for first version of the sequential workflow, including
@@ -533,16 +544,16 @@ Added requirements:
 - tqdm>=4.60
 
 
-# [0.0.1] - 2022-12-09
+## [0.0.1] - 2022-12-09
 
-**Added**
+### Added
 
 - Created the `config` module to handle the configuration of the workflows
 - Command line interface for running the workflows
 - Outline of project structure and utilities
 
 
-**Dependencies**
+### Dependencies
 
 Added requirements:
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import datetime
 from dataclasses import dataclass # type: ignore
+import logging
 from os import fspath
 from pathlib import Path
 from typing import Mapping, Sequence
@@ -15,12 +16,11 @@ from rasterio.warp import transform_bounds # type: ignore
 from scipy.interpolate import RegularGridInterpolator # type: ignore
 
 from dolphin import io
-from dolphin._log import get_log
 from dolphin._types import Bbox, Filename, TropoModel, TropoType
 from dolphin.utils import format_date_pair
 from ._netcdf import delay_from_netcdf, group_netcdf_by_date
 
-logger = get_log(__name__)
+logger = logging.getLogger(__name__)
 
 ###########
 

@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 from opera_utils import group_by_burst
 
-from dolphin.utils import flatten
+from dolphin.utils import flatten, full_suffix
 from dolphin.workflows import config, displacement
 
 pytestmark = pytest.mark.filterwarnings(
@@ -42,9 +42,16 @@ def test_displacement_run_single(
         assert paths.stitched_amp_dispersion_file.exists()
         assert paths.unwrapped_paths is not None
         assert paths.conncomp_paths is not None
+        assert paths.timeseries_paths is not None
         assert all(p.exists() for p in paths.conncomp_paths)
         assert all(p.exists() for p in paths.unwrapped_paths)
+        assert all(full_suffix(p) == ".unw.tif" for p in paths.unwrapped_paths)
         assert all(p.exists() for p in paths.conncomp_paths)
+        assert all(p.exists() for p in paths.timeseries_paths)
+        assert all(full_suffix(p) == ".tif" for p in paths.timeseries_paths)
+
+        # check the network size
+        assert len(paths.unwrapped_paths) > len(paths.timeseries_paths)
 
 
 def test_displacement_run_single_official_opera_naming(
@@ -75,7 +82,10 @@ def test_displacement_run_single_official_opera_naming(
             # },
             unwrap_options={"run_unwrap": True},
         )
-        displacement.run(cfg)
+        paths = displacement.run(cfg)
+        assert paths.timeseries_paths is not None
+        assert all(p.exists() for p in paths.timeseries_paths)
+        assert all(full_suffix(p) == ".tif" for p in paths.timeseries_paths)
 
 
 def run_displacement_stack(
@@ -91,13 +101,16 @@ def run_displacement_stack(
         unwrap_options={"run_unwrap": run_unwrap},
         log_file=Path() / "dolphin.log",
     )
-    displacement.run(cfg)
+    paths = displacement.run(cfg)
+    if run_unwrap:
+        assert paths.timeseries_paths is not None
+        assert all(full_suffix(p) == ".tif" for p in paths.timeseries_paths)
 
 
 def test_stack_with_compSLCs(opera_slc_files, tmpdir):
     with tmpdir.as_cwd():
         p1 = Path("first_run")
-        run_displacement_stack(p1, opera_slc_files)
+        run_displacement_stack(p1, opera_slc_files, run_unwrap=True)
         # Find the compressed SLC files
         new_comp_slcs = sorted(p1.rglob("compressed_*"))
 

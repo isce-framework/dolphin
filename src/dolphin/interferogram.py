@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import itertools
+import logging
 from dataclasses import dataclass
 from os import fspath
 from pathlib import Path
@@ -17,12 +18,11 @@ from scipy.ndimage import uniform_filter
 from tqdm.contrib.concurrent import thread_map
 
 from dolphin import io, utils
-from dolphin._log import get_log
 from dolphin._types import DateOrDatetime, Filename, T
 
 gdal.UseExceptions()
 
-logger = get_log(__name__)
+logger = logging.getLogger(__name__)
 
 DEFAULT_SUFFIX = ".int.vrt"
 
@@ -687,8 +687,6 @@ def estimate_interferometric_correlations(
         Paths to newly written correlation files.
 
     """
-    logger = get_log()
-
     corr_paths: list[Path] = []
     for ifg_path in ifg_paths:
         cor_path = Path(ifg_path).with_suffix(out_suffix)
@@ -710,7 +708,7 @@ def estimate_interferometric_correlations(
             options=options,
         )
 
-    thread_map(process_ifg, zip(ifg_paths, corr_paths), max_workers=num_workers)
+    thread_map(process_ifg, list(zip(ifg_paths, corr_paths)), max_workers=num_workers)
 
     return corr_paths
 

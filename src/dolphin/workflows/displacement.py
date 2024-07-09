@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 from __future__ import annotations
 
+import logging
+
 # import contextlib
 import multiprocessing as mp
 from collections import defaultdict
@@ -8,14 +10,13 @@ from concurrent.futures import ProcessPoolExecutor
 from datetime import datetime
 from os import PathLike
 from pathlib import Path
-from pprint import pformat
 from typing import Mapping, NamedTuple, Sequence
 
 from opera_utils import group_by_burst, group_by_date  # , get_dates
 from tqdm.auto import tqdm
 
 from dolphin import __version__, io, timeseries, utils
-from dolphin._log import get_log, log_runtime
+from dolphin._log import log_runtime, setup_logging
 from dolphin.atmosphere import estimate_ionospheric_delay, estimate_tropospheric_delay
 from dolphin.workflows import CallFunc
 
@@ -23,7 +24,7 @@ from . import stitching_bursts, unwrapping, wrapped_phase
 from ._utils import _create_burst_cfg, _remove_dir_if_empty
 from .config import DisplacementWorkflow  # , TimeseriesOptions
 
-logger = get_log(__name__)
+logger = logging.getLogger(__name__)
 
 
 class OutputPaths(NamedTuple):
@@ -38,6 +39,7 @@ class OutputPaths(NamedTuple):
     stitched_shp_count_file: Path
     unwrapped_paths: list[Path] | None
     conncomp_paths: list[Path] | None
+    timeseries_paths: list[Path] | None
     tropospheric_corrections: list[Path] | None
     ionospheric_corrections: list[Path] | None
 
@@ -58,9 +60,12 @@ def run(
         Enable debug logging, by default False.
 
     """
+    if cfg.log_file is None:
+        cfg.log_file = cfg.work_directory / "dolphin.log"
     # Set the logging level for all `dolphin.` modules
-    logger = get_log(name="dolphin", debug=debug, filename=cfg.log_file)
-    logger.debug(pformat(cfg.model_dump()))
+    setup_logging(debug=debug, filename=cfg.log_file)
+    # TODO: need to pass the cfg filename for the logger
+    logger.debug(cfg.model_dump())
 
     if not cfg.worker_settings.gpu_enabled:
         utils.disable_gpu()
@@ -224,6 +229,7 @@ def run(
             stitched_shp_count_file=stitched_shp_count_file,
             unwrapped_paths=None,
             conncomp_paths=None,
+            timeseries_paths=None,
             tropospheric_corrections=None,
             ionospheric_corrections=None,
         )
@@ -248,7 +254,7 @@ def run(
     if len(unwrapped_paths) > 1 and (ts_opts.run_inversion or ts_opts.run_velocity):
         # the output of run_timeseries is not currently used so pre-commit removes it
         # let's add back if we need it
-        timeseries.run(
+        timeseries_paths = timeseries.run(
             unwrapped_paths=unwrapped_paths,
             conncomp_paths=conncomp_paths,
             corr_paths=stitched_cor_paths,
@@ -261,8 +267,9 @@ def run(
             # TODO: do i care to configure block shape, or num threads from somewhere?
             # num_threads=cfg.worker_settings....?
         )
+
     else:
-        pass
+        timeseries_paths = None
 
     # ##############################################
     # 5. Estimate corrections for each interferogram
@@ -345,6 +352,7 @@ def run(
         # to update other products like conncomp
         # unwrapped_paths=inverted_phase_paths,
         conncomp_paths=conncomp_paths,
+        timeseries_paths=timeseries_paths,
         tropospheric_corrections=tropo_paths,
         ionospheric_corrections=iono_paths,
     )

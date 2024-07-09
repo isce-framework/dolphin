@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Annotated, Any, Optional
 
@@ -13,7 +14,6 @@ from pydantic import (
     model_validator,
 )
 
-from dolphin._log import get_log
 from dolphin._types import TropoModel, TropoType
 
 from ._common import (
@@ -33,7 +33,7 @@ __all__ = [
     "CorrectionOptions",
 ]
 
-logger = get_log(__name__)
+logger = logging.getLogger(__name__)
 
 
 # Add a class for troposphere, ionosphere corrections, with geometry files and DEM

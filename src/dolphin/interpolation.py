@@ -1,14 +1,14 @@
+import logging
+
 import numba
 import numpy as np
 from numpy.typing import ArrayLike
 from scipy.interpolate import interp1d
 import pandas as pd
 
-from dolphin._log import get_log
-
 from .similarity import get_circle_idxs
 
-logger = get_log(__name__)
+logger = logging.getLogger(__name__)
 
 
 def interpolate(

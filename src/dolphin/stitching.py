@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import math
 import subprocess
 import tempfile
@@ -18,11 +19,10 @@ from rasterio.warp import transform_bounds
 from tqdm.contrib.concurrent import thread_map
 
 from dolphin import io, utils
-from dolphin._log import get_log
 from dolphin._types import Bbox, Filename
 from dolphin.io import DEFAULT_DATETIME_FORMAT
 
-logger = get_log(__name__)
+logger = logging.getLogger(__name__)
 
 
 def merge_by_date(
@@ -119,7 +119,7 @@ def merge_by_date(
     # loop over the merging in parallel
     thread_map(
         process_date,
-        zip(grouped_images.values(), stitched_acq_times.values()),
+        list(zip(grouped_images.values(), stitched_acq_times.values())),
         max_workers=num_workers,
     )
 

@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 import abc
+import logging
 from queue import Empty, Full, Queue
 from threading import Event, Thread, main_thread
 
-from dolphin._log import get_log
-
-logger = get_log(__name__)
+logger = logging.getLogger(__name__)
 
 _DEFAULT_TIMEOUT = 0.5
 
