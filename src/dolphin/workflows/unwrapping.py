@@ -2,17 +2,18 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Sequence
 
 from dolphin import io, stitching, unwrap
-from dolphin._log import get_log, log_runtime
+from dolphin._log import log_runtime
 from dolphin._overviews import ImageType, create_overviews
 from dolphin._types import PathOrStr
 
 from .config import UnwrapOptions
 
-logger = get_log(__name__)
+logger = logging.getLogger(__name__)
 
 
 @log_runtime

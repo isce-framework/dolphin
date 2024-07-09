@@ -5,6 +5,7 @@ Initially based on [@Ansari2017SequentialEstimatorEfficient].
 
 from __future__ import annotations
 
+import logging
 from itertools import chain
 from os import fspath
 from pathlib import Path
@@ -13,7 +14,6 @@ from typing import Optional
 from osgeo_utils import gdal_calc
 
 from dolphin import io
-from dolphin._log import get_log
 from dolphin._types import Filename
 from dolphin.io import VRTStack
 from dolphin.stack import MiniStackPlanner
@@ -21,7 +21,7 @@ from dolphin.stack import MiniStackPlanner
 from .config import ShpMethod
 from .single import run_wrapped_phase_single
 
-logger = get_log(__name__)
+logger = logging.getLogger(__name__)
 
 __all__ = ["run_wrapped_phase_sequential"]
 

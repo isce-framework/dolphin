@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 import contextlib
+import logging
 from pathlib import Path
-
-from dolphin._log import get_log
 
 from .config import DisplacementWorkflow
 
-logger = get_log(__name__)
+logger = logging.getLogger(__name__)
 
 
 def _create_burst_cfg(

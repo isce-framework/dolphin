@@ -1,15 +1,15 @@
 from __future__ import annotations
 
+import logging
 from os import fspath
 from pathlib import Path
 
 import rasterio as rio
 
 from dolphin import io
-from dolphin._log import get_log
 from dolphin._types import Filename
 
-logger = get_log(__name__)
+logger = logging.getLogger(__name__)
 
 
 def create_combined_mask(

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from pprint import pformat
 
@@ -7,11 +8,13 @@ import opera_utils
 
 import dolphin.ps
 from dolphin import __version__
-from dolphin._log import get_log, log_runtime
+from dolphin._log import log_runtime, setup_logging
 from dolphin.io import VRTStack
 from dolphin.utils import get_max_memory_usage
 
 from .config import PsWorkflow
+
+logger = logging.getLogger(__name__)
 
 
 @log_runtime
@@ -34,7 +37,7 @@ def run(
 
     """
     # Set the logging level for all `dolphin.` modules
-    logger = get_log(name="dolphin", debug=debug, filename=cfg.log_file)
+    setup_logging(debug=debug, filename=cfg.log_file)
     logger.debug(pformat(cfg.model_dump()))
 
     output_file_list = [
