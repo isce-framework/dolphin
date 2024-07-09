@@ -119,8 +119,17 @@ def run(
     input_dates = _get_input_dates(
         input_file_list, is_compressed, cfg.input_options.cslc_date_fmt
     )
+    manual_reference_dates = cfg.interferogram_network.reference_dates
+    manual_reference_idxs = (
+        _get_nearest_idxs([dtup[0] for dtup in input_dates], manual_reference_dates)
+        if manual_reference_dates
+        else None
+    )
+
     reference_date, reference_idx = _get_reference_date_idx(
-        input_file_list, is_compressed, input_dates
+        input_file_list,
+        is_compressed,
+        input_dates,
     )
 
     ministack_planner = stack.MiniStackPlanner(
@@ -129,7 +138,6 @@ def run(
         is_compressed=is_compressed,
         output_folder=pl_path,
         max_num_compressed=cfg.phase_linking.max_num_compressed,
-        reference_date=reference_date,
         reference_idx=reference_idx,
     )
 
@@ -165,6 +173,7 @@ def run(
                 slc_vrt_file=vrt_stack.outfile,
                 ministack_planner=ministack_planner,
                 ministack_size=cfg.phase_linking.ministack_size,
+                manual_reference_idxs=manual_reference_idxs,
                 half_window=cfg.phase_linking.half_window.model_dump(),
                 strides=strides,
                 use_evd=cfg.phase_linking.use_evd,
@@ -200,8 +209,13 @@ def run(
         )
 
     logger.info(f"Creating virtual interferograms from {len(phase_linked_slcs)} files")
+    # TODO: with manual indexes, this may be split into 2 and redone
     ifg_file_list = create_ifgs(
-        ifg_network, phase_linked_slcs, any(is_compressed), reference_date
+        ifg_network,
+        phase_linked_slcs,
+        any(is_compressed),
+        reference_date,
+        manual_reference_idxs,
     )
     return (
         ifg_file_list,
@@ -218,6 +232,7 @@ def create_ifgs(
     phase_linked_slcs: Sequence[Path],
     contained_compressed_slcs: bool,
     reference_date: datetime.datetime,
+    manual_reference_idxs: Sequence[int] | None = None,
     dry_run: bool = False,
 ) -> list[Path]:
     """Create the list of interferograms for the `phase_linked_slcs`.
@@ -377,10 +392,28 @@ def _get_input_dates(
     # For any that aren't compressed, take the first date.
     # this is because the official product name of OPERA/Sentinel1 has both
     # "acquisition_date" ... "generation_date" in the filename
+    # For compressed, we want the first 3 dates: (base phase, start, end)
     # TODO: this is a bit hacky, perhaps we can make this some input option
     # so that the user can specify how to get dates from their files (or even
     # directly pass in dates?)
     return [
-        dates[:1] if not is_comp else dates
+        dates[:1] if not is_comp else dates[:3]
         for dates, is_comp in zip(input_dates, is_compressed)
     ]
+
+
+def _get_nearest_idxs(
+    input_dates: Sequence[datetime.datetime],
+    selected_dates: Sequence[datetime.datetime],
+) -> list[int]:
+    """Find the indices nearest to `selected_dates` within `input_dates`."""
+    nearest_idxs = []
+
+    for selected_date in selected_dates:
+        nearest_idx = min(
+            range(len(input_dates)),
+            key=lambda i: abs((input_dates[i] - selected_date).total_seconds()),
+        )
+        nearest_idxs.append(nearest_idx)
+
+    return nearest_idxs
