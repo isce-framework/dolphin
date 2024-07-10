@@ -24,7 +24,7 @@ NODATA_VALUES = {"ps": 255, "amp_dispersion": 0.0, "amp_mean": 0.0}
 
 FILE_DTYPES = {"ps": np.uint8, "amp_dispersion": np.float32, "amp_mean": np.float32}
 _EXTRA_COMPRESSION = {
-    "significant_bits": 10,
+    "keep_bits": 10,
     "predictor": 3,
 }
 REPACK_OPTIONS = {
@@ -281,7 +281,7 @@ def multilook_ps_files(
     ps_mask_file: Filename,
     amp_dispersion_file: Filename,
 ) -> tuple[Path, Path]:
-    """Create a multilooked version of the full-res PS mask/ampltiude dispersion.
+    """Create a multilooked version of the full-res PS mask/amplitude dispersion.
 
     Parameters
     ----------
