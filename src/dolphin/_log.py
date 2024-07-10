@@ -49,7 +49,8 @@ def setup_logging(debug: bool = False, filename: PathOrStr | None = None):
 
     if filename:
         config["loggers"]["dolphin"]["handlers"].append("file")
-        config["handlers"]["file"]["filename"] = filename
+        config["handlers"]["file"]["filename"] = os.fspath(filename)
+        Path(filename).parent.mkdir(exist_ok=True, parents=True)
 
     if "filename" not in config["handlers"]["file"]:
         # We never passed in a filename: don't log to a file
