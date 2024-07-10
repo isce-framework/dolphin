@@ -141,6 +141,8 @@ def run(
         reference_idx=reference_idx,
     )
 
+    # ipdb.set_trace()
+
     # Make the nodata mask from the polygons, if we're using OPERA CSLCs
     non_compressed_slcs = [
         f for f, is_comp in zip(input_file_list, is_compressed) if not is_comp
@@ -210,13 +212,16 @@ def run(
 
     logger.info(f"Creating virtual interferograms from {len(phase_linked_slcs)} files")
     # TODO: with manual indexes, this may be split into 2 and redone
-    ifg_file_list = create_ifgs(
-        ifg_network,
-        phase_linked_slcs,
-        any(is_compressed),
-        reference_date,
-        manual_reference_idxs,
-    )
+    ifg_file_list: list[Path] = []
+    for _idx in manual_reference_idxs:
+        ifg_file_list.extend(
+            create_ifgs(
+                ifg_network,
+                phase_linked_slcs,
+                any(is_compressed),
+                reference_date,
+            )
+        )
     return (
         ifg_file_list,
         comp_slc_list,
@@ -232,7 +237,6 @@ def create_ifgs(
     phase_linked_slcs: Sequence[Path],
     contained_compressed_slcs: bool,
     reference_date: datetime.datetime,
-    manual_reference_idxs: Sequence[int] | None = None,
     dry_run: bool = False,
 ) -> list[Path]:
     """Create the list of interferograms for the `phase_linked_slcs`.
@@ -408,6 +412,12 @@ def _get_nearest_idxs(
 ) -> list[int]:
     """Find the indices nearest to `selected_dates` within `input_dates`."""
     nearest_idxs = []
+    sorted_inputs = sorted(input_dates)
+    for d in selected_dates:
+        if not sorted_inputs[0] <= d <= sorted_inputs[-1]:
+            msg = f"Request {d} falls outside of input range: "
+            msg += f"{sorted_inputs[0]}, {sorted_inputs[-1]}"
+            raise ValueError(msg)
 
     for selected_date in selected_dates:
         nearest_idx = min(

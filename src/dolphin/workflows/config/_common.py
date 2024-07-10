@@ -150,9 +150,10 @@ class InterferogramNetwork(BaseModel, extra="forbid"):
         None,
         description=(
             "Specify a multi-reference network: list the date/datetimes in the input"
-            " SLC stack which you would like to make single-reference interferograms for."
-            " This allows you to specify more than one network for, e.g., a large earthquake"
-            " event."
+            " SLC stack which you would like to make single-reference interferograms"
+            " for. This allows you to specify more than one network for, e.g., "
+            " a large earthquake event. If passing strings, formats accepted are"
+            " YYYY-MM-DD[T]HH:MM[:SS[.ffffff]][Z or [±]HH[:]MM], or YYYY-MM-DD"
         ),
     )
 

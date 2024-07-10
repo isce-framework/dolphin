@@ -106,7 +106,7 @@ def run_wrapped_phase_sequential(
                 output_folder=cur_output_folder,
                 half_window=half_window,
                 strides=strides,
-                reference_idx=ministack.reference_idx,
+                compressed_reference_idx=ministack.reference_idx,
                 use_evd=use_evd,
                 beta=beta,
                 mask_file=mask_file,
