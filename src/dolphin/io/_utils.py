@@ -116,7 +116,7 @@ def _format_for_gdal(options: dict[str, str]) -> list[str]:
 def repack_raster(
     raster_path: Path,
     output_dir: Path | None = None,
-    significant_bits: int | None = None,
+    keep_bits: int | None = None,
     **output_options,
 ) -> Path:
     """Repack a single raster file with GDAL Translate using provided options.
@@ -127,7 +127,7 @@ def repack_raster(
         Path to the input raster file.
     output_dir : Path, optional
         Directory to save the repacked rasters or None for in-place repacking.
-    significant_bits : int, optional
+    keep_bits : int, optional
         Number of bits to preserve in mantissa. Defaults to None.
         Lower numbers will truncate the mantissa more and enable more compression.
     **output_options
@@ -158,8 +158,8 @@ def repack_raster(
         with rio.open(output_path, "w", **profile) as dst:
             for i in range(1, src.count + 1):
                 data = src.read(i)
-                if significant_bits is not None:
-                    round_mantissa(data, significant_bits)
+                if keep_bits is not None:
+                    round_mantissa(data, keep_bits)
                 dst.write(data, i)
 
     if output_dir is None:
@@ -173,7 +173,7 @@ def repack_rasters(
     raster_files: list[Path],
     output_dir: Path | None = None,
     num_threads: int = 4,
-    significant_bits: int | None = None,
+    keep_bits: int | None = None,
     **output_options,
 ):
     """Recreate and compress a list of raster files.
@@ -189,7 +189,7 @@ def repack_rasters(
         Directory to save the processed rasters or None for in-place processing.
     num_threads : int, optional
         Number of threads to use (default is 4).
-    significant_bits : int, optional
+    keep_bits : int, optional
         Number of bits to preserve in mantissa. Defaults to None.
         Lower numbers will truncate the mantissa more and enable more compression
     **output_options
@@ -206,7 +206,7 @@ def repack_rasters(
 
     thread_map(
         lambda raster: repack_raster(
-            raster, output_dir, significant_bits=significant_bits, **output_options
+            raster, output_dir, keep_bits=keep_bits, **output_options
         ),
         raster_files,
         max_workers=num_threads,
