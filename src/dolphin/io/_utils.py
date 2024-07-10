@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import numpy as np
-from numpy.typing import NDArray
 
 if TYPE_CHECKING:
     from dolphin._types import Index
@@ -15,6 +14,7 @@ __all__ = [
     "get_gtiff_options",
     "repack_raster",
     "repack_rasters",
+    "round_mantissa",
 ]
 
 
@@ -214,61 +214,51 @@ def repack_rasters(
     )
 
 
-def round_mantissa(z: NDArray, significant_bits=10, truncate: bool = False):
-    """Zero out bits in mantissa of elements of array in place.
+def round_mantissa(z: np.ndarray, keep_bits=10) -> None:
+    """Zero out mantissa bits of elements of array in place.
 
-    Attempts to round the floating point numbers zeroing.
+    Drops a specified number of bits from the floating point mantissa,
+    leaving an array more amenable to compression.
 
     Parameters
     ----------
-    z : numpy.array
+    z : numpy.ndarray
         Real or complex array whose mantissas are to be zeroed out
-    significant_bits : int, optional
+    keep_bits : int, optional
         Number of bits to preserve in mantissa. Defaults to 10.
         Lower numbers will truncate the mantissa more and enable
         more compression.
-    truncate : bool, optional
-        Instead of attempting to round, simply truncate the mantissa.
-        Default = False
+
+    References
+    ----------
+    https://numcodecs.readthedocs.io/en/v0.12.1/_modules/numcodecs/bitround.html
 
     """
+    max_bits = {
+        "float16": 10,
+        "float32": 23,
+        "float64": 52,
+    }
     # recurse for complex data
     if np.iscomplexobj(z):
-        round_mantissa(z.real, significant_bits)
-        round_mantissa(z.imag, significant_bits)
+        round_mantissa(z.real, keep_bits)
+        round_mantissa(z.imag, keep_bits)
         return
 
-    if not issubclass(z.dtype.type, np.floating):
-        err_str = "argument z is not complex float or float type"
-        raise TypeError(err_str)
+    if not z.dtype.kind == "f" or z.dtype.itemsize > 8:
+        raise TypeError("Only float arrays (16-64bit) can be bit-rounded")
 
-    mant_bits = np.finfo(z.dtype).nmant
-    float_bytes = z.dtype.itemsize
-
-    if significant_bits == mant_bits:
-        return
-
-    if not 0 < significant_bits <= mant_bits:
-        err_str = f"Require 0 < {significant_bits=} <= {mant_bits}"
-        raise ValueError(err_str)
-
-    # create integer value whose binary representation is one for all bits in
-    # the floating point type.
-    allbits = (1 << (float_bytes * 8)) - 1
-
-    # Construct bit mask by left shifting by nzero_bits and then truncate.
-    # This works because IEEE 754 specifies that bit order is sign, then
-    # exponent, then mantissa.  So we zero out the least significant mantissa
-    # bits when we AND with this mask.
-    nzero_bits = mant_bits - significant_bits
-    bitmask = (allbits << nzero_bits) & allbits
-
-    utype = np.dtype(f"u{float_bytes}")
-    # view as uint type (can not mask against float)
-    u = z.view(utype)
-
-    if truncate is False:
-        round_mask = 1 << (nzero_bits - 1)
-        u += round_mask  # Add the rounding mask before applying the bitmask
-    # bitwise-and in-place to mask
-    u &= bitmask
+    bits = max_bits[str(z.dtype)]
+    # cast float to int type of same width (preserve endianness)
+    a_int_dtype = np.dtype(z.dtype.str.replace("f", "i"))
+    all_set = np.array(-1, dtype=a_int_dtype)
+    if keep_bits == bits:
+        return z
+    if keep_bits > bits:
+        raise ValueError("keep_bits too large for given dtype")
+    b = z.view(a_int_dtype)
+    maskbits = bits - keep_bits
+    mask = (all_set >> maskbits) << maskbits
+    half_quantum1 = (1 << (maskbits - 1)) - 1
+    b += ((b >> maskbits) & 1) + half_quantum1
+    b &= mask

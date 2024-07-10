@@ -281,7 +281,7 @@ def multilook_ps_files(
     ps_mask_file: Filename,
     amp_dispersion_file: Filename,
 ) -> tuple[Path, Path]:
-    """Create a multilooked version of the full-res PS mask/ampltiude dispersion.
+    """Create a multilooked version of the full-res PS mask/amplitude dispersion.
 
     Parameters
     ----------
