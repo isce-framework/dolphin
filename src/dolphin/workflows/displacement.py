@@ -89,14 +89,6 @@ def run(
     else:
         grouped_amp_mean_files = defaultdict(list)
 
-    # if len(cfg.correction_options.troposphere_files) > 0:
-    #     grouped_tropo_files = group_by_date(
-    #         cfg.correction_options.troposphere_files,
-    #         file_date_fmt=cfg.correction_options.tropo_date_fmt,
-    #     )
-    # else:
-    #     grouped_tropo_files = None
-
     grouped_iono_files: Mapping[tuple[datetime], Sequence[str | PathLike[str]]] = {}
     if len(cfg.correction_options.ionosphere_files) > 0:
         for fmt in cfg.correction_options._iono_date_fmt:
