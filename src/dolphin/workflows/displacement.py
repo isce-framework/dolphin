@@ -305,7 +305,7 @@ def run(
                 "DEM file is not given, skip estimating tropospheric corrections..."
             )
         else:
-            if not cfg.correction_options.troposphere_files is None:
+            if cfg.correction_options.troposphere_files is not None:
                 tropo_paths = estimate_tropospheric_delay(
                     ifg_file_list=ifg_filenames,
                     troposphere_files=cfg.correction_options.troposphere_files,
