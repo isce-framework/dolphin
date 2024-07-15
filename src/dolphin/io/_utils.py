@@ -85,8 +85,6 @@ def get_gtiff_options(
         "blockxsize": str(chunk_size),
         "blockysize": str(chunk_size),
         "compress": compression_type,
-        "copy_src_overviews": "yes",
-        "compress_overview": compression_type,
     }
     if zlevel is not None:
         options["zlevel"] = str(zlevel)

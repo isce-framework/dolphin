@@ -236,14 +236,10 @@ def calc_ps_block(
         # ignore the warning about nansum/nanmean of empty slice
         warnings.simplefilter("ignore", category=RuntimeWarning)
 
-        # mean = np.nanmean(stack_mag, axis=0)
+        mean = np.nanmean(stack_mag, axis=0)
         std_dev = np.nanstd(stack_mag, axis=0)
-        mean_sq = np.nanmean(stack_mag**2, axis=0)
-        R_hat = np.sqrt(mean_sq - 2 * std_dev)
-        mean = np.sqrt(mean_sq)
         count = np.count_nonzero(~np.isnan(stack_mag), axis=0)
-        amp_disp = std_dev / R_hat
-        # amp_disp = std_dev / mean
+        amp_disp = std_dev / mean
     # Mask out the pixels with too few valid pixels
     amp_disp[count < min_count] = np.nan
     # replace nans/infinities with 0s, which will mean nodata
