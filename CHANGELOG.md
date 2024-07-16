@@ -1,5 +1,16 @@
 # Changelog
 
+## [Unreleased](https://github.com/isce-framework/dolphin/compare/v0.21.0...main)
+
+## [0.21.0](https://github.com/isce-framework/dolphin/compare/v0.20.0...v0.21.0)
+
+### Added
+- Continuous deployment Github action workflow to publish to pypi
+- Conversion from NetCDF tropospheric correction files
+
+### Changed
+- Round mantissa bits instead of truncate, call the argument `keep_bits` for clarity
+
 ## [0.20.0](https://github.com/isce-framework/dolphin/compare/v0.19.0...v0.20.0)
 
 ### Added
