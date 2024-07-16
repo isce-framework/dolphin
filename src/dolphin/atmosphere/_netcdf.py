@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 ###########
 # Mostly inherited from RAiDER
 
-# __all__ = ["delay_from_netcdf"]
+__all__ = ["delay_from_netcdf"]
 
 
 def delay_from_netcdf(
