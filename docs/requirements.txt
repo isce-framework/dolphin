@@ -1,5 +1,5 @@
-# For citations:
 # mkdocs requirements
+markdown # for mdx_bib
 mkdocs
 mkdocs-gen-files
 mkdocs-jupyter
@@ -7,4 +7,5 @@ mkdocs-literate-nav
 mkdocs-material
 mkdocs-section-index
 mkdocstrings[python]
+pybtex # for mdx_bib
 pymdown-extensions
