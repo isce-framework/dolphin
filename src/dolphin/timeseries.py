@@ -402,7 +402,7 @@ def estimate_velocity(
     Returns
     -------
     velocity : np.array 2D
-        The estimated velocity in (unw unit) / year.
+        The estimated velocity in (unw unit) / year calculated as 365.25 * rad/day.
         E.g. if the unwrapped phase is in radians, the velocity is in rad/year.
 
     """
@@ -467,6 +467,10 @@ def create_velocity(
     add_overviews: bool = True,
 ) -> None:
     """Perform pixel-wise (weighted) linear regression to estimate velocity.
+
+    The units of `output_file` are in (unwrapped units) / year.
+    E.g. if the files in `unw_file_list` are in radians, the output velocity
+    is in radians / year, which is calculated as 365.25 * radians / day.
 
     Parameters
     ----------
