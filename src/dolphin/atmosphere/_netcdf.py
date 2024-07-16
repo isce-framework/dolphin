@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 ###########
 # Mostly inherited from RAiDER
 
-__all__ = ["delay_from_netcdf"]
+# __all__ = ["delay_from_netcdf"]
 
 
 def delay_from_netcdf(
@@ -57,7 +57,11 @@ def delay_from_netcdf(
     """
     # Load CRS from weather model file
     with xarray.load_dataset(weather_model_file) as ds:
-
+        # The dataset in the original netcdf that is download includes:
+        # t, z, q and lnsp
+        # The converted netcdf to the format usable for our purpose consists of
+        # calculated datasets of hydro and wet. so in the following we check for
+        # the netcdf file to include those data and if not, we convert it
         if "hydro" in ds:
             wmodel_file = weather_model_file
         else:
@@ -84,7 +88,6 @@ def delay_from_netcdf(
     if height_levels is None:
         height_levels = wm_levels
 
-    # TODO: expose this as library function
     ds = _get_delays_on_cube(
         dt, wmodel_file, wm_proj, SNWE, height_levels, out_epsg=out_proj
     )
