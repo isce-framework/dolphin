@@ -61,7 +61,7 @@ class CorrectionOptions(BaseModel, extra="forbid"):
     )
 
     tropo_model: TropoModel = Field(
-        TropoModel.ERA5, description="source of the atmospheric model."
+        TropoModel.ECMWF, description="source of the atmospheric model."
     )
 
     tropo_delay_type: TropoType = Field(
