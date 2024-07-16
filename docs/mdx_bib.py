@@ -1,3 +1,4 @@
+# Source: https://github.com/bobmyhill/mdx_bib/blob/6b13bbbc407617a5e93ed0f8a0e5e4c52f73f677/mdx_bib.py
 import re
 import string
 from collections import Counter, OrderedDict
