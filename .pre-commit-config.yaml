@@ -38,3 +38,4 @@ repos:
         - types-pkg_resources
         - types-requests
         - "pydantic>=2.4"
+        - types-markdown
