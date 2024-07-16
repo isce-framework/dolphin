@@ -7,8 +7,7 @@ from pathlib import Path
 
 import numpy as np
 import xarray
-from opera_utils._helpers import reproject_coordinates
-from pyproj import CRS
+from pyproj import CRS, Transformer
 from shapely.geometry import box
 
 import dolphin.atmosphere._utils as utils
@@ -383,7 +382,8 @@ class WeatherModel(ABC):
 
             wm_proj = self._proj
             xs, ys = [xmin, xmin, xmax, xmax], [ymin, ymax, ymin, ymax]
-            lons, lats = reproject_coordinates(xs, ys, wm_proj.to_epsg(), 4326)
+            t = Transformer.from_crs(wm_proj.to_epsg(), 4326, always_xy=True)
+            lons, lats = t.transform(xs, ys)
 
             ## projected weather models may not be aligned N/S
             ## should only matter for warning messages
