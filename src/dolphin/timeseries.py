@@ -375,7 +375,7 @@ def estimate_velocity_pixel(x: ArrayLike, y: ArrayLike, w: ArrayLike) -> Array:
     Returns
     -------
     velocity : np.array, 0D
-        The estimated velocity in (unw unit) / day.
+        The estimated velocity in (unw unit) / year.
 
     """
     # Jax polyfit will grab the first *2* dimensions of y to solve in a batch
@@ -402,8 +402,8 @@ def estimate_velocity(
     Returns
     -------
     velocity : np.array 2D
-        The estimated velocity in (unw unit) / day.
-        E.g. if the unwrapped phase is in radians, the velocity is in rad/day.
+        The estimated velocity in (unw unit) / year calculated as 365.25 * rad/day.
+        E.g. if the unwrapped phase is in radians, the velocity is in rad/year.
 
     """
     # TODO: weighted least squares using correlation?
@@ -427,7 +427,9 @@ def estimate_velocity(
         velos = vmap(estimate_velocity_pixel, in_axes=(None, -1, -1))(
             x_arr, unw_pixels, weights_pixels
         )
-    return velos.reshape(n_rows, n_cols)
+    # Currently `velos` is in units / day,
+    days_per_year = 365.25
+    return velos.reshape(n_rows, n_cols) * days_per_year
 
 
 def datetime_to_float(dates: Sequence[DateOrDatetime]) -> np.ndarray:
@@ -465,6 +467,10 @@ def create_velocity(
     add_overviews: bool = True,
 ) -> None:
     """Perform pixel-wise (weighted) linear regression to estimate velocity.
+
+    The units of `output_file` are in (unwrapped units) / year.
+    E.g. if the files in `unw_file_list` are in radians, the output velocity
+    is in radians / year, which is calculated as 365.25 * radians / day.
 
     Parameters
     ----------

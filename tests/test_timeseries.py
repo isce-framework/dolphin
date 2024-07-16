@@ -13,7 +13,8 @@ NUM_DATES = 10
 DT = 12
 START_DATE = datetime(2020, 1, 1)
 SHAPE = 50, 50
-VELO_RAD_PER_DAY = 0.2  # rad / day
+VELO_RAD_PER_YEAR = 5.0
+VELO_RAD_PER_DAY = VELO_RAD_PER_YEAR / 365.25
 
 
 def make_sar_dates():
@@ -203,7 +204,7 @@ class TestVelocity:
         for i in range(SHAPE[0]):
             for j in range(SHAPE[1]):
                 out[i, j] = np.polyfit(x_arr, sar_phases[:, i, j], 1)[0]
-        return out
+        return out * 365.25
 
     def test_stack(self, data, x_arr, expected_velo):
         sar_dates, sar_phases, ifg_date_pairs, ifgs = data
