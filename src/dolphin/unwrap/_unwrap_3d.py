@@ -45,12 +45,12 @@ def unwrap_spurt(
     gen_settings = GeneralSettings(
         output_folder=output_path,
         intermediate_folder=scratchdir,
-        **options.general_settings.model_dump(by_alias=True),
+        **options.general_settings.model_dump(),
     )
 
-    tile_settings = TilerSettings(**options.tiler_settings.model_dump(by_alias=True))
-    slv_settings = SolverSettings(**options.solver_settings.model_dump(by_alias=True))
-    mrg_settings = MergerSettings(**options.merger_settings.model_dump(by_alias=True))
+    tile_settings = TilerSettings(**options.tiler_settings.model_dump())
+    slv_settings = SolverSettings(**options.solver_settings.model_dump())
+    mrg_settings = MergerSettings(**options.merger_settings.model_dump())
 
     # Using default Hop3Graph
     # TODO: this is a weird hack.. if there are 15 dates, there are 14 interferograms

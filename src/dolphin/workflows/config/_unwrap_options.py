@@ -155,11 +155,19 @@ class SpurtTilerSettings(BaseModel):
 
 
 class SpurtSolverSettings(BaseModel):
-    worker_count: int = Field(
+    t_worker_count: int = Field(
         default=1,
+        alias="t_worker_count",
         description=(
             "Number of workers for temporal unwrapping in parallel. Set value to <=0 to"
             " let workflow use default workers (ncpus - 1)."
+        ),
+    )
+    s_worker_count: int = Field(
+        default=1,
+        description=(
+            "Number of workers for spatial unwrapping in parallel. Set value to <=0"
+            " to let workflow use (ncpus - 1)."
         ),
     )
     links_per_batch: int = Field(
@@ -170,25 +178,22 @@ class SpurtSolverSettings(BaseModel):
         ),
         gt=0,
     )
-    temp_cost_type: Literal["constant", "distance", "centroid"] = Field(
+    t_cost_type: Literal["constant", "distance", "centroid"] = Field(
         default="constant",
         description="Temporal unwrapping costs.",
-        alias="t_cost_type",
     )
-    temp_cost_scale: float = Field(
+    t_cost_scale: float = Field(
         default=100.0,
         description="Scale factor used to compute edge costs for temporal unwrapping.",
         gt=0.0,
-        alias="t_cost_scale",
     )
-    spatial_cost_type: Literal["constant", "distance", "centroid"] = Field(
+    s_cost_type: Literal["constant", "distance", "centroid"] = Field(
         default="constant", description="Spatial unwrapping costs.", alias="s_cost_type"
     )
-    spatial_cost_scale: float = Field(
+    s_cost_scale: float = Field(
         default=100.0,
         description="Scale factor used to compute edge costs for spatial unwrapping.",
         gt=0.0,
-        alias="s_cost_scale",
     )
 
 
