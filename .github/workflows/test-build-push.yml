@@ -43,9 +43,8 @@ jobs:
               - conda-forge
       - name: Install
         run: |
-          pip install  "snaphu>=0.4.0" "opera-utils>=0.4.1" \
-            git+https://github.com/isce-framework/tophu@main \
-            git+https://github.com/isce-framework/spurt@main
+          pip install "snaphu>=0.4.0" "opera-utils>=0.4.1" git+https://github.com/isce-framework/spurt@main
+          pip install --no-deps git+https://github.com/isce-framework/tophu@main
           pip install --no-deps .
       - name: Install test dependencies
         run: |
