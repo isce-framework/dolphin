@@ -1,13 +1,13 @@
 # These are the packages easily-installable through pip
-h5py >=3.6
-jax >=0.4.19
-numba >=0.56
-numpy >=1.23
-opera-utils >=0.4.1
-pydantic >=2.1
-pyproj >=3.3
-rasterio >=1.3
-ruamel_yaml >=0.15
-scipy >=1.9
-threadpoolctl >=3.0
-tqdm >=4.60
+h5py>=3.6
+jax>=0.4.19
+numba>=0.56
+numpy>=1.23
+opera-utils>=0.4.1
+pydantic>=2.1
+pyproj>=3.3
+rasterio>=1.3
+ruamel_yaml>=0.15
+scipy>=1.9
+threadpoolctl>=3.0
+tqdm>=4.60

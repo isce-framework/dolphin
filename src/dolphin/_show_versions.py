@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import importlib
 import platform
+import re
 import sys
 from importlib.metadata import metadata
 from typing import Optional
@@ -79,7 +80,7 @@ def _get_deps_info() -> dict[str, Optional[str]]:
     meta = metadata("dolphin")
     # Extract dependencies from 'Requires-Dist' field
     deps = [
-        dep.split()[0]
+        re.split(r"[><=~!]", dep.split()[0])[0]
         for dep in meta.get_all("Requires-Dist", [])
         if "extra" not in dep
     ]
