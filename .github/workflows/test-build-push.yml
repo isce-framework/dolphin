@@ -28,10 +28,6 @@ jobs:
     defaults:
       run:
         shell: bash -l {0}
-    # Add GITHUB_TOKEN permissions to clone private repos.
-    # TODO Remove this when whirlwind becomes public.
-    permissions:
-      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -45,11 +41,6 @@ jobs:
           condarc: |
             channels:
               - conda-forge
-      # XXX The whirlwind repo is currently private and requires a C++20 compiler so
-      # let's install it separately from other dependencies.
-      - name: Install whirlwind
-          micromamba install -c conda-forge --override-channels cxx-compiler
-          pip install git+https://${{ secrets.GITHUB_TOKEN }}@github.com/isce-framework/whirlwind.git@main
       - name: Install
         run: |
           pip install --no-deps "snaphu>=0.4.0" "opera-utils>=0.4.1" git+https://github.com/isce-framework/tophu@main
