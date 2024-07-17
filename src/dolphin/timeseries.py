@@ -8,7 +8,7 @@ from typing import Callable, Optional, Protocol, Sequence, TypeVar
 
 import jax.numpy as jnp
 import numpy as np
-from jax import Array, jit, vmap
+from jax import Array, jit, lax, vmap
 from numpy.typing import ArrayLike
 from opera_utils import get_dates
 from scipy import ndimage
@@ -924,3 +924,84 @@ def _get_largest_conncomp_mask(
     # Create a mask of pixels with this label
     isin_largest_conncomp = label == largest_idx
     return isin_largest_conncomp
+
+
+@jit
+def l1_objective(A, x, b):
+    return jnp.sum(jnp.abs(A @ x - b))
+
+
+@jit
+def invert_stack_l1(A: ArrayLike, dphi: ArrayLike) -> Array:
+    n_ifgs, n_rows, n_cols = dphi.shape
+
+    # vectorize the solve function to work on 2D and 3D arrays
+    # We are not vectorizing over the A matrix, only the dphi vector
+    # Solve 2d shapes: (nrows, n_ifgs) -> (nrows, n_sar_dates)
+    invert_2d = vmap(irls, in_axes=(None, 1, 1), out_axes=(1, 1))
+    # Solve 3d shapes: (nrows, ncols, n_ifgs) -> (nrows, ncols, n_sar_dates)
+    invert_3d = vmap(invert_2d, in_axes=(None, 2, 2), out_axes=(2, 2))
+    phase, residuals = invert_3d(A, dphi)
+    # Reshape the residuals to be 2D
+    residuals = residuals[0]
+
+    # Add 0 for the reference date to the front
+    phase = jnp.concatenate([jnp.zeros((1, n_rows, n_cols)), phase], axis=0)
+    return phase, residuals
+
+
+@jit
+def irls(
+    A: jnp.ndarray, b: jnp.ndarray, p: float = 1, max_iters: int = 50, tol: float = 1e-5
+) -> tuple[jnp.ndarray, float]:
+    """Minimize |Ax - b|_1 using Iteratively reweighted least squares (IRLS).
+
+    See https://en.wikipedia.org/wiki/Iteratively_reweighted_least_squares for
+    algorithm description
+
+    Parameters
+    ----------
+    A : jnp.ndarray
+        The matrix A in the equation Ax = b.
+    b : jnp.ndarray
+        The vector b in the equation Ax = b.
+    p : float, optional
+        The power parameter for the weights, by default 1.
+    max_iters : int, optional
+        The maximum number of iterations, by default 50.
+    tol : float, optional
+        The tolerance for convergence, by default 1e-5.
+
+    Returns
+    -------
+    tuple[jnp.ndarray, float]
+        A tuple containing:
+    x : Array
+        The solution vector.
+    residual
+        The final residual |Ax - b|_1
+
+    """
+
+    def _l1_objective(A: jnp.ndarray, x: jnp.ndarray, b: jnp.ndarray) -> float:
+        """Calculate the L1 objective."""
+        return jnp.linalg.norm(A @ x - b, ord=1)
+
+    def cond_fun(val):
+        i, x, residual = val
+        return (i < max_iters) & (residual > tol)
+
+    def body_fun(val):
+        i, x, _ = val
+        residual = jnp.abs(b - A @ x) + eps
+        W = jnp.diag(residual ** (p - 2))
+        new_x = jnp.linalg.solve(A.T @ W @ A, A.T @ W @ b)
+        return i + 1, new_x, x, residual
+
+    M, N = A.shape
+    x = jnp.zeros(N, dtype=jnp.float32)
+    eps = jnp.sqrt(jnp.finfo(jnp.float32).eps)
+
+    num_iters, x, residual = lax.while_loop(cond_fun, body_fun, (0, x, 1.0))
+
+    return x, jnp.mean(residual)
