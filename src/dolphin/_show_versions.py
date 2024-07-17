@@ -64,6 +64,7 @@ def _get_opera_info() -> dict[str, Optional[str]]:
         # optionals
         "isce3": _get_version("isce3"),
         "tophu": _get_version("tophu"),
+        "whirlwind": _get_version("whirlwind"),
     }
 
 

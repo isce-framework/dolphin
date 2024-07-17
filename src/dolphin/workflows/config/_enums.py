@@ -24,6 +24,7 @@ class UnwrapMethod(str, Enum):
     ICU = "icu"
     PHASS = "phass"
     SPURT = "spurt"
+    WHIRLWIND = "whirlwind"
 
 
 class CallFunc(str, Enum):

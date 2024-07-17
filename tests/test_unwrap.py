@@ -11,6 +11,7 @@ from dolphin.workflows import SpurtOptions, TophuOptions, UnwrapMethod, UnwrapOp
 
 TOPHU_INSTALLED = importlib.util.find_spec("tophu") is not None
 SPURT_INSTALLED = importlib.util.find_spec("spurt") is not None
+WHIRLWIND_INSTALLED = importlib.util.find_spec("whirlwind") is not None
 
 
 # Dataset has no geotransform, gcps, or rpcs. The identity matrix will be returned.
@@ -303,6 +304,23 @@ class TestSpurt:
 
         to = SpurtOptions()
         unwrap_options = UnwrapOptions(unwrap_method="phass", tophu_options=to)
+        out_path, conncomp_path = dolphin.unwrap.unwrap(
+            ifg_filename=raster_100_by_200,
+            corr_filename=corr_raster,
+            unw_filename=unw_filename,
+            unwrap_options=unwrap_options,
+            nlooks=1,
+        )
+        assert out_path.exists()
+        assert conncomp_path.exists()
+
+
+@pytest.mark.skipif(not WHIRLWIND_INSTALLED, reason="whirlwind package not installed")
+class TestWhirlwind:
+    def test_unwrap_whirlwind(self, tmp_path, raster_100_by_200, corr_raster):
+        unw_filename = tmp_path / "whirlwind-unwrapped.unw.tif"
+
+        unwrap_options = UnwrapOptions(unwrap_method="whirlwind")
         out_path, conncomp_path = dolphin.unwrap.unwrap(
             ifg_filename=raster_100_by_200,
             corr_filename=corr_raster,
