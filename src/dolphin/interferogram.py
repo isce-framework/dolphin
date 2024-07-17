@@ -659,6 +659,7 @@ def estimate_interferometric_correlations(
     out_driver: str = "GTiff",
     out_suffix: str = ".cor.tif",
     options: Sequence[str] = io.DEFAULT_TIFF_OPTIONS,
+    keep_bits: int = 10,
     num_workers: int = 3,
 ) -> list[Path]:
     """Estimate correlations for a sequence of interferograms.
@@ -670,13 +671,16 @@ def estimate_interferometric_correlations(
     ifg_paths : Sequence[Filename]
         Paths to complex interferogram files.
     window_size : tuple[int, int]
-        (row, column) size of window to use for estimate
+        (row, column) size of window to use for estimate.
     out_driver : str, optional
-        Name of output GDAL driver, by default "GTiff"
+        Name of output GDAL driver, by default "GTiff".
     out_suffix : str, optional
         File suffix to use for correlation files, by default ".cor.tif"
     options : list[str], optional
-        GDAL Creation options for the output array
+        GDAL Creation options for the output array.
+    keep_bits : int, optional
+        Number of bits to preserve in mantissa. Defaults to None.
+        Lower numbers will truncate the mantissa more and enable more compression.
     num_workers : int
         Number of threads to use for stitching in parallel.
         Default = 3
@@ -700,6 +704,8 @@ def estimate_interferometric_correlations(
         logger.debug(f"Estimating correlation for {ifg_path}, writing to {cor_path}")
         ifg = io.load_gdal(ifg_path)
         cor = estimate_correlation_from_phase(ifg, window_size=window_size)
+        if keep_bits:
+            io.round_mantissa(cor, keep_bits=keep_bits)
         io.write_arr(
             arr=cor,
             output_name=cor_path,
