@@ -32,7 +32,7 @@ def unwrap_snaphu_py(
     cost: str = "smooth",
     scratchdir: Optional[Filename] = None,
 ) -> tuple[Path, Path]:
-    """Unwrap an interferogram using at multiple scales using `tophu`.
+    """Unwrap an interferogram using `SNAPHU`.
 
     Parameters
     ----------
@@ -42,8 +42,6 @@ def unwrap_snaphu_py(
         Path to input correlation file.
     unw_filename : Filename
         Path to output unwrapped phase file.
-    downsample_factor : tuple[int, int]
-        Downsample the interferograms by this factor to unwrap faster, then upsample
     nlooks : float
         Effective number of looks used to form the input correlation data.
     ntiles : tuple[int, int], optional
@@ -63,7 +61,7 @@ def unwrap_snaphu_py(
         Set wrapped phase/correlation to 0 where mask is 0 before unwrapping.
         If not mask is provided, this is ignored.
         By default True.
-    unw_nodata : float , optional.
+    unw_nodata : float, optional
         If providing `unwrap_callback`, provide the nodata value for your
         unwrapping function.
     ccl_nodata : float, optional

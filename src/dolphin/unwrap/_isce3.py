@@ -28,7 +28,7 @@ def unwrap_isce3(
     ccl_nodata: int = DEFAULT_CCL_NODATA,
     zero_where_masked: bool = False,
 ) -> tuple[Path, Path]:
-    """Unwrap a single interferogram using snaphu, isce3, or tophu.
+    """Unwrap a single interferogram using isce3 or tophu.
 
     Parameters
     ----------
@@ -49,7 +49,7 @@ def unwrap_isce3(
         Nodata value to use in output connected component raster
     unwrap_method : UnwrapMethod or str, optional, default = "phass"
         Choice of unwrapping algorithm to use.
-        Choices: {"icu", "phass"} (snaphu is done by snaphu_pu)
+        Choices: {"icu", "phass"} (snaphu is done by snaphu-py)
 
     Returns
     -------
