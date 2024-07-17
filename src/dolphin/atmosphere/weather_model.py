@@ -12,7 +12,6 @@ from shapely.geometry import box
 
 import dolphin.atmosphere._utils as utils
 import dolphin.atmosphere.model_levels as ml
-from dolphin.interpolation import fillna3d, interpolate_along_axis
 
 logger = logging.getLogger(__name__)
 
@@ -468,15 +467,15 @@ class WeatherModel(ABC):
         new_zs = np.tile(_zlevels, (nx, ny, 1))
 
         # re-assign values to the uniform z
-        self._t = interpolate_along_axis(self._zs, self._t, new_zs, axis=2).astype(
-            np.float32
-        )
-        self._p = interpolate_along_axis(self._zs, self._p, new_zs, axis=2).astype(
-            np.float32
-        )
-        self._e = interpolate_along_axis(self._zs, self._e, new_zs, axis=2).astype(
-            np.float32
-        )
+        self._t = utils.interpolate_along_axis(
+            self._zs, self._t, new_zs, axis=2
+        ).astype(np.float32)
+        self._p = utils.interpolate_along_axis(
+            self._zs, self._p, new_zs, axis=2
+        ).astype(np.float32)
+        self._e = utils.interpolate_along_axis(
+            self._zs, self._e, new_zs, axis=2
+        ).astype(np.float32)
 
         self._zs = _zlevels
         self._xs = np.unique(self._xs)
@@ -484,11 +483,11 @@ class WeatherModel(ABC):
 
     def _check_for_nans(self):
         """Fill in NaN-values."""
-        self._p = fillna3d(self._p)
-        self._t = fillna3d(
+        self._p = utils.fillna3d(self._p)
+        self._t = utils.fillna3d(
             self._t, fill_value=1e16
         )  # to avoid division by zero later on
-        self._e = fillna3d(self._e)
+        self._e = utils.fillna3d(self._e)
 
     def out_file(self, outLoc):
         """Path to the output file."""
