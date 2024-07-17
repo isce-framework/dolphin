@@ -2,9 +2,7 @@ import logging
 
 import numba
 import numpy as np
-import pandas as pd
 from numpy.typing import ArrayLike
-from scipy.interpolate import interp1d
 
 from .similarity import get_circle_idxs
 
@@ -137,78 +135,3 @@ def _interp_loop(
                 csum += np.exp(-r2[i] / r2_norm) * cphase[i]
 
             interpolated_ifg[r0, c0] = np.abs(ifg[r0, c0]) * np.exp(1j * np.angle(csum))
-
-
-def interpolate_along_axis(oldCoord, newCoord, data, axis=2):
-    """Interpolate an array of 3-D data along one axis. This function.
-
-    assumes that the x-coordinate increases monotonically.
-    """
-    if oldCoord.ndim > 1:
-        stackedData = np.concatenate([oldCoord, data, newCoord], axis=axis)
-        out = np.apply_along_axis(
-            interp_vector, axis=axis, arr=stackedData, Nx=oldCoord.shape[axis]
-        )
-    else:
-        out = np.apply_along_axis(
-            interp_v,
-            axis=axis,
-            arr=data,
-            old_x=oldCoord,
-            new_x=newCoord,
-            left=np.nan,
-            right=np.nan,
-        )
-
-    return out
-
-
-def interp_vector(vec, Nx):
-    """Interpolate data from a single vector containing the original.
-
-    x, the original y, and the new x, in that order. Nx tells the
-    number of original x-points.
-    """
-    x = vec[:Nx]
-    y = vec[Nx : 2 * Nx]
-    xnew = vec[2 * Nx :]
-    f = interp1d(x, y, bounds_error=False, copy=False, assume_sorted=True)
-    return f(xnew)
-
-
-def interp_v(y, old_x, new_x, left=None, right=None, period=None):
-    """Rearrange np.interp's arguments."""
-    return np.interp(new_x, old_x, y, left=left, right=right, period=period)
-
-
-def fillna3d(array: np.ndarray, axis: int = -1, fill_value: float = 0.0) -> np.ndarray:
-    """Fill in NaNs in 3D arrays using the nearest non-NaN value for "low" NaNs.
-
-    and a specified fill value (default 0.0) for "high" NaNs.
-
-    Parameters
-    ----------
-    array : np.ndarray
-        3D array, where the last axis is the "z" dimension.
-    axis : int, optional
-        The axis along which to fill values. Default is -1 (the last axis).
-    fill_value : float, optional
-        The value used for filling NaNs. Default is 0.0.
-
-    Returns
-    -------
-    np.ndarray
-        3D array with low NaNs filled using nearest neighbors and high NaNs
-        filled with the specified fill value.
-
-    """
-    # fill lower NaNs with nearest neighbor
-    narr = np.moveaxis(array, axis, -1)
-    nars = narr.reshape((np.prod(narr.shape[:-1]), narr.shape[-1]))
-    dfd = pd.DataFrame(data=nars).interpolate(axis=1, limit_direction="backward")
-    out = dfd.values.reshape(array.shape)
-
-    # fill upper NaNs with 0s
-    outmat = np.moveaxis(out, -1, axis)
-    outmat[np.isnan(outmat)] = fill_value
-    return outmat
