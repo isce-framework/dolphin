@@ -48,6 +48,7 @@ jobs:
       # XXX The whirlwind repo is currently private and requires a C++20 compiler so
       # let's install it separately from other dependencies.
       - name: Install whirlwind
+        run: |
           micromamba install -c conda-forge --override-channels cxx-compiler
           pip install git+https://${{ secrets.GITHUB_TOKEN }}@github.com/isce-framework/whirlwind.git@main
       - name: Install
