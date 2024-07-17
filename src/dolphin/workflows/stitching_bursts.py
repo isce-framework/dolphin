@@ -11,7 +11,7 @@ from dolphin._log import log_runtime
 from dolphin._overviews import ImageType, create_image_overviews, create_overviews
 from dolphin._types import Bbox
 from dolphin.interferogram import estimate_interferometric_correlations
-from dolphin.io._utils import _format_for_gdal, get_gtiff_options
+from dolphin.io._utils import repack_raster
 
 from .config import OutputOptions
 
@@ -92,14 +92,10 @@ def run(
     )
     stitched_ifg_paths = list(date_to_ifg_path.values())
 
-    cor_create_options = _format_for_gdal(
-        get_gtiff_options(max_error=0.005, compression_type="lerc_deflate", predictor=3)
-    )
     # Estimate the interferometric correlation from the stitched interferogram
     interferometric_corr_paths = estimate_interferometric_correlations(
         stitched_ifg_paths,
         window_size=corr_window_size,
-        options=cor_create_options,
         num_workers=num_workers,
     )
 
@@ -111,8 +107,8 @@ def run(
         driver="GTiff",
         out_bounds=out_bounds,
         out_bounds_epsg=output_options.bounds_epsg,
-        options=cor_create_options,
     )
+    repack_raster(stitched_temp_coh_file, keep_bits=10)
 
     # Stitch the looked PS files
     stitched_ps_file = stitched_ifg_dir / "ps_mask_looked.tif"
@@ -127,9 +123,6 @@ def run(
     )
 
     # Stitch the amp dispersion files
-    amp_create_options = _format_for_gdal(
-        get_gtiff_options(max_error=0.005, compression_type="lerc_deflate", predictor=3)
-    )
     stitched_amp_disp_file = stitched_ifg_dir / "amp_dispersion_looked.tif"
     stitching.merge_images(
         amp_dispersion_list,
@@ -137,8 +130,8 @@ def run(
         driver="GTiff",
         out_bounds=out_bounds,
         out_bounds_epsg=output_options.bounds_epsg,
-        options=amp_create_options,
     )
+    repack_raster(stitched_temp_coh_file, keep_bits=10)
 
     stitched_shp_count_file = stitched_ifg_dir / "shp_counts.tif"
     stitching.merge_images(

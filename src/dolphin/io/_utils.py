@@ -191,7 +191,7 @@ def repack_rasters(
         Number of threads to use (default is 4).
     keep_bits : int, optional
         Number of bits to preserve in mantissa. Defaults to None.
-        Lower numbers will truncate the mantissa more and enable more compression
+        Lower numbers will truncate the mantissa more and enable more compression.
     **output_options
         Creation options to pass to `get_gtiff_options`
 
