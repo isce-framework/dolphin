@@ -27,6 +27,7 @@ from ._snaphu_py import grow_conncomp_snaphu, unwrap_snaphu_py
 from ._tophu import multiscale_unwrap
 from ._unwrap_3d import unwrap_spurt
 from ._utils import create_combined_mask, set_nodata_values
+from ._whirlwind import unwrap_whirlwind
 
 logger = logging.getLogger(__name__)
 
@@ -205,7 +206,7 @@ def unwrap(
     scratchdir: Optional[Filename] = None,
     delete_scratch: bool = False,
 ) -> tuple[Path, Path]:
-    """Unwrap a single interferogram using snaphu, isce3, or tophu.
+    """Unwrap a single interferogram.
 
     Parameters
     ----------
@@ -367,7 +368,19 @@ def unwrap(
             cost=snaphu_opts.cost,
             scratchdir=scratchdir,
         )
-    else:
+    elif unwrap_method == UnwrapMethod.WHIRLWIND:
+        unw_path, conncomp_path = unwrap_whirlwind(
+            unwrapper_ifg_filename,
+            corr_filename,
+            unwrapper_unw_filename,
+            nlooks,
+            mask_file=combined_mask_file,
+            zero_where_masked=unwrap_options.zero_where_masked,
+            unw_nodata=unw_nodata,
+            ccl_nodata=ccl_nodata,
+            scratchdir=scratchdir,
+        )
+    elif (unwrap_method == UnwrapMethod.ICU) or (unwrap_method == UnwrapMethod.PHASS):
         tophu_opts = unwrap_options.tophu_options
         unw_path, conncomp_path = multiscale_unwrap(
             unwrapper_ifg_filename,
@@ -386,6 +399,9 @@ def unwrap(
             scratchdir=scratchdir,
             log_to_file=log_to_file,
         )
+    else:
+        # Should be unreachable.
+        raise AssertionError(f"unexpected unwrap method {unwrap_method}")
 
     # post-processing steps go here:
 
