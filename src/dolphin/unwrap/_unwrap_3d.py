@@ -42,6 +42,8 @@ def unwrap_spurt(
     if mask_filename is not None:
         _mask = io.load_gdal(mask_filename)
 
+    if scratchdir is None:
+        scratchdir = Path(output_path) / "scratch"
     gen_settings = GeneralSettings(
         output_folder=output_path,
         intermediate_folder=scratchdir,
