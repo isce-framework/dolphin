@@ -27,7 +27,6 @@ install_packages() {
     else
         PKGS_ARGS=""
     fi
-    echo "$PKGS_ARGS"
 
     # Get concretized package list.
     local PKGLIST
