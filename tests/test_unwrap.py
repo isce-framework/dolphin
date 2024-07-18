@@ -18,6 +18,10 @@ WHIRLWIND_INSTALLED = importlib.util.find_spec("whirlwind") is not None
 pytestmark = pytest.mark.filterwarnings(
     "ignore::rasterio.errors.NotGeoreferencedWarning",
     "ignore:.*io.FileIO.*:pytest.PytestUnraisableExceptionWarning",
+    # TODO: Remove this when spurt removes `fork`:
+    # RuntimeWarning: os.fork() was called. ...
+    # ... unraisableexception.py:80: PytestUnraisableExceptionWarning
+    "ignore::pytest.PytestUnraisableExceptionWarning",
 )
 
 
@@ -275,44 +279,45 @@ class TestTophu:
 
 class TestSpurt:
     @pytest.fixture()
-    def slc_file_list(self, tmp_path, slc_stack, slc_date_list):
+    def ifg_file_list(self, tmp_path, slc_stack, slc_date_list):
         from dolphin import io
         from dolphin.phase_link import simulate
 
-        slc_stack = simulate.make_defo_stack((20, 64, 64))
+        slc_stack = np.exp(
+            1j * simulate.make_defo_stack((20, 100, 200), sigma=1)
+        ).astype("complex64")
+        ifg_stack = slc_stack[1:] * slc_stack[[0]].conj()
         # Write to a file
         d = tmp_path / "gtiff"
         d.mkdir()
-        name_template = d / "{date}.slc.tif"
+        name_template = d / f"{slc_date_list[0].strftime('%Y%m%d')}_{{date}}.slc.tif"
 
         file_list = []
-        for cur_date, cur_slc in zip(slc_date_list, slc_stack):
+        for cur_date, cur_ifg in zip(slc_date_list[1:], ifg_stack):
             fname = str(name_template).format(date=cur_date.strftime("%Y%m%d"))
             file_list.append(Path(fname))
-            io.write_arr(arr=cur_slc, output_name=fname)
+            io.write_arr(arr=cur_ifg, output_name=fname)
 
-        # Write the list of SLC files to a text file
-        with open(d / "slclist.txt", "w") as f:
-            f.write("\n".join([str(f) for f in file_list]))
         return file_list
 
     @pytest.mark.skipif(
         not SPURT_INSTALLED, reason="spurt not installed for 3d unwrapping"
     )
-    def test_unwrap_spurt(self, tmp_path, raster_100_by_200, corr_raster):
-        unw_filename = tmp_path / "unwrapped.unw.tif"
-
-        to = SpurtOptions()
-        unwrap_options = UnwrapOptions(unwrap_method="phass", tophu_options=to)
-        out_path, conncomp_path = dolphin.unwrap.unwrap(
-            ifg_filename=raster_100_by_200,
-            corr_filename=corr_raster,
-            unw_filename=unw_filename,
+    def test_unwrap_spurt(self, tmp_path, ifg_file_list, corr_raster):
+        opts = SpurtOptions()
+        unwrap_options = UnwrapOptions(unwrap_method="spurt", spurt_options=opts)
+        out_paths, conncomp_paths = dolphin.unwrap.run(
+            ifg_filenames=ifg_file_list,
+            cor_filenames=ifg_file_list,  # NOT USED... but required for `run`?
+            temporal_coherence_file=corr_raster,
             unwrap_options=unwrap_options,
-            nlooks=1,
+            output_path=tmp_path,
+            nlooks=5,
         )
-        assert out_path.exists()
-        assert conncomp_path.exists()
+        assert all(p.exists() for p in out_paths)
+        # spurt gives 0 conncomps for now:
+        # TODO: Uncomment this if spurt starts making conncomps
+        # assert all(p.exists() for p in conncomp_paths)
 
 
 @pytest.mark.skipif(not WHIRLWIND_INSTALLED, reason="whirlwind package not installed")
