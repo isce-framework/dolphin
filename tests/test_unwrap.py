@@ -21,7 +21,7 @@ pytestmark = pytest.mark.filterwarnings(
     # TODO: Remove this when spurt removes `fork`:
     # RuntimeWarning: os.fork() was called. ...
     # ... unraisableexception.py:80: PytestUnraisableExceptionWarning
-    "ignore::PytestUnraisableExceptionWarning",
+    "ignore::pytest.PytestUnraisableExceptionWarning",
 )
 
 
