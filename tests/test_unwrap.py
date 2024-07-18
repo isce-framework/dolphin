@@ -18,6 +18,10 @@ WHIRLWIND_INSTALLED = importlib.util.find_spec("whirlwind") is not None
 pytestmark = pytest.mark.filterwarnings(
     "ignore::rasterio.errors.NotGeoreferencedWarning",
     "ignore:.*io.FileIO.*:pytest.PytestUnraisableExceptionWarning",
+    # TODO: Remove this when spurt removes `fork`:
+    # RuntimeWarning: os.fork() was called. ...
+    # ... unraisableexception.py:80: PytestUnraisableExceptionWarning
+    "ignore::PytestUnraisableExceptionWarning",
 )
 
 
