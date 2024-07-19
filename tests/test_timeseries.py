@@ -222,6 +222,17 @@ class TestVelocity:
         npt.assert_allclose(velocities, expected_velo, atol=1e-5)
 
 
+class TestCreateAverage:
+    def test_basic(self, tmp_path, slc_file_list, slc_stack):
+        output_file = tmp_path / "average.tif"
+        timeseries.create_average(
+            file_list=slc_file_list, output_file=output_file, num_threads=1
+        )
+        computed = io.load_gdal(output_file)
+        expected = np.average(slc_stack, axis=0)
+        npt.assert_allclose(computed, expected)
+
+
 if __name__ == "__main__":
     sar_dates = make_sar_dates()
     sar_phases = make_sar_phases(sar_dates)
