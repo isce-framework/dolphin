@@ -586,8 +586,9 @@ def create_average(
     output_file: PathOrStr,
     block_shape: tuple[int, int] = (512, 512),
     num_threads: int = 5,
-    average_func: Callable[[ArrayLike, int], np.ndarray] = np.nanmean,
+    average_func: Callable[[ArrayLike, int], np.ndarray] = np.average,
     mask_average_func: Callable[[ArrayLike, int], np.ndarray] = np.any,
+    weights: ArrayLike | None = None,
     read_masked: bool = False,
 ) -> None:
     """Average all images in `file_list` to create a 2D image in `output_file`.
@@ -606,23 +607,33 @@ def create_average(
         Default is 5.
     average_func : Callable[[ArrayLike, int], np.ndarray], optional
         The function to use to average the images.
-        Default is `np.nanmean`, which calls `np.nanmean(arr, axis=0)` on each block.
+        Default calls `np.average(arr, axis=0, weights=weights)` on each block.
     mask_average_func : Callable[[ArrayLike, int], np.ndarray], optional
         If `read_masked` is true, the function to use to average the masks.
         Default is `np.any`, which calls `np.any(masks, axis=0)` on each block
         and masks *any* pixel that is masked in one of the images.
         Use `np.all` to have more valid pixels (a smaller masked region).
+    weights: ArrayLike, optional
+        If provided, assigns a floating point weight to each file in `file_list`.
+        The output is a weighted average.
+        Default is `None`, equivalent to `np.ones(len(file_list))`.
     read_masked : bool, optional
         If True, reads the data as a masked array based on the rasters' nodata values.
         Default is False.
 
     """
+    if weights is None:
+        weights = np.ones(len(file_list), dtype="float32")
+    if weights.shape != (len(file_list),):
+        msg = f"weights must be shape (len(file_list),) got {weights.shape}"
+        raise ValueError(msg)
 
     def read_and_average(
         readers: Sequence[io.StackReader], rows: slice, cols: slice
     ) -> tuple[slice, slice, np.ndarray]:
         chunk = readers[0][:, rows, cols]
-        out_chunk = average_func(chunk, 0), rows, cols
+
+        out_chunk = average_func(chunk, axis=0, weights=weights), rows, cols
         if isinstance(chunk, np.ma.MaskedArray):
             mask = mask_average_func(chunk.mask, 0)
             out_chunk = np.ma.MaskedArray(data=out_chunk, mask=mask)
