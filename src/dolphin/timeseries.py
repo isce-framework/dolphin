@@ -4,7 +4,7 @@ import logging
 import shutil
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from typing import Callable, Optional, Protocol, Sequence, TypeVar
+from typing import Callable, Optional, Sequence, TypeVar
 
 import jax.numpy as jnp
 import numpy as np
@@ -579,12 +579,6 @@ def create_velocity(
     if add_overviews:
         logger.info("Creating overviews for velocity image")
         create_overviews([output_file])
-
-
-class AverageFunc(Protocol):
-    """Protocol for temporally averaging a block of data."""
-
-    def __call__(self, ArrayLike, axis: int) -> ArrayLike: ...
 
 
 def create_average(
