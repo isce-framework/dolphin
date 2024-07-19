@@ -587,7 +587,7 @@ class AverageFunc(Protocol):
     def __call__(self, ArrayLike, axis: int) -> ArrayLike: ...
 
 
-def create_temporal_average(
+def create_average(
     file_list: Sequence[PathOrStr],
     output_file: PathOrStr,
     block_shape: tuple[int, int] = (512, 512),
@@ -595,7 +595,7 @@ def create_temporal_average(
     average_func: Callable[[ArrayLike, int], np.ndarray] = np.nanmean,
     read_masked: bool = False,
 ) -> None:
-    """Average all images in `reader` to create a 2D image in `output_file`.
+    """Average all images in `file_list` to create a 2D image in `output_file`.
 
     Parameters
     ----------
@@ -622,7 +622,8 @@ def create_temporal_average(
         readers: Sequence[io.StackReader], rows: slice, cols: slice
     ) -> tuple[slice, slice, np.ndarray]:
         chunk = readers[0][:, rows, cols]
-        return average_func(chunk, 0), rows, cols
+        out_chunk = average_func(chunk, 0), rows, cols
+        return out_chunk
 
     writer = io.BackgroundRasterWriter(output_file, like_filename=file_list[0])
     with NamedTemporaryFile(mode="w", suffix=".vrt") as f:
@@ -642,6 +643,17 @@ def create_temporal_average(
         )
 
     writer.notify_finished()
+
+
+def create_temporal_average(*args, **kwargs):
+    import warnings
+
+    warnings.warn(
+        "'create_temporal_average' is deprecated. Use 'create_average' instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return create_average(*args, **kwargs)
 
 
 def invert_unw_network(
@@ -894,7 +906,7 @@ def _get_largest_conncomp_mask(
     conncomp_intersection_file = Path(output_dir) / "conncomp_intersection.tif"
     if ccl_file_list and not conncomp_intersection_file.exists():
         logger.info("Creating intersection of connected components")
-        create_temporal_average(
+        create_average(
             file_list=ccl_file_list,
             output_file=conncomp_intersection_file,
             block_shape=block_shape,
