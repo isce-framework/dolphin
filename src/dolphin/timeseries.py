@@ -4,12 +4,12 @@ import logging
 import shutil
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from typing import Callable, Optional, Sequence, TypeVar
+from typing import Callable, Optional, Protocol, Sequence, TypeVar
 
 import jax.numpy as jnp
 import numpy as np
 from jax import Array, jit, vmap
-from numpy.typing import ArrayLike
+from numpy.typing import ArrayLike, NDArray
 from opera_utils import get_dates
 from scipy import ndimage
 
@@ -581,12 +581,20 @@ def create_velocity(
         create_overviews([output_file])
 
 
+class WeightedAverager(Protocol):
+    """Protocol for temporally averaging a block of data."""
+
+    def __call__(
+        self, arr: ArrayLike, axis: int, weights: ArrayLike | None
+    ) -> NDArray: ...
+
+
 def create_average(
     file_list: Sequence[PathOrStr],
     output_file: PathOrStr,
     block_shape: tuple[int, int] = (512, 512),
     num_threads: int = 5,
-    average_func: Callable[[ArrayLike, int], np.ndarray] = np.average,
+    average_func: WeightedAverager = np.average,
     mask_average_func: Callable[[ArrayLike, int], np.ndarray] = np.any,
     weights: ArrayLike | None = None,
     read_masked: bool = False,
@@ -906,8 +914,12 @@ def _get_largest_conncomp_mask(
     block_shape: tuple[int, int] = (512, 512),
     num_threads: int = 5,
 ) -> np.ndarray:
-    def intersect_conncomp(arr: np.ma.MaskedArray, axis: int) -> np.ndarray:
+    def intersect_conncomp(
+        arr: ArrayLike, axis: int, _weights: ArrayLike | None
+    ) -> np.ndarray:
         # Track where input is nodata
+        if not isinstance(arr, np.ma.MaskedArray):
+            arr = np.ma.MaskedArray(data=arr, mask=np.ma.nomask)
         any_masked = np.any(arr.mask, axis=axis)
         # Get the logical AND of all nonzero conncomp labels
         fillval = arr.fill_value
@@ -918,6 +930,7 @@ def _get_largest_conncomp_mask(
         return all_are_valid
 
     conncomp_intersection_file = Path(output_dir) / "conncomp_intersection.tif"
+    average_func: WeightedAverager = intersect_conncomp  # type: ignore[assignment]
     if ccl_file_list and not conncomp_intersection_file.exists():
         logger.info("Creating intersection of connected components")
         create_average(
@@ -925,7 +938,7 @@ def _get_largest_conncomp_mask(
             output_file=conncomp_intersection_file,
             block_shape=block_shape,
             num_threads=num_threads,
-            average_func=intersect_conncomp,
+            average_func=average_func,
             read_masked=True,
         )
 
