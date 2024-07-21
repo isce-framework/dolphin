@@ -93,6 +93,11 @@ def run(
         create_overviews(unwrapped_paths, image_type=ImageType.UNWRAPPED)
         create_overviews(conncomp_paths, image_type=ImageType.CONNCOMP)
 
+    # Dump the used options for JSON parsing
+    logger.info(
+        "Unwrapping complete",
+        extra={"unwrap_options": unwrap_options.model_dump(mode="json")},
+    )
     return (unwrapped_paths, conncomp_paths)
 
 
