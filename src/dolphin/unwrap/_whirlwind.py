@@ -93,7 +93,8 @@ def unwrap_whirlwind(
             mask = stack.enter_context(snaphu.io.Raster(mask_file))
 
         logger.info("Unwrapping using whirlwind")
-        unw = ww.unwrap(igram, corr, nlooks, mask=mask)
+        # TODO: change the random nlooks/2 once whirlwind's nan problem is solved
+        unw = ww.unwrap(igram, corr, nlooks // 2, mask=mask)
 
         logger.info("Writing unwrapped phase to raster file")
         with snaphu.io.Raster.create(
