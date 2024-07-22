@@ -412,9 +412,10 @@ def unwrap(
             "Transferring ambiguity numbers from filtered/interpolated"
             f" ifg {unwrapper_unw_filename}"
         )
+        ifg_unwrapped = io.load_gdal(unwrapper_ifg_filename)
         unw_arr = io.load_gdal(unwrapper_unw_filename, masked=True).filled(unw_nodata)
 
-        final_arr = np.angle(ifg) + (unw_arr - np.angle(modified_ifg))
+        final_arr = np.angle(ifg) + (unw_arr - np.angle(ifg_unwrapped))
         final_arr[ifg.mask] = unw_nodata
 
         io.write_arr(
