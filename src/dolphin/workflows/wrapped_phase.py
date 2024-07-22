@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import datetime
 import logging
+import time
 from pathlib import Path
 from typing import Optional, Sequence, cast
 
@@ -53,6 +54,7 @@ def run(
         Path to the created SHP counts file.
 
     """
+    t0 = time.perf_counter()
     setup_logging(debug=debug, filename=cfg.log_file)
     if tqdm_kwargs is None:
         tqdm_kwargs = {}
@@ -181,6 +183,14 @@ def run(
                 **kwargs,
             )
         )
+    # Dump the used options for JSON parsing
+    logger.info(
+        "wrapped_phase complete",
+        extra={
+            "elapsed": time.perf_counter() - t0,
+            "phase_linking_options": cfg.phase_linking.model_dump(mode="json"),
+        },
+    )
 
     # ###################################################
     # Form interferograms from estimated wrapped phase
