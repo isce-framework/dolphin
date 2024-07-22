@@ -324,7 +324,7 @@ def unwrap(
             str(pre_interp_unw_filename).split(".")[0] + (name_change + "unw" + suf)
         )
 
-        ifg = io.load_gdal(pre_interp_ifg_filename)
+        pre_interp_ifg = io.load_gdal(pre_interp_ifg_filename)
         corr = io.load_gdal(corr_filename)
         cutoff = preproc_options.interpolation_cor_threshold
         logger.info(f"Masking pixels with correlation below {cutoff}")
@@ -332,7 +332,7 @@ def unwrap(
 
         logger.info(f"Interpolating {pre_interp_ifg_filename} -> {interp_ifg_filename}")
         modified_ifg = interpolate(
-            ifg=ifg,
+            ifg=pre_interp_ifg,
             weights=coherent_pixel_mask,
             weight_cutoff=cutoff,
             max_radius=preproc_options.max_radius,
@@ -443,12 +443,12 @@ def unwrap(
 
         # Move the intermediate ".interp" or ".goldstein" into the scratch directory
         if scratchdir is not None:
-            shutil.move(unwrapper_ifg_filename, scratchdir)
+            shutil.move(unwrapper_unw_filename, scratchdir)
 
     # Reset the input nodata values to be nodata in the unwrapped and CCL
     logger.info(f"Setting nodata values of {unw_path} file")
     set_nodata_values(
-        filename=unw_path, output_nodata=unw_nodata, like_filename=ifg_filename
+        filename=unw_filename, output_nodata=unw_nodata, like_filename=ifg_filename
     )
     logger.info(f"Setting nodata values of {conncomp_path} file")
     set_nodata_values(
