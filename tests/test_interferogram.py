@@ -226,15 +226,13 @@ class TestNetwork:
             datetime(2022, 6, 1),
         ]
         slcs = [d.strftime("%Y%m%d") for d in dates]
-        assert Network._find_annuals(slcs, dates) == [
+        assert Network.find_annuals(slcs, dates) == [
             (slcs[0], slcs[2]),
             (slcs[1], slcs[2]),
         ]
-        assert Network._find_annuals(slcs, dates, buffer_days=10) == [
-            (slcs[0], slcs[2])
-        ]
+        assert Network.find_annuals(slcs, dates, buffer_days=10) == [(slcs[0], slcs[2])]
 
-        assert Network._find_annuals(slcs[1:], dates[1:], buffer_days=10) == []
+        assert Network.find_annuals(slcs[1:], dates[1:], buffer_days=10) == []
 
     def test_manual_indexes(self, tmp_path, four_slc_files):
         n = Network(four_slc_files, indexes=[(0, 1)], outdir=tmp_path)
