@@ -131,15 +131,18 @@ class TestUnwrapSingle:
         assert np.isnan(io.get_raster_nodata(unw_path))
         assert io.get_raster_nodata(conncomp_path) == 123
 
-    @pytest.mark.parametrize("method", [UnwrapMethod.SNAPHU, UnwrapMethod.PHASS])
     def test_goldstein(
-        self, tmp_path, list_of_gtiff_ifgs, corr_raster, unwrap_options, method
+        self,
+        tmp_path,
+        list_of_gtiff_ifgs,
+        corr_raster,
+        unwrap_options,
     ):
         # test other init_method
         unw_filename = tmp_path / "unwrapped.unw.tif"
         scratch_dir = tmp_path / "scratch"
         scratch_dir.mkdir()
-        unwrap_options.unwrap_method = method
+
         unwrap_options.run_goldstein = True
         unw_path, conncomp_path = dolphin.unwrap.unwrap(
             ifg_filename=list_of_gtiff_ifgs[0],
@@ -151,6 +154,43 @@ class TestUnwrapSingle:
         )
         assert unw_path.exists()
         assert conncomp_path.exists()
+        # Check there are no extraneous ".filter" files
+        unw_dir = Path(unw_path).parent
+        assert set(unw_dir.glob("*.unw.tif")) == {unw_path}
+
+    @pytest.mark.parametrize("method", [UnwrapMethod.SNAPHU, UnwrapMethod.PHASS])
+    @pytest.mark.parametrize("run_interpolation", [False, True])
+    @pytest.mark.parametrize("run_goldstein", [False, True])
+    def test_multiple_preprocess(
+        self,
+        tmp_path,
+        list_of_gtiff_ifgs,
+        corr_raster,
+        unwrap_options,
+        method,
+        run_interpolation,
+        run_goldstein,
+    ):
+        # test other init_method
+        unw_filename = tmp_path / "unwrapped.unw.tif"
+        scratch_dir = tmp_path / "scratch"
+        scratch_dir.mkdir()
+        unwrap_options.unwrap_method = method
+        unwrap_options.run_interpolation = run_interpolation
+        unwrap_options.run_goldstein = run_goldstein
+        unw_path, conncomp_path = dolphin.unwrap.unwrap(
+            ifg_filename=list_of_gtiff_ifgs[0],
+            corr_filename=corr_raster,
+            unw_filename=unw_filename,
+            nlooks=1,
+            unwrap_options=unwrap_options,
+            scratchdir=scratch_dir,
+        )
+        assert unw_path.exists()
+        assert conncomp_path.exists()
+        # Check there are no extraneous ".interp" files
+        unw_dir = Path(unw_path).parent
+        assert set(unw_dir.glob("*.unw.tif")) == {unw_path}
 
     def test_interp_loop(self):
         x, y = np.meshgrid(np.arange(200), np.arange(100))
@@ -205,6 +245,9 @@ class TestUnwrapSingle:
         )
         assert unw_path.exists()
         assert conncomp_path.exists()
+        # Check there are no extraneous ".interp" files
+        unw_dir = Path(unw_path).parent
+        assert set(unw_dir.glob("*.unw.tif")) == {unw_path}
 
 
 class TestUnwrapRun:
@@ -222,7 +265,7 @@ class TestUnwrapRun:
 
     def test_run_envi(self, list_of_envi_ifgs, corr_raster, unwrap_options):
         ifg_path = list_of_envi_ifgs[0].parent
-        unwrap_options.snaphu_options.init_method = "mst"
+        unwrap_options.snaphu_options.init_method = "mcf"
         u_paths, c_paths = dolphin.unwrap.run(
             ifg_filenames=list_of_envi_ifgs,
             cor_filenames=[corr_raster] * len(list_of_envi_ifgs),
