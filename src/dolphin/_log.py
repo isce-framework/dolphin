@@ -39,16 +39,25 @@ LOG_RECORD_BUILTIN_ATTRS = {
 __all__ = ["log_runtime"]
 
 
-def setup_logging(debug: bool = False, filename: PathOrStr | None = None):
+def setup_logging(
+    *,
+    logger_name: str = "dolphin",
+    debug: bool = False,
+    filename: PathOrStr | None = None,
+):
     config_file = Path(__file__).parent / Path("log-config.json")
     with open(config_file) as f_in:
         config = json.load(f_in)
 
+    if logger_name not in config["loggers"]:
+        config["loggers"][logger_name] = {"level": "INFO", "handlers": ["stderr"]}
+
     if debug:
-        config["loggers"]["dolphin"]["level"] = "DEBUG"
+        config["loggers"][logger_name]["level"] = "DEBUG"
 
     if filename:
-        config["loggers"]["dolphin"]["handlers"].append("file")
+        if "file" not in config["loggers"][logger_name]["handlers"]:
+            config["loggers"][logger_name]["handlers"].append("file")
         config["handlers"]["file"]["filename"] = os.fspath(filename)
         Path(filename).parent.mkdir(exist_ok=True, parents=True)
 
@@ -57,6 +66,7 @@ def setup_logging(debug: bool = False, filename: PathOrStr | None = None):
         config["handlers"].pop("file")
 
     logging.config.dictConfig(config)
+
     # Temp work around for tqdm on py312
     if sys.version_info.major == 3 and sys.version_info.minor == 12:
         os.environ["TQDM_DISABLE"] = "1"
