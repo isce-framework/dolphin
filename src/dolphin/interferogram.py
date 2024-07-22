@@ -392,10 +392,10 @@ class Network:
                 ]
             )
         if self.max_bandwidth is not None:
-            ifgs.extend(Network._limit_by_bandwidth(self.slc_list, self.max_bandwidth))
+            ifgs.extend(Network.limit_by_bandwidth(self.slc_list, self.max_bandwidth))
         if self.max_temporal_baseline is not None:
             ifgs.extend(
-                Network._limit_by_temporal_baseline(
+                Network.limit_by_temporal_baseline(
                     self.slc_list,
                     dates=self.dates,
                     max_temporal_baseline=self.max_temporal_baseline,
@@ -408,7 +408,7 @@ class Network:
 
         if self.include_annual:
             # Add in the annual pairs, then re-sort
-            annual_ifgs = Network._find_annuals(
+            annual_ifgs = Network.find_annuals(
                 self.slc_list, self.dates, buffer_days=self.annual_buffer_days
             )
             ifgs.extend(annual_ifgs)
@@ -490,9 +490,9 @@ class Network:
         return [tuple(sorted([ref, date])) for date in slc_list if date != ref]
 
     @staticmethod
-    def _limit_by_bandwidth(
-        slc_list: Iterable[Filename], max_bandwidth: int
-    ) -> list[IfgPairT]:
+    def limit_by_bandwidth(
+        slc_list: Iterable[T], max_bandwidth: int
+    ) -> list[tuple[T, T]]:
         """Form a list of the "nearest-`max_bandwidth`" ifgs.
 
         Parameters
@@ -512,16 +512,16 @@ class Network:
         slc_to_idx = {s: idx for idx, s in enumerate(slc_list)}
         return [
             (a, b)
-            for (a, b) in Network._all_pairs(slc_list)
+            for (a, b) in Network.all_pairs(slc_list)
             if slc_to_idx[b] - slc_to_idx[a] <= max_bandwidth
         ]
 
     @staticmethod
-    def _limit_by_temporal_baseline(
-        slc_list: Iterable[Filename],
+    def limit_by_temporal_baseline(
+        slc_list: Iterable[T],
         dates: Sequence[DateOrDatetime],
         max_temporal_baseline: Optional[float] = None,
-    ) -> list[IfgPairT]:
+    ) -> list[tuple[T, T]]:
         """Form a list of the ifgs limited to a maximum temporal baseline.
 
         Parameters
@@ -545,19 +545,19 @@ class Network:
             If any of the input files have more than one date.
 
         """
-        ifg_strs = Network._all_pairs(slc_list)
-        ifg_dates = Network._all_pairs(dates)
-        baselines = [Network._temp_baseline(ifg) for ifg in ifg_dates]
+        ifg_strs = Network.all_pairs(slc_list)
+        ifg_dates = Network.all_pairs(dates)
+        baselines = [Network.temporal_baseline(ifg) for ifg in ifg_dates]
         return [
             ifg for ifg, b in zip(ifg_strs, baselines) if b <= max_temporal_baseline
         ]
 
     @staticmethod
-    def _find_annuals(
-        slc_list: Iterable[Filename],
+    def find_annuals(
+        slc_list: Iterable[T],
         dates: Sequence[DateOrDatetime],
         buffer_days: float = 30,
-    ) -> list[IfgPairT]:
+    ) -> list[tuple[T, T]]:
         """Pick out interferograms which are closest to 1 year in span.
 
         We only want to pick 1 ifg per date, closest to a year, but we will skip
@@ -567,27 +567,28 @@ class Network:
         date_to_date_pair: dict[
             DateOrDatetime, tuple[DateOrDatetime, DateOrDatetime]
         ] = {}
-        date_to_file: dict[DateOrDatetime, IfgPairT] = {}
-        slc_pairs = Network._all_pairs(slc_list)
-        date_pairs = Network._all_pairs(dates)
+        date_to_file: dict[DateOrDatetime, tuple[T, T]] = {}
+        slc_pairs = Network.all_pairs(slc_list)
+        date_pairs = Network.all_pairs(dates)
         for ifg, date_pair in zip(slc_pairs, date_pairs):
             early = date_pair[0]
-            baseline_days = Network._temp_baseline(date_pair)
+            baseline_days = Network.temporal_baseline(date_pair)
             if abs(baseline_days - 365) > buffer_days:
                 continue
             dp = date_to_date_pair.get(early)
             # Use this ifg as the annual if none exist, or if it's closer to 365
-            if dp is None or abs(baseline_days - 365) < Network._temp_baseline(dp):
+            if dp is None or abs(baseline_days - 365) < Network.temporal_baseline(dp):
                 date_to_file[early] = ifg
         return sorted(date_to_file.values())
 
     @staticmethod
-    def _all_pairs(slc_list: Iterable[T]) -> list[tuple[T, T]]:
+    def all_pairs(slc_list: Iterable[T]) -> list[tuple[T, T]]:
         """Create the list of all possible ifg pairs from slc_list."""
         return list(itertools.combinations(slc_list, r=2))
 
     @staticmethod
-    def _temp_baseline(ifg_pair: tuple[DateOrDatetime, DateOrDatetime]):
+    def temporal_baseline(ifg_pair: tuple[DateOrDatetime, DateOrDatetime]):
+        """Compute the temporal baseline (in decimal days) between the date pair."""
         return (ifg_pair[1] - ifg_pair[0]).total_seconds() / 86400
 
     def __len__(self):

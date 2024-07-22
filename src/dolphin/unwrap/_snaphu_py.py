@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from contextlib import ExitStack
 from pathlib import Path
 from typing import Optional
 
@@ -87,64 +88,61 @@ def unwrap_snaphu_py(
 
     unw_suffix = full_suffix(unw_filename)
     cc_filename = str(unw_filename).replace(unw_suffix, CONNCOMP_SUFFIX)
-
-    if zero_where_masked and mask_file is not None:
-        logger.info(f"Zeroing phase/corr of pixels masked in {mask_file}")
-        zeroed_ifg_file, zeroed_corr_file = _zero_from_mask(
-            ifg_filename, corr_filename, mask_file
-        )
-        igram = snaphu.io.Raster(zeroed_ifg_file)
-        corr = snaphu.io.Raster(zeroed_corr_file)
-    else:
-        igram = snaphu.io.Raster(ifg_filename)
-        corr = snaphu.io.Raster(corr_filename)
-
-    mask = None if mask_file is None else snaphu.io.Raster(mask_file)
-    try:
-        with (
-            snaphu.io.Raster.create(
-                unw_filename,
-                like=igram,
-                nodata=unw_nodata,
-                dtype="f4",
-                **DEFAULT_TIFF_OPTIONS_RIO,
-            ) as unw,
-            snaphu.io.Raster.create(
-                cc_filename,
-                like=igram,
-                nodata=ccl_nodata,
-                dtype="u2",
-                **DEFAULT_TIFF_OPTIONS_RIO,
-            ) as conncomp,
-        ):
-            # Unwrap and store the results in the `unw` and `conncomp` rasters.
-            snaphu.unwrap(
-                igram,
-                corr,
-                nlooks=nlooks,
-                init=init_method,
-                cost=cost,
-                mask=mask,
-                unw=unw,
-                conncomp=conncomp,
-                ntiles=ntiles,
-                tile_overlap=tile_overlap,
-                nproc=nproc,
-                scratchdir=scratchdir,
-                # https://github.com/isce-framework/snaphu-py/commit/a77cbe1ff115d96164985523987b1db3278970ed
-                # On frame-sized ifgs, especially with decorrelation, defaults of
-                # (500, 100) for (tile_cost_thresh, min_region_size) lead to
-                # "Exceeded maximum number of secondary arcs"
-                # "Decrease TILECOSTTHRESH and/or increase MINREGIONSIZE"
-                tile_cost_thresh=500,
-                # ... "and/or increase MINREGIONSIZE"
-                min_region_size=300,
+    with ExitStack() as stack:
+        if zero_where_masked and (mask_file is not None):
+            logger.info(f"Zeroing phase/corr of pixels masked in {mask_file}")
+            zeroed_ifg_file, zeroed_corr_file = _zero_from_mask(
+                ifg_filename, corr_filename, mask_file
             )
-    finally:
-        igram.close()
-        corr.close()
-        if mask is not None:
-            mask.close()
+            igram = stack.enter_context(snaphu.io.Raster(zeroed_ifg_file))
+            corr = stack.enter_context(snaphu.io.Raster(zeroed_corr_file))
+        else:
+            igram = stack.enter_context(snaphu.io.Raster(ifg_filename))
+            corr = stack.enter_context(snaphu.io.Raster(corr_filename))
+
+        if mask_file is None:
+            mask = None
+        else:
+            mask = stack.enter_context(snaphu.io.Raster(mask_file))
+
+        unw, conncomp = snaphu.unwrap(
+            igram,
+            corr,
+            nlooks=nlooks,
+            init=init_method,
+            cost=cost,
+            mask=mask,
+            ntiles=ntiles,
+            tile_overlap=tile_overlap,
+            nproc=nproc,
+            scratchdir=scratchdir,
+            # https://github.com/isce-framework/snaphu-py/commit/a77cbe1ff115d96164985523987b1db3278970ed
+            # On frame-sized ifgs, especially with decorrelation, defaults of
+            # (500, 100) for (tile_cost_thresh, min_region_size) lead to
+            # "Exceeded maximum number of secondary arcs"
+            # "Decrease TILECOSTTHRESH and/or increase MINREGIONSIZE"
+            tile_cost_thresh=500,
+            # ... "and/or increase MINREGIONSIZE"
+            min_region_size=300,
+        )
+
+        # Save the numpy results
+        with snaphu.io.Raster.create(
+            unw_filename,
+            like=igram,
+            nodata=unw_nodata,
+            dtype="f4",
+            **DEFAULT_TIFF_OPTIONS_RIO,
+        ) as unw_raster:
+            unw_raster[:, :] = unw
+        with snaphu.io.Raster.create(
+            cc_filename,
+            like=igram,
+            nodata=ccl_nodata,
+            dtype="u2",
+            **DEFAULT_TIFF_OPTIONS_RIO,
+        ) as conncomp_raster:
+            conncomp_raster[:, :] = conncomp
 
     if zero_where_masked and mask_file is not None:
         logger.info(f"Zeroing unw/conncomp of pixels masked in {mask_file}")
