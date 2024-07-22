@@ -198,6 +198,30 @@ def parse_log_files(log_files: Iterable[Path | str]) -> pd.DataFrame:
 
 
 def _get_cli_args() -> argparse.Namespace:
+    run_descriptions = [
+        f"{idx}:{o.name}" for idx, o in enumerate(create_unwrap_options(), start=1)
+    ]
+
+    def parse_steps(string_value: str):
+        """Parse ranges of steps, from https://stackoverflow.com/a/4726287."""
+        if string_value is None:
+            return []
+
+        step_nums: set[int] = set()
+        try:
+            for part in string_value.split(","):
+                x = part.split("-")
+                step_nums.update(range(int(x[0]), int(x[-1]) + 1))
+        except (ValueError, AttributeError) as e:
+            raise TypeError(
+                "Must be comma separated integers and/or dash separated range."
+            ) from e
+        max_step = len(run_descriptions)
+        if any((num < 1 or num > max_step) for num in step_nums):
+            raise TypeError(f"Must be ints between 1 and {max_step}")
+
+        return sorted(step_nums)
+
     parser = argparse.ArgumentParser(
         description="Run unwrapping cookoff tests",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
@@ -224,10 +248,34 @@ def _get_cli_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--run",
+        type=parse_steps,
+        default=list(range(1, 1 + len(run_descriptions))),
+        help=(
+            "Indexes of configurations to run. None runs all options. "
+            " Examples: --run 0,1,4 --run 3-6 --step 1,9-10."
+            " Options: {}".format(", ".join(run_descriptions))
+        ),
+    )
+    parser.add_argument(
         "--nlooks",
         type=int,
         default=30,
         help="Effective number of looks used to form correlation",
+    )
+    parser.add_argument(
+        "--ntiles",
+        type=int,
+        nargs=2,
+        default=(2, 2),
+        help="Number of tiles to use for SNAPHU runs using tiling.",
+    )
+    parser.add_argument(
+        "--tile-overlap",
+        type=int,
+        nargs=2,
+        default=(300, 300),
+        help="Amount of tile overlap for SNAPHU runs using tiling.",
     )
     parser.add_argument(
         "--n-parallel-jobs",
@@ -248,9 +296,15 @@ if __name__ == "__main__":
     temporal_coherence_file = next(ifg_dir.glob("*temporal_coherence*tif"))
 
     base_dir: Path = args.base_dir
-    all_options = create_unwrap_options(base_dir)
+    all_options = create_unwrap_options(
+        base_dir,
+        n_parallel_jobs=args.n_parallel_jobs,
+        ntiles=args.ntiles,
+        tile_overlap=args.tile_overlap,
+    )
 
-    for run in all_options:
+    selected_options = [all_options[i - 1] for i in args.run]
+    for run in selected_options:
         log_file = base_dir / f"{run.name}.log"
         setup_logging(filename=log_file)
         if run.unwrapper == UnwrapMethod.SPURT:
