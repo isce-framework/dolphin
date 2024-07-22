@@ -1,8 +1,12 @@
 import argparse
+import json
 import logging
 import time
+from collections.abc import Iterable
 from pathlib import Path
+from typing import Any
 
+import pandas as pd
 from pydantic import BaseModel, Field
 
 from dolphin._log import setup_logging
@@ -19,6 +23,7 @@ logger = logging.getLogger("dolphin")
 
 
 NO_TILES = (1, 1)
+DEFAULT_COH_THRESHOLD = 0.6
 
 
 # @dataclass(config=ConfigDict(arbitrary_types_allowed=True))
@@ -31,8 +36,8 @@ class CookoffRun(BaseModel):
     run_interpolation: bool = False
     run_goldstein: bool = False
     n_parallel_jobs: int = 1
-    spurt_cost: SpurtOptions = Field(default_factory=SpurtOptions)
-    spurt_coh_threshold: float = 0.6
+    spurt_options: SpurtOptions = Field(default_factory=SpurtOptions)
+    spurt_coh_threshold: float = DEFAULT_COH_THRESHOLD
     tile_overlap: tuple[int, int] = (400, 400)
 
     @property
@@ -46,9 +51,9 @@ class CookoffRun(BaseModel):
         if self.run_goldstein:
             n += "_goldstein"
         if self.unwrapper == UnwrapMethod.SPURT:
-            n += f"_threshold_{self.spurt_coh_threshold}"
-            cost = self.spurt_cost.solver_settings.t_cost_type
-            if cost != "constant":
+            if (threshold := self.spurt_coh_threshold) != DEFAULT_COH_THRESHOLD:
+                n += f"_threshold_{threshold}"
+            if (cost := self.spurt_options.solver_settings.t_cost_type) != "constant":
                 n += f"_cost_{cost}"
 
         return n
@@ -78,7 +83,7 @@ class CookoffRun(BaseModel):
             spurt_options = SpurtOptions(
                 temporal_coherence_threshold=self.spurt_coh_threshold,
                 solver_settings={
-                    "solver_settings": self.spurt_cost,
+                    "solver_settings": self.spurt_options.solver_settings,
                 },
             )
             opts = UnwrapOptions(**common_options, spurt_options=spurt_options)
@@ -130,7 +135,7 @@ def create_unwrap_options(
         CookoffRun(unwrapper=UnwrapMethod.SPURT, spurt_coh_threshold=0.7, **common),
         CookoffRun(
             unwrapper=UnwrapMethod.SPURT,
-            spurt_cost={
+            spurt_options={
                 "solver_settings": {
                     "t_cost_type": "distance",
                     "s_cost_type": "distance",
@@ -146,6 +151,52 @@ def create_unwrap_options(
     return all_options
 
 
+def parse_log_files(log_files: Iterable[Path | str]) -> pd.DataFrame:
+    """Parse all .log files and assemble a DataFrame of results.
+
+    Parameters
+    ----------
+    log_files : Iterable[Path | str]
+        Iterable of log files to attempt parsing on.
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame containing the parsed information from all log files.
+
+    """
+    data: list[dict[str, Any]] = []
+
+    for log_file in log_files:
+        with open(log_file, "r") as f:
+            for line in f:
+                try:
+                    log_entry = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if not log_entry["message"].startswith("Completed"):
+                    continue
+                options = log_entry["cookoff_options"]
+                opts = CookoffRun.model_validate(options)
+                row = {
+                    "name": opts.name,
+                    "elapsed_seconds": log_entry["elapsed"],
+                    "max_memory_gb": log_entry["max_memory_gb"],
+                    "spurt_cost": opts.spurt_options.solver_settings.s_cost_type,
+                    "spurt_temporal_coherence_threshold": opts.spurt_coh_threshold,
+                    **opts.model_dump(exclude={"spurt_options"}),
+                }
+                # prettify the enum
+                row["unwrapper"] = row["unwrapper"].value
+
+                data.append(row)
+                break
+            else:
+                print(f"No `Completed` message found in {log_file}")
+
+    return pd.DataFrame(data)
+
+
 def _get_cli_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Run unwrapping cookoff tests",
@@ -155,7 +206,7 @@ def _get_cli_args() -> argparse.Namespace:
         "--base-dir",
         type=Path,
         default=Path("unwrap_cookoff"),
-        help="Base directory for output (default: ./unwrap_cookoff)",
+        help="Base directory for output",
     )
     # Get Inputs from the command line
     inputs = parser.add_argument_group("File Inputs")
