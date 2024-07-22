@@ -270,6 +270,7 @@ def unwrap(
     unwrapper_unw_filename = Path(unw_filename)
     name_change = "."
 
+    ifg = io.load_gdal(ifg_filename, masked=True)
     if unwrap_options.run_goldstein:
         suf = Path(unw_filename).suffix
         if suf == ".tif":
@@ -289,9 +290,8 @@ def unwrap(
             str(unw_filename).split(".")[0] + (name_change + "unw" + suf)
         )
 
-        ifg = io.load_gdal(ifg_filename)
         logger.info(f"Goldstein filtering {ifg_filename} -> {filt_ifg_filename}")
-        modified_ifg = goldstein(ifg, alpha=preproc_options.alpha)
+        modified_ifg = goldstein(ifg.filled(0), alpha=preproc_options.alpha)
         logger.info(f"Writing filtered output to {filt_ifg_filename}")
         io.write_arr(
             arr=modified_ifg,
@@ -324,7 +324,7 @@ def unwrap(
             str(pre_interp_unw_filename).split(".")[0] + (name_change + "unw" + suf)
         )
 
-        ifg = io.load_gdal(pre_interp_ifg_filename)
+        pre_interp_ifg = io.load_gdal(pre_interp_ifg_filename)
         corr = io.load_gdal(corr_filename)
         cutoff = preproc_options.interpolation_cor_threshold
         logger.info(f"Masking pixels with correlation below {cutoff}")
@@ -332,7 +332,7 @@ def unwrap(
 
         logger.info(f"Interpolating {pre_interp_ifg_filename} -> {interp_ifg_filename}")
         modified_ifg = interpolate(
-            ifg=ifg,
+            ifg=pre_interp_ifg,
             weights=coherent_pixel_mask,
             weight_cutoff=cutoff,
             max_radius=preproc_options.max_radius,
@@ -405,16 +405,6 @@ def unwrap(
 
     # post-processing steps go here:
 
-    # Reset the input nodata values to be nodata in the unwrapped and CCL
-    logger.info(f"Setting nodata values of {unw_path} file")
-    set_nodata_values(
-        filename=unw_path, output_nodata=unw_nodata, like_filename=ifg_filename
-    )
-    logger.info(f"Setting nodata values of {conncomp_path} file")
-    set_nodata_values(
-        filename=conncomp_path, output_nodata=ccl_nodata, like_filename=ifg_filename
-    )
-
     # Transfer ambiguity numbers from filtered/interpolated unwrapped interferogram
     # back to original interferogram
     if unwrap_options.run_goldstein or unwrap_options.run_interpolation:
@@ -422,9 +412,10 @@ def unwrap(
             "Transferring ambiguity numbers from filtered/interpolated"
             f" ifg {unwrapper_unw_filename}"
         )
-        unw_arr = io.load_gdal(unwrapper_unw_filename)
+        unw_arr = io.load_gdal(unwrapper_unw_filename, masked=True).filled(unw_nodata)
 
         final_arr = np.angle(ifg) + (unw_arr - np.angle(modified_ifg))
+        final_arr[ifg.mask] = unw_nodata
 
         io.write_arr(
             arr=final_arr,
@@ -449,6 +440,20 @@ def unwrap(
             cost=unwrap_options.snaphu_options.cost,
             scratchdir=scratchdir,
         )
+
+        # Move the intermediate ".interp" or ".goldstein" into the scratch directory
+        if scratchdir is not None:
+            shutil.move(unwrapper_unw_filename, scratchdir)
+
+    # Reset the input nodata values to be nodata in the unwrapped and CCL
+    logger.info(f"Setting nodata values of {unw_path} file")
+    set_nodata_values(
+        filename=unw_filename, output_nodata=unw_nodata, like_filename=ifg_filename
+    )
+    logger.info(f"Setting nodata values of {conncomp_path} file")
+    set_nodata_values(
+        filename=conncomp_path, output_nodata=ccl_nodata, like_filename=ifg_filename
+    )
 
     if delete_scratch:
         assert scratchdir is not None
