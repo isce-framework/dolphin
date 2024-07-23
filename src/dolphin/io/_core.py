@@ -58,6 +58,7 @@ DEFAULT_TIFF_OPTIONS_RIO = {
     "zlevel": 4,
     "bigtiff": "yes",
     "tiled": "yes",
+    "interleave": "band",
     "blockxsize": DEFAULT_TILE_SHAPE[1],
     "blockysize": DEFAULT_TILE_SHAPE[0],
 }
