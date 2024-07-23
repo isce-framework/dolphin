@@ -93,6 +93,9 @@ def unwrap_whirlwind(
             mask = stack.enter_context(snaphu.io.Raster(mask_file))
 
         logger.info("Unwrapping using whirlwind")
+        # FIXME: Ad hoc kludge to prevent NaN's in whirlwind cost computation.
+        # Remove this when the issue is fixed upstream.
+        nlooks = max(nlooks / 2, 1.0)
         unw = ww.unwrap(igram, corr, nlooks, mask=mask)
 
         logger.info("Writing unwrapped phase to raster file")
