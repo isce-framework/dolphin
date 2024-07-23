@@ -145,7 +145,7 @@ def run(
     if delete_intermediate:
         assert scratchdir is not None  # can't be none from the previous check
         scratch_dirs: list[Path | None] = [
-            Path(scratchdir) / Path(ifg_file).name for ifg_file in in_files
+            Path(scratchdir) / f"scratch-{Path(ifg_file).stem}" for ifg_file in in_files
         ]
     else:
         scratch_dirs = itertools.repeat(scratchdir)  # type: ignore[assignment]
