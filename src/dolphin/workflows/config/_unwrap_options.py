@@ -137,12 +137,12 @@ class SpurtTilerSettings(BaseModel):
 
     max_tiles: int = Field(16, description="Maximum number of tiles allowed.", ge=1)
     target_points_for_generation: int = Field(
-        120000,
+        120_000,
         description="Number of points used for determining tiles based on density.",
         gt=0,
     )
     target_points_per_tile: int = Field(
-        800000, description="Target points per tile when generating tiles.", gt=0
+        800_000, description="Target points per tile when generating tiles.", gt=0
     )
     dilation_factor: float = Field(
         0.05,
@@ -171,7 +171,7 @@ class SpurtSolverSettings(BaseModel):
         ),
     )
     links_per_batch: int = Field(
-        default=10000,
+        default=50_000,
         description=(
             "Temporal unwrapping operations over spatial links are performed in batches"
             " and each batch is solved in parallel."
