@@ -193,6 +193,37 @@ def run(
     return all_out_files, conncomp_files
 
 
+def transfer_ambiguities(wrapped: np.ndarray, unw_est: np.ndarray) -> np.ndarray:
+    """Compute unwrapped phase by transferring ambiguities from an unwrapped estimate.
+
+    Transfer the ambiguities from an unwrapped phase estimate to the original wrapped
+    phase in order to form a new unwrapped phase array that is congruent (i.e. differs
+    from the wrapped phase only by multiples of 2pi).
+
+    Parameters
+    ----------
+    wrapped : numpy.ndarray
+        The initial wrapped phase array, in radians. A 2-D, real-valued array.
+    unw_est : numpy.ndarray
+        An estimate of the unwrapped phase, in radians. A 2-D, real-valued array with
+        the same shape as `wrapped`. May differ from the wrapped phase by non-integer
+        cycles.
+
+    Returns
+    -------
+    numpy.ndarray
+        The unwrapped phase data, rounded pixel-wise to the nearest value that differs
+        from the wrapped phase by a multiple of 2pi.
+
+    """
+    # Measure the difference between the unwrapped & wrapped phase, rounded to the
+    # nearest phase cycle.
+    ambiguity = np.round((unw_est - wrapped) / (2 * np.pi))
+
+    # Convert ambiguities back to radians and add them to the wrapped phase.
+    return wrapped + 2 * np.pi * ambiguity
+
+
 def unwrap(
     ifg_filename: Filename,
     corr_filename: Filename,
@@ -412,10 +443,9 @@ def unwrap(
             "Transferring ambiguity numbers from filtered/interpolated"
             f" ifg {unwrapper_unw_filename}"
         )
-        ifg_unwrapped = io.load_gdal(unwrapper_ifg_filename)
         unw_arr = io.load_gdal(unwrapper_unw_filename, masked=True).filled(unw_nodata)
 
-        final_arr = np.angle(ifg) + (unw_arr - np.angle(ifg_unwrapped))
+        final_arr = transfer_ambiguities(unw_arr, np.angle(ifg))
         final_arr[ifg.mask] = unw_nodata
 
         io.write_arr(
