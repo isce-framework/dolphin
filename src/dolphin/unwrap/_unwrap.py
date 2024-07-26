@@ -445,7 +445,7 @@ def unwrap(
         )
         unw_arr = io.load_gdal(unwrapper_unw_filename, masked=True).filled(unw_nodata)
 
-        final_arr = transfer_ambiguities(unw_arr, np.angle(ifg))
+        final_arr = transfer_ambiguities(np.angle(ifg), unw_arr)
         final_arr[ifg.mask] = unw_nodata
 
         io.write_arr(
