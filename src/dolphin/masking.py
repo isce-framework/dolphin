@@ -10,7 +10,7 @@ import numpy as np
 from osgeo import gdal
 
 from dolphin import io
-from dolphin._types import Filename
+from dolphin._types import PathOrStr
 from dolphin.utils import numpy_to_gdal_type
 
 gdal.UseExceptions()
@@ -41,8 +41,8 @@ class MaskConvention(IntEnum):
 
 
 def combine_mask_files(
-    mask_files: Sequence[Filename],
-    output_file: Filename,
+    mask_files: Sequence[PathOrStr],
+    output_file: PathOrStr,
     dtype: str = "uint8",
     output_convention: MaskConvention = MaskConvention.SNAPHU,
     input_conventions: Optional[Sequence[MaskConvention]] = None,
@@ -55,7 +55,7 @@ def combine_mask_files(
     ----------
     mask_files : list of Path or str
         list of mask files to combine.
-    output_file : Filename
+    output_file : PathOrStr
         Path to the combined output file.
     dtype : str, optional
         Data type of output file. Default is uint8.
@@ -145,3 +145,35 @@ def combine_mask_files(
         mask_total = ~mask_total
     ds_out.GetRasterBand(1).WriteArray(mask_total.astype(dtype))
     ds_out = None
+
+
+def load_mask_as_numpy(mask_file: PathOrStr) -> np.ndarray:
+    """Load `mask_file` and convert it to a NumPy boolean array.
+
+    This function reads a mask file where 0 represents invalid data and 1 represents
+    good data. It converts the mask to a boolean numpy array where True values
+    indicate missing data (nodata) pixels, following the numpy masking convention.
+
+    Parameters
+    ----------
+    mask_file : PathOrStr
+        Path to the mask file. Can be a string or a Path-like object.
+
+    Returns
+    -------
+    np.ndarray
+        A boolean numpy array where True values indicate nodata (invalid) pixels
+        and False values indicate valid data pixels.
+
+    Notes
+    -----
+    The input mask file is expected to use 0 for invalid data and 1 for good data.
+    The output mask follows the numpy masking convention where True indicates
+    nodata and False indicates valid data.
+
+    """
+    # The mask file will by have 0s at invalid data, 1s at good
+    nodata_mask = io.load_gdal(mask_file, masked=True).astype(bool).filled(False)
+    # invert the mask so Trues are the missing data pixels
+    nodata_mask = ~nodata_mask
+    return nodata_mask
