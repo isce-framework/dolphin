@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 from enum import IntEnum
-from os import fspath
 from pathlib import Path
 from typing import Optional, Sequence
 
@@ -11,7 +10,6 @@ from osgeo import gdal
 
 from dolphin import io
 from dolphin._types import PathOrStr
-from dolphin.utils import numpy_to_gdal_type
 
 gdal.UseExceptions()
 
@@ -44,10 +42,9 @@ def combine_mask_files(
     mask_files: Sequence[PathOrStr],
     output_file: PathOrStr,
     dtype: str = "uint8",
-    output_convention: MaskConvention = MaskConvention.SNAPHU,
+    output_convention: MaskConvention = MaskConvention.ZERO_IS_NODATA,
     input_conventions: Optional[Sequence[MaskConvention]] = None,
     combine_method: str = "any",
-    output_format: str = "GTiff",
 ):
     """Combine multiple mask files into a single mask file.
 
@@ -64,16 +61,13 @@ def combine_mask_files(
         where 0 indicates invalid pixels.
     input_conventions : list of MaskConvention, optional
         Convention to use for each input mask. Default is None,
-        where it is assumed all masks use the numpy convention
-        (1 indicates invalid pixels).
+        where it is assumed all masks use the "0 is invalid" convention.
     combine_method : str, optional, default = 'any', choices = ['any', 'all']
         Logical operation to use to combine masks. Default is 'any',
         which means the output is masked where *any* of the input masks indicated
         a masked pixel (the masked region grows larger).
         If 'all', the only pixels masked are those in which *all* input masks
         indicated a masked pixel (the masked region shrinks).
-    output_format : str, optional, default = 'GTiff'
-        Output format to be used for the output image.
 
     Raises
     ------
@@ -83,40 +77,23 @@ def combine_mask_files(
 
     """
     output_file = Path(output_file)
-    gt = io.get_raster_gt(mask_files[0])
-    crs = io.get_raster_crs(mask_files[0])
     xsize, ysize = io.get_raster_xysize(mask_files[0])
 
     if combine_method not in ["any", "all"]:
         msg = "combine_method must be 'any' or 'all'"
         raise ValueError(msg)
 
-    # Create output file
-    driver = gdal.GetDriverByName(output_format)
-    ds_out = driver.Create(
-        fspath(output_file),
-        xsize,
-        ysize,
-        1,
-        numpy_to_gdal_type(dtype),
-    )
-    ds_out.SetGeoTransform(gt)
-    ds_out.SetProjection(crs.to_wkt())
-    # TODO: we probably want a separate "mask nodata", where there was
-    # no data in the original, to be separate from the "bad data" value of 0/1,
-    # similar to the PS masking we set up.
-    # ds_out.GetRasterBand(1).SetNoDataValue(int(output_convention))
-
     if input_conventions is None:
         input_conventions = [MaskConvention.NUMPY] * len(mask_files)
-    elif len(input_conventions) != len(mask_files):
+    elif isinstance(input_conventions, MaskConvention):
+        input_conventions = [input_conventions] * len(mask_files)
+
+    if len(input_conventions) != len(mask_files):
         msg = (
             f"input_conventions ({len(input_conventions)}) must have the same"
             f" length as mask_files ({len(mask_files)})"
         )
-        raise ValueError(
-            msg,
-        )
+        raise ValueError(msg)
 
     # Uses the numpy convention (1 = invalid, 0 = valid) for combining logic
     # Loop through mask files and update the total mask
@@ -143,8 +120,12 @@ def combine_mask_files(
     # Convert to output convention
     if output_convention == MaskConvention.SNAPHU:
         mask_total = ~mask_total
-    ds_out.GetRasterBand(1).WriteArray(mask_total.astype(dtype))
-    ds_out = None
+
+    io.write_arr(
+        arr=mask_total.astype(dtype),
+        output_name=output_file,
+        like_filename=mask_files[0],
+    )
 
 
 def load_mask_as_numpy(mask_file: PathOrStr) -> np.ndarray:
