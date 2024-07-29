@@ -62,7 +62,7 @@ conda activate dolphin-env
 python -m pip install .
 ```
 
-Dolphin can also take advantage of CUDA-compatible GPUs for faster processing. [See the docs](dolphin-insar.readthedocs.io/gpu-setup.md) for installation instructions and configuration.
+Dolphin can also take advantage of CUDA-compatible GPUs for faster processing. [See the docs](https://dolphin-insar.readthedocs.io/en/latest/gpu-setup) for installation instructions and configuration.
 
 ## Usage
 
