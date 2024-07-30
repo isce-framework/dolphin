@@ -236,6 +236,14 @@ class InputOptions(BaseModel, extra="forbid"):
         "%Y%m%d",
         description="Format of dates contained in CSLC filenames",
     )
+    wavelength: Optional[float] = Field(
+        None,
+        description=(
+            "Wavelength of the data (in meters), used to convert the rasters in"
+            " `timeseries/` to radians. If None and sensor is not recognized, outputs"
+            " remain in radians."
+        ),
+    )
 
 
 class OutputOptions(BaseModel, extra="forbid"):
