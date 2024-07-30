@@ -36,7 +36,7 @@ LOG_RECORD_BUILTIN_ATTRS = {
     "threadName",
     "taskName",
 }
-__all__ = ["log_runtime"]
+__all__ = ["setup_logging", "log_runtime"]
 
 
 def setup_logging(
