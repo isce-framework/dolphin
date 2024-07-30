@@ -42,6 +42,7 @@ def run(
     correlation_threshold: float = 0.2,
     num_threads: int = 5,
     reference_point: tuple[int, int] = (-1, -1),
+    wavelength: float | None = None,
 ) -> list[Path]:
     """Invert the unwrapped interferograms, estimate timeseries and phase velocity.
 
@@ -75,11 +76,23 @@ def run(
         Reference point (row, col) used if performing a time series inversion.
         If not provided, a point will be selected from a consistent connected
         component with low amplitude dispersion or high temporal coherence.
+    wavelength : float, optional
+        The wavelength of the radar signal, in meters.
+        If provided, the output rasters are in meters and meters / year for
+        the displacement and velocity rasters.
+        If not provided, the outputs are in radians.
+        See Notes for line of sight convention.
 
     Returns
     -------
     inverted_phase_paths : list[Path]
         list of Paths to inverted interferograms (single reference phase series).
+
+    Notes
+    -----
+    When wavelength is provided, the output rasters are in meters and meters / year,
+    where positive values indicate motion *toward* from the radar (i.e. positive values
+    in both ascending and descending tracks imply uplift).
 
     """
     condition_func = argmax_index if condition == CallFunc.MAX else argmin_index
@@ -113,6 +126,7 @@ def run(
             reference=reference,
             output_dir=output_dir,
             num_threads=num_threads,
+            wavelength=wavelength,
         )
     else:
         logger.info(
@@ -652,6 +666,7 @@ def invert_unw_network(
     cor_threshold: float = 0.2,
     n_cor_looks: int = 1,
     ifg_date_pairs: Sequence[Sequence[DateOrDatetime]] | None = None,
+    wavelength: float | None = None,
     block_shape: tuple[int, int] = (512, 512),
     num_threads: int = 5,
     add_overviews: bool = True,
@@ -668,16 +683,20 @@ def invert_unw_network(
         from all other points when solving.
     output_dir : PathOrStr
         The directory to save the output files
-    ifg_date_pairs : Sequence[Sequence[DateOrDatetime]], optional
-        List of date pairs to use for the inversion. If not provided, will be
-        parsed from filenames in `unw_file_list`.
-    block_shape : tuple[int, int], optional
-        The shape of the blocks to process in parallel
     cor_file_list : Sequence[PathOrStr], optional
         List of correlation files to use for weighting the inversion
     cor_threshold : float, optional
         The correlation threshold to use for weighting the inversion
         Default is 0.2
+    ifg_date_pairs : Sequence[Sequence[DateOrDatetime]], optional
+        List of date pairs to use for the inversion. If not provided, will be
+        parsed from filenames in `unw_file_list`.
+    wavelength : float, optional
+        The wavelength of the radar signal, in meters.
+        If provided, the output rasters are in meters.
+        If not provided, the outputs are in radians.
+    block_shape : tuple[int, int], optional
+        The shape of the blocks to process in parallel
     n_cor_looks : int, optional
         The number of looks used to form the input correlation data, used
         to convert correlation to phase variance.
@@ -749,6 +768,12 @@ def invert_unw_network(
         # TODO: do i want to write residuals too? Do i need
         # to have multiple writers then?
         phases = invert_stack(A, stack, weights)[0]
+        # Convert to meters, with LOS convention:
+        # Positive values are motion towards the radar
+        if wavelength is not None:
+            phases = phases * -1 * (wavelength / (4 * np.pi))
+        else:
+            phases = -1 * phases
         return np.asarray(phases), rows, cols
 
     if cor_file_list is not None:
