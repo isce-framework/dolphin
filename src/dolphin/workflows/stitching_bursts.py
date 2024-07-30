@@ -101,37 +101,40 @@ def run(
 
     # Stitch the correlation files
     stitched_temp_coh_file = stitched_ifg_dir / "temporal_coherence.tif"
-    stitching.merge_images(
-        temp_coh_file_list,
-        outfile=stitched_temp_coh_file,
-        driver="GTiff",
-        out_bounds=out_bounds,
-        out_bounds_epsg=output_options.bounds_epsg,
-    )
-    repack_raster(stitched_temp_coh_file, keep_bits=10)
+    if not stitched_temp_coh_file.exists():
+        stitching.merge_images(
+            temp_coh_file_list,
+            outfile=stitched_temp_coh_file,
+            driver="GTiff",
+            out_bounds=out_bounds,
+            out_bounds_epsg=output_options.bounds_epsg,
+        )
+        repack_raster(stitched_temp_coh_file, keep_bits=10)
 
     # Stitch the looked PS files
     stitched_ps_file = stitched_ifg_dir / "ps_mask_looked.tif"
-    stitching.merge_images(
-        ps_file_list,
-        outfile=stitched_ps_file,
-        out_nodata=255,
-        driver="GTiff",
-        resample_alg="nearest",
-        out_bounds=out_bounds,
-        out_bounds_epsg=output_options.bounds_epsg,
-    )
+    if not stitched_ps_file.exists():
+        stitching.merge_images(
+            ps_file_list,
+            outfile=stitched_ps_file,
+            out_nodata=255,
+            driver="GTiff",
+            resample_alg="nearest",
+            out_bounds=out_bounds,
+            out_bounds_epsg=output_options.bounds_epsg,
+        )
 
     # Stitch the amp dispersion files
     stitched_amp_disp_file = stitched_ifg_dir / "amp_dispersion_looked.tif"
-    stitching.merge_images(
-        amp_dispersion_list,
-        outfile=stitched_amp_disp_file,
-        driver="GTiff",
-        out_bounds=out_bounds,
-        out_bounds_epsg=output_options.bounds_epsg,
-    )
-    repack_raster(stitched_temp_coh_file, keep_bits=10)
+    if not stitched_amp_disp_file.exists():
+        stitching.merge_images(
+            amp_dispersion_list,
+            outfile=stitched_amp_disp_file,
+            driver="GTiff",
+            out_bounds=out_bounds,
+            out_bounds_epsg=output_options.bounds_epsg,
+        )
+        repack_raster(stitched_temp_coh_file, keep_bits=10)
 
     stitched_shp_count_file = stitched_ifg_dir / "shp_counts.tif"
     stitching.merge_images(
