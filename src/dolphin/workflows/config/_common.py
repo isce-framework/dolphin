@@ -239,9 +239,9 @@ class InputOptions(BaseModel, extra="forbid"):
     wavelength: Optional[float] = Field(
         None,
         description=(
-            "Wavelength of the data (in meters), used to convert the rasters in"
-            " `timeseries/` to radians. If None and sensor is not recognized, outputs"
-            " remain in radians."
+            "Radar wavelength (in meters) of the transmitted data. used to convert the"
+            " units in the rasters in `timeseries/` to from radians to meters. If None"
+            " and sensor is not recognized, outputs remain in radians."
         ),
     )
 

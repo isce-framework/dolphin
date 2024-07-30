@@ -152,6 +152,7 @@ def run(
             output_name=ref_raster,
             like_filename=inverted_phase_paths[0],
             nodata=0,
+            units="radians",
         )
         inverted_phase_paths.append(ref_raster)
 
@@ -748,6 +749,14 @@ def invert_unw_network(
     ref_row, ref_col = reference
     ref_data = unw_reader[:, ref_row, ref_col].reshape(-1, 1, 1)
 
+    if wavelength is not None:
+        # Positive values are motion towards the radar
+        constant = -1 * (wavelength / (4 * np.pi))
+        units = "meters"
+    else:
+        constant = -1
+        units = "radians"
+
     def read_and_solve(
         readers: Sequence[io.StackReader], rows: slice, cols: slice
     ) -> tuple[slice, slice, np.ndarray]:
@@ -769,12 +778,7 @@ def invert_unw_network(
         # to have multiple writers then?
         phases = invert_stack(A, stack, weights)[0]
         # Convert to meters, with LOS convention:
-        # Positive values are motion towards the radar
-        if wavelength is not None:
-            phases = phases * -1 * (wavelength / (4 * np.pi))
-        else:
-            phases = -1 * phases
-        return np.asarray(phases), rows, cols
+        return constant * np.asarray(phases), rows, cols
 
     if cor_file_list is not None:
         cor_reader = io.VRTStack(
@@ -784,7 +788,9 @@ def invert_unw_network(
     else:
         readers = [unw_reader]
 
-    writer = io.BackgroundStackWriter(out_paths, like_filename=unw_file_list[0])
+    writer = io.BackgroundStackWriter(
+        out_paths, like_filename=unw_file_list[0], units=units
+    )
 
     io.process_blocks(
         readers=readers,
