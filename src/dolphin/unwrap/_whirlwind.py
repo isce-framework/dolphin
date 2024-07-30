@@ -95,7 +95,7 @@ def unwrap_whirlwind(
         logger.info("Unwrapping using whirlwind")
         # FIXME: Ad hoc kludge to prevent NaN's in whirlwind cost computation.
         # Remove this when the issue is fixed upstream.
-        nlooks = max(nlooks / 2, 1.0)
+        nlooks = np.clip(nlooks / 2, 1.0, 20.0)
         unw = ww.unwrap(igram, corr, nlooks, mask=mask)
 
         logger.info("Writing unwrapped phase to raster file")
