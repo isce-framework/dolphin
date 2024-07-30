@@ -121,6 +121,7 @@ def merge_by_date(
         process_date,
         list(zip(grouped_images.values(), stitched_acq_times.values())),
         max_workers=num_workers,
+        desc="Merging images by date",
     )
 
     return stitched_acq_times
