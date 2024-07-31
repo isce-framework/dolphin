@@ -835,6 +835,11 @@ def select_reference_point(
         component label files
 
     """
+    output_file = output_dir / "reference_point.json"
+    if output_file.exists():
+        logger.info("Reading from existing %s", output_file)
+        return _read_reference_point(output_file=output_file)
+
     logger.info("Selecting reference point")
     condition_file_values = io.load_gdal(condition_file, masked=True)
 
@@ -859,7 +864,18 @@ def select_reference_point(
     ref_row, ref_col = condition_func(condition_file_values)
 
     # Cast to `int` to avoid having `np.int64` types
-    return ReferencePoint(int(ref_row), int(ref_col))
+    ref_point = ReferencePoint(int(ref_row), int(ref_col))
+    logger.info("Saving reference to from existing %s", output_file)
+    _write_reference_point(output_file=output_file, ref_point=ref_point)
+    return ref_point
+
+
+def _write_reference_point(output_file: Path, ref_point: ReferencePoint) -> None:
+    output_file.write_text(",".join(list(map(str, ref_point))))
+
+
+def _read_reference_point(output_file: Path):
+    return ReferencePoint(*[int(n) for n in output_file.read_text().split(",")])
 
 
 def _get_largest_conncomp_mask(
