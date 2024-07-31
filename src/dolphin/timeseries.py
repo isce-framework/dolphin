@@ -712,7 +712,7 @@ def invert_unw_network(
     unw_reader = io.VRTStack(
         file_list=unw_file_list, outfile=out_vrt_name, skip_size_check=True
     )
-    cor_vrt_name = Path(output_dir) / "unw_network.vrt"
+    cor_vrt_name = Path(output_dir) / "cor_network.vrt"
 
     # Get the reference point data
     ref_row, ref_col = reference
