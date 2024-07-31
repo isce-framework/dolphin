@@ -836,10 +836,11 @@ def select_reference_point(
         component label files
 
     """
-    output_file = output_dir / "reference_point.json"
+    output_file = output_dir / "reference_point.txt"
     if output_file.exists():
-        logger.info("Reading from existing %s", output_file)
-        return _read_reference_point(output_file=output_file)
+        ref_point = _read_reference_point(output_file=output_file)
+        logger.info(f"Read {ref_point!r} from existing {output_file}")
+        return ref_point
 
     logger.info("Selecting reference point")
     condition_file_values = io.load_gdal(condition_file, masked=True)
@@ -866,7 +867,7 @@ def select_reference_point(
 
     # Cast to `int` to avoid having `np.int64` types
     ref_point = ReferencePoint(int(ref_row), int(ref_col))
-    logger.info("Saving reference to from existing %s", output_file)
+    logger.info(f"Saving {ref_point!r} to from existing {output_file}")
     _write_reference_point(output_file=output_file, ref_point=ref_point)
     return ref_point
 
@@ -908,7 +909,6 @@ def _get_largest_conncomp_mask(
             read_masked=True,
         )
 
-    logger.info("Selecting reference point")
     conncomp_intersection = io.load_gdal(conncomp_intersection_file, masked=True)
 
     # Find the largest conncomp region in the intersection
