@@ -1,34 +1,34 @@
 import numpy as np
 from numpy.typing import ArrayLike
-from scipy import ndimage
+from scipy import fft, ndimage
 
 
 def filter_long_wavelength(
     unwrapped_phase: ArrayLike,
-    correlation: ArrayLike,
-    mask_cutoff: float = 0.5,
+    bad_pixel_mask: ArrayLike,
     wavelength_cutoff: float = 50 * 1e3,
     pixel_spacing: float = 30,
+    workers: int = 1,
 ) -> np.ndarray:
     """Filter out signals with spatial wavelength longer than a threshold.
 
     Parameters
     ----------
-    unwrapped_phase : np.ndarray, 2D complex array
+    unwrapped_phase : ArrayLike
         Unwrapped interferogram phase to filter.
-    correlation : Arraylike, 2D
-        Array of interferometric correlation from 0 to 1.
-    mask_cutoff: float
-        Threshold to use on `correlation` so that pixels where
-        `correlation[i, j] > mask_cutoff` are used and the rest are ignored.
-        The default is 0.5.
-    wavelength_cutoff: float
+    bad_pixel_mask : ArrayLike
+        Boolean array with same shape as `unwrapped_phase` where `True` indicates a
+        pixel to ignore during ramp fitting
+    wavelength_cutoff : float
         Spatial wavelength threshold to filter the unwrapped phase.
         Signals with wavelength longer than 'wavelength_cutoff' are filtered out.
         The default is 50*1e3 (m).
     pixel_spacing : float
         Pixel spatial spacing. Assume same spacing for x, y axes.
         The default is 30 (m).
+    workers : int
+        Number of `fft` workers to use for `scipy.fft.fft2`.
+        Default is 1.
 
     Returns
     -------
@@ -37,121 +37,53 @@ def filter_long_wavelength(
         longer than a threshold.
 
     """
-    nrow, ncol = correlation.shape
+    good_pixel_mask = ~bad_pixel_mask
 
-    mask = (correlation > mask_cutoff).astype("bool")
+    unw0 = np.nan_to_num(unwrapped_phase)
+    # Take either nan or 0 pixels in `unwrapped_phase` to be nodata
+    nodata_mask = unw0 == 0
+    in_bounds_pixels = ~nodata_mask
 
-    # Create Boolean mask for Zero-filled boundary area to be False
-    # and the rest to be True
-    mask_boundary = ~(correlation == 0).astype("bool")
+    total_valid_mask = in_bounds_pixels & good_pixel_mask
 
-    plane = fit_ramp_plane(unwrapped_phase, mask)
+    plane = fit_ramp_plane(unw0, total_valid_mask)
+    # Remove the plane, setting to 0 where we had no data for the plane fit:
+    unw_ifg_interp = np.where((~nodata_mask & good_pixel_mask), unw0, plane)
 
-    # Replace masked out pixels with the ramp plane
-    unw_ifg_interp = np.copy(unwrapped_phase)
-    unw_ifg_interp[~mask * mask_boundary] = plane[~mask * mask_boundary]
+    # Find the filter `sigma` which gives the correct cutoff in meters
+    sigma = _compute_filter_sigma(wavelength_cutoff, pixel_spacing, cutoff_value=0.5)
 
-    # Copy the edge pixels for the boundary area before filling them by reflection
-    EV_fill = np.copy(unw_ifg_interp)
+    # Pad the array with edge values
+    # The padding extends further than the default "radius = 2*sigma + 1",
+    # which given specified in `gaussian_filter`
+    # https://docs.scipy.org/doc/scipy/reference/generated/scipy.ndimage.gaussian_filter.html#scipy.ndimage.gaussian_filter
+    pad_rows = pad_cols = int(3 * sigma)
+    # See here for illustration of `mode="reflect"`
+    # https://scikit-image.org/docs/stable/auto_examples/transform/plot_edge_modes.html#interpolation-edge-modes
+    padded = np.pad(
+        unw_ifg_interp, ((pad_rows, pad_rows), (pad_cols, pad_cols)), mode="reflect"
+    )
 
-    Xdata = np.argwhere(mask)  # Get indices of non-NaN & masked pixels
-    NW = Xdata[np.argmin(Xdata[:, 0])]  # Get indices of upper left corner pixel
-    SE = Xdata[np.argmax(Xdata[:, 0])]  # Get indices of lower right corner pixel
-    SW = Xdata[np.argmin(Xdata[:, 1])]  # Get indices of lower left corner pixel
-    NE = Xdata[np.argmax(Xdata[:, 1])]  # Get indices of upper left corner pixel
+    # Apply Gaussian filter
+    result = fft.fft2(padded, workers=workers)
+    result = ndimage.fourier_gaussian(result, sigma=sigma)
+    # Make sure to only take the real part (ifft returns complex)
+    result = fft.ifft2(result, workers=workers).real.astype(unwrapped_phase.dtype)
 
-    for k in range(NW[1], NE[1] + 1):
-        n_zeros = np.count_nonzero(
-            unw_ifg_interp[0 : NE[0] + 1, k] == 0
-        )  # count zeros in North direction
-        if n_zeros == 0:
-            continue
-        EV_fill[0:n_zeros, k] = EV_fill[n_zeros, k]
-    for k in range(SW[1], SE[1] + 1):
-        n_zeros = np.count_nonzero(
-            unw_ifg_interp[SW[0] + 1 :, k] == 0
-        )  # count zeros in South direction
-        if n_zeros == 0:
-            continue
-        EV_fill[-n_zeros:, k] = EV_fill[-n_zeros - 1, k]
-    for k in range(NW[0], SW[0] + 1):
-        n_zeros = np.count_nonzero(
-            unw_ifg_interp[k, 0 : NW[1] + 1] == 0
-        )  # count zeros in North direction
-        if n_zeros == 0:
-            continue
-        EV_fill[k, 0:n_zeros] = EV_fill[k, n_zeros]
-    for k in range(NE[0], SE[0] + 1):
-        n_zeros = np.count_nonzero(
-            unw_ifg_interp[k, SE[1] + 1 :] == 0
-        )  # count zeros in North direction
-        if n_zeros == 0:
-            continue
-        EV_fill[k, -n_zeros:] = EV_fill[k, -n_zeros - 1]
+    # Crop back to original size
+    lowpass_filtered = result[pad_rows:-pad_rows, pad_cols:-pad_cols]
 
-    # Fill the boundary area reflecting the pixel values
-    Reflect_fill = np.copy(EV_fill)
+    filtered_ifg = unw_ifg_interp - lowpass_filtered * in_bounds_pixels
+    return np.where(in_bounds_pixels, filtered_ifg, 0)
 
-    for k in range(NW[1], NE[1] + 1):
-        n_zeros = np.count_nonzero(
-            unw_ifg_interp[0 : NE[0] + 1, k] == 0
-        )  # count zeros in North direction
-        if n_zeros == 0:
-            continue
-        Reflect_fill[0:n_zeros, k] = np.flipud(EV_fill[n_zeros : n_zeros + n_zeros, k])
-    for k in range(SW[1], SE[1] + 1):
-        n_zeros = np.count_nonzero(
-            unw_ifg_interp[SW[0] + 1 :, k] == 0
-        )  # count zeros in South direction
-        if n_zeros == 0:
-            continue
-        Reflect_fill[-n_zeros:, k] = np.flipud(
-            EV_fill[-n_zeros - n_zeros : -n_zeros, k]
-        )
-    for k in range(NW[0], SW[0] + 1):
-        n_zeros = np.count_nonzero(
-            unw_ifg_interp[k, 0 : NW[1] + 1] == 0
-        )  # count zeros in North direction
-        if n_zeros == 0:
-            continue
-        Reflect_fill[k, 0:n_zeros] = np.flipud(EV_fill[k, n_zeros : n_zeros + n_zeros])
-    for k in range(NE[0], SE[0] + 1):
-        n_zeros = np.count_nonzero(
-            unw_ifg_interp[k, SE[1] + 1 :] == 0
-        )  # count zeros in North direction
-        if n_zeros == 0:
-            continue
-        Reflect_fill[k, -n_zeros:] = np.flipud(
-            EV_fill[k, -n_zeros - n_zeros : -n_zeros]
-        )
 
-    Reflect_fill[0 : NW[0], 0 : NW[1]] = np.flipud(
-        Reflect_fill[NW[0] : NW[0] + NW[0], 0 : NW[1]]
-    )  # upper left corner area
-    Reflect_fill[0 : NE[0], NE[1] + 1 :] = np.fliplr(
-        Reflect_fill[0 : NE[0], NE[1] + 1 - (ncol - NE[1] - 1) : NE[1] + 1]
-    )  # upper right corner area
-    Reflect_fill[SW[0] + 1 :, 0 : SW[1]] = np.fliplr(
-        Reflect_fill[SW[0] + 1 :, SW[1] : SW[1] + SW[1]]
-    )  # lower left corner area
-    Reflect_fill[SE[0] + 1 :, SE[1] + 1 :] = np.flipud(
-        Reflect_fill[SE[0] + 1 - (nrow - SE[0] - 1) : SE[0] + 1, SE[1] + 1 :]
-    )  # lower right corner area
-
-    # 2D filtering with Gaussian kernel
-    # wavelength_cutoff: float = 50*1e3,
-    # dx: float = 30,
-    cutoff_value = 0.5  # 0 < cutoff_value < 1
-    sigma_f = (
-        1 / wavelength_cutoff / np.sqrt(np.log(1 / cutoff_value))
-    )  # fc = sqrt(ln(1/cutoff_value))*sigma_f
+def _compute_filter_sigma(
+    wavelength_cutoff: float, pixel_spacing: float, cutoff_value: float = 0.5
+) -> float:
+    sigma_f = 1 / wavelength_cutoff / np.sqrt(np.log(1 / cutoff_value))
     sigma_x = 1 / np.pi / 2 / sigma_f
     sigma = sigma_x / pixel_spacing
-
-    lowpass_filtered = ndimage.gaussian_filter(Reflect_fill, sigma)
-    filtered_ifg = unwrapped_phase - lowpass_filtered * mask_boundary
-
-    return filtered_ifg
+    return sigma
 
 
 def fit_ramp_plane(unw_ifg: ArrayLike, mask: ArrayLike) -> np.ndarray:
