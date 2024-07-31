@@ -923,7 +923,7 @@ def _get_largest_conncomp_mask(
 
     # Make a mask of the largest conncomp:
     # Find the label with the most pixels using bincount
-    label_counts = np.bincount(conncomp_intersection.ravel())
+    label_counts = np.bincount(label.ravel())
     # (ignore the 0 label)
     largest_idx = np.argmax(label_counts[1:]) + 1
     # Create a mask of pixels with this label
