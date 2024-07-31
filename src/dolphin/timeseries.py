@@ -140,11 +140,11 @@ def run(
         logger.info("Estimating phase velocity")
         if velocity_file is None:
             velocity_file = Path(output_dir) / "velocity.tif"
+
         create_velocity(
             unw_file_list=inverted_phase_paths,
             output_file=velocity_file,
             reference=reference,
-            date_list=sar_dates,
             cor_file_list=cor_file_list,
             cor_threshold=correlation_threshold,
             num_threads=num_threads,
