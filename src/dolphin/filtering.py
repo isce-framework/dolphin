@@ -3,12 +3,13 @@ from numpy.typing import ArrayLike
 from scipy import fft, ndimage
 
 
-def filter_long_wavelength_old(
+def filter_long_wavelength(
     unwrapped_phase: ArrayLike,
     correlation: ArrayLike,
     mask_cutoff: float = 0.5,
     wavelength_cutoff: float = 50 * 1e3,
     pixel_spacing: float = 30,
+    workers: int = 1,
 ) -> np.ndarray:
     """Filter out signals with spatial wavelength longer than a threshold.
 
@@ -29,6 +30,9 @@ def filter_long_wavelength_old(
     pixel_spacing : float
         Pixel spatial spacing. Assume same spacing for x, y axes.
         The default is 30 (m).
+    workers : int
+        Number of `fft` workers to use for `scipy.fft.fft2`.
+        Default is 1.
 
     Returns
     -------
@@ -53,7 +57,7 @@ def filter_long_wavelength_old(
 
     sigma = _compute_filter_sigma(wavelength_cutoff, pixel_spacing, cutoff_value=0.5)
     # Apply Gaussian filter
-    input_ = fft.fft2(padded, workers=6)
+    input_ = fft.fft2(padded, workers=workers)
     result = ndimage.fourier_gaussian(input_, sigma=sigma)
     result = np.fft.ifft2(result).real.astype(unwrapped_phase.dtype)
 
