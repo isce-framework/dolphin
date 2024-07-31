@@ -5,9 +5,7 @@ from scipy import fft, ndimage
 
 def filter_long_wavelength(
     unwrapped_phase: ArrayLike,
-    correlation: ArrayLike,
-    correlation_cutoff: float = 0.5,
-    connected_component_labels: ArrayLike | None = None,
+    bad_pixel_mask: ArrayLike,
     wavelength_cutoff: float = 50 * 1e3,
     pixel_spacing: float = 30,
     workers: int = 1,
@@ -16,17 +14,11 @@ def filter_long_wavelength(
 
     Parameters
     ----------
-    unwrapped_phase : np.ndarray, 2D complex array
+    unwrapped_phase : ArrayLike
         Unwrapped interferogram phase to filter.
-    correlation : Arraylike, 2D
-        Array of interferometric correlation from 0 to 1.
-    correlation_cutoff : float
-        Threshold to use on `correlation` so that pixels where
-        `correlation[i, j] > correlation_cutoff` are used and the rest are ignored.
-        The default is 0.5.
-    connected_component_labels : ArrayLike, optional
-        Integer labels of connected components from the unwrapped interferogram.
-        If provided, ignores pixels with label 0.
+    bad_pixel_mask : ArrayLike
+        Boolean array with same shape as `unwrapped_phase` where `True` indicates a
+        pixel to ignore during ramp fitting
     wavelength_cutoff : float
         Spatial wavelength threshold to filter the unwrapped phase.
         Signals with wavelength longer than 'wavelength_cutoff' are filtered out.
@@ -45,48 +37,44 @@ def filter_long_wavelength(
         longer than a threshold.
 
     """
-    nrow, ncol = correlation.shape
-    good_pixel_mask = correlation > correlation_cutoff
-    non_boundary_mask = ~(correlation == 0)
-
-    if connected_component_labels is not None:
-        good_pixel_mask = good_pixel_mask & (connected_component_labels != 0)
+    good_pixel_mask = ~bad_pixel_mask
 
     unw0 = np.nan_to_num(unwrapped_phase)
-    unw_valid_mask = unw0 != 0
-    total_valid_mask = unw_valid_mask & good_pixel_mask
+    # Take either nan or 0 pixels in `unwrapped_phase` to be nodata
+    nodata_mask = unw0 == 0
+    in_bounds_pixels = ~nodata_mask
 
-    # Shift to be zero mean, then reset the borders to 0
-    offset = np.mean(unw0[total_valid_mask])
-    unw0 -= offset
-    unw0[~total_valid_mask] = 0
+    total_valid_mask = in_bounds_pixels & good_pixel_mask
 
     plane = fit_ramp_plane(unw0, total_valid_mask)
+    # Remove the plane, setting to 0 where we had no data for the plane fit:
+    unw_ifg_interp = np.where((~nodata_mask & good_pixel_mask), unw0, plane)
 
-    unw_ifg_interp = np.where(total_valid_mask, unw0, plane)
+    # Find the filter `sigma` which gives the correct cutoff in meters
+    sigma = _compute_filter_sigma(wavelength_cutoff, pixel_spacing, cutoff_value=0.5)
 
     # Pad the array with edge values
-    pad_rows = nrow // 4
-    pad_cols = ncol // 4
+    # The padding extends further than the default "radius = 2*sigma + 1",
+    # which given specified in `gaussian_filter`
+    # https://docs.scipy.org/doc/scipy/reference/generated/scipy.ndimage.gaussian_filter.html#scipy.ndimage.gaussian_filter
+    pad_rows = pad_cols = int(3 * sigma)
     # See here for illustration of `mode="reflect"`
     # https://scikit-image.org/docs/stable/auto_examples/transform/plot_edge_modes.html#interpolation-edge-modes
     padded = np.pad(
         unw_ifg_interp, ((pad_rows, pad_rows), (pad_cols, pad_cols)), mode="reflect"
     )
 
-    sigma = _compute_filter_sigma(wavelength_cutoff, pixel_spacing, cutoff_value=0.5)
     # Apply Gaussian filter
-    input_ = fft.fft2(padded, workers=workers)
-    result = ndimage.fourier_gaussian(input_, sigma=sigma)
+    result = fft.fft2(padded, workers=workers)
+    result = ndimage.fourier_gaussian(result, sigma=sigma)
     # Make sure to only take the real part (ifft returns complex)
     result = fft.ifft2(result, workers=workers).real.astype(unwrapped_phase.dtype)
 
     # Crop back to original size
     lowpass_filtered = result[pad_rows:-pad_rows, pad_cols:-pad_cols]
 
-    filtered_ifg = unw0 - lowpass_filtered * non_boundary_mask
-
-    return filtered_ifg
+    filtered_ifg = unw_ifg_interp - lowpass_filtered * in_bounds_pixels
+    return np.where(in_bounds_pixels, filtered_ifg, 0)
 
 
 def _compute_filter_sigma(
