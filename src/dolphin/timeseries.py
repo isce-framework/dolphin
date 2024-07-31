@@ -84,18 +84,19 @@ def run(
     """
     condition_func = argmax_index if condition == CallFunc.MAX else argmin_index
 
-    Path(output_dir).mkdir(exist_ok=True, parents=True)
+    def _get_reference():
+        # First we find the reference point for the unwrapped interferograms
+        if reference_point == (-1, -1):
+            return select_reference_point(
+                condition_file=condition_file,
+                output_dir=Path(output_dir),
+                condition_func=condition_func,
+                ccl_file_list=conncomp_paths,
+            )
+        else:
+            return ReferencePoint(row=reference_point[0], col=reference_point[1])
 
-    # First we find the reference point for the unwrapped interferograms
-    if reference_point == (-1, -1):
-        reference = select_reference_point(
-            condition_file=condition_file,
-            output_dir=Path(output_dir),
-            condition_func=condition_func,
-            ccl_file_list=conncomp_paths,
-        )
-    else:
-        reference = ReferencePoint(row=reference_point[0], col=reference_point[1])
+    Path(output_dir).mkdir(exist_ok=True, parents=True)
 
     ifg_date_pairs = [get_dates(f) for f in unwrapped_paths]
     sar_dates = sorted(set(utils.flatten(ifg_date_pairs)))
@@ -110,7 +111,7 @@ def run(
         logger.info("Inverting network of %s unwrapped ifgs", len(unwrapped_paths))
         inverted_phase_paths = invert_unw_network(
             unw_file_list=unwrapped_paths,
-            reference=reference,
+            reference=_get_reference(),
             output_dir=output_dir,
             num_threads=num_threads,
         )
@@ -144,7 +145,7 @@ def run(
         create_velocity(
             unw_file_list=inverted_phase_paths,
             output_file=velocity_file,
-            reference=reference,
+            reference=_get_reference(),
             cor_file_list=cor_file_list,
             cor_threshold=correlation_threshold,
             num_threads=num_threads,
