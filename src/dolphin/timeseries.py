@@ -129,17 +129,6 @@ def run(
             if not target.exists():  # Check to prevent overwriting
                 shutil.copy(p, target)
             inverted_phase_paths.append(target)
-        # Make extra "0" raster so that the number of rasters matches len(sar_dates)
-        ref_raster = Path(output_dir) / (
-            utils.format_dates(sar_dates[0], sar_dates[0]) + ".tif"
-        )
-        io.write_arr(
-            arr=None,
-            output_name=ref_raster,
-            like_filename=inverted_phase_paths[0],
-            nodata=0,
-        )
-        inverted_phase_paths.append(ref_raster)
 
     if run_velocity:
         #  We can't pass the correlations after an inversion- the numbers don't match
@@ -151,11 +140,11 @@ def run(
         logger.info("Estimating phase velocity")
         if velocity_file is None:
             velocity_file = Path(output_dir) / "velocity.tif"
+
         create_velocity(
             unw_file_list=inverted_phase_paths,
             output_file=velocity_file,
             reference=reference,
-            date_list=sar_dates,
             cor_file_list=cor_file_list,
             cor_threshold=correlation_threshold,
             num_threads=num_threads,
@@ -275,7 +264,7 @@ def invert_stack(
     -------
     phi : np.array 3D
         The estimated phase for each SAR acquisition
-        Shape is (n_sar_dates, n_rows, n_cols)
+        Shape is (n_sar_dates - 1, n_rows, n_cols)
     residuals : np.array 2D
         Sums of squared residuals: Squared Euclidean 2-norm for `dphi - A @ x`
         Shape is (n_rows, n_cols)
@@ -308,8 +297,6 @@ def invert_stack(
         # Reshape the residuals to be 2D
         residuals = residuals[0]
 
-    # Add 0 for the reference date to the front
-    phase = jnp.concatenate([jnp.zeros((1, n_rows, n_cols)), phase], axis=0)
     return phase, residuals
 
 
@@ -710,8 +697,9 @@ def invert_unw_network(
     sar_dates = sorted(set(flatten(ifg_tuples)))
     ref_date = sar_dates[0]
     suffix = ".tif"
+    # Create the `n_sar_dates - 1` output files (skipping the 0 reference raster)
     out_paths = [
-        Path(output_dir) / (format_dates(ref_date, d) + suffix) for d in sar_dates
+        Path(output_dir) / (format_dates(ref_date, d) + suffix) for d in sar_dates[1:]
     ]
     if all(p.exists() for p in out_paths):
         logger.info("All output files already exist, skipping inversion")

@@ -1,4 +1,4 @@
-from concurrent.futures import Future, ThreadPoolExecutor
+from concurrent.futures import FIRST_EXCEPTION, Future, ThreadPoolExecutor, wait
 from typing import Protocol, Sequence
 
 from numpy.typing import ArrayLike
@@ -52,7 +52,16 @@ def process_blocks(
         pbar.update()
 
     Executor = ThreadPoolExecutor if num_threads > 1 else DummyProcessPoolExecutor
+    futures: set[Future] = set()
     with Executor(num_threads) as exc:
         for rows, cols in slices:
             future = exc.submit(func, readers=readers, rows=rows, cols=cols)
             future.add_done_callback(write_callback)
+            futures.add(future)
+
+        while futures:
+            done, futures = wait(futures, timeout=1, return_when=FIRST_EXCEPTION)
+            for future in done:
+                e = future.exception()
+                if e is not None:
+                    raise e
