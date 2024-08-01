@@ -401,7 +401,7 @@ def _write_results_to_xarray(
 
 def group_netcdf_by_date(
     files: Iterable[Filename],
-    file_date_fmt: str = "datetime64[h]",
+    file_date_fmt: str = "datetime64[s]",
 ) -> dict[datetime.datetime, list[Filename]]:
     """Combine files by date and time into a dict.
 
