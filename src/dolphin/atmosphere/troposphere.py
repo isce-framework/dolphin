@@ -17,6 +17,7 @@ from scipy.interpolate import RegularGridInterpolator
 
 from dolphin import io
 from dolphin._types import Bbox, Filename, TropoModel, TropoType
+from dolphin.timeseries import ReferencePoint
 from dolphin.utils import format_date_pair
 
 from ._netcdf import delay_from_netcdf, group_netcdf_by_date
@@ -53,9 +54,6 @@ class DelayParams:
     geotransform: list[float]
     """Sequence of geotransformation parameters."""
 
-    wavelength: float
-    """Radar wavelength."""
-
     tropo_model: TropoModel
     """Model used for tropospheric correction."""
 
@@ -83,6 +81,7 @@ def estimate_tropospheric_delay(
     slc_files: Mapping[tuple[datetime.datetime], Sequence[Filename]],
     troposphere_files: Sequence[Filename],
     geom_files: dict[str, Path],
+    reference_point: ReferencePoint | None,
     output_dir: Path,
     file_date_fmt: str,
     tropo_model: TropoModel,
@@ -90,7 +89,7 @@ def estimate_tropospheric_delay(
     epsg: int,
     bounds: Bbox,
 ) -> list[Path]:
-    """Estimate the tropospheric delay corrections for each interferogram.
+    """Estimate the tropospheric delay corrections (in meters) for each interferogram.
 
     Parameters
     ----------
@@ -103,6 +102,9 @@ def estimate_tropospheric_delay(
     geom_files : dict[str, Path]
         Dictionary of geometry files with height and incidence angle, or
         los_east and los_north.
+    reference_point : tuple[int, int], optional
+        Reference point (row, col) used during time series inversion.
+        If not provided, no spatial referencing is performed.
     output_dir : Path
         Output directory.
     file_date_fmt : str
@@ -121,6 +123,7 @@ def estimate_tropospheric_delay(
     -------
     list[Path]
         List of newly created tropospheric phase delay geotiffs.
+        Units are in meters.
 
     """
     # Read geogrid data
@@ -136,13 +139,6 @@ def estimate_tropospheric_delay(
         left, bottom, right, top = bounds
 
     tropo_height_levels = np.concatenate(([-100], np.arange(0, 9000, 500)))
-
-    for key in slc_files:
-        if "compressed" not in str(slc_files[key][0]).lower():
-            one_of_slcs = slc_files[key][0]
-            break
-
-    wavelength = oput.get_radar_wavelength(one_of_slcs)
 
     delay_type = tropo_delay_type.value
 
@@ -216,7 +212,6 @@ def estimate_tropospheric_delay(
             epsg=epsg,
             tropo_model=tropo_model,
             delay_type=delay_type,
-            wavelength=wavelength,
             shape=(ysize, xsize),
             geotransform=gt,
             reference_file=tropo_files[closest_date_ref][0],
@@ -226,15 +221,21 @@ def estimate_tropospheric_delay(
             interferogram=format_date_pair(ref_date, sec_date),
         )
 
+        logger.info(f"Running troposphere computation for {ref_date}, {sec_date}")
         delay_datacube = tropo_run(delay_parameters)
 
         tropo_delay_2d = compute_2d_delay(delay_parameters, delay_datacube, geom_files)
+
+        if reference_point is not None:
+            ref_row, ref_col = reference_point
+            tropo_delay_2d -= tropo_delay_2d[ref_row, ref_col]
 
         # Write 2D tropospheric correction layer to disc
         io.write_arr(
             arr=tropo_delay_2d,
             output_name=tropo_delay_product_path,
             like_filename=ifg,
+            units="meters",
         )
 
     return output_paths
@@ -304,9 +305,8 @@ def compute_pyaps(delay_parameters: DelayParams) -> np.ndarray:
         phs_second = second_aps_estimator.getdelay()
 
         # Convert the delay in meters to radians
-        tropo_delay_datacube_list.append(
-            -(phs_ref - phs_second) * 4.0 * np.pi / delay_parameters.wavelength
-        )
+        relative_delay = phs_second - phs_ref
+        tropo_delay_datacube_list.append(relative_delay)
 
     # Tropo delay datacube
     tropo_delay_datacube = np.stack(tropo_delay_datacube_list)
@@ -315,7 +315,7 @@ def compute_pyaps(delay_parameters: DelayParams) -> np.ndarray:
 
 
 def compute_tropo_delay_from_netcdf(delay_parameters: DelayParams) -> np.ndarray:
-    """Compute tropospheric delay datacube from netcdf tropo file.
+    """Compute tropospheric delay (in meters) datacube from netcdf tropo file.
 
     Parameters
     ----------
@@ -364,8 +364,8 @@ def compute_tropo_delay_from_netcdf(delay_parameters: DelayParams) -> np.ndarray
             - tropo_delay_secondary[delay_parameters.delay_type]
         )
 
-    # Convert it to radians units
-    tropo_delay_datacube = -tropo_delay * 4.0 * np.pi / delay_parameters.wavelength
+    # Convert it to convention where positive means toward the satellite
+    tropo_delay_datacube = -1 * tropo_delay
 
     # Create a masked datacube that excludes the NaN values
     tropo_delay_datacube_masked = np.ma.masked_invalid(tropo_delay_datacube)
@@ -413,7 +413,7 @@ def compute_2d_delay(
     Returns
     -------
     np.ndarray
-        Computed 2D delay.
+        Computed 2D delay in meters.
 
     """
     dem_file = Path(geo_files["height"])

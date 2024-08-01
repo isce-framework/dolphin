@@ -38,6 +38,10 @@ __all__ = [
     "get_raster_bounds",
     "get_raster_dtype",
     "get_raster_metadata",
+    "get_raster_units",
+    "set_raster_units",
+    "get_raster_description",
+    "set_raster_description",
     "get_raster_gt",
     "get_raster_driver",
     "get_raster_chunk_size",
@@ -406,6 +410,81 @@ def set_raster_metadata(
     ds = None
 
 
+def get_raster_description(filename: Filename, band: int = 1):
+    """Get description of a raster band.
+
+    Parameters
+    ----------
+    filename : Filename
+        Path to the file to load.
+    band : int, optional
+        Band to get description for. Default is 1.
+
+    """
+    ds = gdal.Open(fspath(filename), gdal.GA_Update)
+    bnd = ds.GetRasterBand(band)
+    return bnd.GetDescription()
+
+
+def set_raster_description(filename: Filename, description: str, band: int = 1):
+    """Set description on a raster band.
+
+    Parameters
+    ----------
+    filename : Filename
+        Path to the file to load.
+    description : str
+        Description to set.
+    band : int, optional
+        Band to set description for. Default is 1.
+
+    """
+    ds = gdal.Open(fspath(filename), gdal.GA_Update)
+    bnd = ds.GetRasterBand(band)
+    bnd.SetDescription(description)
+    bnd.FlushCache()
+    ds = None
+
+
+def get_raster_units(filename: Filename, band: int = 1) -> str | None:
+    """Get units of a raster band.
+
+    Parameters
+    ----------
+    filename : Filename
+        Path to the file to load.
+    band : int
+        Band to get units for.
+        Default is 1.
+
+    """
+    ds = gdal.Open(fspath(filename))
+    bnd = ds.GetRasterBand(band)
+    return bnd.GetUnitType() or None
+
+
+def set_raster_units(filename: Filename, units: str, band: int | None = None) -> None:
+    """Set units on a raster band.
+
+    Parameters
+    ----------
+    filename : Filename
+        Path to the file to load.
+    units : str
+        Units to set.
+    band : int, optional
+        Band to set units for. Default is None, which sets for all bands.
+
+    """
+    ds = gdal.Open(fspath(filename), gdal.GA_Update)
+    if band is None:
+        bands = range(1, ds.RasterCount + 1)
+    for i in bands:
+        bnd = ds.GetRasterBand(i)
+        bnd.SetUnitType(units)
+        bnd.FlushCache()
+
+
 def rowcol_to_xy(
     row: int,
     col: int,
@@ -467,6 +546,8 @@ def write_arr(
     strides: Optional[dict[str, int]] = None,
     projection: Optional[Any] = None,
     nodata: Optional[float] = None,
+    units: Optional[str] = None,
+    description: Optional[str] = None,
 ):
     """Save an array to `output_name`.
 
@@ -507,6 +588,11 @@ def write_arr(
     nodata : float, optional
         Nodata value to save.
         Default is the nodata of band 1 of `like_filename` (if provided), or None.
+    units : str, optional
+        Units of the data. Default is None.
+        Value is stored in the metadata as "units".
+    description : str, optional
+        Description of the raster bands stored in the metadata.
 
     """
     fi = FileInfo.from_user_inputs(
@@ -552,12 +638,17 @@ def write_arr(
             bnd = ds_out.GetRasterBand(i + 1)
             bnd.WriteArray(arr[i])
 
-    # Set the nodata value for each band
-    if fi.nodata is not None:
-        for i in range(fi.nbands):
-            logger.debug(f"Setting nodata for band {i+1}/{fi.nbands}")
-            bnd = ds_out.GetRasterBand(i + 1)
+    # Set the nodata/units/description for each band
+    for i in range(fi.nbands):
+        logger.debug(f"Setting nodata for band {i+1}/{fi.nbands}")
+        bnd = ds_out.GetRasterBand(i + 1)
+        # Note: right now we're assuming the nodata/units/description
+        if fi.nodata is not None:
             bnd.SetNoDataValue(fi.nodata)
+        if units is not None:
+            bnd.SetUnitType(units)
+        if description is not None:
+            bnd.SetDescription(description)
 
     ds_out.FlushCache()
     ds_out = None
