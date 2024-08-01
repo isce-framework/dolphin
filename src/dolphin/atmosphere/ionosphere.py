@@ -184,6 +184,7 @@ def estimate_ionospheric_delay(
             arr=ifg_iono_range_delay,
             output_name=iono_delay_product_name,
             like_filename=ifg,
+            units="meters",
         )
 
     return output_paths

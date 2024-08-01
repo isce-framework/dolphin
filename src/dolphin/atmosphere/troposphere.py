@@ -234,6 +234,7 @@ def estimate_tropospheric_delay(
             arr=tropo_delay_2d,
             output_name=tropo_delay_product_path,
             like_filename=ifg,
+            units="meters",
         )
 
     return output_paths
