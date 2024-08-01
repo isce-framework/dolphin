@@ -82,6 +82,8 @@ def run(
         list of Paths to inverted interferograms (single reference phase series).
 
     """
+    Path(output_dir).mkdir(exist_ok=True, parents=True)
+
     condition_func = argmax_index if condition == CallFunc.MAX else argmin_index
     if reference_point == (-1, -1):
         ref = select_reference_point(
@@ -92,8 +94,6 @@ def run(
         )
     else:
         ref = ReferencePoint(row=reference_point[0], col=reference_point[1])
-
-    Path(output_dir).mkdir(exist_ok=True, parents=True)
 
     ifg_date_pairs = [get_dates(f) for f in unwrapped_paths]
     sar_dates = sorted(set(utils.flatten(ifg_date_pairs)))
