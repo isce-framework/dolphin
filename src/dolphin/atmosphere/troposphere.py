@@ -87,7 +87,7 @@ def estimate_tropospheric_delay(
     epsg: int,
     bounds: Bbox,
 ) -> list[Path]:
-    """Estimate the tropospheric delay corrections for each interferogram.
+    """Estimate the tropospheric delay corrections (in meters) for each interferogram.
 
     Parameters
     ----------
@@ -118,6 +118,7 @@ def estimate_tropospheric_delay(
     -------
     list[Path]
         List of newly created tropospheric phase delay geotiffs.
+        Units are in meters.
 
     """
     # Read geogrid data
@@ -303,7 +304,7 @@ def compute_pyaps(delay_parameters: DelayParams) -> np.ndarray:
 
 
 def compute_tropo_delay_from_netcdf(delay_parameters: DelayParams) -> np.ndarray:
-    """Compute tropospheric delay datacube from netcdf tropo file.
+    """Compute tropospheric delay (in meters) datacube from netcdf tropo file.
 
     Parameters
     ----------
@@ -401,7 +402,7 @@ def compute_2d_delay(
     Returns
     -------
     np.ndarray
-        Computed 2D delay.
+        Computed 2D delay in meters.
 
     """
     dem_file = Path(geo_files["height"])
