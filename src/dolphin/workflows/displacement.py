@@ -298,10 +298,14 @@ def run(
         # Troposphere
         if "height" not in frame_geometry_files:
             logger.warning(
-                "DEM file is not given, skip estimating tropospheric corrections..."
+                "DEM file is not given, skip estimating tropospheric corrections."
             )
         else:
             if cfg.correction_options.troposphere_files is not None:
+                logger.info(
+                    "Calculating tropospheric corrections for %s files.",
+                    len(ifg_filenames),
+                )
                 tropo_paths = estimate_tropospheric_delay(
                     ifg_file_list=ifg_filenames,
                     troposphere_files=cfg.correction_options.troposphere_files,
@@ -316,10 +320,13 @@ def run(
                     bounds=out_bounds,
                 )
             else:
-                logger.info("No weather model, skip tropospheric correction ...")
+                logger.info("No weather model, skip tropospheric correction.")
 
         # Ionosphere
         if grouped_iono_files:
+            logger.info(
+                "Calculating ionospheric corrections for %s files", len(ifg_filenames)
+            )
             iono_paths = estimate_ionospheric_delay(
                 ifg_file_list=ifg_filenames,
                 slc_files=grouped_slc_files,
@@ -331,7 +338,7 @@ def run(
                 bounds=out_bounds,
             )
         else:
-            logger.info("No TEC files, skip ionospheric correction ...")
+            logger.info("No TEC files, skip ionospheric correction.")
 
     # Print the maximum memory usage for each worker
     _print_summary(cfg)

@@ -221,6 +221,7 @@ def estimate_tropospheric_delay(
             interferogram=format_date_pair(ref_date, sec_date),
         )
 
+        logger.info(f"Running troposphere computation for {ref_date}, {sec_date}")
         delay_datacube = tropo_run(delay_parameters)
 
         tropo_delay_2d = compute_2d_delay(delay_parameters, delay_datacube, geom_files)

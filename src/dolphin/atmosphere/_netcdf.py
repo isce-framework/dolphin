@@ -75,8 +75,8 @@ def delay_from_netcdf(
         try:
             wm_proj = CRS.from_wkt(ds["proj"].attrs["crs_wkt"])
         except KeyError:
-            logger.warning(
-                "WARNING: I can't find a CRS in the weather model file, "
+            logger.debug(
+                "I can't find a CRS in the weather model file, "
                 "so I will assume you are using WGS84"
             )
             wm_proj = CRS.from_epsg(4326)
@@ -265,7 +265,6 @@ def _build_cube(xpts, ypts, zpts, model_crs, pts_crs, interpolators):
 
     # Loop over heights and compute delays
     for ii, ht in enumerate(zpts):
-
         # pts is in weather model system;
         if model_crs != pts_crs:
             # lat / lon / height for hrrr
