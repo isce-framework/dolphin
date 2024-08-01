@@ -39,7 +39,7 @@ def estimate_ionospheric_delay(
     epsg: int,
     bounds: Bbox,
 ) -> list[Path]:
-    """Estimate the range delay caused by ionosphere for each interferogram.
+    """Estimate the range delay (in meters) caused by ionosphere for each interferogram.
 
     Parameters
     ----------
@@ -166,7 +166,9 @@ def estimate_ionospheric_delay(
             secondary_vtec, iono_inc_angle, freq, obs_type="phase"
         )
 
-        ifg_iono_range_delay = range_delay_reference - range_delay_secondary
+        ifg_iono_range_delay_radians = range_delay_reference - range_delay_secondary
+        # Convert to meters, where positive corresponds to motion toward the satellite
+        ifg_iono_range_delay = -wavelength / (4 * np.pi) * ifg_iono_range_delay_radians
 
         # Write 2D tropospheric correction layer to disc
         io.write_arr(
