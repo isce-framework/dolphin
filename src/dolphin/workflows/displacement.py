@@ -245,8 +245,11 @@ def run(
     # ##############################################
 
     ts_opts = cfg.timeseries_options
-    # Skip if we only have 1 unwrapped, or if we didn't ask for inversion/velocity
-    if len(unwrapped_paths) > 1 and (ts_opts.run_inversion or ts_opts.run_velocity):
+    # Skip if we didn't ask for inversion/velocity
+    # TODO: the troposphere/ionosphere corrections rely on `timeseries_paths`
+    # Perhaps we should refactor those to not need files,
+    # or perhaps we should throw an error if they want corrections but not `timeseries`
+    if ts_opts.run_inversion or ts_opts.run_velocity:
         # the output of run_timeseries is not currently used so pre-commit removes it
         # let's add back if we need it
         timeseries_paths, reference_point = timeseries.run(
