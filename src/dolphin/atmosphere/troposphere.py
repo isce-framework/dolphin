@@ -53,9 +53,6 @@ class DelayParams:
     geotransform: list[float]
     """Sequence of geotransformation parameters."""
 
-    wavelength: float
-    """Radar wavelength."""
-
     tropo_model: TropoModel
     """Model used for tropospheric correction."""
 
@@ -137,13 +134,6 @@ def estimate_tropospheric_delay(
 
     tropo_height_levels = np.concatenate(([-100], np.arange(0, 9000, 500)))
 
-    for key in slc_files:
-        if "compressed" not in str(slc_files[key][0]).lower():
-            one_of_slcs = slc_files[key][0]
-            break
-
-    wavelength = oput.get_radar_wavelength(one_of_slcs)
-
     delay_type = tropo_delay_type.value
 
     if str(troposphere_files[0]).endswith(".nc"):
@@ -216,7 +206,6 @@ def estimate_tropospheric_delay(
             epsg=epsg,
             tropo_model=tropo_model,
             delay_type=delay_type,
-            wavelength=wavelength,
             shape=(ysize, xsize),
             geotransform=gt,
             reference_file=tropo_files[closest_date_ref][0],
@@ -304,9 +293,8 @@ def compute_pyaps(delay_parameters: DelayParams) -> np.ndarray:
         phs_second = second_aps_estimator.getdelay()
 
         # Convert the delay in meters to radians
-        tropo_delay_datacube_list.append(
-            -(phs_ref - phs_second) * 4.0 * np.pi / delay_parameters.wavelength
-        )
+        relative_delay = phs_second - phs_ref
+        tropo_delay_datacube_list.append(relative_delay)
 
     # Tropo delay datacube
     tropo_delay_datacube = np.stack(tropo_delay_datacube_list)
@@ -364,8 +352,8 @@ def compute_tropo_delay_from_netcdf(delay_parameters: DelayParams) -> np.ndarray
             - tropo_delay_secondary[delay_parameters.delay_type]
         )
 
-    # Convert it to radians units
-    tropo_delay_datacube = -tropo_delay * 4.0 * np.pi / delay_parameters.wavelength
+    # Convert it to convention where positive means toward the satellite
+    tropo_delay_datacube = -1 * tropo_delay
 
     # Create a masked datacube that excludes the NaN values
     tropo_delay_datacube_masked = np.ma.masked_invalid(tropo_delay_datacube)
