@@ -42,7 +42,7 @@ def run(
     correlation_threshold: float = 0.2,
     num_threads: int = 5,
     reference_point: tuple[int, int] = (-1, -1),
-) -> list[Path]:
+) -> tuple[list[Path], ReferencePoint]:
     """Invert the unwrapped interferograms, estimate timeseries and phase velocity.
 
     Parameters
@@ -80,20 +80,24 @@ def run(
     -------
     inverted_phase_paths : list[Path]
         list of Paths to inverted interferograms (single reference phase series).
+    reference_point : ReferencePoint
+        NamedTuple of reference (row, column) selected.
+        If passed as input, simply returned back as output.
+        Otherwise, the result is the auto-selection from `select_reference_point`.
 
     """
     Path(output_dir).mkdir(exist_ok=True, parents=True)
 
     condition_func = argmax_index if condition == CallFunc.MAX else argmin_index
     if reference_point == (-1, -1):
-        ref = select_reference_point(
+        ref_point = select_reference_point(
             condition_file=condition_file,
             output_dir=Path(output_dir),
             condition_func=condition_func,
             ccl_file_list=conncomp_paths,
         )
     else:
-        ref = ReferencePoint(row=reference_point[0], col=reference_point[1])
+        ref_point = ReferencePoint(row=reference_point[0], col=reference_point[1])
 
     ifg_date_pairs = [get_dates(f) for f in unwrapped_paths]
     sar_dates = sorted(set(utils.flatten(ifg_date_pairs)))
@@ -108,7 +112,7 @@ def run(
         logger.info("Inverting network of %s unwrapped ifgs", len(unwrapped_paths))
         inverted_phase_paths = invert_unw_network(
             unw_file_list=unwrapped_paths,
-            reference=ref,
+            reference=ref_point,
             output_dir=output_dir,
             num_threads=num_threads,
         )
@@ -142,13 +146,13 @@ def run(
         create_velocity(
             unw_file_list=inverted_phase_paths,
             output_file=velocity_file,
-            reference=ref,
+            reference=ref_point,
             cor_file_list=cor_file_list,
             cor_threshold=correlation_threshold,
             num_threads=num_threads,
         )
 
-    return inverted_phase_paths
+    return inverted_phase_paths, ref_point
 
 
 def argmin_index(arr: ArrayLike) -> tuple[int, ...]:

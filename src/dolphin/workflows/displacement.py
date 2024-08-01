@@ -18,6 +18,7 @@ from tqdm.auto import tqdm
 from dolphin import __version__, io, timeseries, utils
 from dolphin._log import log_runtime, setup_logging
 from dolphin.atmosphere import estimate_ionospheric_delay, estimate_tropospheric_delay
+from dolphin.timeseries import ReferencePoint
 from dolphin.workflows import CallFunc
 
 from . import stitching_bursts, unwrapping, wrapped_phase
@@ -42,6 +43,7 @@ class OutputPaths(NamedTuple):
     timeseries_paths: list[Path] | None
     tropospheric_corrections: list[Path] | None
     ionospheric_corrections: list[Path] | None
+    reference_point: ReferencePoint | None
 
 
 @log_runtime
@@ -224,6 +226,7 @@ def run(
             timeseries_paths=None,
             tropospheric_corrections=None,
             ionospheric_corrections=None,
+            reference_point=None,
         )
 
     row_looks, col_looks = cfg.phase_linking.half_window.to_looks()
@@ -246,7 +249,7 @@ def run(
     if len(unwrapped_paths) > 1 and (ts_opts.run_inversion or ts_opts.run_velocity):
         # the output of run_timeseries is not currently used so pre-commit removes it
         # let's add back if we need it
-        timeseries_paths = timeseries.run(
+        timeseries_paths, reference_point = timeseries.run(
             unwrapped_paths=unwrapped_paths,
             conncomp_paths=conncomp_paths,
             corr_paths=stitched_cor_paths,
@@ -262,6 +265,7 @@ def run(
 
     else:
         timeseries_paths = None
+        reference_point = None
 
     # ##############################################
     # 5. Estimate corrections for each interferogram
@@ -347,6 +351,7 @@ def run(
         timeseries_paths=timeseries_paths,
         tropospheric_corrections=tropo_paths,
         ionospheric_corrections=iono_paths,
+        reference_point=reference_point,
     )
 
 
