@@ -38,6 +38,10 @@ __all__ = [
     "get_raster_bounds",
     "get_raster_dtype",
     "get_raster_metadata",
+    "get_raster_units",
+    "set_raster_units",
+    "get_raster_description",
+    "set_raster_description",
     "get_raster_gt",
     "get_raster_driver",
     "get_raster_chunk_size",
@@ -406,6 +410,22 @@ def set_raster_metadata(
     ds = None
 
 
+def get_raster_description(filename: Filename, band: int = 1):
+    """Get description of a raster band.
+
+    Parameters
+    ----------
+    filename : Filename
+        Path to the file to load.
+    band : int, optional
+        Band to get description for. Default is 1.
+
+    """
+    ds = gdal.Open(fspath(filename), gdal.GA_Update)
+    bnd = ds.GetRasterBand(band)
+    return bnd.GetDescription()
+
+
 def set_raster_description(filename: Filename, description: str, band: int = 1):
     """Set description on a raster band.
 
@@ -424,6 +444,23 @@ def set_raster_description(filename: Filename, description: str, band: int = 1):
     bnd.SetDescription(description)
     bnd.FlushCache()
     ds = None
+
+
+def get_raster_units(filename: Filename, band: int = 1) -> str | None:
+    """Get units of a raster band.
+
+    Parameters
+    ----------
+    filename : Filename
+        Path to the file to load.
+    band : int
+        Band to get units for.
+        Default is 1.
+
+    """
+    ds = gdal.Open(fspath(filename))
+    bnd = ds.GetRasterBand(band)
+    return bnd.GetUnitType()
 
 
 def set_raster_units(filename: Filename, units: str, band: int | None = None) -> None:
