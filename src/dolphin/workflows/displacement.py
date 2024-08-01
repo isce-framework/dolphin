@@ -273,8 +273,6 @@ def run(
     tropo_paths: list[Path] | None = None
     iono_paths: list[Path] | None = None
     if len(cfg.correction_options.geometry_files) > 0:
-        stitched_ifg_dir = cfg.interferogram_network._directory
-        ifg_filenames = sorted(Path(stitched_ifg_dir).glob("*.int.tif"))
         out_dir = cfg.work_directory / cfg.correction_options._atm_directory
         out_dir.mkdir(exist_ok=True)
         grouped_slc_files = group_by_date(cfg.cslc_file_list)
@@ -282,13 +280,14 @@ def run(
         # Prepare frame geometry files
         geometry_dir = out_dir / "geometry"
         geometry_dir.mkdir(exist_ok=True)
-        crs = io.get_raster_crs(ifg_filenames[0])
+        assert timeseries_paths is not None
+        crs = io.get_raster_crs(timeseries_paths[0])
         epsg = crs.to_epsg()
-        out_bounds = io.get_raster_bounds(ifg_filenames[0])
+        out_bounds = io.get_raster_bounds(timeseries_paths[0])
         frame_geometry_files = utils.prepare_geometry(
             geometry_dir=geometry_dir,
             geo_files=cfg.correction_options.geometry_files,
-            matching_file=ifg_filenames[0],
+            matching_file=timeseries_paths[0],
             dem_file=cfg.correction_options.dem_file,
             epsg=epsg,
             out_bounds=out_bounds,
@@ -302,12 +301,13 @@ def run(
             )
         else:
             if cfg.correction_options.troposphere_files is not None:
+                assert timeseries_paths is not None
                 logger.info(
                     "Calculating tropospheric corrections for %s files.",
-                    len(ifg_filenames),
+                    len(timeseries_paths),
                 )
                 tropo_paths = estimate_tropospheric_delay(
-                    ifg_file_list=ifg_filenames,
+                    ifg_file_list=timeseries_paths,
                     troposphere_files=cfg.correction_options.troposphere_files,
                     file_date_fmt=cfg.correction_options.tropo_date_fmt,
                     slc_files=grouped_slc_files,
@@ -325,10 +325,12 @@ def run(
         # Ionosphere
         if grouped_iono_files:
             logger.info(
-                "Calculating ionospheric corrections for %s files", len(ifg_filenames)
+                "Calculating ionospheric corrections for %s files",
+                len(timeseries_paths),
             )
+            assert timeseries_paths is not None
             iono_paths = estimate_ionospheric_delay(
-                ifg_file_list=ifg_filenames,
+                ifg_file_list=timeseries_paths,
                 slc_files=grouped_slc_files,
                 tec_files=grouped_iono_files,
                 geom_files=frame_geometry_files,
