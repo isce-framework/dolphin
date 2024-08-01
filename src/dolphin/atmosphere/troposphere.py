@@ -17,6 +17,7 @@ from scipy.interpolate import RegularGridInterpolator
 
 from dolphin import io
 from dolphin._types import Bbox, Filename, TropoModel, TropoType
+from dolphin.timeseries import ReferencePoint
 from dolphin.utils import format_date_pair
 
 from ._netcdf import delay_from_netcdf, group_netcdf_by_date
@@ -80,6 +81,7 @@ def estimate_tropospheric_delay(
     slc_files: Mapping[tuple[datetime.datetime], Sequence[Filename]],
     troposphere_files: Sequence[Filename],
     geom_files: dict[str, Path],
+    reference_point: ReferencePoint | None,
     output_dir: Path,
     file_date_fmt: str,
     tropo_model: TropoModel,
@@ -100,6 +102,9 @@ def estimate_tropospheric_delay(
     geom_files : dict[str, Path]
         Dictionary of geometry files with height and incidence angle, or
         los_east and los_north.
+    reference_point : tuple[int, int], optional
+        Reference point (row, col) used during time series inversion.
+        If not provided, no spatial referencing is performed.
     output_dir : Path
         Output directory.
     file_date_fmt : str
@@ -219,6 +224,10 @@ def estimate_tropospheric_delay(
         delay_datacube = tropo_run(delay_parameters)
 
         tropo_delay_2d = compute_2d_delay(delay_parameters, delay_datacube, geom_files)
+
+        if reference_point is not None:
+            ref_row, ref_col = reference_point
+            tropo_delay_2d -= tropo_delay_2d[ref_row, ref_col]
 
         # Write 2D tropospheric correction layer to disc
         io.write_arr(
