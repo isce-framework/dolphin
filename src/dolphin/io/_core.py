@@ -460,7 +460,7 @@ def get_raster_units(filename: Filename, band: int = 1) -> str | None:
     """
     ds = gdal.Open(fspath(filename))
     bnd = ds.GetRasterBand(band)
-    return bnd.GetUnitType()
+    return bnd.GetUnitType() or None
 
 
 def set_raster_units(filename: Filename, units: str, band: int | None = None) -> None:
