@@ -17,7 +17,6 @@ from tqdm.auto import tqdm
 
 from dolphin import __version__, io, timeseries, utils
 from dolphin._log import log_runtime, setup_logging
-from dolphin.atmosphere import estimate_ionospheric_delay, estimate_tropospheric_delay
 from dolphin.timeseries import ReferencePoint
 from dolphin.workflows import CallFunc
 
@@ -304,6 +303,8 @@ def run(
             )
         else:
             if cfg.correction_options.troposphere_files is not None:
+                from dolphin.atmosphere import estimate_tropospheric_delay
+
                 assert timeseries_paths is not None
                 logger.info(
                     "Calculating tropospheric corrections for %s files.",
@@ -327,6 +328,8 @@ def run(
 
         # Ionosphere
         if grouped_iono_files:
+            from dolphin.atmosphere import estimate_ionospheric_delay
+
             logger.info(
                 "Calculating ionospheric corrections for %s files",
                 len(timeseries_paths),
