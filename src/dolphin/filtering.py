@@ -41,9 +41,15 @@ def filter_long_wavelength(
         filtered interferogram that does not contain signals with spatial wavelength
         longer than a threshold.
 
+    Raises
+    ------
+    ValueError
+        If wavelength_cutoff too large for image size/pixel spacing.
+
     """
     good_pixel_mask = ~bad_pixel_mask
 
+    rows, cols = unwrapped_phase.shape
     unw0 = np.nan_to_num(unwrapped_phase)
     # Take either nan or 0 pixels in `unwrapped_phase` to be nodata
     nodata_mask = unw0 == 0
@@ -58,6 +64,10 @@ def filter_long_wavelength(
     # Find the filter `sigma` which gives the correct cutoff in meters
     sigma = _compute_filter_sigma(wavelength_cutoff, pixel_spacing, cutoff_value=0.5)
 
+    if sigma > unw0.shape[0] or sigma > unw0.shape[0]:
+        msg = f"{wavelength_cutoff = } too large for image."
+        msg += f"Shape = {(rows, cols)}, and {pixel_spacing = }"
+        raise ValueError(msg)
     # Pad the array with edge values
     # The padding extends further than the default "radius = 2*sigma + 1",
     # which given specified in `gaussian_filter`
