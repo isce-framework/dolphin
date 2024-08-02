@@ -681,5 +681,8 @@ class DummyProcessPoolExecutor(Executor):
         future.set_result(result)
         return future
 
-    def shutdown(self, wait: bool = True, cancel_futures: bool = True):  # noqa: D102
+    def shutdown(self, wait: bool = True, cancel_futures: bool = True):  # noqa:D102
         pass
+
+    def map(self, fn: Callable[P, T], *iterables, **kwargs):  # noqa: D102
+        return map(fn, *iterables)
