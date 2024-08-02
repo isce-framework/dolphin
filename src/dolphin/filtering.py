@@ -132,19 +132,19 @@ def fit_ramp_plane(unw_ifg: ArrayLike, mask: ArrayLike) -> np.ndarray:
 
 def filter_rasters(
     unw_filenames: list[Path],
-    cor_filenames: list[Path] | None,
-    conncomp_filenames: list[Path] | None,
-    temporal_coherence_filename: Path | None,
+    cor_filenames: list[Path] | None = None,
+    conncomp_filenames: list[Path] | None = None,
+    temporal_coherence_filename: Path | None = None,
     wavelength_cutoff: float = 50_000,
     correlation_cutoff: float = 0.5,
     output_dir: Path | None = None,
-    num_threads: int = 4,
-):
+    max_workers: int = 4,
+) -> list[Path]:
     """Filter a list of unwrapped interferogram files using a long-wavelength filter.
 
-    This function applies a spatial filter to remove long-wavelength components from
-    unwrapped interferograms. It can optionall use temporal coherence, correlation, and
-    connected component information for masking.
+    Remove long-wavelength components from each unwrapped interferogram.
+    It can optionally use temporal coherence, correlation, and connected component
+    information for masking.
 
     Parameters
     ----------
@@ -167,8 +167,13 @@ def filter_rasters(
     output_dir : Path | None, optional
         Directory to save the filtered results.
         If None, saves in the same location as inputs with .filt.tif extension.
-    num_threads : int, optional
-        Number of parallel threads to use for processing. Default is 4.
+    max_workers : int, optional
+        Number of parallel images to process. Default is 4.
+
+    Returns
+    -------
+    list[Path]
+        Output filtered rasters.
 
     Notes
     -----
@@ -191,10 +196,9 @@ def filter_rasters(
         assert unw_filenames
         output_dir = unw_filenames[0].parent
     output_dir.mkdir(exist_ok=True)
-
     mp.set_start_method("spawn")
 
-    process_map(
+    return process_map(
         _filter_and_save,
         unw_filenames,
         cor_filenames or repeat(None),
@@ -203,7 +207,7 @@ def filter_rasters(
         repeat(wavelength_cutoff),
         repeat(bad_pixel_mask),
         repeat(correlation_cutoff),
-        max_workers=num_threads,
+        max_workers=max_workers,
         desc="Filtering rasters",
     )
 

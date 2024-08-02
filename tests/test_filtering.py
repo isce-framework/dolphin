@@ -1,9 +1,12 @@
+from pathlib import Path
+
 import numpy as np
+import pytest
 
-from dolphin import filtering
+from dolphin import filtering, io
 
 
-def test_filter_long_wavelegnth():
+def test_filter_long_wavelength():
     # Check filtering with ramp phase
     y, x = np.ogrid[-3:3:512j, -3:3:512j]
     unw_ifg = np.pi * (x + y)
@@ -18,4 +21,28 @@ def test_filter_long_wavelegnth():
         filtered_ifg[10:-10, 10:-10],
         np.zeros(filtered_ifg[10:-10, 10:-10].shape),
         atol=1.0,
+    )
+
+
+@pytest.fixture()
+def unw_files(tmp_path):
+    """Make series of files offset in lat/lon."""
+    shape = (3, 9, 9)
+
+    y, x = np.ogrid[-3:3:512j, -3:3:512j]
+    file_list = []
+    for i in range(shape[0]):
+        unw_arr = (i + 1) * np.pi * (x + y)
+        print(unw_arr.shape)
+        fname = tmp_path / f"unw_{i}.tif"
+        io.write_arr(arr=unw_arr, output_name=fname)
+        file_list.append(Path(fname))
+
+    return file_list
+
+
+def test_filter(tmp_path, unw_files):
+    output_dir = Path(tmp_path) / "filtered"
+    filtering.filter_rasters(
+        unw_filenames=unw_files, output_dir=output_dir, max_workers=1
     )

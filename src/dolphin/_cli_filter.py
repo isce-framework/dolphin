@@ -70,7 +70,7 @@ def get_parser(subparser=None, subcommand_name="unwrap") -> argparse.ArgumentPar
     )
 
     parser.add_argument(
-        "--max-jobs",
+        "--max-workers",
         type=int,
         default=1,
         help="Number of parallel files to filter.",
