@@ -1,6 +1,7 @@
 import argparse
 import sys
 
+import dolphin._cli_filter
 import dolphin._cli_timeseries
 import dolphin._cli_unwrap
 import dolphin.workflows._cli_config
@@ -22,6 +23,7 @@ def main(args=None):
     dolphin.workflows._cli_config.get_parser(subparser, "config")
     dolphin._cli_unwrap.get_parser(subparser, "unwrap")
     dolphin._cli_timeseries.get_parser(subparser, "timeseries")
+    dolphin._cli_filter.get_parser(subparser, "filter")
     parsed_args = parser.parse_args(args=args)
 
     arg_dict = vars(parsed_args)
