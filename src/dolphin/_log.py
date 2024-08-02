@@ -119,10 +119,10 @@ class JSONFormatter(logging.Formatter):
 
     def _prepare_log_dict(self, record: logging.LogRecord):
         always_fields = {
-            "message": record.getMessage(),
             "timestamp": datetime.fromtimestamp(
                 record.created, tz=timezone.utc
             ).isoformat(),
+            "message": record.getMessage(),
         }
         if record.exc_info is not None:
             always_fields["exc_info"] = self.formatException(record.exc_info)
