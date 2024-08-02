@@ -272,7 +272,7 @@ def merge_images(
             args.extend(["-co", option])
 
     arg_list = [str(a) for a in args]
-    logger.info(f"Running {' '.join(arg_list)}")
+    logger.debug(f"Running {' '.join(arg_list)}")
     subprocess.check_call(arg_list)
 
     # Now clip to the provided bounding box
