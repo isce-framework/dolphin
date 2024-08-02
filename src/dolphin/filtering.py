@@ -1,4 +1,5 @@
 import multiprocessing as mp
+from concurrent.futures import ProcessPoolExecutor
 from itertools import repeat
 from pathlib import Path
 
@@ -180,8 +181,6 @@ def filter_rasters(
     - If temporal_coherence_filename is provided, pixels with coherence < 0.5 are masked
 
     """
-    from tqdm.contrib.concurrent import process_map
-
     from dolphin import io
 
     bad_pixel_mask = np.zeros(
@@ -196,20 +195,21 @@ def filter_rasters(
         assert unw_filenames
         output_dir = unw_filenames[0].parent
     output_dir.mkdir(exist_ok=True)
-    mp.set_start_method("spawn")
+    ctx = mp.get_context("spawn")
 
-    return process_map(
-        _filter_and_save,
-        unw_filenames,
-        cor_filenames or repeat(None),
-        conncomp_filenames or repeat(None),
-        repeat(output_dir),
-        repeat(wavelength_cutoff),
-        repeat(bad_pixel_mask),
-        repeat(correlation_cutoff),
-        max_workers=max_workers,
-        desc="Filtering rasters",
-    )
+    with ProcessPoolExecutor(max_workers, mp_context=ctx) as pool:
+        return list(
+            pool.map(
+                _filter_and_save,
+                unw_filenames,
+                cor_filenames or repeat(None),
+                conncomp_filenames or repeat(None),
+                repeat(output_dir),
+                repeat(wavelength_cutoff),
+                repeat(bad_pixel_mask),
+                repeat(correlation_cutoff),
+            )
+        )
 
 
 def _filter_and_save(
