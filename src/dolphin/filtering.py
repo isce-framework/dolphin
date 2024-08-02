@@ -1,5 +1,10 @@
+import multiprocessing as mp
+from concurrent.futures import ProcessPoolExecutor
+from itertools import repeat
+from pathlib import Path
+
 import numpy as np
-from numpy.typing import ArrayLike
+from numpy.typing import ArrayLike, NDArray
 from scipy import fft, ndimage
 
 
@@ -36,9 +41,15 @@ def filter_long_wavelength(
         filtered interferogram that does not contain signals with spatial wavelength
         longer than a threshold.
 
+    Raises
+    ------
+    ValueError
+        If wavelength_cutoff too large for image size/pixel spacing.
+
     """
     good_pixel_mask = ~bad_pixel_mask
 
+    rows, cols = unwrapped_phase.shape
     unw0 = np.nan_to_num(unwrapped_phase)
     # Take either nan or 0 pixels in `unwrapped_phase` to be nodata
     nodata_mask = unw0 == 0
@@ -53,6 +64,10 @@ def filter_long_wavelength(
     # Find the filter `sigma` which gives the correct cutoff in meters
     sigma = _compute_filter_sigma(wavelength_cutoff, pixel_spacing, cutoff_value=0.5)
 
+    if sigma > unw0.shape[0] or sigma > unw0.shape[0]:
+        msg = f"{wavelength_cutoff = } too large for image."
+        msg += f"Shape = {(rows, cols)}, and {pixel_spacing = }"
+        raise ValueError(msg)
     # Pad the array with edge values
     # The padding extends further than the default "radius = 2*sigma + 1",
     # which given specified in `gaussian_filter`
@@ -124,3 +139,123 @@ def fit_ramp_plane(unw_ifg: ArrayLike, mask: ArrayLike) -> np.ndarray:
     plane = np.reshape(X_ @ theta, (nrow, ncol))
 
     return plane
+
+
+def filter_rasters(
+    unw_filenames: list[Path],
+    cor_filenames: list[Path] | None = None,
+    conncomp_filenames: list[Path] | None = None,
+    temporal_coherence_filename: Path | None = None,
+    wavelength_cutoff: float = 50_000,
+    correlation_cutoff: float = 0.5,
+    output_dir: Path | None = None,
+    max_workers: int = 4,
+) -> list[Path]:
+    """Filter a list of unwrapped interferogram files using a long-wavelength filter.
+
+    Remove long-wavelength components from each unwrapped interferogram.
+    It can optionally use temporal coherence, correlation, and connected component
+    information for masking.
+
+    Parameters
+    ----------
+    unw_filenames : list[Path]
+        List of paths to unwrapped interferogram files to be filtered.
+    cor_filenames : list[Path] | None
+        List of paths to correlation files
+        Passing None skips filtering on correlation.
+    conncomp_filenames : list[Path] | None
+        List of paths to connected component files, filters any 0 labelled pixels.
+        Passing None skips filtering on connected component labels.
+    temporal_coherence_filename : Path | None
+        Path to the temporal coherence file for masking.
+        Passing None skips filtering on temporal coherence.
+    wavelength_cutoff : float, optional
+        Spatial wavelength cutoff (in meters) for the filter. Default is 50,000 meters.
+    correlation_cutoff : float, optional
+        Threshold of correlation (if passing `cor_filenames`) to use to ignore pixels
+        during filtering.
+    output_dir : Path | None, optional
+        Directory to save the filtered results.
+        If None, saves in the same location as inputs with .filt.tif extension.
+    max_workers : int, optional
+        Number of parallel images to process. Default is 4.
+
+    Returns
+    -------
+    list[Path]
+        Output filtered rasters.
+
+    Notes
+    -----
+    - If temporal_coherence_filename is provided, pixels with coherence < 0.5 are masked
+
+    """
+    from dolphin import io
+
+    bad_pixel_mask = np.zeros(
+        io.get_raster_xysize(unw_filenames[0])[::-1], dtype="bool"
+    )
+    if temporal_coherence_filename:
+        bad_pixel_mask = bad_pixel_mask | (
+            io.load_gdal(temporal_coherence_filename) < 0.5
+        )
+
+    if output_dir is None:
+        assert unw_filenames
+        output_dir = unw_filenames[0].parent
+    output_dir.mkdir(exist_ok=True)
+    ctx = mp.get_context("spawn")
+
+    with ProcessPoolExecutor(max_workers, mp_context=ctx) as pool:
+        return list(
+            pool.map(
+                _filter_and_save,
+                unw_filenames,
+                cor_filenames or repeat(None),
+                conncomp_filenames or repeat(None),
+                repeat(output_dir),
+                repeat(wavelength_cutoff),
+                repeat(bad_pixel_mask),
+                repeat(correlation_cutoff),
+            )
+        )
+
+
+def _filter_and_save(
+    unw_filename: Path,
+    cor_path: Path | None,
+    conncomp_path: Path | None,
+    output_dir: Path,
+    wavelength_cutoff: float,
+    bad_pixel_mask: NDArray[np.bool_],
+    correlation_cutoff: float = 0.5,
+) -> Path:
+    """Filter one interferogram (wrapper for multiprocessing)."""
+    from dolphin import io
+    from dolphin._overviews import Resampling, create_image_overviews
+
+    # Average for the pixel spacing for filtering
+    _, x_res, _, _, _, y_res = io.get_raster_gt(unw_filename)
+    pixel_spacing = (abs(x_res) + abs(y_res)) / 2
+
+    if cor_path is not None:
+        bad_pixel_mask |= io.load_gdal(cor_path) < correlation_cutoff
+    if conncomp_path is not None:
+        bad_pixel_mask |= io.load_gdal(conncomp_path, masked=True).astype(bool) == 0
+
+    unw = io.load_gdal(unw_filename)
+    filt_arr = filter_long_wavelength(
+        unwrapped_phase=unw,
+        wavelength_cutoff=wavelength_cutoff,
+        bad_pixel_mask=bad_pixel_mask,
+        pixel_spacing=pixel_spacing,
+        workers=1,
+    )
+    io.round_mantissa(filt_arr, keep_bits=9)
+    output_name = output_dir / Path(unw_filename).with_suffix(".filt.tif").name
+    io.write_arr(arr=filt_arr, like_filename=unw_filename, output_name=output_name)
+
+    create_image_overviews(output_name, resampling=Resampling.AVERAGE)
+
+    return output_name
