@@ -84,13 +84,6 @@ class BaseStack(BaseModel):
             raise ValueError(msg)
         return self
 
-    # @model_validator(mode="after")
-    # def _check_unset_reference_date(self):
-    #     if self.reference_date == _DUMMY_DATE:
-    #         ref_date = self.dates[self.reference_idx][0]
-    #         logger.debug("No reference date provided, using first date: %s", ref_date)
-    #         self.reference_date = ref_date
-    #     return self
     @property
     def reference_date(self):
         """Date of the reference phase of the stack."""
@@ -395,13 +388,16 @@ class MiniStackPlanner(BaseStack):
 
     max_num_compressed: int = 5
 
-    def plan(self, ministack_size: int) -> list[MiniStackInfo]:
+    def plan(
+        self, ministack_size: int, manual_idxs: Sequence[int] | None = None
+    ) -> list[MiniStackInfo]:
         """Create a list of ministacks to be processed."""
         if ministack_size < 2:
             msg = "Cannot create ministacks with size < 2"
             raise ValueError(msg)
 
         output_ministacks: list[MiniStackInfo] = []
+        manual_idx_list = sorted(manual_idxs or [])
 
         # Start of with any compressed SLCs that are passed in
         compressed_slc_infos: list[CompressedSlcInfo] = []
@@ -442,6 +438,13 @@ class MiniStackPlanner(BaseStack):
                 reference_idx = last_compressed_idx[-1]
             except IndexError:
                 reference_idx = 0
+            if manual_idx_list:
+                # Check if we are at the next manual index to use:
+                cur_end_idx = cur_slice.stop
+                if cur_end_idx > manual_idx_list[0]:
+                    # Get the index as *relative* to the current slice of *real* SLCs
+                    reference_idx = manual_idx_list.pop(0) - cur_slice.start + num_ccslc
+                    logger.debug(f"Setting reference idx manually: {reference_idx}")
 
             # Make the current ministack output folder using the start/end dates
             new_date_str = format_dates(

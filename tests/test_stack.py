@@ -241,3 +241,27 @@ def test_hit_max_compressed(slc_file_list, slc_date_list, is_compressed):
     assert len(ministacks[2].file_list) == 5
     assert len(ministacks[3].file_list) == 6
     assert all(len(m.file_list) == 6 for m in ministacks[3:-1])
+
+
+def test_manual_idx_setting(slc_file_list, slc_date_list, is_compressed):
+    """Check the planning works even after going pased the max CCSLCs."""
+    is_compressed = [False] * len(slc_file_list)
+    ministack_planner = MiniStackPlanner(
+        file_list=slc_file_list,
+        dates=slc_date_list,
+        is_compressed=is_compressed,
+        output_folder=Path("fake_dir"),
+        max_num_compressed=3,
+    )
+    # Check we can get the compressed SLC info
+    expected_ref_date1 = slc_date_list[1]
+    expected_ref_date2 = slc_date_list[8]
+
+    ministacks = ministack_planner.plan(3, manual_idxs=[1, 8])
+
+    assert ministacks[0].reference_date == expected_ref_date1
+    assert ministacks[1].reference_date == expected_ref_date1
+    # Since we did size-3 planning, i.e. (0,3), (3,6), (6,9),...
+    # the 3rd ministack has the changeover to the next manual idx
+    for i in range(2, len(ministacks)):
+        assert ministacks[i].reference_date == expected_ref_date2

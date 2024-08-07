@@ -141,10 +141,10 @@ def run(
     comp_slc_dict: dict[str, list[Path]] = {}
     # Now for each burst, run the wrapped phase estimation
     # Try running several bursts in parallel...
+    # Use the Dummy one if not going parallel, as debugging is much simpler
+    num_parallel = min(cfg.worker_settings.n_parallel_bursts, len(grouped_slc_files))
     Executor = (
-        ProcessPoolExecutor
-        if cfg.worker_settings.n_parallel_bursts > 1
-        else utils.DummyProcessPoolExecutor
+        ProcessPoolExecutor if num_parallel > 1 else utils.DummyProcessPoolExecutor
     )
     mw = cfg.worker_settings.n_parallel_bursts
     ctx = mp.get_context("spawn")

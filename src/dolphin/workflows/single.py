@@ -44,6 +44,7 @@ def run_wrapped_phase_single(
     half_window: dict,
     strides: Optional[dict] = None,
     reference_idx: int = 0,
+    compressed_reference_idx: int = 0,
     beta: float = 0.00,
     use_evd: bool = False,
     mask_file: Optional[Filename] = None,
@@ -61,9 +62,14 @@ def run_wrapped_phase_single(
 
     Output files will all be placed in the provided `output_folder`.
     """
-    # TODO: extract common stuff between here and sequential
+    # Unclear now if we will ever need to pass through the `reference_idx`
+    # For now, make the user explicitly use "compressed_reference_idx"
+    if reference_idx:
+        logger.warning(f"reference_idx set to {reference_idx} will not be used.")
+
     if strides is None:
         strides = {"x": 1, "y": 1}
+    # TODO: extract common stuff between here and sequential
     strides_tup = Strides(y=strides["y"], x=strides["x"])
     half_window_tup = HalfWindow(y=half_window["y"], x=half_window["x"])
     output_folder = Path(output_folder)
@@ -190,8 +196,6 @@ def run_wrapped_phase_single(
             amp_stack=amp_stack,
             method=shp_method,
         )
-        # Run the phase linking process on the current ministack
-        reference_idx = max(0, first_real_slc_idx - 1)
         try:
             pl_output = run_phase_linking(
                 cur_data,
@@ -199,7 +203,9 @@ def run_wrapped_phase_single(
                 strides=strides_tup,
                 use_evd=use_evd,
                 beta=beta,
-                reference_idx=reference_idx,
+                # TODO: Do we really need to pass in `reference_idx` to here?
+                # We can (and do) re-reference, if needed, from the result
+                # reference_idx=reference_idx,
                 nodata_mask=nodata_mask[in_rows, in_cols],
                 ps_mask=ps_mask[in_rows, in_cols],
                 neighbor_arrays=neighbor_arrays,
@@ -244,6 +250,7 @@ def run_wrapped_phase_single(
             cur_data[first_real_slc_idx:, in_trim_rows, in_trim_cols],
             pl_output.cpx_phase[first_real_slc_idx:, out_trim_rows, out_trim_cols],
             slc_mean=cur_data_mean,
+            reference_idx=compressed_reference_idx,
         )
         # TODO: truncate
 
