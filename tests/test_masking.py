@@ -1,9 +1,10 @@
+import zipfile
 from pathlib import Path
 
 import numpy as np
 import pytest
 
-from dolphin import io, masking
+from dolphin import Bbox, io, masking
 
 
 @pytest.fixture()
@@ -42,3 +43,36 @@ def test_load_mask_as_numpy(mask_files):
     expected = np.ones((9, 9), dtype=bool)
     expected[:3] = False
     np.testing.assert_array_equal(arr, expected)
+
+
+@pytest.fixture
+def like_filename_zipped():
+    return Path(__file__).parent / "data/dummy_like.tif.zip"
+
+
+def test_bounds(tmp_path, like_filename_zipped):
+    # Unzip to tmp_path
+    with zipfile.ZipFile(like_filename_zipped, "r") as zip_ref:
+        zip_ref.extractall(tmp_path)
+
+    # Get the path of the extracted TIF file
+    extracted_tif = tmp_path / "dummy_like.tif"
+
+    output_filename = tmp_path / "mask_bounds.tif"
+    bounds = Bbox(
+        left=-122.90334860812246,
+        bottom=51.7323987260125,
+        right=-122.68416491724179,
+        top=51.95333755674119,
+    )
+    masking.create_bounds_mask(
+        bounds, like_filename=extracted_tif, output_filename=output_filename
+    )
+    # Check result
+    mask = io.load_gdal(output_filename)
+    assert (mask[1405:3856, 9681:12685] == 1).all()
+    # WGS84 box is not a box in UTM
+    assert (mask[:1400, :] == 0).all()
+    assert (mask[4000:, :] == 0).all()
+    assert (mask[:, :9500] == 0).all()
+    assert (mask[:, 13000:] == 0).all()
