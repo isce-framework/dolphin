@@ -511,12 +511,14 @@ def create_velocity(
             msg += f"{len(cor_file_list) = }, but {len(unw_file_list) = }"
             raise ValueError(msg)
 
+        logger.info("Using correlation to weight velocity fit")
         cor_reader = io.VRTStack(
             file_list=cor_file_list,
             outfile=out_dir / "cor_inputs.vrt",
             skip_size_check=True,
         )
     else:
+        logger.info("Using unweighted fit for velocity.")
         cor_reader = None
 
     # Read in the reference point
@@ -568,6 +570,7 @@ def create_velocity(
     if add_overviews:
         logger.info("Creating overviews for velocity image")
         create_overviews([output_file])
+    logger.info("Completed create_velocity")
 
 
 class AverageFunc(Protocol):
@@ -763,6 +766,8 @@ def invert_unw_network(
     if add_overviews:
         logger.info("Creating overviews for unwrapped images")
         create_overviews(out_paths, image_type=ImageType.UNWRAPPED)
+
+    logger.info("Completed invert_unw_network")
     return out_paths
 
 
