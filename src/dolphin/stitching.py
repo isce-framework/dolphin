@@ -280,7 +280,9 @@ def merge_images(
         destName=fspath(outfile),
         srcDS=fspath(merge_output),
         projWin=proj_win,
-        resampleAlg=resample_alg,
+        # TODO: https://github.com/OSGeo/gdal/issues/10536
+        # Figure out if we really want to resample here, or just
+        # do a nearest neighbor (which is default if not reampling given)
         format=driver,
         creationOptions=options,
     )
