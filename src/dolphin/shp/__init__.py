@@ -1,16 +1,16 @@
 from __future__ import annotations
 
+import logging
 from typing import Optional
 
 import numpy as np
 from numpy.typing import ArrayLike
 
-from dolphin._log import get_log
 from dolphin.workflows import ShpMethod
 
 from . import _glrt, _ks
 
-logger = get_log(__name__)
+logger = logging.getLogger(__name__)
 
 __all__ = ["estimate_neighbors"]
 

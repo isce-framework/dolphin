@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import glob
+import logging
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
@@ -15,14 +16,13 @@ from pydantic import (
 )
 
 from dolphin import __version__ as _dolphin_version
-from dolphin._log import get_log
 from dolphin._types import Bbox
 from dolphin.io import DEFAULT_HDF5_OPTIONS, DEFAULT_TIFF_OPTIONS
 
 from ._enums import ShpMethod
 from ._yaml_model import YamlModel
 
-logger = get_log(__name__)
+logger = logging.getLogger(__name__)
 
 __all__ = [
     "HalfWindow",
@@ -103,6 +103,15 @@ class PhaseLinkingOptions(BaseModel, extra="forbid"):
         description="Significance level (probability of false alarm) for SHP tests.",
         gt=0.0,
         lt=1.0,
+    )
+    baseline_lag: Optional[int] = Field(
+        None,
+        gt=0,
+        description=(
+            "StBAS parameter to include only nearest-N interferograms for"
+            "phase linking. A `baseline_lag` of `n` will only include the closest"
+            "`n` interferograms. `baseline_line` must be positive."
+        ),
     )
 
 
@@ -353,7 +362,10 @@ class WorkflowBase(YamlModel):
     worker_settings: WorkerSettings = Field(default_factory=WorkerSettings)
     log_file: Optional[Path] = Field(
         default=None,
-        description="Path to output log file (in addition to logging to `stderr`).",
+        description=(
+            "Path to output log file (in addition to logging to `stderr`)."
+            " Default logs to `dolphin.log` within `work_directory`"
+        ),
     )
     creation_time_utc: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
@@ -374,11 +386,10 @@ class WorkflowBase(YamlModel):
             # Save all directories as absolute paths
             self.work_directory = self.work_directory.resolve(strict=False)
 
-    def create_dir_tree(self, debug: bool = False) -> None:
+    def create_dir_tree(self) -> None:
         """Create the directory tree for the workflow."""
-        log = get_log(debug=debug)
         for d in self._directory_list:
-            log.debug(f"Creating directory: {d}")
+            logger.debug(f"Creating directory: {d}")
             d.mkdir(parents=True, exist_ok=True)
 
 

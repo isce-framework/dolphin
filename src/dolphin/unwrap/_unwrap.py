@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import itertools
+import logging
 import shutil
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -10,7 +11,6 @@ import numpy as np
 from tqdm.auto import tqdm
 
 from dolphin import goldstein, interpolate, io
-from dolphin._log import get_log, log_runtime
 from dolphin._types import Filename
 from dolphin.utils import DummyProcessPoolExecutor, full_suffix
 from dolphin.workflows import UnwrapMethod, UnwrapOptions
@@ -27,15 +27,15 @@ from ._snaphu_py import grow_conncomp_snaphu, unwrap_snaphu_py
 from ._tophu import multiscale_unwrap
 from ._unwrap_3d import unwrap_spurt
 from ._utils import create_combined_mask, set_nodata_values
+from ._whirlwind import unwrap_whirlwind
 
-logger = get_log(__name__)
+logger = logging.getLogger(__name__)
 
 __all__ = ["run", "unwrap"]
 
 DEFAULT_OPTIONS = UnwrapOptions()
 
 
-@log_runtime
 def run(
     ifg_filenames: Sequence[Filename],
     cor_filenames: Sequence[Filename],
@@ -145,7 +145,7 @@ def run(
     if delete_intermediate:
         assert scratchdir is not None  # can't be none from the previous check
         scratch_dirs: list[Path | None] = [
-            Path(scratchdir) / Path(ifg_file).name for ifg_file in in_files
+            Path(scratchdir) / f"scratch-{Path(ifg_file).stem}" for ifg_file in in_files
         ]
     else:
         scratch_dirs = itertools.repeat(scratchdir)  # type: ignore[assignment]
@@ -193,6 +193,37 @@ def run(
     return all_out_files, conncomp_files
 
 
+def transfer_ambiguities(wrapped: np.ndarray, unw_est: np.ndarray) -> np.ndarray:
+    """Compute unwrapped phase by transferring ambiguities from an unwrapped estimate.
+
+    Transfer the ambiguities from an unwrapped phase estimate to the original wrapped
+    phase in order to form a new unwrapped phase array that is congruent (i.e. differs
+    from the wrapped phase only by multiples of 2pi).
+
+    Parameters
+    ----------
+    wrapped : numpy.ndarray
+        The initial wrapped phase array, in radians. A 2-D, real-valued array.
+    unw_est : numpy.ndarray
+        An estimate of the unwrapped phase, in radians. A 2-D, real-valued array with
+        the same shape as `wrapped`. May differ from the wrapped phase by non-integer
+        cycles.
+
+    Returns
+    -------
+    numpy.ndarray
+        The unwrapped phase data, rounded pixel-wise to the nearest value that differs
+        from the wrapped phase by a multiple of 2pi.
+
+    """
+    # Measure the difference between the unwrapped & wrapped phase, rounded to the
+    # nearest phase cycle.
+    ambiguity = np.round((unw_est - wrapped) / (2 * np.pi))
+
+    # Convert ambiguities back to radians and add them to the wrapped phase.
+    return wrapped + 2 * np.pi * ambiguity
+
+
 def unwrap(
     ifg_filename: Filename,
     corr_filename: Filename,
@@ -206,7 +237,7 @@ def unwrap(
     scratchdir: Optional[Filename] = None,
     delete_scratch: bool = False,
 ) -> tuple[Path, Path]:
-    """Unwrap a single interferogram using snaphu, isce3, or tophu.
+    """Unwrap a single interferogram.
 
     Parameters
     ----------
@@ -270,6 +301,7 @@ def unwrap(
     unwrapper_unw_filename = Path(unw_filename)
     name_change = "."
 
+    ifg = io.load_gdal(ifg_filename, masked=True)
     if unwrap_options.run_goldstein:
         suf = Path(unw_filename).suffix
         if suf == ".tif":
@@ -289,9 +321,8 @@ def unwrap(
             str(unw_filename).split(".")[0] + (name_change + "unw" + suf)
         )
 
-        ifg = io.load_gdal(ifg_filename)
         logger.info(f"Goldstein filtering {ifg_filename} -> {filt_ifg_filename}")
-        modified_ifg = goldstein(ifg, alpha=preproc_options.alpha)
+        modified_ifg = goldstein(ifg.filled(0), alpha=preproc_options.alpha)
         logger.info(f"Writing filtered output to {filt_ifg_filename}")
         io.write_arr(
             arr=modified_ifg,
@@ -324,7 +355,7 @@ def unwrap(
             str(pre_interp_unw_filename).split(".")[0] + (name_change + "unw" + suf)
         )
 
-        ifg = io.load_gdal(pre_interp_ifg_filename)
+        pre_interp_ifg = io.load_gdal(pre_interp_ifg_filename)
         corr = io.load_gdal(corr_filename)
         cutoff = preproc_options.interpolation_cor_threshold
         logger.info(f"Masking pixels with correlation below {cutoff}")
@@ -332,7 +363,7 @@ def unwrap(
 
         logger.info(f"Interpolating {pre_interp_ifg_filename} -> {interp_ifg_filename}")
         modified_ifg = interpolate(
-            ifg=ifg,
+            ifg=pre_interp_ifg,
             weights=coherent_pixel_mask,
             weight_cutoff=cutoff,
             max_radius=preproc_options.max_radius,
@@ -368,7 +399,19 @@ def unwrap(
             cost=snaphu_opts.cost,
             scratchdir=scratchdir,
         )
-    else:
+    elif unwrap_method == UnwrapMethod.WHIRLWIND:
+        unw_path, conncomp_path = unwrap_whirlwind(
+            unwrapper_ifg_filename,
+            corr_filename,
+            unwrapper_unw_filename,
+            nlooks,
+            mask_file=combined_mask_file,
+            zero_where_masked=unwrap_options.zero_where_masked,
+            unw_nodata=unw_nodata,
+            ccl_nodata=ccl_nodata,
+            scratchdir=scratchdir,
+        )
+    elif (unwrap_method == UnwrapMethod.ICU) or (unwrap_method == UnwrapMethod.PHASS):
         tophu_opts = unwrap_options.tophu_options
         unw_path, conncomp_path = multiscale_unwrap(
             unwrapper_ifg_filename,
@@ -387,18 +430,11 @@ def unwrap(
             scratchdir=scratchdir,
             log_to_file=log_to_file,
         )
+    else:
+        # Should be unreachable.
+        raise AssertionError(f"unexpected unwrap method {unwrap_method}")
 
     # post-processing steps go here:
-
-    # Reset the input nodata values to be nodata in the unwrapped and CCL
-    logger.info(f"Setting nodata values of {unw_path} file")
-    set_nodata_values(
-        filename=unw_path, output_nodata=unw_nodata, like_filename=ifg_filename
-    )
-    logger.info(f"Setting nodata values of {conncomp_path} file")
-    set_nodata_values(
-        filename=conncomp_path, output_nodata=ccl_nodata, like_filename=ifg_filename
-    )
 
     # Transfer ambiguity numbers from filtered/interpolated unwrapped interferogram
     # back to original interferogram
@@ -407,9 +443,10 @@ def unwrap(
             "Transferring ambiguity numbers from filtered/interpolated"
             f" ifg {unwrapper_unw_filename}"
         )
-        unw_arr = io.load_gdal(unwrapper_unw_filename)
+        unw_arr = io.load_gdal(unwrapper_unw_filename, masked=True).filled(unw_nodata)
 
-        final_arr = np.angle(ifg) + (unw_arr - np.angle(modified_ifg))
+        final_arr = transfer_ambiguities(np.angle(ifg), unw_arr)
+        final_arr[ifg.mask] = unw_nodata
 
         io.write_arr(
             arr=final_arr,
@@ -435,8 +472,22 @@ def unwrap(
             scratchdir=scratchdir,
         )
 
+        # Move the intermediate ".interp" or ".goldstein" into the scratch directory
+        if scratchdir is not None:
+            shutil.move(unwrapper_unw_filename, scratchdir)
+
+    # Reset the input nodata values to be nodata in the unwrapped and CCL
+    logger.info(f"Setting nodata values of {unw_path} file")
+    set_nodata_values(
+        filename=unw_filename, output_nodata=unw_nodata, like_filename=ifg_filename
+    )
+    logger.info(f"Setting nodata values of {conncomp_path} file")
+    set_nodata_values(
+        filename=conncomp_path, output_nodata=ccl_nodata, like_filename=ifg_filename
+    )
+
     if delete_scratch:
         assert scratchdir is not None
         shutil.rmtree(scratchdir)
 
-    return unw_path, conncomp_path
+    return Path(unw_filename), conncomp_path

@@ -13,11 +13,6 @@ GPU_AVAILABLE = gpu_is_available() and os.environ.get("NUMBA_DISABLE_JIT") != "1
 NUM_ACQ = 30
 simulate._seed(1234)
 
-# 'Grid size 49 will likely result in GPU under-utilization due to low occupancy.'
-pytestmark = pytest.mark.filterwarnings(
-    "ignore::numba.core.errors.NumbaPerformanceWarning"
-)
-
 
 # Make sure the GPU versions are correct by making simpler versions:
 def form_cov(slc1, slc2, looks):

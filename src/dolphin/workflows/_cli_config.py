@@ -28,8 +28,10 @@ def create_config(
     ministack_size: Optional[int] = 15,
     half_window_size: tuple[int, int] = (11, 5),
     shp_method: ShpMethod = ShpMethod.GLRT,
+    baseline_lag: Optional[int] = None,
     amp_dispersion_threshold: float = 0.25,
     strides: tuple[int, int],
+    output_bounds: tuple[int, int, int, int],
     block_shape: tuple[int, int] = (512, 512),
     threads_per_worker: int = 4,
     n_parallel_bursts: int = 1,
@@ -90,11 +92,13 @@ def create_config(
         interferogram_network=interferogram_network,
         output_options={
             "strides": {"x": strides[0], "y": strides[1]},
+            "bounds": output_bounds,
         },
         phase_linking={
             "ministack_size": ministack_size,
             "half_window": {"x": half_window_size[0], "y": half_window_size[1]},
             "shp_method": shp_method,
+            "baseline_lag": baseline_lag,
         },
         ps_options={
             "amp_dispersion_threshold": amp_dispersion_threshold,
@@ -234,6 +238,12 @@ def get_parser(subparser=None, subcommand_name="run"):
         default=ShpMethod.GLRT,
         help="Method used to calculate the SHP.",
     )
+    pl_group.add_argument(
+        "--baseline-lag",
+        type=Optional[int],
+        default=None,
+        help="Half window size for the phase linking algorithm",
+    )
 
     # PS options
     ps_group = parser.add_argument_group("PS options")
@@ -358,6 +368,13 @@ def get_parser(subparser=None, subcommand_name="run"):
             "Strides/decimation factor (x, y) (in pixels) to use when determining"
             " output shape."
         ),
+    )
+    out_group.add_argument(
+        "--output-bounds",
+        nargs=4,
+        type=float,
+        metavar=("left", "bottom", "right", "top"),
+        help="Requested bounding box (in lat/lon) for final output.",
     )
 
     worker_group = parser.add_argument_group("Worker options")

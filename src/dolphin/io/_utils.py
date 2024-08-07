@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import shutil
 import tempfile
-from os import fspath
 from pathlib import Path
 from typing import TYPE_CHECKING
+
+import numpy as np
 
 if TYPE_CHECKING:
     from dolphin._types import Index
@@ -13,6 +14,7 @@ __all__ = [
     "get_gtiff_options",
     "repack_raster",
     "repack_rasters",
+    "round_mantissa",
 ]
 
 
@@ -112,7 +114,10 @@ def _format_for_gdal(options: dict[str, str]) -> list[str]:
 
 
 def repack_raster(
-    raster_path: Path, output_dir: Path | None = None, **output_options
+    raster_path: Path,
+    output_dir: Path | None = None,
+    keep_bits: int | None = None,
+    **output_options,
 ) -> Path:
     """Repack a single raster file with GDAL Translate using provided options.
 
@@ -122,6 +127,9 @@ def repack_raster(
         Path to the input raster file.
     output_dir : Path, optional
         Directory to save the repacked rasters or None for in-place repacking.
+    keep_bits : int, optional
+        Number of bits to preserve in mantissa. Defaults to None.
+        Lower numbers will truncate the mantissa more and enable more compression.
     **output_options
         Keyword args passed to `get_gtiff_options`
 
@@ -132,7 +140,7 @@ def repack_raster(
         If `output_dir` is None, this will be the same filename as `raster_path`
 
     """
-    from osgeo import gdal
+    import rasterio as rio
 
     if output_dir is None:
         output_file = tempfile.NamedTemporaryFile(
@@ -143,8 +151,16 @@ def repack_raster(
         output_dir.mkdir(parents=True, exist_ok=True)
         output_path = output_dir / raster_path.name
 
-    options = _format_for_gdal(get_gtiff_options(**output_options))
-    gdal.Translate(fspath(output_path), fspath(raster_path), creationOptions=options)
+    options = get_gtiff_options(**output_options)
+    with rio.open(raster_path) as src:
+        profile = src.profile
+        profile.update(**options)
+        with rio.open(output_path, "w", **profile) as dst:
+            for i in range(1, src.count + 1):
+                data = src.read(i)
+                if keep_bits is not None:
+                    round_mantissa(data, keep_bits)
+                dst.write(data, i)
 
     if output_dir is None:
         # Overwrite the original
@@ -157,6 +173,7 @@ def repack_rasters(
     raster_files: list[Path],
     output_dir: Path | None = None,
     num_threads: int = 4,
+    keep_bits: int | None = None,
     **output_options,
 ):
     """Recreate and compress a list of raster files.
@@ -172,6 +189,9 @@ def repack_rasters(
         Directory to save the processed rasters or None for in-place processing.
     num_threads : int, optional
         Number of threads to use (default is 4).
+    keep_bits : int, optional
+        Number of bits to preserve in mantissa. Defaults to None.
+        Lower numbers will truncate the mantissa more and enable more compression.
     **output_options
         Creation options to pass to `get_gtiff_options`
 
@@ -185,8 +205,60 @@ def repack_rasters(
     from tqdm.contrib.concurrent import thread_map
 
     thread_map(
-        lambda raster: repack_raster(raster, output_dir, **output_options),
+        lambda raster: repack_raster(
+            raster, output_dir, keep_bits=keep_bits, **output_options
+        ),
         raster_files,
         max_workers=num_threads,
         desc="Processing Rasters",
     )
+
+
+def round_mantissa(z: np.ndarray, keep_bits=10) -> None:
+    """Zero out mantissa bits of elements of array in place.
+
+    Drops a specified number of bits from the floating point mantissa,
+    leaving an array more amenable to compression.
+
+    Parameters
+    ----------
+    z : numpy.ndarray
+        Real or complex array whose mantissas are to be zeroed out
+    keep_bits : int, optional
+        Number of bits to preserve in mantissa. Defaults to 10.
+        Lower numbers will truncate the mantissa more and enable
+        more compression.
+
+    References
+    ----------
+    https://numcodecs.readthedocs.io/en/v0.12.1/_modules/numcodecs/bitround.html
+
+    """
+    max_bits = {
+        "float16": 10,
+        "float32": 23,
+        "float64": 52,
+    }
+    # recurse for complex data
+    if np.iscomplexobj(z):
+        round_mantissa(z.real, keep_bits)
+        round_mantissa(z.imag, keep_bits)
+        return
+
+    if not z.dtype.kind == "f" or z.dtype.itemsize > 8:
+        raise TypeError("Only float arrays (16-64bit) can be bit-rounded")
+
+    bits = max_bits[str(z.dtype)]
+    # cast float to int type of same width (preserve endianness)
+    a_int_dtype = np.dtype(z.dtype.str.replace("f", "i"))
+    all_set = np.array(-1, dtype=a_int_dtype)
+    if keep_bits == bits:
+        return z
+    if keep_bits > bits:
+        raise ValueError("keep_bits too large for given dtype")
+    b = z.view(a_int_dtype)
+    maskbits = bits - keep_bits
+    mask = (all_set >> maskbits) << maskbits
+    half_quantum1 = (1 << (maskbits - 1)) - 1
+    b += ((b >> maskbits) & 1) + half_quantum1
+    b &= mask

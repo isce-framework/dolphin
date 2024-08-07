@@ -1,7 +1,7 @@
 # GPU setup
 
 If you have access to a GPU with CUDA support, you can gain a considerable processing speedup with `dolphin`.
-We use both [Numba](https://github.com/numba/numba/) and [JAX](jax.readthedocs.io/), which each have slightly different setups:
+We use both [Numba](https://github.com/numba/numba/) and [JAX](https://jax.readthedocs.io/), which each have slightly different setups:
 
 - Numba instructions: https://numba.readthedocs.io/en/stable/cuda/overview.html#software
 - JAX instructions: https://jax.readthedocs.io/en/latest/installation.html#nvidia-gpu

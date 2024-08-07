@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime
+import logging
 import re
 from pathlib import Path
 from typing import Mapping, Sequence
@@ -14,11 +15,11 @@ from rasterio.warp import transform_bounds
 from scipy import interpolate
 
 from dolphin import io
-from dolphin._log import get_log
 from dolphin._types import Bbox, Filename
+from dolphin.timeseries import ReferencePoint
 from dolphin.utils import format_date_pair
 
-logger = get_log(__name__)
+logger = logging.getLogger(__name__)
 
 ###########
 
@@ -35,11 +36,12 @@ def estimate_ionospheric_delay(
     slc_files: Mapping[tuple[datetime.datetime], Sequence[Filename]],
     tec_files: Mapping[tuple[datetime.datetime], Sequence[Filename]],
     geom_files: dict[str, Path],
+    reference_point: ReferencePoint | None,
     output_dir: Path,
     epsg: int,
     bounds: Bbox,
 ) -> list[Path]:
-    """Estimate the range delay caused by ionosphere for each interferogram.
+    """Estimate the range delay (in meters) caused by ionosphere for each interferogram.
 
     Parameters
     ----------
@@ -52,6 +54,9 @@ def estimate_ionospheric_delay(
     geom_files : list[Path]
         Dictionary of geometry files with height and incidence angle, or
         los_east and los_north.
+    reference_point : tuple[int, int], optional
+        Reference point (row, col) used during time series inversion.
+        If not provided, no spatial referencing is performed.
     output_dir : Path
         Output directory.
     epsg : int
@@ -166,13 +171,20 @@ def estimate_ionospheric_delay(
             secondary_vtec, iono_inc_angle, freq, obs_type="phase"
         )
 
-        ifg_iono_range_delay = range_delay_reference - range_delay_secondary
+        ifg_iono_range_delay_radians = range_delay_reference - range_delay_secondary
+        # Convert to meters, where positive corresponds to motion toward the satellite
+        ifg_iono_range_delay = -wavelength / (4 * np.pi) * ifg_iono_range_delay_radians
+
+        if reference_point is not None:
+            ref_row, ref_col = reference_point
+            ifg_iono_range_delay -= ifg_iono_range_delay[ref_row, ref_col]
 
         # Write 2D tropospheric correction layer to disc
         io.write_arr(
             arr=ifg_iono_range_delay,
             output_name=iono_delay_product_name,
             like_filename=ifg,
+            units="meters",
         )
 
     return output_paths

@@ -2,27 +2,36 @@
 
 from __future__ import annotations
 
+import logging
 import shutil
 import warnings
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Sequence
 
 import numpy as np
 from numpy.typing import ArrayLike
 from osgeo import gdal
 
 from dolphin import io, utils
-from dolphin._log import get_log
 from dolphin._types import Filename
-from dolphin.io import EagerLoader, StackReader
+from dolphin.io import EagerLoader, StackReader, repack_raster
 
 gdal.UseExceptions()
 
-logger = get_log(__name__)
+logger = logging.getLogger(__name__)
 
 NODATA_VALUES = {"ps": 255, "amp_dispersion": 0.0, "amp_mean": 0.0}
 
 FILE_DTYPES = {"ps": np.uint8, "amp_dispersion": np.float32, "amp_mean": np.float32}
+_EXTRA_COMPRESSION = {
+    "keep_bits": 10,
+    "predictor": 3,
+}
+REPACK_OPTIONS = {
+    "ps": {},
+    "amp_dispersion": _EXTRA_COMPRESSION,
+    "amp_mean": _EXTRA_COMPRESSION,
+}
 
 
 def create_ps(
@@ -106,16 +115,9 @@ def create_ps(
     # Initialize the intermediate arrays for the calculation
     magnitude = np.zeros((reader.shape[0], *block_shape), dtype=np.float32)
 
-    skip_empty = nodata_mask is None
-
     writer = io.BackgroundBlockWriter()
     # Make the generator for the blocks
-    block_gen = EagerLoader(
-        reader,
-        block_shape=block_shape,
-        nodata_mask=nodata_mask,
-        skip_empty=skip_empty,
-    )
+    block_gen = EagerLoader(reader, block_shape=block_shape, nodata_mask=nodata_mask)
     for cur_data, (rows, cols) in block_gen.iter_blocks(**tqdm_kwargs):
         cur_rows, cur_cols = cur_data.shape[-2:]
 
@@ -156,6 +158,11 @@ def create_ps(
 
     logger.info(f"Waiting to write {writer.num_queued} blocks of data.")
     writer.notify_finished()
+    # Repack for better compression
+    logger.info("Repacking PS rasters for better compression")
+    for fn, opt in zip(file_list, REPACK_OPTIONS.values()):
+        # Repack to a temp, then overwrite
+        repack_raster(Path(fn), output_dir=None, **opt)
     logger.info("Finished writing out PS files")
 
 
@@ -267,7 +274,7 @@ def multilook_ps_files(
     ps_mask_file: Filename,
     amp_dispersion_file: Filename,
 ) -> tuple[Path, Path]:
-    """Create a multilooked version of the full-res PS mask/ampltiude dispersion.
+    """Create a multilooked version of the full-res PS mask/amplitude dispersion.
 
     Parameters
     ----------
@@ -343,3 +350,133 @@ def multilook_ps_files(
             nodata=NODATA_VALUES["amp_dispersion"],
         )
     return ps_out_path, amp_disp_out_path
+
+
+def combine_means(means: ArrayLike, N: ArrayLike) -> np.ndarray:
+    r"""Compute the combined mean from multiple `mu_i` values.
+
+    This function calculates the weighted average of amplitudes based on the
+    number of original data points (N) that went into each mean.
+
+    Parameters
+    ----------
+    means : ArrayLike
+        A 3D array of mean values.
+        Shape: (n_images, rows, cols)
+    N : np.ndarray
+        A list/array of weights indicating the number of original images.
+        Shape: (depth,)
+
+    Returns
+    -------
+    np.ndarray
+        The combined mean.
+        Shape: (height, width)
+
+    Notes
+    -----
+    Both input arrays are expected to have the same shape.
+    The operation is performed along axis=0.
+
+    The combined mean is calculated as
+
+    \begin{equation}
+        E[X] = \frac{\sum_i N_i\mu_i}{\sum_i N_i}
+    \end{equation}
+
+    """
+    N = np.asarray(N)
+    if N.shape[0] != means.shape[0]:
+        raise ValueError("Size of N must match the number of images in means.")
+    if N.ndim == 1:
+        N = N[:, None, None]
+
+    weighted_sum = np.sum(means * N, axis=0)
+    total_N = np.sum(N, axis=0)
+
+    return weighted_sum / total_N
+
+
+def combine_amplitude_dispersions(
+    dispersions: np.ndarray, means: np.ndarray, N: ArrayLike | Sequence
+) -> np.ndarray:
+    r"""Compute the combined amplitude dispersion from multiple groups.
+
+    Given several ADs where difference numbers of images, N, went in,
+    the function computes a weighted mean/variance to calculate the combined AD.
+
+    Parameters
+    ----------
+    dispersions : np.ndarray
+        A 3D array of amplitude dispersion values for each group.
+        Shape: (depth, height, width)
+    means : np.ndarray
+        A 3D array of mean values for each group.
+        Shape: (depth, height, width)
+    N : np.ndarray
+        An array sample sizes for each group.
+        Shape: (depth, )
+
+    Returns
+    -------
+    np.ndarray
+        The combined amplitude dispersion.
+        Shape: (height, width)
+    np.ndarray
+        The combined amplitude mean.
+        Shape: (height, width)
+
+    Notes
+    -----
+    All input arrays are expected to have the same shape.
+    The operation is performed along `axis=0`.
+
+    Let $X_i$ be the random variable for group $i$, with mean $\mu_i$ and variance
+    $\sigma_i^2$, and $N_i$ be the number of samples in group $i$.
+
+    The combined variance $\sigma^2$ uses the formula
+
+    \begin{equation}
+        \sigma^2 = E[X^2] - (E[X])^2
+    \end{equation}
+
+    where $E[X]$ is the combined mean, and $E[X^2]$ is the expected value of
+    the squared random variable.
+
+    The combined mean is calculated as:
+
+    \begin{equation}
+        E[X] = \frac{\sum_i N_i\mu_i}{\sum_i N_i}
+    \end{equation}
+
+    For $E[X^2]$, we use the property $E[X^2] = \sigma^2 + \mu^2$:
+
+    \begin{equation}
+        E[X^2] = \frac{\sum_i N_i(\sigma_i^2 + \mu_i^2)}{\sum_i N_i}
+    \end{equation}
+
+    Substituting these into the variance formula gives:
+
+    \begin{equation}
+        \sigma^2 = \frac{\sum_i N_i(\sigma_i^2 + \mu_i^2)}{\sum_i N_i} -
+        \left(\frac{\sum_i N_i\mu_i}{\sum_i N_i}\right)^2
+    \end{equation}
+
+    """
+    N = np.asarray(N)
+    if N.ndim == 1:
+        N = N[:, None, None]
+    if not (means.shape == dispersions.shape):
+        raise ValueError("Input arrays must have the same shape.")
+    if means.shape[0] != N.shape[0]:
+        raise ValueError("Size of N must match the number of groups in means.")
+
+    combined_mean = combine_means(means, N)
+
+    # Compute combined variance
+    variances = (dispersions * means) ** 2
+    total_N = np.sum(N, axis=0).squeeze()
+    sum_N_var_meansq = np.sum(N * (variances + means**2), axis=0)
+    combined_variance = (sum_N_var_meansq / total_N) - combined_mean**2
+
+    return np.sqrt(combined_variance) / combined_mean, combined_mean

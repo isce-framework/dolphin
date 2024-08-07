@@ -13,7 +13,8 @@ NUM_DATES = 10
 DT = 12
 START_DATE = datetime(2020, 1, 1)
 SHAPE = 50, 50
-VELO_RAD_PER_DAY = 0.2  # rad / day
+VELO_RAD_PER_YEAR = 5.0
+VELO_RAD_PER_DAY = VELO_RAD_PER_YEAR / 365.25
 
 
 def make_sar_dates():
@@ -115,9 +116,9 @@ class TestInvert:
         sar_dates, sar_phases, ifg_date_pairs, ifgs = data
 
         phi_stack, residuals = timeseries.invert_stack(A, ifgs)
-        assert phi_stack.shape == sar_phases.shape
-        assert residuals.shape == sar_phases.shape[1:]
-        npt.assert_allclose(phi_stack, sar_phases, atol=1e-5)
+        assert phi_stack.shape == sar_phases[1:].shape
+        assert residuals.shape == sar_phases[0].shape
+        npt.assert_allclose(phi_stack, sar_phases[1:], atol=1e-5)
         npt.assert_array_less(residuals, 1e-5)
 
     def test_weighted_stack(self, data, A):
@@ -125,12 +126,12 @@ class TestInvert:
 
         weights = np.ones_like(ifgs)
         phi, residuals = timeseries.invert_stack(A, ifgs, weights)
-        assert phi.shape[0] == len(sar_dates)
-        npt.assert_allclose(phi, sar_phases, atol=1e-5)
+        assert phi.shape[0] == len(sar_dates) - 1
+        npt.assert_allclose(phi, sar_phases[1:], atol=1e-5)
         # Here there is no noise, so it's over determined
         weights[1, :, :] = 0
         phi2, residuals2 = timeseries.invert_stack(A, ifgs, weights)
-        npt.assert_allclose(phi2, sar_phases, atol=1e-5)
+        npt.assert_allclose(phi2, sar_phases[1:], atol=1e-5)
         npt.assert_allclose(residuals2, residuals, atol=1e-5)
 
     def test_remove_row_vs_weighted(self, data, A):
@@ -187,7 +188,7 @@ class TestInvert:
         # Check results
         solved_stack = io.RasterStackReader.from_file_list(out_files)[:, :, :]
         sar_phases = data[1]
-        npt.assert_allclose(solved_stack, sar_phases, atol=1e-5)
+        npt.assert_allclose(solved_stack, sar_phases[1:], atol=1e-5)
 
 
 class TestVelocity:
@@ -203,7 +204,7 @@ class TestVelocity:
         for i in range(SHAPE[0]):
             for j in range(SHAPE[1]):
                 out[i, j] = np.polyfit(x_arr, sar_phases[:, i, j], 1)[0]
-        return out
+        return out * 365.25
 
     def test_stack(self, data, x_arr, expected_velo):
         sar_dates, sar_phases, ifg_date_pairs, ifgs = data

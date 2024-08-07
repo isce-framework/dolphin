@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Literal
 
@@ -10,11 +11,9 @@ from pydantic import (
     field_validator,
 )
 
-from dolphin._log import get_log
-
 from ._enums import UnwrapMethod
 
-logger = get_log(__name__)
+logger = logging.getLogger(__name__)
 
 __all__ = [
     "UnwrapOptions",
@@ -138,12 +137,12 @@ class SpurtTilerSettings(BaseModel):
 
     max_tiles: int = Field(16, description="Maximum number of tiles allowed.", ge=1)
     target_points_for_generation: int = Field(
-        120000,
+        120_000,
         description="Number of points used for determining tiles based on density.",
         gt=0,
     )
     target_points_per_tile: int = Field(
-        800000, description="Target points per tile when generating tiles.", gt=0
+        800_000, description="Target points per tile when generating tiles.", gt=0
     )
     dilation_factor: float = Field(
         0.05,
@@ -156,40 +155,45 @@ class SpurtTilerSettings(BaseModel):
 
 
 class SpurtSolverSettings(BaseModel):
-    worker_count: int = Field(
+    t_worker_count: int = Field(
         default=1,
+        alias="t_worker_count",
         description=(
             "Number of workers for temporal unwrapping in parallel. Set value to <=0 to"
             " let workflow use default workers (ncpus - 1)."
         ),
     )
+    s_worker_count: int = Field(
+        default=1,
+        description=(
+            "Number of workers for spatial unwrapping in parallel. Set value to <=0"
+            " to let workflow use (ncpus - 1)."
+        ),
+    )
     links_per_batch: int = Field(
-        default=10000,
+        default=50_000,
         description=(
             "Temporal unwrapping operations over spatial links are performed in batches"
             " and each batch is solved in parallel."
         ),
         gt=0,
     )
-    temp_cost_type: Literal["constant", "distance", "centroid"] = Field(
+    t_cost_type: Literal["constant", "distance", "centroid"] = Field(
         default="constant",
         description="Temporal unwrapping costs.",
-        alias="t_cost_type",
     )
-    temp_cost_scale: float = Field(
+    t_cost_scale: float = Field(
         default=100.0,
         description="Scale factor used to compute edge costs for temporal unwrapping.",
         gt=0.0,
-        alias="t_cost_scale",
     )
-    spatial_cost_type: Literal["constant", "distance", "centroid"] = Field(
+    s_cost_type: Literal["constant", "distance", "centroid"] = Field(
         default="constant", description="Spatial unwrapping costs.", alias="s_cost_type"
     )
-    spatial_cost_scale: float = Field(
+    s_cost_scale: float = Field(
         default=100.0,
         description="Scale factor used to compute edge costs for spatial unwrapping.",
         gt=0.0,
-        alias="s_cost_scale",
     )
 
 

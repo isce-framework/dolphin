@@ -12,11 +12,6 @@ GPU_AVAILABLE = gpu_is_available() and os.environ.get("NUMBA_DISABLE_JIT") != "1
 NUM_ACQ = 30
 simulate._seed(1234)
 
-# 'Grid size 49 will likely result in GPU under-utilization due to low occupancy.'
-pytestmark = pytest.mark.filterwarnings(
-    "ignore::numba.core.errors.NumbaPerformanceWarning"
-)
-
 
 @pytest.fixture(scope="module")
 def slc_samples(C_truth):
@@ -25,8 +20,9 @@ def slc_samples(C_truth):
     return simulate.simulate_neighborhood_stack(C, ns)
 
 
+@pytest.mark.parametrize("baseline_lag", [None, 5])
 @pytest.mark.parametrize("use_evd", [False, True])
-def test_estimation(C_truth, slc_samples, use_evd):
+def test_estimation(C_truth, slc_samples, use_evd, baseline_lag):
     _, truth = C_truth
 
     C_hat = np.array(covariance.coh_mat_single(slc_samples))
@@ -43,13 +39,18 @@ def test_estimation(C_truth, slc_samples, use_evd):
 
     # cpx_phase, temp_coh, eigs, _ = _core.run_cpl(
     pl_out = _core.run_cpl(
-        slc_stack, HalfWindow(x=5, y=5), Strides(x=1, y=1), use_evd=use_evd
+        slc_stack,
+        HalfWindow(x=5, y=5),
+        Strides(x=1, y=1),
+        use_evd=use_evd,
+        baseline_lag=baseline_lag,
     )
     assert pl_out.cpx_phase.shape == (len(est_mle_verify), 11, 11)
     assert pl_out.temp_coh.shape == (11, 11)
     assert pl_out.eigenvalues.shape == (11, 11)
     if use_evd:
-        assert np.all(pl_out.eigenvalues > NUM_ACQ / 3)
+        expected_min_eig = baseline_lag if baseline_lag else NUM_ACQ / 3
+        assert np.all(pl_out.eigenvalues > expected_min_eig)
         assert pl_out
     else:
         # should be 1, but floating point rounding sometimes drops

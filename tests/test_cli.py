@@ -11,17 +11,17 @@ def test_help(capsys, option):
     with contextlib.suppress(SystemExit):
         main([option])
     output = capsys.readouterr().out
-    assert " dolphin [-h] [--version] {run,config,unwrap,timeseries}" in output
+    assert " dolphin [-h] [--version] {run,config,unwrap,timeseries,filter}" in output
 
 
 def test_empty(capsys):
     with contextlib.suppress(SystemExit):
         main([])
     output = capsys.readouterr().out
-    assert " dolphin [-h] [--version] {run,config,unwrap,timeseries}" in output
+    assert " dolphin [-h] [--version] {run,config,unwrap,timeseries,filter}" in output
 
 
-@pytest.mark.parametrize("sub_cmd", ["run", "config", "unwrap", "timeseries"])
+@pytest.mark.parametrize("sub_cmd", ["run", "config", "filter", "unwrap", "timeseries"])
 @pytest.mark.parametrize("option", ["-h", "--help"])
 def test_subcommand_help(capsys, sub_cmd, option):
     with contextlib.suppress(SystemExit):

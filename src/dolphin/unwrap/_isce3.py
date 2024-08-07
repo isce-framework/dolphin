@@ -1,12 +1,12 @@
 from __future__ import annotations
 
+import logging
 from os import fspath
 from pathlib import Path
 
 import numpy as np
 
 from dolphin import io
-from dolphin._log import get_log
 from dolphin._types import Filename
 from dolphin.utils import full_suffix
 from dolphin.workflows import UnwrapMethod
@@ -14,7 +14,7 @@ from dolphin.workflows import UnwrapMethod
 from ._constants import CONNCOMP_SUFFIX, DEFAULT_CCL_NODATA
 from ._utils import _redirect_unwrapping_log, _zero_from_mask
 
-logger = get_log(__name__)
+logger = logging.getLogger(__name__)
 
 __all__ = ["unwrap_isce3"]
 
@@ -28,7 +28,7 @@ def unwrap_isce3(
     ccl_nodata: int = DEFAULT_CCL_NODATA,
     zero_where_masked: bool = False,
 ) -> tuple[Path, Path]:
-    """Unwrap a single interferogram using snaphu, isce3, or tophu.
+    """Unwrap a single interferogram using isce3 or tophu.
 
     Parameters
     ----------
@@ -49,7 +49,7 @@ def unwrap_isce3(
         Nodata value to use in output connected component raster
     unwrap_method : UnwrapMethod or str, optional, default = "phass"
         Choice of unwrapping algorithm to use.
-        Choices: {"icu", "phass"} (snaphu is done by snaphu_pu)
+        Choices: {"icu", "phass"} (snaphu is done by snaphu-py)
 
     Returns
     -------

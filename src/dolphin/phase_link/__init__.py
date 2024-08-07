@@ -5,5 +5,5 @@ Currently implements the eigenvalue-based maximum likelihood (EMI) algorithm fro
 [@Fornaro2015CAESARApproachBased] and [@Mirzaee2023NonlinearPhaseLinking]
 """
 
-from ._compress import compress  # noqa: F401
-from ._core import PhaseLinkRuntimeError, run_phase_linking  # noqa: F401
+from ._compress import compress
+from ._core import PhaseLinkRuntimeError, run_phase_linking

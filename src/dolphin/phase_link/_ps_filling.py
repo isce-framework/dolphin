@@ -4,6 +4,7 @@ import logging
 import warnings
 
 import numpy as np
+from numba import njit
 from numpy.typing import ArrayLike
 
 from dolphin._types import Strides
@@ -114,35 +115,39 @@ def _get_avg_ps(
     )
 
 
+@njit
 def get_max_idxs(arr: ArrayLike, row_looks: int, col_looks: int):
-    """Get the indices of the maximum value in each look window."""
-    if row_looks == 1 and col_looks == 1:
-        # No need to pad if we're not looking
-        return np.where(arr == arr)
-    # Adjusted from this answer to not take every moving window
-    # https://stackoverflow.com/a/72742009/4174466
-    windows = np.lib.stride_tricks.sliding_window_view(arr, (row_looks, col_looks))[
-        ::row_looks, ::col_looks
-    ]
-    with warnings.catch_warnings():
-        # ignore the warning about nansum/nanmean of empty slice
-        # https://stackoverflow.com/questions/29688168/mean-nanmean-and-warning-mean-of-empty-slice
-        warnings.simplefilter("ignore", category=RuntimeWarning)
-        maxvals = np.nanmax(windows, axis=(2, 3))
-    indx = np.array((windows == np.expand_dims(maxvals, axis=(2, 3))).nonzero())
+    window_height, window_width = row_looks, col_looks
+    height, width = arr.shape
 
-    # In [82]: (windows == np.expand_dims(maxvals, axis = (2, 3))).nonzero()
-    # This gives 4 arrays:
-    # First two are the window indices
-    # (array([0, 0, 0, 1, 1, 1]),
-    # array([0, 1, 2, 0, 1, 2]),
-    # last two are the relative indices (within each window)
-    # array([0, 0, 1, 1, 1, 1]),
-    # array([1, 1, 1, 1, 1, 0]))
-    window_positions, relative_positions = indx.reshape((2, 2, -1))
-    # Multiply the first two by the window size to get the absolute indices
-    # of the top lefts of the windows
-    window_offsets = np.array([row_looks, col_looks]).reshape((2, 1))
-    # Then add the last two to get the relative indices
-    rows, cols = relative_positions + window_positions * window_offsets
-    return rows, cols
+    # Calculate the number of windows
+    new_height = height // window_height
+    new_width = width // window_width
+
+    row_indices = []
+    col_indices = []
+
+    for i in range(new_height):
+        for j in range(new_width):
+            window = arr[
+                i * window_height : (i + 1) * window_height,
+                j * window_width : (j + 1) * window_width,
+            ]
+
+            max_value = -np.inf
+            max_row, max_col = -1, -1
+
+            for row in range(window_height):
+                for col in range(window_width):
+                    value = window[row, col]
+                    if not np.isnan(value) and value > max_value:
+                        max_value = value
+                        max_row = row
+                        max_col = col
+
+            # If max_row and max_col are still -1, it means the window was all NaNs
+            if max_row != -1 and max_col != -1:
+                row_indices.append(i * window_height + max_row)
+                col_indices.append(j * window_width + max_col)
+
+    return np.array(row_indices), np.array(col_indices)

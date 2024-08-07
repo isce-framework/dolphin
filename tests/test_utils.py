@@ -54,13 +54,13 @@ class TestTakeLooks:
         npt.assert_array_equal(
             downsampled, np.ma.MaskedArray([[np.inf, 5 + 1j]], mask=[True, False])
         )
-        assert type(downsampled) == np.ma.MaskedArray
+        assert type(downsampled) is np.ma.MaskedArray
 
     def test_nomask(self):
         arr = np.ma.MaskedArray([[0.1, 0.01, 2], [3, 4, 1 + 1j]], mask=np.ma.nomask)
         downsampled = utils.take_looks(arr, 2, 1, func_type="nansum")
         npt.assert_array_equal(downsampled, np.array([[3.1, 4.01, 3.0 + 1.0j]]))
-        assert type(downsampled) == np.ma.MaskedArray
+        assert type(downsampled) is np.ma.MaskedArray
 
 
 def test_upsample_nearest():

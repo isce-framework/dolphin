@@ -11,11 +11,6 @@ from dolphin.workflows import sequential
 GPU_AVAILABLE = gpu_is_available()
 simulate._seed(1234)
 
-# 'Grid size 49 will likely result in GPU under-utilization due to low occupancy.'
-pytestmark = pytest.mark.filterwarnings(
-    "ignore::numba.core.errors.NumbaPerformanceWarning"
-)
-
 
 def test_sequential_gtiff(tmp_path, slc_file_list):
     """Run through the sequential estimation with a GeoTIFF stack."""

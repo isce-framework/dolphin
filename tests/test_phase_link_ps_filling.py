@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import numpy as np
 import numpy.testing as npt
 import pytest
@@ -6,10 +8,7 @@ from dolphin._types import Strides
 from dolphin.phase_link import simulate
 from dolphin.phase_link._ps_filling import fill_ps_pixels, get_max_idxs
 
-# 'Grid size 49 will likely result in GPU under-utilization due to low occupancy.'
-pytestmark = pytest.mark.filterwarnings(
-    "ignore::numba.core.errors.NumbaPerformanceWarning"
-)
+RNG = np.random.default_rng()
 
 
 @pytest.mark.parametrize("use_max_ps", [True, False])
@@ -105,3 +104,43 @@ def test_get_max_idxs_param(n, looks):
     actual_rows, actual_cols = get_max_idxs(arr, looks, looks)
     assert np.array_equal(actual_rows, expected[0])
     assert np.array_equal(actual_cols, expected[1])
+
+
+def test_get_max_idxs_uneven_shape():
+    arr = np.arange(9 * 11).reshape(9, 11)
+    rows, cols = get_max_idxs(arr, 2, 3)
+    expected = np.array([[13, 16, 19], [35, 38, 41], [57, 60, 63], [79, 82, 85]])
+    npt.assert_array_equal(arr[rows, cols], expected.ravel())
+
+
+def test_failing_ps_size():
+    data = np.load(Path(__file__).parent / "data/ps-fix/failing_data_idxs.npz")
+    shape2d = (522, 534)
+    slc_stack = RNG.normal(size=(15, *shape2d)) + 1j * RNG.normal(size=(15, *shape2d))
+    slc_stack = slc_stack.astype("complex64")
+    slc_stack[data["slc_nan_t"], data["slc_nan_y"], data["slc_nan_x"]] = np.nan
+    reference_idx = 0
+
+    mags = RNG.normal(size=shape2d) ** 2
+    avg_mag = np.full_like(mags, np.nan)
+    rows, cols = data["not_nan_rows"], data["not_nan_cols"]
+    avg_mag[rows, cols] = mags[rows, cols]
+    ps_mask = np.zeros(shape2d, dtype=bool)
+    ps_mask[rows, cols] = True
+
+    small_shape2d = (174, 89)
+    temp_coh = RNG.random(size=small_shape2d)
+    strides = Strides(3, 6)
+    cpx_phase = RNG.normal(size=(15, *small_shape2d)) + 1j * RNG.normal(
+        size=(15, *small_shape2d)
+    )
+
+    fill_ps_pixels(
+        cpx_phase=cpx_phase,
+        temp_coh=temp_coh,
+        slc_stack=slc_stack,
+        strides=strides,
+        avg_mag=avg_mag,
+        ps_mask=ps_mask,
+        reference_idx=reference_idx,
+    )
