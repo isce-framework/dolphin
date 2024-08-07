@@ -282,7 +282,8 @@ def merge_images(
         projWin=proj_win,
         # TODO: https://github.com/OSGeo/gdal/issues/10536
         # Figure out if we really want to resample here, or just
-        # do a nearest neighbor (which is default if not reampling given)
+        # do a nearest neighbor (which is default)
+        resampleAlg="bilinear",
         format=driver,
         creationOptions=options,
     )
