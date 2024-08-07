@@ -24,6 +24,9 @@ authors:
   - name: Talib Oliver-Cabrera
     orcid: 0000-0002-2315-4710
     affiliation: 1
+  - name: Emre Havazli
+    orcid: 0000-0002-1236-7067
+    affiliation: 1
   - name: Heresh Fattahi
     orcid: 0000-0001-6926-4387
     affiliation: 1
