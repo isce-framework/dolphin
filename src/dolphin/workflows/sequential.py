@@ -7,16 +7,13 @@ from __future__ import annotations
 
 import logging
 from itertools import chain
-from os import fspath
 from pathlib import Path
 from typing import Optional
 
-from osgeo_utils import gdal_calc
-
-from dolphin import io
 from dolphin._types import Filename
 from dolphin.io import VRTStack
 from dolphin.stack import MiniStackPlanner
+from dolphin.timeseries import create_average
 
 from .config import ShpMethod
 from .single import run_wrapped_phase_single
@@ -128,12 +125,10 @@ def run_wrapped_phase_sequential(
     # Average the temporal coherence files in each ministack
     full_span = ministack_planner.real_slc_date_range_str
     output_temp_coh_file = output_folder / f"temporal_coherence_average_{full_span}.tif"
-    output_shp_count_file = output_folder / f"shp_counts_average_{full_span}.tif"
+    create_average(temp_coh_files, output_file=output_temp_coh_file)
 
-    # we can pass the list of files to gdal_calc, which interprets it
-    # as a multi-band file
-    _average_rasters(temp_coh_files, output_temp_coh_file, "Float32")
-    _average_rasters(shp_count_files, output_shp_count_file, "Int16")
+    output_shp_count_file = output_folder / f"shp_counts_average_{full_span}.tif"
+    create_average(shp_count_files, output_file=output_shp_count_file)
 
     # Combine the separate SLC output lists into a single list
     all_slc_files = list(chain.from_iterable(output_slc_files))
@@ -162,22 +157,3 @@ def _get_outputs_from_folder(
     # Currently ignoring to not stitch:
     # eigenvalues, estimator, avg_coh
     return cur_output_files, cur_comp_slc_file, temp_coh_file, shp_count_file
-
-
-def _average_rasters(file_list: list[Path], outfile: Path, output_type: str):
-    if len(file_list) == 1:
-        file_list[0].rename(outfile)
-        return
-
-    logger.info(f"Averaging {len(file_list)} files into {outfile}")
-    gdal_calc.Calc(
-        NoDataValue=0,
-        format="GTiff",
-        outfile=fspath(outfile),
-        type=output_type,
-        quiet=True,
-        overwrite=True,
-        creation_options=io.DEFAULT_TIFF_OPTIONS,
-        A=file_list,
-        calc="numpy.nanmean(A, axis=0)",
-    )

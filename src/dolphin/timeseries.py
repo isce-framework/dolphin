@@ -9,7 +9,7 @@ from typing import Callable, Optional, Protocol, Sequence, TypeVar
 import jax.numpy as jnp
 import numpy as np
 from jax import Array, jit, vmap
-from numpy.typing import ArrayLike
+from numpy.typing import ArrayLike, NDArray
 from opera_utils import get_dates
 from scipy import ndimage
 
@@ -573,21 +573,25 @@ def create_velocity(
     logger.info("Completed create_velocity")
 
 
-class AverageFunc(Protocol):
+class WeightedAverager(Protocol):
     """Protocol for temporally averaging a block of data."""
 
-    def __call__(self, ArrayLike, axis: int) -> ArrayLike: ...
+    def __call__(
+        self, arr: ArrayLike, axis: int, weights: ArrayLike | None
+    ) -> NDArray: ...
 
 
-def create_temporal_average(
+def create_average(
     file_list: Sequence[PathOrStr],
     output_file: PathOrStr,
     block_shape: tuple[int, int] = (512, 512),
     num_threads: int = 5,
-    average_func: Callable[[ArrayLike, int], np.ndarray] = np.nanmean,
+    average_func: WeightedAverager = np.average,
+    mask_average_func: Callable[[ArrayLike, int], np.ndarray] = np.any,
+    weights: ArrayLike | None = None,
     read_masked: bool = False,
 ) -> None:
-    """Average all images in `reader` to create a 2D image in `output_file`.
+    """Average all images in `file_list` to create a 2D image in `output_file`.
 
     Parameters
     ----------
@@ -603,18 +607,37 @@ def create_temporal_average(
         Default is 5.
     average_func : Callable[[ArrayLike, int], np.ndarray], optional
         The function to use to average the images.
-        Default is `np.nanmean`, which calls `np.nanmean(arr, axis=0)` on each block.
+        Default calls `np.average(arr, axis=0, weights=weights)` on each block.
+    mask_average_func : Callable[[ArrayLike, int], np.ndarray], optional
+        If `read_masked` is true, the function to use to average the masks.
+        Default is `np.any`, which calls `np.any(masks, axis=0)` on each block
+        and masks *any* pixel that is masked in one of the images.
+        Use `np.all` to have more valid pixels (a smaller masked region).
+    weights: ArrayLike, optional
+        If provided, assigns a floating point weight to each file in `file_list`.
+        The output is a weighted average.
+        Default is `None`, equivalent to `np.ones(len(file_list))`.
     read_masked : bool, optional
         If True, reads the data as a masked array based on the rasters' nodata values.
         Default is False.
 
     """
+    if weights is None:
+        weights = np.ones(len(file_list), dtype="float32")
+    if weights.shape != (len(file_list),):
+        msg = f"weights must be shape (len(file_list),) got {weights.shape}"
+        raise ValueError(msg)
 
     def read_and_average(
         readers: Sequence[io.StackReader], rows: slice, cols: slice
     ) -> tuple[slice, slice, np.ndarray]:
         chunk = readers[0][:, rows, cols]
-        return average_func(chunk, 0), rows, cols
+
+        out_chunk = average_func(chunk, axis=0, weights=weights), rows, cols
+        if isinstance(chunk, np.ma.MaskedArray):
+            mask = mask_average_func(chunk.mask, 0)
+            out_chunk = np.ma.MaskedArray(data=out_chunk, mask=mask)
+        return out_chunk
 
     writer = io.BackgroundRasterWriter(output_file, like_filename=file_list[0])
     with NamedTemporaryFile(mode="w", suffix=".vrt") as f:
@@ -634,6 +657,17 @@ def create_temporal_average(
         )
 
     writer.notify_finished()
+
+
+def create_temporal_average(*args, **kwargs):
+    import warnings
+
+    warnings.warn(
+        "'create_temporal_average' is deprecated. Use 'create_average' instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return create_average(*args, **kwargs)
 
 
 def invert_unw_network(
@@ -892,8 +926,12 @@ def _get_largest_conncomp_mask(
     block_shape: tuple[int, int] = (512, 512),
     num_threads: int = 5,
 ) -> np.ndarray:
-    def intersect_conncomp(arr: np.ma.MaskedArray, axis: int) -> np.ndarray:
+    def intersect_conncomp(
+        arr: ArrayLike, axis: int, _weights: ArrayLike | None
+    ) -> np.ndarray:
         # Track where input is nodata
+        if not isinstance(arr, np.ma.MaskedArray):
+            arr = np.ma.MaskedArray(data=arr, mask=np.ma.nomask)
         any_masked = np.any(arr.mask, axis=axis)
         # Get the logical AND of all nonzero conncomp labels
         fillval = arr.fill_value
@@ -904,14 +942,15 @@ def _get_largest_conncomp_mask(
         return all_are_valid
 
     conncomp_intersection_file = Path(output_dir) / "conncomp_intersection.tif"
+    average_func: WeightedAverager = intersect_conncomp  # type: ignore[assignment]
     if ccl_file_list and not conncomp_intersection_file.exists():
         logger.info("Creating intersection of connected components")
-        create_temporal_average(
+        create_average(
             file_list=ccl_file_list,
             output_file=conncomp_intersection_file,
             block_shape=block_shape,
             num_threads=num_threads,
-            average_func=intersect_conncomp,
+            average_func=average_func,
             read_masked=True,
         )
 
