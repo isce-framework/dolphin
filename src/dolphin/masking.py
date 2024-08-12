@@ -89,7 +89,7 @@ def combine_mask_files(
         raise ValueError(msg)
 
     if input_conventions is None:
-        input_conventions = [MaskConvention.NUMPY] * len(mask_files)
+        input_conventions = [MaskConvention.ZERO_IS_NODATA] * len(mask_files)
     elif isinstance(input_conventions, MaskConvention):
         input_conventions = [input_conventions] * len(mask_files)
 
