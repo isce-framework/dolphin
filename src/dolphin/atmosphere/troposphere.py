@@ -148,7 +148,7 @@ def estimate_tropospheric_delay(
         if tropo_delay_type.value == "hydrostatic":
             delay_type = "hydro"
     else:
-        tropo_files = group_by_date(troposphere_files, ile_date_fmt=file_date_fmt)
+        tropo_files = group_by_date(troposphere_files, file_date_fmt=file_date_fmt)
         tropo_run = compute_pyaps
         if tropo_delay_type.value == "hydrostatic":
             delay_type = "dry"
