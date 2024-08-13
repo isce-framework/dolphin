@@ -171,7 +171,7 @@ class SpurtSolverSettings(BaseModel):
         ),
     )
     links_per_batch: int = Field(
-        default=50_000,
+        default=150_000,
         description=(
             "Temporal unwrapping operations over spatial links are performed in batches"
             " and each batch is solved in parallel."
@@ -195,6 +195,11 @@ class SpurtSolverSettings(BaseModel):
         description="Scale factor used to compute edge costs for spatial unwrapping.",
         gt=0.0,
     )
+    num_parallel_tiles: float = Field(
+        default=1,
+        description="Number of tiles to process in parallel. Set to 0 for all tiles.",
+        ge=0.0,
+    )
 
 
 class SpurtMergerSettings(BaseModel):
@@ -207,6 +212,14 @@ class SpurtMergerSettings(BaseModel):
     )
     bulk_method: Literal["integer", "L2"] = Field(
         default="L2", description="Method used to estimate bulk offset between tiles."
+    )
+    num_parallel_ifgs: int = Field(
+        default=3,
+        ge=0,
+        description=(
+            "Number of interferograms to merge in one batch. Use zero to merge all"
+            " interferograms in a single batch."
+        ),
     )
 
 
