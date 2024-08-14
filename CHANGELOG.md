@@ -1,8 +1,97 @@
 # Changelog
 
-## [Unreleased](https://github.com/isce-framework/dolphin/compare/v0.21.0...main)
+## [Unreleased](https://github.com/isce-framework/dolphin/compare/v0.27.1...main)
 
-## [0.21.0](https://github.com/isce-framework/dolphin/compare/v0.20.0...v0.21.0)
+### Fixed
+- Don't use the slc amplitude by defalt in the phase linking output
+
+## [0.27.1](https://github.com/isce-framework/dolphin/compare/v0.27.0...v0.27.1) - 2024-08-12
+
+### Changed
+- Set the default `input_conventions` to be same as `output_conventions`
+
+## [0.27.0](https://github.com/isce-framework/dolphin/compare/v0.26.0...v0.27.0) - 2024-08-12
+
+### Added
+- Ability to mask a subset of input SLCs
+
+### Changed
+- Temporarily removed resampling during stitching final crop
+
+
+## [0.26.0](https://github.com/isce-framework/dolphin/compare/v0.25.0...v0.26.0) - 2024-08-02
+
+### Added
+- `map` option for `DummyProcessPoolExecutor`
+- PR template
+- `dolphin filter` CLI to run a long wavelength filter on a set of rasters
+
+### Changed
+- Changed datetime format for reading tropospheric corrections
+- Copy over unwrapped to `timeseries/` even with 1 file
+- Removed `atmosphere` imports from the main path
+
+## [0.25.0](https://github.com/isce-framework/dolphin/compare/v0.24.0...v0.25.0) - 2024-08-01
+
+### Changed
+- Moved reference point selection back to always be run if not specified
+- Reference correction outputs to a point in space and convert to meters
+
+### Fixed
+- Fixed `timeseries` to mkdir right away
+
+## [0.24.0](https://github.com/isce-framework/dolphin/compare/v0.23.0...v0.24.0) - 2024-08-01
+
+### Added
+- Skip correlation estimate for files that exist
+- Save `ReferencePoint` into file in `timeseries/` folder
+
+### Changed
+- Clip `nlooks` to a max of 20 for `whirlwind`
+- Refactor `filter_long_wavelength` to avoid boundary issues for images with lots of no data region
+- Skip zero raster output by timeseries inversions
+
+### Fixed
+- Fixed reference point selection labels
+
+
+## [0.23.0](https://github.com/isce-framework/dolphin/compare/v0.22.1...v0.23.0) - 2024-07-29
+
+### Added
+- [`whirlwind`](https://github.com/isce-framework/whirlwind) unwrapper
+- Option to redirect other loggers to same JSON file
+- Interleave GTiffs by band, not pixel
+
+### Changed
+- Updated `show_versions` to read `importlib.metadata`, use `keep_bits` instead of `lerc`
+- Made network formation `staticmethod`s public
+- Shrunk `nlooks` for whirlwind
+- Improved code for transferring unwrapped phase ambiguities
+- Moved mask loading function into `masking.py`
+
+### Fixed
+- Fixed Spurt tests
+- Updated `spurt` imports for exported interface
+- Set the `final_arr` nodata to be same as original ifg mask
+- Fixed filtering ambiguity transfer for interp/goldstein
+- Fixed confusing name for scratchdirs
+
+## [0.22.1](https://github.com/isce-framework/dolphin/compare/v0.22.0...v0.22.1) - 2024-07-17
+
+### Fixed
+
+- Fixed v0.22.0 imports
+
+## [0.22.0](https://github.com/isce-framework/dolphin/compare/v0.21.0...v0.22.0) - 2024-07-16
+
+### Added
+- Output velocities in units per year in `timeseries`
+
+### Changed
+- Minor changes in `spurt` config to match its naming conventions
+- Vendored `mdx_bib` to avoid direct URL in `docs/requirements.txt`
+
+## [0.21.0](https://github.com/isce-framework/dolphin/compare/v0.20.0...v0.21.0) 2024-07-16
 
 ### Added
 - Continuous deployment Github action workflow to publish to pypi
@@ -11,7 +100,7 @@
 ### Changed
 - Round mantissa bits instead of truncate, call the argument `keep_bits` for clarity
 
-## [0.20.0](https://github.com/isce-framework/dolphin/compare/v0.19.0...v0.20.0)
+## [0.20.0](https://github.com/isce-framework/dolphin/compare/v0.19.0...v0.20.0) - 2027-07-08
 
 ### Added
 - Functions in `ps` to combine amplitude dispersions from older rasters
