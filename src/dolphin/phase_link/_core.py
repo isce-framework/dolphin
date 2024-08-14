@@ -71,7 +71,7 @@ def run_phase_linking(
     use_max_ps: bool = True,
     neighbor_arrays: ArrayLike | None = None,
     avg_mag: ArrayLike | None = None,
-    use_slc_amp: bool = True,
+    use_slc_amp: bool = False,
     calc_average_coh: bool = False,
     baseline_lag: Optional[int] = None,
 ) -> PhaseLinkOutput:
@@ -121,7 +121,7 @@ def run_phase_linking(
         If None, the average magnitude will be computed from `slc_stack`.
     use_slc_amp : bool, optional
         Whether to use the SLC amplitude when outputting the MLE estimate,
-        or to set the SLC amplitude to 1.0. By default True.
+        or to set the SLC amplitude to 1.0. By default False.
     calc_average_coh : bool, optional, default = False
         Whether to calculate the average coherence for each SLC date.
     baseline_lag : int, optional, default=None
@@ -270,7 +270,7 @@ def run_cpl(
         The index of the (non compressed) reference SLC, by default 0
     use_slc_amp : bool, optional
         Whether to use the SLC amplitude when outputting the MLE estimate,
-        or to set the SLC amplitude to 1.0. By default True.
+        or to set the SLC amplitude to 1.0. By default False.
     neighbor_arrays : np.ndarray, optional
         The neighbor arrays to use for SHP, shape = (n_rows, n_cols, *window_shape).
         If None, a rectangular window is used. By default None.
