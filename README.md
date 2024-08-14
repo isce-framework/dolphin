@@ -15,7 +15,7 @@
 [github-discussions-link]:  https://github.com/isce-framework/dolphin/discussions
 <!-- prettier-ignore-end -->
 
-High resolution wrapped phase estimation for InSAR using combined PS/DS processing.
+High resolution wrapped phase estimation for Interferometric Synthetic Aperture Radar (InSAR) using combined persistent scatterer (PS) and distributed scatterer (DS) processing.
 
 <!-- DeformatiOn Land surface Products in High resolution using INsar -->
 
