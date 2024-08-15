@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import shutil
+from enum import Enum
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Callable, Optional, Protocol, Sequence, TypeVar
@@ -30,6 +31,11 @@ class ReferencePointError(ValueError):
     pass
 
 
+class InversionMethod(str, Enum):
+    L1 = "L1"
+    L2 = "L2"
+
+
 def run(
     unwrapped_paths: Sequence[PathOrStr],
     conncomp_paths: Sequence[PathOrStr],
@@ -37,6 +43,7 @@ def run(
     condition_file: PathOrStr,
     condition: CallFunc,
     output_dir: PathOrStr,
+    method: InversionMethod = InversionMethod.L2,
     run_velocity: bool = False,
     velocity_file: Optional[PathOrStr] = None,
     correlation_threshold: float = 0.2,
@@ -62,6 +69,10 @@ def run(
         the options are [min, max]
     output_dir : Path
         Path to the output directory.
+    method : str, choices = "L1", "L2"
+        Inversion method to use when solving Ax = b.
+        Default is L2, which uses least squares to solve Ax = b (faster).
+        "L1" minimizes |Ax - b|_1 at each pixel.
     run_velocity : bool
         Whether to run velocity estimation on the inverted phase series
     velocity_file : Path, Optional
@@ -115,6 +126,7 @@ def run(
             reference=ref_point,
             output_dir=output_dir,
             num_threads=num_threads,
+            method=method,
         )
     else:
         logger.info(
@@ -644,6 +656,7 @@ def invert_unw_network(
     cor_threshold: float = 0.2,
     n_cor_looks: int = 1,
     ifg_date_pairs: Sequence[Sequence[DateOrDatetime]] | None = None,
+    method: InversionMethod = InversionMethod.L2,
     block_shape: tuple[int, int] = (512, 512),
     num_threads: int = 5,
     add_overviews: bool = True,
@@ -663,6 +676,10 @@ def invert_unw_network(
     ifg_date_pairs : Sequence[Sequence[DateOrDatetime]], optional
         List of date pairs to use for the inversion. If not provided, will be
         parsed from filenames in `unw_file_list`.
+    method : str, choices = "L1", "L2"
+        Inversion method to use when solving Ax = b.
+        Default is L2, which uses least squares to solve Ax = b (faster).
+        "L1" minimizes |Ax - b|_1 at each pixel.
     block_shape : tuple[int, int], optional
         The shape of the blocks to process in parallel
     cor_file_list : Sequence[PathOrStr], optional
@@ -725,7 +742,7 @@ def invert_unw_network(
     def read_and_solve(
         readers: Sequence[io.StackReader], rows: slice, cols: slice
     ) -> tuple[slice, slice, np.ndarray]:
-        if len(readers) == 2:
+        if len(readers) == 2 and method == "L2":
             unw_reader, cor_reader = readers
             stack = unw_reader[:, rows, cols]
             cor = cor_reader[:, rows, cols]
@@ -742,6 +759,10 @@ def invert_unw_network(
         # TODO: do i want to write residuals too? Do i need
         # to have multiple writers then?
         phases = invert_stack(A, stack, weights)[0]
+        if method.upper() == "L1":
+            phases = invert_stack_l1(A, stack)[0]
+        else:
+            phases = invert_stack(A, stack, weights)[0]
         return np.asarray(phases), rows, cols
 
     if cor_file_list is not None:

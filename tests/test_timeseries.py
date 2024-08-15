@@ -198,7 +198,8 @@ class TestInvert:
 
         return out
 
-    def test_invert_unw_network(self, data, unw_files, tmp_path):
+    @pytest.mark.parametrize("method", ["L1", "L2"])
+    def test_invert_unw_network(self, data, unw_files, tmp_path, method):
         output_dir = tmp_path / "output"
         output_dir.mkdir()
         ref_point = (0, 0)
@@ -206,6 +207,7 @@ class TestInvert:
             unw_file_list=unw_files,
             reference=ref_point,
             output_dir=output_dir,
+            method=method,
             # ifg_date_pairs: Sequence[Sequence[DateOrDatetime]] | None = None,
             # block_shape: tuple[int, int] = (512, 512),
             # cor_file_list: Sequence[PathOrStr] | None = None,
