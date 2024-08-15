@@ -139,24 +139,16 @@ def run(
     pl_path = cfg.phase_linking._directory
     pl_path.mkdir(parents=True, exist_ok=True)
 
-    # Mark any files beginning with "compressed" as compressed
-    is_compressed = ["compressed" in str(f).lower() for f in input_file_list]
-    input_dates = _get_input_dates(
-        input_file_list, is_compressed, cfg.input_options.cslc_date_fmt
-    )
-
-    manual_reference_date = cfg.output_options.extra_reference_date
-    if manual_reference_date:
-        manual_reference_idx = _get_nearest_idx(
-            [dtup[0] for dtup in input_dates], manual_reference_date
+    extra_reference_date = cfg.output_options.extra_reference_date
+    if extra_reference_date:
+        new_compressed_slc_reference_idx = _get_nearest_idx(
+            [dtup[0] for dtup in input_dates], extra_reference_date
         )
     else:
-        manual_reference_idx = None
+        new_compressed_slc_reference_idx = None
 
     reference_date, reference_idx = _get_reference_date_idx(
-        input_file_list,
-        is_compressed,
-        input_dates,
+        input_file_list, is_compressed, input_dates
     )
 
     ministack_planner = stack.MiniStackPlanner(
@@ -187,7 +179,7 @@ def run(
                 slc_vrt_file=vrt_stack.outfile,
                 ministack_planner=ministack_planner,
                 ministack_size=cfg.phase_linking.ministack_size,
-                manual_reference_idx=manual_reference_idx,
+                manual_reference_idx=new_compressed_slc_reference_idx,
                 half_window=cfg.phase_linking.half_window.model_dump(),
                 strides=strides,
                 use_evd=cfg.phase_linking.use_evd,
@@ -233,15 +225,13 @@ def run(
     logger.info(f"Creating virtual interferograms from {len(phase_linked_slcs)} files")
     # TODO: with manual indexes, this may be split into 2 and redone
     ifg_file_list: list[Path] = []
-    if manual_reference_idx:
-        ifg_file_list.extend(
-            create_ifgs(
-                ifg_network,
-                phase_linked_slcs,
-                any(is_compressed),
-                reference_date,
-            )
-        )
+    ifg_file_list = create_ifgs(
+        interferogram_network=ifg_network,
+        phase_linked_slcs=phase_linked_slcs,
+        contained_compressed_slcs=any(is_compressed),
+        reference_date=reference_date,
+        extra_reference_date=extra_reference_date,
+    )
     return (
         ifg_file_list,
         comp_slc_list,
@@ -257,6 +247,7 @@ def create_ifgs(
     phase_linked_slcs: Sequence[Path],
     contained_compressed_slcs: bool,
     reference_date: datetime.datetime,
+    extra_reference_date: datetime.datetime | None = None,
     dry_run: bool = False,
 ) -> list[Path]:
     """Create the list of interferograms for the `phase_linked_slcs`.
@@ -273,6 +264,9 @@ def create_ifgs(
         compressed SLCs.
     reference_date : datetime.datetime
         Date/datetime of the "base phase" for the `phase_linked_slcs`
+    extra_reference_date : datetime.datetime, optional
+        If provided, makes another set of interferograms referenced to this
+        for all dates later than it.
     dry_run : bool
         Flag indicating that the ifgs should not be written to disk.
         Default = False (ifgs will be created).
@@ -294,7 +288,10 @@ def create_ifgs(
     ifg_dir = interferogram_network._directory
     if not dry_run:
         ifg_dir.mkdir(parents=True, exist_ok=True)
+
     ifg_file_list: list[Path] = []
+
+    secondary_dates = [get_dates(f)[0] for f in phase_linked_slcs]
     if not contained_compressed_slcs:
         # When no compressed SLCs were passed in to the config, we can directly pass
         # options to `Network` and get the ifg list
@@ -321,17 +318,37 @@ def create_ifgs(
     # The total SLC phases we have to work with are
     # 1. reference date (might be before any dates in the filenames)
     # 2. the secondary of all phase-linked SLCs (which are the names of the files)
+    if extra_reference_date is None:
+        # To get the ifgs from the reference date to secondary(conj), this means
+        # a `.conj()` on the phase-linked SLCs (currently `day1.conj() * day2`)
+        single_ref_ifgs = [
+            interferogram.convert_pl_to_ifg(
+                f, reference_date=reference_date, output_dir=ifg_dir, dry_run=dry_run
+            )
+            for f in phase_linked_slcs
+        ]
+    else:
+        manual_reference_idx = _get_nearest_idx(secondary_dates, extra_reference_date)
 
-    # To get the ifgs from the reference date to secondary(conj), this involves doing
-    # a `.conj()` on the phase-linked SLCs (which are currently `day1.conj() * day2`)
-    single_ref_ifgs = [
-        interferogram.convert_pl_to_ifg(
-            f, reference_date=reference_date, output_dir=ifg_dir, dry_run=dry_run
+        single_ref_ifgs = [
+            interferogram.convert_pl_to_ifg(
+                f, reference_date=reference_date, output_dir=ifg_dir, dry_run=dry_run
+            )
+            for f in phase_linked_slcs[: manual_reference_idx + 1]
+        ]
+        single_ref_ifgs.extend(
+            [
+                interferogram.convert_pl_to_ifg(
+                    f,
+                    reference_date=extra_reference_date,
+                    output_dir=ifg_dir,
+                    dry_run=dry_run,
+                )
+                for f in phase_linked_slcs[manual_reference_idx + 1 :]
+            ]
         )
-        for f in phase_linked_slcs
-    ]
 
-    # If we're only wanting single-reference day-(reference) to day-k interferograms,
+    # If we only want single-reference day-(reference) to day-k interferograms,
     # these are all we need
     # XX Fix this hack for later
     if interferogram_network.indexes and interferogram_network.indexes == [(0, -1)]:
@@ -361,12 +378,11 @@ def create_ifgs(
         # (which are the (ref_date, ...) interferograms),...
         ifgs_ref_date = single_ref_ifgs[:max_b]
         # ...then combine it with the results from the `Network`
-        # Manually specify the dates, which come from the names of `phase_linked_slcs`
-        secondary_dates = [get_dates(f)[0] for f in phase_linked_slcs]
         network_rest = interferogram.Network(
             slc_list=phase_linked_slcs,
             max_bandwidth=max_b,
             outdir=ifg_dir,
+            # Manually specify the dates, which come from the names of phase_linked_slcs
             dates=secondary_dates,
             write=not dry_run,
             verify_slcs=not dry_run,
