@@ -944,15 +944,13 @@ def invert_stack_l1(A: ArrayLike, dphi: ArrayLike) -> Array:
     # vectorize the solve function to work on 2D and 3D arrays
     # We are not vectorizing over the A matrix, only the dphi vector
     # Solve 2d shapes: (nrows, n_ifgs) -> (nrows, n_sar_dates)
-    invert_2d = vmap(irls, in_axes=(None, 1, 1), out_axes=(1, 1))
+    invert_2d = vmap(irls, in_axes=(None, 1), out_axes=(1, 1))
     # Solve 3d shapes: (nrows, ncols, n_ifgs) -> (nrows, ncols, n_sar_dates)
-    invert_3d = vmap(invert_2d, in_axes=(None, 2, 2), out_axes=(2, 2))
+    invert_3d = vmap(invert_2d, in_axes=(None, 2), out_axes=(2, 2))
     phase, residual_vecs = invert_3d(A, dphi)
     # Reshape the residuals to be 2D
     residuals = jnp.sum(residual_vecs, axis=0)
 
-    # Add 0 for the reference date to the front
-    phase = jnp.concatenate([jnp.zeros((1, n_rows, n_cols)), phase], axis=0)
     return phase, residuals
 
 

@@ -118,15 +118,16 @@ class TestInvert:
         # Get one pixel
         b = ifgs[:, -1, -1].copy()
         # Change one value by a lot, should ignore it
-        b[0] += 100
+        single_ifg_error = 100
+        b[0] += single_ifg_error
 
         x, residuals = timeseries.irls(A, b)
         assert x.shape[0] == len(sar_dates) - 1
         npt.assert_allclose(x, sar_phases[1:, -1, -1], atol=1e-4)
-        npt.assert_allclose(residuals[0], 100, atol=1e-4)
+        npt.assert_allclose(residuals[0], single_ifg_error, atol=1e-4)
         npt.assert_allclose(residuals[1:], 0, atol=1e-4)
 
-    def test_stack(self, data, A):
+    def test_invert_stack(self, data, A):
         sar_dates, sar_phases, ifg_date_pairs, ifgs = data
 
         phi_stack, residuals = timeseries.invert_stack(A, ifgs)
@@ -134,6 +135,18 @@ class TestInvert:
         assert residuals.shape == sar_phases[0].shape
         npt.assert_allclose(phi_stack, sar_phases[1:], atol=1e-5)
         npt.assert_array_less(residuals, 1e-5)
+
+    def test_invert_stack_l1(self, data, A):
+        sar_dates, sar_phases, ifg_date_pairs, ifgs = data
+        ifgs = ifgs.copy()
+        single_ifg_error = 100
+        ifgs[0] += single_ifg_error
+
+        phi_stack, residuals = timeseries.invert_stack_l1(A, ifgs)
+        assert phi_stack.shape == sar_phases[1:].shape
+        assert residuals.shape == sar_phases[0].shape
+        npt.assert_allclose(phi_stack, sar_phases[1:], atol=1e-3)
+        npt.assert_allclose(residuals, single_ifg_error, atol=1e-3)
 
     def test_weighted_stack(self, data, A):
         sar_dates, sar_phases, ifg_date_pairs, ifgs = data
