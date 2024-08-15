@@ -112,6 +112,20 @@ class TestInvert:
         npt.assert_allclose(x, sar_phases[1:, -1, -1], atol=1e-5)
         assert np.array(residual).item() < 1e-5
 
+    def test_l1_invert(self, data, A):
+        sar_dates, sar_phases, ifg_date_pairs, ifgs = data
+
+        # Get one pixel
+        b = ifgs[:, -1, -1].copy()
+        # Change one value by a lot, should ignore it
+        b[0] += 100
+
+        x, residuals = timeseries.irls(A, b)
+        assert x.shape[0] == len(sar_dates) - 1
+        npt.assert_allclose(x, sar_phases[1:, -1, -1], atol=1e-4)
+        npt.assert_allclose(residuals[0], 100, atol=1e-4)
+        npt.assert_allclose(residuals[1:], 0, atol=1e-4)
+
     def test_stack(self, data, A):
         sar_dates, sar_phases, ifg_date_pairs, ifgs = data
 
