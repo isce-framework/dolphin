@@ -938,7 +938,7 @@ def _get_largest_conncomp_mask(
 
 
 @jit
-def l1_objective(A, x, b):
+def l1_objective(A: jnp.ndarray, x: jnp.ndarray, b: jnp.ndarray) -> float:
     return jnp.sum(jnp.abs(A @ x - b))
 
 
@@ -963,7 +963,11 @@ def invert_stack_l1(A: ArrayLike, dphi: ArrayLike) -> Array:
 
 @jit
 def irls(
-    A: jnp.ndarray, b: jnp.ndarray, p: float = 1, max_iters: int = 50, tol: float = 1e-5
+    A: jnp.ndarray,
+    b: jnp.ndarray,
+    p: float = 1,
+    max_iters: int = 50,
+    tol: float = 1e-5,
 ) -> tuple[jnp.ndarray, float]:
     """Minimize |Ax - b|_1 using Iteratively reweighted least squares (IRLS).
 
@@ -993,26 +997,33 @@ def irls(
         The final residual |Ax - b|_1
 
     """
-
-    def _l1_objective(A: jnp.ndarray, x: jnp.ndarray, b: jnp.ndarray) -> float:
-        """Calculate the L1 objective."""
-        return jnp.linalg.norm(A @ x - b, ord=1)
+    eps = jnp.sqrt(jnp.finfo(jnp.float32).eps)
 
     def cond_fun(val):
-        i, x, residual = val
-        return (i < max_iters) & (residual > tol)
+        i, x, x_prev, residual_vec = val
+        # Find the difference in L1 objective between iterations
+        obj = l1_objective(A, x, b)
+        prev_obj = l1_objective(A, x_prev, b)
+        # if it's small, not worth more iterations
+        change = jnp.abs(obj - prev_obj)
+        # Keep going while this condition is true:
+        return (i < max_iters) & (change > tol)
 
     def body_fun(val):
-        i, x, _ = val
-        residual = jnp.abs(b - A @ x) + eps
-        W = jnp.diag(residual ** (p - 2))
+        i, x, _, r = val
+        # Re-weight the least squares system by the L1 residuals
+        residual_vec = jnp.abs(b - A @ x)
+        # Add a small epsilon to avoid divide by 0
+        W = jnp.diag((eps + residual_vec) ** (p - 2))
         new_x = jnp.linalg.solve(A.T @ W @ A, A.T @ W @ b)
-        return i + 1, new_x, x, residual
+        return i + 1, new_x, x, residual_vec
 
     M, N = A.shape
     x = jnp.zeros(N, dtype=jnp.float32)
-    eps = jnp.sqrt(jnp.finfo(jnp.float32).eps)
 
-    num_iters, x, residual = lax.while_loop(cond_fun, body_fun, (0, x, 1.0))
+    r0 = jnp.ones((M,), dtype=jnp.float32)
+    _num_iters, x, _, residual_vec = lax.while_loop(
+        cond_fun, body_fun, (0, x, x + 1, r0)
+    )
 
-    return x, jnp.mean(residual)
+    return x, residual_vec
