@@ -24,7 +24,7 @@ NODATA_VALUES = {"ps": 255, "amp_dispersion": 0.0, "amp_mean": 0.0}
 
 FILE_DTYPES = {"ps": np.uint8, "amp_dispersion": np.float32, "amp_mean": np.float32}
 _EXTRA_COMPRESSION = {
-    "significant_bits": 10,
+    "keep_bits": 10,
     "predictor": 3,
 }
 REPACK_OPTIONS = {
@@ -115,16 +115,9 @@ def create_ps(
     # Initialize the intermediate arrays for the calculation
     magnitude = np.zeros((reader.shape[0], *block_shape), dtype=np.float32)
 
-    skip_empty = nodata_mask is None
-
     writer = io.BackgroundBlockWriter()
     # Make the generator for the blocks
-    block_gen = EagerLoader(
-        reader,
-        block_shape=block_shape,
-        nodata_mask=nodata_mask,
-        skip_empty=skip_empty,
-    )
+    block_gen = EagerLoader(reader, block_shape=block_shape, nodata_mask=nodata_mask)
     for cur_data, (rows, cols) in block_gen.iter_blocks(**tqdm_kwargs):
         cur_rows, cur_cols = cur_data.shape[-2:]
 
@@ -281,7 +274,7 @@ def multilook_ps_files(
     ps_mask_file: Filename,
     amp_dispersion_file: Filename,
 ) -> tuple[Path, Path]:
-    """Create a multilooked version of the full-res PS mask/ampltiude dispersion.
+    """Create a multilooked version of the full-res PS mask/amplitude dispersion.
 
     Parameters
     ----------

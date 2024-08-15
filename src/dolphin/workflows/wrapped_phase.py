@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import datetime
 import logging
+import time
 from pathlib import Path
 from typing import Optional, Sequence, cast
 
 import numpy as np
 from opera_utils import get_dates, make_nodata_mask
 
-from dolphin import interferogram, ps, stack
+from dolphin import Bbox, Filename, interferogram, masking, ps, stack
 from dolphin._log import log_runtime, setup_logging
 from dolphin.io import VRTStack
 
@@ -53,6 +54,7 @@ def run(
         Path to the created SHP counts file.
 
     """
+    t0 = time.perf_counter()
     setup_logging(debug=debug, filename=cfg.log_file)
     if tqdm_kwargs is None:
         tqdm_kwargs = {}
@@ -71,6 +73,28 @@ def run(
         outfile=cfg.work_directory / "slc_stack.vrt",
     )
 
+    # Mark any files beginning with "compressed" as compressed
+    is_compressed = ["compressed" in str(f).lower() for f in input_file_list]
+    input_dates = _get_input_dates(
+        input_file_list, is_compressed, cfg.input_options.cslc_date_fmt
+    )
+    reference_date, reference_idx = _get_reference_date_idx(
+        input_file_list, is_compressed, input_dates
+    )
+
+    non_compressed_slcs = [
+        f for f, is_comp in zip(input_file_list, is_compressed) if not is_comp
+    ]
+
+    # Create a mask file from input bounding polygons and/or specified output bounds
+    mask_filename = _get_mask(
+        output_dir=cfg.work_directory,
+        output_bounds=cfg.output_options.bounds,
+        like_filename=vrt_stack.outfile,
+        cslc_file_list=non_compressed_slcs,
+    )
+
+    nodata_mask = masking.load_mask_as_numpy(mask_filename) if mask_filename else None
     # ###############
     # PS selection
     # ###############
@@ -95,6 +119,7 @@ def run(
             output_amp_dispersion_file=cfg.ps_options._amp_dispersion_file,
             amp_dispersion_threshold=cfg.ps_options.amp_dispersion_threshold,
             existing_amp_dispersion_file=existing_disp,
+            nodata_mask=nodata_mask,
             existing_amp_mean_file=existing_amp,
             block_shape=cfg.worker_settings.block_shape,
             **kwargs,
@@ -141,21 +166,6 @@ def run(
         reference_idx=reference_idx,
     )
 
-    # ipdb.set_trace()
-
-    # Make the nodata mask from the polygons, if we're using OPERA CSLCs
-    non_compressed_slcs = [
-        f for f, is_comp in zip(input_file_list, is_compressed) if not is_comp
-    ]
-    try:
-        nodata_mask_file = cfg.work_directory / "nodata_mask.tif"
-        make_nodata_mask(
-            non_compressed_slcs, out_file=nodata_mask_file, buffer_pixels=200
-        )
-    except Exception as e:
-        logger.warning(f"Could not make nodata mask: {e}")
-        nodata_mask_file = None
-
     phase_linked_slcs = sorted(pl_path.glob("2*.tif"))
     if len(phase_linked_slcs) > 0:
         logger.info(f"Skipping EVD step, {len(phase_linked_slcs)} files already exist")
@@ -180,7 +190,7 @@ def run(
                 strides=strides,
                 use_evd=cfg.phase_linking.use_evd,
                 beta=cfg.phase_linking.beta,
-                mask_file=nodata_mask_file,
+                mask_file=mask_filename,
                 ps_mask_file=ps_output,
                 amp_mean_file=cfg.ps_options._amp_mean_file,
                 amp_dispersion_file=cfg.ps_options._amp_dispersion_file,
@@ -192,6 +202,14 @@ def run(
                 **kwargs,
             )
         )
+    # Dump the used options for JSON parsing
+    logger.info(
+        "wrapped_phase complete",
+        extra={
+            "elapsed": time.perf_counter() - t0,
+            "phase_linking_options": cfg.phase_linking.model_dump(mode="json"),
+        },
+    )
 
     # ###################################################
     # Form interferograms from estimated wrapped phase
@@ -213,15 +231,16 @@ def run(
     logger.info(f"Creating virtual interferograms from {len(phase_linked_slcs)} files")
     # TODO: with manual indexes, this may be split into 2 and redone
     ifg_file_list: list[Path] = []
-    for _idx in manual_reference_idxs:
-        ifg_file_list.extend(
-            create_ifgs(
-                ifg_network,
-                phase_linked_slcs,
-                any(is_compressed),
-                reference_date,
+    if manual_reference_idxs:
+        for _idx in manual_reference_idxs:
+            ifg_file_list.extend(
+                create_ifgs(
+                    ifg_network,
+                    phase_linked_slcs,
+                    any(is_compressed),
+                    reference_date,
+                )
             )
-        )
     return (
         ifg_file_list,
         comp_slc_list,
@@ -404,6 +423,53 @@ def _get_input_dates(
         dates[:1] if not is_comp else dates[:3]
         for dates, is_comp in zip(input_dates, is_compressed)
     ]
+
+
+def _get_mask(
+    output_dir: Path,
+    output_bounds: Bbox | tuple[float, float, float, float] | None,
+    like_filename: Filename,
+    cslc_file_list: Sequence[Filename],
+) -> Path | None:
+    # Make the nodata mask from the polygons, if we're using OPERA CSLCs
+
+    try:
+        nodata_mask_file = output_dir / "nodata_mask.tif"
+        make_nodata_mask(
+            opera_file_list=cslc_file_list,
+            out_file=nodata_mask_file,
+            buffer_pixels=200,
+        )
+    except Exception as e:
+        logger.warning(f"Could not make nodata mask: {e}")
+        nodata_mask_file = None
+
+    mask_filename: Path | None = None
+    # Also mask outside the area of interest if we've specified a small bounds
+    if output_bounds is not None:
+        # Make a mask just from the bounds
+        bounds_mask_filename = output_dir / "bounds_mask.tif"
+        masking.create_bounds_mask(
+            bounds=output_bounds,
+            output_filename=bounds_mask_filename,
+            like_filename=like_filename,
+        )
+
+        # Then combine with the nodata mask
+        if nodata_mask_file is not None:
+            combined_mask_filename = output_dir / "combined_mask.tif"
+            masking.combine_mask_files(
+                mask_files=[bounds_mask_filename, nodata_mask_file],
+                output_file=combined_mask_filename,
+                output_convention=masking.MaskConvention.ZERO_IS_NODATA,
+            )
+            mask_filename = combined_mask_filename
+        else:
+            mask_filename = bounds_mask_filename
+    else:
+        mask_filename = nodata_mask_file
+
+    return mask_filename
 
 
 def _get_nearest_idxs(

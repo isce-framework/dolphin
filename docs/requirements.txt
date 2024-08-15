@@ -1,6 +1,5 @@
-# For citations:
 # mkdocs requirements
-mdx_bib @ git+https://github.com/bobmyhill/mdx_bib.git@6b13bbbc407617a5e93ed0f8a0e5e4c52f73f677
+markdown # for mdx_bib
 mkdocs
 mkdocs-gen-files
 mkdocs-jupyter
@@ -8,4 +7,5 @@ mkdocs-literate-nav
 mkdocs-material
 mkdocs-section-index
 mkdocstrings[python]
+pybtex # for mdx_bib
 pymdown-extensions

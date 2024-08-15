@@ -31,6 +31,7 @@ def create_config(
     baseline_lag: Optional[int] = None,
     amp_dispersion_threshold: float = 0.25,
     strides: tuple[int, int],
+    output_bounds: tuple[int, int, int, int],
     block_shape: tuple[int, int] = (512, 512),
     threads_per_worker: int = 4,
     n_parallel_bursts: int = 1,
@@ -91,6 +92,7 @@ def create_config(
         interferogram_network=interferogram_network,
         output_options={
             "strides": {"x": strides[0], "y": strides[1]},
+            "bounds": output_bounds,
         },
         phase_linking={
             "ministack_size": ministack_size,
@@ -366,6 +368,13 @@ def get_parser(subparser=None, subcommand_name="run"):
             "Strides/decimation factor (x, y) (in pixels) to use when determining"
             " output shape."
         ),
+    )
+    out_group.add_argument(
+        "--output-bounds",
+        nargs=4,
+        type=float,
+        metavar=("left", "bottom", "right", "top"),
+        help="Requested bounding box (in lat/lon) for final output.",
     )
 
     worker_group = parser.add_argument_group("Worker options")

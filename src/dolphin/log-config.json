@@ -9,9 +9,9 @@
         "json": {
             "()": "dolphin._log.JSONFormatter",
             "fmt_keys": {
-                "level": "levelname",
-                "message": "message",
                 "timestamp": "timestamp",
+                "message": "message",
+                "level": "levelname",
                 "logger": "name",
                 "function": "funcName",
                 "line": "lineno",

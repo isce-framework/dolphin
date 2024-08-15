@@ -15,6 +15,7 @@ from dolphin import io, shp
 from dolphin._decorators import atomic_output
 from dolphin._types import Filename, HalfWindow, Strides
 from dolphin.io import EagerLoader, StridedBlockManager, VRTStack
+from dolphin.masking import load_mask_as_numpy
 from dolphin.phase_link import PhaseLinkRuntimeError, compress, run_phase_linking
 from dolphin.ps import calc_ps_block
 from dolphin.stack import MiniStackInfo
@@ -297,11 +298,11 @@ def run_wrapped_phase_single(
     logger.info(f"Finished ministack of size {vrt.shape}.")
 
     logger.info("Repacking for more compression")
-    io.repack_rasters(phase_linked_slc_files, significant_bits=12)
+    io.repack_rasters(phase_linked_slc_files, keep_bits=12)
 
     written_comp_slc = output_files[0]
 
-    io.repack_raster(written_comp_slc.filename, significant_bits=12)
+    io.repack_raster(written_comp_slc.filename, keep_bits=12)
     ccslc_info = ministack.get_compressed_slc_info()
     ccslc_info.write_metadata(output_file=written_comp_slc.filename)
     # TODO: Does it make sense to return anything from this?
@@ -314,18 +315,9 @@ def _get_nodata_mask(
     ncols: int,
 ) -> np.ndarray:
     if mask_file is not None:
-        # The mask file will by -2s at invalid data, 1s at good
-        nodata_mask = io.load_gdal(mask_file, masked=True).astype(bool).filled(False)
-        # invert the mask so -1s are the missing data pixels
-        nodata_mask = ~nodata_mask
-        # check middle pixel
-        if nodata_mask[nrows // 2, ncols // 2]:
-            logger.warning(f"{mask_file} is True at {nrows//2, ncols//2}")
-            logger.warning("Proceeding without the nodata mask.")
-            nodata_mask = np.zeros((nrows, ncols), dtype=bool)
+        return load_mask_as_numpy(mask_file)
     else:
-        nodata_mask = np.zeros((nrows, ncols), dtype=bool)
-    return nodata_mask
+        return np.zeros((nrows, ncols), dtype=bool)
 
 
 def _get_ps_mask(

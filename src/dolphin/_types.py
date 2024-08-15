@@ -84,6 +84,7 @@ class ReferencePoint(NamedTuple):
 class TropoModel(str, Enum):
     """Enumeration representing different tropospheric models."""
 
+    ECMWF = "ECMWF"
     ERA5 = "ERA5"
     HRES = "HRES"
     ERAINT = "ERAINT"

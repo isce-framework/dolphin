@@ -9,7 +9,9 @@ from __future__ import annotations
 
 import importlib
 import platform
+import re
 import sys
+from importlib.metadata import metadata
 from typing import Optional
 
 import dolphin
@@ -38,7 +40,7 @@ def _get_version(module_name: str) -> Optional[str]:
         mod = sys.modules[module_name]
     else:
         try:
-            mod = importlib.import_module(module_name)
+            mod = importlib.import_module(module_name.replace("-", "_"))
         except ImportError:
             return None
     try:
@@ -47,23 +49,21 @@ def _get_version(module_name: str) -> Optional[str]:
         return mod.version
 
 
-def _get_opera_info() -> dict[str, Optional[str]]:
-    """Information on isce/opera specific modules.
+def _get_unwrapping_options() -> dict[str, Optional[str]]:
+    """Information on possible phase unwrapping libraries.
 
     Returns
     -------
     dict
-        dolphin / opera module information
+        module information
 
     """
-    import opera_utils
-
     return {
-        "dolphin": dolphin.__version__,
-        "opera_utils": opera_utils.__version__,
-        # optionals
+        "snaphu": _get_version("snaphu"),
+        "spurt": _get_version("spurt"),
         "isce3": _get_version("isce3"),
         "tophu": _get_version("tophu"),
+        "whirlwind": _get_version("whirlwind"),
     }
 
 
@@ -76,16 +76,18 @@ def _get_deps_info() -> dict[str, Optional[str]]:
         version information on relevant Python libraries
 
     """
+    # Get metadata for your package
+    meta = metadata("dolphin")
+    # Extract dependencies from 'Requires-Dist' field
     deps = [
-        "numpy",
-        "numba",
-        "jax",
-        "osgeo.gdal",
-        "h5py",
-        "ruamel_yaml",
-        "pydantic",
-        "setuptools",
+        re.split(r"[><=~!]", dep.split()[0])[0]
+        for dep in meta.get_all("Requires-Dist", [])
+        if "extra" not in dep
     ]
+    # Replace 'ruamel-yaml' with 'ruamel.yaml'
+    deps = [dep.replace("ruamel-yaml", "ruamel.yaml") for dep in deps]
+    # Add `osgeo` for gdal (not listed in pip requirements)
+    deps += ["osgeo.gdal"]
     return {name: _get_version(name) for name in deps}
 
 
@@ -117,14 +119,10 @@ def show_versions() -> None:
     > python -c "import dolphin; dolphin.show_versions()"
 
     """
-    from dolphin.utils import gpu_is_available
-
-    print("dolphin/isce info:")
-    _print_info_dict(_get_opera_info())
-    print("\nSystem:")
-    _print_info_dict(_get_sys_info())
+    print(f"dolphin version: {dolphin.__version__}")
     print("\nPython deps:")
     _print_info_dict(_get_deps_info())
+    print("\nSystem:")
+    _print_info_dict(_get_sys_info())
     print("optional GPU info:")
-    print(f"{gpu_is_available() = }")
     _print_info_dict(_get_gpu_info())

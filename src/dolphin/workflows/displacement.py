@@ -17,7 +17,7 @@ from tqdm.auto import tqdm
 
 from dolphin import __version__, io, timeseries, utils
 from dolphin._log import log_runtime, setup_logging
-from dolphin.atmosphere import estimate_ionospheric_delay, estimate_tropospheric_delay
+from dolphin.timeseries import ReferencePoint
 from dolphin.workflows import CallFunc
 
 from . import stitching_bursts, unwrapping, wrapped_phase
@@ -42,6 +42,7 @@ class OutputPaths(NamedTuple):
     timeseries_paths: list[Path] | None
     tropospheric_corrections: list[Path] | None
     ionospheric_corrections: list[Path] | None
+    reference_point: ReferencePoint | None
 
 
 @log_runtime
@@ -88,14 +89,6 @@ def run(
         grouped_amp_mean_files = group_by_burst(cfg.amplitude_mean_files)
     else:
         grouped_amp_mean_files = defaultdict(list)
-
-    if len(cfg.correction_options.troposphere_files) > 0:
-        grouped_tropo_files = group_by_date(
-            cfg.correction_options.troposphere_files,
-            file_date_fmt=cfg.correction_options.tropo_date_fmt,
-        )
-    else:
-        grouped_tropo_files = None
 
     grouped_iono_files: Mapping[tuple[datetime], Sequence[str | PathLike[str]]] = {}
     if len(cfg.correction_options.ionosphere_files) > 0:
@@ -232,6 +225,7 @@ def run(
             timeseries_paths=None,
             tropospheric_corrections=None,
             ionospheric_corrections=None,
+            reference_point=None,
         )
 
     row_looks, col_looks = cfg.phase_linking.half_window.to_looks()
@@ -250,11 +244,14 @@ def run(
     # ##############################################
 
     ts_opts = cfg.timeseries_options
-    # Skip if we only have 1 unwrapped, or if we didn't ask for inversion/velocity
-    if len(unwrapped_paths) > 1 and (ts_opts.run_inversion or ts_opts.run_velocity):
+    # Skip if we didn't ask for inversion/velocity
+    # TODO: the troposphere/ionosphere corrections rely on `timeseries_paths`
+    # Perhaps we should refactor those to not need files,
+    # or perhaps we should throw an error if they want corrections but not `timeseries`
+    if ts_opts.run_inversion or ts_opts.run_velocity:
         # the output of run_timeseries is not currently used so pre-commit removes it
         # let's add back if we need it
-        timeseries_paths = timeseries.run(
+        timeseries_paths, reference_point = timeseries.run(
             unwrapped_paths=unwrapped_paths,
             conncomp_paths=conncomp_paths,
             corr_paths=stitched_cor_paths,
@@ -270,6 +267,7 @@ def run(
 
     else:
         timeseries_paths = None
+        reference_point = None
 
     # ##############################################
     # 5. Estimate corrections for each interferogram
@@ -277,8 +275,6 @@ def run(
     tropo_paths: list[Path] | None = None
     iono_paths: list[Path] | None = None
     if len(cfg.correction_options.geometry_files) > 0:
-        stitched_ifg_dir = cfg.interferogram_network._directory
-        ifg_filenames = sorted(Path(stitched_ifg_dir).glob("*.int.tif"))
         out_dir = cfg.work_directory / cfg.correction_options._atm_directory
         out_dir.mkdir(exist_ok=True)
         grouped_slc_files = group_by_date(cfg.cslc_file_list)
@@ -286,13 +282,14 @@ def run(
         # Prepare frame geometry files
         geometry_dir = out_dir / "geometry"
         geometry_dir.mkdir(exist_ok=True)
-        crs = io.get_raster_crs(ifg_filenames[0])
+        assert timeseries_paths is not None
+        crs = io.get_raster_crs(timeseries_paths[0])
         epsg = crs.to_epsg()
-        out_bounds = io.get_raster_bounds(ifg_filenames[0])
+        out_bounds = io.get_raster_bounds(timeseries_paths[0])
         frame_geometry_files = utils.prepare_geometry(
             geometry_dir=geometry_dir,
             geo_files=cfg.correction_options.geometry_files,
-            matching_file=ifg_filenames[0],
+            matching_file=timeseries_paths[0],
             dem_file=cfg.correction_options.dem_file,
             epsg=epsg,
             out_bounds=out_bounds,
@@ -302,38 +299,54 @@ def run(
         # Troposphere
         if "height" not in frame_geometry_files:
             logger.warning(
-                "DEM file is not given, skip estimating tropospheric corrections..."
+                "DEM file is not given, skip estimating tropospheric corrections."
             )
         else:
-            if grouped_tropo_files:
+            if cfg.correction_options.troposphere_files is not None:
+                from dolphin.atmosphere import estimate_tropospheric_delay
+
+                assert timeseries_paths is not None
+                logger.info(
+                    "Calculating tropospheric corrections for %s files.",
+                    len(timeseries_paths),
+                )
                 tropo_paths = estimate_tropospheric_delay(
-                    ifg_file_list=ifg_filenames,
-                    troposphere_files=grouped_tropo_files,
+                    ifg_file_list=timeseries_paths,
+                    troposphere_files=cfg.correction_options.troposphere_files,
+                    file_date_fmt=cfg.correction_options.tropo_date_fmt,
                     slc_files=grouped_slc_files,
                     geom_files=frame_geometry_files,
+                    reference_point=reference_point,
                     output_dir=out_dir,
-                    tropo_package=cfg.correction_options.tropo_package,
                     tropo_model=cfg.correction_options.tropo_model,
                     tropo_delay_type=cfg.correction_options.tropo_delay_type,
                     epsg=epsg,
                     bounds=out_bounds,
                 )
             else:
-                logger.info("No weather model, skip tropospheric correction ...")
+                logger.info("No weather model, skip tropospheric correction.")
 
         # Ionosphere
         if grouped_iono_files:
+            from dolphin.atmosphere import estimate_ionospheric_delay
+
+            logger.info(
+                "Calculating ionospheric corrections for %s files",
+                len(timeseries_paths),
+            )
+            assert timeseries_paths is not None
             iono_paths = estimate_ionospheric_delay(
-                ifg_file_list=ifg_filenames,
+                ifg_file_list=timeseries_paths,
                 slc_files=grouped_slc_files,
                 tec_files=grouped_iono_files,
                 geom_files=frame_geometry_files,
+                reference_point=reference_point,
                 output_dir=out_dir,
                 epsg=epsg,
                 bounds=out_bounds,
             )
         else:
-            logger.info("No TEC files, skip ionospheric correction ...")
+            logger.info("No TEC files, skip ionospheric correction.")
 
     # Print the maximum memory usage for each worker
     _print_summary(cfg)
@@ -355,6 +368,7 @@ def run(
         timeseries_paths=timeseries_paths,
         tropospheric_corrections=tropo_paths,
         ionospheric_corrections=iono_paths,
+        reference_point=reference_point,
     )
 
 
