@@ -9,7 +9,7 @@ import logging
 from itertools import chain
 from os import fspath
 from pathlib import Path
-from typing import Optional, Sequence
+from typing import Optional
 
 from osgeo_utils import gdal_calc
 
@@ -31,7 +31,7 @@ def run_wrapped_phase_sequential(
     slc_vrt_file: Filename,
     ministack_planner: MiniStackPlanner,
     ministack_size: int,
-    manual_reference_idxs: Sequence[int] | None = None,
+    manual_reference_idx: int | None = None,
     half_window: dict,
     strides: Optional[dict] = None,
     mask_file: Optional[Filename] = None,
@@ -53,7 +53,8 @@ def run_wrapped_phase_sequential(
     output_folder = ministack_planner.output_folder
     output_folder.mkdir(parents=True, exist_ok=True)
     ministacks = ministack_planner.plan(
-        ministack_size, manual_idxs=manual_reference_idxs
+        ministack_size,
+        manual_idxs=[manual_reference_idx] if manual_reference_idx is not None else [],
     )
 
     v_all = VRTStack.from_vrt_file(slc_vrt_file)

@@ -144,12 +144,14 @@ def run(
     input_dates = _get_input_dates(
         input_file_list, is_compressed, cfg.input_options.cslc_date_fmt
     )
-    manual_reference_dates = cfg.interferogram_network.reference_dates
-    manual_reference_idxs = (
-        _get_nearest_idxs([dtup[0] for dtup in input_dates], manual_reference_dates)
-        if manual_reference_dates
-        else None
-    )
+
+    manual_reference_date = cfg.output_options.extra_reference_date
+    if manual_reference_date:
+        manual_reference_idx = _get_nearest_idx(
+            [dtup[0] for dtup in input_dates], manual_reference_date
+        )
+    else:
+        manual_reference_idx = None
 
     reference_date, reference_idx = _get_reference_date_idx(
         input_file_list,
@@ -185,7 +187,7 @@ def run(
                 slc_vrt_file=vrt_stack.outfile,
                 ministack_planner=ministack_planner,
                 ministack_size=cfg.phase_linking.ministack_size,
-                manual_reference_idxs=manual_reference_idxs,
+                manual_reference_idx=manual_reference_idx,
                 half_window=cfg.phase_linking.half_window.model_dump(),
                 strides=strides,
                 use_evd=cfg.phase_linking.use_evd,
@@ -231,16 +233,15 @@ def run(
     logger.info(f"Creating virtual interferograms from {len(phase_linked_slcs)} files")
     # TODO: with manual indexes, this may be split into 2 and redone
     ifg_file_list: list[Path] = []
-    if manual_reference_idxs:
-        for _idx in manual_reference_idxs:
-            ifg_file_list.extend(
-                create_ifgs(
-                    ifg_network,
-                    phase_linked_slcs,
-                    any(is_compressed),
-                    reference_date,
-                )
+    if manual_reference_idx:
+        ifg_file_list.extend(
+            create_ifgs(
+                ifg_network,
+                phase_linked_slcs,
+                any(is_compressed),
+                reference_date,
             )
+        )
     return (
         ifg_file_list,
         comp_slc_list,
@@ -472,24 +473,20 @@ def _get_mask(
     return mask_filename
 
 
-def _get_nearest_idxs(
+def _get_nearest_idx(
     input_dates: Sequence[datetime.datetime],
-    selected_dates: Sequence[datetime.datetime],
-) -> list[int]:
-    """Find the indices nearest to `selected_dates` within `input_dates`."""
-    nearest_idxs = []
+    selected_date: datetime.datetime,
+) -> int:
+    """Find the index nearest to `selected_date` within `input_dates`."""
     sorted_inputs = sorted(input_dates)
-    for d in selected_dates:
-        if not sorted_inputs[0] <= d <= sorted_inputs[-1]:
-            msg = f"Request {d} falls outside of input range: "
-            msg += f"{sorted_inputs[0]}, {sorted_inputs[-1]}"
-            raise ValueError(msg)
+    if not sorted_inputs[0] <= selected_date <= sorted_inputs[-1]:
+        msg = f"Requested {selected_date} falls outside of input range: "
+        msg += f"{sorted_inputs[0]}, {sorted_inputs[-1]}"
+        raise ValueError(msg)
 
-    for selected_date in selected_dates:
-        nearest_idx = min(
-            range(len(input_dates)),
-            key=lambda i: abs((input_dates[i] - selected_date).total_seconds()),
-        )
-        nearest_idxs.append(nearest_idx)
+    nearest_idx = min(
+        range(len(input_dates)),
+        key=lambda i: abs((input_dates[i] - selected_date).total_seconds()),
+    )
 
-    return nearest_idxs
+    return nearest_idx

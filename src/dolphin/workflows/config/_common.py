@@ -146,16 +146,6 @@ class InterferogramNetwork(BaseModel, extra="forbid"):
             " interferograms to form."
         ),
     )
-    reference_dates: Optional[list[datetime]] = Field(
-        None,
-        description=(
-            "Specify a multi-reference network: list the date/datetimes in the input"
-            " SLC stack which you would like to make single-reference interferograms"
-            " for. This allows you to specify more than one network for, e.g., "
-            " a large earthquake event. If passing strings, formats accepted are"
-            " YYYY-MM-DD[T]HH:MM[:SS[.ffffff]][Z or [±]HH[:]MM], or YYYY-MM-DD"
-        ),
-    )
 
     # validation
     @model_validator(mode="after")
@@ -297,6 +287,16 @@ class OutputOptions(BaseModel, extra="forbid"):
     overview_levels: list[int] = Field(
         [4, 8, 16, 32, 64],
         description="List of overview levels to create (if `add_overviews=True`).",
+    )
+    extra_reference_date: Optional[datetime] = Field(
+        None,
+        description=(
+            "Specify an extra reference datetime. Adding this lets you"
+            " to create and unwrap two single reference networks; the later resets at"
+            " the given date (e.g. for a large earthquake event). If passing strings,"
+            " formats accepted are YYYY-MM-DD[T]HH:MM[:SS[.ffffff]][Z or [±]HH[:]MM],"
+            " or YYYY-MM-DD"
+        ),
     )
 
     # validators
