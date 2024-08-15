@@ -938,11 +938,6 @@ def _get_largest_conncomp_mask(
 
 
 @jit
-def l1_objective(A: jnp.ndarray, x: jnp.ndarray, b: jnp.ndarray) -> float:
-    return jnp.sum(jnp.abs(A @ x - b))
-
-
-@jit
 def invert_stack_l1(A: ArrayLike, dphi: ArrayLike) -> Array:
     n_ifgs, n_rows, n_cols = dphi.shape
 
@@ -952,9 +947,9 @@ def invert_stack_l1(A: ArrayLike, dphi: ArrayLike) -> Array:
     invert_2d = vmap(irls, in_axes=(None, 1, 1), out_axes=(1, 1))
     # Solve 3d shapes: (nrows, ncols, n_ifgs) -> (nrows, ncols, n_sar_dates)
     invert_3d = vmap(invert_2d, in_axes=(None, 2, 2), out_axes=(2, 2))
-    phase, residuals = invert_3d(A, dphi)
+    phase, residual_vecs = invert_3d(A, dphi)
     # Reshape the residuals to be 2D
-    residuals = residuals[0]
+    residuals = jnp.sum(residual_vecs, axis=0)
 
     # Add 0 for the reference date to the front
     phase = jnp.concatenate([jnp.zeros((1, n_rows, n_cols)), phase], axis=0)
@@ -1000,17 +995,17 @@ def irls(
     eps = jnp.sqrt(jnp.finfo(jnp.float32).eps)
 
     def cond_fun(val):
-        i, x, x_prev, residual_vec = val
+        i, x_current, x_prev, prev_residual_vec = val
         # Find the difference in L1 objective between iterations
-        obj = l1_objective(A, x, b)
-        prev_obj = l1_objective(A, x_prev, b)
+        objective = jnp.sum(jnp.abs(b - A @ x_current))
+        prev_objective = jnp.sum(prev_residual_vec)
         # if it's small, not worth more iterations
-        change = jnp.abs(obj - prev_obj)
+        change = jnp.abs(objective - prev_objective)
         # Keep going while this condition is true:
         return (i < max_iters) & (change > tol)
 
     def body_fun(val):
-        i, x, _, r = val
+        i, x, _, _ = val
         # Re-weight the least squares system by the L1 residuals
         residual_vec = jnp.abs(b - A @ x)
         # Add a small epsilon to avoid divide by 0
