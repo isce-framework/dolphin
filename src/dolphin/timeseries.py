@@ -27,13 +27,15 @@ logger = logging.getLogger(__name__)
 __all__ = ["run"]
 
 
-class ReferencePointError(ValueError):
-    pass
-
-
 class InversionMethod(str, Enum):
+    """Method to use for timeseries inversion."""
+
     L1 = "L1"
     L2 = "L2"
+
+
+class ReferencePointError(ValueError):
+    pass
 
 
 def run(

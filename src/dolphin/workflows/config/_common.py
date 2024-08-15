@@ -4,7 +4,7 @@ import glob
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 from pydantic import (
     BaseModel,
@@ -174,6 +174,9 @@ class TimeseriesOptions(BaseModel, extra="forbid"):
             "Whether to run the inversion step after unwrapping, if more than "
             " a single-reference network is used."
         ),
+    )
+    method: Literal["L1", "L2"] = Field(
+        "L2", description="Norm to use during timeseries inversion."
     )
     reference_point: Optional[tuple[int, int]] = Field(
         None,
