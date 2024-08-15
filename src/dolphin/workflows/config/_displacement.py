@@ -4,7 +4,7 @@ import logging
 from pathlib import Path
 from typing import Annotated, Any, Optional
 
-from opera_utils._dates import get_dates, sort_files_by_date
+from opera_utils import get_dates, sort_files_by_date
 from pydantic import (
     BaseModel,
     ConfigDict,

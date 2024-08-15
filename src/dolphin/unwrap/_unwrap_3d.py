@@ -30,18 +30,20 @@ def unwrap_spurt(
         MergerSettings,
         SolverSettings,
         TilerSettings,
+        compute_phasediff_deciles,
+        get_bulk_offsets,
+        get_tiles,
+        merge_tiles,
+        unwrap_tiles,
     )
-    from spurt.workflows.emcf._bulk_offset import get_bulk_offsets
-    from spurt.workflows.emcf._merge import merge_tiles
-    from spurt.workflows.emcf._overlap import compute_phasediff_deciles
-    from spurt.workflows.emcf._tiling import get_tiles
-    from spurt.workflows.emcf._unwrap import unwrap_tiles
 
     if cor_filenames is not None:
         assert len(ifg_filenames) == len(cor_filenames)
     if mask_filename is not None:
         _mask = io.load_gdal(mask_filename)
 
+    if scratchdir is None:
+        scratchdir = Path(output_path) / "scratch"
     gen_settings = GeneralSettings(
         output_folder=output_path,
         intermediate_folder=scratchdir,

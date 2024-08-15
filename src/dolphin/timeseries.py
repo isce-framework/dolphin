@@ -42,7 +42,7 @@ def run(
     correlation_threshold: float = 0.2,
     num_threads: int = 5,
     reference_point: tuple[int, int] = (-1, -1),
-) -> list[Path]:
+) -> tuple[list[Path], ReferencePoint]:
     """Invert the unwrapped interferograms, estimate timeseries and phase velocity.
 
     Parameters
@@ -80,22 +80,24 @@ def run(
     -------
     inverted_phase_paths : list[Path]
         list of Paths to inverted interferograms (single reference phase series).
+    reference_point : ReferencePoint
+        NamedTuple of reference (row, column) selected.
+        If passed as input, simply returned back as output.
+        Otherwise, the result is the auto-selection from `select_reference_point`.
 
     """
-    condition_func = argmax_index if condition == CallFunc.MAX else argmin_index
-
     Path(output_dir).mkdir(exist_ok=True, parents=True)
 
-    # First we find the reference point for the unwrapped interferograms
+    condition_func = argmax_index if condition == CallFunc.MAX else argmin_index
     if reference_point == (-1, -1):
-        reference = select_reference_point(
+        ref_point = select_reference_point(
             condition_file=condition_file,
             output_dir=Path(output_dir),
             condition_func=condition_func,
             ccl_file_list=conncomp_paths,
         )
     else:
-        reference = ReferencePoint(row=reference_point[0], col=reference_point[1])
+        ref_point = ReferencePoint(row=reference_point[0], col=reference_point[1])
 
     ifg_date_pairs = [get_dates(f) for f in unwrapped_paths]
     sar_dates = sorted(set(utils.flatten(ifg_date_pairs)))
@@ -110,7 +112,7 @@ def run(
         logger.info("Inverting network of %s unwrapped ifgs", len(unwrapped_paths))
         inverted_phase_paths = invert_unw_network(
             unw_file_list=unwrapped_paths,
-            reference=reference,
+            reference=ref_point,
             output_dir=output_dir,
             num_threads=num_threads,
         )
@@ -129,17 +131,6 @@ def run(
             if not target.exists():  # Check to prevent overwriting
                 shutil.copy(p, target)
             inverted_phase_paths.append(target)
-        # Make extra "0" raster so that the number of rasters matches len(sar_dates)
-        ref_raster = Path(output_dir) / (
-            utils.format_dates(sar_dates[0], sar_dates[0]) + ".tif"
-        )
-        io.write_arr(
-            arr=None,
-            output_name=ref_raster,
-            like_filename=inverted_phase_paths[0],
-            nodata=0,
-        )
-        inverted_phase_paths.append(ref_raster)
 
     if run_velocity:
         #  We can't pass the correlations after an inversion- the numbers don't match
@@ -151,17 +142,17 @@ def run(
         logger.info("Estimating phase velocity")
         if velocity_file is None:
             velocity_file = Path(output_dir) / "velocity.tif"
+
         create_velocity(
             unw_file_list=inverted_phase_paths,
             output_file=velocity_file,
-            reference=reference,
-            date_list=sar_dates,
+            reference=ref_point,
             cor_file_list=cor_file_list,
             cor_threshold=correlation_threshold,
             num_threads=num_threads,
         )
 
-    return inverted_phase_paths
+    return inverted_phase_paths, ref_point
 
 
 def argmin_index(arr: ArrayLike) -> tuple[int, ...]:
@@ -275,7 +266,7 @@ def invert_stack(
     -------
     phi : np.array 3D
         The estimated phase for each SAR acquisition
-        Shape is (n_sar_dates, n_rows, n_cols)
+        Shape is (n_sar_dates - 1, n_rows, n_cols)
     residuals : np.array 2D
         Sums of squared residuals: Squared Euclidean 2-norm for `dphi - A @ x`
         Shape is (n_rows, n_cols)
@@ -308,8 +299,6 @@ def invert_stack(
         # Reshape the residuals to be 2D
         residuals = residuals[0]
 
-    # Add 0 for the reference date to the front
-    phase = jnp.concatenate([jnp.zeros((1, n_rows, n_cols)), phase], axis=0)
     return phase, residuals
 
 
@@ -522,12 +511,14 @@ def create_velocity(
             msg += f"{len(cor_file_list) = }, but {len(unw_file_list) = }"
             raise ValueError(msg)
 
+        logger.info("Using correlation to weight velocity fit")
         cor_reader = io.VRTStack(
             file_list=cor_file_list,
             outfile=out_dir / "cor_inputs.vrt",
             skip_size_check=True,
         )
     else:
+        logger.info("Using unweighted fit for velocity.")
         cor_reader = None
 
     # Read in the reference point
@@ -579,6 +570,7 @@ def create_velocity(
     if add_overviews:
         logger.info("Creating overviews for velocity image")
         create_overviews([output_file])
+    logger.info("Completed create_velocity")
 
 
 class AverageFunc(Protocol):
@@ -710,8 +702,9 @@ def invert_unw_network(
     sar_dates = sorted(set(flatten(ifg_tuples)))
     ref_date = sar_dates[0]
     suffix = ".tif"
+    # Create the `n_sar_dates - 1` output files (skipping the 0 reference raster)
     out_paths = [
-        Path(output_dir) / (format_dates(ref_date, d) + suffix) for d in sar_dates
+        Path(output_dir) / (format_dates(ref_date, d) + suffix) for d in sar_dates[1:]
     ]
     if all(p.exists() for p in out_paths):
         logger.info("All output files already exist, skipping inversion")
@@ -723,7 +716,7 @@ def invert_unw_network(
     unw_reader = io.VRTStack(
         file_list=unw_file_list, outfile=out_vrt_name, skip_size_check=True
     )
-    cor_vrt_name = Path(output_dir) / "unw_network.vrt"
+    cor_vrt_name = Path(output_dir) / "cor_network.vrt"
 
     # Get the reference point data
     ref_row, ref_col = reference
@@ -773,6 +766,8 @@ def invert_unw_network(
     if add_overviews:
         logger.info("Creating overviews for unwrapped images")
         create_overviews(out_paths, image_type=ImageType.UNWRAPPED)
+
+    logger.info("Completed invert_unw_network")
     return out_paths
 
 
@@ -847,6 +842,12 @@ def select_reference_point(
         component label files
 
     """
+    output_file = output_dir / "reference_point.txt"
+    if output_file.exists():
+        ref_point = _read_reference_point(output_file=output_file)
+        logger.info(f"Read {ref_point!r} from existing {output_file}")
+        return ref_point
+
     logger.info("Selecting reference point")
     condition_file_values = io.load_gdal(condition_file, masked=True)
 
@@ -871,7 +872,18 @@ def select_reference_point(
     ref_row, ref_col = condition_func(condition_file_values)
 
     # Cast to `int` to avoid having `np.int64` types
-    return ReferencePoint(int(ref_row), int(ref_col))
+    ref_point = ReferencePoint(int(ref_row), int(ref_col))
+    logger.info(f"Saving {ref_point!r} to from existing {output_file}")
+    _write_reference_point(output_file=output_file, ref_point=ref_point)
+    return ref_point
+
+
+def _write_reference_point(output_file: Path, ref_point: ReferencePoint) -> None:
+    output_file.write_text(",".join(list(map(str, ref_point))))
+
+
+def _read_reference_point(output_file: Path):
+    return ReferencePoint(*[int(n) for n in output_file.read_text().split(",")])
 
 
 def _get_largest_conncomp_mask(
@@ -903,7 +915,6 @@ def _get_largest_conncomp_mask(
             read_masked=True,
         )
 
-    logger.info("Selecting reference point")
     conncomp_intersection = io.load_gdal(conncomp_intersection_file, masked=True)
 
     # Find the largest conncomp region in the intersection
@@ -918,7 +929,7 @@ def _get_largest_conncomp_mask(
 
     # Make a mask of the largest conncomp:
     # Find the label with the most pixels using bincount
-    label_counts = np.bincount(conncomp_intersection.ravel())
+    label_counts = np.bincount(label.ravel())
     # (ignore the 0 label)
     largest_idx = np.argmax(label_counts[1:]) + 1
     # Create a mask of pixels with this label

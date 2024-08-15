@@ -121,6 +121,7 @@ def merge_by_date(
         process_date,
         list(zip(grouped_images.values(), stitched_acq_times.values())),
         max_workers=num_workers,
+        desc="Merging images by date",
     )
 
     return stitched_acq_times
@@ -271,7 +272,7 @@ def merge_images(
             args.extend(["-co", option])
 
     arg_list = [str(a) for a in args]
-    logger.info(f"Running {' '.join(arg_list)}")
+    logger.debug(f"Running {' '.join(arg_list)}")
     subprocess.check_call(arg_list)
 
     # Now clip to the provided bounding box
@@ -279,7 +280,10 @@ def merge_images(
         destName=fspath(outfile),
         srcDS=fspath(merge_output),
         projWin=proj_win,
-        resampleAlg=resample_alg,
+        # TODO: https://github.com/OSGeo/gdal/issues/10536
+        # Figure out if we really want to resample here, or just
+        # do a nearest neighbor (which is default)
+        resampleAlg="bilinear",
         format=driver,
         creationOptions=options,
     )
