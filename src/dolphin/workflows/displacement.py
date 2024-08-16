@@ -302,7 +302,7 @@ def run(
                 "DEM file is not given, skip estimating tropospheric corrections."
             )
         else:
-            if cfg.correction_options.troposphere_files is not None:
+            if cfg.correction_options.troposphere_files:
                 from dolphin.atmosphere import estimate_tropospheric_delay
 
                 assert timeseries_paths is not None
