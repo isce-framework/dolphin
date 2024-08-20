@@ -222,6 +222,32 @@ class TestVelocity:
         npt.assert_allclose(velocities, expected_velo, atol=1e-5)
 
 
+class TestCreateAverage:
+    def test_basic(self, tmp_path, slc_file_list, slc_stack):
+        output_file = tmp_path / "average.tif"
+        timeseries.create_average(
+            file_list=slc_file_list, output_file=output_file, num_threads=1
+        )
+        computed = io.load_gdal(output_file)
+        expected = np.average(slc_stack, axis=0)
+        npt.assert_allclose(computed, expected)
+
+    def test_weighted(self, tmp_path, slc_file_list, slc_stack):
+        output_file = tmp_path / "average.tif"
+        weights = np.ones(len(slc_file_list))
+        weights[-1] = 0
+        timeseries.create_average(
+            file_list=slc_file_list,
+            output_file=output_file,
+            num_threads=1,
+            weights=weights,
+        )
+
+        computed = io.load_gdal(output_file)
+        expected = np.average(slc_stack[:-1], axis=0)
+        npt.assert_allclose(computed, expected, atol=1e-6)
+
+
 if __name__ == "__main__":
     sar_dates = make_sar_dates()
     sar_phases = make_sar_phases(sar_dates)
