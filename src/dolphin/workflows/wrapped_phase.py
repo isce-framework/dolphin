@@ -433,11 +433,12 @@ def _get_mask(
         # Then combine with the nodata mask
         if nodata_mask_file is not None:
             combined_mask_filename = output_dir / "combined_mask.tif"
-            masking.combine_mask_files(
-                mask_files=[bounds_mask_filename, nodata_mask_file],
-                output_file=combined_mask_filename,
-                output_convention=masking.MaskConvention.ZERO_IS_NODATA,
-            )
+            if not combined_mask_filename.exists():
+                masking.combine_mask_files(
+                    mask_files=[bounds_mask_filename, nodata_mask_file],
+                    output_file=combined_mask_filename,
+                    output_convention=masking.MaskConvention.ZERO_IS_NODATA,
+                )
             mask_filename = combined_mask_filename
         else:
             mask_filename = bounds_mask_filename
