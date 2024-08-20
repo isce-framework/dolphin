@@ -195,7 +195,7 @@ class SpurtSolverSettings(BaseModel):
         description="Scale factor used to compute edge costs for spatial unwrapping.",
         gt=0.0,
     )
-    num_parallel_tiles: float = Field(
+    num_parallel_tiles: int = Field(
         default=1,
         description="Number of tiles to process in parallel. Set to 0 for all tiles.",
         ge=0.0,
