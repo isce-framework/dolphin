@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import logging
 import shutil
+from enum import Enum
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Callable, Optional, Protocol, Sequence, TypeVar
 
 import jax.numpy as jnp
 import numpy as np
-from jax import Array, jit, vmap
+from jax import Array, jit, lax, vmap
 from numpy.typing import ArrayLike
 from opera_utils import get_dates
 from scipy import ndimage
@@ -26,6 +27,13 @@ logger = logging.getLogger(__name__)
 __all__ = ["run"]
 
 
+class InversionMethod(str, Enum):
+    """Method to use for timeseries inversion."""
+
+    L1 = "L1"
+    L2 = "L2"
+
+
 class ReferencePointError(ValueError):
     pass
 
@@ -37,6 +45,7 @@ def run(
     condition_file: PathOrStr,
     condition: CallFunc,
     output_dir: PathOrStr,
+    method: InversionMethod = InversionMethod.L2,
     run_velocity: bool = False,
     velocity_file: Optional[PathOrStr] = None,
     correlation_threshold: float = 0.2,
@@ -62,6 +71,10 @@ def run(
         the options are [min, max]
     output_dir : Path
         Path to the output directory.
+    method : str, choices = "L1", "L2"
+        Inversion method to use when solving Ax = b.
+        Default is L2, which uses least squares to solve Ax = b (faster).
+        "L1" minimizes |Ax - b|_1 at each pixel.
     run_velocity : bool
         Whether to run velocity estimation on the inverted phase series
     velocity_file : Path, Optional
@@ -115,6 +128,7 @@ def run(
             reference=ref_point,
             output_dir=output_dir,
             num_threads=num_threads,
+            method=method,
         )
     else:
         logger.info(
@@ -644,6 +658,7 @@ def invert_unw_network(
     cor_threshold: float = 0.2,
     n_cor_looks: int = 1,
     ifg_date_pairs: Sequence[Sequence[DateOrDatetime]] | None = None,
+    method: InversionMethod = InversionMethod.L2,
     block_shape: tuple[int, int] = (512, 512),
     num_threads: int = 5,
     add_overviews: bool = True,
@@ -663,6 +678,10 @@ def invert_unw_network(
     ifg_date_pairs : Sequence[Sequence[DateOrDatetime]], optional
         List of date pairs to use for the inversion. If not provided, will be
         parsed from filenames in `unw_file_list`.
+    method : str, choices = "L1", "L2"
+        Inversion method to use when solving Ax = b.
+        Default is L2, which uses least squares to solve Ax = b (faster).
+        "L1" minimizes |Ax - b|_1 at each pixel.
     block_shape : tuple[int, int], optional
         The shape of the blocks to process in parallel
     cor_file_list : Sequence[PathOrStr], optional
@@ -725,7 +744,7 @@ def invert_unw_network(
     def read_and_solve(
         readers: Sequence[io.StackReader], rows: slice, cols: slice
     ) -> tuple[slice, slice, np.ndarray]:
-        if len(readers) == 2:
+        if len(readers) == 2 and method == "L2":
             unw_reader, cor_reader = readers
             stack = unw_reader[:, rows, cols]
             cor = cor_reader[:, rows, cols]
@@ -742,6 +761,10 @@ def invert_unw_network(
         # TODO: do i want to write residuals too? Do i need
         # to have multiple writers then?
         phases = invert_stack(A, stack, weights)[0]
+        if method.upper() == "L1":
+            phases = invert_stack_l1(A, stack)[0]
+        else:
+            phases = invert_stack(A, stack, weights)[0]
         return np.asarray(phases), rows, cols
 
     if cor_file_list is not None:
@@ -935,3 +958,88 @@ def _get_largest_conncomp_mask(
     # Create a mask of pixels with this label
     isin_largest_conncomp = label == largest_idx
     return isin_largest_conncomp
+
+
+@jit
+def invert_stack_l1(A: ArrayLike, dphi: ArrayLike) -> Array:
+    n_ifgs, n_rows, n_cols = dphi.shape
+
+    # vectorize the solve function to work on 2D and 3D arrays
+    # We are not vectorizing over the A matrix, only the dphi vector
+    # Solve 2d shapes: (nrows, n_ifgs) -> (nrows, n_sar_dates)
+    invert_2d = vmap(irls, in_axes=(None, 1), out_axes=(1, 1))
+    # Solve 3d shapes: (nrows, ncols, n_ifgs) -> (nrows, ncols, n_sar_dates)
+    invert_3d = vmap(invert_2d, in_axes=(None, 2), out_axes=(2, 2))
+    phase, residual_vecs = invert_3d(A, dphi)
+    # Reshape the residuals to be 2D
+    residuals = jnp.sum(residual_vecs, axis=0)
+
+    return phase, residuals
+
+
+@jit
+def irls(
+    A: jnp.ndarray,
+    b: jnp.ndarray,
+    p: float = 1,
+    max_iters: int = 50,
+    tol: float = 1e-5,
+) -> tuple[jnp.ndarray, float]:
+    """Minimize |Ax - b|_1 using Iteratively reweighted least squares (IRLS).
+
+    See https://en.wikipedia.org/wiki/Iteratively_reweighted_least_squares for
+    algorithm description
+
+    Parameters
+    ----------
+    A : jnp.ndarray
+        The matrix A in the equation Ax = b.
+    b : jnp.ndarray
+        The vector b in the equation Ax = b.
+    p : float, optional
+        The power parameter for the weights, by default 1.
+    max_iters : int, optional
+        The maximum number of iterations, by default 50.
+    tol : float, optional
+        The tolerance for convergence, by default 1e-5.
+
+    Returns
+    -------
+    tuple[jnp.ndarray, float]
+        A tuple containing:
+    x : Array
+        The solution vector.
+    residual
+        The final residual |Ax - b|_1
+
+    """
+    eps = jnp.sqrt(jnp.finfo(jnp.float32).eps)
+
+    def cond_fun(val):
+        i, x_current, x_prev, prev_residual_vec = val
+        # Find the difference in L1 objective between iterations
+        objective = jnp.sum(jnp.abs(b - A @ x_current))
+        prev_objective = jnp.sum(prev_residual_vec)
+        # if it's small, not worth more iterations
+        change = jnp.abs(objective - prev_objective)
+        # Keep going while this condition is true:
+        return (i < max_iters) & (change > tol)
+
+    def body_fun(val):
+        i, x, _, _ = val
+        # Re-weight the least squares system by the L1 residuals
+        residual_vec = jnp.abs(b - A @ x)
+        # Add a small epsilon to avoid divide by 0
+        W = jnp.diag((eps + residual_vec) ** (p - 2))
+        new_x = jnp.linalg.solve(A.T @ W @ A, A.T @ W @ b)
+        return i + 1, new_x, x, residual_vec
+
+    M, N = A.shape
+    x = jnp.zeros(N, dtype=jnp.float32)
+
+    r0 = jnp.ones((M,), dtype=jnp.float32)
+    _num_iters, x, _, residual_vec = lax.while_loop(
+        cond_fun, body_fun, (0, x, x + 1, r0)
+    )
+
+    return x, residual_vec

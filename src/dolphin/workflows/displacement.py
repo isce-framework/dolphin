@@ -258,6 +258,7 @@ def run(
             condition_file=stitched_temp_coh_file,
             condition=CallFunc.MAX,
             output_dir=ts_opts._directory,
+            method=timeseries.InversionMethod(ts_opts.method),
             run_velocity=ts_opts.run_velocity,
             velocity_file=ts_opts._velocity_file,
             correlation_threshold=ts_opts.correlation_threshold,
