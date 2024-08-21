@@ -88,6 +88,6 @@ dolphin run dolphin_config.yaml
 # Acknowledgements
 
 Copyright © 2024, California Institute of Technology ("Caltech"). U.S. Government sponsorship acknowledged.
-The research was carried out at the Jet Propulsion Laboratory, California Institute of Technology, under a contract with the National Aeronautics and Space Administration (80NM0018D0004). The OPERA project has been funded by the Satellite Needs Working Group.
+The research was carried out at the Jet Propulsion Laboratory, California Institute of Technology, under a contract with the National Aeronautics and Space Administration (80NM0018D0004). OPERA, managed by the Jet Propulsion Laboratory and funded by the Satellite Needs Working Group, is creating remote sensing products to address Earth observation needs across U.S. civilian federal agencies.
 
 # References
