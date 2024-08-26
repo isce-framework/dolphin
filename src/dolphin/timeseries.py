@@ -49,6 +49,7 @@ def run(
     run_velocity: bool = False,
     velocity_file: Optional[PathOrStr] = None,
     correlation_threshold: float = 0.2,
+    block_shape: tuple[int, int] = (128, 128),
     num_threads: int = 5,
     reference_point: tuple[int, int] = (-1, -1),
 ) -> tuple[list[Path], ReferencePoint]:
@@ -81,6 +82,9 @@ def run(
         The output velocity file
     correlation_threshold : float
         Pixels with correlation below this value will be masked out
+    block_shape : tuple[int, int], optional
+        The shape of the blocks to process in parallel.
+        Default is (512, 512)
     num_threads : int
         The parallel blocks to process at once.
         Default is 5.
@@ -127,6 +131,7 @@ def run(
             unw_file_list=unwrapped_paths,
             reference=ref_point,
             output_dir=output_dir,
+            block_shape=block_shape,
             num_threads=num_threads,
             method=method,
         )
@@ -163,6 +168,7 @@ def run(
             reference=ref_point,
             cor_file_list=cor_file_list,
             cor_threshold=correlation_threshold,
+            block_shape=block_shape,
             num_threads=num_threads,
         )
 
@@ -772,8 +778,10 @@ def invert_unw_network(
             file_list=cor_file_list, outfile=cor_vrt_name, skip_size_check=True
         )
         readers = [unw_reader, cor_reader]
+        logger.info("Using correlation to weight unw inversion")
     else:
         readers = [unw_reader]
+        logger.info("Using unweighted unw inversion")
 
     writer = io.BackgroundStackWriter(out_paths, like_filename=unw_file_list[0])
 
@@ -846,7 +854,7 @@ def select_reference_point(
         for example numpy.argmin which finds the pixel with lowest value
     ccl_file_list : Sequence[PathOrStr]
         List of connected component label phase files.
-    block_shape: tuple[int, int]
+    block_shape : tuple[int, int]
         Size of blocks to read from while processing `ccl_file_list`
         Default = (512, 512)
     num_threads: int
@@ -1029,9 +1037,13 @@ def irls(
         i, x, _, _ = val
         # Re-weight the least squares system by the L1 residuals
         residual_vec = jnp.abs(b - A @ x)
-        # Add a small epsilon to avoid divide by 0
-        W = jnp.diag((eps + residual_vec) ** (p - 2))
-        new_x = jnp.linalg.solve(A.T @ W @ A, A.T @ W @ b)
+        # The matrix version looks like
+        # W = jnp.diag(residual_vec ** (p - 2))
+        # new_x = jnp.linalg.solve(A.T @ W @ A, A.T @ W @ b)
+        # We use element-wise mult to keep memory lower:
+        w = (eps + residual_vec) ** (p - 2)  # Add a small epsilon to avoid divide by 0
+        AtW = A.T * w
+        new_x = jnp.linalg.solve(AtW @ A, AtW @ b)
         return i + 1, new_x, x, residual_vec
 
     M, N = A.shape
