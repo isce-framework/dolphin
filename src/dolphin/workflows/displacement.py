@@ -262,6 +262,7 @@ def run(
             run_velocity=ts_opts.run_velocity,
             velocity_file=ts_opts._velocity_file,
             correlation_threshold=ts_opts.correlation_threshold,
+            num_threads=ts_opts.num_parallel_blocks,
             # TODO: do i care to configure block shape, or num threads from somewhere?
             # num_threads=cfg.worker_settings....?
         )

@@ -197,6 +197,17 @@ class TimeseriesOptions(BaseModel, extra="forbid"):
         ge=0.0,
         le=1.0,
     )
+    block_shape: tuple[int, int] = Field(
+        (256, 256),
+        description=(
+            "Size (rows, columns) of blocks of data to load at a time. 3D dimsion is"
+            " number of interferograms (during inversion) and number of SLC dates"
+            " (during velocity fitting)"
+        ),
+    )
+    num_parallel_blocks: int = Field(
+        4, description="Number of parallel blocks to process at once."
+    )
 
 
 class WorkerSettings(BaseModel, extra="forbid"):

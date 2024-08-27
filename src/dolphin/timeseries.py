@@ -49,8 +49,8 @@ def run(
     run_velocity: bool = False,
     velocity_file: Optional[PathOrStr] = None,
     correlation_threshold: float = 0.2,
-    block_shape: tuple[int, int] = (128, 128),
-    num_threads: int = 5,
+    block_shape: tuple[int, int] = (256, 256),
+    num_threads: int = 4,
     reference_point: tuple[int, int] = (-1, -1),
 ) -> tuple[list[Path], ReferencePoint]:
     """Invert the unwrapped interferograms, estimate timeseries and phase velocity.
@@ -84,7 +84,7 @@ def run(
         Pixels with correlation below this value will be masked out
     block_shape : tuple[int, int], optional
         The shape of the blocks to process in parallel.
-        Default is (512, 512)
+        Default is (256, 256)
     num_threads : int
         The parallel blocks to process at once.
         Default is 5.
@@ -471,8 +471,8 @@ def create_velocity(
     date_list: Sequence[DateOrDatetime] | None = None,
     cor_file_list: Sequence[PathOrStr] | None = None,
     cor_threshold: float = 0.2,
-    block_shape: tuple[int, int] = (512, 512),
-    num_threads: int = 5,
+    block_shape: tuple[int, int] = (256, 256),
+    num_threads: int = 4,
     add_overviews: bool = True,
 ) -> None:
     """Perform pixel-wise (weighted) linear regression to estimate velocity.
@@ -501,7 +501,7 @@ def create_velocity(
         Default is 0.2.
     block_shape : tuple[int, int], optional
         The shape of the blocks to process in parallel.
-        Default is (512, 512)
+        Default is (256, 256)
     num_threads : int, optional
         The parallel blocks to process at once.
         Default is 5.
@@ -602,8 +602,8 @@ class AverageFunc(Protocol):
 def create_temporal_average(
     file_list: Sequence[PathOrStr],
     output_file: PathOrStr,
-    block_shape: tuple[int, int] = (512, 512),
-    num_threads: int = 5,
+    block_shape: tuple[int, int] = (256, 256),
+    num_threads: int = 4,
     average_func: Callable[[ArrayLike, int], np.ndarray] = np.nanmean,
     read_masked: bool = False,
 ) -> None:
@@ -617,7 +617,7 @@ def create_temporal_average(
         The output file to save the average to
     block_shape : tuple[int, int], optional
         The shape of the blocks to process in parallel.
-        Default is (512, 512)
+        Default is (256, 256)
     num_threads : int, optional
         The parallel blocks to process at once.
         Default is 5.
@@ -665,8 +665,8 @@ def invert_unw_network(
     n_cor_looks: int = 1,
     ifg_date_pairs: Sequence[Sequence[DateOrDatetime]] | None = None,
     method: InversionMethod = InversionMethod.L2,
-    block_shape: tuple[int, int] = (512, 512),
-    num_threads: int = 5,
+    block_shape: tuple[int, int] = (256, 256),
+    num_threads: int = 4,
     add_overviews: bool = True,
 ) -> list[Path]:
     """Perform pixel-wise inversion of unwrapped network to get phase per date.
@@ -830,8 +830,8 @@ def select_reference_point(
     output_dir: Path,
     condition_func: Callable[[ArrayLike], tuple[int, ...]] = argmin_index,
     ccl_file_list: Sequence[PathOrStr] | None = None,
-    block_shape: tuple[int, int] = (512, 512),
-    num_threads: int = 5,
+    block_shape: tuple[int, int] = (256, 256),
+    num_threads: int = 4,
 ) -> ReferencePoint:
     """Automatically select a reference point for a stack of unwrapped interferograms.
 
@@ -856,7 +856,7 @@ def select_reference_point(
         List of connected component label phase files.
     block_shape : tuple[int, int]
         Size of blocks to read from while processing `ccl_file_list`
-        Default = (512, 512)
+        Default = (256, 256)
     num_threads: int
         Number of parallel blocks to process.
         Default = 5
@@ -920,8 +920,8 @@ def _read_reference_point(output_file: Path):
 def _get_largest_conncomp_mask(
     output_dir: Path,
     ccl_file_list: Sequence[PathOrStr] | None = None,
-    block_shape: tuple[int, int] = (512, 512),
-    num_threads: int = 5,
+    block_shape: tuple[int, int] = (256, 256),
+    num_threads: int = 4,
 ) -> np.ndarray:
     def intersect_conncomp(arr: np.ma.MaskedArray, axis: int) -> np.ndarray:
         # Track where input is nodata
