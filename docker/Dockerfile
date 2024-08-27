@@ -64,7 +64,7 @@ SHELL ["/usr/local/bin/_dockerfile_shell.sh"]
 COPY --chown=$MAMBA_USER:$MAMBA_USER docker/specfile.txt /tmp/specfile.txt
 RUN micromamba install --yes --channel conda-forge -n base -f /tmp/specfile.txt && \
     # cxx-compiler for whirlwind:
-    micromamba install cxx-compiler && \
+    micromamba install --yes --channel conda-forge -n base cxx-compiler && \
     micromamba clean --all --yes
 
 COPY --chown=$MAMBA_USER:$MAMBA_USER . .
