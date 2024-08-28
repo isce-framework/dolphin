@@ -555,7 +555,7 @@ def prepare_geometry(
 
     """
     from dolphin import stitching
-    from dolphin.io import format_nc_filename
+    from dolphin.io import DEFAULT_TIFF_OPTIONS, format_nc_filename
 
     if strides is None:
         strides = {"x": 1, "y": 1}
@@ -565,28 +565,32 @@ def prepare_geometry(
 
     if geo_files[0].name.endswith(".h5"):
         # ISCE3 geocoded SLCs
-        datasets = ["los_east", "los_north"]
+        datasets = ["los_east", "los_north", "layover_shadow_mask"]
+        nodatas = [0, 0, 127]
 
-        for ds_name in datasets:
+        for nodata, ds_name in zip(nodatas, datasets):
             outfile = geometry_dir / f"{ds_name}.tif"
             logger.info(f"Creating {outfile}")
             stitched_geo_list[ds_name] = outfile
             ds_path = f"/data/{ds_name}"
             cur_files = [format_nc_filename(f, ds_name=ds_path) for f in geo_files]
 
-            no_data = 0
-
+            if ds_name not in "layover_shadow_mask":
+                options = (*DEFAULT_TIFF_OPTIONS, "NBITS=16")
+            else:
+                options = DEFAULT_TIFF_OPTIONS
             stitching.merge_images(
                 cur_files,
                 outfile=outfile,
                 driver="GTiff",
                 out_bounds=out_bounds,
                 out_bounds_epsg=epsg,
-                in_nodata=no_data,
-                out_nodata=no_data,
+                in_nodata=nodata,
+                out_nodata=nodata,
                 target_aligned_pixels=True,
                 strides=strides,
                 overwrite=False,
+                options=options,
             )
 
         if dem_file:
