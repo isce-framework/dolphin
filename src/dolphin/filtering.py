@@ -165,7 +165,7 @@ def filter_rasters(
         List of paths to correlation files
         Passing None skips filtering on correlation.
     conncomp_filenames : list[Path] | None
-        List of paths to connected component files, filters any 0 labelled pixels.
+        List of paths to connected component files, filters any 0 labeled pixels.
         Passing None skips filtering on connected component labels.
     temporal_coherence_filename : Path | None
         Path to the temporal coherence file for masking.
