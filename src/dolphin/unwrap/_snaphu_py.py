@@ -5,8 +5,6 @@ from contextlib import ExitStack
 from pathlib import Path
 from typing import Optional
 
-from numpy.typing import ArrayLike
-
 from dolphin._types import Filename
 from dolphin.io._core import DEFAULT_TIFF_OPTIONS_RIO
 from dolphin.utils import full_suffix
