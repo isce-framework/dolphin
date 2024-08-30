@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import shutil
 from enum import Enum
 from pathlib import Path
 from tempfile import NamedTemporaryFile
@@ -154,16 +153,12 @@ def run(
             "Skipping inversion step: only single reference interferograms exist."
         )
         # Copy over the unwrapped paths to `timeseries/`
-        for p in unwrapped_paths:
-            # if it ends in `.unw.tif`, change to just `.tif` for consistency
-            # with the case where we run an inversion
-            cur_name = Path(p).name
-            unw_suffix = full_suffix(p)
-            target_name = str(cur_name).replace(unw_suffix, ".tif")
-            target = Path(output_dir) / target_name
-            if not target.exists():  # Check to prevent overwriting
-                shutil.copy(p, target)
-            inverted_phase_paths.append(target)
+        inverted_phase_paths = _convert_and_reference(
+            unwrapped_paths,
+            output_dir=output_dir,
+            reference_point=ref_point,
+            wavelength=wavelength,
+        )
 
     if run_velocity:
         #  We can't pass the correlations after an inversion- the numbers don't match
@@ -187,6 +182,51 @@ def run(
         )
 
     return inverted_phase_paths, ref_point
+
+
+def _convert_and_reference(
+    unwrapped_paths: Sequence[PathOrStr],
+    *,
+    output_dir: PathOrStr,
+    reference_point: ReferencePoint,
+    wavelength: float | None = None,
+) -> list[Path]:
+    if wavelength is not None:
+        # Positive values are motion towards the radar
+        constant = -1 * (wavelength / (4 * np.pi))
+        units = "meters"
+    else:
+        constant = -1
+        units = "radians"
+
+    ref_row, ref_col = reference_point
+    out_paths: list[Path] = []
+    for p in unwrapped_paths:
+        # if it ends in `.unw.tif`, change to just `.tif` for consistency
+        # with the case where we run an inversion
+        cur_name = Path(p).name
+        unw_suffix = full_suffix(p)
+        target_name = str(cur_name).replace(unw_suffix, ".tif")
+        target = Path(output_dir) / target_name
+        out_paths.append(target)
+
+        if target.exists():  # Check to prevent overwriting
+            continue
+
+        arr_radians = io.load_gdal(p)
+        # Reference to the
+        ref_value = arr_radians[ref_row, ref_col]
+        if np.isnan(ref_value):
+            logger.warning(
+                "{ref_point!r} is NaN for {p} . Skipping reference subtraction."
+            )
+        else:
+            arr_radians -= ref_value
+        io.write_arr(
+            arr=arr_radians * constant, output_name=target, units=units, like_filename=p
+        )
+
+    return out_paths
 
 
 def argmin_index(arr: ArrayLike) -> tuple[int, ...]:
