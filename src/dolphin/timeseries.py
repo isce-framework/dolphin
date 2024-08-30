@@ -904,7 +904,7 @@ def select_reference_point(
 
     # Cast to `int` to avoid having `np.int64` types
     ref_point = ReferencePoint(int(ref_row), int(ref_col))
-    logger.info(f"Saving {ref_point!r} to from existing {output_file}")
+    logger.info(f"Saving {ref_point!r} to {output_file}")
     _write_reference_point(output_file=output_file, ref_point=ref_point)
     return ref_point
 

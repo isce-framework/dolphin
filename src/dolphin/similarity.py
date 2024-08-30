@@ -41,7 +41,8 @@ def median_similarity(
     search_radius: int
         maximum radius (in pixels) to search for neighbors when comparing each pixel.
     mask: ArrayLike (optional)
-        Array of mask from True/False indicating whether to ignore the pixel
+        Array of mask from True/False indicating whether to include the pixel (True)
+        or ignore it (False).
 
     Returns
     -------
@@ -72,7 +73,8 @@ def max_similarity(
     search_radius: int
         maximum radius (in pixels) to search for neighbors when comparing each pixel.
     mask: ArrayLike (optional)
-        Array of mask from True/False indicating whether to ignore the pixel
+        Array of mask from True/False indicating whether to include the pixel (True)
+        or ignore it (False).
 
     Returns
     -------
@@ -92,7 +94,7 @@ def max_similarity(
 def _create_loop_and_run(
     ifg_stack: ArrayLike,
     search_radius: int,
-    mask: ArrayLike,
+    mask: ArrayLike | None,
     func: Callable[[ArrayLike], np.ndarray],
 ):
     n_ifg, rows, cols = ifg_stack.shape
