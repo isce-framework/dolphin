@@ -115,16 +115,9 @@ def create_ps(
     # Initialize the intermediate arrays for the calculation
     magnitude = np.zeros((reader.shape[0], *block_shape), dtype=np.float32)
 
-    skip_empty = nodata_mask is None
-
     writer = io.BackgroundBlockWriter()
     # Make the generator for the blocks
-    block_gen = EagerLoader(
-        reader,
-        block_shape=block_shape,
-        nodata_mask=nodata_mask,
-        skip_empty=skip_empty,
-    )
+    block_gen = EagerLoader(reader, block_shape=block_shape, nodata_mask=nodata_mask)
     for cur_data, (rows, cols) in block_gen.iter_blocks(**tqdm_kwargs):
         cur_rows, cur_cols = cur_data.shape[-2:]
 

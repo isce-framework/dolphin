@@ -4,7 +4,7 @@ import glob
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 from pydantic import (
     BaseModel,
@@ -104,6 +104,14 @@ class PhaseLinkingOptions(BaseModel, extra="forbid"):
         gt=0.0,
         lt=1.0,
     )
+    mask_input_ps: bool = Field(
+        False,
+        description=(
+            "If True, pixels labeled as PS will get set to NaN during phase linking to"
+            " avoid summing their phase. Default of False means that the SHP algorithm"
+            " will decide if a pixel should be included, regardless of its PS label."
+        ),
+    )
     baseline_lag: Optional[int] = Field(
         None,
         gt=0,
@@ -175,6 +183,9 @@ class TimeseriesOptions(BaseModel, extra="forbid"):
             " a single-reference network is used."
         ),
     )
+    method: Literal["L1", "L2"] = Field(
+        "L2", description="Norm to use during timeseries inversion."
+    )
     reference_point: Optional[tuple[int, int]] = Field(
         None,
         description=(
@@ -193,6 +204,17 @@ class TimeseriesOptions(BaseModel, extra="forbid"):
         description="Pixels with correlation below this value will be masked out.",
         ge=0.0,
         le=1.0,
+    )
+    block_shape: tuple[int, int] = Field(
+        (256, 256),
+        description=(
+            "Size (rows, columns) of blocks of data to load at a time. 3D dimsion is"
+            " number of interferograms (during inversion) and number of SLC dates"
+            " (during velocity fitting)"
+        ),
+    )
+    num_parallel_blocks: int = Field(
+        4, description="Number of parallel blocks to process at once."
     )
 
 

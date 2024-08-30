@@ -655,7 +655,7 @@ def estimate_correlation_from_phase(
 
 
 def estimate_interferometric_correlations(
-    ifg_paths: Sequence[Filename],
+    ifg_filenames: Sequence[Filename],
     window_size: tuple[int, int],
     out_driver: str = "GTiff",
     out_suffix: str = ".cor.tif",
@@ -669,7 +669,7 @@ def estimate_interferometric_correlations(
 
     Parameters
     ----------
-    ifg_paths : Sequence[Filename]
+    ifg_filenames : Sequence[Filename]
         Paths to complex interferogram files.
     window_size : tuple[int, int]
         (row, column) size of window to use for estimate.
@@ -692,13 +692,16 @@ def estimate_interferometric_correlations(
         Paths to newly written correlation files.
 
     """
-    corr_paths: list[Path] = []
-    for ifg_path in ifg_paths:
-        cor_path = Path(ifg_path).with_suffix(out_suffix)
-        corr_paths.append(cor_path)
+    path_tuples: list[tuple[Path, Path]] = []
+    output_paths: list[Path] = []
+    for fn in ifg_filenames:
+        ifg_path = Path(fn)
+        cor_path = ifg_path.with_suffix(out_suffix)
+        output_paths.append(cor_path)
         if cor_path.exists():
             logger.info(f"Skipping existing interferometric correlation for {ifg_path}")
             continue
+        path_tuples.append((ifg_path, cor_path))
 
     def process_ifg(args):
         ifg_path, cor_path = args
@@ -715,9 +718,14 @@ def estimate_interferometric_correlations(
             options=options,
         )
 
-    thread_map(process_ifg, list(zip(ifg_paths, corr_paths)), max_workers=num_workers)
+    thread_map(
+        process_ifg,
+        path_tuples,
+        max_workers=num_workers,
+        desc="Estimating correlations",
+    )
 
-    return corr_paths
+    return output_paths
 
 
 def _create_vrt_conj(

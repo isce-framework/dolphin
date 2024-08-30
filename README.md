@@ -15,7 +15,7 @@
 [github-discussions-link]:  https://github.com/isce-framework/dolphin/discussions
 <!-- prettier-ignore-end -->
 
-High resolution wrapped phase estimation for InSAR using combined PS/DS processing.
+High resolution wrapped phase estimation for Interferometric Synthetic Aperture Radar (InSAR) using combined persistent scatterer (PS) and distributed scatterer (DS) processing.
 
 <!-- DeformatiOn Land surface Products in High resolution using INsar -->
 
@@ -92,6 +92,16 @@ If the SLC files are spread over multiple files, you can either
 The full set of options is written to the configuration file; you can edit this file, or you can see which commonly tuned options by are changeable running `dolphin config --help`.
 
 See the [documentation](https://dolphin-insar.readthedocs.io/) for more details.
+
+## Building and running via Docker
+
+`dolphin` can also be run using Docker. You can use the one built on [Github](https://github.com/isce-framework/dolphin/pkgs/container/dolphin), or build it locally using the script
+
+```bash
+./docker/build-docker-image.sh
+```
+
+See `./docker/build-docker-image.sh --help` for more building options.
 
 ## License
 
