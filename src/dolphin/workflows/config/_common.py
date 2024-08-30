@@ -104,6 +104,14 @@ class PhaseLinkingOptions(BaseModel, extra="forbid"):
         gt=0.0,
         lt=1.0,
     )
+    mask_input_ps: bool = Field(
+        False,
+        description=(
+            "If True, pixels labeled as PS will get set to NaN during phase linking to"
+            " avoid summing their phase. Default of False means that the SHP algorithm"
+            " will decide if a pixel should be included, regardless of its PS label."
+        ),
+    )
     baseline_lag: Optional[int] = Field(
         None,
         gt=0,

@@ -21,7 +21,7 @@ LABEL org.opencontainers.image.licenses="BSD-3-Clause OR Apache-2.0"
 # Install CA certificates if the base image has apt-get, otherwise we can't install conda packages
 RUN if command -v apt-get > /dev/null; then \
     apt-get update && \
-    apt-get install -y ca-certificates && \
+    apt-get install -y ca-certificates wget && \
     rm -rf /var/lib/apt/lists/*; \
     fi
 
@@ -63,6 +63,8 @@ SHELL ["/usr/local/bin/_dockerfile_shell.sh"]
 # https://github.com/mamba-org/micromamba-docker#quick-start
 COPY --chown=$MAMBA_USER:$MAMBA_USER docker/specfile.txt /tmp/specfile.txt
 RUN micromamba install --yes --channel conda-forge -n base -f /tmp/specfile.txt && \
+    # cxx-compiler for whirlwind:
+    micromamba install --yes --channel conda-forge -n base cxx-compiler && \
     micromamba clean --all --yes
 
 COPY --chown=$MAMBA_USER:$MAMBA_USER . .
