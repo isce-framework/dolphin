@@ -458,15 +458,13 @@ def unwrap(
         )
 
         # Regrow connected components after phase modification
-        corr = io.load_gdal(corr_filename)
-        mask = corr[:] > 0
         # TODO decide whether we want to have the
         # 'min_conncomp_frac' option in the config
         conncomp_path = grow_conncomp_snaphu(
             unw_filename=unw_filename,
             corr_filename=corr_filename,
             nlooks=nlooks,
-            mask=mask,
+            mask_filename=combined_mask_file,
             ccl_nodata=ccl_nodata,
             cost=unwrap_options.snaphu_options.cost,
             scratchdir=scratchdir,

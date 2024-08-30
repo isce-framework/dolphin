@@ -49,7 +49,8 @@ def run(
     run_velocity: bool = False,
     velocity_file: Optional[PathOrStr] = None,
     correlation_threshold: float = 0.2,
-    num_threads: int = 5,
+    block_shape: tuple[int, int] = (256, 256),
+    num_threads: int = 4,
     reference_point: tuple[int, int] = (-1, -1),
 ) -> tuple[list[Path], ReferencePoint]:
     """Invert the unwrapped interferograms, estimate timeseries and phase velocity.
@@ -81,9 +82,12 @@ def run(
         The output velocity file
     correlation_threshold : float
         Pixels with correlation below this value will be masked out
+    block_shape : tuple[int, int], optional
+        The shape of the blocks to process in parallel.
+        Default is (256, 256)
     num_threads : int
         The parallel blocks to process at once.
-        Default is 5.
+        Default is 4.
     reference_point : tuple[int, int], optional
         Reference point (row, col) used if performing a time series inversion.
         If not provided, a point will be selected from a consistent connected
@@ -127,6 +131,7 @@ def run(
             unw_file_list=unwrapped_paths,
             reference=ref_point,
             output_dir=output_dir,
+            block_shape=block_shape,
             num_threads=num_threads,
             method=method,
         )
@@ -163,6 +168,7 @@ def run(
             reference=ref_point,
             cor_file_list=cor_file_list,
             cor_threshold=correlation_threshold,
+            block_shape=block_shape,
             num_threads=num_threads,
         )
 
@@ -465,8 +471,8 @@ def create_velocity(
     date_list: Sequence[DateOrDatetime] | None = None,
     cor_file_list: Sequence[PathOrStr] | None = None,
     cor_threshold: float = 0.2,
-    block_shape: tuple[int, int] = (512, 512),
-    num_threads: int = 5,
+    block_shape: tuple[int, int] = (256, 256),
+    num_threads: int = 4,
     add_overviews: bool = True,
 ) -> None:
     """Perform pixel-wise (weighted) linear regression to estimate velocity.
@@ -495,10 +501,10 @@ def create_velocity(
         Default is 0.2.
     block_shape : tuple[int, int], optional
         The shape of the blocks to process in parallel.
-        Default is (512, 512)
+        Default is (256, 256)
     num_threads : int, optional
         The parallel blocks to process at once.
-        Default is 5.
+        Default is 4.
     add_overviews : bool, optional
         If True, creates overviews of the new velocity raster.
         Default is True.
@@ -596,8 +602,8 @@ class AverageFunc(Protocol):
 def create_temporal_average(
     file_list: Sequence[PathOrStr],
     output_file: PathOrStr,
-    block_shape: tuple[int, int] = (512, 512),
-    num_threads: int = 5,
+    block_shape: tuple[int, int] = (256, 256),
+    num_threads: int = 4,
     average_func: Callable[[ArrayLike, int], np.ndarray] = np.nanmean,
     read_masked: bool = False,
 ) -> None:
@@ -611,10 +617,10 @@ def create_temporal_average(
         The output file to save the average to
     block_shape : tuple[int, int], optional
         The shape of the blocks to process in parallel.
-        Default is (512, 512)
+        Default is (256, 256)
     num_threads : int, optional
         The parallel blocks to process at once.
-        Default is 5.
+        Default is 4.
     average_func : Callable[[ArrayLike, int], np.ndarray], optional
         The function to use to average the images.
         Default is `np.nanmean`, which calls `np.nanmean(arr, axis=0)` on each block.
@@ -659,8 +665,8 @@ def invert_unw_network(
     n_cor_looks: int = 1,
     ifg_date_pairs: Sequence[Sequence[DateOrDatetime]] | None = None,
     method: InversionMethod = InversionMethod.L2,
-    block_shape: tuple[int, int] = (512, 512),
-    num_threads: int = 5,
+    block_shape: tuple[int, int] = (256, 256),
+    num_threads: int = 4,
     add_overviews: bool = True,
 ) -> list[Path]:
     """Perform pixel-wise inversion of unwrapped network to get phase per date.
@@ -695,7 +701,7 @@ def invert_unw_network(
         Default is 1.
     num_threads : int
         The parallel blocks to process at once.
-        Default is 5.
+        Default is 4.
     add_overviews : bool, optional
         If True, creates overviews of the new unwrapped phase rasters.
         Default is True.
@@ -772,10 +778,10 @@ def invert_unw_network(
             file_list=cor_file_list, outfile=cor_vrt_name, skip_size_check=True
         )
         readers = [unw_reader, cor_reader]
-        logger.info("Using correlation-weighted inversion for invert_unw_network.")
+        logger.info("Using correlation to weight unw inversion")
     else:
         readers = [unw_reader]
-        logger.info("Using unweighted inversion for invert_unw_network.")
+        logger.info("Using unweighted unw inversion")
 
     writer = io.BackgroundStackWriter(out_paths, like_filename=unw_file_list[0])
 
@@ -824,8 +830,8 @@ def select_reference_point(
     output_dir: Path,
     condition_func: Callable[[ArrayLike], tuple[int, ...]] = argmin_index,
     ccl_file_list: Sequence[PathOrStr] | None = None,
-    block_shape: tuple[int, int] = (512, 512),
-    num_threads: int = 5,
+    block_shape: tuple[int, int] = (256, 256),
+    num_threads: int = 4,
 ) -> ReferencePoint:
     """Automatically select a reference point for a stack of unwrapped interferograms.
 
@@ -848,9 +854,9 @@ def select_reference_point(
         for example numpy.argmin which finds the pixel with lowest value
     ccl_file_list : Sequence[PathOrStr]
         List of connected component label phase files.
-    block_shape: tuple[int, int]
+    block_shape : tuple[int, int]
         Size of blocks to read from while processing `ccl_file_list`
-        Default = (512, 512)
+        Default = (256, 256)
     num_threads: int
         Number of parallel blocks to process.
         Default = 5
@@ -914,8 +920,8 @@ def _read_reference_point(output_file: Path):
 def _get_largest_conncomp_mask(
     output_dir: Path,
     ccl_file_list: Sequence[PathOrStr] | None = None,
-    block_shape: tuple[int, int] = (512, 512),
-    num_threads: int = 5,
+    block_shape: tuple[int, int] = (256, 256),
+    num_threads: int = 4,
 ) -> np.ndarray:
     def intersect_conncomp(arr: np.ma.MaskedArray, axis: int) -> np.ndarray:
         # Track where input is nodata
@@ -1031,9 +1037,13 @@ def irls(
         i, x, _, _ = val
         # Re-weight the least squares system by the L1 residuals
         residual_vec = jnp.abs(b - A @ x)
-        # Add a small epsilon to avoid divide by 0
-        W = jnp.diag((eps + residual_vec) ** (p - 2))
-        new_x = jnp.linalg.solve(A.T @ W @ A, A.T @ W @ b)
+        # The matrix version looks like
+        # W = jnp.diag(residual_vec ** (p - 2))
+        # new_x = jnp.linalg.solve(A.T @ W @ A, A.T @ W @ b)
+        # We use element-wise mult to keep memory lower:
+        w = (eps + residual_vec) ** (p - 2)  # Add a small epsilon to avoid divide by 0
+        AtW = A.T * w
+        new_x = jnp.linalg.solve(AtW @ A, AtW @ b)
         return i + 1, new_x, x, residual_vec
 
     M, N = A.shape
