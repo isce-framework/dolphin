@@ -1,19 +1,21 @@
 # dolphin
+
 [![Pytest and build docker image](https://github.com/isce-framework/dolphin/actions/workflows/test-build-push.yml/badge.svg?branch=main)](https://github.com/isce-framework/dolphin/actions/workflows/test-build-push.yml)
 [![pre-commit.ci status](https://results.pre-commit.ci/badge/github/isce-framework/dolphin/main.svg)](https://results.pre-commit.ci/latest/github/isce-framework/dolphin/main)
 [![Conda-Forge][conda-badge]][conda-link]
-<!-- [![PyPI version][pypi-version]][pypi-link] -->
-<!-- [![PyPI platforms][pypi-platforms]][pypi-link] -->
+[![PyPI platforms][pypi-platforms]][pypi-link]
+[![GitHub Discussion][github-discussions-badge]][github-discussions-link]
 
 <!-- prettier-ignore-start -->
 [conda-badge]:              https://img.shields.io/conda/vn/conda-forge/dolphin
 [conda-link]:               https://github.com/conda-forge/dolphin-feedstock
 [pypi-link]:                https://pypi.org/project/dolphin/
 [pypi-platforms]:           https://img.shields.io/pypi/pyversions/dolphin
-[pypi-version]:             https://img.shields.io/pypi/v/dolphin
+[github-discussions-badge]: https://img.shields.io/static/v1?label=Discussions&message=Ask&color=blue&logo=github
+[github-discussions-link]:  https://github.com/isce-framework/dolphin/discussions
 <!-- prettier-ignore-end -->
 
-High resolution wrapped phase estimation for InSAR using combined PS/DS processing.
+High resolution wrapped phase estimation for Interferometric Synthetic Aperture Radar (InSAR) using combined persistent scatterer (PS) and distributed scatterer (DS) processing.
 
 <!-- DeformatiOn Land surface Products in High resolution using INsar -->
 
@@ -62,7 +64,7 @@ conda activate dolphin-env
 python -m pip install .
 ```
 
-Dolphin can also take advantage of CUDA-compatible GPUs for faster processing. [See the docs](dolphin-insar.readthedocs.io/gpu-setup.md) for installation instructions and configuration.
+Dolphin can also take advantage of CUDA-compatible GPUs for faster processing. [See the docs](https://dolphin-insar.readthedocs.io/en/latest/gpu-setup) for installation instructions and configuration.
 
 ## Usage
 
@@ -90,6 +92,16 @@ If the SLC files are spread over multiple files, you can either
 The full set of options is written to the configuration file; you can edit this file, or you can see which commonly tuned options by are changeable running `dolphin config --help`.
 
 See the [documentation](https://dolphin-insar.readthedocs.io/) for more details.
+
+## Building and running via Docker
+
+`dolphin` can also be run using Docker. You can use the one built on [Github](https://github.com/isce-framework/dolphin/pkgs/container/dolphin), or build it locally using the script
+
+```bash
+./docker/build-docker-image.sh
+```
+
+See `./docker/build-docker-image.sh --help` for more building options.
 
 ## License
 

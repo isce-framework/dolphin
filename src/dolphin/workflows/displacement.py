@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 from __future__ import annotations
 
+import logging
+
 # import contextlib
 import multiprocessing as mp
 from collections import defaultdict
@@ -8,22 +10,21 @@ from concurrent.futures import ProcessPoolExecutor
 from datetime import datetime
 from os import PathLike
 from pathlib import Path
-from pprint import pformat
 from typing import Mapping, NamedTuple, Sequence
 
 from opera_utils import group_by_burst, group_by_date  # , get_dates
 from tqdm.auto import tqdm
 
 from dolphin import __version__, io, timeseries, utils
-from dolphin._log import get_log, log_runtime
-from dolphin.atmosphere import estimate_ionospheric_delay, estimate_tropospheric_delay
+from dolphin._log import log_runtime, setup_logging
+from dolphin.timeseries import ReferencePoint
 from dolphin.workflows import CallFunc
 
 from . import stitching_bursts, unwrapping, wrapped_phase
 from ._utils import _create_burst_cfg, _remove_dir_if_empty
 from .config import DisplacementWorkflow  # , TimeseriesOptions
 
-logger = get_log(__name__)
+logger = logging.getLogger(__name__)
 
 
 class OutputPaths(NamedTuple):
@@ -38,8 +39,10 @@ class OutputPaths(NamedTuple):
     stitched_shp_count_file: Path
     unwrapped_paths: list[Path] | None
     conncomp_paths: list[Path] | None
+    timeseries_paths: list[Path] | None
     tropospheric_corrections: list[Path] | None
     ionospheric_corrections: list[Path] | None
+    reference_point: ReferencePoint | None
 
 
 @log_runtime
@@ -58,9 +61,12 @@ def run(
         Enable debug logging, by default False.
 
     """
+    if cfg.log_file is None:
+        cfg.log_file = cfg.work_directory / "dolphin.log"
     # Set the logging level for all `dolphin.` modules
-    logger = get_log(name="dolphin", debug=debug, filename=cfg.log_file)
-    logger.debug(pformat(cfg.model_dump()))
+    setup_logging(debug=debug, filename=cfg.log_file)
+    # TODO: need to pass the cfg filename for the logger
+    logger.debug(cfg.model_dump())
 
     if not cfg.worker_settings.gpu_enabled:
         utils.disable_gpu()
@@ -83,14 +89,6 @@ def run(
         grouped_amp_mean_files = group_by_burst(cfg.amplitude_mean_files)
     else:
         grouped_amp_mean_files = defaultdict(list)
-
-    if len(cfg.correction_options.troposphere_files) > 0:
-        grouped_tropo_files = group_by_date(
-            cfg.correction_options.troposphere_files,
-            file_date_fmt=cfg.correction_options.tropo_date_fmt,
-        )
-    else:
-        grouped_tropo_files = None
 
     grouped_iono_files: Mapping[tuple[datetime], Sequence[str | PathLike[str]]] = {}
     if len(cfg.correction_options.ionosphere_files) > 0:
@@ -224,8 +222,10 @@ def run(
             stitched_shp_count_file=stitched_shp_count_file,
             unwrapped_paths=None,
             conncomp_paths=None,
+            timeseries_paths=None,
             tropospheric_corrections=None,
             ionospheric_corrections=None,
+            reference_point=None,
         )
 
     row_looks, col_looks = cfg.phase_linking.half_window.to_looks()
@@ -233,6 +233,7 @@ def run(
     unwrapped_paths, conncomp_paths = unwrapping.run(
         ifg_file_list=stitched_ifg_paths,
         cor_file_list=stitched_cor_paths,
+        temporal_coherence_file=stitched_temp_coh_file,
         nlooks=nlooks,
         unwrap_options=cfg.unwrap_options,
         mask_file=cfg.mask_file,
@@ -243,25 +244,32 @@ def run(
     # ##############################################
 
     ts_opts = cfg.timeseries_options
-    # Skip if we only have 1 unwrapped, or if we didn't ask for inversion/velocity
-    if len(unwrapped_paths) > 1 and (ts_opts.run_inversion or ts_opts.run_velocity):
+    # Skip if we didn't ask for inversion/velocity
+    # TODO: the troposphere/ionosphere corrections rely on `timeseries_paths`
+    # Perhaps we should refactor those to not need files,
+    # or perhaps we should throw an error if they want corrections but not `timeseries`
+    if ts_opts.run_inversion or ts_opts.run_velocity:
         # the output of run_timeseries is not currently used so pre-commit removes it
         # let's add back if we need it
-        timeseries.run(
+        timeseries_paths, reference_point = timeseries.run(
             unwrapped_paths=unwrapped_paths,
             conncomp_paths=conncomp_paths,
             corr_paths=stitched_cor_paths,
-            condition_file=stitched_amp_dispersion_file,
-            condition=CallFunc.MIN,
+            condition_file=stitched_temp_coh_file,
+            condition=CallFunc.MAX,
             output_dir=ts_opts._directory,
+            method=timeseries.InversionMethod(ts_opts.method),
             run_velocity=ts_opts.run_velocity,
             velocity_file=ts_opts._velocity_file,
             correlation_threshold=ts_opts.correlation_threshold,
+            num_threads=ts_opts.num_parallel_blocks,
             # TODO: do i care to configure block shape, or num threads from somewhere?
             # num_threads=cfg.worker_settings....?
         )
+
     else:
-        pass
+        timeseries_paths = None
+        reference_point = None
 
     # ##############################################
     # 5. Estimate corrections for each interferogram
@@ -269,8 +277,6 @@ def run(
     tropo_paths: list[Path] | None = None
     iono_paths: list[Path] | None = None
     if len(cfg.correction_options.geometry_files) > 0:
-        stitched_ifg_dir = cfg.interferogram_network._directory
-        ifg_filenames = sorted(Path(stitched_ifg_dir).glob("*.int.tif"))
         out_dir = cfg.work_directory / cfg.correction_options._atm_directory
         out_dir.mkdir(exist_ok=True)
         grouped_slc_files = group_by_date(cfg.cslc_file_list)
@@ -278,13 +284,14 @@ def run(
         # Prepare frame geometry files
         geometry_dir = out_dir / "geometry"
         geometry_dir.mkdir(exist_ok=True)
-        crs = io.get_raster_crs(ifg_filenames[0])
+        assert timeseries_paths is not None
+        crs = io.get_raster_crs(timeseries_paths[0])
         epsg = crs.to_epsg()
-        out_bounds = io.get_raster_bounds(ifg_filenames[0])
+        out_bounds = io.get_raster_bounds(timeseries_paths[0])
         frame_geometry_files = utils.prepare_geometry(
             geometry_dir=geometry_dir,
             geo_files=cfg.correction_options.geometry_files,
-            matching_file=ifg_filenames[0],
+            matching_file=timeseries_paths[0],
             dem_file=cfg.correction_options.dem_file,
             epsg=epsg,
             out_bounds=out_bounds,
@@ -294,38 +301,54 @@ def run(
         # Troposphere
         if "height" not in frame_geometry_files:
             logger.warning(
-                "DEM file is not given, skip estimating tropospheric corrections..."
+                "DEM file is not given, skip estimating tropospheric corrections."
             )
         else:
-            if grouped_tropo_files:
+            if cfg.correction_options.troposphere_files:
+                from dolphin.atmosphere import estimate_tropospheric_delay
+
+                assert timeseries_paths is not None
+                logger.info(
+                    "Calculating tropospheric corrections for %s files.",
+                    len(timeseries_paths),
+                )
                 tropo_paths = estimate_tropospheric_delay(
-                    ifg_file_list=ifg_filenames,
-                    troposphere_files=grouped_tropo_files,
+                    ifg_file_list=timeseries_paths,
+                    troposphere_files=cfg.correction_options.troposphere_files,
+                    file_date_fmt=cfg.correction_options.tropo_date_fmt,
                     slc_files=grouped_slc_files,
                     geom_files=frame_geometry_files,
+                    reference_point=reference_point,
                     output_dir=out_dir,
-                    tropo_package=cfg.correction_options.tropo_package,
                     tropo_model=cfg.correction_options.tropo_model,
                     tropo_delay_type=cfg.correction_options.tropo_delay_type,
                     epsg=epsg,
                     bounds=out_bounds,
                 )
             else:
-                logger.info("No weather model, skip tropospheric correction ...")
+                logger.info("No weather model, skip tropospheric correction.")
 
         # Ionosphere
         if grouped_iono_files:
+            from dolphin.atmosphere import estimate_ionospheric_delay
+
+            logger.info(
+                "Calculating ionospheric corrections for %s files",
+                len(timeseries_paths),
+            )
+            assert timeseries_paths is not None
             iono_paths = estimate_ionospheric_delay(
-                ifg_file_list=ifg_filenames,
+                ifg_file_list=timeseries_paths,
                 slc_files=grouped_slc_files,
                 tec_files=grouped_iono_files,
                 geom_files=frame_geometry_files,
+                reference_point=reference_point,
                 output_dir=out_dir,
                 epsg=epsg,
                 bounds=out_bounds,
             )
         else:
-            logger.info("No TEC files, skip ionospheric correction ...")
+            logger.info("No TEC files, skip ionospheric correction.")
 
     # Print the maximum memory usage for each worker
     _print_summary(cfg)
@@ -338,14 +361,16 @@ def run(
         stitched_amp_dispersion_file=stitched_amp_dispersion_file,
         stitched_shp_count_file=stitched_shp_count_file,
         unwrapped_paths=unwrapped_paths,
-        # TODO: Let's keep the uwrapped_paths since all the outputs are
+        # TODO: Let's keep the unwrapped_paths since all the outputs are
         # corresponding to those and if we have a network unwrapping, the
         # inversion would create different single-reference network and we need
         # to update other products like conncomp
         # unwrapped_paths=inverted_phase_paths,
         conncomp_paths=conncomp_paths,
+        timeseries_paths=timeseries_paths,
         tropospheric_corrections=tropo_paths,
         ionospheric_corrections=iono_paths,
+        reference_point=reference_point,
     )
 
 

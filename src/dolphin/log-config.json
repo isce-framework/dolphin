@@ -1,0 +1,45 @@
+{
+    "version": 1,
+    "disable_existing_loggers": false,
+    "formatters": {
+        "simple": {
+            "format": "[%(levelname)s|%(module)s|L%(lineno)d] %(asctime)s: %(message)s",
+            "datefmt": "%Y-%m-%dT%H:%M:%S%z"
+        },
+        "json": {
+            "()": "dolphin._log.JSONFormatter",
+            "fmt_keys": {
+                "timestamp": "timestamp",
+                "message": "message",
+                "level": "levelname",
+                "logger": "name",
+                "function": "funcName",
+                "line": "lineno",
+                "thread_name": "threadName"
+            }
+        }
+    },
+    "handlers": {
+        "stderr": {
+            "class": "logging.StreamHandler",
+            "level": "INFO",
+            "formatter": "simple",
+            "stream": "ext://sys.stderr"
+        },
+        "file": {
+            "class": "logging.handlers.RotatingFileHandler",
+            "level": "INFO",
+            "formatter": "json",
+            "maxBytes": 10000000,
+            "backupCount": 3
+        }
+    },
+    "loggers": {
+        "dolphin": {
+            "level": "INFO",
+            "handlers": [
+                "stderr"
+            ]
+        }
+    }
+}

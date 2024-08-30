@@ -11,7 +11,7 @@ dependencies:
   - jax>=0.4.19
   - numba>=0.56
   - numpy>=1.23
-  - opera-utils>=0.1.5
+  - opera-utils>=0.4.1
   - pydantic>=2.1
   - pyproj>=3.3
   - rasterio>=1.3

@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Annotated, Any, Optional
 
-from opera_utils._dates import get_dates, sort_files_by_date
+from opera_utils import get_dates, sort_files_by_date
 from pydantic import (
     BaseModel,
     ConfigDict,
@@ -13,7 +14,6 @@ from pydantic import (
     model_validator,
 )
 
-from dolphin._log import get_log
 from dolphin._types import TropoModel, TropoType
 
 from ._common import (
@@ -23,17 +23,17 @@ from ._common import (
     PhaseLinkingOptions,
     PsOptions,
     TimeseriesOptions,
-    UnwrapOptions,
     WorkflowBase,
     _read_file_list_or_glob,
 )
+from ._unwrap_options import UnwrapOptions
 
 __all__ = [
     "DisplacementWorkflow",
     "CorrectionOptions",
 ]
 
-logger = get_log(__name__)
+logger = logging.getLogger(__name__)
 
 
 # Add a class for troposphere, ionosphere corrections, with geometry files and DEM
@@ -61,13 +61,15 @@ class CorrectionOptions(BaseModel, extra="forbid"):
     )
 
     tropo_model: TropoModel = Field(
-        TropoModel.ERA5, description="source of the atmospheric model."
+        TropoModel.ECMWF, description="source of the atmospheric model."
     )
 
     tropo_delay_type: TropoType = Field(
         TropoType.COMB,
-        description="Tropospheric delay type to calculate, comb contains both wet "
-        "and dry delays.",
+        description=(
+            "Tropospheric delay type to calculate, comb contains both wet "
+            "and dry delays."
+        ),
     )
 
     ionosphere_files: list[Path] = Field(

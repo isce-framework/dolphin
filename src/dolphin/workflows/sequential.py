@@ -5,6 +5,7 @@ Initially based on [@Ansari2017SequentialEstimatorEfficient].
 
 from __future__ import annotations
 
+import logging
 from itertools import chain
 from os import fspath
 from pathlib import Path
@@ -13,7 +14,6 @@ from typing import Optional
 from osgeo_utils import gdal_calc
 
 from dolphin import io
-from dolphin._log import get_log
 from dolphin._types import Filename
 from dolphin.io import VRTStack
 from dolphin.stack import MiniStackPlanner
@@ -21,7 +21,7 @@ from dolphin.stack import MiniStackPlanner
 from .config import ShpMethod
 from .single import run_wrapped_phase_single
 
-logger = get_log(__name__)
+logger = logging.getLogger(__name__)
 
 __all__ = ["run_wrapped_phase_sequential"]
 
@@ -43,6 +43,7 @@ def run_wrapped_phase_sequential(
     use_evd: bool = False,
     beta: float = 0.00,
     block_shape: tuple[int, int] = (512, 512),
+    baseline_lag: Optional[int] = None,
     **tqdm_kwargs,
 ) -> tuple[list[Path], list[Path], Path, Path]:
     """Estimate wrapped phase using batches of ministacks."""
@@ -111,6 +112,7 @@ def run_wrapped_phase_sequential(
                 shp_alpha=shp_alpha,
                 shp_nslc=shp_nslc,
                 block_shape=block_shape,
+                baseline_lag=baseline_lag,
                 **tqdm_kwargs,
             )
 

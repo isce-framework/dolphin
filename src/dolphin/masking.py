@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+import tempfile
 from enum import IntEnum
 from os import fspath
 from pathlib import Path
@@ -7,15 +9,16 @@ from typing import Optional, Sequence
 
 import numpy as np
 from osgeo import gdal
+from pyproj import CRS, Transformer
+from shapely import to_geojson
+from shapely.geometry import box
 
 from dolphin import io
-from dolphin._log import get_log
-from dolphin._types import Filename
-from dolphin.utils import numpy_to_gdal_type
+from dolphin._types import Bbox, PathOrStr
 
 gdal.UseExceptions()
 
-logger = get_log(__name__)
+logger = logging.getLogger(__name__)
 
 
 class MaskConvention(IntEnum):
@@ -41,13 +44,12 @@ class MaskConvention(IntEnum):
 
 
 def combine_mask_files(
-    mask_files: Sequence[Filename],
-    output_file: Filename,
+    mask_files: Sequence[PathOrStr],
+    output_file: PathOrStr,
     dtype: str = "uint8",
-    output_convention: MaskConvention = MaskConvention.SNAPHU,
+    output_convention: MaskConvention = MaskConvention.ZERO_IS_NODATA,
     input_conventions: Optional[Sequence[MaskConvention]] = None,
     combine_method: str = "any",
-    output_format: str = "GTiff",
 ):
     """Combine multiple mask files into a single mask file.
 
@@ -55,7 +57,7 @@ def combine_mask_files(
     ----------
     mask_files : list of Path or str
         list of mask files to combine.
-    output_file : Filename
+    output_file : PathOrStr
         Path to the combined output file.
     dtype : str, optional
         Data type of output file. Default is uint8.
@@ -64,16 +66,13 @@ def combine_mask_files(
         where 0 indicates invalid pixels.
     input_conventions : list of MaskConvention, optional
         Convention to use for each input mask. Default is None,
-        where it is assumed all masks use the numpy convention
-        (1 indicates invalid pixels).
+        where it is assumed all masks use the "0 is invalid" convention.
     combine_method : str, optional, default = 'any', choices = ['any', 'all']
         Logical operation to use to combine masks. Default is 'any',
         which means the output is masked where *any* of the input masks indicated
         a masked pixel (the masked region grows larger).
         If 'all', the only pixels masked are those in which *all* input masks
         indicated a masked pixel (the masked region shrinks).
-    output_format : str, optional, default = 'GTiff'
-        Output format to be used for the output image.
 
     Raises
     ------
@@ -83,40 +82,23 @@ def combine_mask_files(
 
     """
     output_file = Path(output_file)
-    gt = io.get_raster_gt(mask_files[0])
-    crs = io.get_raster_crs(mask_files[0])
     xsize, ysize = io.get_raster_xysize(mask_files[0])
 
     if combine_method not in ["any", "all"]:
         msg = "combine_method must be 'any' or 'all'"
         raise ValueError(msg)
 
-    # Create output file
-    driver = gdal.GetDriverByName(output_format)
-    ds_out = driver.Create(
-        fspath(output_file),
-        xsize,
-        ysize,
-        1,
-        numpy_to_gdal_type(dtype),
-    )
-    ds_out.SetGeoTransform(gt)
-    ds_out.SetProjection(crs.to_wkt())
-    # TODO: we probably want a separate "mask nodata", where there was
-    # no data in the original, to be separate from the "bad data" value of 0/1,
-    # similar to the PS masking we set up.
-    # ds_out.GetRasterBand(1).SetNoDataValue(int(output_convention))
-
     if input_conventions is None:
-        input_conventions = [MaskConvention.NUMPY] * len(mask_files)
-    elif len(input_conventions) != len(mask_files):
+        input_conventions = [MaskConvention.ZERO_IS_NODATA] * len(mask_files)
+    elif isinstance(input_conventions, MaskConvention):
+        input_conventions = [input_conventions] * len(mask_files)
+
+    if len(input_conventions) != len(mask_files):
         msg = (
             f"input_conventions ({len(input_conventions)}) must have the same"
             f" length as mask_files ({len(mask_files)})"
         )
-        raise ValueError(
-            msg,
-        )
+        raise ValueError(msg)
 
     # Uses the numpy convention (1 = invalid, 0 = valid) for combining logic
     # Loop through mask files and update the total mask
@@ -143,5 +125,110 @@ def combine_mask_files(
     # Convert to output convention
     if output_convention == MaskConvention.SNAPHU:
         mask_total = ~mask_total
-    ds_out.GetRasterBand(1).WriteArray(mask_total.astype(dtype))
-    ds_out = None
+
+    io.write_arr(
+        arr=mask_total.astype(dtype),
+        output_name=output_file,
+        like_filename=mask_files[0],
+    )
+
+
+def load_mask_as_numpy(mask_file: PathOrStr) -> np.ndarray:
+    """Load `mask_file` and convert it to a NumPy boolean array.
+
+    This function reads a mask file where 0 represents invalid data and 1 represents
+    good data. It converts the mask to a boolean numpy array where True values
+    indicate missing data (nodata) pixels, following the numpy masking convention.
+
+    Parameters
+    ----------
+    mask_file : PathOrStr
+        Path to the mask file. Can be a string or a Path-like object.
+
+    Returns
+    -------
+    np.ndarray
+        A boolean numpy array where True values indicate nodata (invalid) pixels
+        and False values indicate valid data pixels.
+
+    Notes
+    -----
+    The input mask file is expected to use 0 for invalid data and 1 for good data.
+    The output mask follows the numpy masking convention where True indicates
+    nodata and False indicates valid data.
+
+    """
+    # The mask file will by have 0s at invalid data, 1s at good
+    nodata_mask = io.load_gdal(mask_file, masked=True).astype(bool).filled(False)
+    # invert the mask so Trues are the missing data pixels
+    nodata_mask = ~nodata_mask
+    return nodata_mask
+
+
+def create_bounds_mask(
+    bounds: Bbox | tuple[float, float, float, float],
+    output_filename: PathOrStr,
+    like_filename: PathOrStr,
+    bounds_epsg: int = 4326,
+    overwrite: bool = False,
+) -> None:
+    """Create a boolean raster mask where 1 is inside the given bounds and 0 is outside.
+
+    Parameters
+    ----------
+    bounds : tuple
+        (min x, min y, max x, max y) of the area of interest
+    like_filename : Filename
+        Reference file to copy the shape, extent, and projection.
+    output_filename : Filename
+        Output filename for the mask
+    bounds_epsg : int, optional
+        EPSG code of the coordinate system of the bounds.
+        Default is 4326 (lat/lon coordinates for the bounds).
+    overwrite : bool, optional
+        Overwrite the output file if it already exists, by default False
+
+    """
+    if Path(output_filename).exists():
+        if not overwrite:
+            logger.info(f"Skipping {output_filename} since it already exists.")
+            return
+        else:
+            logger.info(f"Overwriting {output_filename} since overwrite=True.")
+            Path(output_filename).unlink()
+
+    # Transform bounds if necessary
+    # Geojson default is 4326, and GDAL handles the conversion to, e.g., UTM
+    if bounds_epsg != 4326:
+        transformer = Transformer.from_crs(
+            CRS.from_epsg(bounds_epsg), 4326, always_xy=True
+        )
+        bounds = transformer.transform_bounds(*bounds)
+
+    logger.info(f"Creating mask for bounds {bounds}")
+
+    # Create a polygon from the bounds
+    bounds_poly = box(*bounds)
+
+    # Create the output raster
+    io.write_arr(
+        arr=None,
+        output_name=output_filename,
+        dtype=bool,
+        nbands=1,
+        like_filename=like_filename,
+    )
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        temp_vector_file = Path(tmpdir) / "temp.geojson"
+        with open(temp_vector_file, "w") as f:
+            f.write(to_geojson(bounds_poly))
+
+        # Open the input vector file
+        src_ds = gdal.OpenEx(fspath(temp_vector_file), gdal.OF_VECTOR)
+        dst_ds = gdal.Open(fspath(output_filename), gdal.GA_Update)
+
+        # Now burn in the union of all polygons
+        gdal.Rasterize(dst_ds, src_ds, burnValues=[1])
+
+    logger.info(f"Created {output_filename}")

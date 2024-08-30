@@ -43,12 +43,15 @@ jobs:
               - conda-forge
       - name: Install
         run: |
-          pip install --no-deps "snaphu>=0.2.1" "opera-utils>=0.3.0" git+https://github.com/isce-framework/tophu@main
+          pip install --no-deps \
+            "snaphu>=0.4.0" \
+            "opera-utils>=0.4.1" \
+            git+https://github.com/isce-framework/tophu@main \
+            git+https://github.com/isce-framework/whirlwind@40defb38d2d6deca2819934788ebbc57e418e32d
           pip install --no-deps .
       - name: Install test dependencies
         run: |
           micromamba install -f tests/requirements.txt -c conda-forge
-          pip install --no-deps git+https://github.com/isce-framework/tophu@main
       - name: Enable numba boundscheck for better error catching
         run: |
           echo "NUMBA_BOUNDSCHECK=1" >> $GITHUB_ENV
@@ -91,7 +94,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build, tag, and push image to Github Container Registry
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: ./docker/Dockerfile

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime
+import logging
 import math
 import resource
 import sys
@@ -16,13 +17,12 @@ import numpy as np
 from numpy.typing import ArrayLike, DTypeLike
 from osgeo import gdal, gdal_array, gdalconst
 
-from dolphin._log import get_log
 from dolphin._types import Bbox, Filename, P, Strides, T
 
 DateOrDatetime = Union[datetime.date, datetime.datetime]
 
 gdal.UseExceptions()
-logger = get_log(__name__)
+logger = logging.getLogger(__name__)
 
 
 def numpy_to_gdal_type(np_dtype: DTypeLike) -> int:
@@ -555,7 +555,7 @@ def prepare_geometry(
 
     """
     from dolphin import stitching
-    from dolphin.io import format_nc_filename
+    from dolphin.io import DEFAULT_TIFF_OPTIONS, format_nc_filename
 
     if strides is None:
         strides = {"x": 1, "y": 1}
@@ -565,28 +565,32 @@ def prepare_geometry(
 
     if geo_files[0].name.endswith(".h5"):
         # ISCE3 geocoded SLCs
-        datasets = ["los_east", "los_north"]
+        datasets = ["los_east", "los_north", "layover_shadow_mask"]
+        nodatas = [0, 0, 127]
 
-        for ds_name in datasets:
+        for nodata, ds_name in zip(nodatas, datasets):
             outfile = geometry_dir / f"{ds_name}.tif"
             logger.info(f"Creating {outfile}")
             stitched_geo_list[ds_name] = outfile
             ds_path = f"/data/{ds_name}"
             cur_files = [format_nc_filename(f, ds_name=ds_path) for f in geo_files]
 
-            no_data = 0
-
+            if ds_name not in "layover_shadow_mask":
+                options = (*DEFAULT_TIFF_OPTIONS, "NBITS=16")
+            else:
+                options = DEFAULT_TIFF_OPTIONS
             stitching.merge_images(
                 cur_files,
                 outfile=outfile,
                 driver="GTiff",
                 out_bounds=out_bounds,
                 out_bounds_epsg=epsg,
-                in_nodata=no_data,
-                out_nodata=no_data,
+                in_nodata=nodata,
+                out_nodata=nodata,
                 target_aligned_pixels=True,
                 strides=strides,
                 overwrite=False,
+                options=options,
             )
 
         if dem_file:
@@ -681,5 +685,8 @@ class DummyProcessPoolExecutor(Executor):
         future.set_result(result)
         return future
 
-    def shutdown(self, wait: bool = True, cancel_futures: bool = True):  # noqa: D102
+    def shutdown(self, wait: bool = True, cancel_futures: bool = True):  # noqa:D102
         pass
+
+    def map(self, fn: Callable[P, T], *iterables, **kwargs):  # noqa: D102
+        return map(fn, *iterables)

@@ -21,7 +21,7 @@ LABEL org.opencontainers.image.licenses="BSD-3-Clause OR Apache-2.0"
 # Install CA certificates if the base image has apt-get, otherwise we can't install conda packages
 RUN if command -v apt-get > /dev/null; then \
     apt-get update && \
-    apt-get install -y ca-certificates && \
+    apt-get install -y ca-certificates wget && \
     rm -rf /var/lib/apt/lists/*; \
     fi
 
@@ -63,6 +63,8 @@ SHELL ["/usr/local/bin/_dockerfile_shell.sh"]
 # https://github.com/mamba-org/micromamba-docker#quick-start
 COPY --chown=$MAMBA_USER:$MAMBA_USER docker/specfile.txt /tmp/specfile.txt
 RUN micromamba install --yes --channel conda-forge -n base -f /tmp/specfile.txt && \
+    # cxx-compiler for whirlwind:
+    micromamba install --yes --channel conda-forge -n base cxx-compiler && \
     micromamba clean --all --yes
 
 COPY --chown=$MAMBA_USER:$MAMBA_USER . .
@@ -71,7 +73,11 @@ COPY --chown=$MAMBA_USER:$MAMBA_USER . .
 # https://github.com/mamba-org/micromamba-docker#running-commands-in-dockerfile-within-the-conda-environment
 ARG MAMBA_DOCKERFILE_ACTIVATE=1
 # For now, manually install tophu/snaphu from git/pip
-RUN python -m pip install --no-deps "snaphu>=0.2" git+https://github.com/isce-framework/tophu@66df96fc4645f6977421336ed96c553833216c07
+RUN python -m pip install --no-deps \
+    "snaphu>=0.4" \
+    git+https://github.com/isce-framework/tophu@66df96fc4645f6977421336ed96c553833216c07 \
+    git+https://github.com/isce-framework/spurt@main \
+    git+https://github.com/isce-framework/whirlwind@40defb38d2d6deca2819934788ebbc57e418e32d
 
 # --no-deps because they are installed with conda
 RUN python -m pip install --no-deps .

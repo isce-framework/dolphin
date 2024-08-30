@@ -2,17 +2,19 @@
 
 from __future__ import annotations
 
+import logging
+import time
 from pathlib import Path
 from typing import Sequence
 
 from dolphin import io, stitching, unwrap
-from dolphin._log import get_log, log_runtime
+from dolphin._log import log_runtime
 from dolphin._overviews import ImageType, create_overviews
 from dolphin._types import PathOrStr
 
 from .config import UnwrapOptions
 
-logger = get_log(__name__)
+logger = logging.getLogger(__name__)
 
 
 @log_runtime
@@ -21,6 +23,7 @@ def run(
     cor_file_list: Sequence[Path],
     nlooks: float,
     unwrap_options: UnwrapOptions,
+    temporal_coherence_file: PathOrStr | None = None,
     mask_file: PathOrStr | None = None,
     add_overviews: bool = True,
 ) -> tuple[list[Path], list[Path]]:
@@ -37,6 +40,8 @@ def run(
     unwrap_options : UnwrapOptions
         [`UnwrapOptions`][dolphin.workflows.config.UnwrapOptions] config object
         with parameters for running unwrapping jobs.
+    temporal_coherence_file : Filename, optional
+        Path to temporal coherence file from phase linking.
     mask_file : PathOrStr, optional
         Path to boolean mask indicating nodata areas.
         1 indicates valid data, 0 indicates missing data.
@@ -52,6 +57,7 @@ def run(
         list of Paths to connected component files created.
 
     """
+    t0 = time.perf_counter()
     if len(ifg_file_list) != len(cor_file_list):
         msg = f"{len(ifg_file_list) = } != {len(cor_file_list) = }"
         raise ValueError(msg)
@@ -77,29 +83,26 @@ def run(
         ifg_filenames=ifg_file_list,
         cor_filenames=cor_file_list,
         output_path=output_path,
+        unwrap_options=unwrap_options,
         nlooks=nlooks,
+        temporal_coherence_file=temporal_coherence_file,
         mask_filename=output_mask,
-        zero_where_masked=unwrap_options.zero_where_masked,
-        max_jobs=unwrap_options.n_parallel_jobs,
-        ntiles=unwrap_options.ntiles,
-        tile_overlap=unwrap_options.tile_overlap,
-        n_parallel_tiles=unwrap_options.n_parallel_tiles,
-        init_method=unwrap_options.init_method,
-        cost=unwrap_options.cost,
-        downsample_factor=unwrap_options.downsample_factor,
-        unwrap_method=unwrap_options.unwrap_method,
         scratchdir=unwrap_scratchdir,
-        run_goldstein=unwrap_options.run_goldstein,
-        alpha=unwrap_options.alpha,
-        run_interpolation=unwrap_options.run_interpolation,
-        max_radius=unwrap_options.max_radius,
-        interpolation_cor_threshold=unwrap_options.interpolation_cor_threshold,
     )
 
     if add_overviews:
         logger.info("Creating overviews for unwrapped images")
         create_overviews(unwrapped_paths, image_type=ImageType.UNWRAPPED)
         create_overviews(conncomp_paths, image_type=ImageType.CONNCOMP)
+
+    # Dump the used options for JSON parsing
+    logger.info(
+        "unwrapping complete",
+        extra={
+            "elapsed": time.perf_counter() - t0,
+            "unwrap_options": unwrap_options.model_dump(mode="json"),
+        },
+    )
 
     return (unwrapped_paths, conncomp_paths)
 

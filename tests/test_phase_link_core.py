@@ -6,17 +6,11 @@ import pytest
 
 from dolphin._types import HalfWindow, Strides
 from dolphin.phase_link import _core, covariance, simulate
-from dolphin.phase_link._ps_filling import fill_ps_pixels
 from dolphin.utils import gpu_is_available
 
 GPU_AVAILABLE = gpu_is_available() and os.environ.get("NUMBA_DISABLE_JIT") != "1"
 NUM_ACQ = 30
 simulate._seed(1234)
-
-# 'Grid size 49 will likely result in GPU under-utilization due to low occupancy.'
-pytestmark = pytest.mark.filterwarnings(
-    "ignore::numba.core.errors.NumbaPerformanceWarning"
-)
 
 
 @pytest.fixture(scope="module")
@@ -26,8 +20,9 @@ def slc_samples(C_truth):
     return simulate.simulate_neighborhood_stack(C, ns)
 
 
+@pytest.mark.parametrize("baseline_lag", [None, 5])
 @pytest.mark.parametrize("use_evd", [False, True])
-def test_estimation(C_truth, slc_samples, use_evd):
+def test_estimation(C_truth, slc_samples, use_evd, baseline_lag):
     _, truth = C_truth
 
     C_hat = np.array(covariance.coh_mat_single(slc_samples))
@@ -44,13 +39,18 @@ def test_estimation(C_truth, slc_samples, use_evd):
 
     # cpx_phase, temp_coh, eigs, _ = _core.run_cpl(
     pl_out = _core.run_cpl(
-        slc_stack, HalfWindow(x=5, y=5), Strides(x=1, y=1), use_evd=use_evd
+        slc_stack,
+        HalfWindow(x=5, y=5),
+        Strides(x=1, y=1),
+        use_evd=use_evd,
+        baseline_lag=baseline_lag,
     )
     assert pl_out.cpx_phase.shape == (len(est_mle_verify), 11, 11)
     assert pl_out.temp_coh.shape == (11, 11)
     assert pl_out.eigenvalues.shape == (11, 11)
     if use_evd:
-        assert np.all(pl_out.eigenvalues > NUM_ACQ / 3)
+        expected_min_eig = baseline_lag if baseline_lag else NUM_ACQ / 3
+        assert np.all(pl_out.eigenvalues > expected_min_eig)
         assert pl_out
     else:
         # should be 1, but floating point rounding sometimes drops
@@ -103,7 +103,9 @@ def test_run_phase_linking(slc_samples):
     )
 
 
-def test_run_phase_linking_use_slc_amp(slc_samples):
+@pytest.mark.parametrize("use_slc_amp", [False, True])
+@pytest.mark.parametrize("use_max_ps", [False, True])
+def test_run_phase_linking_use_slc_amp(slc_samples, use_slc_amp, use_max_ps):
     slc_stack = slc_samples.copy().reshape(NUM_ACQ, 11, 11)
     ps_mask = np.zeros((11, 11), dtype=bool)
     # Specify at least 1 ps
@@ -112,10 +114,12 @@ def test_run_phase_linking_use_slc_amp(slc_samples):
         slc_stack,
         half_window=HalfWindow(5, 5),
         ps_mask=ps_mask,
-        use_slc_amp=False,
+        use_slc_amp=use_slc_amp,
+        use_max_ps=use_max_ps,
     )
-    # The output should still all have modulus of 1
-    assert np.allclose(np.abs(pl_out.cpx_phase), 1)
+
+    expected = np.abs(slc_stack) if use_slc_amp else 1
+    assert np.allclose(np.abs(pl_out.cpx_phase), expected)
 
 
 def test_run_phase_linking_with_shift(slc_samples):
@@ -153,49 +157,20 @@ def test_strides_window_sizes(strides, half_window, shape):
     )
 
 
-@pytest.mark.parametrize("strides", [1, 2, 3, 4])
-def test_ps_fill(slc_samples, strides):
-    rows, cols = 11, 11
-    slc_stack = slc_samples.copy().reshape(NUM_ACQ, 11, 11)
-
-    mle_est = np.zeros((NUM_ACQ, rows // strides, cols // strides), dtype=np.complex64)
-    temp_coh = np.zeros(mle_est.shape[1:])
-
-    ps_idx = 2
-    ps_mask = np.zeros((11, 11), dtype=bool)
-    ps_mask[ps_idx, ps_idx] = True
-
-    fill_ps_pixels(
-        mle_est,
-        temp_coh,
-        slc_stack,
-        ps_mask,
-        Strides(strides, strides),
-        None,  # avg_mag
-    )
-
-    ps_phase = slc_stack[:, ps_idx, ps_idx]
-    ps_phase *= ps_phase[0].conj()  # Reference to first acquisition
-
-    out_idx = ps_idx // strides
-    npt.assert_array_almost_equal(
-        np.angle(ps_phase), np.angle(mle_est[:, out_idx, out_idx])
-    )
-
-    assert temp_coh[out_idx, out_idx] == 1
-
-
+@pytest.mark.parametrize("use_max_ps", [True, False])
 @pytest.mark.parametrize("strides", [1, 2, 3])
-def test_run_phase_linking_ps_fill(slc_samples, strides):
+def test_run_phase_linking_ps_fill(slc_samples, use_max_ps, strides):
     slc_stack = slc_samples.copy().reshape(NUM_ACQ, 11, 11)
     ps_idx = 2
     ps_mask = np.zeros((11, 11), dtype=bool)
     ps_mask[ps_idx, ps_idx] = True
+    # Ignore RuntimeWarning
     pl_out = _core.run_phase_linking(
         slc_stack,
         half_window=HalfWindow(5, 5),
         strides=Strides(strides, strides),
         ps_mask=ps_mask,
+        use_max_ps=use_max_ps,
     )
     ps_phase = slc_stack[:, ps_idx, ps_idx]
     ps_phase *= ps_phase[0].conj()  # Reference to first acquisition

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -12,15 +13,16 @@ from tqdm.auto import tqdm
 
 from dolphin import io, shp
 from dolphin._decorators import atomic_output
-from dolphin._log import get_log
 from dolphin._types import Filename, HalfWindow, Strides
 from dolphin.io import EagerLoader, StridedBlockManager, VRTStack
+from dolphin.masking import load_mask_as_numpy
 from dolphin.phase_link import PhaseLinkRuntimeError, compress, run_phase_linking
+from dolphin.ps import calc_ps_block
 from dolphin.stack import MiniStackInfo
 
 from .config import ShpMethod
 
-logger = get_log(__name__)
+logger = logging.getLogger(__name__)
 
 __all__ = ["run_wrapped_phase_single"]
 
@@ -30,6 +32,7 @@ class OutputFile:
     filename: Path
     dtype: DTypeLike
     strides: Optional[dict[str, int]] = None
+    nbands: int = 1
 
 
 @atomic_output(output_arg="output_folder", is_dir=True)
@@ -51,6 +54,7 @@ def run_wrapped_phase_single(
     shp_alpha: float = 0.05,
     shp_nslc: Optional[int] = None,
     block_shape: tuple[int, int] = (1024, 1024),
+    baseline_lag: Optional[int] = None,
     **tqdm_kwargs,
 ):
     """Estimate wrapped phase for one ministack.
@@ -113,8 +117,8 @@ def run_wrapped_phase_single(
     # Use the real-SLC date range for output file naming
     start_end = ministack.real_slc_date_range_str
     output_files: list[OutputFile] = [
-        # The compressed SLC does not used strides
-        OutputFile(output_folder / comp_slc_info.filename, np.complex64),
+        # The compressed SLC does not used strides, but has extra band for dispersion
+        OutputFile(output_folder / comp_slc_info.filename, np.complex64, nbands=2),
         # but all the rest do:
         OutputFile(
             output_folder / f"temporal_coherence_{start_end}.tif", np.float32, strides
@@ -131,7 +135,7 @@ def run_wrapped_phase_single(
             output_name=op.filename,
             dtype=op.dtype,
             strides=op.strides,
-            nbands=1,
+            nbands=op.nbands,
             nodata=0,
         )
 
@@ -199,6 +203,7 @@ def run_wrapped_phase_single(
                 nodata_mask=nodata_mask[in_rows, in_cols],
                 ps_mask=ps_mask[in_rows, in_cols],
                 neighbor_arrays=neighbor_arrays,
+                baseline_lag=baseline_lag,
                 avg_mag=amp_mean[in_rows, in_cols] if amp_mean is not None else None,
             )
         except PhaseLinkRuntimeError as e:
@@ -231,11 +236,16 @@ def run_wrapped_phase_single(
             writer.queue_write(img, f, out_rows.start, out_cols.start)
 
         # Compress the ministack using only the non-compressed SLCs
+        # Get the mean to set as pixel magnitudes
+        abs_stack = np.abs(cur_data[first_real_slc_idx:, in_trim_rows, in_trim_cols])
+        cur_data_mean, cur_amp_dispersion, _ = calc_ps_block(abs_stack)
         cur_comp_slc = compress(
             # Get the inner portion of the full-res SLC data
             cur_data[first_real_slc_idx:, in_trim_rows, in_trim_cols],
             pl_output.cpx_phase[first_real_slc_idx:, out_trim_rows, out_trim_cols],
+            slc_mean=cur_data_mean,
         )
+        # TODO: truncate
 
         # ### Save results ###
 
@@ -245,6 +255,15 @@ def run_wrapped_phase_single(
             output_files[0].filename,
             in_no_pad_rows.start,
             in_no_pad_cols.start,
+            band=1,
+        )
+        # Save the amplitude dispersion of the real SLC data
+        writer.queue_write(
+            cur_amp_dispersion,
+            output_files[0].filename,
+            in_no_pad_rows.start,
+            in_no_pad_cols.start,
+            band=2,
         )
 
         # All other outputs are strided (smaller in size)
@@ -271,8 +290,12 @@ def run_wrapped_phase_single(
     writer.notify_finished()
     logger.info(f"Finished ministack of size {vrt.shape}.")
 
+    logger.info("Repacking for more compression")
+    io.repack_rasters(phase_linked_slc_files, keep_bits=12)
+
     written_comp_slc = output_files[0]
 
+    io.repack_raster(written_comp_slc.filename, keep_bits=12)
     ccslc_info = ministack.get_compressed_slc_info()
     ccslc_info.write_metadata(output_file=written_comp_slc.filename)
     # TODO: Does it make sense to return anything from this?
@@ -285,18 +308,9 @@ def _get_nodata_mask(
     ncols: int,
 ) -> np.ndarray:
     if mask_file is not None:
-        # The mask file will by -2s at invalid data, 1s at good
-        nodata_mask = io.load_gdal(mask_file, masked=True).astype(bool).filled(False)
-        # invert the mask so -1s are the missing data pixels
-        nodata_mask = ~nodata_mask
-        # check middle pixel
-        if nodata_mask[nrows // 2, ncols // 2]:
-            logger.warning(f"{mask_file} is True at {nrows//2, ncols//2}")
-            logger.warning("Proceeding without the nodata mask.")
-            nodata_mask = np.zeros((nrows, ncols), dtype=bool)
+        return load_mask_as_numpy(mask_file)
     else:
-        nodata_mask = np.zeros((nrows, ncols), dtype=bool)
-    return nodata_mask
+        return np.zeros((nrows, ncols), dtype=bool)
 
 
 def _get_ps_mask(

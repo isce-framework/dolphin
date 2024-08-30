@@ -96,14 +96,18 @@ ignore = [
 exclude = ["scripts"]
 
 [tool.ruff.lint.per-file-ignores]
-"**/__init__.py" = ["F403"]
+"**/__init__.py" = ["F401", "F403"]
 "tests/**" = ["D", "N", "PTH"]
 "benchmarks/**" = ["D", "N", "PTH", "RUF", "ARG002"]
+"docs/mdx_bib.py" = ["ALL"] # ignore the vendored code
 
 [tool.ruff.lint.flake8-unused-arguments]
 # Whether to allow unused variadic arguments, like *args and **kwargs.
 ignore-variadic-names = true
 
+
+[tool.black]
+preview = true
 
 [tool.mypy]
 python_version = "3.10"

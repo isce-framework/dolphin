@@ -1,14 +1,13 @@
 from __future__ import annotations
 
 import functools
+import logging
 import shutil
 import tempfile
 from pathlib import Path
 from typing import Any, Callable
 
-from dolphin._log import get_log
-
-logger = get_log(__name__)
+logger = logging.getLogger(__name__)
 
 __all__ = [
     "atomic_output",

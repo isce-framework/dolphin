@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import itertools
+import logging
 from dataclasses import dataclass
 from os import fspath
 from pathlib import Path
@@ -14,14 +15,14 @@ from opera_utils import get_dates
 from osgeo import gdal
 from pydantic import BaseModel, Field, ValidationInfo, field_validator, model_validator
 from scipy.ndimage import uniform_filter
+from tqdm.contrib.concurrent import thread_map
 
 from dolphin import io, utils
-from dolphin._log import get_log
 from dolphin._types import DateOrDatetime, Filename, T
 
 gdal.UseExceptions()
 
-logger = get_log(__name__)
+logger = logging.getLogger(__name__)
 
 DEFAULT_SUFFIX = ".int.vrt"
 
@@ -93,13 +94,17 @@ class VRTInterferogram(BaseModel, extra="allow"):
     )
     ref_date: Optional[DateOrDatetime] = Field(
         None,
-        description="Reference date of the interferogram. If not specified,"
-        "will be parsed from `ref_slc` using `date_format`.",
+        description=(
+            "Reference date of the interferogram. If not specified,"
+            "will be parsed from `ref_slc` using `date_format`."
+        ),
     )
     sec_date: Optional[DateOrDatetime] = Field(
         None,
-        description="Secondary date of the interferogram. If not specified,"
-        "will be parsed from `sec_slc` using `date_format`.",
+        description=(
+            "Secondary date of the interferogram. If not specified,"
+            "will be parsed from `sec_slc` using `date_format`."
+        ),
     )
     resolve_paths: bool = Field(
         True, description="Resolve paths of `ref_slc`/`sec_slc` when saving the VRT"
@@ -387,10 +392,10 @@ class Network:
                 ]
             )
         if self.max_bandwidth is not None:
-            ifgs.extend(Network._limit_by_bandwidth(self.slc_list, self.max_bandwidth))
+            ifgs.extend(Network.limit_by_bandwidth(self.slc_list, self.max_bandwidth))
         if self.max_temporal_baseline is not None:
             ifgs.extend(
-                Network._limit_by_temporal_baseline(
+                Network.limit_by_temporal_baseline(
                     self.slc_list,
                     dates=self.dates,
                     max_temporal_baseline=self.max_temporal_baseline,
@@ -403,7 +408,7 @@ class Network:
 
         if self.include_annual:
             # Add in the annual pairs, then re-sort
-            annual_ifgs = Network._find_annuals(
+            annual_ifgs = Network.find_annuals(
                 self.slc_list, self.dates, buffer_days=self.annual_buffer_days
             )
             ifgs.extend(annual_ifgs)
@@ -485,9 +490,9 @@ class Network:
         return [tuple(sorted([ref, date])) for date in slc_list if date != ref]
 
     @staticmethod
-    def _limit_by_bandwidth(
-        slc_list: Iterable[Filename], max_bandwidth: int
-    ) -> list[IfgPairT]:
+    def limit_by_bandwidth(
+        slc_list: Iterable[T], max_bandwidth: int
+    ) -> list[tuple[T, T]]:
         """Form a list of the "nearest-`max_bandwidth`" ifgs.
 
         Parameters
@@ -507,16 +512,16 @@ class Network:
         slc_to_idx = {s: idx for idx, s in enumerate(slc_list)}
         return [
             (a, b)
-            for (a, b) in Network._all_pairs(slc_list)
+            for (a, b) in Network.all_pairs(slc_list)
             if slc_to_idx[b] - slc_to_idx[a] <= max_bandwidth
         ]
 
     @staticmethod
-    def _limit_by_temporal_baseline(
-        slc_list: Iterable[Filename],
+    def limit_by_temporal_baseline(
+        slc_list: Iterable[T],
         dates: Sequence[DateOrDatetime],
         max_temporal_baseline: Optional[float] = None,
-    ) -> list[IfgPairT]:
+    ) -> list[tuple[T, T]]:
         """Form a list of the ifgs limited to a maximum temporal baseline.
 
         Parameters
@@ -540,19 +545,19 @@ class Network:
             If any of the input files have more than one date.
 
         """
-        ifg_strs = Network._all_pairs(slc_list)
-        ifg_dates = Network._all_pairs(dates)
-        baselines = [Network._temp_baseline(ifg) for ifg in ifg_dates]
+        ifg_strs = Network.all_pairs(slc_list)
+        ifg_dates = Network.all_pairs(dates)
+        baselines = [Network.temporal_baseline(ifg) for ifg in ifg_dates]
         return [
             ifg for ifg, b in zip(ifg_strs, baselines) if b <= max_temporal_baseline
         ]
 
     @staticmethod
-    def _find_annuals(
-        slc_list: Iterable[Filename],
+    def find_annuals(
+        slc_list: Iterable[T],
         dates: Sequence[DateOrDatetime],
         buffer_days: float = 30,
-    ) -> list[IfgPairT]:
+    ) -> list[tuple[T, T]]:
         """Pick out interferograms which are closest to 1 year in span.
 
         We only want to pick 1 ifg per date, closest to a year, but we will skip
@@ -562,27 +567,28 @@ class Network:
         date_to_date_pair: dict[
             DateOrDatetime, tuple[DateOrDatetime, DateOrDatetime]
         ] = {}
-        date_to_file: dict[DateOrDatetime, IfgPairT] = {}
-        slc_pairs = Network._all_pairs(slc_list)
-        date_pairs = Network._all_pairs(dates)
+        date_to_file: dict[DateOrDatetime, tuple[T, T]] = {}
+        slc_pairs = Network.all_pairs(slc_list)
+        date_pairs = Network.all_pairs(dates)
         for ifg, date_pair in zip(slc_pairs, date_pairs):
             early = date_pair[0]
-            baseline_days = Network._temp_baseline(date_pair)
+            baseline_days = Network.temporal_baseline(date_pair)
             if abs(baseline_days - 365) > buffer_days:
                 continue
             dp = date_to_date_pair.get(early)
             # Use this ifg as the annual if none exist, or if it's closer to 365
-            if dp is None or abs(baseline_days - 365) < Network._temp_baseline(dp):
+            if dp is None or abs(baseline_days - 365) < Network.temporal_baseline(dp):
                 date_to_file[early] = ifg
         return sorted(date_to_file.values())
 
     @staticmethod
-    def _all_pairs(slc_list: Iterable[T]) -> list[tuple[T, T]]:
+    def all_pairs(slc_list: Iterable[T]) -> list[tuple[T, T]]:
         """Create the list of all possible ifg pairs from slc_list."""
         return list(itertools.combinations(slc_list, r=2))
 
     @staticmethod
-    def _temp_baseline(ifg_pair: tuple[DateOrDatetime, DateOrDatetime]):
+    def temporal_baseline(ifg_pair: tuple[DateOrDatetime, DateOrDatetime]):
+        """Compute the temporal baseline (in decimal days) between the date pair."""
         return (ifg_pair[1] - ifg_pair[0]).total_seconds() / 86400
 
     def __len__(self):
@@ -649,10 +655,13 @@ def estimate_correlation_from_phase(
 
 
 def estimate_interferometric_correlations(
-    ifg_paths: Sequence[Filename],
+    ifg_filenames: Sequence[Filename],
     window_size: tuple[int, int],
     out_driver: str = "GTiff",
     out_suffix: str = ".cor.tif",
+    options: Sequence[str] = io.DEFAULT_TIFF_OPTIONS,
+    keep_bits: int = 10,
+    num_workers: int = 3,
 ) -> list[Path]:
     """Estimate correlations for a sequence of interferograms.
 
@@ -660,14 +669,22 @@ def estimate_interferometric_correlations(
 
     Parameters
     ----------
-    ifg_paths : Sequence[Filename]
+    ifg_filenames : Sequence[Filename]
         Paths to complex interferogram files.
     window_size : tuple[int, int]
-        (row, column) size of window to use for estimate
+        (row, column) size of window to use for estimate.
     out_driver : str, optional
-        Name of output GDAL driver, by default "GTiff"
+        Name of output GDAL driver, by default "GTiff".
     out_suffix : str, optional
         File suffix to use for correlation files, by default ".cor.tif"
+    options : list[str], optional
+        GDAL Creation options for the output array.
+    keep_bits : int, optional
+        Number of bits to preserve in mantissa. Defaults to None.
+        Lower numbers will truncate the mantissa more and enable more compression.
+    num_workers : int
+        Number of threads to use for stitching in parallel.
+        Default = 3
 
     Returns
     -------
@@ -675,25 +692,40 @@ def estimate_interferometric_correlations(
         Paths to newly written correlation files.
 
     """
-    logger = get_log()
-
-    corr_paths: list[Path] = []
-    for ifg_path in ifg_paths:
-        cor_path = Path(ifg_path).with_suffix(out_suffix)
-        corr_paths.append(cor_path)
+    path_tuples: list[tuple[Path, Path]] = []
+    output_paths: list[Path] = []
+    for fn in ifg_filenames:
+        ifg_path = Path(fn)
+        cor_path = ifg_path.with_suffix(out_suffix)
+        output_paths.append(cor_path)
         if cor_path.exists():
             logger.info(f"Skipping existing interferometric correlation for {ifg_path}")
             continue
+        path_tuples.append((ifg_path, cor_path))
+
+    def process_ifg(args):
+        ifg_path, cor_path = args
+        logger.debug(f"Estimating correlation for {ifg_path}, writing to {cor_path}")
         ifg = io.load_gdal(ifg_path)
-        logger.info(f"Estimating correlation for {ifg_path}, writing to {cor_path}")
         cor = estimate_correlation_from_phase(ifg, window_size=window_size)
+        if keep_bits:
+            io.round_mantissa(cor, keep_bits=keep_bits)
         io.write_arr(
             arr=cor,
             output_name=cor_path,
             like_filename=ifg_path,
             driver=out_driver,
+            options=options,
         )
-    return corr_paths
+
+    thread_map(
+        process_ifg,
+        path_tuples,
+        max_workers=num_workers,
+        desc="Estimating correlations",
+    )
+
+    return output_paths
 
 
 def _create_vrt_conj(

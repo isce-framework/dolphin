@@ -1,11 +1,10 @@
 from __future__ import annotations
 
+import logging
+from contextlib import ExitStack
 from pathlib import Path
 from typing import Optional
 
-from numpy.typing import ArrayLike
-
-from dolphin._log import get_log
 from dolphin._types import Filename
 from dolphin.io._core import DEFAULT_TIFF_OPTIONS_RIO
 from dolphin.utils import full_suffix
@@ -13,7 +12,7 @@ from dolphin.utils import full_suffix
 from ._constants import CONNCOMP_SUFFIX, DEFAULT_CCL_NODATA, DEFAULT_UNW_NODATA
 from ._utils import _zero_from_mask
 
-logger = get_log(__name__)
+logger = logging.getLogger(__name__)
 
 
 def unwrap_snaphu_py(
@@ -32,7 +31,7 @@ def unwrap_snaphu_py(
     cost: str = "smooth",
     scratchdir: Optional[Filename] = None,
 ) -> tuple[Path, Path]:
-    """Unwrap an interferogram using at multiple scales using `tophu`.
+    """Unwrap an interferogram using `SNAPHU`.
 
     Parameters
     ----------
@@ -42,8 +41,6 @@ def unwrap_snaphu_py(
         Path to input correlation file.
     unw_filename : Filename
         Path to output unwrapped phase file.
-    downsample_factor : tuple[int, int]
-        Downsample the interferograms by this factor to unwrap faster, then upsample
     nlooks : float
         Effective number of looks used to form the input correlation data.
     ntiles : tuple[int, int], optional
@@ -63,7 +60,7 @@ def unwrap_snaphu_py(
         Set wrapped phase/correlation to 0 where mask is 0 before unwrapping.
         If not mask is provided, this is ignored.
         By default True.
-    unw_nodata : float , optional.
+    unw_nodata : float, optional
         If providing `unwrap_callback`, provide the nodata value for your
         unwrapping function.
     ccl_nodata : float, optional
@@ -89,67 +86,64 @@ def unwrap_snaphu_py(
 
     unw_suffix = full_suffix(unw_filename)
     cc_filename = str(unw_filename).replace(unw_suffix, CONNCOMP_SUFFIX)
-
-    if zero_where_masked and mask_file is not None:
-        logger.info(f"Zeroing phase/corr of pixels masked in {mask_file}")
-        zeroed_ifg_file, zeroed_corr_file = _zero_from_mask(
-            ifg_filename, corr_filename, mask_file
-        )
-        igram = snaphu.io.Raster(zeroed_ifg_file)
-        corr = snaphu.io.Raster(zeroed_corr_file)
-    else:
-        igram = snaphu.io.Raster(ifg_filename)
-        corr = snaphu.io.Raster(corr_filename)
-
-    mask = None if mask_file is None else snaphu.io.Raster(mask_file)
-    try:
-        with (
-            snaphu.io.Raster.create(
-                unw_filename,
-                like=igram,
-                nodata=unw_nodata,
-                dtype="f4",
-                **DEFAULT_TIFF_OPTIONS_RIO,
-            ) as unw,
-            snaphu.io.Raster.create(
-                cc_filename,
-                like=igram,
-                nodata=ccl_nodata,
-                dtype="u2",
-                **DEFAULT_TIFF_OPTIONS_RIO,
-            ) as conncomp,
-        ):
-            # Unwrap and store the results in the `unw` and `conncomp` rasters.
-            snaphu.unwrap(
-                igram,
-                corr,
-                nlooks=nlooks,
-                init=init_method,
-                cost=cost,
-                mask=mask,
-                unw=unw,
-                conncomp=conncomp,
-                ntiles=ntiles,
-                tile_overlap=tile_overlap,
-                nproc=nproc,
-                scratchdir=scratchdir,
-                # https://github.com/isce-framework/snaphu-py/commit/a77cbe1ff115d96164985523987b1db3278970ed
-                # On frame-sized ifgs, especially with decorrelation, defaults of
-                # (500, 100) for (tile_cost_thresh, min_region_size) lead to
-                # "Exceeded maximum number of secondary arcs"
-                # "Decrease TILECOSTTHRESH and/or increase MINREGIONSIZE"
-                tile_cost_thresh=500,
-                # ... "and/or increase MINREGIONSIZE"
-                min_region_size=300,
+    with ExitStack() as stack:
+        if zero_where_masked and (mask_file is not None):
+            logger.info(f"Zeroing phase/corr of pixels masked in {mask_file}")
+            zeroed_ifg_file, zeroed_corr_file = _zero_from_mask(
+                ifg_filename, corr_filename, mask_file
             )
-    finally:
-        igram.close()
-        corr.close()
-        if mask is not None:
-            mask.close()
+            igram = stack.enter_context(snaphu.io.Raster(zeroed_ifg_file))
+            corr = stack.enter_context(snaphu.io.Raster(zeroed_corr_file))
+        else:
+            igram = stack.enter_context(snaphu.io.Raster(ifg_filename))
+            corr = stack.enter_context(snaphu.io.Raster(corr_filename))
+
+        if mask_file is None:
+            mask = None
+        else:
+            mask = stack.enter_context(snaphu.io.Raster(mask_file))
+
+        unw, conncomp = snaphu.unwrap(
+            igram,
+            corr,
+            nlooks=nlooks,
+            init=init_method,
+            cost=cost,
+            mask=mask,
+            ntiles=ntiles,
+            tile_overlap=tile_overlap,
+            nproc=nproc,
+            scratchdir=scratchdir,
+            # https://github.com/isce-framework/snaphu-py/commit/a77cbe1ff115d96164985523987b1db3278970ed
+            # On frame-sized ifgs, especially with decorrelation, defaults of
+            # (500, 100) for (tile_cost_thresh, min_region_size) lead to
+            # "Exceeded maximum number of secondary arcs"
+            # "Decrease TILECOSTTHRESH and/or increase MINREGIONSIZE"
+            tile_cost_thresh=500,
+            # ... "and/or increase MINREGIONSIZE"
+            min_region_size=300,
+        )
+
+        # Save the numpy results
+        with snaphu.io.Raster.create(
+            unw_filename,
+            like=igram,
+            nodata=unw_nodata,
+            dtype="f4",
+            **DEFAULT_TIFF_OPTIONS_RIO,
+        ) as unw_raster:
+            unw_raster[:, :] = unw
+        with snaphu.io.Raster.create(
+            cc_filename,
+            like=igram,
+            nodata=ccl_nodata,
+            dtype="u2",
+            **DEFAULT_TIFF_OPTIONS_RIO,
+        ) as conncomp_raster:
+            conncomp_raster[:, :] = conncomp
 
     if zero_where_masked and mask_file is not None:
-        logger.info("Zeroing unw/conncomp of pixels masked in " f"{mask_file}")
+        logger.info(f"Zeroing unw/conncomp of pixels masked in {mask_file}")
 
         return _zero_from_mask(unw_filename, cc_filename, mask_file)
 
@@ -160,7 +154,7 @@ def grow_conncomp_snaphu(
     unw_filename: Filename,
     corr_filename: Filename,
     nlooks: float,
-    mask: Optional[ArrayLike] = None,
+    mask_filename: Optional[Filename] = None,
     ccl_nodata: Optional[int] = DEFAULT_CCL_NODATA,
     cost: str = "smooth",
     min_conncomp_frac: float = 0.0001,
@@ -176,8 +170,8 @@ def grow_conncomp_snaphu(
         Path to input correlation file.
     nlooks : float
         Effective number of looks used to form the input correlation data.
-    mask : Array, optional
-        binary byte mask array, by default None.
+    mask_filename : Filename, optional
+        Path to binary byte mask file, by default None.
         Assumes that 1s are valid pixels and 0s are invalid.
     ccl_nodata : float, optional
         Nodata value for the connected component labels.
@@ -202,17 +196,24 @@ def grow_conncomp_snaphu(
     unw_suffix = full_suffix(unw_filename)
     cc_filename = str(unw_filename).replace(unw_suffix, CONNCOMP_SUFFIX)
 
-    with (
-        snaphu.io.Raster(unw_filename) as unw,
-        snaphu.io.Raster(corr_filename) as corr,
-        snaphu.io.Raster.create(
-            cc_filename,
-            like=unw,
-            nodata=ccl_nodata,
-            dtype="u2",
-            **DEFAULT_TIFF_OPTIONS_RIO,
-        ) as conncomp,
-    ):
+    with ExitStack() as stack:
+        unw = stack.enter_context(snaphu.io.Raster(unw_filename))
+        corr = stack.enter_context(snaphu.io.Raster(corr_filename))
+        conncomp = stack.enter_context(
+            snaphu.io.Raster.create(
+                cc_filename,
+                like=unw,
+                nodata=ccl_nodata,
+                dtype="u2",
+                **DEFAULT_TIFF_OPTIONS_RIO,
+            )
+        )
+
+        if mask_filename is not None:
+            mask = stack.enter_context(snaphu.io.Raster(mask_filename))
+        else:
+            mask = None
+
         snaphu.grow_conncomps(
             unw=unw,
             corr=corr,

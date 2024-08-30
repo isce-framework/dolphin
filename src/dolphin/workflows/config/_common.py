@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import glob
+import logging
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal, Optional
@@ -15,14 +16,13 @@ from pydantic import (
 )
 
 from dolphin import __version__ as _dolphin_version
-from dolphin._log import get_log
 from dolphin._types import Bbox
 from dolphin.io import DEFAULT_HDF5_OPTIONS, DEFAULT_TIFF_OPTIONS
 
-from ._enums import ShpMethod, UnwrapMethod
+from ._enums import ShpMethod
 from ._yaml_model import YamlModel
 
-logger = get_log(__name__)
+logger = logging.getLogger(__name__)
 
 __all__ = [
     "HalfWindow",
@@ -33,7 +33,6 @@ __all__ = [
     "PhaseLinkingOptions",
     "InterferogramNetwork",
     "TimeseriesOptions",
-    "UnwrapOptions",
 ]
 
 
@@ -105,6 +104,23 @@ class PhaseLinkingOptions(BaseModel, extra="forbid"):
         gt=0.0,
         lt=1.0,
     )
+    mask_input_ps: bool = Field(
+        False,
+        description=(
+            "If True, pixels labeled as PS will get set to NaN during phase linking to"
+            " avoid summing their phase. Default of False means that the SHP algorithm"
+            " will decide if a pixel should be included, regardless of its PS label."
+        ),
+    )
+    baseline_lag: Optional[int] = Field(
+        None,
+        gt=0,
+        description=(
+            "StBAS parameter to include only nearest-N interferograms for"
+            "phase linking. A `baseline_lag` of `n` will only include the closest"
+            "`n` interferograms. `baseline_line` must be positive."
+        ),
+    )
 
 
 class InterferogramNetwork(BaseModel, extra="forbid"):
@@ -155,101 +171,6 @@ class InterferogramNetwork(BaseModel, extra="forbid"):
         return self
 
 
-class UnwrapOptions(BaseModel, extra="forbid"):
-    """Options for unwrapping after wrapped phase estimation."""
-
-    run_unwrap: bool = Field(
-        True,
-        description=(
-            "Whether to run the unwrapping step after wrapped phase estimation."
-        ),
-    )
-    run_goldstein: bool = Field(
-        False,
-        description=(
-            "Whether to run Goldstein filtering step on wrapped interferogram."
-        ),
-    )
-    run_interpolation: bool = Field(
-        False,
-        description=("Whether to run interpolation step on wrapped interferogram."),
-    )
-    _directory: Path = PrivateAttr(Path("unwrapped"))
-    unwrap_method: UnwrapMethod = UnwrapMethod.SNAPHU
-    n_parallel_jobs: int = Field(
-        1, description="Number of interferograms to unwrap in parallel."
-    )
-    ntiles: tuple[int, int] = Field(
-        (1, 1),
-        description=(
-            "(`snaphu-py` or multiscale unwrapping) Number of tiles to split "
-            "the inputs into"
-        ),
-    )
-    downsample_factor: tuple[int, int] = Field(
-        (1, 1),
-        description=(
-            "(for multiscale unwrapping) Extra multilook factor to use for the coarse"
-            " unwrap."
-        ),
-    )
-    tile_overlap: tuple[int, int] = Field(
-        (0, 0),
-        description=(
-            "(for use in `snaphu-py`) Amount of tile overlap (in pixels) along the"
-            " (row, col) directions."
-        ),
-    )
-    n_parallel_tiles: int = Field(
-        1,
-        description=(
-            "(for snaphu) Number of tiles to unwrap in parallel for each interferogram."
-        ),
-    )
-    init_method: Literal["mcf", "mst"] = Field(
-        "mcf",
-        description="Initialization method for SNAPHU.",
-    )
-    cost: Literal["defo", "smooth"] = Field(
-        "smooth",
-        description="Statistical cost mode method for SNAPHU.",
-    )
-    zero_where_masked: bool = Field(
-        False,
-        description=(
-            "Set wrapped phase/correlation to 0 where mask is 0 before unwrapping. "
-        ),
-    )
-    alpha: float = Field(
-        0.5,
-        description=(
-            "(for Goldstein filtering) Power parameter for Goldstein algorithm."
-        ),
-    )
-    max_radius: int = Field(
-        51,
-        ge=0.0,
-        description=("(for interpolation) maximum radius to find scatterers."),
-    )
-    interpolation_cor_threshold: float = Field(
-        0.5,
-        description=" Threshold on the correlation raster to use for interpolation. "
-        "Pixels with less than this value are replaced by a weighted "
-        "combination of neighboring pixels.",
-        ge=0.0,
-        le=1.0,
-    )
-
-    @field_validator("ntiles", "downsample_factor", mode="before")
-    @classmethod
-    def _to_tuple(cls, v):
-        if v is None:
-            return (1, 1)
-        elif isinstance(v, int):
-            return (v, v)
-        return v
-
-
 class TimeseriesOptions(BaseModel, extra="forbid"):
     """Options for inversion/time series fitting."""
 
@@ -261,6 +182,9 @@ class TimeseriesOptions(BaseModel, extra="forbid"):
             "Whether to run the inversion step after unwrapping, if more than "
             " a single-reference network is used."
         ),
+    )
+    method: Literal["L1", "L2"] = Field(
+        "L2", description="Norm to use during timeseries inversion."
     )
     reference_point: Optional[tuple[int, int]] = Field(
         None,
@@ -280,6 +204,17 @@ class TimeseriesOptions(BaseModel, extra="forbid"):
         description="Pixels with correlation below this value will be masked out.",
         ge=0.0,
         le=1.0,
+    )
+    block_shape: tuple[int, int] = Field(
+        (256, 256),
+        description=(
+            "Size (rows, columns) of blocks of data to load at a time. 3D dimsion is"
+            " number of interferograms (during inversion) and number of SLC dates"
+            " (during velocity fitting)"
+        ),
+    )
+    num_parallel_blocks: int = Field(
+        4, description="Number of parallel blocks to process at once."
     )
 
 
@@ -449,7 +384,10 @@ class WorkflowBase(YamlModel):
     worker_settings: WorkerSettings = Field(default_factory=WorkerSettings)
     log_file: Optional[Path] = Field(
         default=None,
-        description="Path to output log file (in addition to logging to `stderr`).",
+        description=(
+            "Path to output log file (in addition to logging to `stderr`)."
+            " Default logs to `dolphin.log` within `work_directory`"
+        ),
     )
     creation_time_utc: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
@@ -470,11 +408,10 @@ class WorkflowBase(YamlModel):
             # Save all directories as absolute paths
             self.work_directory = self.work_directory.resolve(strict=False)
 
-    def create_dir_tree(self, debug: bool = False) -> None:
+    def create_dir_tree(self) -> None:
         """Create the directory tree for the workflow."""
-        log = get_log(debug=debug)
         for d in self._directory_list:
-            log.debug(f"Creating directory: {d}")
+            logger.debug(f"Creating directory: {d}")
             d.mkdir(parents=True, exist_ok=True)
 
 

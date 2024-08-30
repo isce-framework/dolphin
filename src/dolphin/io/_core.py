@@ -6,6 +6,7 @@ wrapper functions to write/iterate over blocks of large raster files.
 
 from __future__ import annotations
 
+import logging
 import math
 from dataclasses import dataclass
 from os import fspath
@@ -18,12 +19,11 @@ from numpy.typing import ArrayLike, DTypeLike
 from osgeo import gdal
 from pyproj import CRS
 
-from dolphin._log import get_log
 from dolphin._types import Bbox, Filename, Strides
 from dolphin.utils import compute_out_shape, gdal_to_numpy_type, numpy_to_gdal_type
 
 gdal.UseExceptions()
-logger = get_log(__name__)
+logger = logging.getLogger(__name__)
 
 __all__ = [
     "load_gdal",
@@ -38,6 +38,10 @@ __all__ = [
     "get_raster_bounds",
     "get_raster_dtype",
     "get_raster_metadata",
+    "get_raster_units",
+    "set_raster_units",
+    "get_raster_description",
+    "set_raster_description",
     "get_raster_gt",
     "get_raster_driver",
     "get_raster_chunk_size",
@@ -54,10 +58,11 @@ DEFAULT_DATETIME_FORMAT = "%Y%m%d"
 DEFAULT_TILE_SHAPE = [128, 128]
 # For use in rasterio
 DEFAULT_TIFF_OPTIONS_RIO = {
-    "compress": "deflate",
+    "compress": "lzw",
     "zlevel": 4,
     "bigtiff": "yes",
     "tiled": "yes",
+    "interleave": "band",
     "blockxsize": DEFAULT_TILE_SHAPE[1],
     "blockysize": DEFAULT_TILE_SHAPE[0],
 }
@@ -405,6 +410,81 @@ def set_raster_metadata(
     ds = None
 
 
+def get_raster_description(filename: Filename, band: int = 1):
+    """Get description of a raster band.
+
+    Parameters
+    ----------
+    filename : Filename
+        Path to the file to load.
+    band : int, optional
+        Band to get description for. Default is 1.
+
+    """
+    ds = gdal.Open(fspath(filename), gdal.GA_Update)
+    bnd = ds.GetRasterBand(band)
+    return bnd.GetDescription()
+
+
+def set_raster_description(filename: Filename, description: str, band: int = 1):
+    """Set description on a raster band.
+
+    Parameters
+    ----------
+    filename : Filename
+        Path to the file to load.
+    description : str
+        Description to set.
+    band : int, optional
+        Band to set description for. Default is 1.
+
+    """
+    ds = gdal.Open(fspath(filename), gdal.GA_Update)
+    bnd = ds.GetRasterBand(band)
+    bnd.SetDescription(description)
+    bnd.FlushCache()
+    ds = None
+
+
+def get_raster_units(filename: Filename, band: int = 1) -> str | None:
+    """Get units of a raster band.
+
+    Parameters
+    ----------
+    filename : Filename
+        Path to the file to load.
+    band : int
+        Band to get units for.
+        Default is 1.
+
+    """
+    ds = gdal.Open(fspath(filename))
+    bnd = ds.GetRasterBand(band)
+    return bnd.GetUnitType() or None
+
+
+def set_raster_units(filename: Filename, units: str, band: int | None = None) -> None:
+    """Set units on a raster band.
+
+    Parameters
+    ----------
+    filename : Filename
+        Path to the file to load.
+    units : str
+        Units to set.
+    band : int, optional
+        Band to set units for. Default is None, which sets for all bands.
+
+    """
+    ds = gdal.Open(fspath(filename), gdal.GA_Update)
+    if band is None:
+        bands = range(1, ds.RasterCount + 1)
+    for i in bands:
+        bnd = ds.GetRasterBand(i)
+        bnd.SetUnitType(units)
+        bnd.FlushCache()
+
+
 def rowcol_to_xy(
     row: int,
     col: int,
@@ -466,6 +546,8 @@ def write_arr(
     strides: Optional[dict[str, int]] = None,
     projection: Optional[Any] = None,
     nodata: Optional[float] = None,
+    units: Optional[str] = None,
+    description: Optional[str] = None,
 ):
     """Save an array to `output_name`.
 
@@ -506,6 +588,11 @@ def write_arr(
     nodata : float, optional
         Nodata value to save.
         Default is the nodata of band 1 of `like_filename` (if provided), or None.
+    units : str, optional
+        Units of the data. Default is None.
+        Value is stored in the metadata as "units".
+    description : str, optional
+        Description of the raster bands stored in the metadata.
 
     """
     fi = FileInfo.from_user_inputs(
@@ -551,12 +638,17 @@ def write_arr(
             bnd = ds_out.GetRasterBand(i + 1)
             bnd.WriteArray(arr[i])
 
-    # Set the nodata value for each band
-    if fi.nodata is not None:
-        for i in range(fi.nbands):
-            logger.debug(f"Setting nodata for band {i+1}/{fi.nbands}")
-            bnd = ds_out.GetRasterBand(i + 1)
+    # Set the nodata/units/description for each band
+    for i in range(fi.nbands):
+        logger.debug(f"Setting nodata for band {i+1}/{fi.nbands}")
+        bnd = ds_out.GetRasterBand(i + 1)
+        # Note: right now we're assuming the nodata/units/description
+        if fi.nodata is not None:
             bnd.SetNoDataValue(fi.nodata)
+        if units is not None:
+            bnd.SetUnitType(units)
+        if description is not None:
+            bnd.SetDescription(description)
 
     ds_out.FlushCache()
     ds_out = None
@@ -567,6 +659,8 @@ def write_block(
     filename: Filename,
     row_start: int,
     col_start: int,
+    band: int | None = None,
+    dset: str | None = None,
 ):
     """Write out an ndarray to a subset of the pre-made `filename`.
 
@@ -580,6 +674,12 @@ def write_block(
         Row index to start writing at.
     col_start : int
         Column index to start writing at.
+    band : int, optional
+        Raster band to write to within `filename`.
+        If None, writes to band 1 (for 2D), or all bands if `cur_block.ndim = 3`.
+    dset : str
+        (For writing to HDF5/NetCDF files) The name of the string dataset
+        withing `filename` to write to.
 
     Raises
     ------
@@ -587,7 +687,7 @@ def write_block(
         If length of `output_files` does not match length of `cur_block`.
 
     """
-    if cur_block.ndim == 2:
+    if cur_block.ndim == 2 and band is None:
         # Make into 3D array shaped (1, rows, cols)
         cur_block = cur_block[np.newaxis, ...]
     # filename must be pre-made
@@ -597,9 +697,11 @@ def write_block(
         raise ValueError(msg)
 
     if filename.suffix in (".h5", ".hdf5", ".nc"):
-        _write_hdf5(cur_block, filename, row_start, col_start)
+        if dset is None:
+            raise ValueError("Missing `dset` argument for writing to HDF5")
+        _write_hdf5(cur_block, filename, row_start, col_start, dset)
     else:
-        _write_gdal(cur_block, filename, row_start, col_start)
+        _write_gdal(cur_block, filename, row_start, col_start, band)
 
 
 def _write_gdal(
@@ -607,15 +709,21 @@ def _write_gdal(
     filename: Filename,
     row_start: int,
     col_start: int,
+    band: int | None,
 ):
     ds = gdal.Open(fspath(filename), gdal.GA_Update)
-    for b_idx, cur_image in enumerate(cur_block, start=1):
-        bnd = ds.GetRasterBand(b_idx)
-        # only need offset for write:
-        # https://gdal.org/api/python/osgeo.gdal.html#osgeo.gdal.Band.WriteArray
-        bnd.WriteArray(cur_image, col_start, row_start)
-        bnd.FlushCache()
+    if band is not None:
+        bnd = ds.GetRasterBand(band)
+        bnd.WriteArray(cur_block, col_start, row_start)
         bnd = None
+    else:
+        for b_idx, cur_image in enumerate(cur_block, start=1):
+            bnd = ds.GetRasterBand(b_idx)
+            # only need offset for write:
+            # https://gdal.org/api/python/osgeo.gdal.html#osgeo.gdal.Band.WriteArray
+            bnd.WriteArray(cur_image, col_start, row_start)
+            bnd.FlushCache()
+            bnd = None
     ds = None
 
 
@@ -624,12 +732,16 @@ def _write_hdf5(
     filename: Filename,
     row_start: int,
     col_start: int,
+    dset: str,
 ):
     nrows, ncols = cur_block.shape[-2:]
     row_slice = slice(row_start, row_start + nrows)
     col_slice = slice(col_start, col_start + ncols)
     with h5py.File(filename, "a") as hf:
-        hf[row_slice, col_slice] = cur_block
+        ds = hf[dset]
+        ds.write_direct(
+            cur_block, source_sel=None, dest_sel=np.s_[row_slice, col_slice]
+        )
 
 
 @dataclass

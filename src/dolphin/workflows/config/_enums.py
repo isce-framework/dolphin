@@ -23,6 +23,8 @@ class UnwrapMethod(str, Enum):
     SNAPHU = "snaphu"
     ICU = "icu"
     PHASS = "phass"
+    SPURT = "spurt"
+    WHIRLWIND = "whirlwind"
 
 
 class CallFunc(str, Enum):

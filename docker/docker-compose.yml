@@ -1,0 +1,14 @@
+name: basic-run
+services:
+    $TAG:
+        user: $(id -u):$(id -g)
+        volumes:
+            - $(realpath input_slcs):$WORKDIR/input_slcs:ro
+            - $(realpath dynamic_ancillary):$WORKDIR/dynamic_ancillary:ro
+            - $(realpath algorithm_parameters.yaml):$WORKDIR/algorithm_parameters.yaml:ro
+            - $(realpath runconfig.yaml):$WORKDIR/runconfig.yaml:ro
+            - $(realpath scratch):$WORKDIR/scratch
+            - $(realpath output):$WORKDIR/output
+        working_dir: $WORKDIR
+        image: $TAG
+        command: dolphin run dolphin_config.yaml

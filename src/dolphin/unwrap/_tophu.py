@@ -1,11 +1,11 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 import numpy as np
 
 from dolphin import io
-from dolphin._log import get_log
 from dolphin._types import Filename
 from dolphin.io._core import DEFAULT_TIFF_OPTIONS_RIO
 from dolphin.utils import full_suffix
@@ -14,7 +14,7 @@ from dolphin.workflows import UnwrapMethod
 from ._constants import CONNCOMP_SUFFIX, DEFAULT_CCL_NODATA, DEFAULT_UNW_NODATA
 from ._utils import _redirect_unwrapping_log, _zero_from_mask
 
-logger = get_log(__name__)
+logger = logging.getLogger(__name__)
 
 
 def multiscale_unwrap(
