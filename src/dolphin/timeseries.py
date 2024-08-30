@@ -87,7 +87,7 @@ def run(
         Default is (256, 256)
     num_threads : int
         The parallel blocks to process at once.
-        Default is 5.
+        Default is 4.
     reference_point : tuple[int, int], optional
         Reference point (row, col) used if performing a time series inversion.
         If not provided, a point will be selected from a consistent connected
@@ -504,7 +504,7 @@ def create_velocity(
         Default is (256, 256)
     num_threads : int, optional
         The parallel blocks to process at once.
-        Default is 5.
+        Default is 4.
     add_overviews : bool, optional
         If True, creates overviews of the new velocity raster.
         Default is True.
@@ -620,7 +620,7 @@ def create_temporal_average(
         Default is (256, 256)
     num_threads : int, optional
         The parallel blocks to process at once.
-        Default is 5.
+        Default is 4.
     average_func : Callable[[ArrayLike, int], np.ndarray], optional
         The function to use to average the images.
         Default is `np.nanmean`, which calls `np.nanmean(arr, axis=0)` on each block.
@@ -701,7 +701,7 @@ def invert_unw_network(
         Default is 1.
     num_threads : int
         The parallel blocks to process at once.
-        Default is 5.
+        Default is 4.
     add_overviews : bool, optional
         If True, creates overviews of the new unwrapped phase rasters.
         Default is True.
