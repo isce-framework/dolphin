@@ -122,6 +122,8 @@ def run(
             options=unwrap_options.spurt_options,
             scratchdir=scratchdir,
         )
+        for f in unw_paths:
+            io.set_raster_units(f, "radians")
         return unw_paths, conncomp_paths
 
     ifg_suffixes = [full_suffix(f) for f in ifg_filenames]
@@ -190,6 +192,8 @@ def run(
             Path(str(outf).replace(UNW_SUFFIX, CONNCOMP_SUFFIX))
             for outf in all_out_files
         ]
+    for f in all_out_files:
+        io.set_raster_units(f, "radians")
     return all_out_files, conncomp_files
 
 

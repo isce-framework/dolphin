@@ -132,10 +132,24 @@ def run(
     sar_dates = sorted(set(utils.flatten(ifg_date_pairs)))
     # if we did single-reference interferograms, for `n` sar dates, we will only have
     # `n-1` interferograms. Any more than n-1 ifgs means we need to invert
-    needs_inversion = len(unwrapped_paths) > len(sar_dates) - 1
+    is_single_reference = (len(unwrapped_paths) == len(sar_dates) - 1) and all(
+        pair[0] == ifg_date_pairs[0][0] for pair in ifg_date_pairs
+    )
+
     # check if we even need to invert, or if it was single reference
     inverted_phase_paths: list[Path] = []
-    if needs_inversion:
+    if is_single_reference:
+        logger.info(
+            "Skipping inversion step: only single reference interferograms exist."
+        )
+        # Copy over the unwrapped paths to `timeseries/`
+        inverted_phase_paths = _convert_and_reference(
+            unwrapped_paths,
+            output_dir=output_dir,
+            reference_point=ref_point,
+            wavelength=wavelength,
+        )
+    else:
         logger.info("Selecting a reference point for unwrapped interferograms")
 
         logger.info("Inverting network of %s unwrapped ifgs", len(unwrapped_paths))
@@ -147,17 +161,6 @@ def run(
             num_threads=num_threads,
             wavelength=wavelength,
             method=method,
-        )
-    else:
-        logger.info(
-            "Skipping inversion step: only single reference interferograms exist."
-        )
-        # Copy over the unwrapped paths to `timeseries/`
-        inverted_phase_paths = _convert_and_reference(
-            unwrapped_paths,
-            output_dir=output_dir,
-            reference_point=ref_point,
-            wavelength=wavelength,
         )
 
     if run_velocity:
@@ -630,7 +633,6 @@ def create_velocity(
     readers = [unw_reader]
     if cor_reader is not None:
         readers.append(cor_reader)
-
     writer = io.BackgroundRasterWriter(output_file, like_filename=unw_file_list[0])
     io.process_blocks(
         readers=readers,
@@ -644,6 +646,8 @@ def create_velocity(
     if add_overviews:
         logger.info("Creating overviews for velocity image")
         create_overviews([output_file])
+    if units := io.get_raster_units(unw_file_list[0]):
+        io.set_raster_units(output_file, units=units)
     logger.info("Completed create_velocity")
 
 
@@ -866,7 +870,7 @@ def invert_unw_network(
     writer.notify_finished()
 
     if add_overviews:
-        logger.info("Creating overviews for unwrapped images")
+        logger.info("Creating overviews for timeseries images")
         create_overviews(out_paths, image_type=ImageType.UNWRAPPED)
 
     logger.info("Completed invert_unw_network")

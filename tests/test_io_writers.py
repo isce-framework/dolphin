@@ -6,7 +6,7 @@ import pytest
 import rasterio as rio
 from rasterio.errors import NotGeoreferencedWarning
 
-from dolphin.io._core import load_gdal
+from dolphin.io._core import get_raster_units, load_gdal
 from dolphin.io._writers import (
     BackgroundBlockWriter,
     BackgroundRasterWriter,
@@ -150,3 +150,11 @@ class TestBackgroundStackWriter:
             assert np.allclose(
                 load_gdal(output_file_list[i], rows=rows, cols=cols), data[i]
             )
+
+    def test_file_kwargs(self, output_file_list, slc_file_list):
+        w = BackgroundStackWriter(
+            output_file_list, like_filename=slc_file_list[0], units="custom units"
+        )
+        w.close()
+        for f in output_file_list:
+            assert get_raster_units(f) == "custom units"
