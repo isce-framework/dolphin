@@ -61,7 +61,7 @@ def unwrap_snaphu_py(
     zero_where_masked : bool, optional
         Set wrapped phase/correlation to 0 where mask is 0 before unwrapping.
         If not mask is provided, this is ignored.
-        By default True.
+        By default False.
     unw_nodata : float, optional
         If providing `unwrap_callback`, provide the nodata value for your
         unwrapping function.

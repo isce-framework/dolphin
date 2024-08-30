@@ -772,8 +772,10 @@ def invert_unw_network(
             file_list=cor_file_list, outfile=cor_vrt_name, skip_size_check=True
         )
         readers = [unw_reader, cor_reader]
+        logger.info("Using correlation-weighted inversion for invert_unw_network.")
     else:
         readers = [unw_reader]
+        logger.info("Using unweighted inversion for invert_unw_network.")
 
     writer = io.BackgroundStackWriter(out_paths, like_filename=unw_file_list[0])
 
@@ -896,7 +898,7 @@ def select_reference_point(
 
     # Cast to `int` to avoid having `np.int64` types
     ref_point = ReferencePoint(int(ref_row), int(ref_col))
-    logger.info(f"Saving {ref_point!r} to from existing {output_file}")
+    logger.info(f"Saving {ref_point!r} to {output_file}")
     _write_reference_point(output_file=output_file, ref_point=ref_point)
     return ref_point
 
