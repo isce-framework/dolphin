@@ -1,9 +1,7 @@
 import json
 import sys
 import textwrap
-import warnings
 from io import StringIO
-from itertools import repeat
 from typing import Optional, TextIO, Union
 
 from pydantic import BaseModel
@@ -106,32 +104,9 @@ class YamlModel(BaseModel):
             Number of spaces to indent per level.
 
         """
-        full_dict = cls._construct_empty()
-        # UserWarning: Pydantic serializer warnings:
-        # New V2 warning, but seems harmless for just printing the schema
-        with warnings.catch_warnings():
-            warnings.filterwarnings("ignore", category=UserWarning)
-            cls.model_construct(**full_dict).to_yaml(
-                output_path, with_comments=True, indent_per_level=indent_per_level
-            )
-
-    @classmethod
-    def _construct_empty(cls):
-        """Construct a model with all fields filled in.
-
-        Uses defaults, or `None` for required fields.
-
-        The .construct is a pydantic method to disable validation
-        https://docs.pydantic.dev/usage/models/#creating-models-without-validation
-        But Fields without a default value don't get filled in
-        so first, we manually make a dict of all the fields with None values
-        then we update it with the default-filled values
-        """
-        all_none_vals = dict(
-            zip(cls.model_json_schema()["properties"].keys(), repeat(None))
+        cls.model_construct().to_yaml(
+            output_path, with_comments=True, indent_per_level=indent_per_level
         )
-        all_none_vals.update(cls.model_construct().model_dump())
-        return all_none_vals
 
     def _to_yaml_obj(self, by_alias: bool = True) -> CommentedMap:
         # Make the YAML object to add comments to

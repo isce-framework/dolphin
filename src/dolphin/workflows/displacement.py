@@ -265,6 +265,7 @@ def run(
             num_threads=ts_opts.num_parallel_blocks,
             # TODO: do i care to configure block shape, or num threads from somewhere?
             # num_threads=cfg.worker_settings....?
+            wavelength=cfg.input_options.wavelength,
         )
 
     else:

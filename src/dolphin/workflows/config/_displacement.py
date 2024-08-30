@@ -4,7 +4,7 @@ import logging
 from pathlib import Path
 from typing import Annotated, Any, Optional
 
-from opera_utils import get_dates, sort_files_by_date
+from opera_utils import get_burst_id, get_dates, sort_files_by_date
 from pydantic import (
     BaseModel,
     ConfigDict,
@@ -14,6 +14,7 @@ from pydantic import (
     model_validator,
 )
 
+from dolphin import constants
 from dolphin._types import TropoModel, TropoType
 
 from ._common import (
@@ -187,6 +188,16 @@ class DisplacementWorkflow(WorkflowBase):
     def model_post_init(self, __context: Any) -> None:
         """After validation, set up properties for use during workflow run."""
         super().model_post_init(__context)
+
+        if self.input_options.wavelength is None and self.cslc_file_list:
+            # Try to infer the wavelength from filenames
+            try:
+                get_burst_id(self.cslc_file_list[-1])
+                # The Burst ID was recognized for OPERA-S1 SLCs: use S1 wavelength
+                self.input_options.wavelength = constants.SENTINEL_1_WAVELENGTH
+            except ValueError:
+                pass
+
         # Ensure outputs from workflow steps are within work directory.
         if not self.keep_paths_relative:
             # Resolve all CSLC paths:

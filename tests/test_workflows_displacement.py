@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 from opera_utils import group_by_burst
 
+from dolphin.io import get_raster_units
 from dolphin.utils import flatten, full_suffix
 from dolphin.workflows import config, displacement
 
@@ -85,6 +86,9 @@ def test_displacement_run_single_official_opera_naming(
         paths = displacement.run(cfg)
         assert paths.timeseries_paths is not None
         assert all(p.exists() for p in paths.timeseries_paths)
+        assert paths.unwrapped_paths is not None
+        assert all(get_raster_units(p) == "radians" for p in paths.unwrapped_paths)
+        assert all(get_raster_units(p) == "meters" for p in paths.timeseries_paths)
         assert all(full_suffix(p) == ".tif" for p in paths.timeseries_paths)
 
 
