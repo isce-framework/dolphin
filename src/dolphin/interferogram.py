@@ -643,7 +643,8 @@ def estimate_correlation_from_phase(
     else:
         # If they passed complex, normalize to unit magnitude
         inp = np.exp(1j * np.nan_to_num(np.angle(ifg)))
-
+    # Now set the 0s to nans (so that either 0 input, or nan input gets ignored)
+    inp[inp == 0] = np.nan
     # Note: the clipping is from possible partial windows producing correlation
     # above 1
     cor = np.clip(np.abs(uniform_filter(inp, window_size, mode="nearest")), 0, 1)

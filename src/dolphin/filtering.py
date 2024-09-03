@@ -259,3 +259,48 @@ def _filter_and_save(
     create_image_overviews(output_name, resampling=Resampling.AVERAGE)
 
     return output_name
+
+
+def gaussian_filter_nan(
+    image: ArrayLike, sigma: float, mode="constant", **kwargs
+) -> np.ndarray:
+    """Apply a gaussian filter to an image with NaNs (avoiding all nans).
+
+    The scipy.ndimage `gaussian_filter` will make the output all NaNs if
+    any of the pixels in the input that touches the kernel is NaN
+
+    Source:
+    https://stackoverflow.com/a/36307291
+
+    Parameters
+    ----------
+    image : ndarray
+        Image with nans to filter
+    sigma : float
+        Size of filter kernel. passed into `gaussian_filter`
+    mode : str, default = "constant"
+        Boundary mode for `[scipy.ndimage.gaussian_filter][]`
+    **kwargs : Any
+        Passed into `[scipy.ndimage.gaussian_filter][]`
+
+    Returns
+    -------
+    ndarray
+        Filtered version of `image`.
+
+    """
+    from scipy.ndimage import gaussian_filter
+
+    if np.sum(np.isnan(image)) == 0:
+        return gaussian_filter(image, sigma=sigma, mode=mode, **kwargs)
+
+    V = image.copy()
+    nan_idxs = np.isnan(image)
+    V[nan_idxs] = 0
+    V_filt = gaussian_filter(V, sigma, **kwargs)
+
+    W = np.ones(image.shape)
+    W[nan_idxs] = 0
+    W_filt = gaussian_filter(W, sigma, **kwargs)
+
+    return V_filt / W_filt
