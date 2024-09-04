@@ -130,12 +130,9 @@ def _create_conncomps_from_mask(
     # - 0 for invalid, ignored pixels
     # - 1 for the good ones
     # nodata is propagated from `temporal_coherence_file`
-    conncomp_arr1 = arr > temporal_coherence_threshold
-    print(conncomp_arr1.sum())
     conncomp_arr = (
         (arr > temporal_coherence_threshold).astype("uint16").filled(DEFAULT_CCL_NODATA)
     )
-    print((conncomp_arr == 1).sum())
 
     conncomp_files = [
         Path(str(outf).replace(UNW_SUFFIX, CONNCOMP_SUFFIX)) for outf in unw_filenames
