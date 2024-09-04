@@ -52,6 +52,7 @@ def run(
     num_threads: int = 4,
     reference_point: tuple[int, int] = (-1, -1),
     wavelength: float | None = None,
+    add_overviews: bool = True,
 ) -> tuple[list[Path], ReferencePoint]:
     """Invert the unwrapped interferograms, estimate timeseries and phase velocity.
 
@@ -98,6 +99,9 @@ def run(
         the displacement and velocity rasters.
         If not provided, the outputs are in radians.
         See Notes for line of sight convention.
+    add_overviews : bool, optional
+        If True, creates overviews of the new velocity raster.
+        Default is True.
 
     Returns
     -------
@@ -162,6 +166,9 @@ def run(
             wavelength=wavelength,
             method=method,
         )
+    if add_overviews:
+        logger.info("Creating overviews for timeseries images")
+        create_overviews(inverted_phase_paths, image_type=ImageType.UNWRAPPED)
 
     if run_velocity:
         #  We can't pass the correlations after an inversion- the numbers don't match
@@ -726,7 +733,6 @@ def invert_unw_network(
     method: InversionMethod = InversionMethod.L2,
     block_shape: tuple[int, int] = (256, 256),
     num_threads: int = 4,
-    add_overviews: bool = True,
 ) -> list[Path]:
     """Perform pixel-wise inversion of unwrapped network to get phase per date.
 
@@ -766,9 +772,6 @@ def invert_unw_network(
     num_threads : int
         The parallel blocks to process at once.
         Default is 4.
-    add_overviews : bool, optional
-        If True, creates overviews of the new unwrapped phase rasters.
-        Default is True.
 
     Returns
     -------
@@ -868,10 +871,6 @@ def invert_unw_network(
         num_threads=num_threads,
     )
     writer.notify_finished()
-
-    if add_overviews:
-        logger.info("Creating overviews for timeseries images")
-        create_overviews(out_paths, image_type=ImageType.UNWRAPPED)
 
     logger.info("Completed invert_unw_network")
     return out_paths
