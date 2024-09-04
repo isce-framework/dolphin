@@ -266,6 +266,7 @@ def run(
             # TODO: do i care to configure block shape, or num threads from somewhere?
             # num_threads=cfg.worker_settings....?
             wavelength=cfg.input_options.wavelength,
+            add_overviews=cfg.output_options.add_overviews,
         )
 
     else:
