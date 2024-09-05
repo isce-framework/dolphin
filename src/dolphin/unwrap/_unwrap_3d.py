@@ -3,7 +3,9 @@ import shutil
 from pathlib import Path
 from typing import Sequence
 
+import numpy as np
 from opera_utils import get_dates
+from scipy import ndimage, signal
 
 from dolphin import io, utils
 from dolphin._types import PathOrStr
@@ -124,14 +126,23 @@ def _create_conncomps_from_mask(
     temporal_coherence_file: PathOrStr,
     temporal_coherence_threshold: float,
     unw_filenames: Sequence[PathOrStr],
+    dilate_by: int = 21,
 ) -> list[Path]:
     arr = io.load_gdal(temporal_coherence_file, masked=True)
-    # XX: for now, "connected component" files are
-    # - 0 for invalid, ignored pixels
-    # - 1 for the good ones
-    # nodata is propagated from `temporal_coherence_file`
+    good_pixels = arr > temporal_coherence_threshold
+    strel = np.ones((dilate_by, dilate_by))
+    # All "1" pixels will be spread out and have (approximately) 1.0 surrounding pixels
+    # Threshold back to be a binary image
+    good_pixels_dilated = signal.fftconvolve(good_pixels, strel, mode="same") > 0.95
+    # Label the contiguous areas based on the dilated version
+    labels, nlabels = ndimage.label(good_pixels_dilated)
+    # Now these labels will extend to areas which are not "good" in the original.
+    labels[~good_pixels] = 0
+    # An make a masked version based on the original nodata, then fill with final output
     conncomp_arr = (
-        (arr > temporal_coherence_threshold).astype("uint16").filled(DEFAULT_CCL_NODATA)
+        np.ma.MaskedArray(data=labels, mask=arr.mask)
+        .astype("uint16")
+        .filled(DEFAULT_CCL_NODATA)
     )
 
     conncomp_files = [
