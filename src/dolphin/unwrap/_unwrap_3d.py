@@ -126,13 +126,15 @@ def _create_conncomps_from_mask(
     temporal_coherence_file: PathOrStr,
     temporal_coherence_threshold: float,
     unw_filenames: Sequence[PathOrStr],
-    dilate_by: int = 21,
+    dilate_by: int = 25,
 ) -> list[Path]:
     arr = io.load_gdal(temporal_coherence_file, masked=True)
     good_pixels = arr > temporal_coherence_threshold
     strel = np.ones((dilate_by, dilate_by))
     # All "1" pixels will be spread out and have (approximately) 1.0 surrounding pixels
     # Threshold back to be a binary image
+    # Note `ndimage.binary_dilation` scales ~quadratically with `dilate_by`, whereas
+    # FFT-based convolution is roughly constant for an `dilate_by`.
     good_pixels_dilated = signal.fftconvolve(good_pixels, strel, mode="same") > 0.95
     # Label the contiguous areas based on the dilated version
     labels, nlabels = ndimage.label(good_pixels_dilated)
