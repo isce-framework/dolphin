@@ -490,6 +490,6 @@ def unwrap(
 
     if delete_scratch:
         assert scratchdir is not None
-        shutil.rmtree(scratchdir)
+        shutil.rmtree(scratchdir, ignore_errors=True)
 
     return Path(unw_filename), conncomp_path
