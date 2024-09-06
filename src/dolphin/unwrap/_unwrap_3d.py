@@ -131,13 +131,13 @@ def _create_conncomps_from_mask(
     arr = io.load_gdal(temporal_coherence_file, masked=True)
     good_pixels = arr > temporal_coherence_threshold
     strel = np.ones((dilate_by, dilate_by))
-    # All "1" pixels will be spread out and have (approximately) 1.0 surrounding pixels
-    # Threshold back to be a binary image
-    # Note `ndimage.binary_dilation` scales ~quadratically with `dilate_by`, whereas
-    # FFT-based convolution is roughly constant for an `dilate_by`.
+    # "1" pixels will be spread out and have (approximately) 1.0 in surrounding pixels
+    # Note: `ndimage.binary_dilation` scales ~quadratically with `dilate_by`,
+    # whereas FFT-based convolution is roughly constant for any `dilate_by`.
     good_pixels_dilated = signal.fftconvolve(good_pixels, strel, mode="same") > 0.95
     # Label the contiguous areas based on the dilated version
     labels, nlabels = ndimage.label(good_pixels_dilated)
+    logger.debug("Labeled %s connected components", nlabels)
     # Now these labels will extend to areas which are not "good" in the original.
     labels[~good_pixels] = 0
     # An make a masked version based on the original nodata, then fill with final output
