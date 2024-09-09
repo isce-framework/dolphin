@@ -64,7 +64,8 @@ def run(
     if cfg.log_file is None:
         cfg.log_file = cfg.work_directory / "dolphin.log"
     # Set the logging level for all `dolphin.` modules
-    setup_logging(debug=debug, filename=cfg.log_file)
+    for logger_name in ["dolphin", "spurt"]:
+        setup_logging(logger_name=logger_name, debug=debug, filename=cfg.log_file)
     # TODO: need to pass the cfg filename for the logger
     logger.debug(cfg.model_dump())
 
@@ -258,11 +259,15 @@ def run(
             condition_file=stitched_temp_coh_file,
             condition=CallFunc.MAX,
             output_dir=ts_opts._directory,
+            method=timeseries.InversionMethod(ts_opts.method),
             run_velocity=ts_opts.run_velocity,
             velocity_file=ts_opts._velocity_file,
             correlation_threshold=ts_opts.correlation_threshold,
+            num_threads=ts_opts.num_parallel_blocks,
             # TODO: do i care to configure block shape, or num threads from somewhere?
             # num_threads=cfg.worker_settings....?
+            wavelength=cfg.input_options.wavelength,
+            add_overviews=cfg.output_options.add_overviews,
         )
 
     else:
@@ -302,7 +307,7 @@ def run(
                 "DEM file is not given, skip estimating tropospheric corrections."
             )
         else:
-            if cfg.correction_options.troposphere_files is not None:
+            if cfg.correction_options.troposphere_files:
                 from dolphin.atmosphere import estimate_tropospheric_delay
 
                 assert timeseries_paths is not None

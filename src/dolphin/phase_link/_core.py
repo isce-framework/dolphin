@@ -67,11 +67,12 @@ def run_phase_linking(
     beta: float = 0.0,
     reference_idx: int = 0,
     nodata_mask: ArrayLike | None = None,
+    mask_input_ps: bool = False,
     ps_mask: ArrayLike | None = None,
     use_max_ps: bool = True,
     neighbor_arrays: ArrayLike | None = None,
     avg_mag: ArrayLike | None = None,
-    use_slc_amp: bool = True,
+    use_slc_amp: bool = False,
     calc_average_coh: bool = False,
     baseline_lag: Optional[int] = None,
 ) -> PhaseLinkOutput:
@@ -101,6 +102,10 @@ def run_phase_linking(
         A mask of bad/nodata pixels to ignore when estimating the covariance.
         Pixels with `True` (or 1) are ignored, by default None
         If None, all pixels are used, by default None.
+    mask_input_ps : bool
+        If True, pixels labeled as PS will get set to NaN during phase linking to
+        avoid summing their phase. Default of False means that the SHP algorithm
+        will decide if a pixel should be included, regardless of its PS label.
     ps_mask : ArrayLike, optional
         A mask of pixels marking persistent scatterers (PS) to
         skip when multilooking.
@@ -121,7 +126,7 @@ def run_phase_linking(
         If None, the average magnitude will be computed from `slc_stack`.
     use_slc_amp : bool, optional
         Whether to use the SLC amplitude when outputting the MLE estimate,
-        or to set the SLC amplitude to 1.0. By default True.
+        or to set the SLC amplitude to 1.0. By default False.
     calc_average_coh : bool, optional, default = False
         Whether to calculate the average coherence for each SLC date.
     baseline_lag : int, optional, default=None
@@ -172,12 +177,13 @@ def run_phase_linking(
     # Make sure the PS mask didn't have extra burst borders that are nodata here
     ps_mask[nodata_mask] = False
 
-    # TODO: Any other masks we need?
-    ignore_mask = np.logical_or.reduce((nodata_mask, ps_mask))
-
     # Make a copy, and set the masked pixels to np.nan
     slc_stack_masked = slc_stack.copy()
-    slc_stack_masked[:, ignore_mask] = np.nan
+    if mask_input_ps:
+        ignore_mask = np.logical_or.reduce((nodata_mask, ps_mask))
+        slc_stack_masked[:, ignore_mask] = np.nan
+    else:
+        slc_stack_masked[:, nodata_mask] = np.nan
 
     cpl_out = run_cpl(
         slc_stack=slc_stack_masked,
@@ -270,7 +276,7 @@ def run_cpl(
         The index of the (non compressed) reference SLC, by default 0
     use_slc_amp : bool, optional
         Whether to use the SLC amplitude when outputting the MLE estimate,
-        or to set the SLC amplitude to 1.0. By default True.
+        or to set the SLC amplitude to 1.0. By default False.
     neighbor_arrays : np.ndarray, optional
         The neighbor arrays to use for SHP, shape = (n_rows, n_cols, *window_shape).
         If None, a rectangular window is used. By default None.

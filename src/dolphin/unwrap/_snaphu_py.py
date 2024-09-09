@@ -5,8 +5,6 @@ from contextlib import ExitStack
 from pathlib import Path
 from typing import Optional
 
-from numpy.typing import ArrayLike
-
 from dolphin._types import Filename
 from dolphin.io._core import DEFAULT_TIFF_OPTIONS_RIO
 from dolphin.utils import full_suffix
@@ -61,7 +59,7 @@ def unwrap_snaphu_py(
     zero_where_masked : bool, optional
         Set wrapped phase/correlation to 0 where mask is 0 before unwrapping.
         If not mask is provided, this is ignored.
-        By default True.
+        By default False.
     unw_nodata : float, optional
         If providing `unwrap_callback`, provide the nodata value for your
         unwrapping function.
@@ -156,7 +154,7 @@ def grow_conncomp_snaphu(
     unw_filename: Filename,
     corr_filename: Filename,
     nlooks: float,
-    mask: Optional[ArrayLike] = None,
+    mask_filename: Optional[Filename] = None,
     ccl_nodata: Optional[int] = DEFAULT_CCL_NODATA,
     cost: str = "smooth",
     min_conncomp_frac: float = 0.0001,
@@ -172,8 +170,8 @@ def grow_conncomp_snaphu(
         Path to input correlation file.
     nlooks : float
         Effective number of looks used to form the input correlation data.
-    mask : Array, optional
-        binary byte mask array, by default None.
+    mask_filename : Filename, optional
+        Path to binary byte mask file, by default None.
         Assumes that 1s are valid pixels and 0s are invalid.
     ccl_nodata : float, optional
         Nodata value for the connected component labels.
@@ -198,17 +196,24 @@ def grow_conncomp_snaphu(
     unw_suffix = full_suffix(unw_filename)
     cc_filename = str(unw_filename).replace(unw_suffix, CONNCOMP_SUFFIX)
 
-    with (
-        snaphu.io.Raster(unw_filename) as unw,
-        snaphu.io.Raster(corr_filename) as corr,
-        snaphu.io.Raster.create(
-            cc_filename,
-            like=unw,
-            nodata=ccl_nodata,
-            dtype="u2",
-            **DEFAULT_TIFF_OPTIONS_RIO,
-        ) as conncomp,
-    ):
+    with ExitStack() as stack:
+        unw = stack.enter_context(snaphu.io.Raster(unw_filename))
+        corr = stack.enter_context(snaphu.io.Raster(corr_filename))
+        conncomp = stack.enter_context(
+            snaphu.io.Raster.create(
+                cc_filename,
+                like=unw,
+                nodata=ccl_nodata,
+                dtype="u2",
+                **DEFAULT_TIFF_OPTIONS_RIO,
+            )
+        )
+
+        if mask_filename is not None:
+            mask = stack.enter_context(snaphu.io.Raster(mask_filename))
+        else:
+            mask = None
+
         snaphu.grow_conncomps(
             unw=unw,
             corr=corr,

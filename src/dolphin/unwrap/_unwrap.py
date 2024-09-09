@@ -122,6 +122,8 @@ def run(
             options=unwrap_options.spurt_options,
             scratchdir=scratchdir,
         )
+        for f in unw_paths:
+            io.set_raster_units(f, "radians")
         return unw_paths, conncomp_paths
 
     ifg_suffixes = [full_suffix(f) for f in ifg_filenames]
@@ -190,6 +192,8 @@ def run(
             Path(str(outf).replace(UNW_SUFFIX, CONNCOMP_SUFFIX))
             for outf in all_out_files
         ]
+    for f in all_out_files:
+        io.set_raster_units(f, "radians")
     return all_out_files, conncomp_files
 
 
@@ -458,15 +462,13 @@ def unwrap(
         )
 
         # Regrow connected components after phase modification
-        corr = io.load_gdal(corr_filename)
-        mask = corr[:] > 0
         # TODO decide whether we want to have the
         # 'min_conncomp_frac' option in the config
         conncomp_path = grow_conncomp_snaphu(
             unw_filename=unw_filename,
             corr_filename=corr_filename,
             nlooks=nlooks,
-            mask=mask,
+            mask_filename=combined_mask_file,
             ccl_nodata=ccl_nodata,
             cost=unwrap_options.snaphu_options.cost,
             scratchdir=scratchdir,
@@ -488,6 +490,6 @@ def unwrap(
 
     if delete_scratch:
         assert scratchdir is not None
-        shutil.rmtree(scratchdir)
+        shutil.rmtree(scratchdir, ignore_errors=True)
 
     return Path(unw_filename), conncomp_path

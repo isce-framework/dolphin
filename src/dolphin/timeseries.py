@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 import logging
-import shutil
+from enum import Enum
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Callable, Optional, Protocol, Sequence, TypeVar
 
 import jax.numpy as jnp
 import numpy as np
-from jax import Array, jit, vmap
+from jax import Array, jit, lax, vmap
 from numpy.typing import ArrayLike
 from opera_utils import get_dates
 from scipy import ndimage
@@ -26,6 +26,13 @@ logger = logging.getLogger(__name__)
 __all__ = ["run"]
 
 
+class InversionMethod(str, Enum):
+    """Method to use for timeseries inversion."""
+
+    L1 = "L1"
+    L2 = "L2"
+
+
 class ReferencePointError(ValueError):
     pass
 
@@ -37,11 +44,15 @@ def run(
     condition_file: PathOrStr,
     condition: CallFunc,
     output_dir: PathOrStr,
+    method: InversionMethod = InversionMethod.L2,
     run_velocity: bool = False,
     velocity_file: Optional[PathOrStr] = None,
     correlation_threshold: float = 0.2,
-    num_threads: int = 5,
+    block_shape: tuple[int, int] = (256, 256),
+    num_threads: int = 4,
     reference_point: tuple[int, int] = (-1, -1),
+    wavelength: float | None = None,
+    add_overviews: bool = True,
 ) -> tuple[list[Path], ReferencePoint]:
     """Invert the unwrapped interferograms, estimate timeseries and phase velocity.
 
@@ -62,19 +73,35 @@ def run(
         the options are [min, max]
     output_dir : Path
         Path to the output directory.
+    method : str, choices = "L1", "L2"
+        Inversion method to use when solving Ax = b.
+        Default is L2, which uses least squares to solve Ax = b (faster).
+        "L1" minimizes |Ax - b|_1 at each pixel.
     run_velocity : bool
         Whether to run velocity estimation on the inverted phase series
     velocity_file : Path, Optional
         The output velocity file
     correlation_threshold : float
         Pixels with correlation below this value will be masked out
+    block_shape : tuple[int, int], optional
+        The shape of the blocks to process in parallel.
+        Default is (256, 256)
     num_threads : int
         The parallel blocks to process at once.
-        Default is 5.
+        Default is 4.
     reference_point : tuple[int, int], optional
         Reference point (row, col) used if performing a time series inversion.
         If not provided, a point will be selected from a consistent connected
         component with low amplitude dispersion or high temporal coherence.
+    wavelength : float, optional
+        The wavelength of the radar signal, in meters.
+        If provided, the output rasters are in meters and meters / year for
+        the displacement and velocity rasters.
+        If not provided, the outputs are in radians.
+        See Notes for line of sight convention.
+    add_overviews : bool, optional
+        If True, creates overviews of the new velocity raster.
+        Default is True.
 
     Returns
     -------
@@ -84,6 +111,12 @@ def run(
         NamedTuple of reference (row, column) selected.
         If passed as input, simply returned back as output.
         Otherwise, the result is the auto-selection from `select_reference_point`.
+
+    Notes
+    -----
+    When wavelength is provided, the output rasters are in meters and meters / year,
+    where positive values indicate motion *toward* from the radar (i.e. positive values
+    in both ascending and descending tracks imply uplift).
 
     """
     Path(output_dir).mkdir(exist_ok=True, parents=True)
@@ -103,10 +136,24 @@ def run(
     sar_dates = sorted(set(utils.flatten(ifg_date_pairs)))
     # if we did single-reference interferograms, for `n` sar dates, we will only have
     # `n-1` interferograms. Any more than n-1 ifgs means we need to invert
-    needs_inversion = len(unwrapped_paths) > len(sar_dates) - 1
+    is_single_reference = (len(unwrapped_paths) == len(sar_dates) - 1) and all(
+        pair[0] == ifg_date_pairs[0][0] for pair in ifg_date_pairs
+    )
+
     # check if we even need to invert, or if it was single reference
     inverted_phase_paths: list[Path] = []
-    if needs_inversion:
+    if is_single_reference:
+        logger.info(
+            "Skipping inversion step: only single reference interferograms exist."
+        )
+        # Copy over the unwrapped paths to `timeseries/`
+        inverted_phase_paths = _convert_and_reference(
+            unwrapped_paths,
+            output_dir=output_dir,
+            reference_point=ref_point,
+            wavelength=wavelength,
+        )
+    else:
         logger.info("Selecting a reference point for unwrapped interferograms")
 
         logger.info("Inverting network of %s unwrapped ifgs", len(unwrapped_paths))
@@ -114,23 +161,14 @@ def run(
             unw_file_list=unwrapped_paths,
             reference=ref_point,
             output_dir=output_dir,
+            block_shape=block_shape,
             num_threads=num_threads,
+            wavelength=wavelength,
+            method=method,
         )
-    else:
-        logger.info(
-            "Skipping inversion step: only single reference interferograms exist."
-        )
-        # Copy over the unwrapped paths to `timeseries/`
-        for p in unwrapped_paths:
-            # if it ends in `.unw.tif`, change to just `.tif` for consistency
-            # with the case where we run an inversion
-            cur_name = Path(p).name
-            unw_suffix = full_suffix(p)
-            target_name = str(cur_name).replace(unw_suffix, ".tif")
-            target = Path(output_dir) / target_name
-            if not target.exists():  # Check to prevent overwriting
-                shutil.copy(p, target)
-            inverted_phase_paths.append(target)
+    if add_overviews:
+        logger.info("Creating overviews for timeseries images")
+        create_overviews(inverted_phase_paths, image_type=ImageType.UNWRAPPED)
 
     if run_velocity:
         #  We can't pass the correlations after an inversion- the numbers don't match
@@ -149,10 +187,56 @@ def run(
             reference=ref_point,
             cor_file_list=cor_file_list,
             cor_threshold=correlation_threshold,
+            block_shape=block_shape,
             num_threads=num_threads,
         )
 
     return inverted_phase_paths, ref_point
+
+
+def _convert_and_reference(
+    unwrapped_paths: Sequence[PathOrStr],
+    *,
+    output_dir: PathOrStr,
+    reference_point: ReferencePoint,
+    wavelength: float | None = None,
+) -> list[Path]:
+    if wavelength is not None:
+        # Positive values are motion towards the radar
+        constant = -1 * (wavelength / (4 * np.pi))
+        units = "meters"
+    else:
+        constant = -1
+        units = "radians"
+
+    ref_row, ref_col = reference_point
+    out_paths: list[Path] = []
+    for p in unwrapped_paths:
+        # if it ends in `.unw.tif`, change to just `.tif` for consistency
+        # with the case where we run an inversion
+        cur_name = Path(p).name
+        unw_suffix = full_suffix(p)
+        target_name = str(cur_name).replace(unw_suffix, ".tif")
+        target = Path(output_dir) / target_name
+        out_paths.append(target)
+
+        if target.exists():  # Check to prevent overwriting
+            continue
+
+        arr_radians = io.load_gdal(p)
+        # Reference to the
+        ref_value = arr_radians[ref_row, ref_col]
+        if np.isnan(ref_value):
+            logger.warning(
+                "{ref_point!r} is NaN for {p} . Skipping reference subtraction."
+            )
+        else:
+            arr_radians -= ref_value
+        io.write_arr(
+            arr=arr_radians * constant, output_name=target, units=units, like_filename=p
+        )
+
+    return out_paths
 
 
 def argmin_index(arr: ArrayLike) -> tuple[int, ...]:
@@ -451,8 +535,8 @@ def create_velocity(
     date_list: Sequence[DateOrDatetime] | None = None,
     cor_file_list: Sequence[PathOrStr] | None = None,
     cor_threshold: float = 0.2,
-    block_shape: tuple[int, int] = (512, 512),
-    num_threads: int = 5,
+    block_shape: tuple[int, int] = (256, 256),
+    num_threads: int = 4,
     add_overviews: bool = True,
 ) -> None:
     """Perform pixel-wise (weighted) linear regression to estimate velocity.
@@ -481,10 +565,10 @@ def create_velocity(
         Default is 0.2.
     block_shape : tuple[int, int], optional
         The shape of the blocks to process in parallel.
-        Default is (512, 512)
+        Default is (256, 256)
     num_threads : int, optional
         The parallel blocks to process at once.
-        Default is 5.
+        Default is 4.
     add_overviews : bool, optional
         If True, creates overviews of the new velocity raster.
         Default is True.
@@ -556,7 +640,6 @@ def create_velocity(
     readers = [unw_reader]
     if cor_reader is not None:
         readers.append(cor_reader)
-
     writer = io.BackgroundRasterWriter(output_file, like_filename=unw_file_list[0])
     io.process_blocks(
         readers=readers,
@@ -570,6 +653,8 @@ def create_velocity(
     if add_overviews:
         logger.info("Creating overviews for velocity image")
         create_overviews([output_file])
+    if units := io.get_raster_units(unw_file_list[0]):
+        io.set_raster_units(output_file, units=units)
     logger.info("Completed create_velocity")
 
 
@@ -582,8 +667,8 @@ class AverageFunc(Protocol):
 def create_temporal_average(
     file_list: Sequence[PathOrStr],
     output_file: PathOrStr,
-    block_shape: tuple[int, int] = (512, 512),
-    num_threads: int = 5,
+    block_shape: tuple[int, int] = (256, 256),
+    num_threads: int = 4,
     average_func: Callable[[ArrayLike, int], np.ndarray] = np.nanmean,
     read_masked: bool = False,
 ) -> None:
@@ -597,10 +682,10 @@ def create_temporal_average(
         The output file to save the average to
     block_shape : tuple[int, int], optional
         The shape of the blocks to process in parallel.
-        Default is (512, 512)
+        Default is (256, 256)
     num_threads : int, optional
         The parallel blocks to process at once.
-        Default is 5.
+        Default is 4.
     average_func : Callable[[ArrayLike, int], np.ndarray], optional
         The function to use to average the images.
         Default is `np.nanmean`, which calls `np.nanmean(arr, axis=0)` on each block.
@@ -644,9 +729,10 @@ def invert_unw_network(
     cor_threshold: float = 0.2,
     n_cor_looks: int = 1,
     ifg_date_pairs: Sequence[Sequence[DateOrDatetime]] | None = None,
-    block_shape: tuple[int, int] = (512, 512),
-    num_threads: int = 5,
-    add_overviews: bool = True,
+    wavelength: float | None = None,
+    method: InversionMethod = InversionMethod.L2,
+    block_shape: tuple[int, int] = (256, 256),
+    num_threads: int = 4,
 ) -> list[Path]:
     """Perform pixel-wise inversion of unwrapped network to get phase per date.
 
@@ -660,11 +746,6 @@ def invert_unw_network(
         from all other points when solving.
     output_dir : PathOrStr
         The directory to save the output files
-    ifg_date_pairs : Sequence[Sequence[DateOrDatetime]], optional
-        List of date pairs to use for the inversion. If not provided, will be
-        parsed from filenames in `unw_file_list`.
-    block_shape : tuple[int, int], optional
-        The shape of the blocks to process in parallel
     cor_file_list : Sequence[PathOrStr], optional
         List of correlation files to use for weighting the inversion
     cor_threshold : float, optional
@@ -674,12 +755,23 @@ def invert_unw_network(
         The number of looks used to form the input correlation data, used
         to convert correlation to phase variance.
         Default is 1.
+    ifg_date_pairs : Sequence[Sequence[DateOrDatetime]], optional
+        List of date pairs to use for the inversion. If not provided, will be
+        parsed from filenames in `unw_file_list`.
+    method : str, choices = "L1", "L2"
+        Inversion method to use when solving Ax = b.
+        Default is L2, which uses least squares to solve Ax = b (faster).
+        "L1" minimizes |Ax - b|_1 at each pixel.
+    wavelength : float, optional
+        The wavelength of the radar signal, in meters.
+        If provided, the output rasters are in meters.
+        If not provided, the outputs are in radians.
+    block_shape : tuple[int, int], optional
+        The shape of the blocks to process in parallel.
+        Default is (256, 256).
     num_threads : int
         The parallel blocks to process at once.
-        Default is 5.
-    add_overviews : bool, optional
-        If True, creates overviews of the new unwrapped phase rasters.
-        Default is True.
+        Default is 4.
 
     Returns
     -------
@@ -722,10 +814,18 @@ def invert_unw_network(
     ref_row, ref_col = reference
     ref_data = unw_reader[:, ref_row, ref_col].reshape(-1, 1, 1)
 
+    if wavelength is not None:
+        # Positive values are motion towards the radar
+        constant = -1 * (wavelength / (4 * np.pi))
+        units = "meters"
+    else:
+        constant = -1
+        units = "radians"
+
     def read_and_solve(
         readers: Sequence[io.StackReader], rows: slice, cols: slice
     ) -> tuple[slice, slice, np.ndarray]:
-        if len(readers) == 2:
+        if len(readers) == 2 and method == "L2":
             unw_reader, cor_reader = readers
             stack = unw_reader[:, rows, cols]
             cor = cor_reader[:, rows, cols]
@@ -742,17 +842,26 @@ def invert_unw_network(
         # TODO: do i want to write residuals too? Do i need
         # to have multiple writers then?
         phases = invert_stack(A, stack, weights)[0]
-        return np.asarray(phases), rows, cols
+        if method.upper() == "L1":
+            phases = invert_stack_l1(A, stack)[0]
+        else:
+            phases = invert_stack(A, stack, weights)[0]
+        # Convert to meters, with LOS convention:
+        return constant * np.asarray(phases), rows, cols
 
     if cor_file_list is not None:
         cor_reader = io.VRTStack(
             file_list=cor_file_list, outfile=cor_vrt_name, skip_size_check=True
         )
         readers = [unw_reader, cor_reader]
+        logger.info("Using correlation to weight unw inversion")
     else:
         readers = [unw_reader]
+        logger.info("Using unweighted unw inversion")
 
-    writer = io.BackgroundStackWriter(out_paths, like_filename=unw_file_list[0])
+    writer = io.BackgroundStackWriter(
+        out_paths, like_filename=unw_file_list[0], units=units
+    )
 
     io.process_blocks(
         readers=readers,
@@ -762,10 +871,6 @@ def invert_unw_network(
         num_threads=num_threads,
     )
     writer.notify_finished()
-
-    if add_overviews:
-        logger.info("Creating overviews for unwrapped images")
-        create_overviews(out_paths, image_type=ImageType.UNWRAPPED)
 
     logger.info("Completed invert_unw_network")
     return out_paths
@@ -799,8 +904,8 @@ def select_reference_point(
     output_dir: Path,
     condition_func: Callable[[ArrayLike], tuple[int, ...]] = argmin_index,
     ccl_file_list: Sequence[PathOrStr] | None = None,
-    block_shape: tuple[int, int] = (512, 512),
-    num_threads: int = 5,
+    block_shape: tuple[int, int] = (256, 256),
+    num_threads: int = 4,
 ) -> ReferencePoint:
     """Automatically select a reference point for a stack of unwrapped interferograms.
 
@@ -823,9 +928,9 @@ def select_reference_point(
         for example numpy.argmin which finds the pixel with lowest value
     ccl_file_list : Sequence[PathOrStr]
         List of connected component label phase files.
-    block_shape: tuple[int, int]
+    block_shape : tuple[int, int]
         Size of blocks to read from while processing `ccl_file_list`
-        Default = (512, 512)
+        Default = (256, 256)
     num_threads: int
         Number of parallel blocks to process.
         Default = 5
@@ -873,7 +978,7 @@ def select_reference_point(
 
     # Cast to `int` to avoid having `np.int64` types
     ref_point = ReferencePoint(int(ref_row), int(ref_col))
-    logger.info(f"Saving {ref_point!r} to from existing {output_file}")
+    logger.info(f"Saving {ref_point!r} to {output_file}")
     _write_reference_point(output_file=output_file, ref_point=ref_point)
     return ref_point
 
@@ -889,8 +994,8 @@ def _read_reference_point(output_file: Path):
 def _get_largest_conncomp_mask(
     output_dir: Path,
     ccl_file_list: Sequence[PathOrStr] | None = None,
-    block_shape: tuple[int, int] = (512, 512),
-    num_threads: int = 5,
+    block_shape: tuple[int, int] = (256, 256),
+    num_threads: int = 4,
 ) -> np.ndarray:
     def intersect_conncomp(arr: np.ma.MaskedArray, axis: int) -> np.ndarray:
         # Track where input is nodata
@@ -935,3 +1040,92 @@ def _get_largest_conncomp_mask(
     # Create a mask of pixels with this label
     isin_largest_conncomp = label == largest_idx
     return isin_largest_conncomp
+
+
+@jit
+def invert_stack_l1(A: ArrayLike, dphi: ArrayLike) -> Array:
+    n_ifgs, n_rows, n_cols = dphi.shape
+
+    # vectorize the solve function to work on 2D and 3D arrays
+    # We are not vectorizing over the A matrix, only the dphi vector
+    # Solve 2d shapes: (nrows, n_ifgs) -> (nrows, n_sar_dates)
+    invert_2d = vmap(irls, in_axes=(None, 1), out_axes=(1, 1))
+    # Solve 3d shapes: (nrows, ncols, n_ifgs) -> (nrows, ncols, n_sar_dates)
+    invert_3d = vmap(invert_2d, in_axes=(None, 2), out_axes=(2, 2))
+    phase, residual_vecs = invert_3d(A, dphi)
+    # Reshape the residuals to be 2D
+    residuals = jnp.sum(residual_vecs, axis=0)
+
+    return phase, residuals
+
+
+@jit
+def irls(
+    A: jnp.ndarray,
+    b: jnp.ndarray,
+    p: float = 1,
+    max_iters: int = 50,
+    tol: float = 1e-5,
+) -> tuple[jnp.ndarray, float]:
+    """Minimize |Ax - b|_1 using Iteratively reweighted least squares (IRLS).
+
+    See https://en.wikipedia.org/wiki/Iteratively_reweighted_least_squares for
+    algorithm description
+
+    Parameters
+    ----------
+    A : jnp.ndarray
+        The matrix A in the equation Ax = b.
+    b : jnp.ndarray
+        The vector b in the equation Ax = b.
+    p : float, optional
+        The power parameter for the weights, by default 1.
+    max_iters : int, optional
+        The maximum number of iterations, by default 50.
+    tol : float, optional
+        The tolerance for convergence, by default 1e-5.
+
+    Returns
+    -------
+    tuple[jnp.ndarray, float]
+        A tuple containing:
+    x : Array
+        The solution vector.
+    residual
+        The final residual |Ax - b|_1
+
+    """
+    eps = jnp.sqrt(jnp.finfo(jnp.float32).eps)
+
+    def cond_fun(val):
+        i, x_current, x_prev, prev_residual_vec = val
+        # Find the difference in L1 objective between iterations
+        objective = jnp.sum(jnp.abs(b - A @ x_current))
+        prev_objective = jnp.sum(prev_residual_vec)
+        # if it's small, not worth more iterations
+        change = jnp.abs(objective - prev_objective)
+        # Keep going while this condition is true:
+        return (i < max_iters) & (change > tol)
+
+    def body_fun(val):
+        i, x, _, _ = val
+        # Re-weight the least squares system by the L1 residuals
+        residual_vec = jnp.abs(b - A @ x)
+        # The matrix version looks like
+        # W = jnp.diag(residual_vec ** (p - 2))
+        # new_x = jnp.linalg.solve(A.T @ W @ A, A.T @ W @ b)
+        # We use element-wise mult to keep memory lower:
+        w = (eps + residual_vec) ** (p - 2)  # Add a small epsilon to avoid divide by 0
+        AtW = A.T * w
+        new_x = jnp.linalg.solve(AtW @ A, AtW @ b)
+        return i + 1, new_x, x, residual_vec
+
+    M, N = A.shape
+    x = jnp.zeros(N, dtype=jnp.float32)
+
+    r0 = jnp.ones((M,), dtype=jnp.float32)
+    _num_iters, x, _, residual_vec = lax.while_loop(
+        cond_fun, body_fun, (0, x, x + 1, r0)
+    )
+
+    return x, residual_vec

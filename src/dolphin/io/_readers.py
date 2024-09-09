@@ -712,7 +712,7 @@ class VRTStack(StackReader):
                 )
                 raise FileExistsError(msg)
             else:
-                logger.info(f"Overwriting {outfile}")
+                logger.debug(f"Overwriting {outfile}")
 
         # files: list[Filename] = [Path(f) for f in file_list]
         self._use_abs_path = use_abs_path

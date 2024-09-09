@@ -58,7 +58,7 @@ def multiscale_unwrap(
     zero_where_masked : bool, optional
         Set wrapped phase/correlation to 0 where mask is 0 before unwrapping.
         If not mask is provided, this is ignored.
-        By default True.
+        By default False.
     unwrap_method : UnwrapMethod or str, optional, default = "snaphu"
         Choice of unwrapping algorithm to use.
         Choices: {"snaphu", "icu", "phass"}

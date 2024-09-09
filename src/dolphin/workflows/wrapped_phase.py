@@ -90,6 +90,7 @@ def run(
     mask_filename = _get_mask(
         output_dir=cfg.work_directory,
         output_bounds=cfg.output_options.bounds,
+        output_bounds_epsg=cfg.output_options.bounds_epsg,
         like_filename=vrt_stack.outfile,
         cslc_file_list=non_compressed_slcs,
     )
@@ -445,6 +446,7 @@ def _get_input_dates(
 def _get_mask(
     output_dir: Path,
     output_bounds: Bbox | tuple[float, float, float, float] | None,
+    output_bounds_epsg: int,
     like_filename: Filename,
     cslc_file_list: Sequence[Filename],
 ) -> Path | None:
@@ -468,6 +470,7 @@ def _get_mask(
         bounds_mask_filename = output_dir / "bounds_mask.tif"
         masking.create_bounds_mask(
             bounds=output_bounds,
+            bounds_epsg=output_bounds_epsg,
             output_filename=bounds_mask_filename,
             like_filename=like_filename,
         )
@@ -475,11 +478,12 @@ def _get_mask(
         # Then combine with the nodata mask
         if nodata_mask_file is not None:
             combined_mask_filename = output_dir / "combined_mask.tif"
-            masking.combine_mask_files(
-                mask_files=[bounds_mask_filename, nodata_mask_file],
-                output_file=combined_mask_filename,
-                output_convention=masking.MaskConvention.ZERO_IS_NODATA,
-            )
+            if not combined_mask_filename.exists():
+                masking.combine_mask_files(
+                    mask_files=[bounds_mask_filename, nodata_mask_file],
+                    output_file=combined_mask_filename,
+                    output_convention=masking.MaskConvention.ZERO_IS_NODATA,
+                )
             mask_filename = combined_mask_filename
         else:
             mask_filename = bounds_mask_filename

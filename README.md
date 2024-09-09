@@ -93,6 +93,16 @@ The full set of options is written to the configuration file; you can edit this 
 
 See the [documentation](https://dolphin-insar.readthedocs.io/) for more details.
 
+## Building and running via Docker
+
+`dolphin` can also be run using Docker. You can use the one built on [Github](https://github.com/isce-framework/dolphin/pkgs/container/dolphin), or build it locally using the script
+
+```bash
+./docker/build-docker-image.sh
+```
+
+See `./docker/build-docker-image.sh --help` for more building options.
+
 ## License
 
 This software is licensed under your choice of BSD-3-Clause or Apache-2.0 licenses. See the accompanying LICENSE file for further details.
