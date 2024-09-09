@@ -2,6 +2,7 @@ import multiprocessing as mp
 from concurrent.futures import ProcessPoolExecutor
 from itertools import repeat
 from pathlib import Path
+from typing import Sequence
 
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
@@ -262,7 +263,7 @@ def _filter_and_save(
 
 
 def gaussian_filter_nan(
-    image: ArrayLike, sigma: float, mode="constant", **kwargs
+    image: ArrayLike, sigma: float | Sequence[float], mode="constant", **kwargs
 ) -> np.ndarray:
     """Apply a gaussian filter to an image with NaNs (avoiding all nans).
 
