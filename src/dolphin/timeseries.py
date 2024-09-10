@@ -40,12 +40,13 @@ class ReferencePointError(ValueError):
 def run(
     unwrapped_paths: Sequence[PathOrStr],
     conncomp_paths: Sequence[PathOrStr],
-    corr_paths: Sequence[PathOrStr],
     condition_file: PathOrStr,
     condition: CallFunc,
     output_dir: PathOrStr,
     method: InversionMethod = InversionMethod.L2,
     run_velocity: bool = False,
+    corr_paths: Sequence[PathOrStr] | None = None,
+    weight_velocity_by_corr: bool = False,
     velocity_file: Optional[PathOrStr] = None,
     correlation_threshold: float = 0.2,
     block_shape: tuple[int, int] = (256, 256),
@@ -60,8 +61,6 @@ def run(
     ----------
     unwrapped_paths : Sequence[Path]
         Sequence unwrapped interferograms to invert.
-    corr_paths : Sequence[Path]
-        Sequence interferometric correlation files, one per file in `unwrapped_paths`
     conncomp_paths : Sequence[Path]
         Sequence connected component files, one per file in `unwrapped_paths`
     condition_file: PathOrStr
@@ -79,6 +78,12 @@ def run(
         "L1" minimizes |Ax - b|_1 at each pixel.
     run_velocity : bool
         Whether to run velocity estimation on the inverted phase series
+    corr_paths : Sequence[Path], optional
+        Sequence interferometric correlation files, one per file in `unwrapped_paths`.
+        If not provided, does no weighting by correlation.
+    weight_velocity_by_corr : bool
+        Flag to indicate whether the velocity fitting should use correlation as weights.
+        Default is False.
     velocity_file : Path, Optional
         The output velocity file
     correlation_threshold : float
@@ -171,13 +176,18 @@ def run(
         create_overviews(inverted_phase_paths, image_type=ImageType.UNWRAPPED)
 
     if run_velocity:
+        logger.info("Estimating phase velocity")
+
         #  We can't pass the correlations after an inversion- the numbers don't match
         # TODO:
         # Is there a better weighting then?
-        cor_file_list = (
-            corr_paths if len(corr_paths) == len(inverted_phase_paths) else None
-        )
-        logger.info("Estimating phase velocity")
+        if not weight_velocity_by_corr or corr_paths is None:
+            cor_file_list = None
+        else:
+            cor_file_list = (
+                corr_paths if len(corr_paths) == len(inverted_phase_paths) else None
+            )
+
         if velocity_file is None:
             velocity_file = Path(output_dir) / "velocity.tif"
 
