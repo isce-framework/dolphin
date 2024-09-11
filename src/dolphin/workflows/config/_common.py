@@ -10,6 +10,7 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    NaiveDatetime,
     PrivateAttr,
     field_validator,
     model_validator,
@@ -318,10 +319,12 @@ class OutputOptions(BaseModel, extra="forbid"):
         [4, 8, 16, 32, 64],
         description="List of overview levels to create (if `add_overviews=True`).",
     )
-    extra_reference_date: Optional[datetime] = Field(
+    # Note: we use NaiveDatetime, since other datetime parsing results in Naive
+    # (no TzInfo) datetimes, which can't be compared to datetimes with timezones
+    extra_reference_date: Optional[NaiveDatetime] = Field(
         None,
         description=(
-            "Specify an extra reference datetime. Adding this lets you"
+            "Specify an extra reference datetime in UTC. Adding this lets you"
             " to create and unwrap two single reference networks; the later resets at"
             " the given date (e.g. for a large earthquake event). If passing strings,"
             " formats accepted are YYYY-MM-DD[T]HH:MM[:SS[.ffffff]][Z or [±]HH[:]MM],"
