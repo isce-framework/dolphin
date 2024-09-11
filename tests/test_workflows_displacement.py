@@ -189,6 +189,7 @@ def test_displacement_run_extra_reference_date(opera_slc_files: list[Path], tmpd
             # shape = (4, 128, 128)
             # First one is COMPRESSED_
             output_options={"extra_reference_date": "2022-01-03"},
+            unwrap_options={"unwrap_method": "phass"},
             cslc_file_list=opera_slc_files,
             input_options={"subdataset": "/data/VV"},
             phase_linking={
@@ -198,22 +199,21 @@ def test_displacement_run_extra_reference_date(opera_slc_files: list[Path], tmpd
         paths = displacement.run(cfg)
 
         for slc_paths in paths.comp_slc_dict.values():
-            assert all(p.exists() for p in slc_paths)
-        assert paths.stitched_ps_file.exists()
-        assert all(p.exists() for p in paths.stitched_ifg_paths)
-        assert all(p.exists() for p in paths.stitched_cor_paths)
-        assert paths.stitched_temp_coh_file.exists()
-        assert paths.stitched_ps_file.exists()
-        assert paths.stitched_amp_dispersion_file.exists()
-        assert paths.unwrapped_paths is not None
-        assert paths.conncomp_paths is not None
-        assert paths.timeseries_paths is not None
-        assert all(p.exists() for p in paths.conncomp_paths)
-        assert all(p.exists() for p in paths.unwrapped_paths)
-        assert all(full_suffix(p) == ".unw.tif" for p in paths.unwrapped_paths)
-        assert all(p.exists() for p in paths.conncomp_paths)
-        assert all(p.exists() for p in paths.timeseries_paths)
-        assert all(full_suffix(p) == ".tif" for p in paths.timeseries_paths)
+            # The "base phase" should be 20220103
+            assert slc_paths[0] == "compressed_20220103_20220102_20220104.tif"
 
-        # check the network size
-        assert len(paths.unwrapped_paths) > len(paths.timeseries_paths)
+        # The unwrappd files should have a changeover to the new reference
+        unw_names = [pp.name for pp in paths.unwrapped_paths]
+        assert unw_names == [
+            "20220101_20220102.unw.tif",
+            "20220101_20220103.unw.tif",
+            "20220103_20220104.unw.tif",
+        ]
+
+        # But the timeseries will have inverted the results
+        ts_names = [pp.name for pp in paths.timeseries_paths]
+        assert ts_names == [
+            "20220101_20220102.tif",
+            "20220101_20220103.tif",
+            "20220101_20220104.tif",
+        ]
