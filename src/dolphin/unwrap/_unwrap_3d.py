@@ -152,7 +152,10 @@ def _create_conncomps_from_mask(
     ]
     # Write the first one with geo-metadata
     io.write_arr(
-        arr=conncomp_arr, output_name=conncomp_files[0], nodata=DEFAULT_CCL_NODATA
+        arr=conncomp_arr,
+        like_filename=unw_filenames[0],
+        output_name=conncomp_files[0],
+        nodata=DEFAULT_CCL_NODATA,
     )
     for f in conncomp_files[1:]:
         shutil.copy(conncomp_files[0], f)
