@@ -76,13 +76,20 @@ class PhaseLinkingOptions(BaseModel, extra="forbid"):
         10, description="Size of the ministack for sequential estimator.", gt=1
     )
     max_num_compressed: int = Field(
-        5,
+        100,
         description=(
             "Maximum number of compressed images to use in sequential estimator."
             " If there are more ministacks than this, the earliest CCSLCs will be"
-            " left out of the later stacks."
+            " left out of the later stacks. "
         ),
         gt=0,
+    )
+    output_reference_idx: int = Field(
+        0,
+        description=(
+            "Index of input SLC to use for making phase linked interferograms after"
+            " EVD/EMI."
+        ),
     )
     half_window: HalfWindow = HalfWindow()
     use_evd: bool = Field(
@@ -156,7 +163,6 @@ class InterferogramNetwork(BaseModel, extra="forbid"):
         ),
     )
 
-    # validation
     @model_validator(mode="after")
     def _check_zero_parameters(self) -> InterferogramNetwork:
         ref_idx = self.reference_idx
