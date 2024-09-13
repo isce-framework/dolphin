@@ -203,9 +203,7 @@ def run_wrapped_phase_single(
                 strides=strides_tup,
                 use_evd=use_evd,
                 beta=beta,
-                # TODO: Do we really need to pass in `reference_idx` to here?
-                # We can (and do) re-reference, if needed, from the result
-                # reference_idx=reference_idx,
+                reference_idx=reference_idx,
                 nodata_mask=nodata_mask[in_rows, in_cols],
                 ps_mask=ps_mask[in_rows, in_cols],
                 neighbor_arrays=neighbor_arrays,

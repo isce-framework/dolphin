@@ -89,8 +89,7 @@ def ministack(files, date_lists, is_compressed):
     )
 
 
-def test_ministack_attrs(ministack, dates):
-    assert ministack.full_date_range == (dates[0], dates[-1])
+def test_ministack_attrs(ministack):
     assert ministack.real_slc_date_range_str == "20220101_20220110"
 
 

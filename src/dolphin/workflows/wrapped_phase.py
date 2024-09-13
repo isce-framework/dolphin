@@ -9,7 +9,7 @@ from typing import Optional, Sequence, cast
 import numpy as np
 from opera_utils import get_dates, make_nodata_mask
 
-from dolphin import Bbox, Filename, interferogram, masking, ps, stack
+from dolphin import Bbox, Filename, interferogram, masking, ps
 from dolphin._log import log_runtime, setup_logging
 from dolphin.io import VRTStack
 
@@ -75,12 +75,6 @@ def run(
 
     # Mark any files beginning with "compressed" as compressed
     is_compressed = ["compressed" in str(f).lower() for f in input_file_list]
-    input_dates = _get_input_dates(
-        input_file_list, is_compressed, cfg.input_options.cslc_date_fmt
-    )
-    reference_date, reference_idx = _get_reference_date_idx(
-        input_file_list, is_compressed, input_dates
-    )
 
     non_compressed_slcs = [
         f for f, is_comp in zip(input_file_list, is_compressed) if not is_comp
@@ -140,6 +134,14 @@ def run(
     pl_path = cfg.phase_linking._directory
     pl_path.mkdir(parents=True, exist_ok=True)
 
+    input_dates = _get_input_dates(
+        input_file_list, is_compressed, cfg.input_options.cslc_date_fmt
+    )
+
+    # reference_date, reference_idx = _get_reference_date_idx(
+    #     input_file_list, is_compressed, input_dates
+    # )
+
     extra_reference_date = cfg.output_options.extra_reference_date
     if extra_reference_date:
         new_compressed_slc_reference_idx = _get_nearest_idx(
@@ -148,18 +150,15 @@ def run(
     else:
         new_compressed_slc_reference_idx = None
 
-    reference_date, reference_idx = _get_reference_date_idx(
-        input_file_list, is_compressed, input_dates
-    )
-
-    ministack_planner = stack.MiniStackPlanner(
-        file_list=input_file_list,
-        dates=input_dates,
-        is_compressed=is_compressed,
-        output_folder=pl_path,
-        max_num_compressed=cfg.phase_linking.max_num_compressed,
-        reference_idx=reference_idx,
-    )
+    # ministack_planner = stack.MiniStackPlanner(
+    #     file_list=input_file_list,
+    #     dates=input_dates,
+    #     is_compressed=is_compressed,
+    #     output_folder=pl_path,
+    #     max_num_compressed=cfg.phase_linking.max_num_compressed,
+    #     output_reference_idx=cfg.phase_linking.output_reference_idx,
+    #     # output_reference_idx= reference_idx=cfg.phase_linking.reference_idx,
+    # )
 
     phase_linked_slcs = sorted(pl_path.glob("2*.tif"))
     if len(phase_linked_slcs) > 0:
@@ -178,7 +177,8 @@ def run(
         (phase_linked_slcs, comp_slc_list, temp_coh_file, shp_count_file) = (
             sequential.run_wrapped_phase_sequential(
                 slc_vrt_file=vrt_stack.outfile,
-                ministack_planner=ministack_planner,
+                # ministack_planner=ministack_planner,
+                output_dir=pl_path,
                 ministack_size=cfg.phase_linking.ministack_size,
                 manual_reference_idx=new_compressed_slc_reference_idx,
                 half_window=cfg.phase_linking.half_window.model_dump(),
@@ -192,6 +192,7 @@ def run(
                 shp_method=cfg.phase_linking.shp_method,
                 shp_alpha=cfg.phase_linking.shp_alpha,
                 shp_nslc=shp_nslc,
+                cslc_date_fmt=cfg.input_options.cslc_date_fmt,
                 block_shape=cfg.worker_settings.block_shape,
                 baseline_lag=cfg.phase_linking.baseline_lag,
                 **kwargs,
@@ -225,13 +226,18 @@ def run(
 
     logger.info(f"Creating virtual interferograms from {len(phase_linked_slcs)} files")
     # TODO: with manual indexes, this may be split into 2 and redone
+    reference_date = [
+        get_dates(f, fmt=cfg.input_options.cslc_date_fmt) for f in input_file_list
+    ][cfg.phase_linking.output_reference_idx]
+
     ifg_file_list: list[Path] = []
     ifg_file_list = create_ifgs(
         interferogram_network=ifg_network,
         phase_linked_slcs=phase_linked_slcs,
         contained_compressed_slcs=any(is_compressed),
         reference_date=reference_date,
-        extra_reference_date=extra_reference_date,
+        extra_reference_date=cfg.output_options.extra_reference_date,
+        # extra_reference_date=extra_reference_date,
     )
     return (
         ifg_file_list,
@@ -349,11 +355,9 @@ def create_ifgs(
             ]
         )
 
-    # If we only want single-reference day-(reference) to day-k interferograms,
-    # these are all we need
-    # XX Fix this hack for later
     if interferogram_network.indexes and interferogram_network.indexes == [(0, -1)]:
         ifg_file_list.append(single_ref_ifgs[-1])
+        # XXX Fix this hack for later
         # # This isn't really what we want here, the logic is different than Network:
         # ifgs = [
         #     (single_ref_ifgs[ref_idx], single_ref_ifgs[sec_idx])
