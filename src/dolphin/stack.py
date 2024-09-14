@@ -120,7 +120,6 @@ class BaseStack(BaseModel):
         yield "file_list", self.file_list
         yield "dates", self.dates
         yield "is_compressed", self.is_compressed
-        yield "reference_date", self.reference_date
         yield "file_date_fmt", self.file_date_fmt
         yield "output_folder", self.output_folder
 
@@ -344,11 +343,18 @@ class MiniStackInfo(BaseStack):
     )
 
     @property
-    def reference_date(self):
+    def output_reference_date(self):
         """Date of the reference phase of the stack."""
         # Note this works for either a length-1 tuple (real SLC), or for
         # the compressed SLC formate (ref, start, end)
         return self.dates[self.output_reference_idx][0]
+
+    @property
+    def compressed_reference_date(self):
+        """Date of the reference phase of the stack."""
+        # Note this works for either a length-1 tuple (real SLC), or for
+        # the compressed SLC formate (ref, start, end)
+        return self.dates[self.compressed_reference_idx][0]
 
     def get_compressed_slc_info(self) -> CompressedSlcInfo:
         """Get the compressed SLC which will come from this ministack.
@@ -366,7 +372,7 @@ class MiniStackInfo(BaseStack):
                 real_slc_dates.append(d)
 
         return CompressedSlcInfo(
-            reference_date=self.reference_date,
+            reference_date=self.compressed_reference_date,
             start_date=real_slc_dates[0][0],
             end_date=real_slc_dates[-1][0],
             real_slc_file_list=real_slc_files,
@@ -444,9 +450,9 @@ class MiniStackPlanner(BaseStack):
                         f"Compressed reference idx manually: {compressed_reference_idx}"
                     )
             else:
-                output_reference_idx = self.output_reference_idx
-                # TODO: To change to Ansari-style ministack references, change this:
                 compressed_reference_idx = self.output_reference_idx
+                # TODO: To change to Ansari-style ministack references, change this
+                # so that a new `output_reference_idx` gets made
 
             # Make the current ministack output folder using the start/end dates
             new_date_str = format_dates(
@@ -457,7 +463,7 @@ class MiniStackPlanner(BaseStack):
                 file_list=combined_files,
                 dates=combined_dates,
                 is_compressed=combined_is_compressed,
-                output_reference_idx=output_reference_idx,
+                output_reference_idx=self.output_reference_idx,
                 compressed_reference_idx=compressed_reference_idx,
                 output_folder=cur_output_folder,
             )

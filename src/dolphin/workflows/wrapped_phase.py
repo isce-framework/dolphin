@@ -176,11 +176,10 @@ def run(
         shp_nslc = None
         (phase_linked_slcs, comp_slc_list, temp_coh_file, shp_count_file) = (
             sequential.run_wrapped_phase_sequential(
-                slc_vrt_file=vrt_stack.outfile,
-                # ministack_planner=ministack_planner,
-                output_dir=pl_path,
+                slc_vrt_stack=vrt_stack,
+                output_folder=pl_path,
                 ministack_size=cfg.phase_linking.ministack_size,
-                manual_reference_idx=new_compressed_slc_reference_idx,
+                new_compressed_reference_idx=new_compressed_slc_reference_idx,
                 half_window=cfg.phase_linking.half_window.model_dump(),
                 strides=strides,
                 use_evd=cfg.phase_linking.use_evd,
@@ -227,7 +226,7 @@ def run(
     logger.info(f"Creating virtual interferograms from {len(phase_linked_slcs)} files")
     # TODO: with manual indexes, this may be split into 2 and redone
     reference_date = [
-        get_dates(f, fmt=cfg.input_options.cslc_date_fmt) for f in input_file_list
+        get_dates(f, fmt=cfg.input_options.cslc_date_fmt)[0] for f in input_file_list
     ][cfg.phase_linking.output_reference_idx]
 
     ifg_file_list: list[Path] = []

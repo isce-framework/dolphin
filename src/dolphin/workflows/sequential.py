@@ -82,8 +82,8 @@ def run_wrapped_phase_sequential(
         ministack_size, compressed_idxs=compressed_ref_idxs
     )
 
-    logger.info(f"File range start: {slc_vrt_stack.file_list[0]}")
-    logger.info(f"File range end: {slc_vrt_stack.file_list[-1]}")
+    logger.info(f"File range start: {Path(slc_vrt_stack.file_list[0]).name}")
+    logger.info(f"File range end: {Path(slc_vrt_stack.file_list[-1]).name}")
     logger.info(f"Output folder: {output_folder}")
     logger.info(f"Number of ministacks of size {ministack_size}: {len(ministacks)}")
 
