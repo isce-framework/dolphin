@@ -38,12 +38,11 @@ class OutputFile:
 @atomic_output(output_arg="output_folder", is_dir=True)
 def run_wrapped_phase_single(
     *,
-    slc_vrt_file: Filename,
+    vrt_stack: VRTStack,
     ministack: MiniStackInfo,
     output_folder: Filename,
     half_window: dict,
     strides: Optional[dict] = None,
-    reference_idx: int = 0,
     beta: float = 0.00,
     use_evd: bool = False,
     mask_file: Optional[Filename] = None,
@@ -61,24 +60,24 @@ def run_wrapped_phase_single(
 
     Output files will all be placed in the provided `output_folder`.
     """
-    # TODO: extract common stuff between here and sequential
     if strides is None:
         strides = {"x": 1, "y": 1}
+    # TODO: extract common stuff between here and sequential
     strides_tup = Strides(y=strides["y"], x=strides["x"])
     half_window_tup = HalfWindow(y=half_window["y"], x=half_window["x"])
     output_folder = Path(output_folder)
-    vrt = VRTStack.from_vrt_file(slc_vrt_file)
     input_slc_files = ministack.file_list
-    assert len(input_slc_files) == vrt.shape[0]
+    if len(input_slc_files) != vrt_stack.shape[0]:
+        raise ValueError(f"{len(ministack.file_list) = }, but {vrt_stack.shape = }")
 
     # If we are using a different number of SLCs for the amplitude data,
     # we should note that for the SHP finding algorithms
     if shp_nslc is None:
         shp_nslc = len(input_slc_files)
 
-    logger.info(f"{vrt}: from {ministack.dates[0]} {ministack.file_list[-1]}")
+    logger.info(f"{vrt_stack}: from {ministack.dates[0]} {ministack.file_list[-1]}")
 
-    nrows, ncols = vrt.shape[-2:]
+    nrows, ncols = vrt_stack.shape[-2:]
 
     nodata_mask = _get_nodata_mask(mask_file, nrows, ncols)
     ps_mask = _get_ps_mask(ps_mask_file, nrows, ncols)
@@ -101,14 +100,14 @@ def run_wrapped_phase_single(
     # Create the background writer for this ministack
     writer = io.BackgroundBlockWriter()
 
-    logger.info(f"Total stack size (in pixels): {vrt.shape}")
+    logger.info(f"Total stack size (in pixels): {vrt_stack.shape}")
     # Set up the output folder with empty files to write into
     phase_linked_slc_files = setup_output_folder(
         ministack=ministack,
         driver="GTiff",
         strides=strides,
         output_folder=output_folder,
-        like_filename=vrt.outfile,
+        like_filename=vrt_stack.outfile,
         nodata=0,
     )
 
@@ -131,7 +130,7 @@ def run_wrapped_phase_single(
     for op in output_files:
         io.write_arr(
             arr=None,
-            like_filename=vrt.outfile,
+            like_filename=vrt_stack.outfile,
             output_name=op.filename,
             dtype=op.dtype,
             strides=op.strides,
@@ -147,7 +146,7 @@ def run_wrapped_phase_single(
         half_window=half_window_tup,
     )
     # Set up the background loader
-    loader = EagerLoader(reader=vrt, block_shape=block_shape)
+    loader = EagerLoader(reader=vrt_stack, block_shape=block_shape)
     # Queue all input slices, skip ones that are all nodata
     blocks = []
     # Queue all input slices, skip ones that are all nodata
@@ -190,8 +189,6 @@ def run_wrapped_phase_single(
             amp_stack=amp_stack,
             method=shp_method,
         )
-        # Run the phase linking process on the current ministack
-        reference_idx = max(0, first_real_slc_idx - 1)
         try:
             pl_output = run_phase_linking(
                 cur_data,
@@ -199,7 +196,7 @@ def run_wrapped_phase_single(
                 strides=strides_tup,
                 use_evd=use_evd,
                 beta=beta,
-                reference_idx=reference_idx,
+                reference_idx=ministack.output_reference_idx,
                 nodata_mask=nodata_mask[in_rows, in_cols],
                 ps_mask=ps_mask[in_rows, in_cols],
                 neighbor_arrays=neighbor_arrays,
@@ -244,6 +241,7 @@ def run_wrapped_phase_single(
             cur_data[first_real_slc_idx:, in_trim_rows, in_trim_cols],
             pl_output.cpx_phase[first_real_slc_idx:, out_trim_rows, out_trim_cols],
             slc_mean=cur_data_mean,
+            reference_idx=ministack.compressed_reference_idx,
         )
         # TODO: truncate
 
@@ -288,7 +286,7 @@ def run_wrapped_phase_single(
     # Block until all the writers for this ministack have finished
     logger.info(f"Waiting to write {writer.num_queued} blocks of data.")
     writer.notify_finished()
-    logger.info(f"Finished ministack of size {vrt.shape}.")
+    logger.info(f"Finished ministack of size {vrt_stack.shape}.")
 
     logger.info("Repacking for more compression")
     io.repack_rasters(phase_linked_slc_files, keep_bits=12)
@@ -386,9 +384,9 @@ def setup_output_folder(
         strides = {"y": 1, "x": 1}
     if output_folder is None:
         output_folder = ministack.output_folder
-    # Note: DONT use the ministack.output_folder here, since that will
-    # be the tempdir made by @atomic_output
-    # # output_folder = Path(ministack.output_folder)
+    # Note: during the workflow, the ministack.output_folder is different than
+    # the `run_wrapped_phase_single` argument `output_folder`.
+    # The latter is the tempdir made by @atomic_output
     output_folder.mkdir(exist_ok=True, parents=True)
 
     start_idx = ministack.first_real_slc_idx
