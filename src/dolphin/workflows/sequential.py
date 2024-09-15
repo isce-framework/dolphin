@@ -73,13 +73,8 @@ def run_wrapped_phase_sequential(
         max_num_compressed=max_num_compressed,
         output_reference_idx=output_reference_idx,
     )
-    compressed_ref_idxs = (
-        [new_compressed_reference_idx]
-        if new_compressed_reference_idx is not None
-        else []
-    )
     ministacks = ministack_planner.plan(
-        ministack_size, compressed_idxs=compressed_ref_idxs
+        ministack_size, compressed_idx=new_compressed_reference_idx
     )
 
     logger.info(f"File range start: {Path(slc_vrt_stack.file_list[0]).name}")

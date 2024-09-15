@@ -393,22 +393,27 @@ class MiniStackPlanner(BaseStack):
     )
 
     def plan(
-        self, ministack_size: int, compressed_idxs: Sequence[int] | None = None
+        self, ministack_size: int, compressed_idx: int | None = None
     ) -> list[MiniStackInfo]:
         """Create a list of ministacks to be processed."""
         if ministack_size < 2:
             msg = "Cannot create ministacks with size < 2"
             raise ValueError(msg)
 
+        # For now, only allow `compressed_idx` when doing a single batch.
+        # The logic is more complicated for multiple `compressed_idx`s, and
+        # it's unclear who would need that
+        if compressed_idx is not None and ministack_size < len(self.file_list):
+            raise ValueError(
+                "Cannot set `compressed_idx` when creating multiple ministacks."
+            )
+
         output_ministacks: list[MiniStackInfo] = []
-        compressed_idx_list = sorted(compressed_idxs or [])
 
         # Start of with any compressed SLCs that are passed in
         compressed_slc_infos: list[CompressedSlcInfo] = []
         for f in self.compressed_slc_file_list:
             # TODO: will we ever actually need to read the old metadata here?
-            # # Note: these must actually exist to be used!
-            # compressed_slc_infos.append(CompressedSlcInfo.from_file_metadata(f))
             compressed_slc_infos.append(CompressedSlcInfo.from_filename(f))
 
         # Solve each ministack using current chunk (and the previous compressed SLCs)
@@ -437,28 +442,19 @@ class MiniStackPlanner(BaseStack):
                 self.is_compressed[cur_slice]
             )
 
-            if compressed_idx_list:
-                # Check if we are at the next manual index to use:
-                cur_end_idx = cur_slice.stop
-                if cur_end_idx > compressed_idx_list[0]:
-                    # # Get the index as *relative* to the current slice of *real* SLCs
-                    # compressed_reference_idx = (
-                    #     compressed_idx_list.pop(0) - cur_slice.start + num_ccslc
-                    # )
-                    compressed_reference_idx = compressed_idx_list.pop(0)
-                    logger.debug(
-                        f"Compressed reference idx manually: {compressed_reference_idx}"
-                    )
-            else:
-                compressed_reference_idx = self.output_reference_idx
-                # TODO: To change to Ansari-style ministack references, change this
-                # so that a new `output_reference_idx` gets made
-
             # Make the current ministack output folder using the start/end dates
             new_date_str = format_dates(
                 cur_dates[0][0], cur_dates[-1][-1], fmt=self.file_date_fmt
             )
             cur_output_folder = self.output_folder / new_date_str
+
+            if compressed_idx is None:
+                # TODO: To change to Ansari-style ministack references, change this
+                # so that a new `output_reference_idx` gets made
+                compressed_reference_idx = self.output_reference_idx
+            else:
+                compressed_reference_idx = compressed_idx
+
             cur_ministack = MiniStackInfo(
                 file_list=combined_files,
                 dates=combined_dates,

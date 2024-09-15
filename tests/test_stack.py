@@ -256,8 +256,8 @@ def test_compressed_idx_setting(slc_file_list, slc_date_list, is_compressed):
     expected_ref_date = slc_date_list[8]
 
     # This currently works ONLY for one single ministack planning
-    # (e.g. manually separating minstack runs and re-passeding only CCSLCs)
-    ministacks = ministack_planner.plan(len(slc_file_list), compressed_idxs=[8])
+    # (e.g. manually separating ministack runs and re-passing in CCSLCs)
+    ministacks = ministack_planner.plan(len(slc_file_list), compressed_idx=8)
 
     assert ministacks[0].compressed_reference_date == expected_ref_date
     # But, the output reference date should be the first one (since it was unset)
