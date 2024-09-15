@@ -138,10 +138,6 @@ def run(
         input_file_list, is_compressed, cfg.input_options.cslc_date_fmt
     )
 
-    # reference_date, reference_idx = _get_reference_date_idx(
-    #     input_file_list, is_compressed, input_dates
-    # )
-
     extra_reference_date = cfg.output_options.extra_reference_date
     if extra_reference_date:
         new_compressed_slc_reference_idx = _get_nearest_idx(
@@ -149,16 +145,6 @@ def run(
         )
     else:
         new_compressed_slc_reference_idx = None
-
-    # ministack_planner = stack.MiniStackPlanner(
-    #     file_list=input_file_list,
-    #     dates=input_dates,
-    #     is_compressed=is_compressed,
-    #     output_folder=pl_path,
-    #     max_num_compressed=cfg.phase_linking.max_num_compressed,
-    #     output_reference_idx=cfg.phase_linking.output_reference_idx,
-    #     # output_reference_idx= reference_idx=cfg.phase_linking.reference_idx,
-    # )
 
     phase_linked_slcs = sorted(pl_path.glob("2*.tif"))
     if len(phase_linked_slcs) > 0:
@@ -236,7 +222,6 @@ def run(
         contained_compressed_slcs=any(is_compressed),
         reference_date=reference_date,
         extra_reference_date=cfg.output_options.extra_reference_date,
-        # extra_reference_date=extra_reference_date,
     )
     return (
         ifg_file_list,

@@ -43,8 +43,6 @@ def run_wrapped_phase_single(
     output_folder: Filename,
     half_window: dict,
     strides: Optional[dict] = None,
-    reference_idx: int = 0,
-    compressed_reference_idx: int = 0,
     beta: float = 0.00,
     use_evd: bool = False,
     mask_file: Optional[Filename] = None,
@@ -62,11 +60,6 @@ def run_wrapped_phase_single(
 
     Output files will all be placed in the provided `output_folder`.
     """
-    # Unclear now if we will ever need to pass through the `reference_idx`
-    # For now, make the user explicitly use "compressed_reference_idx"
-    if reference_idx:
-        logger.warning(f"reference_idx set to {reference_idx} will not be used.")
-
     if strides is None:
         strides = {"x": 1, "y": 1}
     # TODO: extract common stuff between here and sequential
@@ -203,7 +196,7 @@ def run_wrapped_phase_single(
                 strides=strides_tup,
                 use_evd=use_evd,
                 beta=beta,
-                reference_idx=reference_idx,
+                reference_idx=ministack.output_reference_idx,
                 nodata_mask=nodata_mask[in_rows, in_cols],
                 ps_mask=ps_mask[in_rows, in_cols],
                 neighbor_arrays=neighbor_arrays,
@@ -248,7 +241,7 @@ def run_wrapped_phase_single(
             cur_data[first_real_slc_idx:, in_trim_rows, in_trim_cols],
             pl_output.cpx_phase[first_real_slc_idx:, out_trim_rows, out_trim_cols],
             slc_mean=cur_data_mean,
-            reference_idx=compressed_reference_idx,
+            reference_idx=ministack.compressed_reference_idx,
         )
         # TODO: truncate
 
@@ -391,9 +384,9 @@ def setup_output_folder(
         strides = {"y": 1, "x": 1}
     if output_folder is None:
         output_folder = ministack.output_folder
-    # Note: DONT use the ministack.output_folder here, since that will
-    # be the tempdir made by @atomic_output
-    # # output_folder = Path(ministack.output_folder)
+    # Note: during the workflow, the ministack.output_folder is different than
+    # the `run_wrapped_phase_single` argument `output_folder`.
+    # The latter is the tempdir made by @atomic_output
     output_folder.mkdir(exist_ok=True, parents=True)
 
     start_idx = ministack.first_real_slc_idx

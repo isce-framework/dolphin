@@ -30,9 +30,7 @@ __all__ = ["run_wrapped_phase_sequential"]
 
 def run_wrapped_phase_sequential(
     *,
-    # slc_vrt_file: Filename,
     slc_vrt_stack: VRTStack,
-    # ministack_planner: MiniStackPlanner,
     output_folder: Path,
     ministack_size: int,
     half_window: dict,
@@ -57,8 +55,6 @@ def run_wrapped_phase_sequential(
     """Estimate wrapped phase using batches of ministacks."""
     if strides is None:
         strides = {"x": 1, "y": 1}
-    # slc_vrt_stack = VRTStack.from_vrt_file(slc_vrt_file)
-    # output_folder = ministack_planner.output_folder
     output_folder.mkdir(parents=True, exist_ok=True)
     input_file_list = slc_vrt_stack.file_list
 
@@ -120,8 +116,6 @@ def run_wrapped_phase_sequential(
                 output_folder=cur_output_folder,
                 half_window=half_window,
                 strides=strides,
-                reference_idx=ministack.output_reference_idx,
-                compressed_reference_idx=ministack.compressed_reference_idx,
                 use_evd=use_evd,
                 beta=beta,
                 mask_file=mask_file,
