@@ -38,7 +38,7 @@ class OutputFile:
 @atomic_output(output_arg="output_folder", is_dir=True)
 def run_wrapped_phase_single(
     *,
-    slc_vrt_file: Filename,
+    vrt_stack: VRTStack,
     ministack: MiniStackInfo,
     output_folder: Filename,
     half_window: dict,
@@ -73,18 +73,18 @@ def run_wrapped_phase_single(
     strides_tup = Strides(y=strides["y"], x=strides["x"])
     half_window_tup = HalfWindow(y=half_window["y"], x=half_window["x"])
     output_folder = Path(output_folder)
-    vrt = VRTStack.from_vrt_file(slc_vrt_file)
     input_slc_files = ministack.file_list
-    assert len(input_slc_files) == vrt.shape[0]
+    if len(input_slc_files) != vrt_stack.shape[0]:
+        raise ValueError(f"{len(ministack.file_list) = }, but {vrt_stack.shape = }")
 
     # If we are using a different number of SLCs for the amplitude data,
     # we should note that for the SHP finding algorithms
     if shp_nslc is None:
         shp_nslc = len(input_slc_files)
 
-    logger.info(f"{vrt}: from {ministack.dates[0]} {ministack.file_list[-1]}")
+    logger.info(f"{vrt_stack}: from {ministack.dates[0]} {ministack.file_list[-1]}")
 
-    nrows, ncols = vrt.shape[-2:]
+    nrows, ncols = vrt_stack.shape[-2:]
 
     nodata_mask = _get_nodata_mask(mask_file, nrows, ncols)
     ps_mask = _get_ps_mask(ps_mask_file, nrows, ncols)
@@ -107,14 +107,14 @@ def run_wrapped_phase_single(
     # Create the background writer for this ministack
     writer = io.BackgroundBlockWriter()
 
-    logger.info(f"Total stack size (in pixels): {vrt.shape}")
+    logger.info(f"Total stack size (in pixels): {vrt_stack.shape}")
     # Set up the output folder with empty files to write into
     phase_linked_slc_files = setup_output_folder(
         ministack=ministack,
         driver="GTiff",
         strides=strides,
         output_folder=output_folder,
-        like_filename=vrt.outfile,
+        like_filename=vrt_stack.outfile,
         nodata=0,
     )
 
@@ -137,7 +137,7 @@ def run_wrapped_phase_single(
     for op in output_files:
         io.write_arr(
             arr=None,
-            like_filename=vrt.outfile,
+            like_filename=vrt_stack.outfile,
             output_name=op.filename,
             dtype=op.dtype,
             strides=op.strides,
@@ -153,7 +153,7 @@ def run_wrapped_phase_single(
         half_window=half_window_tup,
     )
     # Set up the background loader
-    loader = EagerLoader(reader=vrt, block_shape=block_shape)
+    loader = EagerLoader(reader=vrt_stack, block_shape=block_shape)
     # Queue all input slices, skip ones that are all nodata
     blocks = []
     # Queue all input slices, skip ones that are all nodata
@@ -293,7 +293,7 @@ def run_wrapped_phase_single(
     # Block until all the writers for this ministack have finished
     logger.info(f"Waiting to write {writer.num_queued} blocks of data.")
     writer.notify_finished()
-    logger.info(f"Finished ministack of size {vrt.shape}.")
+    logger.info(f"Finished ministack of size {vrt_stack.shape}.")
 
     logger.info("Repacking for more compression")
     io.repack_rasters(phase_linked_slc_files, keep_bits=12)

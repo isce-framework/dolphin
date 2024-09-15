@@ -120,7 +120,7 @@ def run_wrapped_phase_sequential(
             )
 
             run_wrapped_phase_single(
-                slc_vrt_file=cur_vrt,
+                vrt_stack=cur_vrt,
                 ministack=ministack,
                 output_folder=cur_output_folder,
                 half_window=half_window,
