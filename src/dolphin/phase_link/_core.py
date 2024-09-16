@@ -401,10 +401,9 @@ def process_coherence_matrices(
     """
     rows, cols, n, _ = C_arrays.shape
 
+    evd_eig_vals, evd_eig_vecs = eigh_largest_stack(C_arrays * jnp.abs(C_arrays))
     if use_evd:
         # EVD
-        # evd_eig_vals, evd_eig_vecs = eigh_largest_stack(C_arrays)
-        evd_eig_vals, evd_eig_vecs = eigh_largest_stack(C_arrays * jnp.abs(C_arrays))
         eig_vals, eig_vecs = evd_eig_vals, evd_eig_vecs
         estimator = jnp.zeros(eig_vals.shape, dtype=bool)
     else:
@@ -450,7 +449,6 @@ def process_coherence_matrices(
         inv_has_nans_3d = jnp.tile(inv_has_nans[:, :, None], (1, 1, n))
 
         # For EVD, or places where inverting |Gamma| failed: fall back to computing EVD
-        evd_eig_vals, evd_eig_vecs = eigh_largest_stack(C_arrays)
         eig_vecs = lax.select(
             inv_has_nans_3d,
             # Run this on True: EVD, since we failed to invert:
