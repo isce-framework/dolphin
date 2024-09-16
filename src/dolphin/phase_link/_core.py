@@ -403,7 +403,8 @@ def process_coherence_matrices(
 
     if use_evd:
         # EVD
-        evd_eig_vals, evd_eig_vecs = eigh_largest_stack(C_arrays)
+        # evd_eig_vals, evd_eig_vecs = eigh_largest_stack(C_arrays)
+        evd_eig_vals, evd_eig_vecs = eigh_largest_stack(C_arrays * jnp.abs(C_arrays))
         eig_vals, eig_vecs = evd_eig_vals, evd_eig_vecs
         estimator = jnp.zeros(eig_vals.shape, dtype=bool)
     else:
