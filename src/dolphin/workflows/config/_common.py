@@ -352,7 +352,7 @@ class OutputOptions(BaseModel, extra="forbid"):
     @field_validator("bounds_wkt", mode="after")
     @classmethod
     def _read_wkt_file(cls, bounds_wkt: str):
-        if bounds_wkt.endswith(".wkt"):
+        if bounds_wkt and bounds_wkt.endswith(".wkt"):
             return Path(bounds_wkt).read_text()
         return bounds_wkt
 
