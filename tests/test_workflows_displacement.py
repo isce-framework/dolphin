@@ -15,10 +15,7 @@ pytestmark = pytest.mark.filterwarnings(
 )
 
 
-def test_displacement_run_single(
-    opera_slc_files: list[Path],
-    tmpdir,
-):
+def test_displacement_run_single(opera_slc_files: list[Path], tmpdir):
     with tmpdir.as_cwd():
         cfg = config.DisplacementWorkflow(
             cslc_file_list=opera_slc_files,
@@ -183,3 +180,42 @@ def test_separate_workflow_runs(slc_file_list, tmp_path):
     assert len(ifgs3_b) == 10
     # Names should be the same as the previous run
     assert [f.name for f in ifgs3_b] == [f.name for f in ifgs3]
+
+
+def test_displacement_run_extra_reference_date(opera_slc_files: list[Path], tmpdir):
+    with tmpdir.as_cwd():
+        cfg = config.DisplacementWorkflow(
+            # start_date = 20220101
+            # shape = (4, 128, 128)
+            # First one is COMPRESSED_
+            output_options={"extra_reference_date": "2022-01-03"},
+            unwrap_options={"unwrap_method": "phass"},
+            cslc_file_list=opera_slc_files,
+            input_options={"subdataset": "/data/VV"},
+            phase_linking={
+                "ministack_size": 4,
+            },
+        )
+        paths = displacement.run(cfg)
+
+        for slc_paths in paths.comp_slc_dict.values():
+            # The "base phase" should be 20220103
+            assert slc_paths[0].name == "compressed_20220103_20220102_20220104.tif"
+
+        # The unwrappd files should have a changeover to the new reference
+        assert paths.unwrapped_paths is not None
+        unw_names = [pp.name for pp in paths.unwrapped_paths]
+        assert unw_names == [
+            "20220101_20220102.unw.tif",
+            "20220101_20220103.unw.tif",
+            "20220103_20220104.unw.tif",
+        ]
+
+        # But the timeseries will have inverted the results
+        assert paths.timeseries_paths is not None
+        ts_names = [pp.name for pp in paths.timeseries_paths]
+        assert ts_names == [
+            "20220101_20220102.tif",
+            "20220101_20220103.tif",
+            "20220101_20220104.tif",
+        ]

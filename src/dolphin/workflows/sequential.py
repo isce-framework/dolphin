@@ -5,12 +5,14 @@ Initially based on [@Ansari2017SequentialEstimatorEfficient].
 
 from __future__ import annotations
 
+import datetime
 import logging
 from itertools import chain
 from os import fspath
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Sequence
 
+from opera_utils import get_dates
 from osgeo_utils import gdal_calc
 
 from dolphin import io
@@ -28,8 +30,8 @@ __all__ = ["run_wrapped_phase_sequential"]
 
 def run_wrapped_phase_sequential(
     *,
-    slc_vrt_file: Filename,
-    ministack_planner: MiniStackPlanner,
+    slc_vrt_stack: VRTStack,
+    output_folder: Path,
     ministack_size: int,
     half_window: dict,
     strides: Optional[dict] = None,
@@ -42,6 +44,10 @@ def run_wrapped_phase_sequential(
     shp_nslc: Optional[int] = None,
     use_evd: bool = False,
     beta: float = 0.00,
+    max_num_compressed: int = 100,
+    output_reference_idx: int = 0,
+    new_compressed_reference_idx: int | None = None,
+    cslc_date_fmt: str = "%Y%m%d",
     block_shape: tuple[int, int] = (512, 512),
     baseline_lag: Optional[int] = None,
     **tqdm_kwargs,
@@ -49,17 +55,31 @@ def run_wrapped_phase_sequential(
     """Estimate wrapped phase using batches of ministacks."""
     if strides is None:
         strides = {"x": 1, "y": 1}
-    output_folder = ministack_planner.output_folder
     output_folder.mkdir(parents=True, exist_ok=True)
-    ministacks = ministack_planner.plan(ministack_size)
+    input_file_list = slc_vrt_stack.file_list
 
-    v_all = VRTStack.from_vrt_file(slc_vrt_file)
-    logger.info(f"Full file range: {v_all.file_list[0]} to {v_all.file_list[-1]}")
+    is_compressed = ["compressed" in str(f).lower() for f in slc_vrt_stack.file_list]
+    input_dates = _get_input_dates(input_file_list, is_compressed, cslc_date_fmt)
+
+    ministack_planner = MiniStackPlanner(
+        file_list=slc_vrt_stack.file_list,
+        dates=input_dates,
+        is_compressed=is_compressed,
+        output_folder=output_folder,
+        max_num_compressed=max_num_compressed,
+        output_reference_idx=output_reference_idx,
+    )
+    ministacks = ministack_planner.plan(
+        ministack_size, compressed_idx=new_compressed_reference_idx
+    )
+
+    logger.info(f"File range start: {Path(slc_vrt_stack.file_list[0]).name}")
+    logger.info(f"File range end: {Path(slc_vrt_stack.file_list[-1]).name}")
     logger.info(f"Output folder: {output_folder}")
     logger.info(f"Number of ministacks of size {ministack_size}: {len(ministacks)}")
 
     if shp_nslc is None:
-        shp_nslc = v_all.shape[0]
+        shp_nslc = slc_vrt_stack.shape[0]
 
     # list where each item is [output_slc_files] from a ministack
     output_slc_files: list[list] = []
@@ -87,21 +107,15 @@ def run_wrapped_phase_sequential(
                 cur_files,
                 outfile=output_folder / f"{start_end}.vrt",
                 sort_files=False,
-                subdataset=v_all.subdataset,
+                subdataset=slc_vrt_stack.subdataset,
             )
 
-            # Currently: we are always using the first SLC as the reference,
-            # even if this is a compressed SLC.
-            # Will need to change this if we want to accommodate the original
-            # Sequential Estimator+Datum Adjustment method.
-            reference_idx = 0
             run_wrapped_phase_single(
-                slc_vrt_file=cur_vrt,
+                vrt_stack=cur_vrt,
                 ministack=ministack,
                 output_folder=cur_output_folder,
                 half_window=half_window,
                 strides=strides,
-                reference_idx=reference_idx,
                 use_evd=use_evd,
                 beta=beta,
                 mask_file=mask_file,
@@ -181,3 +195,20 @@ def _average_rasters(file_list: list[Path], outfile: Path, output_type: str):
         A=file_list,
         calc="numpy.nanmean(A, axis=0)",
     )
+
+
+def _get_input_dates(
+    input_file_list: Sequence[Filename], is_compressed: Sequence[bool], date_fmt: str
+) -> list[list[datetime.datetime]]:
+    input_dates = [get_dates(f, fmt=date_fmt) for f in input_file_list]
+    # For any that aren't compressed, take the first date.
+    # this is because the official product name of OPERA/Sentinel1 has both
+    # "acquisition_date" ... "generation_date" in the filename
+    # For compressed, we want the first 3 dates: (base phase, start, end)
+    # TODO: this is a bit hacky, perhaps we can make this some input option
+    # so that the user can specify how to get dates from their files (or even
+    # directly pass in dates?)
+    return [
+        dates[:1] if not is_comp else dates[:3]
+        for dates, is_comp in zip(input_dates, is_compressed)
+    ]
