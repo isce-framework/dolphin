@@ -301,8 +301,17 @@ class OutputOptions(BaseModel, extra="forbid"):
             "e.g. `bbox=[-150.2,65.0,-150.1,65.5]`"
         ),
     )
+    bounds_wkt: Optional[str] = Field(
+        None,
+        description=(
+            "Area of interest as a simple Polygon in well-known-text (WKT) format."
+        ),
+    )
     bounds_epsg: int = Field(
-        4326, description="EPSG code for the `bounds` coordinates, if specified."
+        4326,
+        description=(
+            "EPSG code for the `bounds` or `bounds_wkt` coordinates, if specified."
+        ),
     )
 
     hdf5_creation_options: dict = Field(
@@ -341,7 +350,11 @@ class OutputOptions(BaseModel, extra="forbid"):
     # validators
     @field_validator("bounds", mode="after")
     @classmethod
-    def _convert_bbox(cls, bounds):
+    def _check_and_convert_bounds(cls, bounds, info):
+        bounds_wkt = info.data.get("bounds_wkt")
+        if bounds is not None and bounds_wkt is not None:
+            msg = "Cannot specify both bounds and bounds_wkt."
+            raise ValueError(msg)
         if bounds:
             return Bbox(*bounds)
         return bounds
