@@ -305,6 +305,7 @@ class OutputOptions(BaseModel, extra="forbid"):
         None,
         description=(
             "Area of interest as a simple Polygon in well-known-text (WKT) format."
+            " Can pass a string, or a `.wkt` filename containing the Polygon text."
         ),
     )
     bounds_epsg: int = Field(
@@ -348,6 +349,13 @@ class OutputOptions(BaseModel, extra="forbid"):
     )
 
     # validators
+    @field_validator("bounds_wkt", mode="after")
+    @classmethod
+    def _read_wkt_file(cls, bounds_wkt: str):
+        if bounds_wkt.endswith(".wkt"):
+            return Path(bounds_wkt).read_text()
+        return bounds_wkt
+
     @field_validator("bounds", mode="after")
     @classmethod
     def _check_and_convert_bounds(cls, bounds, info):
