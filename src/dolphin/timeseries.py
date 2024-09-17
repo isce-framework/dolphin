@@ -6,6 +6,7 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Callable, Optional, Protocol, Sequence, TypeVar
 
+import jax
 import jax.numpy as jnp
 import numpy as np
 from jax import Array, jit, lax, vmap
@@ -811,6 +812,7 @@ def invert_unw_network(
     if all(p.exists() for p in out_paths):
         logger.info("All output files already exist, skipping inversion")
         return out_paths
+    logger.info(f"Inverting network using {method.upper()}-norm minimization")
 
     A = get_incidence_matrix(ifg_pairs=ifg_tuples, sar_idxs=sar_dates)
 
@@ -1052,35 +1054,26 @@ def _get_largest_conncomp_mask(
     return isin_largest_conncomp
 
 
-@jit
-def invert_stack_l1(A: ArrayLike, dphi: ArrayLike) -> Array:
-    n_ifgs, n_rows, n_cols = dphi.shape
-
-    # vectorize the solve function to work on 2D and 3D arrays
-    # We are not vectorizing over the A matrix, only the dphi vector
-    # Solve 2d shapes: (nrows, n_ifgs) -> (nrows, n_sar_dates)
-    invert_2d = vmap(irls, in_axes=(None, 1), out_axes=(1, 1))
-    # Solve 3d shapes: (nrows, ncols, n_ifgs) -> (nrows, ncols, n_sar_dates)
-    invert_3d = vmap(invert_2d, in_axes=(None, 2), out_axes=(2, 2))
-    phase, residual_vecs = invert_3d(A, dphi)
-    # Reshape the residuals to be 2D
-    residuals = jnp.sum(residual_vecs, axis=0)
-
-    return phase, residuals
+@jax.jit
+def _shrinkage(a: jnp.ndarray, kappa: float) -> jnp.ndarray:
+    """Apply the shrinkage operator element-wise."""
+    return jnp.maximum(0, a - kappa) - jnp.maximum(0, -a - kappa)
 
 
-@jit
-def irls(
+@jax.jit
+def least_absolute_deviations(
     A: jnp.ndarray,
     b: jnp.ndarray,
-    p: float = 1,
-    max_iters: int = 50,
-    tol: float = 1e-5,
-) -> tuple[jnp.ndarray, float]:
-    """Minimize |Ax - b|_1 using Iteratively reweighted least squares (IRLS).
+    R: jnp.ndarray,
+    rho: float = 0.4,
+    alpha: float = 1.0,
+    max_iter: int = 20,
+) -> jnp.ndarray:
+    """Solve Least Absolute Deviations (LAD) via ADMM.
 
-    See https://en.wikipedia.org/wiki/Iteratively_reweighted_least_squares for
-    algorithm description
+    Solves the following problem via ADMM:
+
+        minimize ||Ax - b||_1
 
     Parameters
     ----------
@@ -1088,54 +1081,63 @@ def irls(
         The matrix A in the equation Ax = b.
     b : jnp.ndarray
         The vector b in the equation Ax = b.
-    p : float, optional
-        The power parameter for the weights, by default 1.
-    max_iters : int, optional
-        The maximum number of iterations, by default 50.
-    tol : float, optional
-        The tolerance for convergence, by default 1e-5.
+    R : jnp.ndarray
+        Precomputed lower-triangular Cholesky factor of A^T A.
+    rho : float, optional
+        The augmented Lagrangian parameter
+        By default 0.4.
+    alpha : float, optional
+        The over-relaxation parameter (typical values are between 1.0 and 1.8)
+        By default 1.0.
+    max_iter : int, optional
+        The maximum number of iterations, by default 15.
 
     Returns
     -------
-    tuple[jnp.ndarray, float]
-        A tuple containing:
-    x : Array
-        The solution vector.
-    residual
-        The final residual |Ax - b|_1
+    jnp.ndarray
+        The solution vector x.
 
     """
-    eps = jnp.sqrt(jnp.finfo(jnp.float32).eps)
+    m, n = A.shape
+    x0 = jnp.zeros(n)
+    z0 = jnp.zeros(m)
+    u0 = jnp.zeros(m)
 
-    def cond_fun(val):
-        i, x_current, x_prev, prev_residual_vec = val
-        # Find the difference in L1 objective between iterations
-        objective = jnp.sum(jnp.abs(b - A @ x_current))
-        prev_objective = jnp.sum(prev_residual_vec)
-        # if it's small, not worth more iterations
-        change = jnp.abs(objective - prev_objective)
-        # Keep going while this condition is true:
-        return (i < max_iters) & (change > tol)
+    def body_fun(_i, state):
+        x, z, z_old, u = state
+        # x-update
+        q = A.T @ (b + z - u)
+        x = jax.scipy.linalg.cho_solve((R, True), q)
 
-    def body_fun(val):
-        i, x, _, _ = val
-        # Re-weight the least squares system by the L1 residuals
-        residual_vec = jnp.abs(b - A @ x)
-        # The matrix version looks like
-        # W = jnp.diag(residual_vec ** (p - 2))
-        # new_x = jnp.linalg.solve(A.T @ W @ A, A.T @ W @ b)
-        # We use element-wise mult to keep memory lower:
-        w = (eps + residual_vec) ** (p - 2)  # Add a small epsilon to avoid divide by 0
-        AtW = A.T * w
-        new_x = jnp.linalg.solve(AtW @ A, AtW @ b)
-        return i + 1, new_x, x, residual_vec
+        # z-update with relaxation
+        Ax_hat = alpha * (A @ x) + (1 - alpha) * (z_old + b)
+        z_new = _shrinkage(Ax_hat - b + u, 1 / rho)
 
-    M, N = A.shape
-    x = jnp.zeros(N, dtype=jnp.float32)
+        # u-update
+        u = u + Ax_hat - z_new - b
 
-    r0 = jnp.ones((M,), dtype=jnp.float32)
-    _num_iters, x, _, residual_vec = lax.while_loop(
-        cond_fun, body_fun, (0, x, x + 1, r0)
+        return x, z_new, z, u
+
+    x_final, _, _, _ = lax.fori_loop(0, max_iter, body_fun, (x0, z0, z0, u0))
+    residual = jnp.sum(jnp.abs(b - A @ x_final))
+    return x_final, residual
+
+
+@jit
+def invert_stack_l1(A: ArrayLike, dphi: ArrayLike) -> Array:
+    n_ifgs, n_rows, n_cols = dphi.shape
+    R = jax.scipy.linalg.cholesky(A.T @ A, lower=True)
+
+    # vectorize the solve function to work on 2D and 3D arrays
+    # We are not vectorizing over the A matrix, only the dphi vector
+    # Solve 2d shapes: (nrows, n_ifgs) -> (nrows, n_sar_dates)
+    invert_2d = vmap(
+        least_absolute_deviations, in_axes=(None, 1, None), out_axes=(1, 0)
     )
+    # Solve 3d shapes: (nrows, ncols, n_ifgs) -> (nrows, ncols, n_sar_dates)
+    invert_3d = vmap(invert_2d, in_axes=(None, 2, None), out_axes=(2, 1))
+    phase, residuals = invert_3d(A, dphi, R)
+    # Reshape the residuals to be 2D
+    # residuals = jnp.sum(residual_vecs, axis=0)
 
-    return x, residual_vec
+    return phase, residuals
