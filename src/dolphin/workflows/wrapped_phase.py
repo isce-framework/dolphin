@@ -6,7 +6,6 @@ import time
 from pathlib import Path
 from typing import Optional, Sequence, cast
 
-import numpy as np
 from opera_utils import get_dates, make_nodata_mask
 
 from dolphin import Bbox, Filename, interferogram, masking, ps
@@ -396,22 +395,6 @@ def create_ifgs(
     for p in written_ifgs - requested_ifgs:
         p.unlink()
     return ifg_file_list
-
-
-def _get_reference_date_idx(
-    input_file_list: Sequence[Path],
-    is_compressed: Sequence[bool],
-    input_dates: Sequence[Sequence[datetime.datetime]],
-) -> tuple[datetime.datetime, int]:
-    is_compressed = ["compressed" in str(f).lower() for f in input_file_list]
-    if not is_compressed[0]:
-        return input_dates[0][0], 0
-
-    # Otherwise use the last Compressed SLC as reference
-    reference_idx = np.where(is_compressed)[0][-1]
-    reference_date = input_dates[reference_idx][0]
-
-    return reference_date, reference_idx
 
 
 def _get_input_dates(

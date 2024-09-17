@@ -124,5 +124,7 @@ def show_versions() -> None:
     _print_info_dict(_get_deps_info())
     print("\nSystem:")
     _print_info_dict(_get_sys_info())
+    print("Unwrapping packages:")
+    _print_info_dict(_get_unwrapping_options())
     print("optional GPU info:")
     _print_info_dict(_get_gpu_info())
