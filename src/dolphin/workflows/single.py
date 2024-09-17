@@ -75,7 +75,7 @@ def run_wrapped_phase_single(
     if shp_nslc is None:
         shp_nslc = len(input_slc_files)
 
-    logger.info(f"{vrt_stack}: from {ministack.dates[0]} {ministack.file_list[-1]}")
+    logger.info(f"{vrt_stack}: from {ministack.dates[0]} to {ministack.dates[-1]}")
 
     nrows, ncols = vrt_stack.shape[-2:]
 
