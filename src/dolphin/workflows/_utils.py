@@ -50,7 +50,7 @@ def parse_ionosphere_files(
     ionosphere_files : Sequence[Union[str, Path]]
         List of ionosphere file paths.
     iono_date_fmts: Sequence[str]
-        Format of deates within ionosphere file names to search for.
+        Format of dates within ionosphere file names to search for.
         Default is ["%j0.%y", "%Y%j0000"], which matches the old name
         'jplg2970.16i', and the new name format
         'JPL0OPSFIN_20232540000_01D_02H_GIM.INX' (respectively)
