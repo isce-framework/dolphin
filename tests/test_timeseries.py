@@ -121,7 +121,9 @@ class TestInvert:
         single_ifg_error = 100
         b[0] += single_ifg_error
 
-        x, residuals = timeseries.least_absolute_deviations(A, b)
+        R = np.linalg.cholesky(A.T @ A)
+        x, residual = timeseries.least_absolute_deviations(A, b, R)
+        residuals = np.abs(b - A @ x)
         assert x.shape[0] == len(sar_dates) - 1
         npt.assert_allclose(x, sar_phases[1:, -1, -1], atol=1e-4)
         npt.assert_allclose(residuals[0], single_ifg_error, atol=1e-4)
