@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import shutil
 from enum import Enum
 from pathlib import Path
 from tempfile import NamedTemporaryFile
@@ -41,17 +40,20 @@ class ReferencePointError(ValueError):
 def run(
     unwrapped_paths: Sequence[PathOrStr],
     conncomp_paths: Sequence[PathOrStr],
-    corr_paths: Sequence[PathOrStr],
     condition_file: PathOrStr,
     condition: CallFunc,
     output_dir: PathOrStr,
     method: InversionMethod = InversionMethod.L2,
     run_velocity: bool = False,
+    corr_paths: Sequence[PathOrStr] | None = None,
+    weight_velocity_by_corr: bool = False,
     velocity_file: Optional[PathOrStr] = None,
     correlation_threshold: float = 0.2,
     block_shape: tuple[int, int] = (256, 256),
     num_threads: int = 4,
     reference_point: tuple[int, int] = (-1, -1),
+    wavelength: float | None = None,
+    add_overviews: bool = True,
 ) -> tuple[list[Path], ReferencePoint]:
     """Invert the unwrapped interferograms, estimate timeseries and phase velocity.
 
@@ -59,8 +61,6 @@ def run(
     ----------
     unwrapped_paths : Sequence[Path]
         Sequence unwrapped interferograms to invert.
-    corr_paths : Sequence[Path]
-        Sequence interferometric correlation files, one per file in `unwrapped_paths`
     conncomp_paths : Sequence[Path]
         Sequence connected component files, one per file in `unwrapped_paths`
     condition_file: PathOrStr
@@ -78,6 +78,12 @@ def run(
         "L1" minimizes |Ax - b|_1 at each pixel.
     run_velocity : bool
         Whether to run velocity estimation on the inverted phase series
+    corr_paths : Sequence[Path], optional
+        Sequence interferometric correlation files, one per file in `unwrapped_paths`.
+        If not provided, does no weighting by correlation.
+    weight_velocity_by_corr : bool
+        Flag to indicate whether the velocity fitting should use correlation as weights.
+        Default is False.
     velocity_file : Path, Optional
         The output velocity file
     correlation_threshold : float
@@ -92,6 +98,15 @@ def run(
         Reference point (row, col) used if performing a time series inversion.
         If not provided, a point will be selected from a consistent connected
         component with low amplitude dispersion or high temporal coherence.
+    wavelength : float, optional
+        The wavelength of the radar signal, in meters.
+        If provided, the output rasters are in meters and meters / year for
+        the displacement and velocity rasters.
+        If not provided, the outputs are in radians.
+        See Notes for line of sight convention.
+    add_overviews : bool, optional
+        If True, creates overviews of the new velocity raster.
+        Default is True.
 
     Returns
     -------
@@ -101,6 +116,12 @@ def run(
         NamedTuple of reference (row, column) selected.
         If passed as input, simply returned back as output.
         Otherwise, the result is the auto-selection from `select_reference_point`.
+
+    Notes
+    -----
+    When wavelength is provided, the output rasters are in meters and meters / year,
+    where positive values indicate motion *toward* from the radar (i.e. positive values
+    in both ascending and descending tracks imply uplift).
 
     """
     Path(output_dir).mkdir(exist_ok=True, parents=True)
@@ -120,10 +141,24 @@ def run(
     sar_dates = sorted(set(utils.flatten(ifg_date_pairs)))
     # if we did single-reference interferograms, for `n` sar dates, we will only have
     # `n-1` interferograms. Any more than n-1 ifgs means we need to invert
-    needs_inversion = len(unwrapped_paths) > len(sar_dates) - 1
+    is_single_reference = (len(unwrapped_paths) == len(sar_dates) - 1) and all(
+        pair[0] == ifg_date_pairs[0][0] for pair in ifg_date_pairs
+    )
+
     # check if we even need to invert, or if it was single reference
     inverted_phase_paths: list[Path] = []
-    if needs_inversion:
+    if is_single_reference:
+        logger.info(
+            "Skipping inversion step: only single reference interferograms exist."
+        )
+        # Copy over the unwrapped paths to `timeseries/`
+        inverted_phase_paths = _convert_and_reference(
+            unwrapped_paths,
+            output_dir=output_dir,
+            reference_point=ref_point,
+            wavelength=wavelength,
+        )
+    else:
         logger.info("Selecting a reference point for unwrapped interferograms")
 
         logger.info("Inverting network of %s unwrapped ifgs", len(unwrapped_paths))
@@ -133,32 +168,26 @@ def run(
             output_dir=output_dir,
             block_shape=block_shape,
             num_threads=num_threads,
+            wavelength=wavelength,
             method=method,
         )
-    else:
-        logger.info(
-            "Skipping inversion step: only single reference interferograms exist."
-        )
-        # Copy over the unwrapped paths to `timeseries/`
-        for p in unwrapped_paths:
-            # if it ends in `.unw.tif`, change to just `.tif` for consistency
-            # with the case where we run an inversion
-            cur_name = Path(p).name
-            unw_suffix = full_suffix(p)
-            target_name = str(cur_name).replace(unw_suffix, ".tif")
-            target = Path(output_dir) / target_name
-            if not target.exists():  # Check to prevent overwriting
-                shutil.copy(p, target)
-            inverted_phase_paths.append(target)
+    if add_overviews:
+        logger.info("Creating overviews for timeseries images")
+        create_overviews(inverted_phase_paths, image_type=ImageType.UNWRAPPED)
 
     if run_velocity:
+        logger.info("Estimating phase velocity")
+
         #  We can't pass the correlations after an inversion- the numbers don't match
         # TODO:
         # Is there a better weighting then?
-        cor_file_list = (
-            corr_paths if len(corr_paths) == len(inverted_phase_paths) else None
-        )
-        logger.info("Estimating phase velocity")
+        if not weight_velocity_by_corr or corr_paths is None:
+            cor_file_list = None
+        else:
+            cor_file_list = (
+                corr_paths if len(corr_paths) == len(inverted_phase_paths) else None
+            )
+
         if velocity_file is None:
             velocity_file = Path(output_dir) / "velocity.tif"
 
@@ -173,6 +202,51 @@ def run(
         )
 
     return inverted_phase_paths, ref_point
+
+
+def _convert_and_reference(
+    unwrapped_paths: Sequence[PathOrStr],
+    *,
+    output_dir: PathOrStr,
+    reference_point: ReferencePoint,
+    wavelength: float | None = None,
+) -> list[Path]:
+    if wavelength is not None:
+        # Positive values are motion towards the radar
+        constant = -1 * (wavelength / (4 * np.pi))
+        units = "meters"
+    else:
+        constant = -1
+        units = "radians"
+
+    ref_row, ref_col = reference_point
+    out_paths: list[Path] = []
+    for p in unwrapped_paths:
+        # if it ends in `.unw.tif`, change to just `.tif` for consistency
+        # with the case where we run an inversion
+        cur_name = Path(p).name
+        unw_suffix = full_suffix(p)
+        target_name = str(cur_name).replace(unw_suffix, ".tif")
+        target = Path(output_dir) / target_name
+        out_paths.append(target)
+
+        if target.exists():  # Check to prevent overwriting
+            continue
+
+        arr_radians = io.load_gdal(p)
+        # Reference to the
+        ref_value = arr_radians[ref_row, ref_col]
+        if np.isnan(ref_value):
+            logger.warning(
+                "{ref_point!r} is NaN for {p} . Skipping reference subtraction."
+            )
+        else:
+            arr_radians -= ref_value
+        io.write_arr(
+            arr=arr_radians * constant, output_name=target, units=units, like_filename=p
+        )
+
+    return out_paths
 
 
 def argmin_index(arr: ArrayLike) -> tuple[int, ...]:
@@ -576,7 +650,6 @@ def create_velocity(
     readers = [unw_reader]
     if cor_reader is not None:
         readers.append(cor_reader)
-
     writer = io.BackgroundRasterWriter(output_file, like_filename=unw_file_list[0])
     io.process_blocks(
         readers=readers,
@@ -590,6 +663,8 @@ def create_velocity(
     if add_overviews:
         logger.info("Creating overviews for velocity image")
         create_overviews([output_file])
+    if units := io.get_raster_units(unw_file_list[0]):
+        io.set_raster_units(output_file, units=units)
     logger.info("Completed create_velocity")
 
 
@@ -664,10 +739,10 @@ def invert_unw_network(
     cor_threshold: float = 0.2,
     n_cor_looks: int = 1,
     ifg_date_pairs: Sequence[Sequence[DateOrDatetime]] | None = None,
+    wavelength: float | None = None,
     method: InversionMethod = InversionMethod.L2,
     block_shape: tuple[int, int] = (256, 256),
     num_threads: int = 4,
-    add_overviews: bool = True,
 ) -> list[Path]:
     """Perform pixel-wise inversion of unwrapped network to get phase per date.
 
@@ -681,15 +756,6 @@ def invert_unw_network(
         from all other points when solving.
     output_dir : PathOrStr
         The directory to save the output files
-    ifg_date_pairs : Sequence[Sequence[DateOrDatetime]], optional
-        List of date pairs to use for the inversion. If not provided, will be
-        parsed from filenames in `unw_file_list`.
-    method : str, choices = "L1", "L2"
-        Inversion method to use when solving Ax = b.
-        Default is L2, which uses least squares to solve Ax = b (faster).
-        "L1" minimizes |Ax - b|_1 at each pixel.
-    block_shape : tuple[int, int], optional
-        The shape of the blocks to process in parallel
     cor_file_list : Sequence[PathOrStr], optional
         List of correlation files to use for weighting the inversion
     cor_threshold : float, optional
@@ -699,12 +765,23 @@ def invert_unw_network(
         The number of looks used to form the input correlation data, used
         to convert correlation to phase variance.
         Default is 1.
+    ifg_date_pairs : Sequence[Sequence[DateOrDatetime]], optional
+        List of date pairs to use for the inversion. If not provided, will be
+        parsed from filenames in `unw_file_list`.
+    method : str, choices = "L1", "L2"
+        Inversion method to use when solving Ax = b.
+        Default is L2, which uses least squares to solve Ax = b (faster).
+        "L1" minimizes |Ax - b|_1 at each pixel.
+    wavelength : float, optional
+        The wavelength of the radar signal, in meters.
+        If provided, the output rasters are in meters.
+        If not provided, the outputs are in radians.
+    block_shape : tuple[int, int], optional
+        The shape of the blocks to process in parallel.
+        Default is (256, 256).
     num_threads : int
         The parallel blocks to process at once.
         Default is 4.
-    add_overviews : bool, optional
-        If True, creates overviews of the new unwrapped phase rasters.
-        Default is True.
 
     Returns
     -------
@@ -747,6 +824,14 @@ def invert_unw_network(
     ref_row, ref_col = reference
     ref_data = unw_reader[:, ref_row, ref_col].reshape(-1, 1, 1)
 
+    if wavelength is not None:
+        # Positive values are motion towards the radar
+        constant = -1 * (wavelength / (4 * np.pi))
+        units = "meters"
+    else:
+        constant = -1
+        units = "radians"
+
     def read_and_solve(
         readers: Sequence[io.StackReader], rows: slice, cols: slice
     ) -> tuple[slice, slice, np.ndarray]:
@@ -771,7 +856,8 @@ def invert_unw_network(
             phases = invert_stack_l1(A, stack)[0]
         else:
             phases = invert_stack(A, stack, weights)[0]
-        return np.asarray(phases), rows, cols
+        # Convert to meters, with LOS convention:
+        return constant * np.asarray(phases), rows, cols
 
     if cor_file_list is not None:
         cor_reader = io.VRTStack(
@@ -783,7 +869,9 @@ def invert_unw_network(
         readers = [unw_reader]
         logger.info("Using unweighted unw inversion")
 
-    writer = io.BackgroundStackWriter(out_paths, like_filename=unw_file_list[0])
+    writer = io.BackgroundStackWriter(
+        out_paths, like_filename=unw_file_list[0], units=units
+    )
 
     io.process_blocks(
         readers=readers,
@@ -793,10 +881,6 @@ def invert_unw_network(
         num_threads=num_threads,
     )
     writer.notify_finished()
-
-    if add_overviews:
-        logger.info("Creating overviews for unwrapped images")
-        create_overviews(out_paths, image_type=ImageType.UNWRAPPED)
 
     logger.info("Completed invert_unw_network")
     return out_paths
@@ -904,7 +988,7 @@ def select_reference_point(
 
     # Cast to `int` to avoid having `np.int64` types
     ref_point = ReferencePoint(int(ref_row), int(ref_col))
-    logger.info(f"Saving {ref_point!r} to from existing {output_file}")
+    logger.info(f"Saving {ref_point!r} to {output_file}")
     _write_reference_point(output_file=output_file, ref_point=ref_point)
     return ref_point
 

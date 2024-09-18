@@ -89,8 +89,7 @@ def ministack(files, date_lists, is_compressed):
     )
 
 
-def test_ministack_attrs(ministack, dates):
-    assert ministack.full_date_range == (dates[0], dates[-1])
+def test_ministack_attrs(ministack):
     assert ministack.real_slc_date_range_str == "20220101_20220110"
 
 
@@ -146,7 +145,8 @@ def run_ministack_planner(files, date_lists, is_compressed):
 
         assert ms.output_folder == expected_out_folders[idx]
 
-    assert all(ms.reference_date == datetime(2022, 1, 1) for ms in ms_list)
+    assert all(ms.compressed_reference_date == datetime(2022, 1, 1) for ms in ms_list)
+    assert all(ms.output_reference_date == datetime(2022, 1, 1) for ms in ms_list)
 
 
 def test_ministack_planner_gtiff(files, date_lists, is_compressed):
@@ -241,3 +241,24 @@ def test_hit_max_compressed(slc_file_list, slc_date_list, is_compressed):
     assert len(ministacks[2].file_list) == 5
     assert len(ministacks[3].file_list) == 6
     assert all(len(m.file_list) == 6 for m in ministacks[3:-1])
+
+
+def test_compressed_idx_setting(slc_file_list, slc_date_list, is_compressed):
+    """Check the planning works to set a manually passed compressed index."""
+    is_compressed = [False] * len(slc_file_list)
+    ministack_planner = MiniStackPlanner(
+        file_list=slc_file_list,
+        dates=slc_date_list,
+        is_compressed=is_compressed,
+        output_folder=Path("fake_dir"),
+    )
+    # Check we can get the compressed SLC info
+    expected_ref_date = slc_date_list[8]
+
+    # This currently works ONLY for one single ministack planning
+    # (e.g. manually separating ministack runs and re-passing in CCSLCs)
+    ministacks = ministack_planner.plan(len(slc_file_list), compressed_idx=8)
+
+    assert ministacks[0].compressed_reference_date == expected_ref_date
+    # But, the output reference date should be the first one (since it was unset)
+    assert ministacks[0].output_reference_date == slc_date_list[0]

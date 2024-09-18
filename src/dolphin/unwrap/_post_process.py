@@ -1,7 +1,6 @@
 import numpy as np
 from numba import njit, stencil
 from numpy.typing import ArrayLike
-from scipy.ndimage import gaussian_filter
 
 TWOPI = 2 * np.pi
 
@@ -55,49 +54,6 @@ def rewrap_to_twopi(arr: ArrayLike) -> np.ndarray:
     return np.mod(np.pi + arr, TWOPI) - np.pi
 
 
-def gaussian_filter_nan(
-    image: ArrayLike, sigma: float, mode="constant", **kwargs
-) -> np.ndarray:
-    """Apply a gaussian filter to an image with NaNs (avoiding all nans).
-
-    The scipy.ndimage `gaussian_filter` will make the output all NaNs if
-    any of the pixels in the input that touches the kernel is NaN
-
-    Source:
-    https://stackoverflow.com/a/36307291
-
-    Parameters
-    ----------
-    image : ndarray
-        Image with nans to filter
-    sigma : float
-        Size of filter kernel. passed into `gaussian_filter`
-    mode : str, default = "constant"
-        Boundary mode for `[scipy.ndimage.gaussian_filter][]`
-    **kwargs : Any
-        Passed into `[scipy.ndimage.gaussian_filter][]`
-
-    Returns
-    -------
-    ndarray
-        Filtered version of `image`.
-
-    """
-    if np.sum(np.isnan(image)) == 0:
-        return gaussian_filter(image, sigma=sigma, mode=mode, **kwargs)
-
-    V = image.copy()
-    nan_idxs = np.isnan(image)
-    V[nan_idxs] = 0
-    V_filt = gaussian_filter(V, sigma, **kwargs)
-
-    W = np.ones(image.shape)
-    W[nan_idxs] = 0
-    W_filt = gaussian_filter(W, sigma, **kwargs)
-
-    return V_filt / W_filt
-
-
 def _get_ambiguities(unw: ArrayLike, round_decimals: int = 4) -> np.ndarray:
     mod_2pi_image = np.mod(np.pi + unw, TWOPI) - np.pi
     re_wrapped = np.round(mod_2pi_image, round_decimals)
@@ -107,6 +63,8 @@ def _get_ambiguities(unw: ArrayLike, round_decimals: int = 4) -> np.ndarray:
 def _fill_masked_ambiguities(
     amb_image: ArrayLike, mask: ArrayLike, filter_sigma: int = 60
 ) -> np.ndarray:
+    from dolphin.filtering import gaussian_filter_nan
+
     masked_ambs = amb_image.copy()
     masked_ambs[mask] = np.nan
     ambs_filled = np.round(gaussian_filter_nan(amb_image, filter_sigma))
