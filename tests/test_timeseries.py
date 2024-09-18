@@ -217,7 +217,8 @@ class TestInvert:
         # Check results
         solved_stack = io.RasterStackReader.from_file_list(out_files)[:, :, :]
         sar_phases = data[1]
-        npt.assert_allclose(solved_stack, sar_phases[1:], atol=1e-5)
+        # Account for the flip in sign for LOS convention:
+        npt.assert_allclose(solved_stack, -1 * sar_phases[1:], atol=1e-5)
 
 
 class TestVelocity:

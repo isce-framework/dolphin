@@ -1,12 +1,17 @@
 import logging
+import shutil
 from pathlib import Path
 from typing import Sequence
 
+import numpy as np
 from opera_utils import get_dates
+from scipy import ndimage, signal
 
 from dolphin import io, utils
 from dolphin._types import PathOrStr
 from dolphin.workflows.config import SpurtOptions
+
+from ._constants import CONNCOMP_SUFFIX, DEFAULT_CCL_NODATA, UNW_SUFFIX
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +45,9 @@ def unwrap_spurt(
     if cor_filenames is not None:
         assert len(ifg_filenames) == len(cor_filenames)
     if mask_filename is not None:
+        # TODO: Combine this with the temporal coherence to pass one 0/1 mask
+        # This will still work for spurt, since it runs `> threshold`, which is
+        # always true once we set our desired pixels to 1 and undesired to 0
         _mask = io.load_gdal(mask_filename)
 
     if scratchdir is None:
@@ -83,7 +91,11 @@ def unwrap_spurt(
     # Merge tiles and write output
     unw_filenames = merge_tiles(stack, g_time, gen_settings, mrg_settings)
     # TODO: What can we do for conncomps? Anything? Run snaphu?
-    conncomp_filenames: list[Path] = []
+    conncomp_filenames = _create_conncomps_from_mask(
+        temporal_coherence_file,
+        options.temporal_coherence_threshold,
+        unw_filenames=unw_filenames,
+    )
 
     return unw_filenames, conncomp_filenames
 
@@ -108,3 +120,43 @@ def _map_date_str_to_file(
     # None is special case for reference epoch
     date_str_to_file[first_date] = None
     return date_str_to_file
+
+
+def _create_conncomps_from_mask(
+    temporal_coherence_file: PathOrStr,
+    temporal_coherence_threshold: float,
+    unw_filenames: Sequence[PathOrStr],
+    dilate_by: int = 25,
+) -> list[Path]:
+    arr = io.load_gdal(temporal_coherence_file, masked=True)
+    good_pixels = arr > temporal_coherence_threshold
+    strel = np.ones((dilate_by, dilate_by))
+    # "1" pixels will be spread out and have (approximately) 1.0 in surrounding pixels
+    # Note: `ndimage.binary_dilation` scales ~quadratically with `dilate_by`,
+    # whereas FFT-based convolution is roughly constant for any `dilate_by`.
+    good_pixels_dilated = signal.fftconvolve(good_pixels, strel, mode="same") > 0.95
+    # Label the contiguous areas based on the dilated version
+    labels, nlabels = ndimage.label(good_pixels_dilated)
+    logger.debug("Labeled %s connected components", nlabels)
+    # Now these labels will extend to areas which are not "good" in the original.
+    labels[~good_pixels] = 0
+    # An make a masked version based on the original nodata, then fill with final output
+    conncomp_arr = (
+        np.ma.MaskedArray(data=labels, mask=arr.mask)
+        .astype("uint16")
+        .filled(DEFAULT_CCL_NODATA)
+    )
+
+    conncomp_files = [
+        Path(str(outf).replace(UNW_SUFFIX, CONNCOMP_SUFFIX)) for outf in unw_filenames
+    ]
+    # Write the first one with geo-metadata
+    io.write_arr(
+        arr=conncomp_arr,
+        like_filename=unw_filenames[0],
+        output_name=conncomp_files[0],
+        nodata=DEFAULT_CCL_NODATA,
+    )
+    for f in conncomp_files[1:]:
+        shutil.copy(conncomp_files[0], f)
+    return conncomp_files

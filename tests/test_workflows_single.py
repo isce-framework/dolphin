@@ -13,7 +13,6 @@ def test_sequential_gtiff(tmp_path, slc_file_list):
     vrt_file = tmp_path / "slc_stack.vrt"
     files = slc_file_list[:3]
     vrt_stack = _readers.VRTStack(files, outfile=vrt_file)
-    _, rows, cols = vrt_stack.shape
     is_compressed = [False] * len(files)
     ministack = stack.MiniStackInfo(
         file_list=vrt_stack.file_list,
@@ -26,7 +25,7 @@ def test_sequential_gtiff(tmp_path, slc_file_list):
     strides = {"x": 1, "y": 1}
     output_folder = tmp_path / "single"
     single.run_wrapped_phase_single(
-        slc_vrt_file=vrt_file,
+        vrt_stack=vrt_stack,
         ministack=ministack,
         output_folder=output_folder,
         half_window=half_window,

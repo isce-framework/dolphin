@@ -49,10 +49,6 @@ class BaseStack(BaseModel):
         Path(),
         description="Folder/location where ministack will write outputs to.",
     )
-    reference_idx: int = Field(
-        0,
-        description="Index of the SLC to use as reference during phase linking",
-    )
 
     model_config = {
         # For the `Filename, so it can handle the `GeneralPath` protocol`
@@ -83,33 +79,6 @@ class BaseStack(BaseModel):
             msg = f"dates and file_list must be the same length. Got {lengths}"
             raise ValueError(msg)
         return self
-
-    # @model_validator(mode="after")
-    # def _check_unset_reference_date(self):
-    #     if self.reference_date == _DUMMY_DATE:
-    #         ref_date = self.dates[self.reference_idx][0]
-    #         logger.debug("No reference date provided, using first date: %s", ref_date)
-    #         self.reference_date = ref_date
-    #     return self
-    @property
-    def reference_date(self):
-        """Date of the reference phase of the stack."""
-        # Note this works for either a length-1 tuple (real SLC), or for
-        # the compressed SLC formate (ref, start, end)
-        return self.dates[self.reference_idx][0]
-
-    @property
-    def full_date_range(self) -> tuple[DateOrDatetime, DateOrDatetime]:
-        """Full date range of all SLCs in the ministack."""
-        return (self.reference_date, self.dates[-1][-1])
-
-    @property
-    def full_date_range_str(self) -> str:
-        """Full date range of the ministack as a string, e.g. '20210101_20210202'.
-
-        Includes both compressed + normal SLCs in the range.
-        """
-        return format_dates(*self.full_date_range, fmt=self.file_date_fmt)
 
     @property
     def first_real_slc_idx(self) -> int:
@@ -151,10 +120,8 @@ class BaseStack(BaseModel):
         yield "file_list", self.file_list
         yield "dates", self.dates
         yield "is_compressed", self.is_compressed
-        yield "reference_date", self.reference_date
         yield "file_date_fmt", self.file_date_fmt
         yield "output_folder", self.output_folder
-        yield "reference_idx", self.reference_idx
 
 
 class CompressedSlcInfo(BaseModel):
@@ -363,6 +330,32 @@ class MiniStackInfo(BaseStack):
     Used for planning the processing of a batch of SLCs.
     """
 
+    output_reference_idx: int = Field(
+        0,
+        description="Index of the SLC to use as reference during phase linking",
+    )
+    compressed_reference_idx: int = Field(
+        0,
+        description=(
+            "Index of the SLC to use as during compressed SLC creation. May be"
+            " different than `output_reference_idx`."
+        ),
+    )
+
+    @property
+    def output_reference_date(self):
+        """Date of the reference phase of the stack."""
+        # Note this works for either a length-1 tuple (real SLC), or for
+        # the compressed SLC formate (ref, start, end)
+        return self.dates[self.output_reference_idx][0]
+
+    @property
+    def compressed_reference_date(self):
+        """Date of the reference phase of the stack."""
+        # Note this works for either a length-1 tuple (real SLC), or for
+        # the compressed SLC formate (ref, start, end)
+        return self.dates[self.compressed_reference_idx][0]
+
     def get_compressed_slc_info(self) -> CompressedSlcInfo:
         """Get the compressed SLC which will come from this ministack.
 
@@ -379,7 +372,7 @@ class MiniStackInfo(BaseStack):
                 real_slc_dates.append(d)
 
         return CompressedSlcInfo(
-            reference_date=self.reference_date,
+            reference_date=self.compressed_reference_date,
             start_date=real_slc_dates[0][0],
             end_date=real_slc_dates[-1][0],
             real_slc_file_list=real_slc_files,
@@ -394,12 +387,26 @@ class MiniStackPlanner(BaseStack):
     """Class for planning the processing of batches of SLCs."""
 
     max_num_compressed: int = 5
+    output_reference_idx: int = Field(
+        0,
+        description="Index of the SLC to use as reference during phase linking",
+    )
 
-    def plan(self, ministack_size: int) -> list[MiniStackInfo]:
+    def plan(
+        self, ministack_size: int, compressed_idx: int | None = None
+    ) -> list[MiniStackInfo]:
         """Create a list of ministacks to be processed."""
         if ministack_size < 2:
             msg = "Cannot create ministacks with size < 2"
             raise ValueError(msg)
+
+        # For now, only allow `compressed_idx` when doing a single batch.
+        # The logic is more complicated for multiple `compressed_idx`s, and
+        # it's unclear who would need that
+        if compressed_idx is not None and ministack_size < len(self.file_list):
+            raise ValueError(
+                "Cannot set `compressed_idx` when creating multiple ministacks."
+            )
 
         output_ministacks: list[MiniStackInfo] = []
 
@@ -407,8 +414,6 @@ class MiniStackPlanner(BaseStack):
         compressed_slc_infos: list[CompressedSlcInfo] = []
         for f in self.compressed_slc_file_list:
             # TODO: will we ever actually need to read the old metadata here?
-            # # Note: these must actually exist to be used!
-            # compressed_slc_infos.append(CompressedSlcInfo.from_file_metadata(f))
             compressed_slc_infos.append(CompressedSlcInfo.from_filename(f))
 
         # Solve each ministack using current chunk (and the previous compressed SLCs)
@@ -436,27 +441,27 @@ class MiniStackPlanner(BaseStack):
             combined_is_compressed = num_ccslc * [True] + list(
                 self.is_compressed[cur_slice]
             )
-            # If there are any compressed SLCs, set the reference to the last one
-            try:
-                last_compressed_idx = np.where(combined_is_compressed)[0]
-                reference_idx = last_compressed_idx[-1]
-            except IndexError:
-                reference_idx = 0
 
             # Make the current ministack output folder using the start/end dates
             new_date_str = format_dates(
                 cur_dates[0][0], cur_dates[-1][-1], fmt=self.file_date_fmt
             )
             cur_output_folder = self.output_folder / new_date_str
+
+            if compressed_idx is None:
+                # TODO: To change to Ansari-style ministack references, change this
+                # so that a new `output_reference_idx` gets made
+                compressed_reference_idx = self.output_reference_idx
+            else:
+                compressed_reference_idx = compressed_idx
+
             cur_ministack = MiniStackInfo(
                 file_list=combined_files,
                 dates=combined_dates,
                 is_compressed=combined_is_compressed,
-                reference_idx=reference_idx,
+                output_reference_idx=self.output_reference_idx,
+                compressed_reference_idx=compressed_reference_idx,
                 output_folder=cur_output_folder,
-                reference_date=self.reference_date,
-                # TODO: we'll need to alter logic here if we dont fix
-                # reference_idx=0, since this will change the reference date
             )
 
             output_ministacks.append(cur_ministack)
