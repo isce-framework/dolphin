@@ -7,10 +7,8 @@ import logging
 import multiprocessing as mp
 from collections import defaultdict
 from concurrent.futures import ProcessPoolExecutor
-from datetime import datetime
-from os import PathLike
 from pathlib import Path
-from typing import Mapping, NamedTuple, Sequence
+from typing import NamedTuple
 
 from opera_utils import group_by_burst, group_by_date  # , get_dates
 from tqdm.auto import tqdm
@@ -21,7 +19,7 @@ from dolphin.timeseries import ReferencePoint
 from dolphin.workflows import CallFunc
 
 from . import stitching_bursts, unwrapping, wrapped_phase
-from ._utils import _create_burst_cfg, _remove_dir_if_empty
+from ._utils import _create_burst_cfg, _remove_dir_if_empty, parse_ionosphere_files
 from .config import DisplacementWorkflow  # , TimeseriesOptions
 
 logger = logging.getLogger(__name__)
@@ -91,16 +89,9 @@ def run(
     else:
         grouped_amp_mean_files = defaultdict(list)
 
-    grouped_iono_files: Mapping[tuple[datetime], Sequence[str | PathLike[str]]] = {}
-    if len(cfg.correction_options.ionosphere_files) > 0:
-        for fmt in cfg.correction_options._iono_date_fmt:
-            group_iono = group_by_date(
-                cfg.correction_options.ionosphere_files,
-                file_date_fmt=fmt,
-            )
-            if len(next(iter(group_iono))) == 0:
-                continue
-            grouped_iono_files = {**grouped_iono_files, **group_iono}
+    grouped_iono_files = parse_ionosphere_files(
+        cfg.correction_options.ionosphere_files, cfg.correction_options._iono_date_fmt
+    )
 
     # ######################################
     # 1. Burst-wise Wrapped phase estimation
