@@ -234,17 +234,24 @@ def _convert_and_reference(
         if target.exists():  # Check to prevent overwriting
             continue
 
-        arr_radians = io.load_gdal(p)
+        arr_radians = io.load_gdal(p, masked=True)
+        nodataval = io.get_raster_nodata(p)
         # Reference to the
-        ref_value = arr_radians[ref_row, ref_col]
+        ref_value = arr_radians.filled(np.nan)[ref_row, ref_col]
         if np.isnan(ref_value):
             logger.warning(
                 "{ref_point!r} is NaN for {p} . Skipping reference subtraction."
             )
         else:
             arr_radians -= ref_value
+        # Make sure we keep the same mask as the original
+        out_arr = (arr_radians * constant).filled(nodataval)
         io.write_arr(
-            arr=arr_radians * constant, output_name=target, units=units, like_filename=p
+            arr=out_arr,
+            output_name=target,
+            units=units,
+            like_filename=p,
+            nodata=nodataval,
         )
 
     return out_paths
