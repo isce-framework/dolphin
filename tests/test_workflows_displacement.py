@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 from opera_utils import group_by_burst
 
-from dolphin.io import get_raster_units
+from dolphin.io import get_raster_nodata, get_raster_units
 from dolphin.utils import flatten, full_suffix
 from dolphin.workflows import config, displacement
 
@@ -50,6 +50,12 @@ def test_displacement_run_single(opera_slc_files: list[Path], tmpdir):
 
         # check the network size
         assert len(paths.unwrapped_paths) > len(paths.timeseries_paths)
+
+        # Check nodata values
+        assert get_raster_nodata(paths.unwrapped_paths[0]) is not None
+        assert get_raster_nodata(paths.unwrapped_paths[0]) == get_raster_nodata(
+            paths.timeseries_paths[0]
+        )
 
 
 def test_displacement_run_single_official_opera_naming(
