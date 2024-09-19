@@ -1081,10 +1081,13 @@ def least_absolute_deviations(
     ----------
     A : jnp.ndarray
         The matrix A in the equation Ax = b.
+        Shape is (M, N)
     b : jnp.ndarray
         The vector b in the equation Ax = b.
+        Shape is (M,)
     R : jnp.ndarray
         Precomputed lower-triangular Cholesky factor of A^T A.
+        Shape is (N, N)
     rho : float, optional
         The augmented Lagrangian parameter
         By default 0.4.
@@ -1096,8 +1099,11 @@ def least_absolute_deviations(
 
     Returns
     -------
-    jnp.ndarray
-        The solution vector x.
+    x_solution : jnp.ndarray
+        The solution vector x of shape (N, )
+    residual : jnp.ndarray, scalar
+        The objective residual `sum(abs(b - A @ x_solution))`
+
 
     Notes
     -----
@@ -1135,7 +1141,6 @@ def least_absolute_deviations(
 
 @jit
 def invert_stack_l1(A: ArrayLike, dphi: ArrayLike) -> Array:
-    n_ifgs, n_rows, n_cols = dphi.shape
     R = jax.scipy.linalg.cholesky(A.T @ A, lower=True)
 
     # vectorize the solve function to work on 2D and 3D arrays
