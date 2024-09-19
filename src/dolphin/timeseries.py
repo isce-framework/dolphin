@@ -1075,6 +1075,8 @@ def least_absolute_deviations(
 
         minimize ||Ax - b||_1
 
+    See [@Boyd2010DistributedOptimizationStatistical] for more on ADMM.
+
     Parameters
     ----------
     A : jnp.ndarray
@@ -1096,6 +1098,14 @@ def least_absolute_deviations(
     -------
     jnp.ndarray
         The solution vector x.
+
+    Notes
+    -----
+    The implementation is based on the [MATLAB implementation of LAD here](https://web.stanford.edu/~boyd/papers/admm/least_abs_deviations/lad.html).
+    One caveat is that there are a fixed number of iterations used for this
+    problem here. Inverting interferogram network have a very similar structure
+    each time, and the results converge quickly relative to other large-scale
+    LAD problems which ADMM can solve.
 
     """
     m, n = A.shape
