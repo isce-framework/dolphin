@@ -282,9 +282,9 @@ def create_ifgs(
     ifg_file_list: list[Path] = []
 
     secondary_dates = [get_dates(f)[0] for f in phase_linked_slcs]
-    if not contained_compressed_slcs:
-        # When no compressed SLCs were passed in to the config, we can directly pass
-        # options to `Network` and get the ifg list
+    if not contained_compressed_slcs and extra_reference_date is None:
+        # When no compressed SLCs/extra reference were passed in to the config,
+        # we can directly pass options to `Network` and get the ifg list
         network = interferogram.Network(
             slc_list=phase_linked_slcs,
             reference_idx=interferogram_network.reference_idx,
