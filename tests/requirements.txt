@@ -7,7 +7,7 @@ pooch
 pre-commit
 pytest
 pytest-cov
-pytest-randomly # control random seed
-pytest-xdist # parallel tests: https://pytest-xdist.readthedocs.io/en/latest/
+pytest-randomly
+pytest-xdist
 shapely
-xarray # For dolphin.atmosphere tests
+xarray

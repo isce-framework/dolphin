@@ -394,6 +394,10 @@ def create_ifgs(
     written_ifgs = set(ifg_dir.glob("*.int*"))
     for p in written_ifgs - requested_ifgs:
         p.unlink()
+
+    if len(set(get_dates(ifg_file_list[0]))) == 1:
+        same_date_ifg = ifg_file_list.pop(0)
+        same_date_ifg.unlink()
     return ifg_file_list
 
 

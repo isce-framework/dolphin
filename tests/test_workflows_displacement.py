@@ -208,7 +208,7 @@ def test_displacement_run_extra_reference_date(opera_slc_files: list[Path], tmpd
             # The "base phase" should be 20220103
             assert slc_paths[0].name == "compressed_20220103_20220102_20220104.tif"
 
-        # The unwrappd files should have a changeover to the new reference
+        # The unwrapped/timeseries files should have a changeover to the new reference
         assert paths.unwrapped_paths is not None
         unw_names = [pp.name for pp in paths.unwrapped_paths]
         assert unw_names == [
@@ -216,12 +216,10 @@ def test_displacement_run_extra_reference_date(opera_slc_files: list[Path], tmpd
             "20220101_20220103.unw.tif",
             "20220103_20220104.unw.tif",
         ]
-
-        # But the timeseries will have inverted the results
         assert paths.timeseries_paths is not None
         ts_names = [pp.name for pp in paths.timeseries_paths]
         assert ts_names == [
             "20220101_20220102.tif",
             "20220101_20220103.tif",
-            "20220101_20220104.tif",
+            "20220103_20220104.tif",
         ]
