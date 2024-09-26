@@ -129,6 +129,7 @@ def run(
 
     condition_func = argmax_index if condition == CallFunc.MAX else argmin_index
     if reference_point == (-1, -1):
+        logger.info("Selecting a reference point for unwrapped interferograms")
         ref_point = select_reference_point(
             condition_file=condition_file,
             output_dir=Path(output_dir),
@@ -162,8 +163,6 @@ def run(
             wavelength=wavelength,
         )
     else:
-        logger.info("Selecting a reference point for unwrapped interferograms")
-
         logger.info("Inverting network of %s unwrapped ifgs", len(unwrapped_paths))
         inverted_phase_paths = invert_unw_network(
             unw_file_list=unwrapped_paths,
