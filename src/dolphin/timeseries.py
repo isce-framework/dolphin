@@ -142,9 +142,11 @@ def run(
     sar_dates = sorted(set(utils.flatten(ifg_date_pairs)))
     # if we did single-reference interferograms, for `n` sar dates, we will only have
     # `n-1` interferograms. Any more than n-1 ifgs means we need to invert
-    is_single_reference = (len(unwrapped_paths) == len(sar_dates) - 1) and all(
-        pair[0] == ifg_date_pairs[0][0] for pair in ifg_date_pairs
-    )
+    is_single_reference = len(unwrapped_paths) == len(sar_dates) - 1
+    # TODO: Do we ever want to invert this case: the "trivial" network,
+    # which has 1 ifg per date difference, but a moving reference date?
+    # The extra condition to check is
+    # ... and all(pair[0] == ifg_date_pairs[0][0] for pair in ifg_date_pairs)
 
     # check if we even need to invert, or if it was single reference
     inverted_phase_paths: list[Path] = []
