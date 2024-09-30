@@ -36,7 +36,6 @@ mamba install -c conda-forge dolphin
 
 These may be installed via conda or (in the case of `snaphu-py`) pip.
 
-
 To install locally:
 
 1. Download source code:
@@ -92,6 +91,14 @@ If the SLC files are spread over multiple files, you can either
 The full set of options is written to the configuration file; you can edit this file, or you can see which commonly tuned options by are changeable running `dolphin config --help`.
 
 See the [documentation](https://dolphin-insar.readthedocs.io/) for more details.
+
+## Contributing
+
+We welcome many forms of contributing, including testing, bug reports, and documentation fixes. If you think you've found a problem, please let us know! You can raise an [issue](https://github.com/isce-framework/dolphin/issues) on the repository, where there are templates for Bug Reports and Feature Requests. If you have a general question of idea, feel free to raise it in the [Discussions](https://github.com/isce-framework/dolphin/discussions) page.
+
+For more detailed guidance on setting up a development environment, including how make and test changes to the code, see [Contributing to Dolphin](CONTRIBUTING.md).
+
+For more general Q&A, please use the [Discussions](https://github.com/isce-framework/dolphin/discussions) page.
 
 ## License
 
