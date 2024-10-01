@@ -43,7 +43,6 @@ worker_settings:
 log_file:
 # Time the config file was created.
 #   Type: string.
-creation_time_utc: '2024-10-01T01:52:28.159886Z'
 # REQUIRED: list of CSLC files, or newline-delimited file containing list of CSLC files.
 #   Type: array.
 cslc_file_list: []
