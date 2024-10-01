@@ -16,7 +16,7 @@ input_options:
 mask_file:
 # Name of sub-directory to use for writing output files.
 #   Type: string.
-work_directory: /Users/staniewi/repos/dolphin
+work_directory: .
 # Don't resolve filepaths that are given as relative to be absolute.
 #   Type: boolean.
 keep_paths_relative: false

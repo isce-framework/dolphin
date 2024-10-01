@@ -32,7 +32,9 @@ jobs:
       - name: Generate default config
         run: |
           dolphin config --print-empty -o temp_config.yaml
-          sed '/creation_time_utc:/d' temp_config.yaml > docs/sample_dolphin_config.yaml
+          sed -e '/creation_time_utc:/d' \
+              -e 's|work_directory:.*|work_directory: .|' \
+              temp_config.yaml > docs/sample_dolphin_config.yaml
       - name: Check for changes
         id: git-check
         run: |
