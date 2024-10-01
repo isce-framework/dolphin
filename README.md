@@ -79,7 +79,11 @@ dolphin config --slc-files /path/to/slcs/*tif
 dolphin run dolphin_config.yaml
 ```
 
-The `config` command creates a YAML file (by default `dolphin_config.yaml` in the current directory). If you'd like to see an empty YAML with all defaults filled in, you can run `dolphin config --print-empty`
+The `config` command creates a YAML file (by default `dolphin_config.yaml` in the current directory). If you'd like to see an empty YAML with all defaults filled in, you can run
+
+```bash
+dolphin config --print-empty
+```
 
 The only required inputs for the workflow are the paths to the coregistered SLC files (in either geographic or radar coordinates).
 If the SLC files are spread over multiple files, you can either
@@ -89,8 +93,6 @@ If the SLC files are spread over multiple files, you can either
 1. Store all input SLC files in a text file delimited by newlines (e.g. `my_slc_list.txt`), and give the name of this text file prefixed by the `@` character (e.g. `dolphin config --slc-files @my_slc_list.txt`)
 
 The full set of options is written to the configuration file; you can edit this file, or you can see which commonly tuned options by are changeable running `dolphin config --help`.
-
-See the [documentation](https://dolphin-insar.readthedocs.io/) for more details.
 
 ## Contributing
 
