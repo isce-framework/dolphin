@@ -1,0 +1,47 @@
+name: Update Default Config
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  update-config:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup environment
+        uses: mamba-org/setup-micromamba@v1
+        with:
+          environment-file: conda-env.yml
+          environment-name: dolphin-env
+          generate-run-shell: false
+          create-args: ${{ matrix.deps.spec }}
+          condarc: |
+            channels:
+              - conda-forge
+      - name: Install
+        run: |
+          pip install --no-deps .
+      - name: Generate default config
+        run: |
+          dolphin config --print-empty > docs/sample_dolphin_config.yaml
+      - name: Check for changes
+        id: git-check
+        run: |
+          git add sample_dolphin_config.yaml
+          git diff --staged --exit-code || echo "changes=true" >> $GITHUB_OUTPUT
+      - name: Create Pull Request
+        if: steps.git-check.outputs.changes == 'true'
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: Update sample_dolphin_config.yaml
+          title: 'Update `sample_dolphin_config.yaml`'
+          body: |
+            This is an auto-update docs/sample_dolphin_config.yaml file based on the latest changes.
+          branch: update-default-config
+          delete-branch: true
