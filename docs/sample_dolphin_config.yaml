@@ -5,6 +5,11 @@ input_options:
   # Format of dates contained in CSLC filenames.
   #   Type: string.
   cslc_date_fmt: '%Y%m%d'
+  # Radar wavelength (in meters) of the transmitted data. used to convert the units in the
+  #   rasters in `timeseries/` to from radians to meters. If None and sensor is not
+  #   recognized, outputs remain in radians.
+  #   Type: number | null.
+  wavelength:
 # Mask file used to ignore low correlation/bad data (e.g water mask). Convention is 0 for no
 #   data/invalid, and 1 for good data. Dtype must be uint8.
 #   Type: string | null.
@@ -38,7 +43,7 @@ worker_settings:
 log_file:
 # Time the config file was created.
 #   Type: string.
-creation_time_utc: '2024-10-01T01:37:59.922824Z'
+creation_time_utc: '2024-10-01T01:52:28.159886Z'
 # REQUIRED: list of CSLC files, or newline-delimited file containing list of CSLC files.
 #   Type: array.
 cslc_file_list: []
@@ -92,6 +97,12 @@ output_options:
     - 16
     - 32
     - 64
+  # Specify an extra reference datetime in UTC. Adding this lets you to create and unwrap two
+  #   single reference networks; the later resets at the given date (e.g. for a large
+  #   earthquake event). If passing strings, formats accepted are YYYY-MM-
+  #   DD[T]HH:MM[:SS[.ffffff]][Z or [±]HH[:]MM], or YYYY-MM-DD.
+  #   Type: string | null.
+  extra_reference_date:
 ps_options:
   # Amplitude dispersion threshold to consider a pixel a PS.
   #   Type: number.
@@ -109,9 +120,12 @@ phase_linking:
   #   Type: integer.
   ministack_size: 10
   # Maximum number of compressed images to use in sequential estimator. If there are more
-  #   ministacks than this, the earliest CCSLCs will be left out of the later stacks.
+  #   ministacks than this, the earliest CCSLCs will be left out of the later stacks. .
   #   Type: integer.
-  max_num_compressed: 5
+  max_num_compressed: 100
+  # Index of input SLC to use for making phase linked interferograms after EVD/EMI.
+  #   Type: integer.
+  output_reference_idx: 0
   half_window:
     # Half window size (in pixels) for x direction.
     #   Type: integer.
@@ -132,6 +146,11 @@ phase_linking:
   # Significance level (probability of false alarm) for SHP tests.
   #   Type: number.
   shp_alpha: 0.005
+  # If True, pixels labeled as PS will get set to NaN during phase linking to avoid summing
+  #   their phase. Default of False means that the SHP algorithm will decide if a pixel should
+  #   be included, regardless of its PS label.
+  #   Type: boolean.
+  mask_input_ps: false
   # StBAS parameter to include only nearest-N interferograms forphase linking. A
   #   `baseline_lag` of `n` will only include the closest`n` interferograms. `baseline_line`
   #   must be positive.
@@ -256,7 +275,7 @@ unwrap_options:
       # Temporal unwrapping operations over spatial links are performed in batches and each batch
       #   is solved in parallel.
       #   Type: integer.
-      links_per_batch: 50000
+      links_per_batch: 150000
       # Temporal unwrapping costs.
       #   Type: string.
       #   Options: ['constant', 'distance', 'centroid'].
@@ -271,6 +290,9 @@ unwrap_options:
       # Scale factor used to compute edge costs for spatial unwrapping.
       #   Type: number.
       s_cost_scale: 100.0
+      # Number of tiles to process in parallel. Set to 0 for all tiles.
+      #   Type: integer.
+      num_parallel_tiles: 1
     merger_settings:
       # Minimum number of overlap pixels to be considered valid.
       #   Type: integer.
@@ -283,11 +305,19 @@ unwrap_options:
       #   Type: string.
       #   Options: ['integer', 'L2'].
       bulk_method: L2
+      # Number of interferograms to merge in one batch. Use zero to merge all interferograms in a
+      #   single batch.
+      #   Type: integer.
+      num_parallel_ifgs: 3
 timeseries_options:
   # Whether to run the inversion step after unwrapping, if more than  a single-reference
   #   network is used.
   #   Type: boolean.
   run_inversion: true
+  # Norm to use during timeseries inversion.
+  #   Type: string.
+  #   Options: ['L1', 'L2'].
+  method: L2
   # Reference point (row, col) used if performing a time series inversion. If not provided, a
   #   point will be selected from a consistent connected component with low amplitude
   #   dispersion.
@@ -299,6 +329,15 @@ timeseries_options:
   # Pixels with correlation below this value will be masked out.
   #   Type: number.
   correlation_threshold: 0.2
+  # Size (rows, columns) of blocks of data to load at a time. 3D dimsion is number of
+  #   interferograms (during inversion) and number of SLC dates (during velocity fitting).
+  #   Type: array.
+  block_shape:
+    - 256
+    - 256
+  # Number of parallel blocks to process at once.
+  #   Type: integer.
+  num_parallel_blocks: 4
 correction_options:
   # List of weather-model files (one per date) for tropospheric corrections.
   #   Type: array.
