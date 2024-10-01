@@ -2,6 +2,7 @@
 
 [![Pytest and build docker image](https://github.com/isce-framework/dolphin/actions/workflows/test-build-push.yml/badge.svg?branch=main)](https://github.com/isce-framework/dolphin/actions/workflows/test-build-push.yml)
 [![pre-commit.ci status](https://results.pre-commit.ci/badge/github/isce-framework/dolphin/main.svg)](https://results.pre-commit.ci/latest/github/isce-framework/dolphin/main)
+[![Documentation Status][rtd-badge]][rtd-link]
 [![Conda-Forge][conda-badge]][conda-link]
 [![PyPI platforms][pypi-platforms]][pypi-link]
 [![GitHub Discussion][github-discussions-badge]][github-discussions-link]
@@ -13,6 +14,8 @@
 [pypi-platforms]:           https://img.shields.io/pypi/pyversions/dolphin
 [github-discussions-badge]: https://img.shields.io/static/v1?label=Discussions&message=Ask&color=blue&logo=github
 [github-discussions-link]:  https://github.com/isce-framework/dolphin/discussions
+[rtd-badge]:                https://readthedocs.org/projects/dolphin-insar/badge/?version=latest
+[rtd-link]:                 https://dolphin-insar.readthedocs.io/en/latest/?badge=latest
 <!-- prettier-ignore-end -->
 
 High resolution wrapped phase estimation for InSAR using combined PS/DS processing.
@@ -21,18 +24,22 @@ High resolution wrapped phase estimation for InSAR using combined PS/DS processi
 
 ## Install
 
-`dolphin` is available on conda:
+`dolphin` may be installed via conda-forge:
 
 ```bash
 # if mamba is not already installed, see here: https://mamba.readthedocs.io/en/latest/
 mamba install -c conda-forge dolphin
 ```
 
+It is also available via [`PyPI`](https://pypi.org/project/dolphin/) and may be `pip`-installed on some platforms, such as Google's Colab. However, certain dependencies (e.g. GDAL) are more easily set up through `conda`.
+
 `dolphin` has the ability to unwrap interferograms using several options:
 
 1. [`snaphu-py`](https://github.com/isce-framework/snaphu-py), a lightweight Python bindings to [SNAPHU](https://web.stanford.edu/group/radar/softwareandlinks/sw/snaphu/). Available on both pip and conda.
 2. [`isce3`](https://github.com/isce-framework/isce3)'s python bindings to SNAPHU, PHASS, or ICU
-3. [`tophu`](https://github.com/isce-framework/tophu), a multi-scale unwrapper designed to unwrap large interferograms in parallel tiles at multiple resolution.
+3. [`spurt`](https://github.com/isce-framework/spurt), a 3D unwrapper, implementing the Extended Minimum Cost Flow (ECMF) algorithm
+4. [`tophu`](https://github.com/isce-framework/tophu), a multi-scale unwrapper designed to unwrap large interferograms in parallel tiles at multiple resolution.
+
 
 These may be installed via conda or (in the case of `snaphu-py`) pip.
 
