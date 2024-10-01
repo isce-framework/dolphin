@@ -59,31 +59,9 @@ jobs:
       - name: Test (with numba boundscheck on)
         run: |
           pytest -n0 -vv
-      # Note: skipping code coverage because Numba methods are skipped, skewing results
       # https://community.codecov.com/t/numba-jitted-methods-are-not-captured-by-codecov/2649
       # - name: Coverage report
       #   uses: codecov/codecov-action@v2
-      - name: Generate default config
-        run: |
-          dolphin config --print-empty -o temp_config.yaml
-          sed '/creation_time_utc:/d' temp_config.yaml > docs/sample_dolphin_config.yaml
-      - name: Check for changes
-        id: git-check
-        run: |
-          git add docs/sample_dolphin_config.yaml
-          git diff --staged --exit-code || echo "changes=true" >> $GITHUB_OUTPUT
-      - name: Create Pull Request
-        if: steps.git-check.outputs.changes == 'true'
-        uses: peter-evans/create-pull-request@v5
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          commit-message: Update sample_dolphin_config.yaml
-          title: 'Update `sample_dolphin_config.yaml`'
-          body: |
-            This is an auto-update docs/sample_dolphin_config.yaml file based on the latest changes.
-          branch: update-default-config
-          delete-branch: true
-
 
   dockerize: # Based on Mintpy: https://github.com/insarlab/MintPy/blob/5ca554fef324b816f9130feec567e2cf463e41d2/.github/workflows/build-n-publish-to-pypi.yml
     name: Build Docker image and push to GitHub Container Registry
