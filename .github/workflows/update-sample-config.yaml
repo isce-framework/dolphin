@@ -51,3 +51,4 @@ jobs:
             This is an auto-update docs/sample_dolphin_config.yaml file based on the latest changes.
           branch: update-default-config
           delete-branch: true
+          base: ${{ github.head_ref || github.ref_name }}
