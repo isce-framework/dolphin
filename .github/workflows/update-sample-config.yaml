@@ -44,7 +44,7 @@ jobs:
           git diff --staged --exit-code || echo "changes=true" >> $GITHUB_OUTPUT
       - name: Create Pull Request
         if: steps.git-check.outputs.changes == 'true'
-        uses: peter-evans/create-pull-request@v5
+        uses: peter-evans/create-pull-request@v7
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           commit-message: Update sample_dolphin_config.yaml
