@@ -11,6 +11,7 @@ from opera_utils import get_dates, make_nodata_mask
 from dolphin import Bbox, Filename, interferogram, masking, ps
 from dolphin._log import log_runtime, setup_logging
 from dolphin.io import VRTStack
+from dolphin.utils import get_nearest_date_idx
 
 from . import InterferogramNetwork, sequential
 from .config import DisplacementWorkflow
@@ -139,7 +140,7 @@ def run(
 
     extra_reference_date = cfg.output_options.extra_reference_date
     if extra_reference_date:
-        new_compressed_slc_reference_idx = _get_nearest_idx(
+        new_compressed_slc_reference_idx = get_nearest_date_idx(
             [dtup[0] for dtup in input_dates], extra_reference_date
         )
     else:
@@ -282,6 +283,8 @@ def create_ifgs(
     ifg_file_list: list[Path] = []
 
     secondary_dates = [get_dates(f)[0] for f in phase_linked_slcs]
+    # TODO: if we manually set an ifg network (i.e. not rely on spurt),
+    # we may still want to just pass it right to `Network`
     if not contained_compressed_slcs and extra_reference_date is None:
         # When no compressed SLCs/extra reference were passed in to the config,
         # we can directly pass options to `Network` and get the ifg list
@@ -318,7 +321,9 @@ def create_ifgs(
             for f in phase_linked_slcs
         ]
     else:
-        manual_reference_idx = _get_nearest_idx(secondary_dates, extra_reference_date)
+        manual_reference_idx = get_nearest_date_idx(
+            secondary_dates, extra_reference_date
+        )
 
         single_ref_ifgs = [
             interferogram.convert_pl_to_ifg(
@@ -466,22 +471,3 @@ def _get_mask(
         mask_filename = nodata_mask_file
 
     return mask_filename
-
-
-def _get_nearest_idx(
-    input_dates: Sequence[datetime.datetime],
-    selected_date: datetime.datetime,
-) -> int:
-    """Find the index nearest to `selected_date` within `input_dates`."""
-    sorted_inputs = sorted(input_dates)
-    if not sorted_inputs[0] <= selected_date <= sorted_inputs[-1]:
-        msg = f"Requested {selected_date} falls outside of input range: "
-        msg += f"{sorted_inputs[0]}, {sorted_inputs[-1]}"
-        raise ValueError(msg)
-
-    nearest_idx = min(
-        range(len(input_dates)),
-        key=lambda i: abs((input_dates[i] - selected_date).total_seconds()),
-    )
-
-    return nearest_idx

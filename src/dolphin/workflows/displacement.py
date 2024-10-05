@@ -259,6 +259,7 @@ def run(
             # num_threads=cfg.worker_settings....?
             wavelength=cfg.input_options.wavelength,
             add_overviews=cfg.output_options.add_overviews,
+            extra_reference_date=cfg.output_options.extra_reference_date,
         )
 
     else:
