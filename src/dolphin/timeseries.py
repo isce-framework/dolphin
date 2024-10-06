@@ -211,48 +211,61 @@ def run(
     if extra_reference_date is None:
         final_out = inverted_phase_paths
     else:
-        # Redo the (day 1, day 2), ..., (day 1, day N) pairs to be
-        # (1, 2), (1, 3), ...(1, r), (r, r+1), ..., (r, N)
-        # where r is the index of the `extra_reference_date`
-        inverted_date_pairs: list[tuple[datetime, datetime]] = [
-            get_dates(p.stem)[:2] for p in inverted_phase_paths
-        ]
-        secondary_dates = [pair[1] for pair in inverted_date_pairs]
-        extra_ref_idx = get_nearest_date_idx(
-            secondary_dates, requested=extra_reference_date
-        )
-        ref_date = secondary_dates[extra_ref_idx]
-        logger.info(f"Re-referencing later timeseries files to {ref_date}")
-        extra_ref_img = inverted_phase_paths[extra_ref_idx]
-        ref = io.load_gdal(extra_ref_img, masked=True)
-
-        # Use a temp directory while re-referencing
-        extra_out_dir = inverted_phase_paths[0].parent / "extra"
-        extra_out_dir.mkdir(exist_ok=True)
-
-        for idx in range(extra_ref_idx + 1, len(inverted_date_pairs)):
-            # To create the interferogram (r, r+1), we subtract
-            # (1, r) from (1, r+1)
-            cur_img = inverted_phase_paths[idx]
-            new_stem = format_dates(ref_date, secondary_dates[idx])
-            cur_output_name = extra_out_dir / f"{new_stem}.tif"
-            cur = io.load_gdal(cur_img, masked=True)
-            new_out = cur - ref
-            io.write_arr(
-                arr=new_out, like_filename=extra_ref_img, output_name=cur_output_name
-            )
-
-        for idx, p in enumerate(inverted_phase_paths):
-            if idx <= extra_ref_idx:
-                p.rename(extra_out_dir / p.name)
-            else:
-                p.unlink()
-        # Finally, move them back in to the `timeseries/` folder
-        final_out = []
-        for p in extra_out_dir.glob("*.tif"):
-            final_out.append(p.rename(Path(output_dir) / p.name))
+        final_out = _redo_reference(inverted_phase_paths, extra_reference_date)
 
     return final_out, ref_point
+
+
+def _redo_reference(
+    inverted_phase_paths: Sequence[Path], extra_reference_date: datetime
+):
+    """Reset the reference date in `inverted_phase_paths`.
+
+    Affects all files whose secondary is after `extra_reference_date`.
+
+    E.g Given the (day 1, day 2), ..., (day 1, day N) pairs, outputs
+    (1, 2), (1, 3), ...(1, r), (r, r+1), ..., (r, N)
+    where r is the index of the `extra_reference_date`
+    """
+    output_path = inverted_phase_paths[0].parent
+    inverted_date_pairs: list[tuple[datetime, datetime]] = [
+        get_dates(p.stem)[:2] for p in inverted_phase_paths
+    ]
+    secondary_dates = [pair[1] for pair in inverted_date_pairs]
+    extra_ref_idx = get_nearest_date_idx(
+        secondary_dates, requested=extra_reference_date
+    )
+    ref_date = secondary_dates[extra_ref_idx]
+    logger.info(f"Re-referencing later timeseries files to {ref_date}")
+    extra_ref_img = inverted_phase_paths[extra_ref_idx]
+    ref = io.load_gdal(extra_ref_img, masked=True)
+
+    # Use a temp directory while re-referencing
+    extra_out_dir = inverted_phase_paths[0].parent / "extra"
+    extra_out_dir.mkdir(exist_ok=True)
+
+    for idx in range(extra_ref_idx + 1, len(inverted_date_pairs)):
+        # To create the interferogram (r, r+1), we subtract
+        # (1, r) from (1, r+1)
+        cur_img = inverted_phase_paths[idx]
+        new_stem = format_dates(ref_date, secondary_dates[idx])
+        cur_output_name = extra_out_dir / f"{new_stem}.tif"
+        cur = io.load_gdal(cur_img, masked=True)
+        new_out = cur - ref
+        io.write_arr(
+            arr=new_out, like_filename=extra_ref_img, output_name=cur_output_name
+        )
+
+    for idx, p in enumerate(inverted_phase_paths):
+        if idx <= extra_ref_idx:
+            p.rename(extra_out_dir / p.name)
+        else:
+            p.unlink()
+    # Finally, move them back in to the `timeseries/` folder
+    final_out = []
+    for p in extra_out_dir.glob("*.tif"):
+        final_out.append(p.rename(output_path / p.name))
+    return final_out
 
 
 def _convert_and_reference(
