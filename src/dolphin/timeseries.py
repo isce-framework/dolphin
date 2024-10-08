@@ -265,7 +265,7 @@ def _redo_reference(
     final_out = []
     for p in extra_out_dir.glob("*.tif"):
         final_out.append(p.rename(output_path / p.name))
-    return final_out
+    return sorted(final_out)
 
 
 def _convert_and_reference(
