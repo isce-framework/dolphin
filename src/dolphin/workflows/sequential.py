@@ -18,6 +18,7 @@ from osgeo_utils import gdal_calc
 from dolphin import io
 from dolphin._types import Filename
 from dolphin.io import VRTStack
+from dolphin.similarity import create_similarities
 from dolphin.stack import MiniStackPlanner
 
 from .config import ShpMethod
@@ -51,7 +52,7 @@ def run_wrapped_phase_sequential(
     block_shape: tuple[int, int] = (512, 512),
     baseline_lag: Optional[int] = None,
     **tqdm_kwargs,
-) -> tuple[list[Path], list[Path], Path, Path]:
+) -> tuple[list[Path], list[Path], Path, Path, Path]:
     """Estimate wrapped phase using batches of ministacks."""
     if strides is None:
         strides = {"x": 1, "y": 1}
@@ -149,6 +150,18 @@ def run_wrapped_phase_sequential(
     _average_rasters(temp_coh_files, output_temp_coh_file, "Float32")
     _average_rasters(shp_count_files, output_shp_count_file, "Int16")
 
+    # Create one phase similarity raster
+    output_similarity_file = output_folder / f"similarity_{full_span}.tif"
+    create_similarities(
+        ifg_file_list=cur_output_files,
+        output_file=output_similarity_file,
+        # TODO: any of these configurable?
+        search_radius=11,
+        sim_type="median",
+        block_shape=block_shape,
+        num_threads=3,
+    )
+
     # Combine the separate SLC output lists into a single list
     all_slc_files = list(chain.from_iterable(output_slc_files))
     all_comp_slc_files = [ms.get_compressed_slc_info().path for ms in ministacks]
@@ -163,7 +176,13 @@ def run_wrapped_phase_sequential(
         p.rename(output_folder / p.name)
         comp_slc_outputs.append(output_folder / p.name)
 
-    return out_pl_slcs, comp_slc_outputs, output_temp_coh_file, output_shp_count_file
+    return (
+        out_pl_slcs,
+        comp_slc_outputs,
+        output_temp_coh_file,
+        output_shp_count_file,
+        output_similarity_file,
+    )
 
 
 def _get_outputs_from_folder(

@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 @log_runtime
 def run(
     cfg: DisplacementWorkflow, debug: bool = False, tqdm_kwargs=None
-) -> tuple[list[Path], list[Path], Path, Path, Path, Path]:
+) -> tuple[list[Path], list[Path], Path, Path, Path, Path, Path]:
     """Run the displacement workflow on a stack of SLCs.
 
     Parameters
@@ -151,6 +151,7 @@ def run(
         comp_slc_list = sorted(pl_path.glob("compressed*tif"))
         temp_coh_file = next(pl_path.glob("temporal_coherence*tif"))
         shp_count_file = next(pl_path.glob("shp_count*tif"))
+        similarity_file = next(pl_path.glob("shp_count*tif"))
     else:
         logger.info(f"Running sequential EMI step in {pl_path}")
         kwargs = tqdm_kwargs | {"desc": f"Phase linking ({pl_path})"}
@@ -159,28 +160,32 @@ def run(
         # If we pre-compute it from some big stack, we need to use that for SHP
         # finding, not use the size of `slc_vrt_file`
         shp_nslc = None
-        (phase_linked_slcs, comp_slc_list, temp_coh_file, shp_count_file) = (
-            sequential.run_wrapped_phase_sequential(
-                slc_vrt_stack=vrt_stack,
-                output_folder=pl_path,
-                ministack_size=cfg.phase_linking.ministack_size,
-                new_compressed_reference_idx=new_compressed_slc_reference_idx,
-                half_window=cfg.phase_linking.half_window.model_dump(),
-                strides=strides,
-                use_evd=cfg.phase_linking.use_evd,
-                beta=cfg.phase_linking.beta,
-                mask_file=mask_filename,
-                ps_mask_file=ps_output,
-                amp_mean_file=cfg.ps_options._amp_mean_file,
-                amp_dispersion_file=cfg.ps_options._amp_dispersion_file,
-                shp_method=cfg.phase_linking.shp_method,
-                shp_alpha=cfg.phase_linking.shp_alpha,
-                shp_nslc=shp_nslc,
-                cslc_date_fmt=cfg.input_options.cslc_date_fmt,
-                block_shape=cfg.worker_settings.block_shape,
-                baseline_lag=cfg.phase_linking.baseline_lag,
-                **kwargs,
-            )
+        (
+            phase_linked_slcs,
+            comp_slc_list,
+            temp_coh_file,
+            shp_count_file,
+            similarity_file,
+        ) = sequential.run_wrapped_phase_sequential(
+            slc_vrt_stack=vrt_stack,
+            output_folder=pl_path,
+            ministack_size=cfg.phase_linking.ministack_size,
+            new_compressed_reference_idx=new_compressed_slc_reference_idx,
+            half_window=cfg.phase_linking.half_window.model_dump(),
+            strides=strides,
+            use_evd=cfg.phase_linking.use_evd,
+            beta=cfg.phase_linking.beta,
+            mask_file=mask_filename,
+            ps_mask_file=ps_output,
+            amp_mean_file=cfg.ps_options._amp_mean_file,
+            amp_dispersion_file=cfg.ps_options._amp_dispersion_file,
+            shp_method=cfg.phase_linking.shp_method,
+            shp_alpha=cfg.phase_linking.shp_alpha,
+            shp_nslc=shp_nslc,
+            cslc_date_fmt=cfg.input_options.cslc_date_fmt,
+            block_shape=cfg.worker_settings.block_shape,
+            baseline_lag=cfg.phase_linking.baseline_lag,
+            **kwargs,
         )
     # Dump the used options for JSON parsing
     logger.info(
@@ -206,6 +211,7 @@ def run(
             ps_looked_file,
             amp_disp_looked_file,
             shp_count_file,
+            similarity_file,
         )
 
     logger.info(f"Creating virtual interferograms from {len(phase_linked_slcs)} files")
@@ -229,6 +235,7 @@ def run(
         ps_looked_file,
         amp_disp_looked_file,
         shp_count_file,
+        similarity_file,
     )
 
 
