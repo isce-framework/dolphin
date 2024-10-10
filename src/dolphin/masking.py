@@ -53,6 +53,8 @@ def combine_mask_files(
 ):
     """Combine multiple mask files into a single mask file.
 
+    All `mask_files` must be the same size and projected on the same grid.
+
     Parameters
     ----------
     mask_files : list of Path or str

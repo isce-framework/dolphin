@@ -318,6 +318,7 @@ def create_similarities(
         writer,
         func=calc_sim,
         block_shape=block_shape,
+        overlaps=(search_radius, search_radius),
         num_threads=num_threads,
     )
     writer.notify_finished()
