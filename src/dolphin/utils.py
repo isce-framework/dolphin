@@ -690,3 +690,22 @@ class DummyProcessPoolExecutor(Executor):
 
     def map(self, fn: Callable[P, T], *iterables, **kwargs):  # noqa: D102
         return map(fn, *iterables)
+
+
+def get_nearest_date_idx(
+    input_items: Sequence[datetime.datetime],
+    requested: datetime.datetime,
+) -> int:
+    """Find the index nearest to `requested` within `input_items`."""
+    sorted_inputs = sorted(input_items)
+    if not sorted_inputs[0] <= requested <= sorted_inputs[-1]:
+        msg = f"Requested {requested} falls outside of input range: "
+        msg += f"{sorted_inputs[0]}, {sorted_inputs[-1]}"
+        raise ValueError(msg)
+
+    nearest_idx = min(
+        range(len(input_items)),
+        key=lambda i: abs((input_items[i] - requested).total_seconds()),
+    )
+
+    return nearest_idx
