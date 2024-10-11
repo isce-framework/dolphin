@@ -51,6 +51,30 @@ def test_pixel_similarity():
     assert similarity.phase_similarity(x1, x1) == 1
 
 
+def test_pixel_similarity_zero_nan():
+    x1, x2 = np.zeros((2, 10), dtype="complex64")
+    sim = similarity.phase_similarity(x1, x2)
+    assert sim == 0
+
+    x1, x2 = np.full((2, 10), fill_value=np.nan + 1j * np.nan)
+    sim = similarity.phase_similarity(x1, x2)
+    assert np.isnan(sim)
+
+    x1, x2 = np.ones((2, 10), dtype="complex64")
+    sim = similarity.phase_similarity(x1, x2)
+    assert sim == 1
+
+
+def test_block_similarity_zero_nan():
+    block_zeros = np.zeros((10, 4, 5), dtype="complex64")
+    out = similarity.median_similarity(block_zeros, search_radius=2)
+    assert np.isnan(out).all()
+
+    block_nan = block_zeros * np.nan
+    out = similarity.median_similarity(block_nan, search_radius=2)
+    assert np.isnan(out).all()
+
+
 class TestMedianSimilarity:
     @pytest.fixture
     def ifg_stack(self, slc_stack):
