@@ -160,7 +160,7 @@ def test_shp_half_var_different(mean, var):
     assert not shps_mid_pixel[:5, :].any()
 
 
-@pytest.mark.parametrize("strides", [{"x": 1, "y": 1}, {"x": 2, "y": 2}])
+@pytest.mark.parametrize("strides", [(1, 1), (2, 2)])
 def test_shp_glrt_nodata_0(mean, var, strides):
     """Ensure"""
     method = "glrt"
@@ -179,13 +179,13 @@ def test_shp_glrt_nodata_0(mean, var, strides):
         alpha=0.005,
         method=method,
     )
-    out_col, out_row = 2 // strides["x"], 2 // strides["x"]
+    out_row, out_col = 2 // strides[0], 2 // strides[1]
     assert neighbors[:out_row, :out_col, :, :].sum() == 0
 
 
 @pytest.mark.parametrize("method", ["glrt", "ks"])
 @pytest.mark.parametrize("alpha", [0.01, 0.05])
-@pytest.mark.parametrize("strides", [{"x": 1, "y": 1}, {"x": 2, "y": 2}])
+@pytest.mark.parametrize("strides", [(1, 1), (2, 2)])
 def test_shp_statistics(method, alpha, strides):
     """Check that with repeated tries, the alpha is correct."""
 
