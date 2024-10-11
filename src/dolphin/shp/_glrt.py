@@ -8,7 +8,6 @@ import jax.numpy as jnp
 from jax import Array, jit, lax, vmap
 from numpy.typing import ArrayLike
 
-from dolphin._types import HalfWindow
 from dolphin.utils import compute_out_shape
 
 
@@ -28,11 +27,11 @@ def _read_cutoff_csv():
     return result
 
 
-@partial(jit, static_argnames=["half_window", "strides", "nslc", "alpha"])
+@partial(jit, static_argnames=["halfwin_rowcol", "strides", "nslc", "alpha"])
 def estimate_neighbors(
     mean: ArrayLike,
     var: ArrayLike,
-    half_window: HalfWindow,
+    halfwin_rowcol: tuple[int, int],
     nslc: int,
     strides: tuple[int, int] = (1, 1),
     alpha: float = 0.001,
@@ -40,8 +39,9 @@ def estimate_neighbors(
     """Estimate the number of neighbors based on the GLRT."""
     # Convert mean/var to the Rayleigh scale parameter
     rows, cols = mean.shape
-    half_row, half_col = half_window
+    half_row, half_col = halfwin_rowcol
     row_strides, col_strides = strides
+    # window_size = rsize * csize
 
     in_r_start = row_strides // 2
     in_c_start = col_strides // 2
@@ -68,7 +68,6 @@ def estimate_neighbors(
         scale_1 = scale_squared[in_r, in_c]  # One pixel
         # and one window for scale 2, will broadcast
         scale_2 = _get_window(scale_squared, in_r, in_c, half_row, half_col)
-
         # Compute the GLRT test statistic.
         scale_pooled = (scale_1 + scale_2) / 2
         test_stat = 2 * jnp.log(scale_pooled) - jnp.log(scale_1) - jnp.log(scale_2)

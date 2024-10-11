@@ -71,11 +71,10 @@ def estimate_neighbors(
         - `method` not a valid `ShpMethod`
 
     """
-    import numba
-
     if strides is None:
-        strides = {"x": 1, "y": 1}
-    logger.debug(f"NUMBA THREADS: {numba.get_num_threads()}")
+        strides = (1, 1)
+    if prune_disconnected:
+        logger.warning("`prune_disconnected` is deprecated: ignoring")
 
     if method == ShpMethod.RECT:
         # No estimation needed
@@ -96,7 +95,6 @@ def estimate_neighbors(
             strides=strides,
             nslc=nslc,
             alpha=alpha,
-            prune_disconnected=prune_disconnected,
         )
     elif method.lower() == ShpMethod.KS:
         if amp_stack is None:
