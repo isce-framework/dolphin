@@ -170,6 +170,7 @@ def run(
             slc_vrt_stack=vrt_stack,
             output_folder=pl_path,
             ministack_size=cfg.phase_linking.ministack_size,
+            output_reference_idx=cfg.phase_linking.output_reference_idx,
             new_compressed_reference_idx=new_compressed_slc_reference_idx,
             half_window=cfg.phase_linking.half_window.model_dump(),
             strides=strides,
