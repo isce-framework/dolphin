@@ -46,13 +46,13 @@ jobs:
               - conda-forge
       - name: Install
         run: |
-          pip install --no-deps \
+          python -m pip install --no-deps \
             "snaphu>=0.4.0" \
             "opera-utils>=0.4.1" \
             git+https://github.com/isce-framework/tophu@main \
-          pip install git+https://github.com/isce-framework/spurt@main \
             git+https://github.com/isce-framework/whirlwind@40defb38d2d6deca2819934788ebbc57e418e32d
-          pip install --no-deps .
+          python -m pip install git+https://github.com/isce-framework/spurt@main
+          python -m pip install --no-deps .
       - name: Install test dependencies
         run: |
           micromamba install -f tests/requirements.txt -c conda-forge
