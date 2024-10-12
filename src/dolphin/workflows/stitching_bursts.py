@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Sequence
+from typing import NamedTuple, Sequence
 
 from dolphin import stitching
 from dolphin._log import log_runtime
@@ -18,6 +18,25 @@ from .config import OutputOptions
 logger = logging.getLogger(__name__)
 
 
+class StitchedOutputs(NamedTuple):
+    """Output rasters from stitching step."""
+
+    stitched_ifg_paths: list[Path]
+    """List of Paths to the stitched interferograms."""
+    interferometric_corr_paths: list[Path]
+    """List of Paths to interferometric correlation files created."""
+    stitched_temp_coh_file: Path
+    """Path to temporal correlation file created."""
+    stitched_ps_file: Path
+    """Path to ps mask file created."""
+    stitched_amp_disp_file: Path
+    """Path to amplitude dispersion file created."""
+    stitched_shp_count_file: Path
+    """Path to SHP count file created."""
+    stitched_similarity_file: Path
+    """Path to cosine similarity file created."""
+
+
 @log_runtime
 def run(
     ifg_file_list: Sequence[Path],
@@ -25,26 +44,31 @@ def run(
     ps_file_list: Sequence[Path],
     amp_dispersion_list: Sequence[Path],
     shp_count_file_list: Sequence[Path],
+    similarity_file_list: Sequence[Path],
     stitched_ifg_dir: Path,
     output_options: OutputOptions,
     file_date_fmt: str = "%Y%m%d",
     corr_window_size: tuple[int, int] = (11, 11),
     num_workers: int = 3,
-) -> tuple[list[Path], list[Path], Path, Path, Path, Path]:
-    """Run the displacement workflow on a stack of SLCs.
+) -> StitchedOutputs:
+    """Stitch together spatial subsets from phase linking.
+
+    For Sentinel-1 processing, these can be burst-wise interferograms.
 
     Parameters
     ----------
     ifg_file_list : Sequence[Path]
-        Sequence of burst-wise interferograms files to stitch.
+        Sequence of interferograms files to stitch.
     temp_coh_file_list : Sequence[Path]
-        Sequence of paths to the burst-wise temporal coherence files.
+        Sequence of paths to the temporal coherence files.
     ps_file_list : Sequence[Path]
-        Sequence of paths to the (looked) burst-wise ps mask files.
+        Sequence of paths to the (looked) ps mask files.
     amp_dispersion_list : Sequence[Path]
-        Sequence of paths to the (looked) burst-wise amplitude dispersion files.
+        Sequence of paths to the (looked) amplitude dispersion files.
     shp_count_file_list : Sequence[Path]
-        Sequence of paths to the burst-wise SHP counts files.
+        Sequence of paths to the SHP counts files.
+    similarity_file_list : Sequence[Path]
+        Sequence of paths to the spatial phase cosine similarity files.
     stitched_ifg_dir : Path
         Location to store the output stitched ifgs and correlations
     output_options : OutputOptions
@@ -145,6 +169,15 @@ def run(
         out_bounds_epsg=output_options.bounds_epsg,
     )
 
+    stitched_similarity_file = stitched_ifg_dir / "similarity.tif"
+    stitching.merge_images(
+        similarity_file_list,
+        outfile=stitched_similarity_file,
+        driver="GTiff",
+        out_bounds=out_bounds,
+        out_bounds_epsg=output_options.bounds_epsg,
+    )
+
     if output_options.add_overviews:
         logger.info("Creating overviews for stitched images")
         create_overviews(stitched_ifg_paths, image_type=ImageType.INTERFEROGRAM)
@@ -153,12 +186,16 @@ def run(
         create_image_overviews(stitched_temp_coh_file, image_type=ImageType.CORRELATION)
         create_image_overviews(stitched_amp_disp_file, image_type=ImageType.CORRELATION)
         create_image_overviews(stitched_shp_count_file, image_type=ImageType.PS)
+        create_image_overviews(
+            stitched_similarity_file, image_type=ImageType.CORRELATION
+        )
 
-    return (
+    return StitchedOutputs(
         stitched_ifg_paths,
         interferometric_corr_paths,
         stitched_temp_coh_file,
         stitched_ps_file,
         stitched_amp_disp_file,
         stitched_shp_count_file,
+        stitched_similarity_file,
     )
