@@ -11,6 +11,8 @@ from opera_utils import get_dates, make_nodata_mask
 from dolphin import Bbox, Filename, interferogram, masking, ps
 from dolphin._log import log_runtime, setup_logging
 from dolphin.io import VRTStack
+from dolphin.utils import get_nearest_date_idx
+from dolphin.workflows import UnwrapMethod
 
 from . import InterferogramNetwork, sequential
 from .config import DisplacementWorkflow
@@ -139,7 +141,7 @@ def run(
 
     extra_reference_date = cfg.output_options.extra_reference_date
     if extra_reference_date:
-        new_compressed_slc_reference_idx = _get_nearest_idx(
+        new_compressed_slc_reference_idx = get_nearest_date_idx(
             [dtup[0] for dtup in input_dates], extra_reference_date
         )
     else:
@@ -216,18 +218,31 @@ def run(
         )
 
     logger.info(f"Creating virtual interferograms from {len(phase_linked_slcs)} files")
-    # TODO: with manual indexes, this may be split into 2 and redone
     reference_date = [
         get_dates(f, fmt=cfg.input_options.cslc_date_fmt)[0] for f in input_file_list
     ][cfg.phase_linking.output_reference_idx]
 
+    # TODO: remove this bad back to get around spurt's required input
+    # Reading direct nearest-3 ifgs is not working due to some slicing problem
+    # so we need to just give it single reference ifgs, all referenced to the beginning
+    # of the stack
+    extra_reference_date = (
+        # For spurt / networks of unwrappings, we ignore this this "changeover" date
+        # It will get applied in the `timeseries/` step
+        cfg.output_options.extra_reference_date
+        if (
+            cfg.unwrap_options.unwrap_method != UnwrapMethod.SPURT
+            or cfg.interferogram_network.max_bandwidth is not None
+        )
+        else None
+    )
     ifg_file_list: list[Path] = []
     ifg_file_list = create_ifgs(
         interferogram_network=ifg_network,
         phase_linked_slcs=phase_linked_slcs,
         contained_compressed_slcs=any(is_compressed),
         reference_date=reference_date,
-        extra_reference_date=cfg.output_options.extra_reference_date,
+        extra_reference_date=extra_reference_date,
     )
     return (
         ifg_file_list,
@@ -290,6 +305,8 @@ def create_ifgs(
     ifg_file_list: list[Path] = []
 
     secondary_dates = [get_dates(f)[0] for f in phase_linked_slcs]
+    # TODO: if we manually set an ifg network (i.e. not rely on spurt),
+    # we may still want to just pass it right to `Network`
     if not contained_compressed_slcs and extra_reference_date is None:
         # When no compressed SLCs/extra reference were passed in to the config,
         # we can directly pass options to `Network` and get the ifg list
@@ -326,7 +343,9 @@ def create_ifgs(
             for f in phase_linked_slcs
         ]
     else:
-        manual_reference_idx = _get_nearest_idx(secondary_dates, extra_reference_date)
+        manual_reference_idx = get_nearest_date_idx(
+            secondary_dates, extra_reference_date
+        )
 
         single_ref_ifgs = [
             interferogram.convert_pl_to_ifg(
@@ -474,22 +493,3 @@ def _get_mask(
         mask_filename = nodata_mask_file
 
     return mask_filename
-
-
-def _get_nearest_idx(
-    input_dates: Sequence[datetime.datetime],
-    selected_date: datetime.datetime,
-) -> int:
-    """Find the index nearest to `selected_date` within `input_dates`."""
-    sorted_inputs = sorted(input_dates)
-    if not sorted_inputs[0] <= selected_date <= sorted_inputs[-1]:
-        msg = f"Requested {selected_date} falls outside of input range: "
-        msg += f"{sorted_inputs[0]}, {sorted_inputs[-1]}"
-        raise ValueError(msg)
-
-    nearest_idx = min(
-        range(len(input_dates)),
-        key=lambda i: abs((input_dates[i] - selected_date).total_seconds()),
-    )
-
-    return nearest_idx
