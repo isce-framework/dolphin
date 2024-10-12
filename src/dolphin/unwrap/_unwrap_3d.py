@@ -1,12 +1,10 @@
 import logging
 import shutil
 from pathlib import Path
-from typing import TYPE_CHECKING, Sequence
+from typing import Sequence
 
 import numpy as np
-import rasterio as rio
-from opera_utils import get_dates, sort_files_by_date
-from rasterio.windows import Window
+from opera_utils import get_dates
 from scipy import ndimage, signal
 
 from dolphin import io, utils
@@ -18,9 +16,6 @@ from ._constants import CONNCOMP_SUFFIX, DEFAULT_CCL_NODATA, UNW_SUFFIX
 logger = logging.getLogger(__name__)
 
 DEFAULT_OPTIONS = SpurtOptions()
-
-if TYPE_CHECKING:
-    from spurt.io import Irreg3DInput
 
 
 def unwrap_spurt(
@@ -68,35 +63,18 @@ def unwrap_spurt(
     mrg_settings = MergerSettings(**options.merger_settings.model_dump())
 
     # Using default Hop3Graph
-    ifg_date_tuples = [get_dates(f) for f in ifg_filenames]
-    all_dates = sorted(set(utils.flatten(ifg_date_tuples)))
-    g_time = Hop3Graph(len(all_dates))
+    # TODO: this is a weird hack.. if there are 15 dates, there are 14 interferograms
+    # the spurt cli expects one of the filenames to be all 0s? maybe?
+    # But also still expects them to be date1_date2.int.tif?
+    g_time = Hop3Graph(len(ifg_filenames) + 1)
     logger.info(f"Using Hop3 Graph in time with { g_time.npoints } epochs.")
 
-    if len(all_dates) == len(ifg_filenames) + 1:
-        # Single reference interferograms: do they all have same first date?
-        if len({d[0] for d in ifg_date_tuples}) > 1:
-            errmsg = "interferograms for spurt must be single reference."
-            raise ValueError(errmsg)
-        logger.info(
-            "Converting single-reference interferograms to Hop3 during unwrapping"
-        )
-        date_str_to_file = _map_date_str_to_file(ifg_filenames)
-        stack = SLCStackReader(
-            slc_files=date_str_to_file,
-            temp_coh_file=temporal_coherence_file,
-            temp_coh_threshold=options.temporal_coherence_threshold,
-        )
-    elif len(ifg_filenames) == len(g_time.links):
-        logger.info("Using pre-formed nearest 3 interferograms")
-        stack = IfgStackReader(
-            ifg_filenames=sort_files_by_date(ifg_filenames)[0],
-            quality_file=temporal_coherence_file,
-            threshold=options.temporal_coherence_threshold,
-        )
-    else:
-        raise ValueError("spurt requires nearest-3 interferograms, or single-reference")
-
+    date_str_to_file = _map_date_str_to_file(ifg_filenames)
+    stack = SLCStackReader(
+        slc_files=date_str_to_file,
+        temp_coh_file=temporal_coherence_file,
+        temp_coh_threshold=options.temporal_coherence_threshold,
+    )
     # Run the workflow
     # Generate tiles
     get_tiles(stack, gen_settings, tile_settings)
@@ -125,17 +103,22 @@ def unwrap_spurt(
 def _map_date_str_to_file(
     ifg_filenames: Sequence[PathOrStr], date_fmt: str = "%Y%m%d"
 ) -> dict[str, PathOrStr | None]:
-    date_tuples = sorted([get_dates(f) for f in ifg_filenames])
+    # Then list individual SLCs
+    dates = [get_dates(f) for f in ifg_filenames]
+    if len({d[0] for d in dates}) > 1:
+        errmsg = "interferograms for spurt must be single reference."
+        raise ValueError(errmsg)
 
-    secondary_dates = [d[1] for d in date_tuples]
-    first_date = date_tuples[0][0].strftime(date_fmt)
+    secondary_dates = [d[1] for d in dates]
+    first_date = dates[0][0].strftime(date_fmt)
     date_strings = [utils.format_dates(d, fmt=date_fmt) for d in secondary_dates]
 
-    # first date - set to None
-    # None is special case for reference epoch
-    date_str_to_file: dict[str, PathOrStr | None] = {first_date: None} | dict(
+    date_str_to_file: dict[str, PathOrStr | None] = dict(
         zip(date_strings, ifg_filenames)
     )
+    # first date - set to None
+    # None is special case for reference epoch
+    date_str_to_file[first_date] = None
     return date_str_to_file
 
 
@@ -177,72 +160,3 @@ def _create_conncomps_from_mask(
     for f in conncomp_files[1:]:
         shutil.copy(conncomp_files[0], f)
     return conncomp_files
-
-
-class IfgStackReader:
-    """Class to read slides of nearest 3- interferograms."""
-
-    def __init__(
-        self,
-        ifg_filenames: Sequence[PathOrStr],
-        quality_file: PathOrStr,
-        threshold: float = 0.6,
-    ):
-        self.quality_file = quality_file
-        self.threshold = threshold
-        date_str_to_file = _map_date_str_to_file(ifg_filenames)
-        # Keep naming as spurt currently does
-        # TODO: change once reader interface is merged,
-        # along with the "temp coh" references
-        # Note that even though these "slc_files" are NOT really right,
-        # spurt doesn't use this except for one place to get a `like_filename`.
-        # This hack should also go away in the interface change
-        self.slc_files = date_str_to_file
-        # Extract dates by getting a list of slc_files keys
-        self.dates = sorted(date_str_to_file.keys())
-        self.ifg_filenames = ifg_filenames
-
-        self._reader = io.RasterStackReader.from_file_list(ifg_filenames)
-
-    @property
-    def temp_coh_file(self) -> PathOrStr:
-        return self.quality_file
-
-    @property
-    def temp_coh_threshold(self) -> float:
-        return self.threshold
-
-    def read_tile(self, space: tuple[slice, ...]) -> "Irreg3DInput":
-        """Return a tile of 3D sparse data."""
-        # First read the quality file to get dimensions
-        from spurt.io import Irreg3DInput
-
-        msk = self.read_mask(space=space)
-        xy = np.column_stack(np.where(msk))
-
-        # Assumed complex64 for now but can read one file and determine
-        rows, cols = space
-        arr = self._reader[:, rows, cols]
-
-        return Irreg3DInput(arr[:, msk], xy)
-
-    def read_quality(self, space: tuple[slice, ...] | None = None) -> np.ndarray:
-        """Read in a slice from the quality raster."""
-        if space is None:
-            space = np.s_[:, :]
-        row_slice, col_slice = space
-        with rio.open(self.temp_coh_file) as src:
-            window = Window.from_slices(
-                row_slice, col_slice, width=src.width, height=src.height
-            )
-            return src.read(1, window=window)
-
-    def read_temporal_coherence(
-        self, space: tuple[slice, ...] | None = None
-    ) -> np.ndarray:
-        return self.read_quality(space=space)
-
-    def read_mask(self, space: tuple[slice, ...] | None = None) -> np.ndarray:
-        if space is None:
-            space = np.s_[:, :]
-        return self.read_temporal_coherence(space=space) > self.temp_coh_threshold
