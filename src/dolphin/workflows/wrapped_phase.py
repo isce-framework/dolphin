@@ -12,6 +12,7 @@ from dolphin import Bbox, Filename, interferogram, masking, ps
 from dolphin._log import log_runtime, setup_logging
 from dolphin.io import VRTStack
 from dolphin.utils import get_nearest_date_idx
+from dolphin.workflows import UnwrapMethod
 
 from . import InterferogramNetwork, sequential
 from .config import DisplacementWorkflow
@@ -211,18 +212,27 @@ def run(
         )
 
     logger.info(f"Creating virtual interferograms from {len(phase_linked_slcs)} files")
-    # TODO: with manual indexes, this may be split into 2 and redone
     reference_date = [
         get_dates(f, fmt=cfg.input_options.cslc_date_fmt)[0] for f in input_file_list
     ][cfg.phase_linking.output_reference_idx]
 
+    # TODO: remove this bad back to get around spurt's required input
+    # Reading direct nearest-3 ifgs is not working due to some slicing problem
+    # so we need to just give it single reference ifgs, all referenced to the beginning
+    # of the stack
+    extra_reference_date = (
+        cfg.output_options.extra_reference_date
+        # For spurt: we must ignore this
+        if cfg.unwrap_options.unwrap_method != UnwrapMethod.SPURT
+        else None
+    )
     ifg_file_list: list[Path] = []
     ifg_file_list = create_ifgs(
         interferogram_network=ifg_network,
         phase_linked_slcs=phase_linked_slcs,
         contained_compressed_slcs=any(is_compressed),
         reference_date=reference_date,
-        extra_reference_date=cfg.output_options.extra_reference_date,
+        extra_reference_date=extra_reference_date,
     )
     return (
         ifg_file_list,
