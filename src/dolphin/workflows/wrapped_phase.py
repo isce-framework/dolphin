@@ -221,9 +221,13 @@ def run(
     # so we need to just give it single reference ifgs, all referenced to the beginning
     # of the stack
     extra_reference_date = (
+        # For spurt / networks of unwrappings, we ignore this this "changeover" date
+        # It will get applied in the `timeseries/` step
         cfg.output_options.extra_reference_date
-        # For spurt: we must ignore this
-        if cfg.unwrap_options.unwrap_method != UnwrapMethod.SPURT
+        if (
+            cfg.unwrap_options.unwrap_method != UnwrapMethod.SPURT
+            or cfg.interferogram_network.max_bandwidth is not None
+        )
         else None
     )
     ifg_file_list: list[Path] = []
