@@ -1,7 +1,7 @@
 import logging
 import shutil
 from pathlib import Path
-from typing import Sequence
+from typing import TYPE_CHECKING, Sequence
 
 import numpy as np
 import rasterio as rio
@@ -18,6 +18,9 @@ from ._constants import CONNCOMP_SUFFIX, DEFAULT_CCL_NODATA, UNW_SUFFIX
 logger = logging.getLogger(__name__)
 
 DEFAULT_OPTIONS = SpurtOptions()
+
+if TYPE_CHECKING:
+    from spurt.io import Irreg3DInput
 
 
 def unwrap_spurt(
@@ -179,8 +182,6 @@ def _create_conncomps_from_mask(
 class IfgStackReader:
     """Class to read slides of nearest 3- interferograms."""
 
-    from spurt.io import Irreg3DInput
-
     def __init__(
         self,
         ifg_filenames: Sequence[PathOrStr],
@@ -211,11 +212,11 @@ class IfgStackReader:
     def temp_coh_threshold(self) -> float:
         return self.threshold
 
-    def read_tile(self, space: tuple[slice, ...]) -> Irreg3DInput:
+    def read_tile(self, space: tuple[slice, ...]) -> "Irreg3DInput":
         """Return a tile of 3D sparse data."""
+        # First read the quality file to get dimensions
         from spurt.io import Irreg3DInput
 
-        # First read the quality file to get dimensions
         msk = self.read_mask(space=space)
         xy = np.column_stack(np.where(msk))
 
