@@ -227,11 +227,18 @@ def test_displacement_run_extra_reference_date(
         ]
 
         unw_names = [pp.name for pp in paths.unwrapped_paths]
-        if cfg.unwrap_options.unwrap_method == "phass":
+        if cfg.unwrap_options.unwrap_method == "spurt":
+            assert unw_names == [
+                "20220101_20220102.unw.tif",
+                "20220101_20220103.unw.tif",
+                "20220101_20220104.unw.tif",
+                "20220102_20220103.unw.tif",
+                "20220102_20220104.unw.tif",
+                "20220103_20220104.unw.tif",
+            ]
+        else:
             assert unw_names == [
                 "20220101_20220102.unw.tif",
                 "20220101_20220103.unw.tif",
                 "20220103_20220104.unw.tif",
             ]
-        else:
-            assert unw_names is None
