@@ -5,7 +5,7 @@ from typing import Sequence
 
 import numpy as np
 import rasterio as rio
-from opera_utils import get_dates
+from opera_utils import get_dates, sort_files_by_date
 from rasterio.windows import Window
 from scipy import ndimage, signal
 
@@ -87,7 +87,7 @@ def unwrap_spurt(
     elif len(ifg_filenames) == len(g_time.links):
         logger.info("Using pre-formed nearest 3 interferograms")
         stack = IfgStackReader(
-            ifg_filenames=ifg_filenames,
+            ifg_filenames=sort_files_by_date(ifg_filenames)[0],
             quality_file=temporal_coherence_file,
             threshold=options.temporal_coherence_threshold,
         )
