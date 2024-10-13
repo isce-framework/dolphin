@@ -3,7 +3,7 @@ from numpy.typing import NDArray
 
 
 def goldstein(
-    phase: NDArray[np.complex_] | NDArray[np.float_], alpha: float, psize: int = 32
+    phase: NDArray[np.complex64] | NDArray[np.float_], alpha: float, psize: int = 32
 ) -> np.ndarray:
     """Apply the Goldstein adaptive filter to the given data.
 
@@ -28,7 +28,7 @@ def goldstein(
 
     """
 
-    def apply_pspec(data: NDArray[np.complex_]) -> np.ndarray:
+    def apply_pspec(data: NDArray[np.complex64]) -> np.ndarray:
         # NaN is allowed value
         if alpha < 0:
             raise ValueError(f"alpha must be >= 0, got {alpha = }")
@@ -54,7 +54,7 @@ def goldstein(
         return weight
 
     def patch_goldstein_filter(
-        data: NDArray[np.complex_], weight: NDArray[np.float_], psize: int
+        data: NDArray[np.complex64], weight: NDArray[np.float_], psize: int
     ) -> np.ndarray:
         """Apply the filter to a single patch of data.
 
@@ -78,7 +78,7 @@ def goldstein(
         data = np.fft.ifft2(data, s=(psize, psize))
         return weight * data
 
-    def apply_goldstein_filter(data: NDArray[np.complex_]) -> np.ndarray:
+    def apply_goldstein_filter(data: NDArray[np.complex64]) -> np.ndarray:
         # Create an empty array for the output
         out = np.zeros(data.shape, dtype=np.complex64)
         empty_mask = np.isnan(data) | (np.angle(data) == 0)

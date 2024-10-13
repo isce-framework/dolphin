@@ -374,7 +374,7 @@ class TestWhirlwind:
             corr_filename=corr_raster,
             unw_filename=unw_filename,
             unwrap_options=unwrap_options,
-            nlooks=1,
+            nlooks=3,
         )
         assert out_path.exists()
         assert conncomp_path.exists()
