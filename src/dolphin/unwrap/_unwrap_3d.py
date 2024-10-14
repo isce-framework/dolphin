@@ -210,7 +210,7 @@ def filled_masked_unw_regions(
 
 def _reform_wrapped_phase(
     unw_filename: PathOrStr, ifg_filenames: Sequence[PathOrStr]
-) -> tuple[NDArray[np.float_], NDArray[np.complex64]]:
+) -> tuple[NDArray[np.float64], NDArray[np.complex64]]:
     """Load unwrapped phase, and re-calculate the corresponding wrapped phase.
 
     Finds the matching ifg to `unw_filename`, or uses 2 to compute the correct
