@@ -326,9 +326,9 @@ class TestSpurt:
         from dolphin import io
         from dolphin.phase_link import simulate
 
-        slc_stack = np.exp(
-            1j * simulate.make_defo_stack((20, 100, 200), sigma=1)
-        ).astype("complex64")
+        slc_stack = np.exp(1j * simulate.make_defo_stack((20, 30, 40), sigma=1)).astype(
+            "complex64"
+        )
         ifg_stack = slc_stack[1:] * slc_stack[[0]].conj()
         # Write to a file
         d = tmp_path / "gtiff"
@@ -374,7 +374,7 @@ class TestWhirlwind:
             corr_filename=corr_raster,
             unw_filename=unw_filename,
             unwrap_options=unwrap_options,
-            nlooks=3,
+            nlooks=1,
         )
         assert out_path.exists()
         assert conncomp_path.exists()
