@@ -69,7 +69,7 @@ def get_2pi_ambiguities(
 
 
 def interpolate_masked_gaps(
-    unw: NDArray[np.float_], ifg: NDArray[np.complex64]
+    unw: NDArray[np.float64], ifg: NDArray[np.complex64]
 ) -> None:
     """Perform phase unwrapping using nearest neighbor interpolation of ambiguities.
 

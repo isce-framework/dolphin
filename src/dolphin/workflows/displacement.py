@@ -7,8 +7,8 @@ import logging
 import multiprocessing as mp
 from collections import defaultdict
 from concurrent.futures import ProcessPoolExecutor
+from dataclasses import dataclass
 from pathlib import Path
-from typing import NamedTuple
 
 from opera_utils import group_by_burst, group_by_date  # , get_dates
 from tqdm.auto import tqdm
@@ -25,8 +25,9 @@ from .config import DisplacementWorkflow  # , TimeseriesOptions
 logger = logging.getLogger(__name__)
 
 
-class OutputPaths(NamedTuple):
-    """Named tuple of `DisplacementWorkflow` outputs."""
+@dataclass
+class OutputPaths:
+    """Output files of the `DisplacementWorkflow`."""
 
     comp_slc_dict: dict[str, list[Path]]
     stitched_ifg_paths: list[Path]
@@ -188,15 +189,7 @@ def run(
     # Is there one best size? dependent on `half_window` or resolution?
     # For now, just pick a reasonable size
     corr_window_size = (11, 11)
-    (
-        stitched_ifg_paths,
-        stitched_cor_paths,
-        stitched_temp_coh_file,
-        stitched_ps_file,
-        stitched_amp_dispersion_file,
-        stitched_shp_count_file,
-        stitched_similarity_file,
-    ) = stitching_bursts.run(
+    stitched_paths = stitching_bursts.run(
         ifg_file_list=ifg_file_list,
         temp_coh_file_list=temp_coh_file_list,
         ps_file_list=ps_file_list,
@@ -217,13 +210,13 @@ def run(
         _print_summary(cfg)
         return OutputPaths(
             comp_slc_dict=comp_slc_dict,
-            stitched_ifg_paths=stitched_ifg_paths,
-            stitched_cor_paths=stitched_cor_paths,
-            stitched_temp_coh_file=stitched_temp_coh_file,
-            stitched_ps_file=stitched_ps_file,
-            stitched_amp_dispersion_file=stitched_amp_dispersion_file,
-            stitched_shp_count_file=stitched_shp_count_file,
-            stitched_similarity_file=stitched_similarity_file,
+            stitched_ifg_paths=stitched_paths.ifg_paths,
+            stitched_cor_paths=stitched_paths.interferometric_corr_paths,
+            stitched_temp_coh_file=stitched_paths.temp_coh_file,
+            stitched_ps_file=stitched_paths.ps_file,
+            stitched_amp_dispersion_file=stitched_paths.amp_dispersion_file,
+            stitched_shp_count_file=stitched_paths.shp_count_file,
+            stitched_similarity_file=stitched_paths.similarity_file,
             unwrapped_paths=None,
             conncomp_paths=None,
             timeseries_paths=None,
@@ -235,9 +228,9 @@ def run(
     row_looks, col_looks = cfg.phase_linking.half_window.to_looks()
     nlooks = row_looks * col_looks
     unwrapped_paths, conncomp_paths = unwrapping.run(
-        ifg_file_list=stitched_ifg_paths,
-        cor_file_list=stitched_cor_paths,
-        temporal_coherence_file=stitched_temp_coh_file,
+        ifg_file_list=stitched_paths.ifg_paths,
+        cor_file_list=stitched_paths.interferometric_corr_paths,
+        temporal_coherence_file=stitched_paths.temp_coh_file,
         nlooks=nlooks,
         unwrap_options=cfg.unwrap_options,
         mask_file=cfg.mask_file,
@@ -258,8 +251,8 @@ def run(
         timeseries_paths, reference_point = timeseries.run(
             unwrapped_paths=unwrapped_paths,
             conncomp_paths=conncomp_paths,
-            corr_paths=stitched_cor_paths,
-            condition_file=stitched_temp_coh_file,
+            corr_paths=stitched_paths.interferometric_corr_paths,
+            condition_file=stitched_paths.temp_coh_file,
             condition=CallFunc.MAX,
             output_dir=ts_opts._directory,
             method=timeseries.InversionMethod(ts_opts.method),
@@ -361,13 +354,13 @@ def run(
     _print_summary(cfg)
     return OutputPaths(
         comp_slc_dict=comp_slc_dict,
-        stitched_ifg_paths=stitched_ifg_paths,
-        stitched_cor_paths=stitched_cor_paths,
-        stitched_temp_coh_file=stitched_temp_coh_file,
-        stitched_ps_file=stitched_ps_file,
-        stitched_amp_dispersion_file=stitched_amp_dispersion_file,
-        stitched_shp_count_file=stitched_shp_count_file,
-        stitched_similarity_file=stitched_similarity_file,
+        stitched_ifg_paths=stitched_paths.ifg_paths,
+        stitched_cor_paths=stitched_paths.interferometric_corr_paths,
+        stitched_temp_coh_file=stitched_paths.temp_coh_file,
+        stitched_ps_file=stitched_paths.ps_file,
+        stitched_amp_dispersion_file=stitched_paths.amp_dispersion_file,
+        stitched_shp_count_file=stitched_paths.shp_count_file,
+        stitched_similarity_file=stitched_paths.similarity_file,
         unwrapped_paths=unwrapped_paths,
         # TODO: Let's keep the unwrapped_paths since all the outputs are
         # corresponding to those and if we have a network unwrapping, the

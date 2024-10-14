@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from pathlib import Path
-from typing import NamedTuple, Sequence
+from typing import Sequence
 
 from dolphin import stitching
 from dolphin._log import log_runtime
@@ -18,22 +19,23 @@ from .config import OutputOptions
 logger = logging.getLogger(__name__)
 
 
-class StitchedOutputs(NamedTuple):
+@dataclass
+class StitchedOutputs:
     """Output rasters from stitching step."""
 
-    stitched_ifg_paths: list[Path]
+    ifg_paths: list[Path]
     """List of Paths to the stitched interferograms."""
     interferometric_corr_paths: list[Path]
     """List of Paths to interferometric correlation files created."""
-    stitched_temp_coh_file: Path
+    temp_coh_file: Path
     """Path to temporal correlation file created."""
-    stitched_ps_file: Path
+    ps_file: Path
     """Path to ps mask file created."""
-    stitched_amp_disp_file: Path
+    amp_dispersion_file: Path
     """Path to amplitude dispersion file created."""
-    stitched_shp_count_file: Path
+    shp_count_file: Path
     """Path to SHP count file created."""
-    stitched_similarity_file: Path
+    similarity_file: Path
     """Path to cosine similarity file created."""
 
 
