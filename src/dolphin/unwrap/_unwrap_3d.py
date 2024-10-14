@@ -191,19 +191,20 @@ def filled_masked_unw_regions(
     if output_dir is None:
         output_dir = Path(unw_filenames[0]).parent
 
+    with rasterio.open(unw_filenames[0]) as src:
+        profile = src.profile.copy()
     for unw_filename in unw_filenames:
         unw, wrapped_phase = _reform_wrapped_phase(unw_filename, ifg_filenames)
         interpolate_masked_gaps(unw, wrapped_phase)
 
         # Save the updated unwrapped phase
-        with rasterio.open(
-            output_dir / Path(unw_filename).name,
-            "w",
-            count=1,
-            height=unw.shape[0],
-            width=unw.shape[1],
-            dtype="float32",
-        ) as src:
+        kwargs = profile | {
+            "count": 1,
+            "height": unw.shape[0],
+            "width": unw.shape[1],
+            "dtype": "float32",
+        }
+        with rasterio.open(output_dir / Path(unw_filename).name, "w", **kwargs) as src:
             src.write(unw, 1)
 
 

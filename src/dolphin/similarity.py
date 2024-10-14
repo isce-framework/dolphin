@@ -63,7 +63,7 @@ def max_similarity(
 ):
     """Compute the maximum similarity of each pixel and its neighbors.
 
-    Resulting similarity matches Equation (6) of @[Wang2022AccuratePersistentScatterer]
+    Resulting similarity matches Equation (6) of [@Wang2022AccuratePersistentScatterer]
 
     Parameters
     ----------
