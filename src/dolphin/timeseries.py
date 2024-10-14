@@ -161,7 +161,7 @@ def run(
             "Skipping inversion step: only single reference interferograms exist."
         )
         # Copy over the unwrapped paths to `timeseries/`
-        final_out = _convert_and_reference(
+        final_ts_paths = _convert_and_reference(
             unwrapped_paths,
             output_dir=output_dir,
             reference_point=ref_point,
@@ -179,9 +179,9 @@ def run(
             method=method,
         )
         if extra_reference_date is None:
-            final_out = inverted_phase_paths
+            final_ts_paths = inverted_phase_paths
         else:
-            final_out = _redo_reference(inverted_phase_paths, extra_reference_date)
+            final_ts_paths = _redo_reference(inverted_phase_paths, extra_reference_date)
 
     if add_overviews:
         logger.info("Creating overviews for timeseries images")
@@ -204,7 +204,7 @@ def run(
             velocity_file = Path(output_dir) / "velocity.tif"
 
         create_velocity(
-            unw_file_list=inverted_phase_paths,
+            unw_file_list=final_ts_paths,
             output_file=velocity_file,
             reference=ref_point,
             cor_file_list=cor_file_list,
@@ -213,7 +213,7 @@ def run(
             num_threads=num_threads,
         )
 
-    return final_out, ref_point
+    return final_ts_paths, ref_point
 
 
 def _redo_reference(
