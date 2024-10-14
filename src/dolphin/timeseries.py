@@ -185,7 +185,7 @@ def run(
 
     if add_overviews:
         logger.info("Creating overviews for timeseries images")
-        create_overviews(inverted_phase_paths, image_type=ImageType.UNWRAPPED)
+        create_overviews(final_ts_paths, image_type=ImageType.UNWRAPPED)
 
     if run_velocity:
         logger.info("Estimating phase velocity")
@@ -197,7 +197,7 @@ def run(
             cor_file_list = None
         else:
             cor_file_list = (
-                corr_paths if len(corr_paths) == len(inverted_phase_paths) else None
+                corr_paths if len(corr_paths) == len(final_ts_paths) else None
             )
 
         if velocity_file is None:
