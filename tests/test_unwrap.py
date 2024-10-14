@@ -322,18 +322,18 @@ class TestTophu:
 
 class TestSpurt:
     @pytest.fixture()
-    def ifg_file_list(self, tmp_path, slc_stack, slc_date_list):
+    def ifg_file_list(self, tmp_path, slc_date_list):
         from dolphin import io
         from dolphin.phase_link import simulate
 
-        slc_stack = np.exp(1j * simulate.make_defo_stack((20, 30, 40), sigma=1)).astype(
+        slc_stack = np.exp(1j * simulate.make_defo_stack((10, 20, 30), sigma=1)).astype(
             "complex64"
         )
         ifg_stack = slc_stack[1:] * slc_stack[[0]].conj()
         # Write to a file
         d = tmp_path / "gtiff"
         d.mkdir()
-        name_template = d / f"{slc_date_list[0].strftime('%Y%m%d')}_{{date}}.slc.tif"
+        name_template = d / f"{slc_date_list[0].strftime('%Y%m%d')}_{{date}}.int.tif"
 
         file_list = []
         for cur_date, cur_ifg in zip(slc_date_list[1:], ifg_stack):
@@ -343,16 +343,27 @@ class TestSpurt:
 
         return file_list
 
+    @pytest.fixture()
+    def temp_coh_raster(self, ifg_file_list):
+        d = Path(ifg_file_list[0]).parent
+        coh_raster = d / "temporal_coherence.tif"
+        io.write_arr(
+            arr=np.random.rand(20, 30).astype(np.float32),
+            output_name=coh_raster,
+            driver="GTiff",
+        )
+        return coh_raster
+
     @pytest.mark.skipif(
         not SPURT_INSTALLED, reason="spurt not installed for 3d unwrapping"
     )
-    def test_unwrap_spurt(self, tmp_path, ifg_file_list, corr_raster):
+    def test_unwrap_spurt(self, tmp_path, ifg_file_list, temp_coh_raster):
         opts = SpurtOptions()
         unwrap_options = UnwrapOptions(unwrap_method="spurt", spurt_options=opts)
         out_paths, conncomp_paths = dolphin.unwrap.run(
             ifg_filenames=ifg_file_list,
             cor_filenames=ifg_file_list,  # NOT USED... but required for `run`?
-            temporal_coherence_file=corr_raster,
+            temporal_coherence_file=temp_coh_raster,
             unwrap_options=unwrap_options,
             output_path=tmp_path,
             nlooks=5,
