@@ -7,10 +7,8 @@ import logging
 import multiprocessing as mp
 from collections import defaultdict
 from concurrent.futures import ProcessPoolExecutor
-from datetime import datetime
-from os import PathLike
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Mapping, NamedTuple, Sequence
 
 from opera_utils import group_by_burst, group_by_date  # , get_dates
 from tqdm.auto import tqdm
@@ -21,14 +19,15 @@ from dolphin.timeseries import ReferencePoint
 from dolphin.workflows import CallFunc
 
 from . import stitching_bursts, unwrapping, wrapped_phase
-from ._utils import _create_burst_cfg, _remove_dir_if_empty
+from ._utils import _create_burst_cfg, _remove_dir_if_empty, parse_ionosphere_files
 from .config import DisplacementWorkflow  # , TimeseriesOptions
 
 logger = logging.getLogger(__name__)
 
 
-class OutputPaths(NamedTuple):
-    """Named tuple of `DisplacementWorkflow` outputs."""
+@dataclass
+class OutputPaths:
+    """Output files of the `DisplacementWorkflow`."""
 
     comp_slc_dict: dict[str, list[Path]]
     stitched_ifg_paths: list[Path]
@@ -37,6 +36,7 @@ class OutputPaths(NamedTuple):
     stitched_ps_file: Path
     stitched_amp_dispersion_file: Path
     stitched_shp_count_file: Path
+    stitched_similarity_file: Path
     unwrapped_paths: list[Path] | None
     conncomp_paths: list[Path] | None
     timeseries_paths: list[Path] | None
@@ -91,16 +91,9 @@ def run(
     else:
         grouped_amp_mean_files = defaultdict(list)
 
-    grouped_iono_files: Mapping[tuple[datetime], Sequence[str | PathLike[str]]] = {}
-    if len(cfg.correction_options.ionosphere_files) > 0:
-        for fmt in cfg.correction_options._iono_date_fmt:
-            group_iono = group_by_date(
-                cfg.correction_options.ionosphere_files,
-                file_date_fmt=fmt,
-            )
-            if len(next(iter(group_iono))) == 0:
-                continue
-            grouped_iono_files = {**grouped_iono_files, **group_iono}
+    grouped_iono_files = parse_ionosphere_files(
+        cfg.correction_options.ionosphere_files, cfg.correction_options._iono_date_fmt
+    )
 
     # ######################################
     # 1. Burst-wise Wrapped phase estimation
@@ -137,6 +130,7 @@ def run(
     ps_file_list: list[Path] = []
     amp_dispersion_file_list: list[Path] = []
     shp_count_file_list: list[Path] = []
+    similarity_file_list: list[Path] = []
     # The comp_slc tracking object is a dict, since we'll need to organize
     # multiple comp slcs by burst (they'll have the same filename)
     comp_slc_dict: dict[str, list[Path]] = {}
@@ -170,15 +164,22 @@ def run(
         for fut in fut_to_burst:
             burst = fut_to_burst[fut]
 
-            cur_ifg_list, comp_slcs, temp_coh, ps_file, amp_disp_file, shp_count = (
-                fut.result()
-            )
+            (
+                cur_ifg_list,
+                comp_slcs,
+                temp_coh,
+                ps_file,
+                amp_disp_file,
+                shp_count,
+                similarity,
+            ) = fut.result()
             ifg_file_list.extend(cur_ifg_list)
             comp_slc_dict[burst] = comp_slcs
             temp_coh_file_list.append(temp_coh)
             ps_file_list.append(ps_file)
             amp_dispersion_file_list.append(amp_disp_file)
             shp_count_file_list.append(shp_count)
+            similarity_file_list.append(similarity)
 
     # ###################################
     # 2. Stitch burst-wise interferograms
@@ -188,19 +189,13 @@ def run(
     # Is there one best size? dependent on `half_window` or resolution?
     # For now, just pick a reasonable size
     corr_window_size = (11, 11)
-    (
-        stitched_ifg_paths,
-        stitched_cor_paths,
-        stitched_temp_coh_file,
-        stitched_ps_file,
-        stitched_amp_dispersion_file,
-        stitched_shp_count_file,
-    ) = stitching_bursts.run(
+    stitched_paths = stitching_bursts.run(
         ifg_file_list=ifg_file_list,
         temp_coh_file_list=temp_coh_file_list,
         ps_file_list=ps_file_list,
         amp_dispersion_list=amp_dispersion_file_list,
         shp_count_file_list=shp_count_file_list,
+        similarity_file_list=similarity_file_list,
         stitched_ifg_dir=cfg.interferogram_network._directory,
         output_options=cfg.output_options,
         file_date_fmt=cfg.input_options.cslc_date_fmt,
@@ -215,12 +210,13 @@ def run(
         _print_summary(cfg)
         return OutputPaths(
             comp_slc_dict=comp_slc_dict,
-            stitched_ifg_paths=stitched_ifg_paths,
-            stitched_cor_paths=stitched_cor_paths,
-            stitched_temp_coh_file=stitched_temp_coh_file,
-            stitched_ps_file=stitched_ps_file,
-            stitched_amp_dispersion_file=stitched_amp_dispersion_file,
-            stitched_shp_count_file=stitched_shp_count_file,
+            stitched_ifg_paths=stitched_paths.ifg_paths,
+            stitched_cor_paths=stitched_paths.interferometric_corr_paths,
+            stitched_temp_coh_file=stitched_paths.temp_coh_file,
+            stitched_ps_file=stitched_paths.ps_file,
+            stitched_amp_dispersion_file=stitched_paths.amp_dispersion_file,
+            stitched_shp_count_file=stitched_paths.shp_count_file,
+            stitched_similarity_file=stitched_paths.similarity_file,
             unwrapped_paths=None,
             conncomp_paths=None,
             timeseries_paths=None,
@@ -232,9 +228,9 @@ def run(
     row_looks, col_looks = cfg.phase_linking.half_window.to_looks()
     nlooks = row_looks * col_looks
     unwrapped_paths, conncomp_paths = unwrapping.run(
-        ifg_file_list=stitched_ifg_paths,
-        cor_file_list=stitched_cor_paths,
-        temporal_coherence_file=stitched_temp_coh_file,
+        ifg_file_list=stitched_paths.ifg_paths,
+        cor_file_list=stitched_paths.interferometric_corr_paths,
+        temporal_coherence_file=stitched_paths.temp_coh_file,
         nlooks=nlooks,
         unwrap_options=cfg.unwrap_options,
         mask_file=cfg.mask_file,
@@ -255,8 +251,8 @@ def run(
         timeseries_paths, reference_point = timeseries.run(
             unwrapped_paths=unwrapped_paths,
             conncomp_paths=conncomp_paths,
-            corr_paths=stitched_cor_paths,
-            condition_file=stitched_temp_coh_file,
+            corr_paths=stitched_paths.interferometric_corr_paths,
+            condition_file=stitched_paths.temp_coh_file,
             condition=CallFunc.MAX,
             output_dir=ts_opts._directory,
             method=timeseries.InversionMethod(ts_opts.method),
@@ -268,6 +264,7 @@ def run(
             # num_threads=cfg.worker_settings....?
             wavelength=cfg.input_options.wavelength,
             add_overviews=cfg.output_options.add_overviews,
+            extra_reference_date=cfg.output_options.extra_reference_date,
         )
 
     else:
@@ -357,12 +354,13 @@ def run(
     _print_summary(cfg)
     return OutputPaths(
         comp_slc_dict=comp_slc_dict,
-        stitched_ifg_paths=stitched_ifg_paths,
-        stitched_cor_paths=stitched_cor_paths,
-        stitched_temp_coh_file=stitched_temp_coh_file,
-        stitched_ps_file=stitched_ps_file,
-        stitched_amp_dispersion_file=stitched_amp_dispersion_file,
-        stitched_shp_count_file=stitched_shp_count_file,
+        stitched_ifg_paths=stitched_paths.ifg_paths,
+        stitched_cor_paths=stitched_paths.interferometric_corr_paths,
+        stitched_temp_coh_file=stitched_paths.temp_coh_file,
+        stitched_ps_file=stitched_paths.ps_file,
+        stitched_amp_dispersion_file=stitched_paths.amp_dispersion_file,
+        stitched_shp_count_file=stitched_paths.shp_count_file,
+        stitched_similarity_file=stitched_paths.similarity_file,
         unwrapped_paths=unwrapped_paths,
         # TODO: Let's keep the unwrapped_paths since all the outputs are
         # corresponding to those and if we have a network unwrapping, the

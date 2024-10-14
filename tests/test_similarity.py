@@ -51,47 +51,56 @@ def test_pixel_similarity():
     assert similarity.phase_similarity(x1, x1) == 1
 
 
-class TestMedianSimilarity:
+def test_pixel_similarity_zero_nan():
+    x1, x2 = np.zeros((2, 10), dtype="complex64")
+    sim = similarity.phase_similarity(x1, x2)
+    assert sim == 0
+
+    x1, x2 = np.full((2, 10), fill_value=np.nan + 1j * np.nan)
+    sim = similarity.phase_similarity(x1, x2)
+    assert np.isnan(sim)
+
+    x1, x2 = np.ones((2, 10), dtype="complex64")
+    sim = similarity.phase_similarity(x1, x2)
+    assert sim == 1
+
+
+def test_block_similarity_zero_nan():
+    block_zeros = np.zeros((10, 4, 5), dtype="complex64")
+    out = similarity.median_similarity(block_zeros, search_radius=2)
+    assert np.isnan(out).all()
+
+    block_nan = block_zeros * np.nan
+    out = similarity.median_similarity(block_nan, search_radius=2)
+    assert np.isnan(out).all()
+
+
+class TestStackSimilarity:
     @pytest.fixture
     def ifg_stack(self, slc_stack):
         return slc_stack * slc_stack[[0]].conj()
 
     @pytest.mark.parametrize("radius", [2, 5, 9])
-    def test_basic(self, ifg_stack, radius):
-        sim = similarity.median_similarity(ifg_stack, search_radius=radius)
+    @pytest.mark.parametrize("func", ["median", "max"])
+    def test_basic(self, ifg_stack, radius, func):
+        sim_func = getattr(similarity, f"{func}_similarity")
+        sim = sim_func(ifg_stack, search_radius=radius)
         assert np.all(sim > -1)
         assert np.all(sim < 1)
 
     @pytest.mark.parametrize("radius", [2, 5, 9])
-    def test_median_similarity_masked(self, ifg_stack, radius):
+    @pytest.mark.parametrize("func", ["median", "max"])
+    def test_max_similarity_masked(self, ifg_stack, radius, func):
         rows, cols = ifg_stack.shape[-2:]
         mask = np.random.rand(rows, cols).round().astype(bool)
-        sim = similarity.median_similarity(ifg_stack, search_radius=radius, mask=mask)
-        assert np.all(sim > -1)
-        assert np.all(sim < 1)
+        sim_func = getattr(similarity, f"{func}_similarity")
+        sim = sim_func(ifg_stack, search_radius=radius, mask=mask)
+
+        assert ((np.nan_to_num(sim) > -1) & (np.nan_to_num(sim) < 1)).all()
+        assert np.all(np.isnan(sim) == (~mask))
 
     def test_create_similarity(self, tmp_path, slc_file_list):
         outfile = tmp_path / "med_sim.tif"
         similarity.create_similarities(
             slc_file_list, output_file=outfile, num_threads=1, block_shape=(64, 64)
         )
-
-
-class TestMaxSimilarity:
-    @pytest.fixture
-    def ifg_stack(self, slc_stack):
-        return slc_stack * slc_stack[[0]].conj()
-
-    @pytest.mark.parametrize("radius", [2, 5, 9])
-    def test_basic(self, ifg_stack, radius):
-        sim = similarity.max_similarity(ifg_stack, search_radius=radius)
-        assert np.all(sim > -1)
-        assert np.all(sim < 1)
-
-    @pytest.mark.parametrize("radius", [2, 5, 9])
-    def test_max_similarity_masked(self, ifg_stack, radius):
-        rows, cols = ifg_stack.shape[-2:]
-        mask = np.random.rand(rows, cols).round().astype(bool)
-        sim = similarity.max_similarity(ifg_stack, search_radius=radius, mask=mask)
-        assert np.all(sim >= -1)
-        assert np.all(sim <= 1)
