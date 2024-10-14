@@ -435,8 +435,6 @@ class BackgroundStackWriter(BackgroundWriter, DatasetStackWriter):
         ----------
         data : ArrayLike
             3D data array to save.
-        filename : Filename
-            list of output files to save to, or (if cur_block is 2D) a single file.
         row_start : int
             Row index to start writing at.
         col_start : int

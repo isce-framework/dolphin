@@ -27,7 +27,7 @@ from ._common import (
     WorkflowBase,
     _read_file_list_or_glob,
 )
-from ._unwrap_options import UnwrapOptions
+from ._unwrap_options import UnwrapMethod, UnwrapOptions
 
 __all__ = [
     "DisplacementWorkflow",
@@ -246,3 +246,15 @@ class DisplacementWorkflow(WorkflowBase):
         self.timeseries_options._velocity_file = (
             work_dir / self.timeseries_options._velocity_file
         )
+
+        # Modify interferogram options if using spurt for 3d unwrapping,
+        # which only does nearest-3 interferograms
+        if self.unwrap_options.unwrap_method == UnwrapMethod.SPURT:
+            logger.info(
+                "Using spurt: will form single reference interferograms, later convert"
+                " to nearest-3"
+            )
+            self.interferogram_network.reference_idx = 0
+            # Force all other network options to None
+            for attr in ["max_bandwidth", "max_temporal_baseline", "indexes"]:
+                setattr(self.interferogram_network, attr, None)

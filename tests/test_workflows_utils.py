@@ -1,3 +1,4 @@
+from datetime import datetime
 from pathlib import Path
 
 import numpy as np
@@ -6,6 +7,7 @@ from osgeo import gdal
 
 from dolphin import stack
 from dolphin.io import _readers
+from dolphin.workflows._utils import parse_ionosphere_files
 from dolphin.workflows.single import setup_output_folder
 
 
@@ -82,3 +84,50 @@ def test_setup_output_folder_strided(tmpdir, tiled_file_list, strides):
         assert ds.RasterXSize == cols // strides["x"]
         assert ds.RasterYSize == rows // strides["y"]
         ds = None
+
+
+def test_parse_ionosphere_files():
+    ionosphere_files = [
+        Path("JPL0OPSFIN_20232780000_01D_02H_GIM.INX"),
+        Path("jplg1100.23i"),
+        Path("jplg1820.23i"),
+        Path("JPL0OPSFIN_20232660000_01D_02H_GIM.INX"),
+        Path("JPL0OPSFIN_20232300000_01D_02H_GIM.INX"),
+        Path("jplg2970.16i"),
+        Path("JPL0OPSFIN_20232420000_01D_02H_GIM.INX"),
+        Path("JPL0OPSFIN_20232540000_01D_02H_GIM.INX"),
+    ]
+
+    expected_output = {
+        (datetime(2023, 4, 20),): [Path("jplg1100.23i")],
+        (datetime(2023, 7, 1),): [Path("jplg1820.23i")],
+        (datetime(2016, 10, 23),): [Path("jplg2970.16i")],
+        (datetime(2023, 10, 5, 0, 0, 0),): [
+            Path("JPL0OPSFIN_20232780000_01D_02H_GIM.INX")
+        ],
+        (datetime(2023, 9, 23, 0, 0, 0),): [
+            Path("JPL0OPSFIN_20232660000_01D_02H_GIM.INX")
+        ],
+        (datetime(2023, 8, 18, 0, 0, 0),): [
+            Path("JPL0OPSFIN_20232300000_01D_02H_GIM.INX")
+        ],
+        (datetime(2023, 8, 30, 0, 0, 0),): [
+            Path("JPL0OPSFIN_20232420000_01D_02H_GIM.INX")
+        ],
+        (datetime(2023, 9, 11, 0, 0, 0),): [
+            Path("JPL0OPSFIN_20232540000_01D_02H_GIM.INX")
+        ],
+    }
+
+    grouped_iono_files = parse_ionosphere_files(ionosphere_files)
+    assert len(grouped_iono_files) == len(
+        expected_output
+    ), "Number of grouped dates does not match expected output."
+
+    for date_tuple, files in expected_output.items():
+        assert (
+            date_tuple in grouped_iono_files
+        ), f"Date {date_tuple} not found in grouped ionosphere files."
+        assert (
+            grouped_iono_files[date_tuple] == files
+        ), f"Files for date {date_tuple} do not match expected files."
