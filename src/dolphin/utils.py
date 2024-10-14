@@ -695,7 +695,7 @@ class DummyProcessPoolExecutor(Executor):
 def get_nearest_date_idx(
     input_items: Sequence[datetime.datetime],
     requested: datetime.datetime,
-    outside_input_range: Literal["allow", "warn", "raise"] = "warn",
+    outside_input_range: Literal["allow", "warn", "raise"] = "raise",
 ) -> int:
     """Find the index nearest to `requested` within `input_items`."""
     sorted_inputs = sorted(input_items)
