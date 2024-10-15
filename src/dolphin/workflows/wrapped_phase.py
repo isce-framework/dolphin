@@ -142,7 +142,7 @@ def run(
     extra_reference_date = cfg.output_options.extra_reference_date
     if extra_reference_date:
         new_compressed_slc_reference_idx = get_nearest_date_idx(
-            [dtup[0] for dtup in input_dates], extra_reference_date
+            [date_tup[0] for date_tup in input_dates], extra_reference_date
         )
     else:
         new_compressed_slc_reference_idx = None
