@@ -236,12 +236,16 @@ def run_wrapped_phase_single(
         # Get the mean to set as pixel magnitudes
         abs_stack = np.abs(cur_data[first_real_slc_idx:, in_trim_rows, in_trim_cols])
         cur_data_mean, cur_amp_dispersion, _ = calc_ps_block(abs_stack)
+        # NOTE: the `ministack.compressed_reference_idx` was set relative to *all*
+        # input images, real and compressed.
+        # Since we pass in just the first real idx, we have to subtract that off
+        ref_index_relative = ministack.compressed_reference_idx - first_real_slc_idx
         cur_comp_slc = compress(
             # Get the inner portion of the full-res SLC data
             cur_data[first_real_slc_idx:, in_trim_rows, in_trim_cols],
             pl_output.cpx_phase[first_real_slc_idx:, out_trim_rows, out_trim_cols],
             slc_mean=cur_data_mean,
-            reference_idx=ministack.compressed_reference_idx,
+            reference_idx=ref_index_relative,
         )
         # TODO: truncate
 
