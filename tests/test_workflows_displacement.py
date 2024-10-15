@@ -225,6 +225,7 @@ def test_displacement_run_extra_reference_date(
             "20220101_20220103.tif",
             "20220103_20220104.tif",
         ]
+        assert all(get_raster_units(p) == "meters" for p in paths.timeseries_paths)
 
         unw_names = [pp.name for pp in paths.unwrapped_paths]
         if cfg.unwrap_options.unwrap_method == "spurt":
@@ -242,3 +243,5 @@ def test_displacement_run_extra_reference_date(
                 "20220101_20220103.unw.tif",
                 "20220103_20220104.unw.tif",
             ]
+
+        assert all(get_raster_units(p) == "radians" for p in paths.unwrapped_paths)
