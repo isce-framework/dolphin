@@ -161,7 +161,7 @@ def run(
             "Skipping inversion step: only single reference interferograms exist."
         )
         # Copy over the unwrapped paths to `timeseries/`
-        inverted_phase_paths = _convert_and_reference(
+        final_ts_paths = _convert_and_reference(
             unwrapped_paths,
             output_dir=output_dir,
             reference_point=ref_point,
@@ -178,9 +178,14 @@ def run(
             wavelength=wavelength,
             method=method,
         )
+        if extra_reference_date is None:
+            final_ts_paths = inverted_phase_paths
+        else:
+            final_ts_paths = _redo_reference(inverted_phase_paths, extra_reference_date)
+
     if add_overviews:
         logger.info("Creating overviews for timeseries images")
-        create_overviews(inverted_phase_paths, image_type=ImageType.UNWRAPPED)
+        create_overviews(final_ts_paths, image_type=ImageType.UNWRAPPED)
 
     if run_velocity:
         logger.info("Estimating phase velocity")
@@ -192,14 +197,14 @@ def run(
             cor_file_list = None
         else:
             cor_file_list = (
-                corr_paths if len(corr_paths) == len(inverted_phase_paths) else None
+                corr_paths if len(corr_paths) == len(final_ts_paths) else None
             )
 
         if velocity_file is None:
             velocity_file = Path(output_dir) / "velocity.tif"
 
         create_velocity(
-            unw_file_list=inverted_phase_paths,
+            unw_file_list=final_ts_paths,
             output_file=velocity_file,
             reference=ref_point,
             cor_file_list=cor_file_list,
@@ -208,12 +213,7 @@ def run(
             num_threads=num_threads,
         )
 
-    if extra_reference_date is None:
-        final_out = inverted_phase_paths
-    else:
-        final_out = _redo_reference(inverted_phase_paths, extra_reference_date)
-
-    return final_out, ref_point
+    return final_ts_paths, ref_point
 
 
 def _redo_reference(
@@ -243,6 +243,7 @@ def _redo_reference(
     # Use a temp directory while re-referencing
     extra_out_dir = inverted_phase_paths[0].parent / "extra"
     extra_out_dir.mkdir(exist_ok=True)
+    units = io.get_raster_units(inverted_phase_paths[0])
 
     for idx in range(extra_ref_idx + 1, len(inverted_date_pairs)):
         # To create the interferogram (r, r+1), we subtract
@@ -253,7 +254,10 @@ def _redo_reference(
         cur = io.load_gdal(cur_img, masked=True)
         new_out = cur - ref
         io.write_arr(
-            arr=new_out, like_filename=extra_ref_img, output_name=cur_output_name
+            arr=new_out,
+            like_filename=extra_ref_img,
+            output_name=cur_output_name,
+            units=units,
         )
 
     for idx, p in enumerate(inverted_phase_paths):

@@ -45,6 +45,11 @@ def unwrap_spurt(
         unwrap_tiles,
     )
 
+    if existing_unw_files := sorted(Path(output_path).glob(f"*{UNW_SUFFIX}")):
+        logger.info(f"Found {len(existing_unw_files)} unwrapped files")
+        existing_ccl_files = sorted(Path(output_path).glob(f"*{CONNCOMP_SUFFIX}"))
+        return existing_unw_files, existing_ccl_files
+
     if cor_filenames is not None:
         assert len(ifg_filenames) == len(cor_filenames)
     if mask_filename is not None:
