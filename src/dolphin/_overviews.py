@@ -85,7 +85,7 @@ def create_image_overviews(
     flags = gdal.GA_Update if not external else gdal.GA_ReadOnly
     ds = gdal.Open(fspath(file_path), flags)
     if ds.GetRasterBand(1).GetOverviewCount() > 0:
-        logger.info("%s already has overviews. Skipping.", file_path)
+        logger.debug("%s already has overviews. Skipping.", file_path)
         return
 
     gdal.SetConfigOption("COMPRESS_OVERVIEW", compression)

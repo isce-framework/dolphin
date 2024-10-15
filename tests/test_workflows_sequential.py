@@ -1,7 +1,5 @@
 import pytest
 
-from dolphin import stack
-
 # from dolphin._types import HalfWindow, Strides
 from dolphin.io import _readers
 from dolphin.phase_link import simulate
@@ -25,16 +23,10 @@ def test_sequential_gtiff(tmp_path, slc_file_list):
         pytest.skip(f"Output shape = {out_shape}")
     output_folder = tmp_path / "sequential"
     ms_size = 10
-    ms_planner = stack.MiniStackPlanner(
-        file_list=slc_file_list,
-        dates=vrt_stack.dates,
-        is_compressed=[False] * len(slc_file_list),
-        output_folder=output_folder,
-    )
 
     sequential.run_wrapped_phase_sequential(
-        slc_vrt_file=vrt_file,
-        ministack_planner=ms_planner,
+        slc_vrt_stack=vrt_stack,
+        output_folder=output_folder,
         ministack_size=ms_size,
         half_window=half_window,
         strides=strides,
@@ -71,16 +63,9 @@ def test_sequential_nc(tmp_path, slc_file_list_nc, half_window, strides):
     if not all(out_shape):
         pytest.skip(f"Output shape = {out_shape}")
 
-    ms_planner = stack.MiniStackPlanner(
-        file_list=slc_file_list_nc,
-        dates=v.dates,
-        is_compressed=[False] * len(slc_file_list_nc),
-        output_folder=tmp_path / "sequential",
-    )
-
     sequential.run_wrapped_phase_sequential(
-        slc_vrt_file=vrt_file,
-        ministack_planner=ms_planner,
+        slc_vrt_stack=v,
+        output_folder=tmp_path / "sequential",
         ministack_size=10,
         half_window=half_window,
         strides=strides,
@@ -102,18 +87,12 @@ def test_sequential_ministack_sizes(tmp_path, slc_file_list_nc, ministack_size):
         slc_file_list_nc[:21], outfile=vrt_file, subdataset="data"
     )
     _, rows, cols = vrt_stack.shape
-    ms_planner = stack.MiniStackPlanner(
-        file_list=vrt_stack.file_list,
-        dates=vrt_stack.dates,
-        is_compressed=[False] * len(vrt_stack.file_list),
-        output_folder=tmp_path / "sequential",
-    )
 
     # Record the warning, check after if it's thrown
     sequential.run_wrapped_phase_sequential(
-        slc_vrt_file=vrt_file,
-        ministack_planner=ms_planner,
+        slc_vrt_stack=vrt_stack,
         ministack_size=ministack_size,
+        output_folder=tmp_path / "sequential",
         half_window={"x": cols // 2, "y": rows // 2},
         strides={"x": 1, "y": 1},
         ps_mask_file=None,

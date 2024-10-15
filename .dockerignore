@@ -4,5 +4,7 @@
 build/
 data/
 tests/data/*
+docs/notebooks/input_slcs/*
 dist/
 .nox/
+paper/

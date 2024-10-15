@@ -10,6 +10,7 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    NaiveDatetime,
     PrivateAttr,
     field_validator,
     model_validator,
@@ -75,13 +76,20 @@ class PhaseLinkingOptions(BaseModel, extra="forbid"):
         10, description="Size of the ministack for sequential estimator.", gt=1
     )
     max_num_compressed: int = Field(
-        5,
+        100,
         description=(
             "Maximum number of compressed images to use in sequential estimator."
             " If there are more ministacks than this, the earliest CCSLCs will be"
-            " left out of the later stacks."
+            " left out of the later stacks. "
         ),
         gt=0,
+    )
+    output_reference_idx: int = Field(
+        0,
+        description=(
+            "Index of input SLC to use for making phase linked interferograms after"
+            " EVD/EMI."
+        ),
     )
     half_window: HalfWindow = HalfWindow()
     use_evd: bool = Field(
@@ -155,7 +163,6 @@ class InterferogramNetwork(BaseModel, extra="forbid"):
         ),
     )
 
-    # validation
     @model_validator(mode="after")
     def _check_zero_parameters(self) -> InterferogramNetwork:
         ref_idx = self.reference_idx
@@ -258,6 +265,14 @@ class InputOptions(BaseModel, extra="forbid"):
         "%Y%m%d",
         description="Format of dates contained in CSLC filenames",
     )
+    wavelength: Optional[float] = Field(
+        None,
+        description=(
+            "Radar wavelength (in meters) of the transmitted data. used to convert the"
+            " units in the rasters in `timeseries/` to from radians to meters. If None"
+            " and sensor is not recognized, outputs remain in radians."
+        ),
+    )
 
 
 class OutputOptions(BaseModel, extra="forbid"):
@@ -309,6 +324,18 @@ class OutputOptions(BaseModel, extra="forbid"):
     overview_levels: list[int] = Field(
         [4, 8, 16, 32, 64],
         description="List of overview levels to create (if `add_overviews=True`).",
+    )
+    # Note: we use NaiveDatetime, since other datetime parsing results in Naive
+    # (no TzInfo) datetimes, which can't be compared to datetimes with timezones
+    extra_reference_date: Optional[NaiveDatetime] = Field(
+        None,
+        description=(
+            "Specify an extra reference datetime in UTC. Adding this lets you"
+            " to create and unwrap two single reference networks; the later resets at"
+            " the given date (e.g. for a large earthquake event). If passing strings,"
+            " formats accepted are YYYY-MM-DD[T]HH:MM[:SS[.ffffff]][Z or [±]HH[:]MM],"
+            " or YYYY-MM-DD"
+        ),
     )
 
     # validators

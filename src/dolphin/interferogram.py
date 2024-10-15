@@ -14,11 +14,11 @@ from numpy.typing import ArrayLike
 from opera_utils import get_dates
 from osgeo import gdal
 from pydantic import BaseModel, Field, ValidationInfo, field_validator, model_validator
-from scipy.ndimage import uniform_filter
 from tqdm.contrib.concurrent import thread_map
 
 from dolphin import io, utils
 from dolphin._types import DateOrDatetime, Filename, T
+from dolphin.filtering import gaussian_filter_nan
 
 gdal.UseExceptions()
 
@@ -608,7 +608,7 @@ class Network:
 
 
 def estimate_correlation_from_phase(
-    ifg: Union[VRTInterferogram, ArrayLike], window_size: Union[int, tuple[int, int]]
+    ifg: Union[VRTInterferogram, ArrayLike], window_size: int | tuple[int, int]
 ) -> np.ndarray:
     """Estimate correlation from only an interferogram (no SLCs/magnitudes).
 
@@ -622,10 +622,9 @@ def estimate_correlation_from_phase(
         Interferogram to estimate correlation from.
         If a VRTInterferogram, will load and take the phase.
         If `ifg` is complex, will normalize to unit magnitude before estimating.
-    window_size : Union[int, tuple[int, int]]
+    window_size : int | tuple[int, int]
         Size of window to use for correlation estimation.
-        If int, will use a square window of that size.
-        If tuple, the rectangular window has shape  `size=(row_size, col_size)`.
+        If int, will use a symmetrical Gaussian sigma.
 
     Returns
     -------
@@ -643,10 +642,18 @@ def estimate_correlation_from_phase(
     else:
         # If they passed complex, normalize to unit magnitude
         inp = np.exp(1j * np.nan_to_num(np.angle(ifg)))
+    # Now set the 0s to nans (so that either 0 input, or nan input gets ignored)
+    inp[inp == 0] = np.nan
 
-    # Note: the clipping is from possible partial windows producing correlation
+    # The gaussian window becomes negligible at about "window_size/3":
+    sigma: float | tuple[float, float]
+    if isinstance(window_size, (float, int)):
+        sigma = window_size / 3
+    else:
+        sigma = (window_size[0] / 3), (window_size[1] / 3)
+    # Note: clipping is from possible partial windows producing correlation
     # above 1
-    cor = np.clip(np.abs(uniform_filter(inp, window_size, mode="nearest")), 0, 1)
+    cor = np.clip(np.abs(gaussian_filter_nan(inp, sigma, mode="nearest")), 0, 1)
     # Return the input nans to nan
     cor[nan_mask] = np.nan
     # If the input was 0, the correlation is 0
@@ -666,13 +673,14 @@ def estimate_interferometric_correlations(
     """Estimate correlations for a sequence of interferograms.
 
     Will use the same filename base as inputs with a new suffix.
+    Calls `estimate_correlation_from_phase` on each of `ifg_filenames`.
 
     Parameters
     ----------
     ifg_filenames : Sequence[Filename]
         Paths to complex interferogram files.
-    window_size : tuple[int, int]
-        (row, column) size of window to use for estimate.
+    window_size : tuple[int, int] | int
+        sigma, or (row sigma, column sigma) to use for Gaussian filtering.
     out_driver : str, optional
         Name of output GDAL driver, by default "GTiff".
     out_suffix : str, optional

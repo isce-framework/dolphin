@@ -32,10 +32,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
       - name: Setup environment
-        uses: mamba-org/setup-micromamba@v1
+        uses: mamba-org/setup-micromamba@v2
         with:
           environment-file: conda-env.yml
           environment-name: dolphin-env
+          # persist on the same day.
+          cache-environment-key: environment-${{ steps.date.outputs.date }}
+          cache-downloads-key: downloads-${{ steps.date.outputs.date }}
           generate-run-shell: false
           create-args: ${{ matrix.deps.spec }}
           condarc: |
@@ -43,12 +46,13 @@ jobs:
               - conda-forge
       - name: Install
         run: |
-          pip install --no-deps \
+          python -m pip install --no-deps \
             "snaphu>=0.4.0" \
             "opera-utils>=0.4.1" \
             git+https://github.com/isce-framework/tophu@main \
             git+https://github.com/isce-framework/whirlwind@40defb38d2d6deca2819934788ebbc57e418e32d
-          pip install --no-deps .
+          python -m pip install git+https://github.com/scottstanie/spurt@use-mp-spawn
+          python -m pip install --no-deps .
       - name: Install test dependencies
         run: |
           micromamba install -f tests/requirements.txt -c conda-forge

@@ -41,7 +41,8 @@ def median_similarity(
     search_radius: int
         maximum radius (in pixels) to search for neighbors when comparing each pixel.
     mask: ArrayLike (optional)
-        Array of mask from True/False indicating whether to ignore the pixel
+        Array of mask from True/False indicating whether to include the pixel (True)
+        or ignore it (False).
 
     Returns
     -------
@@ -62,7 +63,7 @@ def max_similarity(
 ):
     """Compute the maximum similarity of each pixel and its neighbors.
 
-    Resulting similarity matches Equation (6) of @[Wang2022AccuratePersistentScatterer]
+    Resulting similarity matches Equation (6) of [@Wang2022AccuratePersistentScatterer]
 
     Parameters
     ----------
@@ -72,12 +73,13 @@ def max_similarity(
     search_radius: int
         maximum radius (in pixels) to search for neighbors when comparing each pixel.
     mask: ArrayLike (optional)
-        Array of mask from True/False indicating whether to ignore the pixel
+        Array of mask from True/False indicating whether to include the pixel (True)
+        or ignore it (False).
 
     Returns
     -------
     np.ndarray
-        2D array (shape (rows, cols)) of the maximum similarity for any neighrbor
+        2D array (shape (rows, cols)) of the maximum similarity for any neighbor
         at a pixel.
 
     """
@@ -92,7 +94,7 @@ def max_similarity(
 def _create_loop_and_run(
     ifg_stack: ArrayLike,
     search_radius: int,
-    mask: ArrayLike,
+    mask: ArrayLike | None,
     func: Callable[[ArrayLike], np.ndarray],
 ):
     n_ifg, rows, cols = ifg_stack.shape
@@ -100,9 +102,12 @@ def _create_loop_and_run(
         raise ValueError("ifg_stack must be complex")
 
     unit_ifgs = np.exp(1j * np.angle(ifg_stack))
-    out_similarity = np.zeros((rows, cols), dtype="float32")
+    out_similarity = np.full((rows, cols), fill_value=np.nan, dtype="float32")
     if mask is None:
         mask = np.ones((rows, cols), dtype="bool")
+    # Mark any nans/all zeros as invalid
+    invalid_mask = np.nan_to_num(ifg_stack).sum(axis=0) == 0
+    mask[invalid_mask] = False
 
     if mask.shape != (rows, cols):
         raise ValueError(f"{ifg_stack.shape = }, but {mask.shape = }")
@@ -123,7 +128,7 @@ def _make_loop_function(
     """
 
     @numba.njit(nogil=True, parallel=True)
-    def _masked_median_sim_loop(
+    def _masked_sim_loop(
         ifg_stack: np.ndarray,
         idxs: np.ndarray,
         mask: np.ndarray,
@@ -143,6 +148,7 @@ def _make_loop_function(
                 if not m0:
                     continue
                 x0 = ifg_stack[:, r0, c0]
+
                 cur_sim_vec = cur_sim[r0, c0]
                 count = 0
 
@@ -167,7 +173,7 @@ def _make_loop_function(
                 out_similarity[r0, c0] = summary_func(cur_sim_vec[:count])
         return out_similarity
 
-    return _masked_median_sim_loop
+    return _masked_sim_loop
 
 
 def get_circle_idxs(
@@ -287,12 +293,12 @@ def create_similarities(
     else:
         raise ValueError(f"Unrecognized {sim_type = }")
 
-    zero_block = np.zeros(block_shape, dtype="float32")
+    nodata_block = np.full(block_shape, fill_value=np.nan, dtype="float32")
 
     def calc_sim(readers, rows, cols):
         block = readers[0][:, rows, cols]
         if np.sum(block) == 0 or np.isnan(block).all():
-            return zero_block[rows, cols], rows, cols
+            return nodata_block[rows, cols], rows, cols
 
         out_avg = sim_function(ifg_stack=block, search_radius=search_radius)
         logger.debug(f"{rows = }, {cols = }, {block.shape = }, {out_avg.shape = }")
@@ -310,12 +316,14 @@ def create_similarities(
         like_filename=ifg_file_list[0],
         dtype="float32",
         driver="GTiff",
+        nodata=np.nan,
     )
     process_blocks(
         [reader],
         writer,
         func=calc_sim,
         block_shape=block_shape,
+        overlaps=(search_radius, search_radius),
         num_threads=num_threads,
     )
     writer.notify_finished()

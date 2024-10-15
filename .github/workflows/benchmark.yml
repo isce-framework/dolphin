@@ -21,7 +21,7 @@ jobs:
           fetch-depth: 0
 
       - name: Setup environment
-        uses: mamba-org/setup-micromamba@v1
+        uses: mamba-org/setup-micromamba@v2
         with:
           environment-file: requirements.txt
           environment-name: dolphin

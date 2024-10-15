@@ -1,9 +1,13 @@
+import logging
+
 import numpy as np
 from numba import njit, stencil
-from numpy.typing import ArrayLike
-from scipy.ndimage import gaussian_filter
+from numpy.typing import ArrayLike, NDArray
+from scipy.interpolate import NearestNDInterpolator
 
 TWOPI = 2 * np.pi
+
+logger = logging.getLogger(__name__)
 
 
 @njit(nogil=True)
@@ -55,73 +59,65 @@ def rewrap_to_twopi(arr: ArrayLike) -> np.ndarray:
     return np.mod(np.pi + arr, TWOPI) - np.pi
 
 
-def gaussian_filter_nan(
-    image: ArrayLike, sigma: float, mode="constant", **kwargs
-) -> np.ndarray:
-    """Apply a gaussian filter to an image with NaNs (avoiding all nans).
-
-    The scipy.ndimage `gaussian_filter` will make the output all NaNs if
-    any of the pixels in the input that touches the kernel is NaN
-
-    Source:
-    https://stackoverflow.com/a/36307291
-
-    Parameters
-    ----------
-    image : ndarray
-        Image with nans to filter
-    sigma : float
-        Size of filter kernel. passed into `gaussian_filter`
-    mode : str, default = "constant"
-        Boundary mode for `[scipy.ndimage.gaussian_filter][]`
-    **kwargs : Any
-        Passed into `[scipy.ndimage.gaussian_filter][]`
-
-    Returns
-    -------
-    ndarray
-        Filtered version of `image`.
-
-    """
-    if np.sum(np.isnan(image)) == 0:
-        return gaussian_filter(image, sigma=sigma, mode=mode, **kwargs)
-
-    V = image.copy()
-    nan_idxs = np.isnan(image)
-    V[nan_idxs] = 0
-    V_filt = gaussian_filter(V, sigma, **kwargs)
-
-    W = np.ones(image.shape)
-    W[nan_idxs] = 0
-    W_filt = gaussian_filter(W, sigma, **kwargs)
-
-    return V_filt / W_filt
-
-
-def _get_ambiguities(unw: ArrayLike, round_decimals: int = 4) -> np.ndarray:
+def get_2pi_ambiguities(
+    unw: NDArray[np.floating], round_decimals: int = 4
+) -> NDArray[np.floating]:
+    """Find the number of 2pi offsets from [-pi, pi) at each pixel of `unw`."""
     mod_2pi_image = np.mod(np.pi + unw, TWOPI) - np.pi
     re_wrapped = np.round(mod_2pi_image, round_decimals)
     return np.round((unw - re_wrapped) / (TWOPI), round_decimals - 1)
 
 
-def _fill_masked_ambiguities(
-    amb_image: ArrayLike, mask: ArrayLike, filter_sigma: int = 60
-) -> np.ndarray:
-    masked_ambs = amb_image.copy()
-    masked_ambs[mask] = np.nan
-    ambs_filled = np.round(gaussian_filter_nan(amb_image, filter_sigma))
+def interpolate_masked_gaps(
+    unw: NDArray[np.float64], ifg: NDArray[np.complex64]
+) -> None:
+    """Perform phase unwrapping using nearest neighbor interpolation of ambiguities.
 
-    out_filled = amb_image.copy()
-    out_filled[mask] = ambs_filled[mask]
-    return out_filled
+    Overwrites `unw`'s masked pixels with the interpolated values.
 
+    This function takes an input unwrapped phase array containin NaNs at masked pixel.
+    It calculates the phase ambiguity, K, at the attempted unwrapped pixels, then
+    interpolates the ambiguities to fill the gaps.
+    The masked pixels get the value of the original wrapped phase + 2pi*K.
 
-def _smooth_masked_areas(unw, mask, filter_sigma: int = 60):
-    amb = _get_ambiguities(unw)
-    amb_filled = _fill_masked_ambiguities(amb, mask, filter_sigma=filter_sigma)
+    Parameters
+    ----------
+    unw : NDArray[np.float]
+        Input unwrapped phase array with NaN values for masked areas.
+    ifg : NDArray[np.complex64]
+        Corresponding wrapped interferogram phase
 
-    out = unw.copy()
-    rewrapped_phase_vec = np.mod(np.pi + unw[mask], TWOPI) - np.pi
-    new_amb_vec = amb_filled[mask]
-    out[mask] = rewrapped_phase_vec + (new_amb_vec * TWOPI)
-    return out
+    Returns
+    -------
+    np.ndarray
+        Fully unwrapped phase array with interpolated values for previously
+        masked areas.
+
+    """
+    # Create masks for valid areas
+    ifg_valid = ~np.isnan(ifg) & (ifg != 0)
+    unw_valid = ~np.isnan(unw)
+
+    # Identify areas to interpolate: where ifg is valid but unw is not
+    interpolate_mask = ifg_valid & ~unw_valid
+
+    # If there's nothing to interpolate, we're done
+    if not np.any(interpolate_mask):
+        return
+
+    # Calculate ambiguities for valid unwrapped pixels
+    valid_pixels = ifg_valid & unw_valid
+    ambiguities = get_2pi_ambiguities(unw[valid_pixels])
+
+    # Get coordinates for valid pixels and pixels to interpolate
+    valid_coords = np.array(np.where(valid_pixels)).T
+    interp_coords = np.array(np.where(interpolate_mask)).T
+
+    # Create and apply the interpolator
+    interpolator = NearestNDInterpolator(valid_coords, ambiguities)
+    interpolated_ambiguities = interpolator(interp_coords)
+
+    # Apply interpolated ambiguities to the wrapped phase
+    unw[interpolate_mask] = np.angle(ifg[interpolate_mask]) + (
+        interpolated_ambiguities * TWOPI
+    )

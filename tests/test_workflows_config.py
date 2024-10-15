@@ -6,6 +6,7 @@ import pydantic
 import pytest
 from make_netcdf import create_test_nc
 
+from dolphin.constants import SENTINEL_1_WAVELENGTH
 from dolphin.workflows import UnwrapMethod, config
 
 
@@ -292,6 +293,7 @@ def test_input_opera_cslc(tmp_path, slc_stack):
     )
     assert opts.cslc_file_list == file_list
     assert opts.input_options.subdataset == "/data/VV"
+    assert opts.input_options.wavelength == SENTINEL_1_WAVELENGTH
 
 
 def test_input_cslc_empty():

@@ -70,7 +70,6 @@ def get_gtiff_options(
     zlevel : int or None, optional
         Compression level for the 'deflate' and 'zstd' compression types (default is 1).
         Use None to omit the zlevel.
-    gdal_format: bool, default = True
 
     Returns
     -------
