@@ -15,7 +15,7 @@ def _add_complex_type(h5_root_group):
     if "complex64" in h5_root_group:
         return
     ctype = h5py.h5t.py_create(np.complex64)
-    ctype.commit(h5_root_group.id, np.string_("complex64"))
+    ctype.commit(h5_root_group.id, np.bytes_("complex64"))
 
 
 def create_test_nc(

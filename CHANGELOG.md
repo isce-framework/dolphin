@@ -1,9 +1,49 @@
 # Changelog
 
-## [Unreleased](https://github.com/isce-framework/dolphin/compare/v0.27.1...main)
+## [Unreleased](https://github.com/isce-framework/dolphin/compare/v0.28.0...main)
+
+## [0.28.0](https://github.com/isce-framework/dolphin/compare/v0.27.1...v0.28.0) - 2024-09-19
+
+### Added
+- `num_parallel_tiles` and `num_parallel_ifgs` to `SpurtOptions`
+- L1-norm-based inversion to `timeseries`
+- Config option to avoid PS pixels during phase linking
+- `block_shape` to timeseries parameters
+- `wavelength` attribute to workflow to convert rasters to meters
+- Larger `N` rows to computed GLRT cutoffs
+- Logic for manually specifying reference dates mid-stack
+- ADMM to minimize L1-norm of `Ax - b`
+- Instructions for building Docker image in documentation
+- Link to notebook in `simulate-demo` function
+- Printing of unwrapping options in `show_versions`
+- Update walkthrough notebook for docs
+- Add clarifications and suggested changes to documentation
+
+### Changed
+- Remove transposed versions of functions in `covariance`
+- Set `use_slc_amp` default to False during phase linking
+- Use the same mask for unwrapping and conncomp regrowing steps
+- Turn off correlation weighting for velocity by default
+- Use less memory for L1 inversion
+- Include layover shadow mask when stitching in `prepare_geometry`
+- Create `.conncomp` files for `spurt` from temporal coherence
+- Add `like_filename` for `spurt` connected components
 
 ### Fixed
-- Don't use the slc amplitude by defalt in the phase linking output
+- Fix plotting/imports for walkthrough
+- Fix `displacement.run` to avoid troposphere computation with empty list
+- Pass through EPSG code to `_get_mask`
+- Fix `n_parallel_tiles` to be an integer, not float
+- Skip `combine_mask_files` if the output already exists
+- Fix typos in walkthrough configuration
+- Fix `simulate-demo` function usage
+- Fix mismatching docs and missing log statements
+- Pass through `add_overviews`, run even if single-reference network
+- Add `ignore_errors=True` to `rmtree` for scratch removal
+- Setup `gaussian_filter_nan` in utils, use in `estimate_correlation_from_phase`
+- Fix Apache end template
+- Fix ionospheric date parsing and grouping
+- Fix handling of `nodata` during timeseries conversion to meters
 
 ## [0.27.1](https://github.com/isce-framework/dolphin/compare/v0.27.0...v0.27.1) - 2024-08-12
 

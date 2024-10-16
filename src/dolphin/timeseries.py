@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 from enum import Enum
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Callable, Optional, Protocol, Sequence, TypeVar
 
+import jax
 import jax.numpy as jnp
 import numpy as np
 from jax import Array, jit, lax, vmap
@@ -16,7 +18,7 @@ from scipy import ndimage
 from dolphin import DateOrDatetime, io, utils
 from dolphin._overviews import ImageType, create_overviews
 from dolphin._types import PathOrStr, ReferencePoint
-from dolphin.utils import flatten, format_dates, full_suffix
+from dolphin.utils import flatten, format_dates, full_suffix, get_nearest_date_idx
 from dolphin.workflows import CallFunc
 
 T = TypeVar("T")
@@ -54,6 +56,7 @@ def run(
     reference_point: tuple[int, int] = (-1, -1),
     wavelength: float | None = None,
     add_overviews: bool = True,
+    extra_reference_date: datetime | None = None,
 ) -> tuple[list[Path], ReferencePoint]:
     """Invert the unwrapped interferograms, estimate timeseries and phase velocity.
 
@@ -107,6 +110,9 @@ def run(
     add_overviews : bool, optional
         If True, creates overviews of the new velocity raster.
         Default is True.
+    extra_reference_date : datetime.datetime, optional
+        If provided, makes another set of interferograms referenced to this
+        for all dates later than it.
 
     Returns
     -------
@@ -128,6 +134,7 @@ def run(
 
     condition_func = argmax_index if condition == CallFunc.MAX else argmin_index
     if reference_point == (-1, -1):
+        logger.info("Selecting a reference point for unwrapped interferograms")
         ref_point = select_reference_point(
             condition_file=condition_file,
             output_dir=Path(output_dir),
@@ -141,9 +148,11 @@ def run(
     sar_dates = sorted(set(utils.flatten(ifg_date_pairs)))
     # if we did single-reference interferograms, for `n` sar dates, we will only have
     # `n-1` interferograms. Any more than n-1 ifgs means we need to invert
-    is_single_reference = (len(unwrapped_paths) == len(sar_dates) - 1) and all(
-        pair[0] == ifg_date_pairs[0][0] for pair in ifg_date_pairs
-    )
+    is_single_reference = len(unwrapped_paths) == len(sar_dates) - 1
+    # TODO: Do we ever want to invert this case: the "trivial" network,
+    # which has 1 ifg per date difference, but a moving reference date?
+    # The extra condition to check is
+    # ... and all(pair[0] == ifg_date_pairs[0][0] for pair in ifg_date_pairs)
 
     # check if we even need to invert, or if it was single reference
     inverted_phase_paths: list[Path] = []
@@ -152,15 +161,13 @@ def run(
             "Skipping inversion step: only single reference interferograms exist."
         )
         # Copy over the unwrapped paths to `timeseries/`
-        inverted_phase_paths = _convert_and_reference(
+        final_ts_paths = _convert_and_reference(
             unwrapped_paths,
             output_dir=output_dir,
             reference_point=ref_point,
             wavelength=wavelength,
         )
     else:
-        logger.info("Selecting a reference point for unwrapped interferograms")
-
         logger.info("Inverting network of %s unwrapped ifgs", len(unwrapped_paths))
         inverted_phase_paths = invert_unw_network(
             unw_file_list=unwrapped_paths,
@@ -171,9 +178,14 @@ def run(
             wavelength=wavelength,
             method=method,
         )
+        if extra_reference_date is None:
+            final_ts_paths = inverted_phase_paths
+        else:
+            final_ts_paths = _redo_reference(inverted_phase_paths, extra_reference_date)
+
     if add_overviews:
         logger.info("Creating overviews for timeseries images")
-        create_overviews(inverted_phase_paths, image_type=ImageType.UNWRAPPED)
+        create_overviews(final_ts_paths, image_type=ImageType.UNWRAPPED)
 
     if run_velocity:
         logger.info("Estimating phase velocity")
@@ -185,14 +197,14 @@ def run(
             cor_file_list = None
         else:
             cor_file_list = (
-                corr_paths if len(corr_paths) == len(inverted_phase_paths) else None
+                corr_paths if len(corr_paths) == len(final_ts_paths) else None
             )
 
         if velocity_file is None:
             velocity_file = Path(output_dir) / "velocity.tif"
 
         create_velocity(
-            unw_file_list=inverted_phase_paths,
+            unw_file_list=final_ts_paths,
             output_file=velocity_file,
             reference=ref_point,
             cor_file_list=cor_file_list,
@@ -201,7 +213,63 @@ def run(
             num_threads=num_threads,
         )
 
-    return inverted_phase_paths, ref_point
+    return final_ts_paths, ref_point
+
+
+def _redo_reference(
+    inverted_phase_paths: Sequence[Path], extra_reference_date: datetime
+):
+    """Reset the reference date in `inverted_phase_paths`.
+
+    Affects all files whose secondary is after `extra_reference_date`.
+
+    E.g Given the (day 1, day 2), ..., (day 1, day N) pairs, outputs
+    (1, 2), (1, 3), ...(1, r), (r, r+1), ..., (r, N)
+    where r is the index of the `extra_reference_date`
+    """
+    output_path = inverted_phase_paths[0].parent
+    inverted_date_pairs: list[tuple[datetime, datetime]] = [
+        get_dates(p.stem)[:2] for p in inverted_phase_paths
+    ]
+    secondary_dates = [pair[1] for pair in inverted_date_pairs]
+    extra_ref_idx = get_nearest_date_idx(
+        secondary_dates, requested=extra_reference_date
+    )
+    ref_date = secondary_dates[extra_ref_idx]
+    logger.info(f"Re-referencing later timeseries files to {ref_date}")
+    extra_ref_img = inverted_phase_paths[extra_ref_idx]
+    ref = io.load_gdal(extra_ref_img, masked=True)
+
+    # Use a temp directory while re-referencing
+    extra_out_dir = inverted_phase_paths[0].parent / "extra"
+    extra_out_dir.mkdir(exist_ok=True)
+    units = io.get_raster_units(inverted_phase_paths[0])
+
+    for idx in range(extra_ref_idx + 1, len(inverted_date_pairs)):
+        # To create the interferogram (r, r+1), we subtract
+        # (1, r) from (1, r+1)
+        cur_img = inverted_phase_paths[idx]
+        new_stem = format_dates(ref_date, secondary_dates[idx])
+        cur_output_name = extra_out_dir / f"{new_stem}.tif"
+        cur = io.load_gdal(cur_img, masked=True)
+        new_out = cur - ref
+        io.write_arr(
+            arr=new_out,
+            like_filename=extra_ref_img,
+            output_name=cur_output_name,
+            units=units,
+        )
+
+    for idx, p in enumerate(inverted_phase_paths):
+        if idx <= extra_ref_idx:
+            p.rename(extra_out_dir / p.name)
+        else:
+            p.unlink()
+    # Finally, move them back in to the `timeseries/` folder
+    final_out = []
+    for p in extra_out_dir.glob("*.tif"):
+        final_out.append(p.rename(output_path / p.name))
+    return sorted(final_out)
 
 
 def _convert_and_reference(
@@ -233,17 +301,24 @@ def _convert_and_reference(
         if target.exists():  # Check to prevent overwriting
             continue
 
-        arr_radians = io.load_gdal(p)
+        arr_radians = io.load_gdal(p, masked=True)
+        nodataval = io.get_raster_nodata(p)
         # Reference to the
-        ref_value = arr_radians[ref_row, ref_col]
+        ref_value = arr_radians.filled(np.nan)[ref_row, ref_col]
         if np.isnan(ref_value):
             logger.warning(
                 "{ref_point!r} is NaN for {p} . Skipping reference subtraction."
             )
         else:
             arr_radians -= ref_value
+        # Make sure we keep the same mask as the original
+        out_arr = (arr_radians * constant).filled(nodataval)
         io.write_arr(
-            arr=arr_radians * constant, output_name=target, units=units, like_filename=p
+            arr=out_arr,
+            output_name=target,
+            units=units,
+            like_filename=p,
+            nodata=nodataval,
         )
 
     return out_paths
@@ -811,6 +886,7 @@ def invert_unw_network(
     if all(p.exists() for p in out_paths):
         logger.info("All output files already exist, skipping inversion")
         return out_paths
+    logger.info(f"Inverting network using {method.upper()}-norm minimization")
 
     A = get_incidence_matrix(ifg_pairs=ifg_tuples, sar_idxs=sar_dates)
 
@@ -1052,90 +1128,105 @@ def _get_largest_conncomp_mask(
     return isin_largest_conncomp
 
 
-@jit
-def invert_stack_l1(A: ArrayLike, dphi: ArrayLike) -> Array:
-    n_ifgs, n_rows, n_cols = dphi.shape
-
-    # vectorize the solve function to work on 2D and 3D arrays
-    # We are not vectorizing over the A matrix, only the dphi vector
-    # Solve 2d shapes: (nrows, n_ifgs) -> (nrows, n_sar_dates)
-    invert_2d = vmap(irls, in_axes=(None, 1), out_axes=(1, 1))
-    # Solve 3d shapes: (nrows, ncols, n_ifgs) -> (nrows, ncols, n_sar_dates)
-    invert_3d = vmap(invert_2d, in_axes=(None, 2), out_axes=(2, 2))
-    phase, residual_vecs = invert_3d(A, dphi)
-    # Reshape the residuals to be 2D
-    residuals = jnp.sum(residual_vecs, axis=0)
-
-    return phase, residuals
+@jax.jit
+def _shrinkage(a: jnp.ndarray, kappa: float) -> jnp.ndarray:
+    """Apply the shrinkage operator element-wise."""
+    return jnp.maximum(0, a - kappa) - jnp.maximum(0, -a - kappa)
 
 
-@jit
-def irls(
+@jax.jit
+def least_absolute_deviations(
     A: jnp.ndarray,
     b: jnp.ndarray,
-    p: float = 1,
-    max_iters: int = 50,
-    tol: float = 1e-5,
-) -> tuple[jnp.ndarray, float]:
-    """Minimize |Ax - b|_1 using Iteratively reweighted least squares (IRLS).
+    R: jnp.ndarray,
+    rho: float = 0.4,
+    alpha: float = 1.0,
+    max_iter: int = 20,
+) -> jnp.ndarray:
+    """Solve Least Absolute Deviations (LAD) via ADMM.
 
-    See https://en.wikipedia.org/wiki/Iteratively_reweighted_least_squares for
-    algorithm description
+    Solves the following problem via ADMM:
+
+        minimize ||Ax - b||_1
+
+    See [@Boyd2010DistributedOptimizationStatistical] for more on ADMM.
 
     Parameters
     ----------
     A : jnp.ndarray
         The matrix A in the equation Ax = b.
+        Shape is (M, N)
     b : jnp.ndarray
         The vector b in the equation Ax = b.
-    p : float, optional
-        The power parameter for the weights, by default 1.
-    max_iters : int, optional
-        The maximum number of iterations, by default 50.
-    tol : float, optional
-        The tolerance for convergence, by default 1e-5.
+        Shape is (M,)
+    R : jnp.ndarray
+        Precomputed lower-triangular Cholesky factor of A^T A.
+        Shape is (N, N)
+    rho : float, optional
+        The augmented Lagrangian parameter
+        By default 0.4.
+    alpha : float, optional
+        The over-relaxation parameter (typical values are between 1.0 and 1.8)
+        By default 1.0.
+    max_iter : int, optional
+        The maximum number of iterations, by default 15.
 
     Returns
     -------
-    tuple[jnp.ndarray, float]
-        A tuple containing:
-    x : Array
-        The solution vector.
-    residual
-        The final residual |Ax - b|_1
+    x_solution : jnp.ndarray
+        The solution vector x of shape (N, )
+    residual : jnp.ndarray, scalar
+        The objective residual `sum(abs(b - A @ x_solution))`
+
+
+    Notes
+    -----
+    The implementation is based on the [MATLAB implementation of LAD here](https://web.stanford.edu/~boyd/papers/admm/least_abs_deviations/lad.html).
+    One caveat is that there are a fixed number of iterations used for this
+    problem here. Inverting interferogram network have a very similar structure
+    each time, and the results converge quickly relative to other large-scale
+    LAD problems which ADMM can solve.
 
     """
-    eps = jnp.sqrt(jnp.finfo(jnp.float32).eps)
+    m, n = A.shape
+    x0 = jnp.zeros(n)
+    z0 = jnp.zeros(m)
+    u0 = jnp.zeros(m)
 
-    def cond_fun(val):
-        i, x_current, x_prev, prev_residual_vec = val
-        # Find the difference in L1 objective between iterations
-        objective = jnp.sum(jnp.abs(b - A @ x_current))
-        prev_objective = jnp.sum(prev_residual_vec)
-        # if it's small, not worth more iterations
-        change = jnp.abs(objective - prev_objective)
-        # Keep going while this condition is true:
-        return (i < max_iters) & (change > tol)
+    def body_fun(_i, state):
+        x, z, z_old, u = state
+        # x-update
+        q = A.T @ (b + z - u)
+        x = jax.scipy.linalg.cho_solve((R, True), q)
 
-    def body_fun(val):
-        i, x, _, _ = val
-        # Re-weight the least squares system by the L1 residuals
-        residual_vec = jnp.abs(b - A @ x)
-        # The matrix version looks like
-        # W = jnp.diag(residual_vec ** (p - 2))
-        # new_x = jnp.linalg.solve(A.T @ W @ A, A.T @ W @ b)
-        # We use element-wise mult to keep memory lower:
-        w = (eps + residual_vec) ** (p - 2)  # Add a small epsilon to avoid divide by 0
-        AtW = A.T * w
-        new_x = jnp.linalg.solve(AtW @ A, AtW @ b)
-        return i + 1, new_x, x, residual_vec
+        # z-update with relaxation
+        Ax_hat = alpha * (A @ x) + (1 - alpha) * (z_old + b)
+        z_new = _shrinkage(Ax_hat - b + u, 1 / rho)
 
-    M, N = A.shape
-    x = jnp.zeros(N, dtype=jnp.float32)
+        # u-update
+        u = u + Ax_hat - z_new - b
 
-    r0 = jnp.ones((M,), dtype=jnp.float32)
-    _num_iters, x, _, residual_vec = lax.while_loop(
-        cond_fun, body_fun, (0, x, x + 1, r0)
+        return x, z_new, z, u
+
+    x_final, _, _, _ = lax.fori_loop(0, max_iter, body_fun, (x0, z0, z0, u0))
+    residual = jnp.sum(jnp.abs(b - A @ x_final))
+    return x_final, residual
+
+
+@jit
+def invert_stack_l1(A: ArrayLike, dphi: ArrayLike) -> Array:
+    R = jax.scipy.linalg.cholesky(A.T @ A, lower=True)
+
+    # vectorize the solve function to work on 2D and 3D arrays
+    # We are not vectorizing over the A matrix, only the dphi vector
+    # Solve 2d shapes: (nrows, n_ifgs) -> (nrows, n_sar_dates)
+    invert_2d = vmap(
+        least_absolute_deviations, in_axes=(None, 1, None), out_axes=(1, 0)
     )
+    # Solve 3d shapes: (nrows, ncols, n_ifgs) -> (nrows, ncols, n_sar_dates)
+    invert_3d = vmap(invert_2d, in_axes=(None, 2, None), out_axes=(2, 1))
+    phase, residuals = invert_3d(A, dphi, R)
+    # Reshape the residuals to be 2D
+    # residuals = jnp.sum(residual_vecs, axis=0)
 
-    return x, residual_vec
+    return phase, residuals

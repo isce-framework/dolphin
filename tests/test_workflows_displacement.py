@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import importlib.util
 from pathlib import Path
 
 import pytest
 from opera_utils import group_by_burst
 
-from dolphin.io import get_raster_units
+from dolphin.io import get_raster_nodata, get_raster_units
 from dolphin.utils import flatten, full_suffix
 from dolphin.workflows import config, displacement
 
@@ -50,6 +51,12 @@ def test_displacement_run_single(opera_slc_files: list[Path], tmpdir):
 
         # check the network size
         assert len(paths.unwrapped_paths) > len(paths.timeseries_paths)
+
+        # Check nodata values
+        assert get_raster_nodata(paths.unwrapped_paths[0]) is not None
+        assert get_raster_nodata(paths.unwrapped_paths[0]) == get_raster_nodata(
+            paths.timeseries_paths[0]
+        )
 
 
 def test_displacement_run_single_official_opera_naming(
@@ -182,14 +189,20 @@ def test_separate_workflow_runs(slc_file_list, tmp_path):
     assert [f.name for f in ifgs3_b] == [f.name for f in ifgs3]
 
 
-def test_displacement_run_extra_reference_date(opera_slc_files: list[Path], tmpdir):
+@pytest.mark.parametrize("unwrap_method", ["phass", "spurt"])
+def test_displacement_run_extra_reference_date(
+    opera_slc_files: list[Path], tmpdir, unwrap_method: str
+):
+    if unwrap_method == "spurt" and importlib.util.find_spec("spurt") is None:
+        pytest.skip(reason="spurt unwrapper not installed")
+
     with tmpdir.as_cwd():
         cfg = config.DisplacementWorkflow(
             # start_date = 20220101
             # shape = (4, 128, 128)
             # First one is COMPRESSED_
             output_options={"extra_reference_date": "2022-01-03"},
-            unwrap_options={"unwrap_method": "phass"},
+            unwrap_options={"unwrap_method": unwrap_method},
             cslc_file_list=opera_slc_files,
             input_options={"subdataset": "/data/VV"},
             phase_linking={
@@ -202,20 +215,33 @@ def test_displacement_run_extra_reference_date(opera_slc_files: list[Path], tmpd
             # The "base phase" should be 20220103
             assert slc_paths[0].name == "compressed_20220103_20220102_20220104.tif"
 
-        # The unwrappd files should have a changeover to the new reference
+        # The unwrapped/timeseries files should have a changeover to the new reference
         assert paths.unwrapped_paths is not None
-        unw_names = [pp.name for pp in paths.unwrapped_paths]
-        assert unw_names == [
-            "20220101_20220102.unw.tif",
-            "20220101_20220103.unw.tif",
-            "20220103_20220104.unw.tif",
-        ]
-
-        # But the timeseries will have inverted the results
         assert paths.timeseries_paths is not None
+
         ts_names = [pp.name for pp in paths.timeseries_paths]
         assert ts_names == [
             "20220101_20220102.tif",
             "20220101_20220103.tif",
-            "20220101_20220104.tif",
+            "20220103_20220104.tif",
         ]
+        assert all(get_raster_units(p) == "meters" for p in paths.timeseries_paths)
+
+        unw_names = [pp.name for pp in paths.unwrapped_paths]
+        if cfg.unwrap_options.unwrap_method == "spurt":
+            assert unw_names == [
+                "20220101_20220102.unw.tif",
+                "20220101_20220103.unw.tif",
+                "20220101_20220104.unw.tif",
+                "20220102_20220103.unw.tif",
+                "20220102_20220104.unw.tif",
+                "20220103_20220104.unw.tif",
+            ]
+        else:
+            assert unw_names == [
+                "20220101_20220102.unw.tif",
+                "20220101_20220103.unw.tif",
+                "20220103_20220104.unw.tif",
+            ]
+
+        assert all(get_raster_units(p) == "radians" for p in paths.unwrapped_paths)

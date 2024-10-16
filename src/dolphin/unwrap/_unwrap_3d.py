@@ -1,9 +1,11 @@
 import logging
 import shutil
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Sequence
 
 import numpy as np
+import rasterio
+from numpy.typing import NDArray
 from opera_utils import get_dates
 from scipy import ndimage, signal
 
@@ -12,6 +14,7 @@ from dolphin._types import PathOrStr
 from dolphin.workflows.config import SpurtOptions
 
 from ._constants import CONNCOMP_SUFFIX, DEFAULT_CCL_NODATA, UNW_SUFFIX
+from ._post_process import interpolate_masked_gaps
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +44,11 @@ def unwrap_spurt(
         merge_tiles,
         unwrap_tiles,
     )
+
+    if existing_unw_files := sorted(Path(output_path).glob(f"*{UNW_SUFFIX}")):
+        logger.info(f"Found {len(existing_unw_files)} unwrapped files")
+        existing_ccl_files = sorted(Path(output_path).glob(f"*{CONNCOMP_SUFFIX}"))
+        return existing_unw_files, existing_ccl_files
 
     if cor_filenames is not None:
         assert len(ifg_filenames) == len(cor_filenames)
@@ -96,6 +104,7 @@ def unwrap_spurt(
         options.temporal_coherence_threshold,
         unw_filenames=unw_filenames,
     )
+    filled_masked_unw_regions(unw_filenames, ifg_filenames)
 
     return unw_filenames, conncomp_filenames
 
@@ -160,3 +169,104 @@ def _create_conncomps_from_mask(
     for f in conncomp_files[1:]:
         shutil.copy(conncomp_files[0], f)
     return conncomp_files
+
+
+def filled_masked_unw_regions(
+    unw_filenames: Sequence[PathOrStr],
+    ifg_filenames: Sequence[PathOrStr],
+    output_dir: Path | None = None,
+) -> None:
+    """Fill the nan gaps in `unw_filenames` using the wrapped `ifg_filenames`.
+
+    This function iterates through the nearest-3 unwrapped filenames from spurt,
+    calculates the wrapped phase difference from 2 `ifg_filenames` and interpolates
+    the unwrapped ambiguity number to fill the gaps.
+
+    Parameters
+    ----------
+    unw_filenames : Sequence[PathOrStr]
+        List of the nearest-3 unwrapped filenames from spurt, containing nan gaps.
+    ifg_filenames : Sequence[PathOrStr]
+        Wrapped, single-reference interferogram filenames used as input to spurt.
+    output_dir : Path, optional
+        Separate folder to write output files after filling gaps.
+        If None, overwrites the `unw_filenames`.
+
+    """
+    if output_dir is None:
+        output_dir = Path(unw_filenames[0]).parent
+
+    with rasterio.open(unw_filenames[0]) as src:
+        profile = src.profile.copy()
+    for unw_filename in unw_filenames:
+        unw, wrapped_phase = _reform_wrapped_phase(unw_filename, ifg_filenames)
+        interpolate_masked_gaps(unw, wrapped_phase)
+
+        # Save the updated unwrapped phase
+        kwargs = profile | {
+            "count": 1,
+            "height": unw.shape[0],
+            "width": unw.shape[1],
+            "dtype": "float32",
+        }
+        with rasterio.open(output_dir / Path(unw_filename).name, "w", **kwargs) as src:
+            src.write(unw, 1)
+
+
+def _reform_wrapped_phase(
+    unw_filename: PathOrStr, ifg_filenames: Sequence[PathOrStr]
+) -> tuple[NDArray[np.float64], NDArray[np.complex64]]:
+    """Load unwrapped phase, and re-calculate the corresponding wrapped phase.
+
+    Finds the matching ifg to `unw_filename`, or uses 2 to compute the correct
+    wrapped phase. For example, if `unw_filename` is like (day4_day5), then we load
+    the `ifg1 = (day1_day4)`, `ifg2 = (day1_day5)`, and compute `a * b.conj()`.
+    """
+    # Extract dates from unw_filename
+    unw_dates = get_dates(Path(unw_filename))
+
+    date1, date2 = unw_dates
+
+    ifg_date_tuples = [get_dates(p) for p in ifg_filenames]
+    if len({tup[0] for tup in ifg_date_tuples}) > 1:
+        raise ValueError(
+            "ifg_filenames must contain only single-reference interferograms"
+        )
+
+    # Find the required interferogram filenames
+    ifg1_name = None
+    ifg2_name = None
+    for ifg in ifg_filenames:
+        ifg_dates = get_dates(Path(ifg))
+        if len(ifg_dates) != 2:
+            continue
+        if ifg_dates == unw_dates:
+            ifg1_name = ifg
+            break
+
+        _ref, sec_date = ifg_dates
+        if sec_date == date1:
+            ifg1_name = ifg
+        if sec_date == date2:
+            ifg2_name = ifg
+
+    if ifg1_name is None and ifg2_name is None:
+        raise ValueError(f"Could not find required interferograms for {unw_filename}")
+
+    logger.info(f"Interpolating nodata in {unw_filename} with {ifg1_name}, {ifg2_name}")
+    # Load the files
+    with rasterio.open(unw_filename) as src:
+        unw = src.read(1)
+
+    with rasterio.open(ifg1_name) as src:
+        ifg1 = src.read(1)
+
+    if ifg2_name is not None:
+        with rasterio.open(ifg2_name) as src:
+            ifg2 = src.read(1)
+        # Calculate the wrapped phase difference
+        wrapped_phase = np.angle(ifg1 * np.conj(ifg2))
+    else:
+        wrapped_phase = ifg1
+
+    return unw, wrapped_phase
