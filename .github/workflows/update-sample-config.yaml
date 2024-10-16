@@ -31,6 +31,15 @@ jobs:
       - name: Install
         run: |
           pip install --no-deps .
+      - name: Fetch full history
+        run: git fetch --prune --unshallow
+      - name: Checkout base branch
+        run: |
+          if [ ${{ github.event_name }} == 'pull_request' ]; then
+            git checkout ${{ github.event.pull_request.base.ref }}
+          else
+            git checkout ${{ github.ref_name }}
+          fi
       - name: Generate default config
         run: |
           dolphin config --print-empty -o temp_config.yaml
@@ -53,4 +62,4 @@ jobs:
             This is an auto-update docs/sample_dolphin_config.yaml file based on the latest changes.
           branch: update-default-config
           delete-branch: true
-          base: ${{ github.head_ref || github.ref_name }}
+          base: ${{ github.event.pull_request.base.ref || github.ref_name }}
