@@ -65,8 +65,9 @@ def test_bounds(tmp_path, like_filename_zipped):
         right=-122.68416491724179,
         top=51.95333755674119,
     )
+    bounds_wkt = None
     masking.create_bounds_mask(
-        bounds, like_filename=extracted_tif, output_filename=output_filename
+        bounds, bounds_wkt, like_filename=extracted_tif, output_filename=output_filename
     )
     # Check result
     mask = io.load_gdal(output_filename)

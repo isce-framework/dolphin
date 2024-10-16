@@ -152,6 +152,7 @@ def run_wrapped_phase_single(
     # Queue all input slices, skip ones that are all nodata
     for b in block_manager.iter_blocks():
         in_rows, in_cols = b[2]
+        # nodata_mask is numpy convention: True for bad (masked).
         if nodata_mask[in_rows, in_cols].all():
             continue
         loader.queue_read(in_rows, in_cols)
