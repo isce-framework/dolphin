@@ -86,6 +86,7 @@ def run_wrapped_phase_sequential(
     output_slc_files: list[list] = []
     # Each item is the temp_coh/shp_count file from a ministack
     temp_coh_files: list[Path] = []
+    similarity_files: list[Path] = []
     shp_count_files: list[Path] = []
 
     # function to check if a ministack has already been processed
@@ -131,11 +132,16 @@ def run_wrapped_phase_sequential(
                 **tqdm_kwargs,
             )
 
-        cur_output_files, cur_comp_slc_file, temp_coh_file, shp_count_file = (
-            _get_outputs_from_folder(cur_output_folder)
-        )
+        (
+            cur_output_files,
+            cur_comp_slc_file,
+            temp_coh_file,
+            similarity_file,
+            shp_count_file,
+        ) = _get_outputs_from_folder(cur_output_folder)
         output_slc_files.append(cur_output_files)
         temp_coh_files.append(temp_coh_file)
+        similarity_files.append(similarity_file)
         shp_count_files.append(shp_count_file)
 
     ##############################################
@@ -144,23 +150,30 @@ def run_wrapped_phase_sequential(
     full_span = ministack_planner.real_slc_date_range_str
     output_temp_coh_file = output_folder / f"temporal_coherence_average_{full_span}.tif"
     output_shp_count_file = output_folder / f"shp_counts_average_{full_span}.tif"
+    output_shp_count_file = output_folder / f"shp_counts_average_{full_span}.tif"
 
     # we can pass the list of files to gdal_calc, which interprets it
     # as a multi-band file
     _average_rasters(temp_coh_files, output_temp_coh_file, "Float32")
     _average_rasters(shp_count_files, output_shp_count_file, "Int16")
 
-    # Create one phase similarity raster
-    output_similarity_file = output_folder / f"similarity_{full_span}.tif"
-    create_similarities(
-        ifg_file_list=cur_output_files,
-        output_file=output_similarity_file,
-        # TODO: any of these configurable?
-        search_radius=11,
-        sim_type="median",
-        block_shape=block_shape,
-        num_threads=3,
-    )
+    if len(similarity_files) > 1:
+        # Create one phase similarity raster on the whole wrapped time series
+        output_similarity_file = output_folder / f"similarity_full_{full_span}.tif"
+        create_similarities(
+            ifg_file_list=cur_output_files,
+            output_file=output_similarity_file,
+            # TODO: any of these configurable?
+            search_radius=11,
+            sim_type="median",
+            block_shape=block_shape,
+            nearest_n=3,
+            num_threads=2,
+        )
+    else:
+        output_similarity_file = similarity_files[0].rename(
+            output_folder / similarity_files[0].name
+        )
 
     # Combine the separate SLC output lists into a single list
     all_slc_files = list(chain.from_iterable(output_slc_files))
@@ -187,14 +200,21 @@ def run_wrapped_phase_sequential(
 
 def _get_outputs_from_folder(
     output_folder: Path,
-) -> tuple[list[Path], Path, Path, Path]:
+) -> tuple[list[Path], Path, Path, Path, Path]:
     cur_output_files = sorted(output_folder.glob("2*.slc.tif"))
     cur_comp_slc_file = next(output_folder.glob("compressed_*"))
     temp_coh_file = next(output_folder.glob("temporal_coherence_*"))
+    similarity_file = next(output_folder.glob("similarity*"))
     shp_count_file = next(output_folder.glob("shp_counts_*"))
     # Currently ignoring to not stitch:
     # eigenvalues, estimator, avg_coh
-    return cur_output_files, cur_comp_slc_file, temp_coh_file, shp_count_file
+    return (
+        cur_output_files,
+        cur_comp_slc_file,
+        temp_coh_file,
+        similarity_file,
+        shp_count_file,
+    )
 
 
 def _average_rasters(file_list: list[Path], outfile: Path, output_type: str):
