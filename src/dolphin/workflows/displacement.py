@@ -230,6 +230,7 @@ def run(
     unwrapped_paths, conncomp_paths = unwrapping.run(
         ifg_file_list=stitched_paths.ifg_paths,
         cor_file_list=stitched_paths.interferometric_corr_paths,
+        similarity_file=stitched_paths.similarity_file,
         temporal_coherence_file=stitched_paths.temp_coh_file,
         nlooks=nlooks,
         unwrap_options=cfg.unwrap_options,

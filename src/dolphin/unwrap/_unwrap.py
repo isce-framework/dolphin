@@ -44,6 +44,7 @@ def run(
     unwrap_options: UnwrapOptions = DEFAULT_OPTIONS,
     nlooks: float = 5,
     temporal_coherence_file: Filename | None = None,
+    similarity_file: Filename | None = None,
     mask_filename: Filename | None = None,
     unw_nodata: float | None = DEFAULT_UNW_NODATA,
     ccl_nodata: int | None = DEFAULT_CCL_NODATA,
@@ -68,6 +69,8 @@ def run(
         Effective number of looks used to form the input correlation data.
     temporal_coherence_file : Filename, optional
         Path to temporal coherence file from phase linking.
+    similarity_file : Filename, optional
+        Path to phase cosine similarity file from phase linking.
     mask_filename : Filename, optional
         Path to binary byte mask file, by default None.
         Assumes that 1s are valid pixels and 0s are invalid.
@@ -164,6 +167,7 @@ def run(
                 unw_filename=out_file,
                 nlooks=nlooks,
                 mask_filename=mask_filename,
+                similarity_filename=similarity_file,
                 unwrap_options=unwrap_options,
                 unw_nodata=unw_nodata,
                 ccl_nodata=ccl_nodata,
@@ -234,6 +238,7 @@ def unwrap(
     unw_filename: Filename,
     nlooks: float,
     mask_filename: Optional[Filename] = None,
+    similarity_file: Optional[Filename] = None,
     unwrap_options: UnwrapOptions = DEFAULT_OPTIONS,
     log_to_file: bool = True,
     unw_nodata: float | None = DEFAULT_UNW_NODATA,
@@ -259,6 +264,8 @@ def unwrap(
     mask_filename : Filename, optional
         Path to binary byte mask file, by default None.
         Assumes that 1s are valid pixels and 0s are invalid.
+    similarity_file : Filename, optional
+        Path to phase cosine similarity file from phase linking.
     log_to_file : bool, optional
         Redirect isce3 logging output to file, by default True
     unw_nodata : float , optional.
@@ -361,9 +368,15 @@ def unwrap(
 
         pre_interp_ifg = io.load_gdal(pre_interp_ifg_filename)
         corr = io.load_gdal(corr_filename)
-        cutoff = preproc_options.interpolation_cor_threshold
-        logger.info(f"Masking pixels with correlation below {cutoff}")
-        coherent_pixel_mask = corr[:] >= cutoff
+        if similarity_file:
+            cutoff = preproc_options.interpolation_similarity_threshold
+            logger.info(f"Masking pixels with similarity below {cutoff}")
+            sim = io.load_gdal(similarity_file, masked=True).filled(0)
+            coherent_pixel_mask = sim[:] >= cutoff
+        else:
+            cutoff = preproc_options.interpolation_cor_threshold
+            logger.info(f"Masking pixels with correlation below {cutoff}")
+            coherent_pixel_mask = corr[:] >= cutoff
 
         logger.info(f"Interpolating {pre_interp_ifg_filename} -> {interp_ifg_filename}")
         modified_ifg = interpolate(

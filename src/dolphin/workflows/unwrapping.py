@@ -24,6 +24,7 @@ def run(
     nlooks: float,
     unwrap_options: UnwrapOptions,
     temporal_coherence_file: PathOrStr | None = None,
+    similarity_file: PathOrStr | None = None,
     mask_file: PathOrStr | None = None,
     add_overviews: bool = True,
 ) -> tuple[list[Path], list[Path]]:
@@ -42,6 +43,8 @@ def run(
         with parameters for running unwrapping jobs.
     temporal_coherence_file : Filename, optional
         Path to temporal coherence file from phase linking.
+    similarity_file : Filename, optional
+        Path to phase cosine similarity file from phase linking.
     mask_file : PathOrStr, optional
         Path to boolean mask indicating nodata areas.
         1 indicates valid data, 0 indicates missing data.
@@ -86,6 +89,7 @@ def run(
         unwrap_options=unwrap_options,
         nlooks=nlooks,
         temporal_coherence_file=temporal_coherence_file,
+        similarity_file=similarity_file,
         mask_filename=output_mask,
         scratchdir=unwrap_scratchdir,
     )

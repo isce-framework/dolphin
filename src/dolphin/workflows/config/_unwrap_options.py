@@ -76,6 +76,16 @@ class PreprocessOptions(BaseModel, extra="forbid"):
         ge=0.0,
         le=1.0,
     )
+    interpolation_similarity_threshold: float = Field(
+        0.5,
+        description=(
+            "Threshold on the correlation raster to use for interpolation. Pixels with"
+            " less than this value are replaced by a weighted combination of"
+            " neighboring pixels."
+        ),
+        ge=0.0,
+        le=1.0,
+    )
 
 
 class SnaphuOptions(BaseModel, extra="forbid"):
