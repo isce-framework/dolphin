@@ -1,6 +1,6 @@
 """Module for computing phase similarity between complex interferogram pixels.
 
-Uses metric from @[Wang2022AccuratePersistentScatterer] for similarity.
+Uses metric from [@Wang2022AccuratePersistentScatterer] for similarity.
 """
 
 import logging
@@ -260,6 +260,7 @@ def create_similarities(
     block_shape: tuple[int, int] = (512, 512),
     num_threads: int = 5,
     add_overviews: bool = True,
+    nearest_n: int | None = None,
 ):
     """Create a similarity raster from as stack of ifg files.
 
@@ -281,10 +282,13 @@ def create_similarities(
         Number of parallel blocks to process, by default 5
     add_overviews : bool, optional
         Whether to create overviews in `output_file` by default True
+    nearest_n : int, optional
+        If provided, reform the nearest N interferograms before computing similarity.
 
     """
     from dolphin._overviews import Resampling, create_image_overviews
     from dolphin.io import BackgroundRasterWriter, VRTStack, process_blocks
+    from dolphin.timeseries import get_incidence_matrix
 
     if sim_type == "median":
         sim_function = median_similarity
@@ -295,10 +299,24 @@ def create_similarities(
 
     nodata_block = np.full(block_shape, fill_value=np.nan, dtype="float32")
 
+    if nearest_n is not None:
+        incidence_matrix = get_incidence_matrix(
+            _create_nearest_n_pairs(len(ifg_file_list) + 1, n=nearest_n)
+        )
+        assert incidence_matrix.shape[1] == len(ifg_file_list)
+    else:
+        incidence_matrix = None
+
     def calc_sim(readers, rows, cols):
         block = readers[0][:, rows, cols]
         if np.sum(block) == 0 or np.isnan(block).all():
             return nodata_block[rows, cols], rows, cols
+
+        if incidence_matrix is not None:
+            n, r, c = block.shape
+            m, n = incidence_matrix.shape
+            columns = np.dot(incidence_matrix, block.reshape(n, -1))
+            block = columns.reshape(m, r, c)
 
         out_avg = sim_function(ifg_stack=block, search_radius=search_radius)
         logger.debug(f"{rows = }, {cols = }, {block.shape = }, {out_avg.shape = }")
@@ -331,3 +349,14 @@ def create_similarities(
     if add_overviews:
         logger.info("Creating overviews for unwrapped images")
         create_image_overviews(Path(output_file), resampling=Resampling.AVERAGE)
+
+
+def _create_nearest_n_pairs(num_files: int, n: int = 3) -> list[tuple[int, int]]:
+    """Create nearest-n interferogram pair indices for a list of `num_files` inputs."""
+    ijs = []
+    for i in range(num_files):
+        for j in range(i + 1, i + n + 1):
+            if j >= num_files:
+                continue
+            ijs.append((i, j))
+    return ijs
