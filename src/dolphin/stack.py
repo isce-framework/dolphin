@@ -470,8 +470,10 @@ class MiniStackPlanner(BaseStack):
                 # but different "residual" added on
                 compressed_reference_idx = 0
             elif self.compressed_slc_plan == CompressedSlcPlan.FIRST_PER_MINISTACK:
-                # Like Ansari paper: each ministack is "self contained"
+                # Like Ansari, 2017 paper: each ministack is "self contained"
                 compressed_reference_idx = num_ccslc
+                # Ansari, 2017 also had output_reference_idx = num_ccslcs, and
+                # use the "Datum Adjustment" step to get outputs relative to day 0
             elif self.compressed_slc_plan == CompressedSlcPlan.LAST_PER_MINISTACK:
                 # Alternative that allows sequential interferograms across ministacks
                 compressed_reference_idx = -1
