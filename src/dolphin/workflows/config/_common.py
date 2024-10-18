@@ -19,8 +19,9 @@ from pydantic import (
 from dolphin import __version__ as _dolphin_version
 from dolphin._types import Bbox
 from dolphin.io import DEFAULT_HDF5_OPTIONS, DEFAULT_TIFF_OPTIONS
+from dolphin.stack import CompressedSlcPlan
 
-from ._enums import CompressedSlcPlan, ShpMethod
+from ._enums import ShpMethod
 from ._yaml_model import YamlModel
 
 logger = logging.getLogger(__name__)

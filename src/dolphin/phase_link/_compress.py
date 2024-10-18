@@ -44,6 +44,8 @@ def compress(
         pl_referenced = pl_cpx_phase * pl_cpx_phase[reference_idx][None, :, :].conj()
     else:
         pl_referenced = pl_cpx_phase
+
+    # Slice away the compressed layers *after* doing the reference.
     pl_referenced = pl_referenced[first_real_slc_idx:, :, :]
     # If the output is downsampled, we need to make `pl_cpx_phase` the same shape
     # as the output

@@ -32,11 +32,3 @@ class CallFunc(str, Enum):
 
     MIN = "min"
     MAX = "max"
-
-
-class CompressedSlcPlan(str, Enum):
-    """Plan for creating Compressed SLCs during phase linking."""
-
-    ALWAYS_FIRST = "always_first"
-    FIRST_PER_MINISTACK = "first_per_ministack"
-    LAST_PER_MINISTACK = "last_per_ministack"
