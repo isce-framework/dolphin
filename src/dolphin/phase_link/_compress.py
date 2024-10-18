@@ -47,18 +47,17 @@ def compress(
 
     # Slice away the compressed layers *after* doing the reference.
     pl_referenced = pl_referenced[first_real_slc_idx:, :, :]
+    slcs = slc_stack[first_real_slc_idx:]
     # If the output is downsampled, we need to make `pl_cpx_phase` the same shape
     # as the output
-    pl_estimate_upsampled = upsample_nearest(pl_referenced, slc_stack.shape[1:])
+    pl_estimate_upsampled = upsample_nearest(pl_referenced, slcs.shape[1:])
     # For each pixel, project the SLCs onto the (normalized) estimated phase
     # by performing a pixel-wise complex dot product
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", message="invalid value encountered")
-        phase = np.angle(
-            np.nansum(slc_stack * np.conjugate(pl_estimate_upsampled), axis=0)
-        )
+        phase = np.angle(np.nansum(slcs * np.conjugate(pl_estimate_upsampled), axis=0))
     if slc_mean is None:
-        slc_mean = np.mean(np.abs(slc_stack), axis=0)
+        slc_mean = np.mean(np.abs(slcs), axis=0)
     # If the phase is invalid, set the mean to NaN
     slc_mean[phase == 0] = np.nan
     return slc_mean * np.exp(1j * phase)
