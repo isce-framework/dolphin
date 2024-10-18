@@ -466,10 +466,14 @@ class MiniStackPlanner(BaseStack):
             if compressed_idx is not None:
                 compressed_reference_idx = compressed_idx
             elif self.compressed_slc_plan == CompressedSlcPlan.ALWAYS_FIRST:
+                # Simplest operational version: CompSLCs have same base phase,
+                # but different "residual" added on
                 compressed_reference_idx = 0
             elif self.compressed_slc_plan == CompressedSlcPlan.FIRST_PER_MINISTACK:
+                # Like Ansari paper: each ministack is "self contained"
                 compressed_reference_idx = num_ccslc
             elif self.compressed_slc_plan == CompressedSlcPlan.LAST_PER_MINISTACK:
+                # Alternative that allows sequential interferograms across ministacks
                 compressed_reference_idx = -1
 
             cur_ministack = MiniStackInfo(
