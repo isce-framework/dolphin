@@ -20,7 +20,7 @@ from dolphin import __version__ as _dolphin_version
 from dolphin._types import Bbox
 from dolphin.io import DEFAULT_HDF5_OPTIONS, DEFAULT_TIFF_OPTIONS
 
-from ._enums import ShpMethod
+from ._enums import CompressedSlcPlan, ShpMethod
 from ._yaml_model import YamlModel
 
 logger = logging.getLogger(__name__)
@@ -129,6 +129,7 @@ class PhaseLinkingOptions(BaseModel, extra="forbid"):
             "`n` interferograms. `baseline_line` must be positive."
         ),
     )
+    compressed_slc_plan: CompressedSlcPlan = CompressedSlcPlan.ALWAYS_FIRST
 
 
 class InterferogramNetwork(BaseModel, extra="forbid"):
