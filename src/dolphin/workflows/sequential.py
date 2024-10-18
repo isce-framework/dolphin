@@ -19,7 +19,7 @@ from dolphin import io
 from dolphin._types import Filename
 from dolphin.io import VRTStack
 from dolphin.similarity import create_similarities
-from dolphin.stack import MiniStackPlanner
+from dolphin.stack import CompressedSlcPlan, MiniStackPlanner
 
 from .config import ShpMethod
 from .single import run_wrapped_phase_single
@@ -45,6 +45,7 @@ def run_wrapped_phase_sequential(
     shp_nslc: Optional[int] = None,
     use_evd: bool = False,
     beta: float = 0.00,
+    compressed_slc_plan: CompressedSlcPlan = CompressedSlcPlan.ALWAYS_FIRST,
     max_num_compressed: int = 100,
     output_reference_idx: int = 0,
     new_compressed_reference_idx: int | None = None,
@@ -69,6 +70,7 @@ def run_wrapped_phase_sequential(
         output_folder=output_folder,
         max_num_compressed=max_num_compressed,
         output_reference_idx=output_reference_idx,
+        compressed_slc_plan=compressed_slc_plan,
     )
     ministacks = ministack_planner.plan(
         ministack_size, compressed_idx=new_compressed_reference_idx
