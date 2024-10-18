@@ -10,8 +10,7 @@ from typing import Optional, Sequence
 import numpy as np
 from osgeo import gdal
 from pyproj import CRS, Transformer
-from shapely import to_geojson
-from shapely.geometry import box
+from shapely import from_wkt, geometry, ops, to_geojson
 
 from dolphin import io
 from dolphin._types import Bbox, PathOrStr
@@ -168,7 +167,8 @@ def load_mask_as_numpy(mask_file: PathOrStr) -> np.ndarray:
 
 
 def create_bounds_mask(
-    bounds: Bbox | tuple[float, float, float, float],
+    bounds: Bbox | tuple[float, float, float, float] | None,
+    bounds_wkt: str | None,
     output_filename: PathOrStr,
     like_filename: PathOrStr,
     bounds_epsg: int = 4326,
@@ -178,8 +178,11 @@ def create_bounds_mask(
 
     Parameters
     ----------
-    bounds : tuple
+    bounds : tuple, optional
         (min x, min y, max x, max y) of the area of interest
+    bounds_wkt : tuple, optional
+        Well known text (WKT) string describing Polygon of the area of interest.
+        Alternative to bounds. Cannot pass both bounds and bounds_wkt.
     like_filename : Filename
         Reference file to copy the shape, extent, and projection.
     output_filename : Filename
@@ -190,7 +193,17 @@ def create_bounds_mask(
     overwrite : bool, optional
         Overwrite the output file if it already exists, by default False
 
+    Raises
+    ------
+    ValueError
+        If neither bounds nor bounds_wkt, or both bounds and bounds_wkt, is passed.
+
     """
+    if bounds is None and bounds_wkt is None:
+        raise ValueError("Must pass either `bounds` or `bounds_wkt`")
+    if bounds is not None and bounds_wkt is not None:
+        raise ValueError("Cannot pass both `bounds` and `bounds_wkt`")
+
     if Path(output_filename).exists():
         if not overwrite:
             logger.info(f"Skipping {output_filename} since it already exists.")
@@ -199,18 +212,21 @@ def create_bounds_mask(
             logger.info(f"Overwriting {output_filename} since overwrite=True.")
             Path(output_filename).unlink()
 
+    # Create a polygon from the bounds or wkt
+    bounds_poly = geometry.box(*bounds) if bounds is not None else from_wkt(bounds_wkt)
+
+    # Geojson default is 4326, so we need it in that system
     # Transform bounds if necessary
-    # Geojson default is 4326, and GDAL handles the conversion to, e.g., UTM
     if bounds_epsg != 4326:
+        # Pass the Pyproj transformer to `shapely.ops.transform`
         transformer = Transformer.from_crs(
             CRS.from_epsg(bounds_epsg), 4326, always_xy=True
         )
-        bounds = transformer.transform_bounds(*bounds)
+        bounds_poly_lonlat = ops.transform(transformer.transform, bounds_poly)
+    else:
+        bounds_poly_lonlat = bounds_poly
 
-    logger.info(f"Creating mask for bounds {bounds}")
-
-    # Create a polygon from the bounds
-    bounds_poly = box(*bounds)
+    logger.info(f"Creating mask for bounds {bounds_poly_lonlat}")
 
     # Create the output raster
     io.write_arr(
@@ -224,7 +240,7 @@ def create_bounds_mask(
     with tempfile.TemporaryDirectory() as tmpdir:
         temp_vector_file = Path(tmpdir) / "temp.geojson"
         with open(temp_vector_file, "w") as f:
-            f.write(to_geojson(bounds_poly))
+            f.write(to_geojson(bounds_poly_lonlat))
 
         # Open the input vector file
         src_ds = gdal.OpenEx(fspath(temp_vector_file), gdal.OF_VECTOR)
