@@ -43,8 +43,8 @@ def run(
     *,
     unwrap_options: UnwrapOptions = DEFAULT_OPTIONS,
     nlooks: float = 5,
-    temporal_coherence_file: Filename | None = None,
-    similarity_file: Filename | None = None,
+    temporal_coherence_filename: Filename | None = None,
+    similarity_filename: Filename | None = None,
     mask_filename: Filename | None = None,
     unw_nodata: float | None = DEFAULT_UNW_NODATA,
     ccl_nodata: int | None = DEFAULT_CCL_NODATA,
@@ -67,9 +67,9 @@ def run(
         with parameters and settings for unwrapping.
     nlooks : int, optional
         Effective number of looks used to form the input correlation data.
-    temporal_coherence_file : Filename, optional
+    temporal_coherence_filename : Filename, optional
         Path to temporal coherence file from phase linking.
-    similarity_file : Filename, optional
+    similarity_filename : Filename, optional
         Path to phase cosine similarity file from phase linking.
     mask_filename : Filename, optional
         Path to binary byte mask file, by default None.
@@ -112,14 +112,14 @@ def run(
 
     output_path = Path(output_path)
     if unwrap_options.unwrap_method == UnwrapMethod.SPURT:
-        if temporal_coherence_file is None:
+        if temporal_coherence_filename is None:
             # TODO: we should make this a mask, instead of requiring this.
             # we'll need to change spurt
             raise ValueError("temporal coherence required for spurt unwrapping")
         unw_paths, conncomp_paths = unwrap_spurt(
             ifg_filenames=ifg_filenames,
             output_path=output_path,
-            temporal_coherence_file=temporal_coherence_file,
+            temporal_coherence_filename=temporal_coherence_filename,
             cor_filenames=cor_filenames,
             mask_filename=mask_filename,
             options=unwrap_options.spurt_options,
@@ -167,7 +167,7 @@ def run(
                 unw_filename=out_file,
                 nlooks=nlooks,
                 mask_filename=mask_filename,
-                similarity_filename=similarity_file,
+                similarity_filename=similarity_filename,
                 unwrap_options=unwrap_options,
                 unw_nodata=unw_nodata,
                 ccl_nodata=ccl_nodata,
@@ -238,7 +238,7 @@ def unwrap(
     unw_filename: Filename,
     nlooks: float,
     mask_filename: Optional[Filename] = None,
-    similarity_file: Optional[Filename] = None,
+    similarity_filename: Optional[Filename] = None,
     unwrap_options: UnwrapOptions = DEFAULT_OPTIONS,
     log_to_file: bool = True,
     unw_nodata: float | None = DEFAULT_UNW_NODATA,
@@ -264,7 +264,7 @@ def unwrap(
     mask_filename : Filename, optional
         Path to binary byte mask file, by default None.
         Assumes that 1s are valid pixels and 0s are invalid.
-    similarity_file : Filename, optional
+    similarity_filename : Filename, optional
         Path to phase cosine similarity file from phase linking.
     log_to_file : bool, optional
         Redirect isce3 logging output to file, by default True
@@ -368,10 +368,10 @@ def unwrap(
 
         pre_interp_ifg = io.load_gdal(pre_interp_ifg_filename)
         corr = io.load_gdal(corr_filename)
-        if similarity_file:
+        if similarity_filename:
             cutoff = preproc_options.interpolation_similarity_threshold
             logger.info(f"Masking pixels with similarity below {cutoff}")
-            sim = io.load_gdal(similarity_file, masked=True).filled(0)
+            sim = io.load_gdal(similarity_filename, masked=True).filled(0)
             coherent_pixel_mask = sim[:] >= cutoff
         else:
             cutoff = preproc_options.interpolation_cor_threshold

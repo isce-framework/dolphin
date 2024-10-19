@@ -299,7 +299,7 @@ def run_wrapped_phase_single(
     similarity.create_similarities(
         phase_linked_slc_files,
         output_file=output_folder / f"similarity_{start_end}.tif",
-        num_threads=1,
+        num_threads=2,
         add_overviews=False,
         nearest_n=3,
     )

@@ -31,12 +31,12 @@ def median_similarity(
 ):
     """Compute the median similarity of each pixel and its neighbors.
 
-    Resulting similarity matches Equation (5) of @[Wang2022AccuratePersistentScatterer]
+    Resulting similarity matches Equation (5) of [@Wang2022AccuratePersistentScatterer]
 
     Parameters
     ----------
     ifg_stack : ArrayLike
-        3D stack of complex interferograms.
+        3D stack of complex interferograms, or floating point phase.
         Shape is (n_ifg, rows, cols)
     search_radius: int
         maximum radius (in pixels) to search for neighbors when comparing each pixel.
@@ -68,7 +68,7 @@ def max_similarity(
     Parameters
     ----------
     ifg_stack : ArrayLike
-        3D stack of complex interferograms.
+        3D stack of complex interferograms, or floating point phase.
         Shape is (n_ifg, rows, cols)
     search_radius: int
         maximum radius (in pixels) to search for neighbors when comparing each pixel.
@@ -98,15 +98,15 @@ def _create_loop_and_run(
     func: Callable[[ArrayLike], np.ndarray],
 ):
     n_ifg, rows, cols = ifg_stack.shape
+    # Mark any nans/all zeros as invalid
+    invalid_mask = np.nan_to_num(ifg_stack).sum(axis=0) == 0
     if not np.iscomplexobj(ifg_stack):
-        raise ValueError("ifg_stack must be complex")
-
-    unit_ifgs = np.exp(1j * np.angle(ifg_stack))
+        unit_ifgs = np.exp(1j * ifg_stack)
+    else:
+        unit_ifgs = np.exp(1j * np.angle(ifg_stack))
     out_similarity = np.full((rows, cols), fill_value=np.nan, dtype="float32")
     if mask is None:
         mask = np.ones((rows, cols), dtype="bool")
-    # Mark any nans/all zeros as invalid
-    invalid_mask = np.nan_to_num(ifg_stack).sum(axis=0) == 0
     mask[invalid_mask] = False
 
     if mask.shape != (rows, cols):
@@ -290,6 +290,10 @@ def create_similarities(
     from dolphin.io import BackgroundRasterWriter, VRTStack, process_blocks
     from dolphin.timeseries import get_incidence_matrix
 
+    if Path(output_file).exists():
+        logger.info(f"{output_file} exists, skipping")
+        return
+
     if sim_type == "median":
         sim_function = median_similarity
     elif sim_type == "max":
@@ -313,10 +317,7 @@ def create_similarities(
             return nodata_block[rows, cols], rows, cols
 
         if incidence_matrix is not None:
-            n, r, c = block.shape
-            m, n = incidence_matrix.shape
-            columns = np.dot(incidence_matrix, block.reshape(n, -1))
-            block = columns.reshape(m, r, c)
+            block = _calc_nearest_diffs(block, incidence_matrix)
 
         out_avg = sim_function(ifg_stack=block, search_radius=search_radius)
         logger.debug(f"{rows = }, {cols = }, {block.shape = }, {out_avg.shape = }")
@@ -324,10 +325,6 @@ def create_similarities(
 
     out_dir = Path(output_file).parent
     reader = VRTStack(ifg_file_list, outfile=out_dir / "sim_inputs.vrt")
-    if reader.dtype not in (np.complex64, np.complex128):
-        raise ValueError(
-            f"ifg_file_list must be complex interferograms. Got {reader.dtype}"
-        )
 
     writer = BackgroundRasterWriter(
         output_file,
@@ -349,6 +346,19 @@ def create_similarities(
     if add_overviews:
         logger.info("Creating overviews for unwrapped images")
         create_image_overviews(Path(output_file), resampling=Resampling.AVERAGE)
+
+
+def _calc_nearest_diffs(block, incidence_matrix) -> np.ndarray:
+    # Multiply the single-ref data by tall and skinny A matrix
+    # to give the nearest-n differences
+    num_imgs, rows, cols = block.shape
+    block_mask = np.nan_to_num(block).sum(axis=0) == 0
+    m, num_imgs = incidence_matrix.shape
+    phase = np.angle(block) if np.iscomplexobj(block) else block
+    columns = np.dot(incidence_matrix, phase.reshape(num_imgs, -1))
+    block = columns.reshape(m, rows, cols)
+    block[:, block_mask] = np.nan
+    return np.exp(1j * block)
 
 
 def _create_nearest_n_pairs(num_files: int, n: int = 3) -> list[tuple[int, int]]:

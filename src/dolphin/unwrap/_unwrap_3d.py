@@ -24,9 +24,12 @@ DEFAULT_OPTIONS = SpurtOptions()
 def unwrap_spurt(
     ifg_filenames: Sequence[PathOrStr],
     output_path: PathOrStr,
-    temporal_coherence_file: PathOrStr,
+    temporal_coherence_filename: PathOrStr,
     cor_filenames: Sequence[PathOrStr] | None = None,
     mask_filename: PathOrStr | None = None,
+    similarity_filename: PathOrStr | None = None,
+    temporal_coherence_threshold: float = 0.6,
+    similarity_threshold: float = 0.5,
     options: SpurtOptions = DEFAULT_OPTIONS,
     scratchdir: PathOrStr | None = None,
 ) -> tuple[list[Path], list[Path]]:
@@ -80,7 +83,7 @@ def unwrap_spurt(
     date_str_to_file = _map_date_str_to_file(ifg_filenames)
     stack = SLCStackReader(
         slc_files=date_str_to_file,
-        temp_coh_file=temporal_coherence_file,
+        temp_coh_file=temporal_coherence_filename,
         temp_coh_threshold=options.temporal_coherence_threshold,
     )
     # Run the workflow
@@ -100,7 +103,7 @@ def unwrap_spurt(
     unw_filenames = merge_tiles(stack, g_time, gen_settings, mrg_settings)
     # TODO: What can we do for conncomps? Anything? Run snaphu?
     conncomp_filenames = _create_conncomps_from_mask(
-        temporal_coherence_file,
+        temporal_coherence_filename,
         options.temporal_coherence_threshold,
         unw_filenames=unw_filenames,
     )
@@ -132,12 +135,12 @@ def _map_date_str_to_file(
 
 
 def _create_conncomps_from_mask(
-    temporal_coherence_file: PathOrStr,
+    temporal_coherence_filename: PathOrStr,
     temporal_coherence_threshold: float,
     unw_filenames: Sequence[PathOrStr],
     dilate_by: int = 25,
 ) -> list[Path]:
-    arr = io.load_gdal(temporal_coherence_file, masked=True)
+    arr = io.load_gdal(temporal_coherence_filename, masked=True)
     good_pixels = arr > temporal_coherence_threshold
     strel = np.ones((dilate_by, dilate_by))
     # "1" pixels will be spread out and have (approximately) 1.0 in surrounding pixels
