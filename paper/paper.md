@@ -40,18 +40,18 @@ bibliography: references.bib
 # Summary
 
 Interferometric Synthetic Aperture Radar (InSAR) is a remote sensing technique used for measuring land surface deformation.
-Conventional InSAR uses pairs of SAR images to get a single map of the relative displacement between the two acquisition times.
-Dolphin is a Python library which uses state-of-the-art multi-temporal algorithms to reduce the impact of noise sources and produce long time series of displacement at fine resolution.
+Conventional InSAR uses pairs of SAR images to create a single map of the relative displacement between the two acquisition times.
+Dolphin is a Python library that uses state-of-the-art multi-temporal algorithms to reduce the impact of noise sources and produce long time series of displacement at fine resolution.
 
 ![Average surface displacement velocity along the radar line-of-sight between February, 2017 and December, 2020. Red (blue) indicates motion towards (away from) the satellite.\label{fig:mojave}](figures/bristol-velocity-sequential.png)
 
 # Statement of need
 
-InSAR has been a powerful tool for decades, both in geophysical studies including tectonics, volcanism, and glacier dynamics, as well as human applications such as urban development, mining, and groundwater extraction. The launch of the European Space Agency's Sentinel-1 satellite in 2014 dramatically increased the availability of free, open-access SAR data. However, processing InSAR data remains challenging, particularly for non-experts.
+InSAR has been a powerful tool for decades, both in geophysical studies, including tectonics, volcanism, and glacier dynamics, as well as human applications such as urban development, mining, and groundwater extraction. The launch of the European Space Agency's Sentinel-1 satellite in 2014 dramatically increased the availability of free, open-access SAR data. However, processing InSAR data remains challenging, especially for non-experts.
 
 Advanced algorithms combining persistent scatterer (PS) and distributed scatterer (DS) techniques, also known as phase linking, have been developed over the past decade to help overcome decorrelation noise in longer time series [@Guarnieri2008ExploitationTargetStatistics]. Despite their potential, these methods have only recently begun to appear in open-source tools.
 
-The phase linking first prototype was the [FRInGE](https://github.com/isce-framework/fringe) C++ library [@Fattahi2019FRInGEFullResolutionInSAR], which implements algorithms and workflows from @Ferretti2011NewAlgorithmProcessing and @Ansari2018EfficientPhaseEstimation. The [MiaplPy](https://github.com/insarlab/MiaplPy) Python library contains a superset of the features in FRInGE, as well as new algorithms developed in @Mirzaee2023NonlinearPhaseLinking. Additionally, the MATLAB [TomoSAR](https://github.com/DinhHoTongMinh/TomoSAR) library was made public in 2022, which implements the "Compressed SAR" (ComSAR) algorithm, a variant of phase linking detailed in @HoTongMinh2022CompressedSARInterferometry.
+The first phase linking prototype library was the [FRInGE](https://github.com/isce-framework/fringe) C++ library [@Fattahi2019FRInGEFullResolutionInSAR], which implements algorithms and workflows from @Ferretti2011NewAlgorithmProcessing and @Ansari2018EfficientPhaseEstimation. The [MiaplPy](https://github.com/insarlab/MiaplPy) Python library contains a superset of the features in FRInGE, as well as new algorithms developed in @Mirzaee2023NonlinearPhaseLinking. Additionally, the MATLAB [TomoSAR](https://github.com/DinhHoTongMinh/TomoSAR) library was made public in 2022, which implements the "Compressed SAR" (ComSAR) algorithm, a variant of phase linking detailed in @HoTongMinh2022CompressedSARInterferometry.
 
 While these tools represent significant progress, there remained a need for software capable of handling the heavy computational demands of large-scale InSAR processing. For example, the TomoSAR library currently requires tens of gigabytes of memory to process more than a small area of interest, while FRInGE and MiaplPy are unable to offer speedups to users who want to process data at a coarser output grid than the full SLC resolution. Additionally, both FRInGE and MiaplPy were designed to process single batches of SLC images.
 
@@ -87,7 +87,7 @@ dolphin run dolphin_config.yaml
 
 The full set of configuration options can be viewed with the `dolphin config --print-empty` command.
 
-\autoref{fig:mojave} shows an example result of the final average surface velocity map created by Dolphin. The inputs were OPERA Coregistered Single-Look Complex (CSLC) geocoded images from Sentinel-1 data between February 2017 - December 2020 over the Mojave Desert.
+\autoref{fig:mojave} shows an example result of the final average surface velocity map created by Dolphin. The inputs were OPERA Coregistered Single-Look Complex (CSLC) geocoded images from Sentinel-1 data between February 2017 and December 2020 over the Mojave Desert.
 
 # Acknowledgements
 
