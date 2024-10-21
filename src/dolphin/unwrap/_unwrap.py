@@ -117,7 +117,7 @@ def run(
             ifg_filenames=ifg_filenames,
             output_path=output_path,
             temporal_coherence_file=temporal_coherence_file,
-            cor_filenames=cor_filenames,
+            # cor_filenames=cor_filenames,
             mask_filename=mask_filename,
             options=unwrap_options.spurt_options,
             scratchdir=scratchdir,
