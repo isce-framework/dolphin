@@ -32,23 +32,44 @@ def unwrap_spurt(
     scratchdir: PathOrStr | None = None,
 ) -> tuple[list[Path], list[Path]]:
     """Perform 3D unwrapping using `spurt` via subprocess call."""
-    if mask_filename is not None:
-        logger.warning("use of `mask_filename` not yet implemented for spurt")
+    # NOTE: we are working around spurt currently wanting "temporal_coherence.tif",
+    # and a temporal coherence threshold.
+    # we'll make our own mask of 0=bad, 1=good, then pass a threshold of 0.5
+    temp_coh = io.load_gdal(temporal_coherence_file, masked=True).filled(0)
+    # Mark the "bad" pixels (good=1, bad=0, following the unwrapper mask convention)
+    temp_coh_mask = temp_coh > options.temporal_coherence_threshold
+    if mask_filename:
+        nodata_mask = io.load_gdal(mask_filename).astype(bool)
+        # A good pixel has to be 1 in both masks
+        combined_mask = temp_coh_mask & nodata_mask
+    else:
+        combined_mask = temp_coh_mask
+    # We name it "temporal_coherence.tif" so spurt reads it.
+    # Also make it float32 as though it were temp coh
+    scratch_path = Path(scratchdir) if scratchdir else Path(output_path) / "scratch"
+    combined_mask_filename = Path(scratch_path) / "temporal_coherence.tif"
+    io.write_arr(
+        arr=combined_mask.astype("float32"), output_name=combined_mask_filename
+    )
+
+    # Symlink the interferograms to the same scratch path so spurt finds everything
+    # expected in the one directory
+    for fn in ifg_filenames:
+        new_path = scratch_path / Path(fn).name
+        new_path.symlink_to(fn)
 
     cmd = [
         "python",
         "-m",
         "spurt.workflows.emcf",
         "-i",
-        str(
-            Path(ifg_filenames[0]).parent
-        ),  # Assuming all ifgs are in the same directory
+        str(scratch_path),
         "-o",
         str(output_path),
         "--tempdir",
-        str(scratchdir or Path(output_path) / "scratch"),
+        str(scratch_path / "emcf_tmp"),
         "-c",
-        str(options.temporal_coherence_threshold),
+        str(0.5),  # arbitrary, since we are passing a 0/1 file anyway
     ]
     if not options.general_settings.use_tiles:
         cmd.append("--singletile")
