@@ -47,7 +47,8 @@ def unwrap_spurt(
     # We name it "temporal_coherence.tif" so spurt reads it.
     # Also make it float32 as though it were temp coh
     scratch_path = Path(scratchdir) if scratchdir else Path(output_path) / "scratch"
-    combined_mask_filename = Path(scratch_path) / "temporal_coherence.tif"
+    scratch_path.mkdir(exist_ok=True, parents=True)
+    combined_mask_filename = scratch_path / "temporal_coherence.tif"
     io.write_arr(
         arr=combined_mask.astype("float32"), output_name=combined_mask_filename
     )
