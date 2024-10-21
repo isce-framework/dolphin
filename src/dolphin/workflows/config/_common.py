@@ -108,7 +108,7 @@ class PhaseLinkingOptions(BaseModel, extra="forbid"):
     )
     shp_method: ShpMethod = ShpMethod.GLRT
     shp_alpha: float = Field(
-        0.005,
+        0.001,
         description=(
             "Significance level (probability of false alarm) for SHP tests. Lower"
             " numbers include more pixels within the multilook window during covariance"
