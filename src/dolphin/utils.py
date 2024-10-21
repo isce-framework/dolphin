@@ -3,6 +3,7 @@ from __future__ import annotations
 import datetime
 import logging
 import math
+import os
 import resource
 import sys
 import warnings
@@ -129,8 +130,6 @@ def full_suffix(filename: Filename):
 
 def disable_gpu():
     """Disable GPU usage."""
-    import os
-
     import jax
 
     os.environ["CUDA_VISIBLE_DEVICES"] = ""
@@ -414,8 +413,6 @@ def set_num_threads(num_threads: int):
 
     Uses https://github.com/joblib/threadpoolctl for numpy.
     """
-    import os
-
     import numba
     from threadpoolctl import ThreadpoolController
 
@@ -462,6 +459,37 @@ def get_cpu_count():
     except Exception:
         pass
     return cpu_count()
+
+
+def check_open_file_limit(file_limit_threshold: int = 512) -> int:
+    """Adjust GDAL_MAX_DATASET_POOL_SIZE based on the system's open file limit.
+
+    This function checks the current file descriptor limit using the resource module.
+    If the limit is below a specified threshold, it lowers the environment variable
+    `GDAL_MAX_DATASET_POOL_SIZE`.
+
+    Parameters
+    ----------
+    file_limit_threshold : int, optional
+        The minimum file descriptor limit below which GDAL_MAX_DATASET_POOL_SIZE
+        should be shrunk.
+        Default is 512.
+
+    Returns
+    -------
+    int
+        The current file descriptor limit, as stated in `resource.RLIMIT_NOFILE`
+
+    """
+    soft_limit, _ = resource.getrlimit(resource.RLIMIT_NOFILE)
+
+    if soft_limit < file_limit_threshold:
+        logger.info(
+            f"File descriptor limit is below {soft_limit}. "
+            "Shrinking GDAL_MAX_DATASET_POOL_SIZE environment variable.",
+        )
+        os.environ["GDAL_MAX_DATASET_POOL_SIZE"] = str(file_limit_threshold // 4)
+    return soft_limit
 
 
 def flatten(list_of_lists: Iterable[Iterable[Any]]) -> chain[Any]:
