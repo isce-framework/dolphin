@@ -363,7 +363,7 @@ class TestSpurt:
         out_paths, conncomp_paths = dolphin.unwrap.run(
             ifg_filenames=ifg_file_list,
             cor_filenames=ifg_file_list,  # NOT USED... but required for `run`?
-            temporal_coherence_file=temp_coh_raster,
+            temporal_coherence_filename=temp_coh_raster,
             unwrap_options=unwrap_options,
             output_path=tmp_path,
             nlooks=5,

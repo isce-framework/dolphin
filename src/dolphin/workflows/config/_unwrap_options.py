@@ -67,7 +67,17 @@ class PreprocessOptions(BaseModel, extra="forbid"):
         description="(for interpolation) Maximum radius to find scatterers.",
     )
     interpolation_cor_threshold: float = Field(
-        0.5,
+        0.3,
+        description=(
+            "Threshold on the correlation raster to use for interpolation. Pixels with"
+            " less than this value are replaced by a weighted combination of"
+            " neighboring pixels."
+        ),
+        ge=0.0,
+        le=1.0,
+    )
+    interpolation_similarity_threshold: float = Field(
+        0.3,
         description=(
             "Threshold on the correlation raster to use for interpolation. Pixels with"
             " less than this value are replaced by a weighted combination of"
@@ -238,6 +248,14 @@ class SpurtOptions(BaseModel, extra="forbid"):
         ge=0.0,
         lt=1.0,
     )
+    similarity_threshold: float = Field(
+        0.5,
+        description="Similarity to pick pixels used on an irregular grid",
+        ge=0.0,
+        lt=1.0,
+    )
+    # TODO: do we want to allow a "AND" or "OR" option, so users can pick if they want
+    # `good_sim & good_temp_coh`, or `good_sim | good_temp_coh`
     general_settings: SpurtGeneralSettings = Field(default_factory=SpurtGeneralSettings)
     tiler_settings: SpurtTilerSettings = Field(default_factory=SpurtTilerSettings)
     solver_settings: SpurtSolverSettings = Field(default_factory=SpurtSolverSettings)

@@ -114,6 +114,7 @@ def unwrap_snaphu_py(
             tile_overlap=tile_overlap,
             nproc=nproc,
             scratchdir=scratchdir,
+            # TODO: add a config option for "single tile reopt"
             # https://github.com/isce-framework/snaphu-py/commit/a77cbe1ff115d96164985523987b1db3278970ed
             # On frame-sized ifgs, especially with decorrelation, defaults of
             # (500, 100) for (tile_cost_thresh, min_region_size) lead to
