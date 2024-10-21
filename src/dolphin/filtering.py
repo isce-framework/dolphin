@@ -146,7 +146,7 @@ def filter_rasters(
     unw_filenames: list[Path],
     cor_filenames: list[Path] | None = None,
     conncomp_filenames: list[Path] | None = None,
-    temporal_coherence_filenamename: Path | None = None,
+    temporal_coherence_filename: Path | None = None,
     wavelength_cutoff: float = 50_000,
     correlation_cutoff: float = 0.5,
     output_dir: Path | None = None,
@@ -168,7 +168,7 @@ def filter_rasters(
     conncomp_filenames : list[Path] | None
         List of paths to connected component files, filters any 0 labeled pixels.
         Passing None skips filtering on connected component labels.
-    temporal_coherence_filenamename : Path | None
+    temporal_coherence_filename : Path | None
         Path to the temporal coherence file for masking.
         Passing None skips filtering on temporal coherence.
     wavelength_cutoff : float, optional
@@ -189,7 +189,7 @@ def filter_rasters(
 
     Notes
     -----
-    - If temporal_coherence_filenamename is provided, pixels with coherence < 0.5 are masked
+    - If temporal_coherence_filename is provided, pixels with coherence < 0.5 are masked
 
     """
     from dolphin import io
@@ -197,9 +197,9 @@ def filter_rasters(
     bad_pixel_mask = np.zeros(
         io.get_raster_xysize(unw_filenames[0])[::-1], dtype="bool"
     )
-    if temporal_coherence_filenamename:
+    if temporal_coherence_filename:
         bad_pixel_mask = bad_pixel_mask | (
-            io.load_gdal(temporal_coherence_filenamename) < 0.5
+            io.load_gdal(temporal_coherence_filename) < 0.5
         )
 
     if output_dir is None:
