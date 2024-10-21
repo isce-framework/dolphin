@@ -184,7 +184,7 @@ def test_shp_glrt_nodata_0(mean, var, strides):
 
 
 @pytest.mark.parametrize("method", ["glrt", "ks"])
-@pytest.mark.parametrize("alpha", [0.01, 0.05])
+@pytest.mark.parametrize("alpha", [0.001, 0.005])
 @pytest.mark.parametrize("strides", [{"x": 1, "y": 1}, {"x": 2, "y": 2}])
 def test_shp_statistics(method, alpha, strides):
     """Check that with repeated tries, the alpha is correct."""
