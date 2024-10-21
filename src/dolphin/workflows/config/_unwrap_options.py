@@ -67,7 +67,7 @@ class PreprocessOptions(BaseModel, extra="forbid"):
         description="(for interpolation) Maximum radius to find scatterers.",
     )
     interpolation_cor_threshold: float = Field(
-        0.5,
+        0.3,
         description=(
             "Threshold on the correlation raster to use for interpolation. Pixels with"
             " less than this value are replaced by a weighted combination of"
@@ -77,7 +77,7 @@ class PreprocessOptions(BaseModel, extra="forbid"):
         le=1.0,
     )
     interpolation_similarity_threshold: float = Field(
-        0.5,
+        0.3,
         description=(
             "Threshold on the correlation raster to use for interpolation. Pixels with"
             " less than this value are replaced by a weighted combination of"
