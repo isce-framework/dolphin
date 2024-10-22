@@ -154,7 +154,6 @@ def run_wrapped_phase_sequential(
     full_span = ministack_planner.real_slc_date_range_str
     output_temp_coh_file = output_folder / f"temporal_coherence_average_{full_span}.tif"
     output_shp_count_file = output_folder / f"shp_counts_average_{full_span}.tif"
-    output_shp_count_file = output_folder / f"shp_counts_average_{full_span}.tif"
 
     # we can pass the list of files to gdal_calc, which interprets it
     # as a multi-band file
