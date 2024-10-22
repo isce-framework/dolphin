@@ -142,7 +142,7 @@ def repack_raster(
     import rasterio as rio
 
     if output_dir is None:
-        output_file = tempfile.NamedTemporaryFile(
+        output_file = tempfile.NamedTemporaryFile(  # noqa: SIM115
             suffix=raster_path.suffix, dir=output_dir, delete=False
         )
         output_path = Path(output_file.name)
