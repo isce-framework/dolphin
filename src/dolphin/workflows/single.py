@@ -11,7 +11,7 @@ import numpy as np
 from numpy.typing import DTypeLike
 from tqdm.auto import tqdm
 
-from dolphin import io, shp
+from dolphin import io, shp, similarity
 from dolphin._decorators import atomic_output
 from dolphin._types import Filename, HalfWindow, Strides
 from dolphin.io import EagerLoader, StridedBlockManager, VRTStack
@@ -52,6 +52,7 @@ def run_wrapped_phase_single(
     shp_method: ShpMethod = ShpMethod.NONE,
     shp_alpha: float = 0.05,
     shp_nslc: Optional[int] = None,
+    similarity_nearest_n: int | None = None,
     block_shape: tuple[int, int] = (1024, 1024),
     baseline_lag: Optional[int] = None,
     **tqdm_kwargs,
@@ -291,6 +292,15 @@ def run_wrapped_phase_single(
 
     logger.info("Repacking for more compression")
     io.repack_rasters(phase_linked_slc_files, keep_bits=12)
+
+    logger.info("Creating similarity raster on outputs")
+    similarity.create_similarities(
+        phase_linked_slc_files,
+        output_file=output_folder / f"similarity_{start_end}.tif",
+        num_threads=2,
+        add_overviews=False,
+        nearest_n=similarity_nearest_n,
+    )
 
     written_comp_slc = output_files[0]
 

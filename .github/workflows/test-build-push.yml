@@ -19,7 +19,7 @@ jobs:
           - label: Latest
             # we can't specify `tophu` for conda, not available on mac
             spec: >-
-              isce3
+              isce3-cpu
               dask
 
       fail-fast: true

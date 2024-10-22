@@ -25,9 +25,10 @@ DEFAULT_OPTIONS = SpurtOptions()
 def unwrap_spurt(
     ifg_filenames: Sequence[PathOrStr],
     output_path: PathOrStr,
-    temporal_coherence_file: PathOrStr,
+    temporal_coherence_filename: PathOrStr,
     # cor_filenames: Sequence[PathOrStr] | None = None,
     mask_filename: PathOrStr | None = None,
+    similarity_filename: PathOrStr | None = None,
     options: SpurtOptions = DEFAULT_OPTIONS,
     scratchdir: PathOrStr | None = None,
 ) -> tuple[list[Path], list[Path]]:
@@ -35,15 +36,21 @@ def unwrap_spurt(
     # NOTE: we are working around spurt currently wanting "temporal_coherence.tif",
     # and a temporal coherence threshold.
     # we'll make our own mask of 0=bad, 1=good, then pass a threshold of 0.5
-    temp_coh = io.load_gdal(temporal_coherence_file, masked=True).filled(0)
+    temp_coh = io.load_gdal(temporal_coherence_filename, masked=True).filled(0)
     # Mark the "bad" pixels (good=1, bad=0, following the unwrapper mask convention)
     temp_coh_mask = temp_coh > options.temporal_coherence_threshold
+    combined_mask = temp_coh_mask
+    if similarity_filename:
+        sim = io.load_gdal(similarity_filename, masked=True).filled(0)
+        sim_mask = sim > options.similarity_threshold
+        # A good pixel can have good similarity, or good temp. coherence
+        combined_mask = combined_mask | sim_mask
+
     if mask_filename:
         nodata_mask = io.load_gdal(mask_filename).astype(bool)
         # A good pixel has to be 1 in both masks
-        combined_mask = temp_coh_mask & nodata_mask
-    else:
-        combined_mask = temp_coh_mask
+        combined_mask = combined_mask & nodata_mask
+
     # We name it "temporal_coherence.tif" so spurt reads it.
     # Also make it float32 as though it were temp coh
     scratch_path = Path(scratchdir) if scratchdir else Path(output_path) / "scratch"
@@ -115,7 +122,7 @@ def unwrap_spurt(
     output_path = Path(output_path)
     unw_filenames = sorted(output_path.glob("*[0-9].unw.tif"))
     conncomp_filenames = _create_conncomps_from_mask(
-        temporal_coherence_file,
+        temporal_coherence_filename,
         options.temporal_coherence_threshold,
         unw_filenames=unw_filenames,
     )
@@ -124,12 +131,12 @@ def unwrap_spurt(
 
 
 def _create_conncomps_from_mask(
-    temporal_coherence_file: PathOrStr,
+    temporal_coherence_filename: PathOrStr,
     temporal_coherence_threshold: float,
     unw_filenames: Sequence[PathOrStr],
     dilate_by: int = 25,
 ) -> list[Path]:
-    arr = io.load_gdal(temporal_coherence_file, masked=True)
+    arr = io.load_gdal(temporal_coherence_filename, masked=True)
     good_pixels = arr > temporal_coherence_threshold
     strel = np.ones((dilate_by, dilate_by))
     # "1" pixels will be spread out and have (approximately) 1.0 in surrounding pixels

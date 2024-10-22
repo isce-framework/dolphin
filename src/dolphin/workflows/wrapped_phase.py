@@ -159,6 +159,13 @@ def run(
         logger.info(f"Running sequential EMI step in {pl_path}")
         kwargs = tqdm_kwargs | {"desc": f"Phase linking ({pl_path})"}
 
+        # Figure out if we should compute phase similarity based on single-ref,
+        # or using nearest-3 interferograms
+        is_single_ref = _is_single_reference_network(
+            cfg.interferogram_network, cfg.unwrap_options.unwrap_method
+        )
+        similarity_nearest_n = None if is_single_ref else 3
+
         # TODO: Need a good way to store the nslc attribute in the PS file...
         # If we pre-compute it from some big stack, we need to use that for SHP
         # finding, not use the size of `slc_vrt_file`
@@ -186,6 +193,7 @@ def run(
             shp_method=cfg.phase_linking.shp_method,
             shp_alpha=cfg.phase_linking.shp_alpha,
             shp_nslc=shp_nslc,
+            similarity_nearest_n=similarity_nearest_n,
             cslc_date_fmt=cfg.input_options.cslc_date_fmt,
             block_shape=cfg.worker_settings.block_shape,
             baseline_lag=cfg.phase_linking.baseline_lag,
@@ -496,3 +504,13 @@ def _get_mask(
         mask_filename = nodata_mask_file
 
     return mask_filename
+
+
+def _is_single_reference_network(
+    ifg_network: InterferogramNetwork, unwrap_method: UnwrapMethod
+):
+    return (
+        unwrap_method != UnwrapMethod.SPURT
+        and ifg_network.max_bandwidth is None
+        and ifg_network.max_temporal_baseline is None
+    )
