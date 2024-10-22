@@ -197,6 +197,7 @@ def run(
             cslc_date_fmt=cfg.input_options.cslc_date_fmt,
             block_shape=cfg.worker_settings.block_shape,
             baseline_lag=cfg.phase_linking.baseline_lag,
+            compressed_slc_plan=cfg.phase_linking.compressed_slc_plan,
             **kwargs,
         )
     # Dump the used options for JSON parsing
