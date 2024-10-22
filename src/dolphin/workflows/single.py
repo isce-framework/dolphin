@@ -52,6 +52,7 @@ def run_wrapped_phase_single(
     shp_method: ShpMethod = ShpMethod.NONE,
     shp_alpha: float = 0.05,
     shp_nslc: Optional[int] = None,
+    similarity_nearest_n: int | None = None,
     block_shape: tuple[int, int] = (1024, 1024),
     baseline_lag: Optional[int] = None,
     **tqdm_kwargs,
@@ -298,7 +299,7 @@ def run_wrapped_phase_single(
         output_file=output_folder / f"similarity_{start_end}.tif",
         num_threads=2,
         add_overviews=False,
-        nearest_n=3,
+        nearest_n=similarity_nearest_n,
     )
 
     written_comp_slc = output_files[0]

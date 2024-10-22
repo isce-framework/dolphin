@@ -45,6 +45,7 @@ def run_wrapped_phase_sequential(
     shp_nslc: Optional[int] = None,
     use_evd: bool = False,
     beta: float = 0.00,
+    similarity_nearest_n: int | None = None,
     compressed_slc_plan: CompressedSlcPlan = CompressedSlcPlan.ALWAYS_FIRST,
     max_num_compressed: int = 100,
     output_reference_idx: int = 0,
@@ -129,6 +130,7 @@ def run_wrapped_phase_sequential(
                 shp_method=shp_method,
                 shp_alpha=shp_alpha,
                 shp_nslc=shp_nslc,
+                similarity_nearest_n=similarity_nearest_n,
                 block_shape=block_shape,
                 baseline_lag=baseline_lag,
                 **tqdm_kwargs,
@@ -169,8 +171,9 @@ def run_wrapped_phase_sequential(
             search_radius=11,
             sim_type="median",
             block_shape=block_shape,
-            nearest_n=3,
+            nearest_n=similarity_nearest_n,
             num_threads=2,
+            add_overviews=False,
         )
     else:
         output_similarity_file = similarity_files[0].rename(
