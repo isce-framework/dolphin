@@ -136,6 +136,13 @@ class PhaseLinkingOptions(BaseModel, extra="forbid"):
     )
     compressed_slc_plan: CompressedSlcPlan = CompressedSlcPlan.ALWAYS_FIRST
 
+    @field_validator("compressed_slc_plan", mode="before")
+    @classmethod
+    def _replace_none(cls, v):
+        if v is None:
+            return CompressedSlcPlan.ALWAYS_FIRST
+        return v
+
 
 class InterferogramNetwork(BaseModel, extra="forbid"):
     """Options to determine the type of network for interferogram formation.
