@@ -37,6 +37,14 @@ class PsWorkflow(WorkflowBase):
     # Options for each step in the workflow
     ps_options: PsOptions = Field(default_factory=PsOptions)
     output_options: OutputOptions = Field(default_factory=OutputOptions)
+    layover_shadow_mask_files: list[Path] = Field(
+        default_factory=list,
+        description=(
+            "Paths to layover/shadow binary masks, where 0 indicates a pixel in"
+            " layover/shadow, 1 is a good pixel. If none provided, no masking is"
+            " performed for layover/shadow."
+        ),
+    )
 
     # internal helpers
     model_config = ConfigDict(

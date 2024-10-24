@@ -131,6 +131,14 @@ class DisplacementWorkflow(WorkflowBase):
             " calculation. If none provided, computed using the input SLC stack."
         ),
     )
+    layover_shadow_mask_files: list[Path] = Field(
+        default_factory=list,
+        description=(
+            "Paths to layover/shadow binary masks, where 0 indicates a pixel in"
+            " layover/shadow, 1 is a good pixel. If none provided, no masking is"
+            " performed for layover/shadow."
+        ),
+    )
 
     phase_linking: PhaseLinkingOptions = Field(default_factory=PhaseLinkingOptions)
     interferogram_network: InterferogramNetwork = Field(
