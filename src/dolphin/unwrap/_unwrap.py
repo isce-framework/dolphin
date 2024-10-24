@@ -415,6 +415,7 @@ def unwrap(
             ccl_nodata=ccl_nodata,
             init_method=snaphu_opts.init_method,
             cost=snaphu_opts.cost,
+            single_tile_reoptimize=snaphu_opts.single_tile_reoptimize,
             scratchdir=scratchdir,
         )
     elif unwrap_method == UnwrapMethod.WHIRLWIND:

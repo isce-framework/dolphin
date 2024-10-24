@@ -113,6 +113,12 @@ class SnaphuOptions(BaseModel, extra="forbid"):
         "smooth",
         description="Statistical cost mode method for SNAPHU.",
     )
+    single_tile_reoptimize: bool = Field(
+        False,
+        description="If True, after unwrapping with multiple tiles, an additional"
+        " post-processing unwrapping step is performed to re-optimize the unwrapped"
+        " phase using a single tile",
+    )
 
     _to_tuple = field_validator("ntiles", "tile_overlap", mode="before")(to_tuple)
 
