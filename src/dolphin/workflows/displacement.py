@@ -90,6 +90,12 @@ def run(
         grouped_amp_mean_files = group_by_burst(cfg.amplitude_mean_files)
     else:
         grouped_amp_mean_files = defaultdict(list)
+    if cfg.layover_shadow_mask_files:
+        grouped_layover_shadow_mask_files = group_by_burst(
+            cfg.layover_shadow_mask_files
+        )
+    else:
+        grouped_layover_shadow_mask_files = defaultdict(list)
 
     grouped_iono_files = parse_ionosphere_files(
         cfg.correction_options.ionosphere_files, cfg.correction_options._iono_date_fmt
@@ -109,6 +115,7 @@ def run(
                     grouped_slc_files,
                     grouped_amp_mean_files,
                     grouped_amp_dispersion_files,
+                    grouped_layover_shadow_mask_files,
                 ),
             )
             for burst in grouped_slc_files
