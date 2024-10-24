@@ -1,7 +1,9 @@
 import argparse
+from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from dolphin.timeseries import InversionMethod
 from dolphin.workflows import CallFunc
 
 if TYPE_CHECKING:
@@ -15,19 +17,17 @@ def get_parser(subparser=None, subcommand_name="timeseries") -> argparse.Argumen
     metadata = {
         "description": "Create a configuration file for a displacement workflow.",
         "formatter_class": argparse.ArgumentDefaultsHelpFormatter,
-        # https://docs.python.org/3/library/argparse.html#fromfile-prefix-chars
         "fromfile_prefix_chars": "@",
     }
     if subparser:
-        # Used by the subparser to make a nested command line interface
         parser = subparser.add_parser(subcommand_name, **metadata)
     else:
         parser = argparse.ArgumentParser(**metadata)  # type: ignore[arg-type]
 
-    # parser._action_groups.pop()
     parser.add_argument(
         "-o",
         "--output-dir",
+        type=Path,
         default=Path(),
         help="Path to output directory to store results",
     )
@@ -58,29 +58,63 @@ def get_parser(subparser=None, subcommand_name="timeseries") -> argparse.Argumen
     parser.add_argument(
         "--condition-file",
         help=(
-            "A file with the same size as each raster, like amplitude dispersion or"
-            "temporal coherence to find reference point. default: amplitude dispersion"
+            "A file with the same size as each raster, like amplitude dispersion or "
+            "temporal coherence to find reference point"
         ),
+        required=True,
     )
     parser.add_argument(
         "--condition",
         type=CallFunc,
         default=CallFunc.MIN,
         help=(
-            "A condition to apply to condition file to find the reference point"
+            "A condition to apply to condition file to find the reference point. "
             "Options are [min, max]. default=min"
         ),
     )
     parser.add_argument(
-        "--num-threads",
-        type=int,
-        default=5,
-        help="Number of threads for the inversion",
+        "--method",
+        type=InversionMethod,
+        choices=list(InversionMethod),
+        default=InversionMethod.L1,
+        help=(
+            "Inversion method to use when solving Ax = b. L2 uses least squares"
+            " (faster), L1 minimizes |Ax - b|_1"
+        ),
     )
     parser.add_argument(
         "--run-velocity",
         action="store_true",
         help="Run the velocity estimation from the phase time series",
+    )
+    parser.add_argument(
+        "--weight-velocity-by-corr",
+        action="store_true",
+        help=(
+            "Flag to indicate whether the velocity fitting should use correlation as"
+            " weights"
+        ),
+    )
+    parser.add_argument(
+        "--correlation-threshold",
+        type=range_limited_float_type,
+        default=0.0,
+        metavar="[0-1]",
+        help="Pixels with correlation below this value will be masked out",
+    )
+    parser.add_argument(
+        "--block-shape",
+        type=int,
+        nargs=2,
+        default=(256, 256),
+        metavar=("HEIGHT", "WIDTH"),
+        help="The shape of the blocks to process in parallel",
+    )
+    parser.add_argument(
+        "--num-threads",
+        type=int,
+        default=4,
+        help="The parallel blocks to process at once",
     )
     parser.add_argument(
         "--reference-point",
@@ -91,15 +125,31 @@ def get_parser(subparser=None, subcommand_name="timeseries") -> argparse.Argumen
         help=(
             "Reference point (row, col) used if performing a time series inversion. "
             "If not provided, a point will be selected from a consistent connected "
-            "component with low amplitude dispersion or high temporal coherence."
+            "component with low amplitude dispersion or high temporal coherence"
         ),
     )
     parser.add_argument(
-        "--correlation-threshold",
-        type=range_limited_float_type,
-        default=0.2,
-        metavar="[0-1]",
-        help="Pixels with correlation below this value will be masked out.",
+        "--wavelength",
+        type=float,
+        help=(
+            "The wavelength of the radar signal, in meters. If provided, the output "
+            "rasters are in meters and meters/year for displacement and velocity. "
+            "If not provided, outputs are in radians"
+        ),
+    )
+    parser.add_argument(
+        "--add-overviews",
+        action="store_true",
+        default=True,
+        help="If True, creates overviews of the new velocity raster",
+    )
+    parser.add_argument(
+        "--extra-reference-date",
+        type=lambda s: datetime.strptime(s, "%Y%m%d"),
+        help=(
+            "If provided, makes another set of interferograms referenced to this "
+            "for all dates later than it. Format: YYYYMMDD"
+        ),
     )
 
     parser.set_defaults(run_func=_run_timeseries)
