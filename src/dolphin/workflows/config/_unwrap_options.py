@@ -151,14 +151,14 @@ class SpurtGeneralSettings(BaseModel):
 class SpurtTilerSettings(BaseModel):
     """Class for holding tile generation settings."""
 
-    max_tiles: int = Field(16, description="Maximum number of tiles allowed.", ge=1)
+    max_tiles: int = Field(49, description="Maximum number of tiles allowed.", ge=1)
     target_points_for_generation: int = Field(
         120_000,
         description="Number of points used for determining tiles based on density.",
         gt=0,
     )
     target_points_per_tile: int = Field(
-        800_000, description="Target points per tile when generating tiles.", gt=0
+        1_000_000, description="Target points per tile when generating tiles.", gt=0
     )
     dilation_factor: float = Field(
         0.05,
