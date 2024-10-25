@@ -468,7 +468,9 @@ class MiniStackPlanner(BaseStack):
             elif self.compressed_slc_plan == CompressedSlcPlan.ALWAYS_FIRST:
                 # Simplest operational version: CompSLCs have same base phase,
                 # but different "residual" added on
-                compressed_reference_idx = 0
+                # We use the `output_reference_idx`, 0 by default, but this index
+                # may be passed in if we are manually specifying an output
+                compressed_reference_idx = self.output_reference_idx
             elif self.compressed_slc_plan == CompressedSlcPlan.FIRST_PER_MINISTACK:
                 # Like Ansari, 2017 paper: each ministack is "self contained"
                 compressed_reference_idx = num_ccslc
