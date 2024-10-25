@@ -158,7 +158,7 @@ class SpurtTilerSettings(BaseModel):
         gt=0,
     )
     target_points_per_tile: int = Field(
-        9_000_000, description="Target points per tile when generating tiles.", gt=0
+        900_000, description="Target points per tile when generating tiles.", gt=0
     )
     dilation_factor: float = Field(
         0.05,
