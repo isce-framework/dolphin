@@ -80,7 +80,9 @@ def run(
     non_compressed_slcs = [
         f for f, is_comp in zip(input_file_list, is_compressed) if not is_comp
     ]
-
+    layover_shadow_mask = (
+        cfg.layover_shadow_mask_files[0] if cfg.layover_shadow_mask_files else None
+    )
     # Create a mask file from input bounding polygons and/or specified output bounds
     mask_filename = _get_mask(
         output_dir=cfg.work_directory,
@@ -88,6 +90,7 @@ def run(
         output_bounds_wkt=cfg.output_options.bounds_wkt,
         output_bounds_epsg=cfg.output_options.bounds_epsg,
         like_filename=vrt_stack.outfile,
+        layover_shadow_mask=layover_shadow_mask,
         cslc_file_list=non_compressed_slcs,
     )
 
@@ -461,9 +464,11 @@ def _get_mask(
     output_bounds_wkt: str | None,
     output_bounds_epsg: int,
     like_filename: Filename,
+    layover_shadow_mask: Filename | None,
     cslc_file_list: Sequence[Filename],
 ) -> Path | None:
     # Make the nodata mask from the polygons, if we're using OPERA CSLCs
+    mask_files: list[Path] = []
 
     try:
         nodata_mask_file = output_dir / "nodata_mask.tif"
@@ -472,11 +477,11 @@ def _get_mask(
             out_file=nodata_mask_file,
             buffer_pixels=200,
         )
+        mask_files.append(nodata_mask_file)
     except Exception as e:
         logger.warning(f"Could not make nodata mask: {e}")
         nodata_mask_file = None
 
-    mask_filename: Path | None = None
     # Also mask outside the area of interest if we've specified a small bounds
     if output_bounds is not None or output_bounds_wkt is not None:
         # Make a mask just from the bounds
@@ -488,23 +493,22 @@ def _get_mask(
             output_filename=bounds_mask_filename,
             like_filename=like_filename,
         )
+        mask_files.append(bounds_mask_filename)
 
-        # Then combine with the nodata mask
-        if nodata_mask_file is not None:
-            combined_mask_filename = output_dir / "combined_mask.tif"
-            if not combined_mask_filename.exists():
-                masking.combine_mask_files(
-                    mask_files=[bounds_mask_filename, nodata_mask_file],
-                    output_file=combined_mask_filename,
-                    output_convention=masking.MaskConvention.ZERO_IS_NODATA,
-                )
-            mask_filename = combined_mask_filename
-        else:
-            mask_filename = bounds_mask_filename
-    else:
-        mask_filename = nodata_mask_file
+    if layover_shadow_mask is not None:
+        mask_files.append(Path(layover_shadow_mask))
 
-    return mask_filename
+    if not mask_files:
+        return None
+
+    combined_mask_filename = output_dir / "combined_mask.tif"
+    if not combined_mask_filename.exists():
+        masking.combine_mask_files(
+            mask_files=mask_files,
+            output_file=combined_mask_filename,
+            output_convention=masking.MaskConvention.ZERO_IS_NODATA,
+        )
+    return combined_mask_filename
 
 
 def _is_single_reference_network(
