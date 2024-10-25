@@ -29,6 +29,7 @@ def unwrap_snaphu_py(
     ccl_nodata: Optional[int] = DEFAULT_CCL_NODATA,
     init_method: str = "mst",
     single_tile_reoptimize: bool = False,
+    min_conncomp_frac: float = 0.001,
     cost: str = "smooth",
     scratchdir: Optional[Filename] = None,
 ) -> tuple[Path, Path]:
@@ -75,6 +76,9 @@ def unwrap_snaphu_py(
         `regrow_conncomps` option -- if both are enabled, only the single-tile
         re-optimization step will be performed in order to avoid redundant computation.
         Defaults to False.
+    min_conncomp_frac : float, optional
+        Minimum size of a single connected component, as a fraction of the total number
+        of pixels in the tile. Defaults to 1e-3
     cost : str
         Statistical cost mode.
         Default = "smooth"
@@ -123,6 +127,7 @@ def unwrap_snaphu_py(
             nproc=nproc,
             scratchdir=scratchdir,
             single_tile_reoptimize=single_tile_reoptimize,
+            min_conncomp_frac=min_conncomp_frac,
             # https://github.com/isce-framework/snaphu-py/commit/a77cbe1ff115d96164985523987b1db3278970ed
             # On frame-sized ifgs, especially with decorrelation, defaults of
             # (500, 100) for (tile_cost_thresh, min_region_size) lead to
