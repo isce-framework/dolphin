@@ -369,7 +369,7 @@ def unwrap(
 
         pre_interp_ifg = io.load_gdal(pre_interp_ifg_filename)
         corr = io.load_gdal(corr_filename)
-        if similarity_filename:
+        if similarity_filename and preproc_options.interpolation_similarity_threshold:
             cutoff = preproc_options.interpolation_similarity_threshold
             logger.info(f"Masking pixels with similarity below {cutoff}")
             sim = io.load_gdal(similarity_filename, masked=True).filled(0)

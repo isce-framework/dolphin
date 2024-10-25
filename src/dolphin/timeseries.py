@@ -307,7 +307,7 @@ def _convert_and_reference(
         ref_value = arr_radians.filled(np.nan)[ref_row, ref_col]
         if np.isnan(ref_value):
             logger.warning(
-                "{ref_point!r} is NaN for {p} . Skipping reference subtraction."
+                f"{ref_value!r} is NaN for {p} . Skipping reference subtraction."
             )
         else:
             arr_radians -= ref_value
