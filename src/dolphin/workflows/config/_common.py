@@ -106,6 +106,14 @@ class PhaseLinkingOptions(BaseModel, extra="forbid"):
         ge=0.0,
         le=1.0,
     )
+    clip_coh_below: float = Field(
+        0.00,
+        description=(
+            "Snap correlation values in the coherence matrix below this value to 0."
+        ),
+        ge=0.0,
+        le=1.0,
+    )
     shp_method: ShpMethod = ShpMethod.GLRT
     shp_alpha: float = Field(
         0.001,
