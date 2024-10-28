@@ -189,7 +189,7 @@ def run(
             strides=strides,
             use_evd=cfg.phase_linking.use_evd,
             beta=cfg.phase_linking.beta,
-            clip_coh_below=cfg.phase_linking.clip_coh_below,
+            zero_correlation_threshold=cfg.phase_linking.zero_correlation_threshold,
             mask_file=mask_filename,
             ps_mask_file=ps_output,
             amp_mean_file=cfg.ps_options._amp_mean_file,

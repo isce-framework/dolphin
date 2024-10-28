@@ -106,7 +106,7 @@ class PhaseLinkingOptions(BaseModel, extra="forbid"):
         ge=0.0,
         le=1.0,
     )
-    clip_coh_below: float = Field(
+    zero_correlation_threshold: float = Field(
         0.00,
         description=(
             "Snap correlation values in the coherence matrix below this value to 0."
