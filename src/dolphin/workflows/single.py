@@ -54,7 +54,7 @@ def run_wrapped_phase_single(
     shp_alpha: float = 0.05,
     shp_nslc: Optional[int] = None,
     similarity_nearest_n: int | None = None,
-    block_shape: tuple[int, int] = (1024, 1024),
+    block_shape: tuple[int, int] = (512, 512),
     baseline_lag: Optional[int] = None,
     **tqdm_kwargs,
 ):
@@ -299,9 +299,10 @@ def run_wrapped_phase_single(
     similarity.create_similarities(
         phase_linked_slc_files,
         output_file=output_folder / f"similarity_{start_end}.tif",
-        num_threads=2,
+        num_threads=1,
         add_overviews=False,
         nearest_n=similarity_nearest_n,
+        block_shape=block_shape,
     )
 
     written_comp_slc = output_files[0]
