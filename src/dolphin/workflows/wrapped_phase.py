@@ -189,6 +189,7 @@ def run(
             strides=strides,
             use_evd=cfg.phase_linking.use_evd,
             beta=cfg.phase_linking.beta,
+            zero_correlation_threshold=cfg.phase_linking.zero_correlation_threshold,
             mask_file=mask_filename,
             ps_mask_file=ps_output,
             amp_mean_file=cfg.ps_options._amp_mean_file,
@@ -196,11 +197,11 @@ def run(
             shp_method=cfg.phase_linking.shp_method,
             shp_alpha=cfg.phase_linking.shp_alpha,
             shp_nslc=shp_nslc,
+            baseline_lag=cfg.phase_linking.baseline_lag,
+            compressed_slc_plan=cfg.phase_linking.compressed_slc_plan,
             similarity_nearest_n=similarity_nearest_n,
             cslc_date_fmt=cfg.input_options.cslc_date_fmt,
             block_shape=cfg.worker_settings.block_shape,
-            baseline_lag=cfg.phase_linking.baseline_lag,
-            compressed_slc_plan=cfg.phase_linking.compressed_slc_plan,
             **kwargs,
         )
     # Dump the used options for JSON parsing
