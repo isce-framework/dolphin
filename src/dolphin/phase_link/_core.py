@@ -434,7 +434,7 @@ def process_coherence_matrices(
         if beta > 0:
             # Perform regularization
             Gamma = (1 - beta) * Gamma + beta * Id
-        # if clip_coh_below > 0.0:
+        # Assume correlation below `clip_coh_below` is 0
         Gamma = jnp.where(Gamma < clip_coh_below, 0, Gamma)
 
         # Attempt to invert Gamma
