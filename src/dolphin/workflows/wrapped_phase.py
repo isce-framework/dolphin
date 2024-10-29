@@ -476,7 +476,7 @@ def _get_mask(
         make_nodata_mask(
             opera_file_list=cslc_file_list,
             out_file=nodata_mask_file,
-            buffer_pixels=200,
+            buffer_pixels=800,
         )
         mask_files.append(nodata_mask_file)
     except Exception as e:
