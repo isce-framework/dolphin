@@ -40,7 +40,7 @@ def unwrap_spurt(
     # Mark the "bad" pixels (good=1, bad=0, following the unwrapper mask convention)
     temp_coh_mask = temp_coh > options.temporal_coherence_threshold
     combined_mask = temp_coh_mask
-    if similarity_filename:
+    if similarity_filename and options.similarity_threshold:
         sim = io.load_gdal(similarity_filename, masked=True).filled(0)
         sim_mask = sim > options.similarity_threshold
         # A good pixel can have good similarity, or good temp. coherence
@@ -87,6 +87,8 @@ def unwrap_spurt(
         [
             "--pts-per-tile",
             str(options.tiler_settings.target_points_per_tile),
+            "--max-tiles",
+            str(options.tiler_settings.max_tiles),
         ]
     )
 

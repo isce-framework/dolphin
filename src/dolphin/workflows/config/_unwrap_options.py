@@ -115,9 +115,11 @@ class SnaphuOptions(BaseModel, extra="forbid"):
     )
     single_tile_reoptimize: bool = Field(
         False,
-        description="If True, after unwrapping with multiple tiles, an additional"
-        " post-processing unwrapping step is performed to re-optimize the unwrapped"
-        " phase using a single tile",
+        description=(
+            "If True, after unwrapping with multiple tiles, an additional"
+            " post-processing unwrapping step is performed to re-optimize the unwrapped"
+            " phase using a single tile"
+        ),
     )
 
     _to_tuple = field_validator("ntiles", "tile_overlap", mode="before")(to_tuple)
@@ -249,14 +251,18 @@ class SpurtOptions(BaseModel, extra="forbid"):
     """
 
     temporal_coherence_threshold: float = Field(
-        0.6,
-        description="Temporal coherence to pick pixels used on an irregular grid",
+        0.7,
+        description="Temporal coherence to pick pixels used on an irregular grid.",
         ge=0.0,
         lt=1.0,
     )
     similarity_threshold: float = Field(
         0.5,
-        description="Similarity to pick pixels used on an irregular grid",
+        description=(
+            "Similarity to pick pixels used on an irregular grid. Any pixel with"
+            " similarity above `similarity_threshold` *or* above the temporal coherence"
+            " threshold is chosen."
+        ),
         ge=0.0,
         lt=1.0,
     )
