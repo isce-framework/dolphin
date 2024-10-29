@@ -3,6 +3,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from dolphin._log import setup_logging
 from dolphin.timeseries import InversionMethod
 from dolphin.workflows import CallFunc
 
@@ -177,6 +178,7 @@ def _run_timeseries(*args, **kwargs):
     """
     from dolphin import timeseries
 
+    setup_logging()
     return timeseries.run(*args, **kwargs)
 
 
@@ -184,6 +186,7 @@ def main(args=None):
     """Get the command line arguments for timeseries inversion."""
     from dolphin import timeseries
 
+    setup_logging()
     parser = get_parser()
     parsed_args = parser.parse_args(args)
 
