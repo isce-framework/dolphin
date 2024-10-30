@@ -145,6 +145,8 @@ def repack_raster(
     import rasterio as rio
     from rasterio.windows import Window
 
+    from ._blocks import iter_blocks
+
     if isinstance(block_shape, int):
         block_shape = (block_shape, block_shape)
 
@@ -158,7 +160,6 @@ def repack_raster(
         output_path = output_dir / raster_path.name
 
     options = get_gtiff_options(**output_options)
-    from dolphin.io import iter_blocks
 
     with rio.open(raster_path) as src:
         profile = src.profile
