@@ -50,14 +50,14 @@ def test_repack_raster(test_raster, temp_dir):
     if np.dtype(dtype) == np.uint8:
         with pytest.raises(TypeError):
             repack_raster(
-                test_raster,
+                Path(test_raster),
                 output_dir=output_dir,
                 keep_bits=keep_bits,
                 block_shape=(32, 32),
             )
         return
     output_path = repack_raster(
-        test_raster,
+        Path(test_raster),
         output_dir=output_dir,
         keep_bits=keep_bits,
         block_shape=(32, 32),
@@ -82,7 +82,7 @@ def test_repack_rasters(test_raster, temp_dir):
     # Add another to test the threaded version
     new_raster = str(test_raster) + ".copy.tif"
     shutil.copy(test_raster, new_raster)
-    raster_paths = [test_raster, new_raster]
+    raster_paths = [Path(test_raster), Path(new_raster)]
 
     output_dir = temp_dir / "output_multiple"
     with rio.open(raster_paths[0]) as src:
