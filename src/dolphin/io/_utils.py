@@ -116,6 +116,7 @@ def repack_raster(
     raster_path: Path,
     output_dir: Path | None = None,
     keep_bits: int | None = None,
+    block_shape: int | tuple[int, int] = (1024, 1024),
     **output_options,
 ) -> Path:
     """Repack a single raster file with GDAL Translate using provided options.
@@ -129,6 +130,8 @@ def repack_raster(
     keep_bits : int, optional
         Number of bits to preserve in mantissa. Defaults to None.
         Lower numbers will truncate the mantissa more and enable more compression.
+    block_shape: int | tuple[int, int]
+        Size of blocks to read in at one time.
     **output_options
         Keyword args passed to `get_gtiff_options`
 
@@ -140,6 +143,10 @@ def repack_raster(
 
     """
     import rasterio as rio
+    from rasterio.windows import Window
+
+    if isinstance(block_shape, int):
+        block_shape = (block_shape, block_shape)
 
     if output_dir is None:
         output_file = tempfile.NamedTemporaryFile(  # noqa: SIM115
@@ -151,20 +158,33 @@ def repack_raster(
         output_path = output_dir / raster_path.name
 
     options = get_gtiff_options(**output_options)
+    from dolphin.io import iter_blocks
+
     with rio.open(raster_path) as src:
         profile = src.profile
         profile.update(**options)
+        # Work in blocks on the input raster
+        blocks = iter_blocks(
+            arr_shape=(src.height, src.width),
+            block_shape=block_shape,
+        )
+
         with rio.open(output_path, "w", **profile) as dst:
             for i in range(1, src.count + 1):
-                data = src.read(i)
-                if keep_bits is not None:
-                    round_mantissa(data, keep_bits)
-                dst.write(data, i)
+                for row_slice, col_slice in blocks:
+                    window = Window.from_slices(rows=row_slice, cols=col_slice)
+                    data = src.read(i, window=window)
+
+                    if keep_bits is not None:
+                        round_mantissa(data, keep_bits)
+
+                    dst.write(data, i, window=window)
 
     if output_dir is None:
         # Overwrite the original
         shutil.move(output_path, raster_path)
         output_path = raster_path
+
     return output_path
 
 
@@ -173,6 +193,7 @@ def repack_rasters(
     output_dir: Path | None = None,
     num_threads: int = 4,
     keep_bits: int | None = None,
+    block_shape: int | tuple[int, int] = (1024, 1024),
     **output_options,
 ):
     """Recreate and compress a list of raster files.
@@ -191,6 +212,8 @@ def repack_rasters(
     keep_bits : int, optional
         Number of bits to preserve in mantissa. Defaults to None.
         Lower numbers will truncate the mantissa more and enable more compression.
+    block_shape: int | tuple[int, int]
+        Size of blocks to read in at one time.
     **output_options
         Creation options to pass to `get_gtiff_options`
 
@@ -205,7 +228,11 @@ def repack_rasters(
 
     thread_map(
         lambda raster: repack_raster(
-            raster, output_dir, keep_bits=keep_bits, **output_options
+            raster,
+            output_dir,
+            keep_bits=keep_bits,
+            block_shape=block_shape,
+            **output_options,
         ),
         raster_files,
         max_workers=num_threads,
