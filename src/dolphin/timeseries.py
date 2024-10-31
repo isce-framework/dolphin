@@ -957,13 +957,7 @@ def invert_unw_network(
     cor_vrt_name = Path(output_dir) / "cor_network.vrt"
     conncomp_vrt_name = Path(output_dir) / "conncomp_network.vrt"
 
-    if cor_file_list is not None:
-        cor_reader = io.VRTStack(
-            file_list=cor_file_list, outfile=cor_vrt_name, skip_size_check=True
-        )
-        readers = [unw_reader, cor_reader]
-        logger.info("Using correlation to weight unw inversion")
-    elif conncomp_file_list is not None:
+    if conncomp_file_list is not None:
         conncomp_reader = io.VRTStack(
             file_list=conncomp_file_list,
             outfile=conncomp_vrt_name,
@@ -971,6 +965,12 @@ def invert_unw_network(
             read_masked=True,
         )
         readers = [unw_reader, conncomp_reader]
+        logger.info("Masking unw pixels during inversion using connected components.")
+    elif cor_file_list is not None:
+        cor_reader = io.VRTStack(
+            file_list=cor_file_list, outfile=cor_vrt_name, skip_size_check=True
+        )
+        readers = [unw_reader, cor_reader]
         logger.info("Using correlation to weight unw inversion")
     else:
         readers = [unw_reader]
