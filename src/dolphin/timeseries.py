@@ -200,9 +200,6 @@ def run(
             cor_file_list = (
                 corr_paths if len(corr_paths) == len(final_ts_paths) else None
             )
-            cor_file_list = (
-                corr_paths if len(corr_paths) == len(final_ts_paths) else None
-            )
 
         if velocity_file is None:
             velocity_file = Path(output_dir) / "velocity.tif"
