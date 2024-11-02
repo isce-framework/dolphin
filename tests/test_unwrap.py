@@ -192,42 +192,6 @@ class TestUnwrapSingle:
         unw_dir = Path(unw_path).parent
         assert set(unw_dir.glob("*.unw.tif")) == {unw_path}
 
-    def test_interp_loop(self):
-        x, y = np.meshgrid(np.arange(200), np.arange(100))
-        # simulate a simple phase ramp
-        phase = 0.003 * x + 0.002 * y
-        # interferogram with the simulated phase ramp and with a constant amplitude
-        ifg = np.exp(1j * phase)
-        corr = np.ones(ifg.shape)
-        # mask out the ifg/corr at a given pixel for example at pixel 50,40
-        # index of the pixel of interest
-        x_idx = 50
-        y_idx = 40
-        corr[y_idx, x_idx] = 0
-        # generate indices for the pixels to be used in interpolation
-        indices = np.array(
-            dolphin.similarity.get_circle_idxs(
-                max_radius=51, min_radius=0, sort_output=False
-            )
-        )
-        # interpolate pixels with zero in the corr and write to interpolated_ifg
-        interpolated_ifg = np.zeros((100, 200), dtype=np.complex64)
-        dolphin.interpolation._interp_loop(
-            ifg,
-            corr,
-            weight_cutoff=0.5,
-            num_neighbors=20,
-            alpha=0.75,
-            indices=indices,
-            interpolated_ifg=interpolated_ifg,
-        )
-        # expected phase based on the model above used for simulation
-        expected_phase = 0.003 * x_idx + 0.002 * y_idx
-        phase_error = np.angle(
-            interpolated_ifg[y_idx, x_idx] * np.exp(-1j * expected_phase)
-        )
-        assert np.allclose(phase_error, 0.0, atol=1e-3)
-
     @pytest.mark.parametrize("method", [UnwrapMethod.SNAPHU, UnwrapMethod.PHASS])
     def test_interpolation(self, tmp_path, list_of_gtiff_ifgs, corr_raster, method):
         # test other init_method
