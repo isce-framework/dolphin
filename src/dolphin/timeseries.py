@@ -458,7 +458,7 @@ def invert_stack(
     dphi: ArrayLike,
     weights: ArrayLike | None = None,
     missing_data_flags: ArrayLike | None = None,
-) -> Array:
+) -> tuple[Array, Array]:
     """Solve the SBAS problem for a stack of unwrapped phase differences.
 
     Parameters
@@ -943,6 +943,8 @@ def invert_unw_network(
     if all(p.exists() for p in out_paths):
         logger.info("All output files already exist, skipping inversion")
         return out_paths
+
+    out_residuals_path = Path(output_dir) / "unw_inversion_residuals.tif"
     logger.info(f"Inverting network using {method.upper()}-norm minimization")
 
     A = get_incidence_matrix(ifg_pairs=ifg_tuples, sar_idxs=sar_dates)
@@ -1022,17 +1024,21 @@ def invert_unw_network(
         # TODO: do i want to write residuals too? Do i need
         # to have multiple writers then, or a StackWriter?
         if method.upper() == "L1":
-            phases = invert_stack_l1(A, stack)[0]
+            phases, residuals = invert_stack_l1(A, stack)
         else:
-            phases = invert_stack(A, stack, weights, missing_data_flags)[0]
+            # phases, residuals = invert_stack(A, stack, weights, missing_data_flags)
+            phases, residuals = invert_stack(A, stack, None, None)
         # Convert to meters, with LOS convention:
         out_displacement = constant * np.asarray(phases)
         # Set the masked pixels to be nodata in the output
         out_displacement[:, masked_pixels] = unw_nodataval
-        return out_displacement, rows, cols
+        return np.vstack([out_displacement, residuals[None]]), rows, cols
 
     writer = io.BackgroundStackWriter(
-        out_paths, like_filename=unw_file_list[0], units=units
+        [*out_paths, out_residuals_path],
+        like_filename=unw_file_list[0],
+        units=units,
+        debug=True,
     )
 
     io.process_blocks(
@@ -1040,7 +1046,8 @@ def invert_unw_network(
         writer=writer,
         func=read_and_solve,
         block_shape=block_shape,
-        num_threads=num_threads,
+        # num_threads=num_threads,
+        num_threads=1,
     )
     writer.notify_finished()
 
@@ -1300,7 +1307,7 @@ def least_absolute_deviations(
 
 
 @jit
-def invert_stack_l1(A: ArrayLike, dphi: ArrayLike) -> Array:
+def invert_stack_l1(A: ArrayLike, dphi: ArrayLike) -> tuple[Array, Array]:
     R = jax.scipy.linalg.cholesky(A.T @ A, lower=True)
 
     # vectorize the solve function to work on 2D and 3D arrays
