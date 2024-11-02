@@ -11,7 +11,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 from jax import Array, jit, lax, vmap
-from numpy.typing import ArrayLike
+from numpy.typing import ArrayLike, NDArray
 from opera_utils import get_dates
 from scipy import ndimage
 
@@ -947,9 +947,13 @@ def invert_unw_network(
 
     A = get_incidence_matrix(ifg_pairs=ifg_tuples, sar_idxs=sar_dates)
 
+    unw_nodataval = io.get_raster_nodata(unw_file_list[0])
     out_vrt_name = Path(output_dir) / "unw_network.vrt"
     unw_reader = io.VRTStack(
-        file_list=unw_file_list, outfile=out_vrt_name, skip_size_check=True
+        file_list=unw_file_list,
+        outfile=out_vrt_name,
+        skip_size_check=True,
+        read_masked=True,
     )
     cor_vrt_name = Path(output_dir) / "cor_network.vrt"
     conncomp_vrt_name = Path(output_dir) / "conncomp_network.vrt"
@@ -976,6 +980,10 @@ def invert_unw_network(
     # Get the reference point data
     ref_row, ref_col = reference
     ref_data = unw_reader[:, ref_row, ref_col].reshape(-1, 1, 1)
+    if ref_data.mask.sum() > 0:
+        logger.warning(f"Masked data found at {ref_row}, {ref_col}.")
+        logger.warning("Zeroing out reference pixel. Results may be wrong.")
+        ref_data = 0 * ref_data.data
 
     if wavelength is not None:
         # Positive values are motion towards the radar
@@ -988,25 +996,28 @@ def invert_unw_network(
     def read_and_solve(
         readers: Sequence[io.StackReader], rows: slice, cols: slice
     ) -> tuple[slice, slice, np.ndarray]:
+        unw_reader = readers[0]
+        stack = unw_reader[:, rows, cols]
+        masked_pixel_sum: NDArray[np.bool_] = stack.mask.sum(axis=0)
+        # Mask the output if any inputs are missing
+        masked_pixels = masked_pixel_sum > 0
+        # Setup the (optional) second reader: either conncomps, or correlation
         if len(readers) == 2 and method == "L2":
-            unw_reader = readers[0]
-            stack = unw_reader[:, rows, cols]
-
             if conncomp_file_list is not None:
+                # Use censored least squares based on the conncomp labels
                 missing_data_flags = readers[1][:, rows, cols].filled(0) != 0
                 weights = None
             else:
+                # Weight the inversion by correlation-derived variance
                 cor = readers[1][:, rows, cols]
                 weights = correlation_to_variance(cor, n_cor_looks)
                 weights[cor < cor_threshold] = 0
                 missing_data_flags = None
-
         else:
-            stack = readers[0][:, rows, cols]
             weights = missing_data_flags = None
 
-        # subtract the reference
-        stack = stack - ref_data
+        # subtract the reference, convert to numpy
+        stack = (stack - ref_data).filled(0)
 
         # TODO: do i want to write residuals too? Do i need
         # to have multiple writers then, or a StackWriter?
@@ -1015,7 +1026,10 @@ def invert_unw_network(
         else:
             phases = invert_stack(A, stack, weights, missing_data_flags)[0]
         # Convert to meters, with LOS convention:
-        return constant * np.asarray(phases), rows, cols
+        out_displacement = constant * np.asarray(phases)
+        # Set the masked pixels to be nodata in the output
+        out_displacement[:, masked_pixels] = unw_nodataval
+        return out_displacement, rows, cols
 
     writer = io.BackgroundStackWriter(
         out_paths, like_filename=unw_file_list[0], units=units
