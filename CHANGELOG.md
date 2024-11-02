@@ -1,6 +1,54 @@
 # Changelog
 
-## [Unreleased](https://github.com/isce-framework/dolphin/compare/v0.28.0...main)
+# Changelog
+
+## [Unreleased](https://github.com/isce-framework/dolphin/compare/v0.30.0...main)
+
+## [0.30.0](https://github.com/isce-framework/dolphin/compare/v0.29.0...v0.30.0) - 2024-11-01
+
+### Added
+- Support for specifying output bounds as WKT
+- Ability to calculate similarity using nearest-3 interferograms
+- Add configuration option for single tile reoptimize functionality for snaphu-py. Turn off by default.
+- Support for layover shadow mask files to mask pixels during wrapped phase
+- Zero correlation threshold parameter for phase linking
+- Censored least squares solving capability for missing data
+- Support for reading from S3 using osgeo.gdal with `/vsis3` conversion
+
+### Changed
+- Updated dolphin timeseries CLI for new options, using L1 by default
+- Increased spurt `max_tiles` default to 49 for smaller MCF problems
+- Modified compressed_reference_idx with relative index fix
+- Replaced CSVs with `chi2.ppf` for GLRT test
+- Lowered `min_conncomp_frac` default to 0.001
+- Using `output_reference_idx` as default for creating compressed SLCs with `ALWAYS_FIRST`
+- Increased `buffer_pixels` when making OPERA CSLC mask
+- Refactored `repack_raster` to work in blocks for lower memory usage
+
+### Fixed
+- Fixed ministack output and compressed SLC indexing
+- Fixed `in_trim_slice` size for non-overlapping blocks
+- Fixed units passthrough during timeseries._redo_reference
+- Improved spurt subprocess handling to avoid fork issues
+- Fixed block_shape passthrough to create_similarities after phase linking
+
+## [0.29.0](https://github.com/isce-framework/dolphin/compare/v0.28.0...v0.29.0) - 2024-10-14
+
+### Added
+- Sample dolphin_config.yaml to the documentation
+- Stitched phase cosine similarity raster to outputs
+- Post-processing step to fill NaN gaps after running spurt
+- Outside input range options to get_nearest_date_idx
+
+### Changed
+- Set EVD input to be weighted by correlation
+- Using dataclasses instead of NamedTuple for displacement and stitched outputs
+- Passing through phase_linking.output_reference_idx to avoid reference resets
+
+### Fixed
+- Added logic to reset extra_reference_date after network unwrapping
+- Applied nan/0 mask to output of goldstein filter
+- Added references/url fixes from JOSS branch
 
 ## [0.28.0](https://github.com/isce-framework/dolphin/compare/v0.27.1...v0.28.0) - 2024-09-19
 
