@@ -186,7 +186,7 @@ def multiscale_unwrap(
         logger.info(f"Zeroing unw/conncomp of pixels masked in {mask_file}")
         return _zero_from_mask(unw_filename, conncomp_filename, mask_file)
     elif unwrap_method == UnwrapMethod.PHASS:
-        # Fill in the nan pixels with the nearest amgibuities
+        # Fill in the nan pixels with the nearest ambiguities
         from ._post_process import interpolate_masked_gaps
 
         with rio.open(unw_filename, mode="r+") as u_src, rio.open(

@@ -367,7 +367,8 @@ def unwrap(
             str(pre_interp_unw_filename).split(".")[0] + (name_change + "unw" + suf)
         )
 
-        pre_interp_ifg = io.load_gdal(pre_interp_ifg_filename)
+        pre_interp_ifg = io.load_gdal(pre_interp_ifg_filename, masked=True).filled(0)
+
         corr = io.load_gdal(corr_filename)
         if similarity_filename and preproc_options.interpolation_similarity_threshold:
             cutoff = preproc_options.interpolation_similarity_threshold
