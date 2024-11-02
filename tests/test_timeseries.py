@@ -163,6 +163,21 @@ class TestInvert:
         npt.assert_allclose(phi2, sar_phases[1:], atol=1e-5)
         npt.assert_allclose(residuals2, residuals, atol=1e-5)
 
+    def test_censored_stack(self, data, A):
+        sar_dates, sar_phases, ifg_date_pairs, ifgs = data
+
+        weights = None
+        missing_data_flags = np.ones(ifgs.shape, dtype=bool)  # no missing data
+        phi, residuals = timeseries.invert_stack(A, ifgs, weights, missing_data_flags)
+        assert phi.shape[0] == len(sar_dates) - 1
+        npt.assert_allclose(phi, sar_phases[1:], atol=1e-5)
+
+        # Here there is no noise, so it's over determined
+        missing_data_flags = np.random.rand(*ifgs.shape) > 0.05  # 5% missing
+        phi2, residuals2 = timeseries.invert_stack(A, ifgs, weights, missing_data_flags)
+        npt.assert_allclose(phi2, sar_phases[1:], atol=1e-5)
+        npt.assert_allclose(residuals2, residuals, atol=1e-5)
+
     def test_remove_row_vs_weighted(self, data, A):
         """Check that removing a row/data point is equivalent to zero-weighting it."""
         sar_dates, sar_phases, ifg_date_pairs, ifgs = data

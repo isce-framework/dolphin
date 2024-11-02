@@ -11,7 +11,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 from jax import Array, jit, lax, vmap
-from numpy.typing import ArrayLike
+from numpy.typing import ArrayLike, NDArray
 from opera_utils import get_dates
 from scipy import ndimage
 
@@ -171,6 +171,7 @@ def run(
         logger.info("Inverting network of %s unwrapped ifgs", len(unwrapped_paths))
         inverted_phase_paths = invert_unw_network(
             unw_file_list=unwrapped_paths,
+            conncomp_file_list=conncomp_paths,
             reference=ref_point,
             output_dir=output_dir,
             block_shape=block_shape,
@@ -365,12 +366,49 @@ def argmax_index(arr: ArrayLike) -> tuple[int, ...]:
 
 
 @jit
+def censored_lstsq(A, B, M):
+    """Solves least squares problem subject to missing data in the right hand side.
+
+    Parameters
+    ----------
+    A : ndarray
+        m x n system matrix.
+    B : ndarray
+        m x k matrix representing the k right hand side data vectors of size m.
+    M : ndarray
+        m x k boolean matrix of missing data (`False` indicate missing values)
+
+    Returns
+    -------
+    X : ndarray
+        n x k matrix that minimizes norm(M*(AX - B))
+    residuals : np.array 1D
+        Sums of (k,) squared residuals: squared Euclidean 2-norm for `b - A @ x`
+
+    Reference
+    ---------
+    http://alexhwilliams.info/itsneuronalblog/2018/02/26/censored-lstsq/
+
+    """
+    # if B is a vector, simply drop out corresponding rows in A
+    if B.ndim == 1 or B.shape[1] == 1:
+        return jnp.linalg.leastsq(A[M], B[M])[0]
+
+    # else solve via tensor representation
+    rhs = jnp.dot(A.T, M * B).T[:, :, None]  # k x n x 1 tensor
+    T = jnp.matmul(A.T[None, :, :], M.T[:, :, None] * A[None, :, :])  # k x n x n tensor
+    x = jnp.squeeze(jnp.linalg.solve(T, rhs)).T  # transpose to get n x k
+    residuals = jnp.linalg.norm(A @ x - (B * M.astype(int)), axis=0)
+    return x, residuals
+
+
+@jit
 def weighted_lstsq_single(
     A: ArrayLike,
     b: ArrayLike,
     weights: ArrayLike,
 ) -> Array:
-    r"""Perform weighted least for one data vector.
+    r"""Perform weighted least squares for one data vector.
 
     Minimizes the weighted 2-norm of the residual vector:
 
@@ -416,7 +454,10 @@ def weighted_lstsq_single(
 
 @jit
 def invert_stack(
-    A: ArrayLike, dphi: ArrayLike, weights: ArrayLike | None = None
+    A: ArrayLike,
+    dphi: ArrayLike,
+    weights: ArrayLike | None = None,
+    missing_data_flags: ArrayLike | None = None,
 ) -> Array:
     """Solve the SBAS problem for a stack of unwrapped phase differences.
 
@@ -430,6 +471,11 @@ def invert_stack(
         The weights for each element of `dphi`.
         Same shape as `dphi`.
         If not provided, all weights are set to 1 (ordinary least squares).
+    missing_data_flags : ArrayLike, optional
+        Boolean matrix, same shape as `dphi`, indicating a missing value in `dphi`.
+        If provided, the least squares result will ignore these entries.
+        Example may come from having connected component masks indicate unreliable
+        values in `dphi` for certain interferograms.
 
     Returns
     -------
@@ -455,6 +501,12 @@ def invert_stack(
         b = dphi.reshape(n_ifgs, -1)
         phase_cols, residuals_cols, _, _ = jnp.linalg.lstsq(A, b)
         # Reshape the phase and residuals to be 3D
+        phase = phase_cols.reshape(-1, n_rows, n_cols)
+        residuals = residuals_cols.reshape(n_rows, n_cols)
+    elif missing_data_flags is not None:
+        b = dphi.reshape(n_ifgs, -1)
+        missing_data = missing_data_flags.reshape(n_ifgs, -1)
+        phase_cols, residuals_cols = censored_lstsq(A, b, missing_data)
         phase = phase_cols.reshape(-1, n_rows, n_cols)
         residuals = residuals_cols.reshape(n_rows, n_cols)
     else:
@@ -810,8 +862,9 @@ def invert_unw_network(
     unw_file_list: Sequence[PathOrStr],
     reference: ReferencePoint,
     output_dir: PathOrStr,
+    conncomp_file_list: Sequence[PathOrStr] | None = None,
     cor_file_list: Sequence[PathOrStr] | None = None,
-    cor_threshold: float = 0.2,
+    cor_threshold: float = 0.0,
     n_cor_looks: int = 1,
     ifg_date_pairs: Sequence[Sequence[DateOrDatetime]] | None = None,
     wavelength: float | None = None,
@@ -831,11 +884,15 @@ def invert_unw_network(
         from all other points when solving.
     output_dir : PathOrStr
         The directory to save the output files
+    conncomp_file_list : Sequence[PathOrStr], optional
+        Sequence connected component files, one per file in `unwrapped_paths`.
+        Used to ignore interferogram pixels whose connected component label is zero.
     cor_file_list : Sequence[PathOrStr], optional
-        List of correlation files to use for weighting the inversion
+        List of correlation files to use for weighting the inversion.
+        Cannot be used if `conncomp_file_list` is passed.
     cor_threshold : float, optional
         The correlation threshold to use for weighting the inversion
-        Default is 0.2
+        Default is 0.0
     n_cor_looks : int, optional
         The number of looks used to form the input correlation data, used
         to convert correlation to phase variance.
@@ -890,15 +947,43 @@ def invert_unw_network(
 
     A = get_incidence_matrix(ifg_pairs=ifg_tuples, sar_idxs=sar_dates)
 
+    unw_nodataval = io.get_raster_nodata(unw_file_list[0])
     out_vrt_name = Path(output_dir) / "unw_network.vrt"
     unw_reader = io.VRTStack(
-        file_list=unw_file_list, outfile=out_vrt_name, skip_size_check=True
+        file_list=unw_file_list,
+        outfile=out_vrt_name,
+        skip_size_check=True,
+        read_masked=True,
     )
     cor_vrt_name = Path(output_dir) / "cor_network.vrt"
+    conncomp_vrt_name = Path(output_dir) / "conncomp_network.vrt"
+
+    if conncomp_file_list is not None:
+        conncomp_reader = io.VRTStack(
+            file_list=conncomp_file_list,
+            outfile=conncomp_vrt_name,
+            skip_size_check=True,
+            read_masked=True,
+        )
+        readers = [unw_reader, conncomp_reader]
+        logger.info("Masking unw pixels during inversion using connected components.")
+    elif cor_file_list is not None:
+        cor_reader = io.VRTStack(
+            file_list=cor_file_list, outfile=cor_vrt_name, skip_size_check=True
+        )
+        readers = [unw_reader, cor_reader]
+        logger.info("Using correlation to weight unw inversion")
+    else:
+        readers = [unw_reader]
+        logger.info("Using unweighted unw inversion")
 
     # Get the reference point data
     ref_row, ref_col = reference
     ref_data = unw_reader[:, ref_row, ref_col].reshape(-1, 1, 1)
+    if ref_data.mask.sum() > 0:
+        logger.warning(f"Masked data found at {ref_row}, {ref_col}.")
+        logger.warning("Zeroing out reference pixel. Results may be wrong.")
+        ref_data = 0 * ref_data.data
 
     if wavelength is not None:
         # Positive values are motion towards the radar
@@ -911,39 +996,40 @@ def invert_unw_network(
     def read_and_solve(
         readers: Sequence[io.StackReader], rows: slice, cols: slice
     ) -> tuple[slice, slice, np.ndarray]:
+        unw_reader = readers[0]
+        stack = unw_reader[:, rows, cols]
+        masked_pixel_sum: NDArray[np.bool_] = stack.mask.sum(axis=0)
+        # Mask the output if any inputs are missing
+        masked_pixels = masked_pixel_sum > 0
+        # Setup the (optional) second reader: either conncomps, or correlation
         if len(readers) == 2 and method == "L2":
-            unw_reader, cor_reader = readers
-            stack = unw_reader[:, rows, cols]
-            cor = cor_reader[:, rows, cols]
-            weights = correlation_to_variance(cor, n_cor_looks)
-            weights[cor < cor_threshold] = 0
+            if conncomp_file_list is not None:
+                # Use censored least squares based on the conncomp labels
+                missing_data_flags = readers[1][:, rows, cols].filled(0) != 0
+                weights = None
+            else:
+                # Weight the inversion by correlation-derived variance
+                cor = readers[1][:, rows, cols]
+                weights = correlation_to_variance(cor, n_cor_looks)
+                weights[cor < cor_threshold] = 0
+                missing_data_flags = None
         else:
-            stack = readers[0][:, rows, cols]
-            weights = None
+            weights = missing_data_flags = None
 
-        # subtract the reference
-        stack = stack - ref_data
+        # subtract the reference, convert to numpy
+        stack = (stack - ref_data).filled(0)
 
-        # TODO: possible second input for weights? from conncomps
         # TODO: do i want to write residuals too? Do i need
-        # to have multiple writers then?
-        phases = invert_stack(A, stack, weights)[0]
+        # to have multiple writers then, or a StackWriter?
         if method.upper() == "L1":
             phases = invert_stack_l1(A, stack)[0]
         else:
-            phases = invert_stack(A, stack, weights)[0]
+            phases = invert_stack(A, stack, weights, missing_data_flags)[0]
         # Convert to meters, with LOS convention:
-        return constant * np.asarray(phases), rows, cols
-
-    if cor_file_list is not None:
-        cor_reader = io.VRTStack(
-            file_list=cor_file_list, outfile=cor_vrt_name, skip_size_check=True
-        )
-        readers = [unw_reader, cor_reader]
-        logger.info("Using correlation to weight unw inversion")
-    else:
-        readers = [unw_reader]
-        logger.info("Using unweighted unw inversion")
+        out_displacement = constant * np.asarray(phases)
+        # Set the masked pixels to be nodata in the output
+        out_displacement[:, masked_pixels] = unw_nodataval
+        return out_displacement, rows, cols
 
     writer = io.BackgroundStackWriter(
         out_paths, like_filename=unw_file_list[0], units=units
