@@ -31,6 +31,7 @@ def unwrap_spurt(
     similarity_filename: PathOrStr | None = None,
     options: SpurtOptions = DEFAULT_OPTIONS,
     scratchdir: PathOrStr | None = None,
+    num_retries: int = 3,
 ) -> tuple[list[Path], list[Path]]:
     """Perform 3D unwrapping using `spurt` via subprocess call."""
     # NOTE: we are working around spurt currently wanting "temporal_coherence.tif",
@@ -118,7 +119,21 @@ def unwrap_spurt(
         ]
     )
 
-    subprocess.run(cmd, check=True, text=True)
+    def run_with_retry(cmd: list[str], num_retries: int = 3):
+        for attempt in range(num_retries):
+            try:
+                result = subprocess.run(cmd, check=True, text=True, capture_output=True)
+                logging.info(f"Command succeeded on attempt {attempt + 1}")
+            except subprocess.CalledProcessError as e:
+                logging.warning(f"Attempt {attempt + 1} failed: {e}")
+            else:
+                return result
+
+        # If we've exhausted all retries
+        logging.error(f"Command failed after {num_retries} attempts")
+        raise RuntimeError(f"Command '{cmd}' failed after {num_retries} attempts")
+
+    run_with_retry(cmd, num_retries=num_retries)
 
     # Return paths to output files
     output_path = Path(output_path)
