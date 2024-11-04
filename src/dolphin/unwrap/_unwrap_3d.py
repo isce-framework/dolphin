@@ -126,6 +126,7 @@ def unwrap_spurt(
                 logging.info(f"Command succeeded on attempt {attempt + 1}")
             except subprocess.CalledProcessError as e:
                 logging.warning(f"Attempt {attempt + 1} failed: {e}")
+                logging.exception(f"Error output:\n{e.stderr}")
             else:
                 return result
 
