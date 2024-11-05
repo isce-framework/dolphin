@@ -18,7 +18,7 @@
 [rtd-link]:                 https://dolphin-insar.readthedocs.io/en/latest/?badge=latest
 <!-- prettier-ignore-end -->
 
-High resolution wrapped phase estimation for InSAR using combined PS/DS processing.
+High resolution wrapped phase estimation for Interferometric Synthetic Aperture Radar (InSAR) using combined persistent scatterer (PS) and distributed scatterer (DS) processing.
 
 <!-- DeformatiOn Land surface Products in High resolution using INsar -->
 
@@ -33,7 +33,7 @@ mamba install -c conda-forge dolphin
 
 It is also available via [`PyPI`](https://pypi.org/project/dolphin/) and may be `pip`-installed on some platforms, such as Google's Colab. However, certain dependencies (e.g. GDAL) are more easily set up through `conda`.
 
-`dolphin` has the ability to unwrap interferograms using several options:
+`dolphin` has the ability to unwrap interferograms using several options, which can be toggled using the `unwrap_method` configuration option:
 
 1. [`snaphu-py`](https://github.com/isce-framework/snaphu-py), a lightweight Python bindings to [SNAPHU](https://web.stanford.edu/group/radar/softwareandlinks/sw/snaphu/). Available on both pip and conda.
 2. [`isce3`](https://github.com/isce-framework/isce3)'s python bindings to SNAPHU, PHASS, or ICU
@@ -86,11 +86,7 @@ dolphin config --slc-files /path/to/slcs/*tif
 dolphin run dolphin_config.yaml
 ```
 
-The `config` command creates a YAML file (by default `dolphin_config.yaml` in the current directory). If you'd like to see an empty YAML with all defaults filled in, you can run
-
-```bash
-dolphin config --print-empty
-```
+The `config` command creates a YAML file (by default `dolphin_config.yaml` in the current directory). If you'd like to see an empty YAML with all defaults filled in, you can run `dolphin config --print-empty`, which creates a [sample file like the one here](https://raw.githubusercontent.com/isce-framework/dolphin/refs/heads/main/docs/sample_dolphin_config.yaml)
 
 The only required inputs for the workflow are the paths to the coregistered SLC files (in either geographic or radar coordinates).
 If the SLC files are spread over multiple files, you can either
@@ -100,6 +96,14 @@ If the SLC files are spread over multiple files, you can either
 1. Store all input SLC files in a text file delimited by newlines (e.g. `my_slc_list.txt`), and give the name of this text file prefixed by the `@` character (e.g. `dolphin config --slc-files @my_slc_list.txt`)
 
 The full set of options is written to the configuration file; you can edit this file, or you can see which commonly tuned options by are changeable running `dolphin config --help`.
+
+## Building and running via Docker
+
+`dolphin` can also be run using Docker. You can use the one built on [Github](https://github.com/isce-framework/dolphin/pkgs/container/dolphin), or build it locally using the script
+
+```bash
+./docker/build-docker-image.sh
+```
 
 ## Contributing
 
@@ -114,4 +118,3 @@ For more general Q&A, please use the [Discussions](https://github.com/isce-frame
 This software is licensed under your choice of BSD-3-Clause or Apache-2.0 licenses. See the accompanying LICENSE file for further details.
 
 SPDX-License-Identifier: BSD-3-Clause OR Apache-2.0
-gg
