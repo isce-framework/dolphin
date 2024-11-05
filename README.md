@@ -2,6 +2,7 @@
 
 [![Pytest and build docker image](https://github.com/isce-framework/dolphin/actions/workflows/test-build-push.yml/badge.svg?branch=main)](https://github.com/isce-framework/dolphin/actions/workflows/test-build-push.yml)
 [![pre-commit.ci status](https://results.pre-commit.ci/badge/github/isce-framework/dolphin/main.svg)](https://results.pre-commit.ci/latest/github/isce-framework/dolphin/main)
+[![Documentation Status][rtd-badge]][rtd-link]
 [![Conda-Forge][conda-badge]][conda-link]
 [![PyPI platforms][pypi-platforms]][pypi-link]
 [![GitHub Discussion][github-discussions-badge]][github-discussions-link]
@@ -13,15 +14,17 @@
 [pypi-platforms]:           https://img.shields.io/pypi/pyversions/dolphin
 [github-discussions-badge]: https://img.shields.io/static/v1?label=Discussions&message=Ask&color=blue&logo=github
 [github-discussions-link]:  https://github.com/isce-framework/dolphin/discussions
+[rtd-badge]:                https://readthedocs.org/projects/dolphin-insar/badge/?version=latest
+[rtd-link]:                 https://dolphin-insar.readthedocs.io/en/latest/?badge=latest
 <!-- prettier-ignore-end -->
 
-High resolution wrapped phase estimation for Interferometric Synthetic Aperture Radar (InSAR) using combined persistent scatterer (PS) and distributed scatterer (DS) processing.
+High resolution wrapped phase estimation for InSAR using combined PS/DS processing.
 
 <!-- DeformatiOn Land surface Products in High resolution using INsar -->
 
 ## Install
 
-`dolphin` is available on conda:
+`dolphin` may be installed via conda-forge:
 
 ```bash
 # if mamba is not already installed, see here: https://mamba.readthedocs.io/en/latest/
@@ -30,15 +33,15 @@ mamba install -c conda-forge dolphin
 
 It is also available via [`PyPI`](https://pypi.org/project/dolphin/) and may be `pip`-installed on some platforms, such as Google's Colab. However, certain dependencies (e.g. GDAL) are more easily set up through `conda`.
 
-`dolphin` has the ability to unwrap interferograms using several options, which can be toggled using the `unwrap_method` configuration option:
+`dolphin` has the ability to unwrap interferograms using several options:
 
 1. [`snaphu-py`](https://github.com/isce-framework/snaphu-py), a lightweight Python bindings to [SNAPHU](https://web.stanford.edu/group/radar/softwareandlinks/sw/snaphu/). Available on both pip and conda.
-2. [`isce3`](https://github.com/isce-framework/isce3) offers bindings to the `PHASS` or the `ICU` unwrapping algorithms.
+2. [`isce3`](https://github.com/isce-framework/isce3)'s python bindings to SNAPHU, PHASS, or ICU
 3. [`spurt`](https://github.com/isce-framework/spurt), a 3D unwrapper, implementing the Extended Minimum Cost Flow (ECMF) algorithm
 4. [`tophu`](https://github.com/isce-framework/tophu), a multi-scale unwrapper designed to unwrap large interferograms in parallel tiles at multiple resolution.
 
-These may be installed via conda or (in the case of `snaphu-py`) pip.
 
+These may be installed via conda or (in the case of `snaphu-py`) pip.
 
 To install locally:
 
@@ -83,7 +86,11 @@ dolphin config --slc-files /path/to/slcs/*tif
 dolphin run dolphin_config.yaml
 ```
 
-The `config` command creates a YAML file (by default `dolphin_config.yaml` in the current directory). If you'd like to see an empty YAML with all defaults filled in, you can run `dolphin config --print-empty`, which creates a [sample file like the one here](https://raw.githubusercontent.com/isce-framework/dolphin/refs/heads/main/docs/sample_dolphin_config.yaml)
+The `config` command creates a YAML file (by default `dolphin_config.yaml` in the current directory). If you'd like to see an empty YAML with all defaults filled in, you can run
+
+```bash
+dolphin config --print-empty
+```
 
 The only required inputs for the workflow are the paths to the coregistered SLC files (in either geographic or radar coordinates).
 If the SLC files are spread over multiple files, you can either
@@ -94,20 +101,17 @@ If the SLC files are spread over multiple files, you can either
 
 The full set of options is written to the configuration file; you can edit this file, or you can see which commonly tuned options by are changeable running `dolphin config --help`.
 
-See the [documentation](https://dolphin-insar.readthedocs.io/) for more details.
+## Contributing
 
-## Building and running via Docker
+We welcome many forms of contributing, including testing, bug reports, and documentation fixes. If you think you've found a problem, please let us know! You can raise an [issue](https://github.com/isce-framework/dolphin/issues) on the repository, where there are templates for Bug Reports and Feature Requests. If you have a general question of idea, feel free to raise it in the [Discussions](https://github.com/isce-framework/dolphin/discussions) page.
 
-`dolphin` can also be run using Docker. You can use the one built on [Github](https://github.com/isce-framework/dolphin/pkgs/container/dolphin), or build it locally using the script
+For more detailed guidance on setting up a development environment, including how make and test changes to the code, see [Contributing to Dolphin](CONTRIBUTING.md).
 
-```bash
-./docker/build-docker-image.sh
-```
-
-See `./docker/build-docker-image.sh --help` for more building options.
+For more general Q&A, please use the [Discussions](https://github.com/isce-framework/dolphin/discussions) page.
 
 ## License
 
 This software is licensed under your choice of BSD-3-Clause or Apache-2.0 licenses. See the accompanying LICENSE file for further details.
 
 SPDX-License-Identifier: BSD-3-Clause OR Apache-2.0
+gg
