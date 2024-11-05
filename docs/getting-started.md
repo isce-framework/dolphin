@@ -1,4 +1,4 @@
---8<-- "README.md:25:102"
+--8<-- "README.md:25:100"
 
 For a more complete tutorial, see our [notebooks](notebooks)
 

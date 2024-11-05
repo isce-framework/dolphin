@@ -83,6 +83,8 @@ Example usage:
 
 ```bash
 dolphin config --slc-files /path/to/slcs/*tif
+# OR: to make a coarser output 4x as quickly:
+# dolphin config --slc-files /path/to/slcs/*tif --strides 2 2
 dolphin run dolphin_config.yaml
 ```
 
