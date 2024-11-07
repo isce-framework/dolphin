@@ -1324,14 +1324,6 @@ def invert_stack_l1(A: ArrayLike, dphi: ArrayLike) -> Array:
     return phase, residuals
 
 
-def _get_date_counting_matrix(
-    ifg_pairs: Sequence[tuple[T, T]], sar_idxs: Sequence[T] | None = None
-) -> np.ndarray:
-    return np.abs(
-        get_incidence_matrix(ifg_pairs, sar_idxs, delete_first_date_column=False)
-    )
-
-
 def count_nonzero_conncomps(
     conncomp_file_list: Sequence[PathOrStr],
     output_dir: PathOrStr,
@@ -1353,7 +1345,7 @@ def count_nonzero_conncomps(
     block_shape : tuple[int, int], optional
         The shape of the blocks to process in parallel.
     num_threads : int
-        The parallel blocks to process at once.
+        The number of parallel blocks to process at once.
 
     Returns
     -------
@@ -1375,8 +1367,11 @@ def count_nonzero_conncomps(
         ) from e
 
     # Get unique dates and create the counting matrix
-    sar_dates = sorted(set(utils.flatten(ifg_date_pairs)))
-    A = _get_date_counting_matrix(ifg_tuples, sar_dates)
+    sar_dates: list[DateOrDatetime] = sorted(set(utils.flatten(ifg_date_pairs)))
+
+    date_counting_matrix = np.abs(
+        get_incidence_matrix(ifg_tuples, sar_dates, delete_first_date_column=False)
+    )
 
     # Create output paths for each date
     suffix = "_valid_count.tif"
@@ -1405,11 +1400,14 @@ def count_nonzero_conncomps(
         valid_mask = stack.filled(0) != 0  # Shape: (n_ifgs, block_rows, block_cols)
 
         # Use the counting matrix to map from interferograms to dates
-        # For each pixel, multiply the valid_mask by A to get counts per date
+        # For each pixel, multiply the valid_mask to get counts per date
         # Reshape valid_mask to (n_ifgs, -1) to handle all pixels at once
         valid_flat = valid_mask.reshape(valid_mask.shape[0], -1)
-        # Matrix multiply to get counts per date, then reshape back
-        date_counts = (A.T @ valid_flat).reshape(-1, *valid_mask.shape[1:])
+        # Matrix multiply to get counts per date
+        # (date_counting_matrix.T) is shape (n_sar_dates, n_ifgs), and each row
+        # has a number of 1s equal to the nonzero conncomps for that date.
+        date_count_cols = date_counting_matrix.T @ valid_flat
+        date_counts = date_count_cols.reshape(-1, *valid_mask.shape[1:])
 
         return date_counts, rows, cols
 
