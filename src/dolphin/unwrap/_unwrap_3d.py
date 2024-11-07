@@ -65,7 +65,8 @@ def unwrap_spurt(
     # expected in the one directory
     for fn in ifg_filenames:
         new_path = scratch_path / Path(fn).name
-        new_path.symlink_to(fn)
+        if not new_path.exists():
+            new_path.symlink_to(fn)
 
     cmd = [
         "python",
@@ -122,7 +123,7 @@ def unwrap_spurt(
     def run_with_retry(cmd: list[str], num_retries: int = 3):
         for attempt in range(num_retries):
             try:
-                result = subprocess.run(cmd, check=True, text=True, capture_output=True)
+                result = subprocess.run(cmd, check=True, text=True)
                 logging.info(f"Command succeeded on attempt {attempt + 1}")
             except subprocess.CalledProcessError as e:
                 logging.warning(f"Attempt {attempt + 1} failed: {e}")

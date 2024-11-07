@@ -392,7 +392,7 @@ def censored_lstsq(A, B, M):
     """
     # if B is a vector, simply drop out corresponding rows in A
     if B.ndim == 1 or B.shape[1] == 1:
-        return jnp.linalg.leastsq(A[M], B[M])[0]
+        return jnp.linalg.lstsq(A[M], B[M])[0]
 
     # else solve via tensor representation
     rhs = jnp.dot(A.T, M * B).T[:, :, None]  # k x n x 1 tensor
@@ -420,7 +420,7 @@ def weighted_lstsq_single(
 
     Parameters
     ----------
-    A : Arraylike
+    A : ArrayLike
         Incidence matrix of shape (n_ifgs, n_sar_dates - 1)
     b : ArrayLike, 1D
         The phase differences between the ifg pairs
@@ -1051,8 +1051,8 @@ def invert_unw_network(
 def correlation_to_variance(correlation: ArrayLike, nlooks: int) -> Array:
     r"""Convert interferometric correlation to phase variance.
 
-    Uses the CRLB formula from Rodriguez, 1992 [1]_ to get the phase variance,
-    \sigma_{\phi}^2:
+    Uses the Cramer-Rao Lower Bound (CRLB) formula from Rodriguez, 1992 [1]_ to
+    get the phase variance, \sigma_{\phi}^2:
 
     \[
         \sigma_{\phi}^{2} = \frac{1}{2N_{L}} \frac{1 - \gamma^{2}}{\gamma^{2}}
@@ -1195,14 +1195,14 @@ def _get_largest_conncomp_mask(
     conncomp_intersection = io.load_gdal(conncomp_intersection_file, masked=True)
 
     # Find the largest conncomp region in the intersection
-    label, nlabels = ndimage.label(
+    label, n_labels = ndimage.label(
         conncomp_intersection.filled(0), structure=np.ones((3, 3))
     )
-    if nlabels == 0:
+    if n_labels == 0:
         raise ReferencePointError(
             "Connected components intersection left no valid regions"
         )
-    logger.info("Found %d connected components in intersection", nlabels)
+    logger.info("Found %d connected components in intersection", n_labels)
 
     # Make a mask of the largest conncomp:
     # Find the label with the most pixels using bincount
