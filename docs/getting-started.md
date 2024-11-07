@@ -1,5 +1,5 @@
---8<-- "README.md:19:107"
+--8<-- "README.md:25:100"
 
-For a more complete tutorial, see our [tutorials page](tutorials.md)
+For a more complete tutorial, see our [notebooks](notebooks)
 
 For help with installing locally and contributing, see the [full developer setup instructions](developer-setup.md).

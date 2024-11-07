@@ -15,6 +15,7 @@ def filter_long_wavelength(
     wavelength_cutoff: float = 50 * 1e3,
     pixel_spacing: float = 30,
     workers: int = 1,
+    fill_value: float | None = None,
 ) -> np.ndarray:
     """Filter out signals with spatial wavelength longer than a threshold.
 
@@ -35,6 +36,10 @@ def filter_long_wavelength(
     workers : int
         Number of `fft` workers to use for `scipy.fft.fft2`.
         Default is 1.
+    fill_value : float, optional
+        Value to place in output pixels which were masked.
+        If `None`, masked pixels are filled with the ramp value fitted
+        before filtering to suppress outliers.
 
     Returns
     -------
@@ -48,19 +53,19 @@ def filter_long_wavelength(
         If wavelength_cutoff too large for image size/pixel spacing.
 
     """
-    good_pixel_mask = ~bad_pixel_mask
+    good_pixel_mask = np.logical_not(bad_pixel_mask)
 
     rows, cols = unwrapped_phase.shape
     unw0 = np.nan_to_num(unwrapped_phase)
     # Take either nan or 0 pixels in `unwrapped_phase` to be nodata
     nodata_mask = unw0 == 0
-    in_bounds_pixels = ~nodata_mask
+    in_bounds_pixels = np.logical_not(nodata_mask)
 
     total_valid_mask = in_bounds_pixels & good_pixel_mask
 
     plane = fit_ramp_plane(unw0, total_valid_mask)
     # Remove the plane, setting to 0 where we had no data for the plane fit:
-    unw_ifg_interp = np.where((~nodata_mask & good_pixel_mask), unw0, plane)
+    unw_ifg_interp = np.where(total_valid_mask, unw0, plane)
 
     # Find the filter `sigma` which gives the correct cutoff in meters
     sigma = _compute_filter_sigma(wavelength_cutoff, pixel_spacing, cutoff_value=0.5)
@@ -90,7 +95,10 @@ def filter_long_wavelength(
     lowpass_filtered = result[pad_rows:-pad_rows, pad_cols:-pad_cols]
 
     filtered_ifg = unw_ifg_interp - lowpass_filtered * in_bounds_pixels
-    return np.where(in_bounds_pixels, filtered_ifg, 0)
+    if fill_value is not None:
+        return np.where(total_valid_mask, filtered_ifg, fill_value)
+    else:
+        return filtered_ifg
 
 
 def _compute_filter_sigma(
