@@ -1324,7 +1324,7 @@ def invert_stack_l1(A: ArrayLike, dphi: ArrayLike) -> Array:
     return phase, residuals
 
 
-def count_nonzero_conncomps(
+def create_nonzero_conncomp_counts(
     conncomp_file_list: Sequence[PathOrStr],
     output_dir: PathOrStr,
     ifg_date_pairs: Sequence[Sequence[DateOrDatetime]] | None = None,
