@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import multiprocessing as mp
 from concurrent.futures import ProcessPoolExecutor
 from itertools import repeat

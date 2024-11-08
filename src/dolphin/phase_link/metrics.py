@@ -1,5 +1,7 @@
 """Module for computing quality metrics of estimated solutions."""
 
+from __future__ import annotations
+
 import jax.numpy as jnp
 from jax import Array, jit, vmap
 from jax.typing import ArrayLike

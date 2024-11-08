@@ -151,18 +151,18 @@ class CompressedSlcInfo(BaseModel):
         ..., description="Datetime of the last real SLC used in the compression."
     )
 
-    real_slc_file_list: list[Filename] | None = Field(
+    real_slc_file_list: Optional[list[Filename]] = Field(
         None,
         description="List of real SLC filenames in the ministack.",
     )
-    real_slc_dates: list[datetime] | None = Field(
+    real_slc_dates: Optional[list[datetime]] = Field(
         None,
         description=(
             "List of date sequences, one for each SLC in the ministack. "
             "Each item is a list/tuple of datetime.date or datetime.datetime objects."
         ),
     )
-    compressed_slc_file_list: list[Filename] | None = Field(
+    compressed_slc_file_list: Optional[list[Filename]] = Field(
         None,
         description="List of compressed SLC filenames in the ministack.",
     )
