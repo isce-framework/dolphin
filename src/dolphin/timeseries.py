@@ -964,7 +964,7 @@ def invert_unw_network(
     cor_vrt_name = Path(output_dir) / "cor_network.vrt"
     conncomp_vrt_name = Path(output_dir) / "conncomp_network.vrt"
 
-    if conncomp_file_list is not None:
+    if conncomp_file_list is not None and method == "L2":
         conncomp_reader = io.VRTStack(
             file_list=conncomp_file_list,
             outfile=conncomp_vrt_name,
@@ -973,7 +973,7 @@ def invert_unw_network(
         )
         readers = [unw_reader, conncomp_reader]
         logger.info("Masking unw pixels during inversion using connected components.")
-    elif cor_file_list is not None:
+    elif cor_file_list is not None and method == "L2":
         cor_reader = io.VRTStack(
             file_list=cor_file_list, outfile=cor_vrt_name, skip_size_check=True
         )
