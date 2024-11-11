@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from concurrent.futures import FIRST_EXCEPTION, Future, ThreadPoolExecutor, wait
 from typing import Protocol, Sequence
 
