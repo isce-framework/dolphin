@@ -13,7 +13,7 @@ tags:
   - earthquake
 authors:
   - name: Scott J. Staniewicz
-    orcid: 0000-0003-0872-7098
+    orcid: 0000-0002-3055-5731
     affiliation: 1
   - name: Sara Mirzaee
     orcid: 0000-0001-8194-5951
