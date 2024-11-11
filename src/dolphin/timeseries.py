@@ -797,7 +797,7 @@ def create_velocity(
         logger.info("Creating overviews for velocity image")
         create_overviews([output_file])
     if units := io.get_raster_units(unw_file_list[0]):
-        io.set_raster_units(output_file, units=units)
+        io.set_raster_units(output_file, units=f"{units} / year")
     logger.info("Completed create_velocity")
 
 
