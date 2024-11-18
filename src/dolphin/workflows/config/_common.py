@@ -74,7 +74,7 @@ class PhaseLinkingOptions(BaseModel, extra="forbid"):
 
     _directory: Path = PrivateAttr(Path("linked_phase"))
     ministack_size: int = Field(
-        10, description="Size of the ministack for sequential estimator.", gt=1
+        15, description="Size of the ministack for sequential estimator.", gt=1
     )
     max_num_compressed: int = Field(
         100,
