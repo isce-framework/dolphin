@@ -589,6 +589,7 @@ def prepare_geometry(
                 out_nodata=nodata,
                 target_aligned_pixels=True,
                 strides=strides,
+                resample_alg="nearest",
                 overwrite=False,
                 options=options,
             )
