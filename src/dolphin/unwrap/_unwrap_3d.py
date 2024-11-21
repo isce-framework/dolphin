@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import logging
+import multiprocessing
 import shutil
-import subprocess
 from collections.abc import Sequence
+from functools import partial
 from pathlib import Path
+from subprocess import PIPE, STDOUT, Popen
 
 import numpy as np
 import rasterio
@@ -76,6 +78,8 @@ def unwrap_spurt(
         "spurt.workflows.emcf",
         "-i",
         str(scratch_path),
+        "--log-file",
+        f"{scratch_path}/spurt-unwrap.log",
         "-o",
         str(output_path),
         "--tempdir",
@@ -122,16 +126,20 @@ def unwrap_spurt(
         ]
     )
 
-    def run_with_retry(cmd: list[str], num_retries: int = 3):
+    def run_with_retry(cmd: list[str], num_retries: int = 3) -> int:
         for attempt in range(num_retries):
-            try:
-                result = subprocess.run(cmd, check=True, text=True)
-                logging.info(f"Command succeeded on attempt {attempt + 1}")
-            except subprocess.CalledProcessError as e:
-                logging.warning(f"Attempt {attempt + 1} failed: {e}")
-                logging.exception(f"Error output:\n{e.stderr}")
-            else:
-                return result
+            process = Popen(cmd, stdout=PIPE, stderr=STDOUT, text=True)
+            assert process.stdout is not None
+            for line in process.stdout:
+                logger.info(line.strip())
+
+            return_code = process.wait()
+            if return_code != 0:
+                logging.warning(f"spurt attempt {attempt + 1} failed")
+                continue
+
+            logging.info(f"Command succeeded on attempt {attempt + 1}")
+            return return_code
 
         # If we've exhausted all retries
         logging.error(f"Command failed after {num_retries} attempts")
@@ -191,10 +199,30 @@ def _create_conncomps_from_mask(
     return conncomp_files
 
 
+def _process_single_unw(
+    unw_filename: PathOrStr,
+    ifg_filenames: Sequence[PathOrStr],
+    output_dir: Path,
+    profile: dict,
+):
+    unw, wrapped_phase = _reform_wrapped_phase(unw_filename, ifg_filenames)
+    interpolate_masked_gaps(unw, wrapped_phase)
+    # Save the updated unwrapped phase
+    kwargs = profile | {
+        "count": 1,
+        "height": unw.shape[0],
+        "width": unw.shape[1],
+        "dtype": "float32",
+    }
+    with rasterio.open(output_dir / Path(unw_filename).name, "w", **kwargs) as src:
+        src.write(unw, 1)
+
+
 def filled_masked_unw_regions(
     unw_filenames: Sequence[PathOrStr],
     ifg_filenames: Sequence[PathOrStr],
     output_dir: Path | None = None,
+    max_workers: int = 3,
 ) -> None:
     """Fill the nan gaps in `unw_filenames` using the wrapped `ifg_filenames`.
 
@@ -211,26 +239,26 @@ def filled_masked_unw_regions(
     output_dir : Path, optional
         Separate folder to write output files after filling gaps.
         If None, overwrites the `unw_filenames`.
+    max_workers : int
+        Number of parallel unwrapped files to process at once.
+        Default is 3.
 
     """
     if output_dir is None:
         output_dir = Path(unw_filenames[0]).parent
-
     with rasterio.open(unw_filenames[0]) as src:
         profile = src.profile.copy()
-    for unw_filename in unw_filenames:
-        unw, wrapped_phase = _reform_wrapped_phase(unw_filename, ifg_filenames)
-        interpolate_masked_gaps(unw, wrapped_phase)
 
-        # Save the updated unwrapped phase
-        kwargs = profile | {
-            "count": 1,
-            "height": unw.shape[0],
-            "width": unw.shape[1],
-            "dtype": "float32",
-        }
-        with rasterio.open(output_dir / Path(unw_filename).name, "w", **kwargs) as src:
-            src.write(unw, 1)
+    process_func = partial(
+        _process_single_unw,
+        ifg_filenames=ifg_filenames,
+        output_dir=output_dir,
+        profile=profile,
+    )
+
+    # Use multiprocessing to process files in parallel
+    with multiprocessing.get_context("spawn").Pool(max_workers) as pool:
+        pool.map(process_func, unw_filenames)
 
 
 def _reform_wrapped_phase(
@@ -274,7 +302,6 @@ def _reform_wrapped_phase(
         raise ValueError(f"Could not find required interferograms for {unw_filename}")
 
     logger.info(f"Interpolating nodata in {unw_filename} with {ifg1_name}, {ifg2_name}")
-    # Load the files
     with rasterio.open(unw_filename) as src:
         unw = src.read(1)
 
