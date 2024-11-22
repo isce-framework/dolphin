@@ -4,6 +4,8 @@ Contains simple versions of MLE and EVD estimator to compare against the
 full CPU/GPU stack implementations.
 """
 
+from __future__ import annotations
+
 import numpy as np
 import numpy.linalg as la
 import scipy.ndimage as ndi

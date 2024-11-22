@@ -197,6 +197,7 @@ def test_displacement_run_extra_reference_date(
         pytest.skip(reason="spurt unwrapper not installed")
 
     with tmpdir.as_cwd():
+        log_file = Path() / "dolphin.log"
         cfg = config.DisplacementWorkflow(
             # start_date = 20220101
             # shape = (4, 128, 128)
@@ -208,6 +209,7 @@ def test_displacement_run_extra_reference_date(
             phase_linking={
                 "ministack_size": 4,
             },
+            log_file=log_file,
         )
         paths = displacement.run(cfg)
 
@@ -245,3 +247,4 @@ def test_displacement_run_extra_reference_date(
             ]
 
         assert all(get_raster_units(p) == "radians" for p in paths.unwrapped_paths)
+        log_file.unlink()

@@ -399,7 +399,7 @@ def combine_means(means: ArrayLike, N: ArrayLike) -> np.ndarray:
 
 def combine_amplitude_dispersions(
     dispersions: np.ndarray, means: np.ndarray, N: ArrayLike | Sequence
-) -> np.ndarray:
+) -> tuple[np.ndarray, np.ndarray]:
     r"""Compute the combined amplitude dispersion from multiple groups.
 
     Given several ADs where difference numbers of images, N, went in,

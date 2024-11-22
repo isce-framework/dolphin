@@ -56,6 +56,7 @@ watch:
 nav:
 - index.md
 - getting-started.md
+- overview.md
 - tutorials.md
 # - Tutorials:
 #   - Notebook page: notebooks/walkthrough-basic.ipynb

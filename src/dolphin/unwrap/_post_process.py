@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import logging
 
 import numpy as np
@@ -75,7 +77,7 @@ def interpolate_masked_gaps(
 
     Overwrites `unw`'s masked pixels with the interpolated values.
 
-    This function takes an input unwrapped phase array containin NaNs at masked pixel.
+    This function takes an input unwrapped phase array containing NaNs at masked pixel.
     It calculates the phase ambiguity, K, at the attempted unwrapped pixels, then
     interpolates the ambiguities to fill the gaps.
     The masked pixels get the value of the original wrapped phase + 2pi*K.

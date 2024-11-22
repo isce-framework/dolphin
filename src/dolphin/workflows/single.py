@@ -11,7 +11,7 @@ import numpy as np
 from numpy.typing import DTypeLike
 from tqdm.auto import tqdm
 
-from dolphin import io, shp
+from dolphin import io, shp, similarity
 from dolphin._decorators import atomic_output
 from dolphin._types import Filename, HalfWindow, Strides
 from dolphin.io import EagerLoader, StridedBlockManager, VRTStack
@@ -44,6 +44,7 @@ def run_wrapped_phase_single(
     half_window: dict,
     strides: Optional[dict] = None,
     beta: float = 0.00,
+    zero_correlation_threshold: float = 0.0,
     use_evd: bool = False,
     mask_file: Optional[Filename] = None,
     ps_mask_file: Optional[Filename] = None,
@@ -52,7 +53,8 @@ def run_wrapped_phase_single(
     shp_method: ShpMethod = ShpMethod.NONE,
     shp_alpha: float = 0.05,
     shp_nslc: Optional[int] = None,
-    block_shape: tuple[int, int] = (1024, 1024),
+    similarity_nearest_n: int | None = None,
+    block_shape: tuple[int, int] = (512, 512),
     baseline_lag: Optional[int] = None,
     **tqdm_kwargs,
 ):
@@ -152,6 +154,7 @@ def run_wrapped_phase_single(
     # Queue all input slices, skip ones that are all nodata
     for b in block_manager.iter_blocks():
         in_rows, in_cols = b[2]
+        # nodata_mask is numpy convention: True for bad (masked).
         if nodata_mask[in_rows, in_cols].all():
             continue
         loader.queue_read(in_rows, in_cols)
@@ -196,6 +199,7 @@ def run_wrapped_phase_single(
                 strides=strides_tup,
                 use_evd=use_evd,
                 beta=beta,
+                zero_correlation_threshold=zero_correlation_threshold,
                 reference_idx=ministack.output_reference_idx,
                 nodata_mask=nodata_mask[in_rows, in_cols],
                 ps_mask=ps_mask[in_rows, in_cols],
@@ -236,18 +240,14 @@ def run_wrapped_phase_single(
         # Get the mean to set as pixel magnitudes
         abs_stack = np.abs(cur_data[first_real_slc_idx:, in_trim_rows, in_trim_cols])
         cur_data_mean, cur_amp_dispersion, _ = calc_ps_block(abs_stack)
-        # NOTE: the `ministack.compressed_reference_idx` was set relative to *all*
-        # input images, real and compressed.
-        # Since we pass in just the first real idx, we have to subtract that off
-        ref_index_relative = ministack.compressed_reference_idx - first_real_slc_idx
         cur_comp_slc = compress(
             # Get the inner portion of the full-res SLC data
-            cur_data[first_real_slc_idx:, in_trim_rows, in_trim_cols],
-            pl_output.cpx_phase[first_real_slc_idx:, out_trim_rows, out_trim_cols],
+            cur_data[:, in_trim_rows, in_trim_cols],
+            pl_output.cpx_phase[:, out_trim_rows, out_trim_cols],
+            first_real_slc_idx=first_real_slc_idx,
             slc_mean=cur_data_mean,
-            reference_idx=ref_index_relative,
+            reference_idx=ministack.compressed_reference_idx,
         )
-        # TODO: truncate
 
         # ### Save results ###
 
@@ -295,9 +295,17 @@ def run_wrapped_phase_single(
     logger.info("Repacking for more compression")
     io.repack_rasters(phase_linked_slc_files, keep_bits=12)
 
-    written_comp_slc = output_files[0]
+    logger.info("Creating similarity raster on outputs")
+    similarity.create_similarities(
+        phase_linked_slc_files,
+        output_file=output_folder / f"similarity_{start_end}.tif",
+        num_threads=1,
+        add_overviews=False,
+        nearest_n=similarity_nearest_n,
+        block_shape=block_shape,
+    )
 
-    io.repack_raster(written_comp_slc.filename, keep_bits=12)
+    written_comp_slc = output_files[0]
     ccslc_info = ministack.get_compressed_slc_info()
     ccslc_info.write_metadata(output_file=written_comp_slc.filename)
     # TODO: Does it make sense to return anything from this?

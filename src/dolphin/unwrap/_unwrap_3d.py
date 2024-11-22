@@ -1,7 +1,12 @@
+from __future__ import annotations
+
 import logging
+import multiprocessing
 import shutil
 from collections.abc import Sequence
+from functools import partial
 from pathlib import Path
+from subprocess import PIPE, STDOUT, Popen
 
 import numpy as np
 import rasterio
@@ -9,7 +14,7 @@ from numpy.typing import NDArray
 from opera_utils import get_dates
 from scipy import ndimage, signal
 
-from dolphin import io, utils
+from dolphin import io
 from dolphin._types import PathOrStr
 from dolphin.workflows.config import SpurtOptions
 
@@ -24,120 +29,143 @@ DEFAULT_OPTIONS = SpurtOptions()
 def unwrap_spurt(
     ifg_filenames: Sequence[PathOrStr],
     output_path: PathOrStr,
-    temporal_coherence_file: PathOrStr,
-    cor_filenames: Sequence[PathOrStr] | None = None,
+    temporal_coherence_filename: PathOrStr,
+    # cor_filenames: Sequence[PathOrStr] | None = None,
     mask_filename: PathOrStr | None = None,
+    similarity_filename: PathOrStr | None = None,
     options: SpurtOptions = DEFAULT_OPTIONS,
     scratchdir: PathOrStr | None = None,
+    num_retries: int = 3,
 ) -> tuple[list[Path], list[Path]]:
-    """Perform 3D unwrapping using `spurt`."""
-    from spurt.graph import Hop3Graph
-    from spurt.io import SLCStackReader
-    from spurt.workflows.emcf import (
-        GeneralSettings,
-        MergerSettings,
-        SolverSettings,
-        TilerSettings,
-        compute_phasediff_deciles,
-        get_bulk_offsets,
-        get_tiles,
-        merge_tiles,
-        unwrap_tiles,
+    """Perform 3D unwrapping using `spurt` via subprocess call."""
+    # NOTE: we are working around spurt currently wanting "temporal_coherence.tif",
+    # and a temporal coherence threshold.
+    # we'll make our own mask of 0=bad, 1=good, then pass a threshold of 0.5
+    temp_coh = io.load_gdal(temporal_coherence_filename, masked=True).filled(0)
+    # Mark the "bad" pixels (good=1, bad=0, following the unwrapper mask convention)
+    temp_coh_mask = temp_coh > options.temporal_coherence_threshold
+    combined_mask = temp_coh_mask
+    if similarity_filename and options.similarity_threshold:
+        sim = io.load_gdal(similarity_filename, masked=True).filled(0)
+        sim_mask = sim > options.similarity_threshold
+        # A good pixel can have good similarity, or good temp. coherence
+        combined_mask = combined_mask | sim_mask
+
+    if mask_filename:
+        nodata_mask = io.load_gdal(mask_filename).astype(bool)
+        # A good pixel has to be 1 in both masks
+        combined_mask = combined_mask & nodata_mask
+
+    # We name it "temporal_coherence.tif" so spurt reads it.
+    # Also make it float32 as though it were temp coh
+    scratch_path = Path(scratchdir) if scratchdir else Path(output_path) / "scratch"
+    scratch_path.mkdir(exist_ok=True, parents=True)
+    combined_mask_filename = scratch_path / "temporal_coherence.tif"
+    io.write_arr(
+        arr=combined_mask.astype("float32"), output_name=combined_mask_filename
     )
 
-    if existing_unw_files := sorted(Path(output_path).glob(f"*{UNW_SUFFIX}")):
-        logger.info(f"Found {len(existing_unw_files)} unwrapped files")
-        existing_ccl_files = sorted(Path(output_path).glob(f"*{CONNCOMP_SUFFIX}"))
-        return existing_unw_files, existing_ccl_files
+    # Symlink the interferograms to the same scratch path so spurt finds everything
+    # expected in the one directory
+    for fn in ifg_filenames:
+        new_path = scratch_path / Path(fn).name
+        if not new_path.exists():
+            new_path.symlink_to(fn)
 
-    if cor_filenames is not None:
-        assert len(ifg_filenames) == len(cor_filenames)
-    if mask_filename is not None:
-        # TODO: Combine this with the temporal coherence to pass one 0/1 mask
-        # This will still work for spurt, since it runs `> threshold`, which is
-        # always true once we set our desired pixels to 1 and undesired to 0
-        _mask = io.load_gdal(mask_filename)
+    cmd = [
+        "python",
+        "-m",
+        "spurt.workflows.emcf",
+        "-i",
+        str(scratch_path),
+        "--log-file",
+        f"{scratch_path}/spurt-unwrap.log",
+        "-o",
+        str(output_path),
+        "--tempdir",
+        str(scratch_path / "emcf_tmp"),
+        "-c",
+        str(0.5),  # arbitrary, since we are passing a 0/1 file anyway
+    ]
+    if not options.general_settings.use_tiles:
+        cmd.append("--singletile")
 
-    if scratchdir is None:
-        scratchdir = Path(output_path) / "scratch"
-    gen_settings = GeneralSettings(
-        output_folder=output_path,
-        intermediate_folder=scratchdir,
-        **options.general_settings.model_dump(),
+    # Tiler Settings
+    cmd.extend(
+        [
+            "--pts-per-tile",
+            str(options.tiler_settings.target_points_per_tile),
+            "--max-tiles",
+            str(options.tiler_settings.max_tiles),
+        ]
     )
 
-    tile_settings = TilerSettings(**options.tiler_settings.model_dump())
-    slv_settings = SolverSettings(**options.solver_settings.model_dump())
-    mrg_settings = MergerSettings(**options.merger_settings.model_dump())
-
-    # Using default Hop3Graph
-    # TODO: this is a weird hack.. if there are 15 dates, there are 14 interferograms
-    # the spurt cli expects one of the filenames to be all 0s? maybe?
-    # But also still expects them to be date1_date2.int.tif?
-    g_time = Hop3Graph(len(ifg_filenames) + 1)
-    logger.info(f"Using Hop3 Graph in time with { g_time.npoints } epochs.")
-
-    date_str_to_file = _map_date_str_to_file(ifg_filenames)
-    stack = SLCStackReader(
-        slc_files=date_str_to_file,
-        temp_coh_file=temporal_coherence_file,
-        temp_coh_threshold=options.temporal_coherence_threshold,
+    # Solver Settings
+    cmd.extend(
+        [
+            "-w",
+            str(options.solver_settings.t_worker_count),
+            "--s-workers",
+            str(options.solver_settings.s_worker_count),
+            "-b",
+            str(options.solver_settings.links_per_batch),
+            "--t-cost-type",
+            options.solver_settings.t_cost_type,
+            "--t-cost-scale",
+            str(int(options.solver_settings.t_cost_scale)),
+            "--unwrap-parallel-tiles",
+            str(options.solver_settings.num_parallel_tiles),
+        ]
     )
-    # Run the workflow
-    # Generate tiles
-    get_tiles(stack, gen_settings, tile_settings)
 
-    # Unwrap tiles
-    unwrap_tiles(stack, g_time, gen_settings, slv_settings)
+    # Merger Settings
+    cmd.extend(
+        [
+            "--merge-parallel-ifgs",
+            str(options.merger_settings.num_parallel_ifgs),
+        ]
+    )
 
-    # Compute overlap stats
-    compute_phasediff_deciles(gen_settings, mrg_settings)
+    def run_with_retry(cmd: list[str], num_retries: int = 3) -> int:
+        for attempt in range(num_retries):
+            process = Popen(cmd, stdout=PIPE, stderr=STDOUT, text=True)
+            assert process.stdout is not None
+            for line in process.stdout:
+                logger.info(line.strip())
 
-    # Compute bulk offsets
-    get_bulk_offsets(stack, gen_settings, mrg_settings)
+            return_code = process.wait()
+            if return_code != 0:
+                logging.warning(f"spurt attempt {attempt + 1} failed")
+                continue
 
-    # Merge tiles and write output
-    unw_filenames = merge_tiles(stack, g_time, gen_settings, mrg_settings)
-    # TODO: What can we do for conncomps? Anything? Run snaphu?
+            logging.info(f"Command succeeded on attempt {attempt + 1}")
+            return return_code
+
+        # If we've exhausted all retries
+        logging.error(f"Command failed after {num_retries} attempts")
+        raise RuntimeError(f"Command '{cmd}' failed after {num_retries} attempts")
+
+    run_with_retry(cmd, num_retries=num_retries)
+
+    # Return paths to output files
+    output_path = Path(output_path)
+    unw_filenames = sorted(output_path.glob("*[0-9].unw.tif"))
     conncomp_filenames = _create_conncomps_from_mask(
-        temporal_coherence_file,
+        temporal_coherence_filename,
         options.temporal_coherence_threshold,
         unw_filenames=unw_filenames,
     )
     filled_masked_unw_regions(unw_filenames, ifg_filenames)
-
     return unw_filenames, conncomp_filenames
 
 
-def _map_date_str_to_file(
-    ifg_filenames: Sequence[PathOrStr], date_fmt: str = "%Y%m%d"
-) -> dict[str, PathOrStr | None]:
-    # Then list individual SLCs
-    dates = [get_dates(f) for f in ifg_filenames]
-    if len({d[0] for d in dates}) > 1:
-        errmsg = "interferograms for spurt must be single reference."
-        raise ValueError(errmsg)
-
-    secondary_dates = [d[1] for d in dates]
-    first_date = dates[0][0].strftime(date_fmt)
-    date_strings = [utils.format_dates(d, fmt=date_fmt) for d in secondary_dates]
-
-    date_str_to_file: dict[str, PathOrStr | None] = dict(
-        zip(date_strings, ifg_filenames)
-    )
-    # first date - set to None
-    # None is special case for reference epoch
-    date_str_to_file[first_date] = None
-    return date_str_to_file
-
-
 def _create_conncomps_from_mask(
-    temporal_coherence_file: PathOrStr,
+    temporal_coherence_filename: PathOrStr,
     temporal_coherence_threshold: float,
     unw_filenames: Sequence[PathOrStr],
     dilate_by: int = 25,
 ) -> list[Path]:
-    arr = io.load_gdal(temporal_coherence_file, masked=True)
+    arr = io.load_gdal(temporal_coherence_filename, masked=True)
     good_pixels = arr > temporal_coherence_threshold
     strel = np.ones((dilate_by, dilate_by))
     # "1" pixels will be spread out and have (approximately) 1.0 in surrounding pixels
@@ -171,10 +199,30 @@ def _create_conncomps_from_mask(
     return conncomp_files
 
 
+def _process_single_unw(
+    unw_filename: PathOrStr,
+    ifg_filenames: Sequence[PathOrStr],
+    output_dir: Path,
+    profile: dict,
+):
+    unw, wrapped_phase = _reform_wrapped_phase(unw_filename, ifg_filenames)
+    interpolate_masked_gaps(unw, wrapped_phase)
+    # Save the updated unwrapped phase
+    kwargs = profile | {
+        "count": 1,
+        "height": unw.shape[0],
+        "width": unw.shape[1],
+        "dtype": "float32",
+    }
+    with rasterio.open(output_dir / Path(unw_filename).name, "w", **kwargs) as src:
+        src.write(unw, 1)
+
+
 def filled_masked_unw_regions(
     unw_filenames: Sequence[PathOrStr],
     ifg_filenames: Sequence[PathOrStr],
     output_dir: Path | None = None,
+    max_workers: int = 3,
 ) -> None:
     """Fill the nan gaps in `unw_filenames` using the wrapped `ifg_filenames`.
 
@@ -191,26 +239,26 @@ def filled_masked_unw_regions(
     output_dir : Path, optional
         Separate folder to write output files after filling gaps.
         If None, overwrites the `unw_filenames`.
+    max_workers : int
+        Number of parallel unwrapped files to process at once.
+        Default is 3.
 
     """
     if output_dir is None:
         output_dir = Path(unw_filenames[0]).parent
-
     with rasterio.open(unw_filenames[0]) as src:
         profile = src.profile.copy()
-    for unw_filename in unw_filenames:
-        unw, wrapped_phase = _reform_wrapped_phase(unw_filename, ifg_filenames)
-        interpolate_masked_gaps(unw, wrapped_phase)
 
-        # Save the updated unwrapped phase
-        kwargs = profile | {
-            "count": 1,
-            "height": unw.shape[0],
-            "width": unw.shape[1],
-            "dtype": "float32",
-        }
-        with rasterio.open(output_dir / Path(unw_filename).name, "w", **kwargs) as src:
-            src.write(unw, 1)
+    process_func = partial(
+        _process_single_unw,
+        ifg_filenames=ifg_filenames,
+        output_dir=output_dir,
+        profile=profile,
+    )
+
+    # Use multiprocessing to process files in parallel
+    with multiprocessing.get_context("spawn").Pool(max_workers) as pool:
+        pool.map(process_func, unw_filenames)
 
 
 def _reform_wrapped_phase(
@@ -254,7 +302,6 @@ def _reform_wrapped_phase(
         raise ValueError(f"Could not find required interferograms for {unw_filename}")
 
     logger.info(f"Interpolating nodata in {unw_filename} with {ifg1_name}, {ifg2_name}")
-    # Load the files
     with rasterio.open(unw_filename) as src:
         unw = src.read(1)
 
