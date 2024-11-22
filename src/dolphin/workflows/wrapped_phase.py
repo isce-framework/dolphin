@@ -240,16 +240,18 @@ def run(
     # Reading direct nearest-3 ifgs is not working due to some slicing problem
     # so we need to just give it single reference ifgs, all referenced to the beginning
     # of the stack
-    extra_reference_date = (
-        # For spurt / networks of unwrappings, we ignore this this "changeover" date
-        # It will get applied in the `timeseries/` step
-        cfg.output_options.extra_reference_date
-        if (
-            cfg.unwrap_options.unwrap_method != UnwrapMethod.SPURT
-            or cfg.interferogram_network.max_bandwidth is not None
-        )
-        else None
-    )
+    # For spurt / networks of unwrapping, we ignore this this "changeover" date
+    # It will get applied in the `timeseries/` step
+    is_using_spurt = cfg.unwrap_options.unwrap_method == UnwrapMethod.SPURT
+    # Same thing for nearest-N interferograms: we just form then normally, then
+    # do a final, post-timeseries re-reference.
+    is_using_short_baseline_ifgs = cfg.interferogram_network.max_bandwidth is not None
+
+    if is_using_spurt or is_using_short_baseline_ifgs:
+        extra_reference_date = None
+    else:
+        extra_reference_date = cfg.output_options.extra_reference_date
+
     ifg_file_list: list[Path] = []
     ifg_file_list = create_ifgs(
         interferogram_network=ifg_network,
@@ -360,24 +362,27 @@ def create_ifgs(
         manual_reference_idx = get_nearest_date_idx(
             secondary_dates, extra_reference_date
         )
-
+        # The first part simply takes a `.conj()` of the phase linking outputs
         single_ref_ifgs = [
             interferogram.convert_pl_to_ifg(
-                f, reference_date=reference_date, output_dir=ifg_dir, dry_run=dry_run
+                f,
+                reference_date=reference_date,  # this is the `phase_linking.output_idx`
+                output_dir=ifg_dir,
+                dry_run=dry_run,
             )
             for f in phase_linked_slcs[: manual_reference_idx + 1]
         ]
-        single_ref_ifgs.extend(
-            [
-                interferogram.convert_pl_to_ifg(
-                    f,
-                    reference_date=extra_reference_date,
-                    output_dir=ifg_dir,
-                    dry_run=dry_run,
-                )
-                for f in phase_linked_slcs[manual_reference_idx + 1 :]
-            ]
-        )
+        # the second part now uses the "extra" date as the ifg reference
+        extra_ref_file = phase_linked_slcs[manual_reference_idx]
+        for f in phase_linked_slcs[manual_reference_idx + 1 :]:
+            v = interferogram.VRTInterferogram(
+                ref_slc=extra_ref_file,
+                sec_slc=f,
+                outdir=ifg_dir,
+                write=not dry_run,
+                verify_slcs=not dry_run,
+            )
+            single_ref_ifgs.append(v.path)  # type: ignore[arg-type]
 
     if interferogram_network.indexes and interferogram_network.indexes == [(0, -1)]:
         ifg_file_list.append(single_ref_ifgs[-1])
