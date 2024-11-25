@@ -10,8 +10,8 @@ logger = logging.getLogger(__name__)
 _DEFAULT_TIMEOUT = 0.5
 
 __all__ = [
-    "BackgroundWorker",
     "BackgroundReader",
+    "BackgroundWorker",
     "BackgroundWriter",
 ]
 

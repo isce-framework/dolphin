@@ -18,7 +18,7 @@ from dolphin.utils import compute_out_shape
 
 DEFAULT_STRIDES = Strides(1, 1)
 
-__all__ = ["estimate_stack_covariance", "coh_mat_single"]
+__all__ = ["coh_mat_single", "estimate_stack_covariance"]
 
 
 @partial(jit, static_argnames=["half_window", "strides"])

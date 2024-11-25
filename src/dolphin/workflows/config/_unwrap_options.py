@@ -16,11 +16,11 @@ from ._enums import UnwrapMethod
 logger = logging.getLogger(__name__)
 
 __all__ = [
-    "UnwrapOptions",
     "PreprocessOptions",
     "SnaphuOptions",
-    "TophuOptions",
     "SpurtOptions",
+    "TophuOptions",
+    "UnwrapOptions",
 ]
 
 
