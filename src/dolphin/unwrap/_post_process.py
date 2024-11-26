@@ -110,26 +110,30 @@ def interpolate_masked_gaps(
 
     # Calculate ambiguities for valid unwrapped pixels
     valid_pixels = ifg_valid & unw_valid
-    ambiguities = get_2pi_ambiguities(unw[::4, ::4][valid_pixels[::4, ::4]])
+    # Work with a subsampled version for the nearest interpolator to speed it up
+    sub = 4
+    ambiguities = get_2pi_ambiguities(unw[::sub, ::sub][valid_pixels[::sub, ::sub]])
 
     # Get coordinates for valid pixels and pixels to interpolate
-    valid_coords = np.array(np.where(valid_pixels[::4, ::4])).T
-    interp_coords = np.array(np.where(interpolate_mask[::4, ::4])).T
+    valid_coords = np.array(np.where(valid_pixels[::sub, ::sub])).T
+    interp_coords = np.array(np.where(interpolate_mask[::sub, ::sub])).T
 
     # Create and apply the interpolator
     interpolator = NearestNDInterpolator(valid_coords, ambiguities)
-    interpolated_ambiguities = interpolator(interp_coords, workers=1)
+    interpolated_ambiguities = interpolator(interp_coords)
 
     # Apply interpolated ambiguities to the wrapped phase
-    intp_a = np.zeros(ifg[::4, ::4].shape, dtype=int)
-    intp_a[interpolate_mask[::4, ::4]] = interpolated_ambiguities
+    # Fill in the subsampled version, then resize it to full
+    interpolated_sub = np.zeros(ifg[::sub, ::sub].shape, dtype=int)
+    interpolated_sub[interpolate_mask[::sub, ::sub]] = interpolated_ambiguities
+
     unw[interpolate_mask] = np.angle(ifg[interpolate_mask]) + (
-        resize(intp_a, ifg.shape).astype(int)[interpolate_mask] * TWOPI
+        TWOPI
+        * np.round(resize(interpolated_sub, ifg.shape)).astype(int)[interpolate_mask]
     )
 
 
 def resize(image: ArrayLike, output_shape_2d: tuple[int, int]):
-
     input_shape = image.shape[-2:]
     factors = np.divide(input_shape, output_shape_2d)
 
