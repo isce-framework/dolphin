@@ -6,6 +6,8 @@ dependencies:
   - pip>=21.3  # https://pip.pypa.io/en/stable/reference/build-system/pyproject-toml/#editable-installation
   - git  # for pip install, due to setuptools_scm
   - gdal>=3.3
+  - libgdal-netcdf
+  - libgdal-hdf5
   - h5py>=3.6
   - hdf5!=1.12.2 # https://github.com/SciTools/iris/issues/5187 and https://github.com/pydata/xarray/issues/7549
   - jax>=0.4.19
@@ -16,7 +18,7 @@ dependencies:
   - pyproj>=3.3
   - rasterio>=1.3
   - ruamel.yaml>=0.15
-  - scipy>=1.9 # "scipy 0.16+ is required for linear algebra", numba. 1.9 is the oldest version working with jax=0.4.19
+  - scipy>=1.12 # "scipy 0.16+ is required for linear algebra", numba. 1.9 is the oldest version working with jax=0.4.19
   - threadpoolctl>=3.0
   - tqdm>=4.60
   - typing_extensions>=3.10

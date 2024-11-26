@@ -5,6 +5,7 @@ import logging
 import numpy as np
 from numba import njit, stencil
 from numpy.typing import ArrayLike, NDArray
+from scipy import ndimage
 from scipy.interpolate import NearestNDInterpolator
 
 TWOPI = 2 * np.pi
@@ -109,17 +110,34 @@ def interpolate_masked_gaps(
 
     # Calculate ambiguities for valid unwrapped pixels
     valid_pixels = ifg_valid & unw_valid
-    ambiguities = get_2pi_ambiguities(unw[valid_pixels])
+    # Work with a subsampled version for the nearest interpolator to speed it up
+    sub = 4
+    ambiguities = get_2pi_ambiguities(unw[::sub, ::sub][valid_pixels[::sub, ::sub]])
 
     # Get coordinates for valid pixels and pixels to interpolate
-    valid_coords = np.array(np.where(valid_pixels)).T
-    interp_coords = np.array(np.where(interpolate_mask)).T
+    valid_coords = np.array(np.where(valid_pixels[::sub, ::sub])).T
+    interp_coords = np.array(np.where(interpolate_mask[::sub, ::sub])).T
 
     # Create and apply the interpolator
     interpolator = NearestNDInterpolator(valid_coords, ambiguities)
     interpolated_ambiguities = interpolator(interp_coords)
 
     # Apply interpolated ambiguities to the wrapped phase
+    # Fill in the subsampled version, then resize it to full
+    interpolated_sub = np.zeros(ifg[::sub, ::sub].shape, dtype=int)
+    interpolated_sub[interpolate_mask[::sub, ::sub]] = interpolated_ambiguities
+
     unw[interpolate_mask] = np.angle(ifg[interpolate_mask]) + (
-        interpolated_ambiguities * TWOPI
+        TWOPI
+        * np.round(_resize(interpolated_sub, ifg.shape)).astype(int)[interpolate_mask]
     )
+
+
+def _resize(image: ArrayLike, output_shape: tuple[int, int]):
+    """Resize `image` to be the same shape as `output_shape`."""
+    input_shape = image.shape[-2:]
+    factors = np.divide(input_shape, output_shape)
+
+    # Translate modes used by np.pad to those used by scipy.ndimage
+    zoom_factors = [1 / f for f in factors]
+    return ndimage.zoom(image, zoom_factors, grid_mode=True, mode="grid-constant")
