@@ -155,7 +155,9 @@ def unwrap_spurt(
         options.temporal_coherence_threshold,
         unw_filenames=unw_filenames,
     )
-    filled_masked_unw_regions(unw_filenames, ifg_filenames)
+
+    if options.run_ambiguity_interpolation:
+        filled_masked_unw_regions(unw_filenames, ifg_filenames)
     return unw_filenames, conncomp_filenames
 
 
