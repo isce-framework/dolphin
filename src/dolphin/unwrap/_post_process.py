@@ -129,13 +129,14 @@ def interpolate_masked_gaps(
 
     unw[interpolate_mask] = np.angle(ifg[interpolate_mask]) + (
         TWOPI
-        * np.round(resize(interpolated_sub, ifg.shape)).astype(int)[interpolate_mask]
+        * np.round(_resize(interpolated_sub, ifg.shape)).astype(int)[interpolate_mask]
     )
 
 
-def resize(image: ArrayLike, output_shape_2d: tuple[int, int]):
+def _resize(image: ArrayLike, output_shape: tuple[int, int]):
+    """Resize `image` to be the same shape as `output_shape`."""
     input_shape = image.shape[-2:]
-    factors = np.divide(input_shape, output_shape_2d)
+    factors = np.divide(input_shape, output_shape)
 
     # Translate modes used by np.pad to those used by scipy.ndimage
     zoom_factors = [1 / f for f in factors]
