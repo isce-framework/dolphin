@@ -6,6 +6,7 @@
 [![Conda-Forge][conda-badge]][conda-link]
 [![PyPI platforms][pypi-platforms]][pypi-link]
 [![GitHub Discussion][github-discussions-badge]][github-discussions-link]
+[![DOI](https://joss.theoj.org/papers/10.21105/joss.06997/status.svg)](https://doi.org/10.21105/joss.06997)
 
 <!-- prettier-ignore-start -->
 [conda-badge]:              https://img.shields.io/conda/vn/conda-forge/dolphin

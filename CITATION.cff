@@ -1,0 +1,80 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+authors:
+- family-names: "Staniewicz"
+  given-names: "Scott J."
+  orcid: "https://orcid.org/0000-0002-3055-5731"
+  affiliation: Jet Propulsion Laboratory, California Institute of Technology
+- family-names: "Mirzaee"
+  given-names: "Sara"
+  orcid: "https://orcid.org/0000-0001-8194-5951"
+  affiliation: Jet Propulsion Laboratory, California Institute of Technology
+- family-names: "Gunter"
+  given-names: "Geoffrey M."
+  orcid: "https://orcid.org/0000-0003-4612-0887"
+  affiliation: Jet Propulsion Laboratory, California Institute of Technology
+- family-names: "Oliver-Cabrera"
+  given-names: "Talib"
+  orcid: "https://orcid.org/0000-0002-2315-4710"
+  affiliation: Jet Propulsion Laboratory, California Institute of Technology
+- family-names: "Havazli"
+  given-names: "Emre"
+  orcid: "https://orcid.org/0000-0002-1236-7067"
+  affiliation: Jet Propulsion Laboratory, California Institute of Technology
+- family-names: "Fattahi"
+  given-names: "Heresh"
+  orcid: "https://orcid.org/0000-0001-6926-4387"
+  affiliation: Jet Propulsion Laboratory, California Institute of Technology
+- family-names: "Sangha"
+  orcid: "https://orcid.org/0000-0002-7458-9992"
+  given-names: "Simran S."
+  affiliation: Jet Propulsion Laboratory, California Institute of Technology
+- family-names: "Burns"
+  given-names: "Ryan"
+  affiliation: Jet Propulsion Laboratory, California Institute of Technology
+- family-names: "Jeon"
+  given-names: "Seyeon"
+  affiliation: Jet Propulsion Laboratory, California Institute of Technology
+license: BSD-3-Clause OR Apache-2.0
+doi: 10.5281/zenodo.14041319
+repository-code: "https://github.com/isce-framework/dolphin"
+preferred-citation:
+  type: article
+  authors:
+  - family-names: "Staniewicz"
+    given-names: "Scott J."
+    orcid: "https://orcid.org/0000-0002-3055-5731"
+    affiliation: Jet Propulsion Laboratory, California Institute of Technology
+  - family-names: "Mirzaee"
+    given-names: "Sara"
+    orcid: "https://orcid.org/0000-0001-8194-5951"
+    affiliation: Jet Propulsion Laboratory, California Institute of Technology
+  - family-names: "Gunter"
+    given-names: "Geoffrey M."
+    orcid: "https://orcid.org/0000-0003-4612-0887"
+    affiliation: Jet Propulsion Laboratory, California Institute of Technology
+  - family-names: "Oliver-Cabrera"
+    given-names: "Talib"
+    orcid: "https://orcid.org/0000-0002-2315-4710"
+    affiliation: Jet Propulsion Laboratory, California Institute of Technology
+  - family-names: "Havazli"
+    given-names: "Emre"
+    orcid: "https://orcid.org/0000-0002-1236-7067"
+    affiliation: Jet Propulsion Laboratory, California Institute of Technology
+  - family-names: "Fattahi"
+    given-names: "Heresh"
+    orcid: "https://orcid.org/0000-0001-6926-4387"
+    affiliation: Jet Propulsion Laboratory, California Institute of Technology
+  date-published: 2024-11-13
+  doi: 10.21105/joss.06997
+  issn: 2475-9066
+  issue: 103
+  journal: Journal of Open Source Software
+  publisher:
+    name: Open Journals
+  start: 6997
+  title: "Dolphin: A Python package for large-scale InSAR PS/DS processing"
+  type: article
+  url: "https://joss.theoj.org/papers/10.21105/joss.06997"
+  volume: 9
+title: "Dolphin: A Python package for large-scale InSAR PS/DS processing"
