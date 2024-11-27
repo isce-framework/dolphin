@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import multiprocessing as mp
-from concurrent.futures import ProcessPoolExecutor
+from tqdm.contrib.concurrent import process_map
 from itertools import repeat
 from pathlib import Path
 from typing import Sequence
@@ -157,9 +157,10 @@ def filter_rasters(
     cor_filenames: list[Path] | None = None,
     conncomp_filenames: list[Path] | None = None,
     temporal_coherence_filename: Path | None = None,
-    wavelength_cutoff: float = 50_000,
-    correlation_cutoff: float = 0.5,
     output_dir: Path | None = None,
+    wavelength_cutoff: float = 50_000,
+    fill_value: float | None = None,
+    correlation_cutoff: float = 0.5,
     max_workers: int = 4,
 ) -> list[Path]:
     """Filter a list of unwrapped interferogram files using a long-wavelength filter.
@@ -186,6 +187,10 @@ def filter_rasters(
     correlation_cutoff : float, optional
         Threshold of correlation (if passing `cor_filenames`) to use to ignore pixels
         during filtering.
+    fill_value : float, optional
+        Value to place in output pixels which were masked.
+        If `None`, masked pixels are filled with the ramp value fitted
+        before filtering to suppress outliers.
     output_dir : Path | None, optional
         Directory to save the filtered results.
         If None, saves in the same location as inputs with .filt.tif extension.
@@ -204,9 +209,7 @@ def filter_rasters(
     """
     from dolphin import io
 
-    bad_pixel_mask = np.zeros(
-        io.get_raster_xysize(unw_filenames[0])[::-1], dtype="bool"
-    )
+    bad_pixel_mask = np.zeros(io.get_raster_shape(unw_filenames[0])[-2:], dtype="bool")
     if temporal_coherence_filename:
         bad_pixel_mask = bad_pixel_mask | (
             io.load_gdal(temporal_coherence_filename) < 0.5
@@ -216,21 +219,31 @@ def filter_rasters(
         assert unw_filenames
         output_dir = unw_filenames[0].parent
     output_dir.mkdir(exist_ok=True)
-    ctx = mp.get_context("spawn")
-
-    with ProcessPoolExecutor(max_workers, mp_context=ctx) as pool:
-        return list(
-            pool.map(
-                _filter_and_save,
-                unw_filenames,
-                cor_filenames or repeat(None),
-                conncomp_filenames or repeat(None),
-                repeat(output_dir),
-                repeat(wavelength_cutoff),
-                repeat(bad_pixel_mask),
-                repeat(correlation_cutoff),
-            )
-        )
+    # ctx = mp.get_context("spawn")
+    # return list(
+    #     ctx.Pool(max_workers).map(
+    #         _filter_and_save,
+    #         unw_filenames,
+    #         cor_filenames or repeat(None),
+    #         conncomp_filenames or repeat(None),
+    #         repeat(output_dir),
+    #         repeat(wavelength_cutoff),
+    #         repeat(bad_pixel_mask),
+    #         repeat(correlation_cutoff),
+    #         repeat(fill_value),
+    #     )
+    # )
+    return process_map(
+        _filter_and_save,
+        unw_filenames,
+        cor_filenames or repeat(None),
+        conncomp_filenames or repeat(None),
+        repeat(output_dir),
+        repeat(wavelength_cutoff),
+        repeat(bad_pixel_mask),
+        repeat(correlation_cutoff),
+        repeat(fill_value),
+    )
 
 
 def _filter_and_save(
@@ -241,6 +254,7 @@ def _filter_and_save(
     wavelength_cutoff: float,
     bad_pixel_mask: NDArray[np.bool_],
     correlation_cutoff: float = 0.5,
+    fill_value: float | None = None,
 ) -> Path:
     """Filter one interferogram (wrapper for multiprocessing)."""
     from dolphin import io
@@ -262,6 +276,7 @@ def _filter_and_save(
         bad_pixel_mask=bad_pixel_mask,
         pixel_spacing=pixel_spacing,
         workers=1,
+        fill_value=fill_value,
     )
     io.round_mantissa(filt_arr, keep_bits=9)
     output_name = output_dir / Path(unw_filename).with_suffix(".filt.tif").name
