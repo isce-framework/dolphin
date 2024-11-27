@@ -161,6 +161,7 @@ def filter_rasters(
     wavelength_cutoff: float = 50_000,
     fill_value: float | None = None,
     correlation_cutoff: float = 0.5,
+    temporal_coherence_cutoff: float = 0.5,
     max_workers: int = 4,
 ) -> list[Path]:
     """Filter a list of unwrapped interferogram files using a long-wavelength filter.
@@ -187,6 +188,9 @@ def filter_rasters(
     correlation_cutoff : float, optional
         Threshold of correlation (if passing `cor_filenames`) to use to ignore pixels
         during filtering.
+    temporal_coherence_cutoff : float, optional
+        Threshold of temporal_coherence to use to ignore pixels during filtering.
+        Default is 0.5.
     fill_value : float, optional
         Value to place in output pixels which were masked.
         If `None`, masked pixels are filled with the ramp value fitted
@@ -202,17 +206,13 @@ def filter_rasters(
     list[Path]
         Output filtered rasters.
 
-    Notes
-    -----
-    - If temporal_coherence_filename is provided, pixels with coherence < 0.5 are masked
-
     """
     from dolphin import io
 
     bad_pixel_mask = np.zeros(io.get_raster_shape(unw_filenames[0])[-2:], dtype="bool")
     if temporal_coherence_filename:
         bad_pixel_mask = bad_pixel_mask | (
-            io.load_gdal(temporal_coherence_filename) < 0.5
+            io.load_gdal(temporal_coherence_filename) < temporal_coherence_cutoff
         )
 
     if output_dir is None:
@@ -243,6 +243,7 @@ def filter_rasters(
         repeat(bad_pixel_mask),
         repeat(correlation_cutoff),
         repeat(fill_value),
+        max_workers=max_workers,
     )
 
 
