@@ -168,9 +168,7 @@ def run(
             ): burst
             for i, (burst, burst_cfg) in enumerate(wrapped_phase_cfgs)
         }
-        for fut in fut_to_burst:
-            burst = fut_to_burst[fut]
-
+        for fut, burst in fut_to_burst.items():
             (
                 cur_ifg_list,
                 comp_slcs,

@@ -1,9 +1,9 @@
 from enum import Enum
 
 __all__ = [
+    "CallFunc",
     "ShpMethod",
     "UnwrapMethod",
-    "CallFunc",
 ]
 
 
