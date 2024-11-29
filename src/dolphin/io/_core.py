@@ -86,7 +86,7 @@ DEFAULT_HDF5_OPTIONS = {
 def _get_gdal_ds(filename: Filename) -> gdal.Dataset:
     if str(filename).startswith("s3://"):
         return gdal.Open(S3Path(str(filename)).to_gdal())
-    return gdal.Open(filename)
+    return gdal.Open(fspath(filename))
 
 
 def load_gdal(
