@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import multiprocessing as mp
-from tqdm.contrib.concurrent import process_map
 from itertools import repeat
 from pathlib import Path
 from typing import Sequence
@@ -9,6 +7,7 @@ from typing import Sequence
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
 from scipy import fft, ndimage
+from tqdm.contrib.concurrent import process_map
 
 
 def filter_long_wavelength(
@@ -219,20 +218,7 @@ def filter_rasters(
         assert unw_filenames
         output_dir = unw_filenames[0].parent
     output_dir.mkdir(exist_ok=True)
-    # ctx = mp.get_context("spawn")
-    # return list(
-    #     ctx.Pool(max_workers).map(
-    #         _filter_and_save,
-    #         unw_filenames,
-    #         cor_filenames or repeat(None),
-    #         conncomp_filenames or repeat(None),
-    #         repeat(output_dir),
-    #         repeat(wavelength_cutoff),
-    #         repeat(bad_pixel_mask),
-    #         repeat(correlation_cutoff),
-    #         repeat(fill_value),
-    #     )
-    # )
+
     return process_map(
         _filter_and_save,
         unw_filenames,
