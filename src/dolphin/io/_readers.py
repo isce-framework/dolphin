@@ -995,7 +995,7 @@ def _assert_images_same_size(files):
     with ThreadPoolExecutor(5) as executor:
         sizes = list(executor.map(io.get_raster_xysize, files))
     if len(set(sizes)) > 1:
-        msg = f"Not files have same raster (x, y) size:\n{set(sizes)}"
+        msg = f"Not all files have the same raster (x, y) size:\n{set(sizes)}"
         raise ValueError(msg)
 
 
