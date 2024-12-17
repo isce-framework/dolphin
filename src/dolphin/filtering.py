@@ -69,6 +69,9 @@ def filter_long_wavelength(
     # Remove the plane, setting to 0 where we had no data for the plane fit:
     unw_ifg_interp = np.where(total_valid_mask, unw0, plane)
 
+    # Fill the boundary area by reflecting pixel values
+    reflect_fill = _fill_boundary_area(unw_ifg_interp, in_bounds_pixels)
+
     # Find the filter `sigma` which gives the correct cutoff in meters
     sigma = _compute_filter_sigma(wavelength_cutoff, pixel_spacing, cutoff_value=0.5)
 
@@ -84,7 +87,7 @@ def filter_long_wavelength(
     # See here for illustration of `mode="reflect"`
     # https://scikit-image.org/docs/stable/auto_examples/transform/plot_edge_modes.html#interpolation-edge-modes
     padded = np.pad(
-        unw_ifg_interp, ((pad_rows, pad_rows), (pad_cols, pad_cols)), mode="reflect"
+        reflect_fill, ((pad_rows, pad_rows), (pad_cols, pad_cols)), mode="reflect"
     )
 
     # Apply Gaussian filter
@@ -101,6 +104,44 @@ def filter_long_wavelength(
         return np.where(total_valid_mask, filtered_ifg, fill_value)
     else:
         return filtered_ifg
+
+
+def _fill_boundary_area(unw_ifg_interp: np.ndarray, mask: np.ndarray) -> np.ndarray:
+    """Fill the boundary area by reflecting pixel values."""
+    # Rotate the data to align the frame
+    rt_unw_ifg = ndimage.rotate(unw_ifg_interp, 8.6, reshape=False)
+
+    rt_pad = 700  # Apply padding for rotating back
+    # Fill boundary area using np.pad for each horizontal step and
+    reflect_filled = np.pad(
+        rt_unw_ifg[846:6059, :],
+        ((846, rt_unw_ifg.shape[0] - 6059), (0, 0)),
+        mode="reflect",
+    )
+    reflect_filled = np.pad(
+        reflect_filled[618:6241, :],
+        ((618, rt_unw_ifg.shape[0] - 6241), (0, 0)),
+        mode="reflect",
+    )
+    reflect_filled = np.pad(
+        reflect_filled[399:6447, :],
+        ((399 + rt_pad, rt_unw_ifg.shape[0] - 6447 + rt_pad), (0, 0)),
+        mode="reflect",
+    )
+    # Fill vertical boundary area using np.pad
+    reflect_filled = np.pad(
+        reflect_filled[:, 591:8861],
+        ((0, 0), (591 + rt_pad, rt_unw_ifg.shape[1] - 8861 + rt_pad)),
+        mode="reflect",
+    )
+
+    # Rotate back to original angle
+    reflect_filled = ndimage.rotate(reflect_filled, -8.6, reshape=False)
+    reflect_filled = reflect_filled[rt_pad:-rt_pad, rt_pad:-rt_pad]
+    # Copy original in-bound pixels
+    reflect_filled[mask] = unw_ifg_interp[mask]
+
+    return reflect_filled
 
 
 def _compute_filter_sigma(
