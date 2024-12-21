@@ -212,7 +212,7 @@ class TimeseriesOptions(BaseModel, extra="forbid"):
         ),
     )
     method: Literal["L1", "L2"] = Field(
-        "L2", description="Norm to use during timeseries inversion."
+        "L1", description="Norm to use during timeseries inversion."
     )
     reference_point: Optional[tuple[int, int]] = Field(
         None,
