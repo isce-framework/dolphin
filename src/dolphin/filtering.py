@@ -9,7 +9,6 @@ from typing import Sequence
 
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
-from osgeo import gdal
 from osgeo_utils.gdal_fillnodata import gdal_fillnodata
 from scipy import fft, ndimage
 
@@ -76,13 +75,9 @@ def filter_long_wavelength(
     # Work on a copy of the displacement field to avoid modifying the input
     displacement = np.nan_to_num(unwrapped_phase)
 
-    good_pixel_mask = np.logical_not(bad_pixel_mask)
-
     # Take either nan or 0 pixels in `unwrapped_phase` to be nodata
     nodata_mask = displacement == 0
     in_bounds_pixels = np.logical_not(nodata_mask)
-
-    total_valid_mask = in_bounds_pixels & good_pixel_mask
 
     # Convert bad pixels to NaN for GDAL fillnodata
     displacement[bad_pixel_mask] = np.nan
@@ -104,12 +99,13 @@ def filter_long_wavelength(
         temp_dst = tmp_path / "filled.tif"
 
         # Save the array to a temporary GeoTIFF
-        driver = gdal.GetDriverByName("GTiff")
-        dset = driver.Create(str(temp_src), cols, rows, 1, gdal.GDT_Float32)
-        band = dset.GetRasterBand(1)
-        band.WriteArray(displacement)
-        band.SetNoDataValue(np.nan)
-        dset = None  # Close the dset
+        io.write_arr(
+            arr=displacement,
+            nodata=np.nan,
+            output_name=temp_src,
+            shape=(rows, cols),
+            dtype=displacement.dtype,
+        )
 
         # Fill nodata using GDAL
         gdal_fillnodata(
@@ -123,44 +119,18 @@ def filter_long_wavelength(
 
         filled_data = io.load_gdal(temp_dst, masked=True)
 
-    padded = filled_data
-
-    # We need to find the new pixels which are valid after filling
-    # These are going to be out of bounds in the original image,
-    # but we don't want to ignore them during the low pass filter.
-    # The boundary pixels are the ones which will allow the edge values
-    # to be smoothed out without.
-    new_valid = np.isnan(displacement) & ~np.isnan(filled_data)
-
-    bad_pixel_mask_ext = bad_pixel_mask.copy()
-    bad_pixel_mask_ext[new_valid] = False
-
-    # # Remove the plane, setting to 0 where we had no data for the plane fit:
-    # unw_ifg_interp = np.where(total_valid_mask, displacement, 0)
-
-    # # Pad the array with edge values
-    # # The padding extends further than the default "radius = 2*sigma + 1",
-    # # which given specified in `gaussian_filter`
-    # # https://docs.scipy.org/doc/scipy/reference/generated/scipy.ndimage.gaussian_filter.html#scipy.ndimage.gaussian_filter
-    # pad_rows = pad_cols = int(3 * sigma)
-    # # See here for illustration of `mode="reflect"`
-    # # https://scikit-image.org/docs/stable/auto_examples/transform/plot_edge_modes.html#interpolation-edge-modes
-    # padded = np.pad(
-    #     unw_ifg_interp, ((pad_rows, pad_rows), (pad_cols, pad_cols)), mode="reflect"
-    # )
-
     # Apply Gaussian filter
-    result = fft.fft2(padded, workers=workers)
-    result = ndimage.fourier_gaussian(result, sigma=sigma)
+    lowpass_filtered = fft.fft2(filled_data, workers=workers)
+    lowpass_filtered = ndimage.fourier_gaussian(lowpass_filtered, sigma=sigma)
     # Make sure to only take the real part (ifft returns complex)
-    result = fft.ifft2(result, workers=workers).real.astype(unwrapped_phase.dtype)
-
-    # Crop back to original size
-    # lowpass_filtered = result[pad_rows:-pad_rows, pad_cols:-pad_cols]
-    lowpass_filtered = result
+    lowpass_filtered = fft.ifft2(lowpass_filtered, workers=workers).real.astype(
+        unwrapped_phase.dtype
+    )
 
     filtered_ifg = filled_data - lowpass_filtered * in_bounds_pixels
     if fill_value is not None:
+        good_pixel_mask = np.logical_not(bad_pixel_mask)
+        total_valid_mask = in_bounds_pixels & good_pixel_mask
         return np.where(total_valid_mask, filtered_ifg, fill_value)
     else:
         return filtered_ifg
