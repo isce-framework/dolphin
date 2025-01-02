@@ -10,12 +10,16 @@ def test_filter_long_wavelength():
     # Check filtering with ramp phase
     y, x = np.ogrid[-3:3:512j, -3:3:512j]
     unw_ifg = np.pi * (x + y)
+
     corr = np.ones(unw_ifg.shape, dtype=np.float32)
     bad_pixel_mask = corr < 0.5
 
     # Filtering
     filtered_ifg = filtering.filter_long_wavelength(
-        unw_ifg, bad_pixel_mask=bad_pixel_mask, pixel_spacing=1000
+        unw_ifg,
+        bad_pixel_mask=bad_pixel_mask,
+        pixel_spacing=100,
+        wavelength_cutoff=1_000,
     )
     np.testing.assert_allclose(
         filtered_ifg[10:-10, 10:-10],
