@@ -117,7 +117,7 @@ def filter_long_wavelength(
             quiet=True,
         )
 
-        filled_data = io.load_gdal(temp_dst, masked=True)
+        filled_data = io.load_gdal(temp_dst, masked=True).filled(0)
 
     # Apply Gaussian filter
     lowpass_filtered = fft.fft2(filled_data, workers=workers)
