@@ -118,10 +118,22 @@ def filter_long_wavelength(
             max_distance=max_distance_pixels,
             smoothing_iterations=0,
             interpolation="nearest",
+            quiet=True,
         )
 
-    filled_data = io.load_gdal(temp_dst, masked=True)
+        filled_data = io.load_gdal(temp_dst, masked=True)
+
     padded = filled_data
+
+    # We need to find the new pixels which are valid after filling
+    # These are going to be out of bounds in the original image,
+    # but we don't want to ignore them during the low pass filter.
+    # The boundary pixels are the ones which will allow the edge values
+    # to be smoothed out without.
+    new_valid = np.isnan(displacement) & ~np.isnan(filled_data)
+
+    bad_pixel_mask_ext = bad_pixel_mask.copy()
+    bad_pixel_mask_ext[new_valid] = False
 
     # # Remove the plane, setting to 0 where we had no data for the plane fit:
     # unw_ifg_interp = np.where(total_valid_mask, displacement, 0)
