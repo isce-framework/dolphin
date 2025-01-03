@@ -417,7 +417,7 @@ def _read_3d(
     key: tuple[Index, ...],
     readers: Sequence[DatasetReader],
     num_threads: int = 1,
-    keepdims: bool = False,
+    keepdims: bool = True,
 ):
     bands, r_slice, c_slice = _unpack_3d_slices(key)
 
@@ -448,7 +448,7 @@ class BaseStackReader(StackReader):
 
     file_list: Sequence[Filename]
     readers: Sequence[DatasetReader]
-    keepdims: bool = False
+    keepdims: bool = True
     num_threads: int = 1
     nodata: Optional[float] = None
 
@@ -636,7 +636,7 @@ class RasterStackReader(BaseStackReader):
         cls,
         file_list: Sequence[Filename],
         bands: int | Sequence[int] = 1,
-        keepdims: bool = False,
+        keepdims: bool = True,
         keep_open: bool = False,
         num_threads: int = 1,
         nodata: Optional[float] = None,

@@ -22,7 +22,9 @@ from dolphin.utils import _get_path_from_gdal_str
 # Note: uses the fixtures from conftest.py
 
 # Get combinations of slices
-slices_to_test = [slice(None), 1, slice(0, 10, 2)]
+# TODO: if we want to test `1`, and have it work the same as
+# numpy slicing which drops the dimension, we'll need to change this
+slices_to_test = [slice(None), slice(1), slice(0, 10, 2)]
 
 
 @pytest.fixture(scope="module")
