@@ -55,6 +55,9 @@ class PhaseLinkOutput(NamedTuple):
     estimator: np.ndarray  # dtype: np.int8
     """The estimator type used for phase linking at each pixel."""
 
+    crlb_std_dev: np.ndarray
+    """The CRLB standard deviation at each pixel."""
+
     avg_coh: np.ndarray | None = None
     """Average coherence across dates for each SLC."""
 
@@ -242,6 +245,7 @@ def run_phase_linking(
         # Convert the rest to numpy for writing
         eigenvalues=np.asarray(cpl_out.eigenvalues),
         estimator=np.asarray(cpl_out.estimator),
+        crlb_std_dev=np.asarray(cpl_out.crlb_std_dev),
         avg_coh=cpl_out.avg_coh,
     )
 
@@ -333,18 +337,21 @@ def run_cpl(
         C_arrays = C_arrays.at[:, :, u_rows, u_cols].set(0.0 + 0j)
         C_arrays = C_arrays.at[:, :, l_rows, l_cols].set(0.0 + 0j)
 
-    cpx_phase, eigenvalues, estimator = process_coherence_matrices(
+    num_looks = (2 * half_window[0] + 1) * (2 * half_window[1] + 1)
+    cpx_phase, eigenvalues, estimator, crlb_std_dev = process_coherence_matrices(
         C_arrays,
         use_evd=use_evd,
         beta=beta,
         zero_correlation_threshold=zero_correlation_threshold,
         reference_idx=reference_idx,
+        num_looks=num_looks,
     )
     # Get the temporal coherence
     temp_coh = metrics.estimate_temp_coh(cpx_phase, C_arrays)
 
     # Reshape the (rows, cols, nslcs) output to be same as input stack
     cpx_phase_reshaped = jnp.moveaxis(cpx_phase, -1, 0)
+    crlb_std_dev_reshaped = jnp.moveaxis(crlb_std_dev, -1, 0)
 
     # Get the SHP counts for each pixel (if not using Rect window)
     if neighbor_arrays is None:
@@ -365,6 +372,7 @@ def run_cpl(
         shp_counts=shp_counts,
         eigenvalues=eigenvalues,
         estimator=estimator,
+        crlb_std_dev=crlb_std_dev_reshaped,
         avg_coh=avg_coh,
     )
 
@@ -376,7 +384,8 @@ def process_coherence_matrices(
     beta: float = 0.0,
     zero_correlation_threshold: float = 0.0,
     reference_idx: int = 0,
-) -> tuple[Array, Array, Array]:
+    num_looks: int = 1,
+) -> tuple[Array, Array, Array, Array]:
     """Estimate the linked phase for a stack of coherence matrices.
 
     This function is used after coherence estimation to estimate the
@@ -400,6 +409,9 @@ def process_coherence_matrices(
     reference_idx : int, optional
         The index of the reference acquisition, by default 0
         All outputs are multiplied by the conjugate of the data at this index.
+    num_looks : int, optional
+        The number of looks used to form the input correlation data, used
+        during CRLB computation.
 
     Returns
     -------
@@ -411,6 +423,8 @@ def process_coherence_matrices(
     estimator : Array
         The estimator used at each pixel.
         0 = EVD, 1 = EMI
+    crlb_std_dev : ndarray[float32], shape = (rows, cols, nslc)
+        The CRLB standard deviation at each pixel.
 
     """
     rows, cols, n, _ = C_arrays.shape
@@ -424,13 +438,13 @@ def process_coherence_matrices(
         # EMI
         # estimate the wrapped phase based on the EMI paper
         # *smallest* eigenvalue decomposition of the (|Gamma|^-1  *  C) matrix
+        Gamma = jnp.abs(C_arrays)
 
         # Identity used for regularization and for solving
-        Id = jnp.eye(n, dtype=C_arrays.dtype)
+        Id = jnp.eye(n, dtype=Gamma.dtype)
         # repeat the identity matrix for each pixel
         Id = jnp.tile(Id, (rows, cols, 1, 1))
 
-        Gamma = jnp.abs(C_arrays)
         if beta > 0:
             # Perform regularization
             Gamma = (1 - beta) * Gamma + beta * Id
@@ -488,7 +502,68 @@ def process_coherence_matrices(
     # Make sure each still has 3 dims, then reference all phases to `ref`
     evd_estimate = eig_vecs * jnp.exp(-1j * jnp.angle(ref[:, :, None]))
 
-    return evd_estimate, eig_vals, estimator.astype("uint8")
+    # Compute Fisher Information Matrix
+    X = 2 * num_looks * (Gamma * Gamma_inv - Id.astype("float32"))
+    # Compute the CRLB standard deviation
+
+    # # Normally, we construct the Theta partial derivative matrix like this
+    # Theta = np.zeros((N, N - 1))
+    # First row is 0 (using day 0 as reference)
+    # Theta[1:, :] = np.eye(N - 1)  # Last N-1 rows are identity
+    # More efficient computation of Theta.T @ X @ Theta
+    # Instead of explicit matrix multiplication, directly extract relevant elements
+    # We want all elements except the reference row/column
+    row_idx = jnp.concatenate(
+        [jnp.arange(reference_idx), jnp.arange(reference_idx + 1, n)]
+    )
+    projected_fim = X[..., row_idx[:, None], row_idx]
+
+    # Compute CRLB for each pixel
+    # Invert each (n-1, n-1) matrix in the batch
+    # crlb = jnp.linalg.inv(projected_fim)  # Shape: (rows, cols, n-1, n-1)
+
+    # repeat the (n-1, n-1) identity matrix for each pixel
+    Id = jnp.tile(jnp.eye(n - 1, dtype=projected_fim.dtype), (rows, cols, 1, 1))
+    cho, is_lower = cho_factor(projected_fim)
+    crlb = cho_solve((cho, is_lower), Id)  # Shape: (rows, cols, n-1, n-1)
+
+    # Extract standard deviations from the diagonal of each CRLB matrix
+    # Shape: (rows, cols, n-1)
+    crlb_std_dev = jnp.sqrt(jnp.diagonal(crlb, axis1=-2, axis2=-1))
+
+    # # ----------------------
+    # # CRLB COMPUTATION
+    # # ----------------------
+    # # Build the B matrix that maps N phases to the N-1 free phase differences
+    # B = jnp.zeros((n, n - 1), dtype="int16")
+    # B = B.at[:reference_idx, :].set(jnp.eye(reference_idx, dtype=C_arrays.dtype))
+    # B = B.at[reference_idx + 1 :, :].set(
+    #     jnp.eye(n - reference_idx - 1, dtype=C_arrays.dtype)
+    # )
+    # # shape of B is (n, n-1)
+    # # shape of B.T is (n-1, n)
+    # # shape of X is (rows, cols, n, n)
+    # # 1) Build the Fisher Information:  FIM_{(r,c)} = B^T @ X_{(r,c)} @ B
+    # #    We can do this in one shot with einsum:
+    # projected_fim = jnp.einsum(
+    #     "ij,rcjk,kl->rcil",
+    #     B.T,  # (n-1, n)     -> "ij"
+    #     X,  # (rows, cols, n, n) -> "rcjk"
+    #     B,  # (n, n-1)     -> "kl"
+    # )
+    # # Now projected_fim has shape (rows, cols, n-1, n-1)
+
+    # # 2) Invert each (n-1 x n-1) sub-block via JAX's batch inversion:
+    # crlb = jnp.linalg.inv(projected_fim)  # shape (rows, cols, n-1, n-1)
+
+    # # 3) Extract diagonal and take sqrt to get std. dev. for each of the n-1 phases:
+    # crlb_diag = jnp.diagonal(crlb, axis1=-2, axis2=-1)  # shape (rows, cols, n-1)
+    # crlb_std_dev = jnp.sqrt(crlb_diag)  # shape (rows, cols, n-1)
+
+    # Insert zeros at reference_idx to match evd_estimate shape (rows, cols, n)
+    crlb_std_dev = jnp.insert(crlb_std_dev, reference_idx, 0, axis=-1)
+
+    return evd_estimate, eig_vals, estimator.astype("uint8"), crlb_std_dev
 
 
 def decimate(arr: ArrayLike, strides: Strides) -> Array:

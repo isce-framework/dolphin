@@ -30,24 +30,22 @@ def compute_crlb(
     # For direct phase estimation, Theta should be (N x (N-1))
     # This maps N-1 phase differences to N phases
     Theta = np.zeros((N, N - 1))
-    # Theta[:-1, :] = np.eye(N - 1)  # First N-1 rows are identity
-    # Theta[-1, :] = -1  # Last row is -1
-    Theta[0, :] = -1  # First row is -1 (using day 0 as reference)
+    # First row is 0 (using day 0 as reference)
     Theta[1:, :] = np.eye(N - 1)  # Last N-1 rows are identity
 
     # Compute X matrix as in equation (17)
     abs_coherence = np.abs(coherence_matrix)
     X = 2 * num_looks * (abs_coherence * inv(abs_coherence) - np.eye(N))
 
-    # Compute CRLB portions in equation (21)
-    fim = Theta.T @ X @ Theta  # Now should be (N-1 x N-1)
     if aps_variance == 0:
-        # If no APS, just use the inverse of the fim
+        # Compute CRLB portions in equation (21)
+        fim = Theta.T @ X @ Theta  # Now should be (N-1 x N-1)
         inv_fim = inv(fim)
     else:
         # Add APS contribution
         R_aps_inv = np.eye(N) / aps_variance
         # Otherwise, use full hybrid version, equation (22)
+        fim = Theta.T @ (X + R_aps_inv) @ Theta
         inv_fim = inv(fim - Theta.T @ X @ inv(X + R_aps_inv) @ X @ Theta)
 
     return inv_fim
@@ -86,3 +84,13 @@ def compute_lower_bound_std(
 
     estimator_stddev = np.sqrt(np.diag(crlb))
     return np.concatenate(([0], estimator_stddev))
+
+
+def examples(N=10, gamma0=0.6, rho=0.8):
+    """Make example covariance matrices used in Tebaldini, 2010."""
+    idxs = np.abs(np.arange(N).reshape(-1, 1) - np.arange(N).reshape(1, -1))
+    # {Γ}nm = ρ^|n−m|; ρ = 0.8  # noqa: RUF003
+    C_ar1 = rho**idxs
+    # {Γ}nm = γ0 + (1 - γ0) δ{n-m};  # noqa: RUF003
+    C_const_gamma = (1 - gamma0) * np.eye(N) + gamma0 * np.ones((N, N))
+    return C_ar1, C_const_gamma
