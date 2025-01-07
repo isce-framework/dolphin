@@ -40,15 +40,18 @@ def binary_file_list(tmp_path_factory, slc_stack):
     for i, slc in enumerate(slc_stack):
         f = tmp_path / f"test_{i}.bin"
         # Ignore warning
-        with pytest.warns(NotGeoreferencedWarning), rio.open(
-            f,
-            "w",
-            driver="ENVI",
-            width=shape[1],
-            height=shape[0],
-            count=1,
-            dtype=dtype,
-        ) as dst:
+        with (
+            pytest.warns(NotGeoreferencedWarning),
+            rio.open(
+                f,
+                "w",
+                driver="ENVI",
+                width=shape[1],
+                height=shape[0],
+                count=1,
+                dtype=dtype,
+            ) as dst,
+        ):
             dst.write(slc, 1)
         files.append(f)
 

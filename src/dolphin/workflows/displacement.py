@@ -90,6 +90,12 @@ def run(
         grouped_amp_mean_files = group_by_burst(cfg.amplitude_mean_files)
     else:
         grouped_amp_mean_files = defaultdict(list)
+    if cfg.layover_shadow_mask_files:
+        grouped_layover_shadow_mask_files = group_by_burst(
+            cfg.layover_shadow_mask_files
+        )
+    else:
+        grouped_layover_shadow_mask_files = defaultdict(list)
 
     grouped_iono_files = parse_ionosphere_files(
         cfg.correction_options.ionosphere_files, cfg.correction_options._iono_date_fmt
@@ -109,6 +115,7 @@ def run(
                     grouped_slc_files,
                     grouped_amp_mean_files,
                     grouped_amp_dispersion_files,
+                    grouped_layover_shadow_mask_files,
                 ),
             )
             for burst in grouped_slc_files
@@ -161,9 +168,7 @@ def run(
             ): burst
             for i, (burst, burst_cfg) in enumerate(wrapped_phase_cfgs)
         }
-        for fut in fut_to_burst:
-            burst = fut_to_burst[fut]
-
+        for fut, burst in fut_to_burst.items():
             (
                 cur_ifg_list,
                 comp_slcs,
@@ -230,7 +235,8 @@ def run(
     unwrapped_paths, conncomp_paths = unwrapping.run(
         ifg_file_list=stitched_paths.ifg_paths,
         cor_file_list=stitched_paths.interferometric_corr_paths,
-        temporal_coherence_file=stitched_paths.temp_coh_file,
+        temporal_coherence_filename=stitched_paths.temp_coh_file,
+        similarity_filename=stitched_paths.similarity_file,
         nlooks=nlooks,
         unwrap_options=cfg.unwrap_options,
         mask_file=cfg.mask_file,

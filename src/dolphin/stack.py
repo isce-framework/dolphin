@@ -5,6 +5,7 @@ import json
 import logging
 import warnings
 from datetime import date, datetime
+from enum import Enum
 from os import fspath
 from pathlib import Path
 from typing import Optional, Sequence
@@ -18,6 +19,14 @@ from dolphin.io import DEFAULT_DATETIME_FORMAT
 from dolphin.utils import format_dates
 
 logger = logging.getLogger(__name__)
+
+
+class CompressedSlcPlan(str, Enum):
+    """Plan for creating Compressed SLCs during phase linking."""
+
+    ALWAYS_FIRST = "always_first"
+    FIRST_PER_MINISTACK = "first_per_ministack"
+    LAST_PER_MINISTACK = "last_per_ministack"
 
 
 class BaseStack(BaseModel):
@@ -142,18 +151,18 @@ class CompressedSlcInfo(BaseModel):
         ..., description="Datetime of the last real SLC used in the compression."
     )
 
-    real_slc_file_list: list[Filename] | None = Field(
+    real_slc_file_list: Optional[list[Filename]] = Field(
         None,
         description="List of real SLC filenames in the ministack.",
     )
-    real_slc_dates: list[datetime] | None = Field(
+    real_slc_dates: Optional[list[datetime]] = Field(
         None,
         description=(
             "List of date sequences, one for each SLC in the ministack. "
             "Each item is a list/tuple of datetime.date or datetime.datetime objects."
         ),
     )
-    compressed_slc_file_list: list[Filename] | None = Field(
+    compressed_slc_file_list: Optional[list[Filename]] = Field(
         None,
         description="List of compressed SLC filenames in the ministack.",
     )
@@ -342,6 +351,11 @@ class MiniStackInfo(BaseStack):
         ),
     )
 
+    def __rich_repr__(self):
+        yield from super().__rich_repr__()
+        yield "output_reference_idx", self.output_reference_idx
+        yield "compressed_reference_idx", self.compressed_reference_idx
+
     @property
     def output_reference_date(self):
         """Date of the reference phase of the stack."""
@@ -391,6 +405,7 @@ class MiniStackPlanner(BaseStack):
         0,
         description="Index of the SLC to use as reference during phase linking",
     )
+    compressed_slc_plan: CompressedSlcPlan = CompressedSlcPlan.ALWAYS_FIRST
 
     def plan(
         self, ministack_size: int, compressed_idx: int | None = None
@@ -448,12 +463,22 @@ class MiniStackPlanner(BaseStack):
             )
             cur_output_folder = self.output_folder / new_date_str
 
-            if compressed_idx is None:
-                # TODO: To change to Ansari-style ministack references, change this
-                # so that a new `output_reference_idx` gets made
-                compressed_reference_idx = self.output_reference_idx
-            else:
+            if compressed_idx is not None:
                 compressed_reference_idx = compressed_idx
+            elif self.compressed_slc_plan == CompressedSlcPlan.ALWAYS_FIRST:
+                # Simplest operational version: CompSLCs have same base phase,
+                # but different "residual" added on
+                # We use the `output_reference_idx`, 0 by default, but this index
+                # may be passed in if we are manually specifying an output
+                compressed_reference_idx = self.output_reference_idx
+            elif self.compressed_slc_plan == CompressedSlcPlan.FIRST_PER_MINISTACK:
+                # Like Ansari, 2017 paper: each ministack is "self contained"
+                compressed_reference_idx = num_ccslc
+                # Ansari, 2017 also had output_reference_idx = num_ccslcs, and
+                # use the "Datum Adjustment" step to get outputs relative to day 0
+            elif self.compressed_slc_plan == CompressedSlcPlan.LAST_PER_MINISTACK:
+                # Alternative that allows sequential interferograms across ministacks
+                compressed_reference_idx = -1
 
             cur_ministack = MiniStackInfo(
                 file_list=combined_files,
@@ -469,3 +494,9 @@ class MiniStackPlanner(BaseStack):
             compressed_slc_infos.append(cur_comp_slc)
 
         return output_ministacks
+
+    def __rich_repr__(self):
+        yield from super().__rich_repr__()
+        yield "max_num_compressed", self.max_num_compressed
+        yield "output_reference_idx", self.output_reference_idx
+        yield "compressed_slc_plan", self.compressed_slc_plan

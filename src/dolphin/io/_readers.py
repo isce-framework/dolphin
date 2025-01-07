@@ -34,16 +34,16 @@ from ._utils import _ensure_slices, _unpack_3d_slices
 logger = logging.getLogger(__name__)
 
 __all__ = [
-    "DatasetReader",
-    "StackReader",
     "BinaryReader",
     "BinaryStackReader",
+    "DatasetReader",
+    "EagerLoader",
     "HDF5Reader",
     "HDF5StackReader",
     "RasterReader",
     "RasterStackReader",
+    "StackReader",
     "VRTStack",
-    "EagerLoader",
 ]
 
 

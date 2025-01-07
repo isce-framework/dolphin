@@ -15,7 +15,6 @@ def test_get_deps_info():
     assert "osgeo.gdal" in deps_info
     assert "numpy" in deps_info
     assert "pydantic" in deps_info
-    assert "ruamel_yaml" in deps_info
     assert "h5py" in deps_info
 
 

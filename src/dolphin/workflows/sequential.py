@@ -19,7 +19,7 @@ from dolphin import io
 from dolphin._types import Filename
 from dolphin.io import VRTStack
 from dolphin.similarity import create_similarities
-from dolphin.stack import MiniStackPlanner
+from dolphin.stack import CompressedSlcPlan, MiniStackPlanner
 
 from .config import ShpMethod
 from .single import run_wrapped_phase_single
@@ -45,6 +45,9 @@ def run_wrapped_phase_sequential(
     shp_nslc: Optional[int] = None,
     use_evd: bool = False,
     beta: float = 0.00,
+    zero_correlation_threshold: float = 0.0,
+    similarity_nearest_n: int | None = None,
+    compressed_slc_plan: CompressedSlcPlan = CompressedSlcPlan.ALWAYS_FIRST,
     max_num_compressed: int = 100,
     output_reference_idx: int = 0,
     new_compressed_reference_idx: int | None = None,
@@ -69,6 +72,7 @@ def run_wrapped_phase_sequential(
         output_folder=output_folder,
         max_num_compressed=max_num_compressed,
         output_reference_idx=output_reference_idx,
+        compressed_slc_plan=compressed_slc_plan,
     )
     ministacks = ministack_planner.plan(
         ministack_size, compressed_idx=new_compressed_reference_idx
@@ -86,6 +90,7 @@ def run_wrapped_phase_sequential(
     output_slc_files: list[list] = []
     # Each item is the temp_coh/shp_count file from a ministack
     temp_coh_files: list[Path] = []
+    similarity_files: list[Path] = []
     shp_count_files: list[Path] = []
 
     # function to check if a ministack has already been processed
@@ -119,6 +124,7 @@ def run_wrapped_phase_sequential(
                 strides=strides,
                 use_evd=use_evd,
                 beta=beta,
+                zero_correlation_threshold=zero_correlation_threshold,
                 mask_file=mask_file,
                 ps_mask_file=ps_mask_file,
                 amp_mean_file=amp_mean_file,
@@ -126,16 +132,22 @@ def run_wrapped_phase_sequential(
                 shp_method=shp_method,
                 shp_alpha=shp_alpha,
                 shp_nslc=shp_nslc,
+                similarity_nearest_n=similarity_nearest_n,
                 block_shape=block_shape,
                 baseline_lag=baseline_lag,
                 **tqdm_kwargs,
             )
 
-        cur_output_files, cur_comp_slc_file, temp_coh_file, shp_count_file = (
-            _get_outputs_from_folder(cur_output_folder)
-        )
+        (
+            cur_output_files,
+            cur_comp_slc_file,
+            temp_coh_file,
+            similarity_file,
+            shp_count_file,
+        ) = _get_outputs_from_folder(cur_output_folder)
         output_slc_files.append(cur_output_files)
         temp_coh_files.append(temp_coh_file)
+        similarity_files.append(similarity_file)
         shp_count_files.append(shp_count_file)
 
     ##############################################
@@ -150,17 +162,24 @@ def run_wrapped_phase_sequential(
     _average_rasters(temp_coh_files, output_temp_coh_file, "Float32")
     _average_rasters(shp_count_files, output_shp_count_file, "Int16")
 
-    # Create one phase similarity raster
-    output_similarity_file = output_folder / f"similarity_{full_span}.tif"
-    create_similarities(
-        ifg_file_list=cur_output_files,
-        output_file=output_similarity_file,
-        # TODO: any of these configurable?
-        search_radius=11,
-        sim_type="median",
-        block_shape=block_shape,
-        num_threads=3,
-    )
+    if len(similarity_files) > 1:
+        # Create one phase similarity raster on the whole wrapped time series
+        output_similarity_file = output_folder / f"similarity_full_{full_span}.tif"
+        create_similarities(
+            ifg_file_list=cur_output_files,
+            output_file=output_similarity_file,
+            # TODO: any of these configurable?
+            search_radius=11,
+            sim_type="median",
+            block_shape=block_shape,
+            nearest_n=similarity_nearest_n,
+            num_threads=2,
+            add_overviews=False,
+        )
+    else:
+        output_similarity_file = similarity_files[0].rename(
+            output_folder / similarity_files[0].name
+        )
 
     # Combine the separate SLC output lists into a single list
     all_slc_files = list(chain.from_iterable(output_slc_files))
@@ -187,14 +206,21 @@ def run_wrapped_phase_sequential(
 
 def _get_outputs_from_folder(
     output_folder: Path,
-) -> tuple[list[Path], Path, Path, Path]:
+) -> tuple[list[Path], Path, Path, Path, Path]:
     cur_output_files = sorted(output_folder.glob("2*.slc.tif"))
     cur_comp_slc_file = next(output_folder.glob("compressed_*"))
     temp_coh_file = next(output_folder.glob("temporal_coherence_*"))
+    similarity_file = next(output_folder.glob("similarity*"))
     shp_count_file = next(output_folder.glob("shp_counts_*"))
     # Currently ignoring to not stitch:
     # eigenvalues, estimator, avg_coh
-    return cur_output_files, cur_comp_slc_file, temp_coh_file, shp_count_file
+    return (
+        cur_output_files,
+        cur_comp_slc_file,
+        temp_coh_file,
+        similarity_file,
+        shp_count_file,
+    )
 
 
 def _average_rasters(file_list: list[Path], outfile: Path, output_type: str):

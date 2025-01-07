@@ -30,8 +30,8 @@ from ._common import (
 from ._unwrap_options import UnwrapMethod, UnwrapOptions
 
 __all__ = [
-    "DisplacementWorkflow",
     "CorrectionOptions",
+    "DisplacementWorkflow",
 ]
 
 logger = logging.getLogger(__name__)
@@ -131,6 +131,14 @@ class DisplacementWorkflow(WorkflowBase):
             " calculation. If none provided, computed using the input SLC stack."
         ),
     )
+    layover_shadow_mask_files: list[Path] = Field(
+        default_factory=list,
+        description=(
+            "Paths to layover/shadow binary masks, where 0 indicates a pixel in"
+            " layover/shadow, 1 is a good pixel. If none provided, no masking is"
+            " performed for layover/shadow."
+        ),
+    )
 
     phase_linking: PhaseLinkingOptions = Field(default_factory=PhaseLinkingOptions)
     interferogram_network: InterferogramNetwork = Field(
@@ -185,9 +193,9 @@ class DisplacementWorkflow(WorkflowBase):
 
         return self
 
-    def model_post_init(self, __context: Any) -> None:
+    def model_post_init(self, context: Any, /) -> None:
         """After validation, set up properties for use during workflow run."""
-        super().model_post_init(__context)
+        super().model_post_init(context)
 
         if self.input_options.wavelength is None and self.cslc_file_list:
             # Try to infer the wavelength from filenames

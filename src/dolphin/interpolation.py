@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import logging
 
 import numba
@@ -64,6 +66,7 @@ def interpolate(
 
     """
     nrow, ncol = weights.shape
+    ifg_is_valid_mask = ifg != 0
 
     weights_float = np.clip(weights.astype(np.float32), 0, 1)
     # Ensure weights are between 0 and 1
@@ -83,6 +86,7 @@ def interpolate(
         ifg,
         weights_float,
         weight_cutoff,
+        ifg_is_valid_mask,
         num_neighbors,
         alpha,
         indices,
@@ -93,12 +97,21 @@ def interpolate(
 
 @numba.njit(parallel=True)
 def _interp_loop(
-    ifg, weights, weight_cutoff, num_neighbors, alpha, indices, interpolated_ifg
+    ifg,
+    weights,
+    weight_cutoff,
+    ifg_is_valid_mask,
+    num_neighbors,
+    alpha,
+    indices,
+    interpolated_ifg,
 ):
     nrow, ncol = weights.shape
     nindices = len(indices)
     for r0 in numba.prange(nrow):
         for c0 in range(ncol):
+            if not ifg_is_valid_mask[r0, c0]:
+                continue
             if weights[r0, c0] >= weight_cutoff:
                 interpolated_ifg[r0, c0] = ifg[r0, c0]
                 continue
