@@ -4,6 +4,8 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+import scipy
+from packaging import version
 
 import dolphin.unwrap
 from dolphin import io
@@ -12,6 +14,10 @@ from dolphin.workflows import SpurtOptions, TophuOptions, UnwrapMethod, UnwrapOp
 TOPHU_INSTALLED = importlib.util.find_spec("tophu") is not None
 SPURT_INSTALLED = importlib.util.find_spec("spurt") is not None
 WHIRLWIND_INSTALLED = importlib.util.find_spec("whirlwind") is not None
+
+if version.parse(scipy.__version__) >= version.parse("1.15.0"):
+    # XXX: The current whirlwind implementation breaks for recent scipy
+    WHIRLWIND_INSTALLED = False
 
 
 # Dataset has no geotransform, gcps, or rpcs. The identity matrix will be returned.
