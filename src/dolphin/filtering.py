@@ -16,7 +16,7 @@ from scipy import fft, ndimage
 def filter_long_wavelength(
     unwrapped_phase: ArrayLike,
     bad_pixel_mask: ArrayLike,
-    wavelength_cutoff: float = 50 * 1e3,
+    wavelength_cutoff: float = 25 * 1e3,
     pixel_spacing: float = 30,
     workers: int = 1,
     fill_value: float | None = None,
