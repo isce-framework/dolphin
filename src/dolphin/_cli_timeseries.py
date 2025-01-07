@@ -62,7 +62,6 @@ def get_parser(subparser=None, subcommand_name="timeseries") -> argparse.Argumen
             "A file with the same size as each raster, like amplitude dispersion or "
             "temporal coherence to find reference point"
         ),
-        required=True,
     )
     parser.add_argument(
         "--condition",

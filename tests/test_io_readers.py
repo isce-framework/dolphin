@@ -22,7 +22,9 @@ from dolphin.utils import _get_path_from_gdal_str
 # Note: uses the fixtures from conftest.py
 
 # Get combinations of slices
-slices_to_test = [slice(None), 1, slice(0, 10, 2)]
+# TODO: if we want to test `1`, and have it work the same as
+# numpy slicing which drops the dimension, we'll need to change this
+slices_to_test = [slice(None), slice(1), slice(0, 10, 2)]
 
 
 @pytest.fixture(scope="module")
@@ -40,15 +42,18 @@ def binary_file_list(tmp_path_factory, slc_stack):
     for i, slc in enumerate(slc_stack):
         f = tmp_path / f"test_{i}.bin"
         # Ignore warning
-        with pytest.warns(NotGeoreferencedWarning), rio.open(
-            f,
-            "w",
-            driver="ENVI",
-            width=shape[1],
-            height=shape[0],
-            count=1,
-            dtype=dtype,
-        ) as dst:
+        with (
+            pytest.warns(NotGeoreferencedWarning),
+            rio.open(
+                f,
+                "w",
+                driver="ENVI",
+                width=shape[1],
+                height=shape[0],
+                count=1,
+                dtype=dtype,
+            ) as dst,
+        ):
             dst.write(slc, 1)
         files.append(f)
 
@@ -171,7 +176,40 @@ def raster_reader(slc_file_list, slc_stack):
     return r
 
 
-class TestRaster:
+@pytest.fixture(scope="module")
+def image_513(tmp_path_factory):
+    from dolphin import io
+
+    tmp_path = tmp_path_factory.mktemp("data")
+    shape = (65, 65)
+    d = tmp_path / "shape513"
+    d.mkdir()
+
+    name = d / "image.tif"
+
+    data = np.random.rand(*shape)
+    io.write_arr(arr=data, output_name=name)
+    return name
+
+
+def test_single_pixel_leftover_squeeze(image_513):
+    # ignore georeferencing warnings
+    with pytest.warns(rio.errors.NotGeoreferencedWarning):
+        r = RasterReader.from_file(image_513, keepdims=True)
+        r2 = RasterReader.from_file(image_513, keepdims=False)
+
+    d = r[slice(64, 65), slice(0, 25)]
+    assert d.shape == (1, 25)
+    assert d.ndim == 2
+    assert r[slice(64, 65), slice(64, 65)].ndim == 2
+
+    d = r2[slice(64, 65), slice(0, 25)]
+    assert d.ndim == 1
+    assert d.shape == (25,)
+    assert r2[slice(64, 65), slice(64, 65)].ndim == 0
+
+
+class TestRasterStack:
     @pytest.mark.parametrize("keep_open", [True, False])
     def test_raster_stack_reader(
         self,
@@ -203,6 +241,20 @@ class TestRaster:
         expected = slc_stack[dslice, rslice, cslice]
         assert s.shape == expected.shape
         npt.assert_array_almost_equal(s, expected)
+
+    def test_single_pixel_leftover_squeeze(self, image_513):
+        with pytest.warns(rio.errors.NotGeoreferencedWarning):
+            reader = RasterStackReader.from_file_list(
+                [image_513, image_513], keepdims=True
+            )
+            reader_sq = RasterStackReader.from_file_list(
+                [image_513, image_513], keepdims=False
+            )
+        d = reader[:, slice(64, 65), slice(64, 65)]
+        assert d.shape == (2, 1, 1)
+
+        d2 = reader_sq[:, slice(64, 65), slice(64, 65)]
+        assert d2.shape == (2,)
 
 
 @pytest.mark.parametrize("rows", slices_to_test)

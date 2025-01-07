@@ -71,7 +71,7 @@ For bug fixes, a good practice is to write a test which fails with the current c
 ## Creating Documentation
 
 We use [MKDocs](https://www.mkdocs.org/) to generate the documentation.
-The reference documentation is generated from the code docstrings using [mkdocstrings](mkdocstrings.github.io/).
+The reference documentation is generated from the code docstrings using [mkdocstrings](https://mkdocstrings.github.io/python/)
 
 The dependencies for building and viewing the documentation locally can be installed:
 

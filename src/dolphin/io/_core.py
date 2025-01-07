@@ -28,31 +28,31 @@ gdal.UseExceptions()
 logger = logging.getLogger(__name__)
 
 __all__ = [
-    "load_gdal",
-    "write_arr",
-    "write_block",
-    "format_nc_filename",
-    "copy_projection",
-    "get_raster_xysize",
-    "get_raster_crs",
-    "get_raster_bounds",
-    "get_raster_nodata",
-    "get_raster_bounds",
-    "get_raster_dtype",
-    "get_raster_metadata",
-    "get_raster_units",
-    "set_raster_units",
-    "get_raster_description",
-    "set_raster_description",
-    "get_raster_gt",
-    "get_raster_driver",
-    "get_raster_chunk_size",
-    "set_raster_metadata",
-    "DEFAULT_ENVI_OPTIONS",
     "DEFAULT_DATETIME_FORMAT",
+    "DEFAULT_ENVI_OPTIONS",
     "DEFAULT_HDF5_OPTIONS",
     "DEFAULT_TIFF_OPTIONS",
     "DEFAULT_TILE_SHAPE",
+    "copy_projection",
+    "format_nc_filename",
+    "get_raster_bounds",
+    "get_raster_bounds",
+    "get_raster_chunk_size",
+    "get_raster_crs",
+    "get_raster_description",
+    "get_raster_driver",
+    "get_raster_dtype",
+    "get_raster_gt",
+    "get_raster_metadata",
+    "get_raster_nodata",
+    "get_raster_units",
+    "get_raster_xysize",
+    "load_gdal",
+    "set_raster_description",
+    "set_raster_metadata",
+    "set_raster_units",
+    "write_arr",
+    "write_block",
 ]
 
 
@@ -86,7 +86,7 @@ DEFAULT_HDF5_OPTIONS = {
 def _get_gdal_ds(filename: Filename) -> gdal.Dataset:
     if str(filename).startswith("s3://"):
         return gdal.Open(S3Path(str(filename)).to_gdal())
-    return gdal.Open(filename)
+    return gdal.Open(fspath(filename))
 
 
 def load_gdal(

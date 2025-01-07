@@ -29,12 +29,12 @@ logger = logging.getLogger(__name__)
 __all__ = [
     "HalfWindow",
     "InputOptions",
-    "OutputOptions",
-    "WorkerSettings",
-    "PsOptions",
-    "PhaseLinkingOptions",
     "InterferogramNetwork",
+    "OutputOptions",
+    "PhaseLinkingOptions",
+    "PsOptions",
     "TimeseriesOptions",
+    "WorkerSettings",
 ]
 
 
@@ -74,7 +74,7 @@ class PhaseLinkingOptions(BaseModel, extra="forbid"):
 
     _directory: Path = PrivateAttr(Path("linked_phase"))
     ministack_size: int = Field(
-        10, description="Size of the ministack for sequential estimator.", gt=1
+        15, description="Size of the ministack for sequential estimator.", gt=1
     )
     max_num_compressed: int = Field(
         100,
@@ -212,7 +212,7 @@ class TimeseriesOptions(BaseModel, extra="forbid"):
         ),
     )
     method: Literal["L1", "L2"] = Field(
-        "L2", description="Norm to use during timeseries inversion."
+        "L1", description="Norm to use during timeseries inversion."
     )
     reference_point: Optional[tuple[int, int]] = Field(
         None,
@@ -469,9 +469,9 @@ class WorkflowBase(YamlModel):
     # Stores the list of directories to be created by the workflow
     _directory_list: list[Path] = PrivateAttr(default_factory=list)
 
-    def model_post_init(self, __context: Any) -> None:
+    def model_post_init(self, context: Any, /) -> None:
         """After validation, set up properties for use during workflow run."""
-        super().model_post_init(__context)
+        super().model_post_init(context)
         # Ensure outputs from workflow steps are within work directory.
         if not self.keep_paths_relative:
             # Save all directories as absolute paths

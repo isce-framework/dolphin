@@ -151,18 +151,18 @@ class CompressedSlcInfo(BaseModel):
         ..., description="Datetime of the last real SLC used in the compression."
     )
 
-    real_slc_file_list: list[Filename] | None = Field(
+    real_slc_file_list: Optional[list[Filename]] = Field(
         None,
         description="List of real SLC filenames in the ministack.",
     )
-    real_slc_dates: list[datetime] | None = Field(
+    real_slc_dates: Optional[list[datetime]] = Field(
         None,
         description=(
             "List of date sequences, one for each SLC in the ministack. "
             "Each item is a list/tuple of datetime.date or datetime.datetime objects."
         ),
     )
-    compressed_slc_file_list: list[Filename] | None = Field(
+    compressed_slc_file_list: Optional[list[Filename]] = Field(
         None,
         description="List of compressed SLC filenames in the ministack.",
     )
@@ -465,26 +465,34 @@ class MiniStackPlanner(BaseStack):
 
             if compressed_idx is not None:
                 compressed_reference_idx = compressed_idx
+                output_reference_idx = self.output_reference_idx
             elif self.compressed_slc_plan == CompressedSlcPlan.ALWAYS_FIRST:
                 # Simplest operational version: CompSLCs have same base phase,
                 # but different "residual" added on
                 # We use the `output_reference_idx`, 0 by default, but this index
                 # may be passed in if we are manually specifying an output
                 compressed_reference_idx = self.output_reference_idx
+                output_reference_idx = self.output_reference_idx
             elif self.compressed_slc_plan == CompressedSlcPlan.FIRST_PER_MINISTACK:
                 # Like Ansari, 2017 paper: each ministack is "self contained"
                 compressed_reference_idx = num_ccslc
                 # Ansari, 2017 also had output_reference_idx = num_ccslcs, and
-                # use the "Datum Adjustment" step to get outputs relative to day 0
+                # used the "Datum Adjustment" step to get outputs relative to day 0
+                # Here, we'll use 0 (or manually specifed)
+                output_reference_idx = self.output_reference_idx
             elif self.compressed_slc_plan == CompressedSlcPlan.LAST_PER_MINISTACK:
                 # Alternative that allows sequential interferograms across ministacks
                 compressed_reference_idx = -1
+                # For this, we'll always use the most recent compressed SLC as output
+                # reference so that we can connected stacks, but minimize the temporal
+                # baseline of interferograms we form
+                output_reference_idx = num_ccslc - 1
 
             cur_ministack = MiniStackInfo(
                 file_list=combined_files,
                 dates=combined_dates,
                 is_compressed=combined_is_compressed,
-                output_reference_idx=self.output_reference_idx,
+                output_reference_idx=output_reference_idx,
                 compressed_reference_idx=compressed_reference_idx,
                 output_folder=cur_output_folder,
             )

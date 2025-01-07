@@ -3,6 +3,8 @@
 Uses metric from [@Wang2022AccuratePersistentScatterer] for similarity.
 """
 
+from __future__ import annotations
+
 import logging
 from pathlib import Path
 from typing import Callable, Literal, Sequence
