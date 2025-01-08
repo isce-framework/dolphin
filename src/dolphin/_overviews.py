@@ -53,7 +53,8 @@ def create_image_overviews(
     image_type: ImageType | None = None,
     resampling: Resampling | None = None,
     external: bool = False,
-    compression: str = "LZW",
+    compression: str = "DEFLATE",
+    num_gdal_threads: int = 1,
 ):
     """Add GDAL compressed overviews to an existing file.
 
@@ -72,9 +73,13 @@ def create_image_overviews(
         if not specifying `image_type`.
     external : bool, default = False
         Use external overviews (.ovr files).
-    compression: str, default = "LZW"
+    compression: str, default = "DEFLATE"
         Compression algorithm to use for overviews.
         See https://gdal.org/programs/gdaladdo.html for options.
+    num_gdal_threads: int, default = 1
+        Number of threads to use for overview creation.
+        For more details, see https://gdal.org/programs/gdaladdo.html and
+        https://gdal.org/en/stable/user/configoptions.html#config-GDAL_NUM_THREADS
 
     """
     if image_type is None and resampling is None:
@@ -91,7 +96,7 @@ def create_image_overviews(
         return
 
     gdal.SetConfigOption("COMPRESS_OVERVIEW", compression)
-    gdal.SetConfigOption("GDAL_NUM_THREADS", "2")
+    gdal.SetConfigOption("GDAL_NUM_THREADS", str(num_gdal_threads))
     ds.BuildOverviews(resampling.value, levels)
 
 
