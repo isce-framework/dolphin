@@ -130,6 +130,7 @@ def run(
     in both ascending and descending tracks imply uplift).
 
     """
+    unwrapped_paths = sorted(unwrapped_paths, key=str)
     Path(output_dir).mkdir(exist_ok=True, parents=True)
 
     condition_func = argmax_index if condition == CallFunc.MAX else argmin_index
@@ -186,7 +187,7 @@ def run(
 
     if add_overviews:
         logger.info("Creating overviews for timeseries images")
-        create_overviews(final_ts_paths, image_type=ImageType.UNWRAPPED)
+        create_overviews(final_ts_paths, image_type=ImageType.UNWRAPPED, max_workers=2)
 
     if run_velocity:
         logger.info("Estimating phase velocity")
@@ -628,7 +629,7 @@ def estimate_velocity(
     unw_pixels = unw_stack.reshape(n_time, -1)
     if weight_stack is None:
         # For jnp.polyfit(...), coeffs[0] is slope, coeffs[1] is the intercept
-        velos = jnp.polyfit(x_arr, unw_pixels, deg=1, rcond=None)[0]
+        velocities = jnp.polyfit(x_arr, unw_pixels, deg=1, rcond=None)[0]
     else:
         # We use the same x inputs for all output pixels
         if unw_stack.shape != weight_stack.shape:
@@ -640,12 +641,12 @@ def estimate_velocity(
 
         weights_pixels = weight_stack.reshape(n_time, 1, -1)
 
-        velos = vmap(estimate_velocity_pixel, in_axes=(None, -1, -1))(
+        velocities = vmap(estimate_velocity_pixel, in_axes=(None, -1, -1))(
             x_arr, unw_pixels, weights_pixels
         )
-    # Currently `velos` is in units / day,
+    # Currently `velocities` is in units / day,
     days_per_year = 365.25
-    return velos.reshape(n_rows, n_cols) * days_per_year
+    return velocities.reshape(n_rows, n_cols) * days_per_year
 
 
 def datetime_to_float(dates: Sequence[DateOrDatetime]) -> np.ndarray:
@@ -1035,14 +1036,17 @@ def invert_unw_network(
             phases, residuals = invert_stack(A, stack, weights, missing_data_flags)
         # Convert to meters, with LOS convention:
         out_displacement = constant * np.asarray(phases)
-        # Set the masked pixels to be nodata in the output
+        # Set the masked pixels to be nodata in the output, and in the residuals
         out_displacement[:, masked_pixels] = unw_nodataval
-        return np.vstack([out_displacement, residuals[None]]), rows, cols
+        residuals = np.where(masked_pixels, np.nan, np.asarray(residuals))
+        return np.vstack([out_displacement, residuals[np.newaxis]]), rows, cols
 
     writer = io.BackgroundStackWriter(
         [*out_paths, out_residuals_path],
         like_filename=unw_file_list[0],
         units=units,
+        # Using np.nan for the residuals, since it's not a valid phase
+        nodata=np.nan,
         debug=True,
     )
 
@@ -1054,6 +1058,10 @@ def invert_unw_network(
         num_threads=num_threads,
     )
     writer.notify_finished()
+    # Set the nodata for the outputs back to `unw_nodataval`
+    for p in out_paths:
+        if unw_nodataval is not None:
+            io.set_raster_nodata(p, unw_nodataval)
 
     logger.info("Completed invert_unw_network")
     return out_paths
