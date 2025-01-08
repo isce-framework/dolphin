@@ -6,7 +6,37 @@ from numpy.typing import ArrayLike
 def compute_crlb(
     coherence_matrix: ArrayLike, num_looks: int, aps_variance: float = 0
 ) -> np.ndarray:
-    """Compute the Cramer-Rao Lower Bound (CRLB) for phase linking estimation.
+    r"""Compute the Cramer-Rao Lower Bound (CRLB) for phase linking estimation.
+
+    Uses notation from [@Tebaldini2010MethodsPerformancesMultiPass], such that
+    the Fisher information matrix, $X$, is computed as
+
+    \begin{equation}
+        X = \frac{2}{L} (\Gamma \circ \Gamma^{-1} - I)
+    \end{equation}
+
+    where $\Gamma$ is the complex coherence matrix, $L$ is the number of looks,
+    and $I$ is the identity matrix.
+
+    The CRLB is then computed as
+
+    \begin{equation}
+        \mathrm{CRLB} = \mathrm{inv}(\mathrm{\Theta}^T X \mathrm{\Theta})
+    \end{equation}
+
+    where $\mathrm{\Theta}$ is a matrix of partial derivatives, which, for direct
+    phase estimation, is an identity matrix with on extra row of zeros.
+
+    If the APS variance is non-zero, the CRLB is modified as
+
+    \begin{equation}
+        \mathrm{CRLB} = \mathrm{inv}(\mathrm{\Theta}^T (X + \mathrm{R}_\mathrm{APS}^{-1}) \mathrm{\Theta})
+    \end{equation}
+
+    where $\mathrm{R}_\mathrm{APS}^{-1}$ is the inverse of the APS covariance matrix,
+    $\mathrm{R}_\mathrm{APS} = \alpha I
+
+    See Equations (21) and (22) in [@Tebaldini2010MethodsPerformancesMultiPass].
 
     Parameters
     ----------
@@ -22,9 +52,10 @@ def compute_crlb(
     Returns
     -------
     np.ndarray
-        CRLB covariance matrix for phase estimates
+        Array (shape (N,)) of standard deviations (in radians) for the estimator
+        variance lower bound at each date.
 
-    """
+    """  # noqa: E501
     N = coherence_matrix.shape[0]
 
     # For direct phase estimation, Theta should be (N x (N-1))
@@ -86,7 +117,7 @@ def compute_lower_bound_std(
     return np.concatenate(([0], estimator_stddev))
 
 
-def examples(N=10, gamma0=0.6, rho=0.8):
+def _examples(N=10, gamma0=0.6, rho=0.8):
     """Make example covariance matrices used in Tebaldini, 2010."""
     idxs = np.abs(np.arange(N).reshape(-1, 1) - np.arange(N).reshape(1, -1))
     # {Γ}nm = ρ^|n−m|; ρ = 0.8  # noqa: RUF003

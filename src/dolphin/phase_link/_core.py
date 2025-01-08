@@ -430,34 +430,36 @@ def process_coherence_matrices(
     rows, cols, n, _ = C_arrays.shape
 
     evd_eig_vals, evd_eig_vecs = eigh_largest_stack(C_arrays * jnp.abs(C_arrays))
+
+    Gamma = jnp.abs(C_arrays)
+
+    # Identity used for regularization and for solving
+    Id = jnp.eye(n, dtype=Gamma.dtype)
+    # repeat the identity matrix for each pixel
+    Id = jnp.tile(Id, (rows, cols, 1, 1))
+
+    if beta > 0:
+        # Perform regularization
+        Gamma = (1 - beta) * Gamma + beta * Id
+    # Assume correlation below `zero_correlation_threshold` is 0
+    Gamma = jnp.where(Gamma < zero_correlation_threshold, 0, Gamma)
+
+    # Attempt to invert Gamma
+    cho, is_lower = cho_factor(Gamma)
+
+    # Check: If it fails the cholesky factor, it's close to singular and
+    # we should just fall back to EVD
+    # Use the already- factored |Gamma|^-1, solving Ax = I gives the inverse
+    Gamma_inv = cho_solve((cho, is_lower), Id)
     if use_evd:
         # EVD
         eig_vals, eig_vecs = evd_eig_vals, evd_eig_vecs
         estimator = jnp.zeros(eig_vals.shape, dtype=bool)
+        crlb_std_dev = jnp.zeros(evd_eig_vecs.shape, dtype=jnp.float32)
     else:
         # EMI
         # estimate the wrapped phase based on the EMI paper
         # *smallest* eigenvalue decomposition of the (|Gamma|^-1  *  C) matrix
-        Gamma = jnp.abs(C_arrays)
-
-        # Identity used for regularization and for solving
-        Id = jnp.eye(n, dtype=Gamma.dtype)
-        # repeat the identity matrix for each pixel
-        Id = jnp.tile(Id, (rows, cols, 1, 1))
-
-        if beta > 0:
-            # Perform regularization
-            Gamma = (1 - beta) * Gamma + beta * Id
-        # Assume correlation below `zero_correlation_threshold` is 0
-        Gamma = jnp.where(Gamma < zero_correlation_threshold, 0, Gamma)
-
-        # Attempt to invert Gamma
-        cho, is_lower = cho_factor(Gamma)
-
-        # Check: If it fails the cholesky factor, it's close to singular and
-        # we should just fall back to EVD
-        # Use the already- factored |Gamma|^-1, solving Ax = I gives the inverse
-        Gamma_inv = cho_solve((cho, is_lower), Id)
         # We're looking for the lambda nearest to 1. So shift by 0.99
         # Also, use the evd vectors as iteration starting point:
         mu = 0.99
@@ -494,6 +496,11 @@ def process_coherence_matrices(
         emi_used = jnp.ones(emi_eig_vals.shape, dtype=jnp.int8)
         estimator = lax.select(inv_has_nans, evd_used, emi_used)
 
+    # Compute Fisher Information Matrix
+    X = 2 * num_looks * (Gamma * Gamma_inv - Id.astype("float32"))
+    # Compute CRLB for each pixel
+    crlb_std_dev = _compute_crlb_jax(X, num_looks, reference_idx)
+
     # Now the shape of eig_vecs is (rows, cols, nslc)
     # at pixel (r, c), eig_vecs[r, c] is the largest (smallest) eigenvector if
     # we picked EVD (EMI)
@@ -501,67 +508,6 @@ def process_coherence_matrices(
     ref = eig_vecs[:, :, reference_idx]
     # Make sure each still has 3 dims, then reference all phases to `ref`
     evd_estimate = eig_vecs * jnp.exp(-1j * jnp.angle(ref[:, :, None]))
-
-    # Compute Fisher Information Matrix
-    X = 2 * num_looks * (Gamma * Gamma_inv - Id.astype("float32"))
-    # Compute the CRLB standard deviation
-
-    # # Normally, we construct the Theta partial derivative matrix like this
-    # Theta = np.zeros((N, N - 1))
-    # First row is 0 (using day 0 as reference)
-    # Theta[1:, :] = np.eye(N - 1)  # Last N-1 rows are identity
-    # More efficient computation of Theta.T @ X @ Theta
-    # Instead of explicit matrix multiplication, directly extract relevant elements
-    # We want all elements except the reference row/column
-    row_idx = jnp.concatenate(
-        [jnp.arange(reference_idx), jnp.arange(reference_idx + 1, n)]
-    )
-    projected_fim = X[..., row_idx[:, None], row_idx]
-
-    # Compute CRLB for each pixel
-    # Invert each (n-1, n-1) matrix in the batch
-    # crlb = jnp.linalg.inv(projected_fim)  # Shape: (rows, cols, n-1, n-1)
-
-    # repeat the (n-1, n-1) identity matrix for each pixel
-    Id = jnp.tile(jnp.eye(n - 1, dtype=projected_fim.dtype), (rows, cols, 1, 1))
-    cho, is_lower = cho_factor(projected_fim)
-    crlb = cho_solve((cho, is_lower), Id)  # Shape: (rows, cols, n-1, n-1)
-
-    # Extract standard deviations from the diagonal of each CRLB matrix
-    # Shape: (rows, cols, n-1)
-    crlb_std_dev = jnp.sqrt(jnp.diagonal(crlb, axis1=-2, axis2=-1))
-
-    # # ----------------------
-    # # CRLB COMPUTATION
-    # # ----------------------
-    # # Build the B matrix that maps N phases to the N-1 free phase differences
-    # B = jnp.zeros((n, n - 1), dtype="int16")
-    # B = B.at[:reference_idx, :].set(jnp.eye(reference_idx, dtype=C_arrays.dtype))
-    # B = B.at[reference_idx + 1 :, :].set(
-    #     jnp.eye(n - reference_idx - 1, dtype=C_arrays.dtype)
-    # )
-    # # shape of B is (n, n-1)
-    # # shape of B.T is (n-1, n)
-    # # shape of X is (rows, cols, n, n)
-    # # 1) Build the Fisher Information:  FIM_{(r,c)} = B^T @ X_{(r,c)} @ B
-    # #    We can do this in one shot with einsum:
-    # projected_fim = jnp.einsum(
-    #     "ij,rcjk,kl->rcil",
-    #     B.T,  # (n-1, n)     -> "ij"
-    #     X,  # (rows, cols, n, n) -> "rcjk"
-    #     B,  # (n, n-1)     -> "kl"
-    # )
-    # # Now projected_fim has shape (rows, cols, n-1, n-1)
-
-    # # 2) Invert each (n-1 x n-1) sub-block via JAX's batch inversion:
-    # crlb = jnp.linalg.inv(projected_fim)  # shape (rows, cols, n-1, n-1)
-
-    # # 3) Extract diagonal and take sqrt to get std. dev. for each of the n-1 phases:
-    # crlb_diag = jnp.diagonal(crlb, axis1=-2, axis2=-1)  # shape (rows, cols, n-1)
-    # crlb_std_dev = jnp.sqrt(crlb_diag)  # shape (rows, cols, n-1)
-
-    # Insert zeros at reference_idx to match evd_estimate shape (rows, cols, n)
-    crlb_std_dev = jnp.insert(crlb_std_dev, reference_idx, 0, axis=-1)
 
     return evd_estimate, eig_vals, estimator.astype("uint8"), crlb_std_dev
 
@@ -591,6 +537,37 @@ def decimate(arr: ArrayLike, strides: Strides) -> Array:
     end_r = (rows // ys) * ys + 1
     end_c = (cols // xs) * xs + 1
     return arr[..., start_r:end_r:ys, start_c:end_c:xs]
+
+
+@jit
+def _compute_crlb_jax(X: ArrayLike, reference_idx: int) -> Array:
+    rows, cols, n, _ = X.shape
+    # Compute the CRLB standard deviation
+
+    # # Normally, we construct the Theta partial derivative matrix like this
+    # Theta = np.zeros((N, N - 1))
+    # First row is 0 (using day 0 as reference)
+    # Theta[1:, :] = np.eye(N - 1)  # Last N-1 rows are identity
+    # More efficient computation of Theta.T @ X @ Theta
+    # Instead of explicit matrix multiplication, directly extract relevant elements
+    # We want all elements except the reference row/column
+    row_idx = jnp.concatenate(
+        [jnp.arange(reference_idx), jnp.arange(reference_idx + 1, n)]
+    )
+    projected_fim = X[..., row_idx[:, None], row_idx]
+
+    # Invert each (n-1, n-1) matrix in the batch
+    # Use cholesky repeat the (n-1, n-1) identity matrix for each pixel
+    Id = jnp.tile(jnp.eye(n - 1, dtype=projected_fim.dtype), (rows, cols, 1, 1))
+    cho, is_lower = cho_factor(projected_fim)
+    crlb = cho_solve((cho, is_lower), Id)  # Shape: (rows, cols, n-1, n-1)
+
+    # Extract standard deviations from the diagonal of each CRLB matrix
+    # Shape: (rows, cols, n-1)
+    crlb_std_dev = jnp.sqrt(jnp.diagonal(crlb, axis1=-2, axis2=-1))
+    # Insert zeros at reference_idx to match evd_estimate shape (rows, cols, n)
+    crlb_std_dev = jnp.insert(crlb_std_dev, reference_idx, 0, axis=-1)
+    return crlb_std_dev
 
 
 def _raise_if_all_nan(slc_stack: np.ndarray):
