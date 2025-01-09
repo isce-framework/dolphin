@@ -53,7 +53,7 @@ def create_image_overviews(
     image_type: ImageType | None = None,
     resampling: Resampling | None = None,
     external: bool = False,
-    compression: str = "DEFLATE",
+    compression: str = "LZW",
     num_gdal_threads: int = 1,
 ):
     """Add GDAL compressed overviews to an existing file.

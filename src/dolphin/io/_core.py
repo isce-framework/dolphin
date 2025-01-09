@@ -84,9 +84,10 @@ DEFAULT_HDF5_OPTIONS = {
 }
 
 
-def _get_gdal_ds(filename: Filename) -> gdal.Dataset:
+def _get_gdal_ds(filename: Filename, update: bool = False) -> gdal.Dataset:
+    mode = gdal.GA_Update if update else gdal.GA_ReadOnly
     if str(filename).startswith("s3://"):
-        return gdal.Open(S3Path(str(filename)).to_gdal())
+        return gdal.Open(S3Path(str(filename)).to_gdal(), mode)
     return gdal.Open(fspath(filename))
 
 
@@ -299,12 +300,13 @@ def set_raster_nodata(filename: Filename, nodata: float, band: int | None = None
         (sets the nodata value for all bands).
 
     """
-    ds = _get_gdal_ds(filename)
+    ds = gdal.Open(fspath(filename), gdal.GA_Update)
     if band is None:
         for i in range(ds.RasterCount):
             ds.GetRasterBand(i + 1).SetNoDataValue(nodata)
     else:
         ds.GetRasterBand(band).SetNoDataValue(nodata)
+    ds = None
 
 
 def get_raster_crs(filename: Filename) -> CRS:
