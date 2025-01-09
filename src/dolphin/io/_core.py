@@ -50,6 +50,7 @@ __all__ = [
     "load_gdal",
     "set_raster_description",
     "set_raster_metadata",
+    "set_raster_nodata",
     "set_raster_units",
     "write_arr",
     "write_block",
@@ -83,9 +84,10 @@ DEFAULT_HDF5_OPTIONS = {
 }
 
 
-def _get_gdal_ds(filename: Filename) -> gdal.Dataset:
+def _get_gdal_ds(filename: Filename, update: bool = False) -> gdal.Dataset:
+    mode = gdal.GA_Update if update else gdal.GA_ReadOnly
     if str(filename).startswith("s3://"):
-        return gdal.Open(S3Path(str(filename)).to_gdal())
+        return gdal.Open(S3Path(str(filename)).to_gdal(), mode)
     return gdal.Open(fspath(filename))
 
 
@@ -282,6 +284,29 @@ def get_raster_nodata(filename: Filename, band: int = 1) -> Optional[float]:
     """
     ds = _get_gdal_ds(filename)
     return ds.GetRasterBand(band).GetNoDataValue()
+
+
+def set_raster_nodata(filename: Filename, nodata: float, band: int | None = None):
+    """Set the nodata value for a raster.
+
+    Parameters
+    ----------
+    filename : Filename
+        Path to the file to load.
+    nodata : float
+        The nodata value to set.
+    band : int, optional
+        The band to set the nodata value for, by default None
+        (sets the nodata value for all bands).
+
+    """
+    ds = gdal.Open(fspath(filename), gdal.GA_Update)
+    if band is None:
+        for i in range(ds.RasterCount):
+            ds.GetRasterBand(i + 1).SetNoDataValue(nodata)
+    else:
+        ds.GetRasterBand(band).SetNoDataValue(nodata)
+    ds = None
 
 
 def get_raster_crs(filename: Filename) -> CRS:

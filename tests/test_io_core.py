@@ -147,6 +147,12 @@ class TestWriteArr:
         )
         assert np.isnan(io.get_raster_nodata(save_name))
 
+    def test_set_raster_nodata(self, raster_100_by_200, tmpdir):
+        save_name = tmpdir / "empty_nometa.tif"
+        io.write_arr(arr=None, like_filename=raster_100_by_200, output_name=save_name)
+        io.set_raster_nodata(save_name, 123)
+        assert io.get_raster_nodata(save_name) == 123
+
     def test_write_units(self, raster_100_by_200, tmpdir):
         save_name = tmpdir / "empty_nometa.tif"
         io.write_arr(arr=None, like_filename=raster_100_by_200, output_name=save_name)
@@ -159,6 +165,13 @@ class TestWriteArr:
             output_name=save_name,
             units="meters",
         )
+        assert io.get_raster_units(save_name) == "meters"
+
+    def test_set_raster_units(self, raster_100_by_200, tmpdir):
+        save_name = tmpdir / "empty_nometa.tif"
+        io.write_arr(arr=None, like_filename=raster_100_by_200, output_name=save_name)
+        assert io.get_raster_units(save_name) is None
+        io.set_raster_units(save_name, "meters")
         assert io.get_raster_units(save_name) == "meters"
 
     def test_save_strided_1(self, raster_100_by_200, tmpdir):

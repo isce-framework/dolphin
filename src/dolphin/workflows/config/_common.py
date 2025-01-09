@@ -10,7 +10,6 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
-    NaiveDatetime,
     PrivateAttr,
     field_validator,
     model_validator,
@@ -358,7 +357,7 @@ class OutputOptions(BaseModel, extra="forbid"):
     )
     # Note: we use NaiveDatetime, since other datetime parsing results in Naive
     # (no TzInfo) datetimes, which can't be compared to datetimes with timezones
-    extra_reference_date: Optional[NaiveDatetime] = Field(
+    extra_reference_date: Optional[datetime] = Field(
         None,
         description=(
             "Specify an extra reference datetime in UTC. Adding this lets you"
@@ -421,6 +420,13 @@ class OutputOptions(BaseModel, extra="forbid"):
             msg = "output_resolution not yet implemented. Use `strides`."
             raise NotImplementedError(msg)
         return strides
+
+    @field_validator("extra_reference_date", mode="after")
+    @classmethod
+    def _strip_timezone(cls, extra_reference_date):
+        if extra_reference_date is None:
+            return None
+        return extra_reference_date.replace(tzinfo=None)
 
 
 class WorkflowBase(YamlModel):
