@@ -1,10 +1,76 @@
 # Changelog
 
-# Changelog
-
 ## [Unreleased](https://github.com/isce-framework/dolphin/compare/v0.30.0...main)
 
-## [0.30.0](https://github.com/isce-framework/dolphin/compare/v0.29.0...v0.30.0) - 2024-11-01
+## [0.35.0](https://github.com/isce-framework/dolphin/compare/v0.34.0...v0.35.0) - 2025-12-09
+
+Added
+
+- Compute timeseries inversion and save to rasters
+- `use_seasonal_coherence` parameter to simulate.py
+
+Changed
+
+- `keepdims` options to reader classes to avoid squeezing singleton dims
+- Using L1 inversion by default for timeseries
+- Using most recent compressed SLC as output for LAST_PER_MINISTACK
+- Adapted short wavelength filter to use gdal_fillnodata for edge effects mitigation
+- Removed numba dependency from simulate.py
+
+### Fixed
+
+- Documentation grammar on VRT size check
+
+## [0.34.0](https://github.com/isce-framework/dolphin/compare/v0.33.0...v0.34.0) - 2024-11-26
+
+### Added
+
+- `--use-evd` option to `dolphin config` CLI
+- `CITATION.cff` file for better zenodo parsing
+
+### Changed
+
+- Spurt changes
+  - Logging redirect, add a log file, multiprocess during final interpolation
+  - Improved speed of post-spurt 2-pi ambiguity interpolation
+- Default ministack_size changed to 15 in PhaseLinkingOptions
+- Using nearest sampling for stitching static layers
+
+### Fixed
+
+- Unit string written to `velocity.tif`
+- `extra_reference_date` logic for single reference unwrapping
+- Missing annotations for Python 3.9 compatibility
+- Pinned `mkdocs-jupyter` to 0.25.0
+- Make `--condition-file` not required for `dolphin timeseries`
+- Removed `.flake8`
+
+## [0.33.0](https://github.com/isce-framework/dolphin/compare/v0.32.0...v0.33.0) - 2024-11-07
+
+### Added
+
+- `fill_value` parameter to `filter_long_wavelength`
+- Function to create counts of valid unwrapped outputs (`create_nonzero_conncomp_counts`)
+
+### Changed
+
+- Modified logging capture from spurt to be more selective
+
+## [0.32.0](https://github.com/isce-framework/dolphin/compare/v0.31...v0.32.0) - 2024-11-05
+
+### Fixed
+
+- Merge documentation improvements from `joss` branch
+- Add a retry to spurt for `BrokenProcessPools`
+
+## [0.31](https://github.com/isce-framework/dolphin/compare/v0.30...v0.31) - 2024-11-03
+
+### Changed
+
+- Skip nodata values of interferograms when interpolating
+
+
+## [0.30](https://github.com/isce-framework/dolphin/compare/v0.29.0...v0.30) - 2024-11-01
 
 ### Added
 - Support for specifying output bounds as WKT
