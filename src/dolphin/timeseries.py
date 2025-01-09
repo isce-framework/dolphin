@@ -945,13 +945,18 @@ def invert_unw_network(
     suffix = ".tif"
     # Create the `n_sar_dates - 1` output files (skipping the 0 reference raster)
     out_paths = [
-        Path(output_dir) / (format_dates(ref_date, d) + suffix) for d in sar_dates[1:]
+        Path(output_dir) / (f"{format_dates(ref_date, d)}{suffix}")
+        for d in sar_dates[1:]
     ]
     if all(p.exists() for p in out_paths):
         logger.info("All output files already exist, skipping inversion")
         return out_paths
+    out_residuals_paths = [
+        Path(output_dir) / (f"residuals_{format_dates(ref_date, d)}{suffix}")
+        for d in sar_dates[1:]
+    ]
 
-    out_residuals_path = Path(output_dir) / "unw_inversion_residuals.tif"
+    summed_residuals_path = Path(output_dir) / "unw_inversion_residuals.tif"
     logger.info(f"Inverting network using {method.upper()}-norm minimization")
 
     A = get_incidence_matrix(ifg_pairs=ifg_tuples, sar_idxs=sar_dates)
@@ -1031,23 +1036,35 @@ def invert_unw_network(
         # TODO: do i want to write residuals too? Do i need
         # to have multiple writers then, or a StackWriter?
         if method.upper() == "L1":
-            phases, residuals = invert_stack_l1(A, stack)
+            phases, residual_sum = invert_stack_l1(A, stack)
         else:
-            phases, residuals = invert_stack(A, stack, weights, missing_data_flags)
+            phases, residual_sum = invert_stack(A, stack, weights, missing_data_flags)
+
+        # Compute the full residuals, then sum them per date
+        # residuals_per_date = np.asarray(_get_residuals_per_date(A, stack, phases))
+        residuals_per_date = _get_residuals_per_date(A, stack, phases)
+
         # Convert to meters, with LOS convention:
         out_displacement = constant * np.asarray(phases)
         # Set the masked pixels to be nodata in the output, and in the residuals
         out_displacement[:, masked_pixels] = unw_nodataval
-        residuals = np.where(masked_pixels, np.nan, np.asarray(residuals))
-        return np.vstack([out_displacement, residuals[np.newaxis]]), rows, cols
+        residuals_per_date = np.asarray(
+            residuals_per_date.at[:, masked_pixels].set(np.nan)
+        )
+        residual_sum = np.where(masked_pixels, np.nan, np.asarray(residual_sum))
 
+        return (
+            np.vstack([out_displacement, residuals_per_date, residual_sum[np.newaxis]]),
+            rows,
+            cols,
+        )
+
+    # Combined writer for all output files
     writer = io.BackgroundStackWriter(
-        [*out_paths, out_residuals_path],
+        [*out_paths, *out_residuals_paths, summed_residuals_path],
         like_filename=unw_file_list[0],
-        units=units,
         # Using np.nan for the residuals, since it's not a valid phase
         nodata=np.nan,
-        debug=True,
     )
 
     io.process_blocks(
@@ -1063,8 +1080,45 @@ def invert_unw_network(
         if unw_nodataval is not None:
             io.set_raster_nodata(p, unw_nodataval)
 
+        io.set_raster_units(p, units)
+
+    # Residuals are always radians
+    for p in out_residuals_paths:
+        io.set_raster_units(p, "radians")
+    io.set_raster_units(summed_residuals_path, "radians")
+
     logger.info("Completed invert_unw_network")
     return out_paths
+
+
+@jit
+def _get_residuals_per_date(
+    A: ArrayLike, x_stack: ArrayLike, b_stack: ArrayLike
+) -> Array:
+    """Sum the time series inversion residuals per date.
+
+    Parameters
+    ----------
+    A : ArrayLike
+       The matrix A in the equation Ax = b.
+    x_stack : ArrayLike
+        The 3D stack of solved phases from the inversion.
+        Shape is (n_dates, n_rows, n_cols)
+    b_stack : ArrayLike
+        The 3D input stack of data.
+        shape is (n_ifgs, n_rows, n_cols)
+
+    Returns
+    -------
+    Array
+        Residuals per date, shape=(n_dates, n_rows, n_cols)
+
+    """
+    resids_all = jnp.abs(
+        A @ b_stack.reshape(A.shape[1], -1) - x_stack.reshape(A.shape[0], -1)
+    )
+    # Running abs(A).T @ b sums only the residuals involved in each date
+    return (jnp.abs(A).T @ resids_all).reshape(b_stack.shape)
 
 
 def correlation_to_variance(correlation: ArrayLike, nlooks: int) -> Array:
