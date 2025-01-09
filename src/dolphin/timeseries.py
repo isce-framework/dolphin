@@ -130,6 +130,9 @@ def run(
     in both ascending and descending tracks imply uplift).
 
     """
+    # Ensure we wont run into problems with large gdal reads from deep VRTs.
+    utils.check_open_file_limit()
+
     Path(output_dir).mkdir(exist_ok=True, parents=True)
 
     condition_func = argmax_index if condition == CallFunc.MAX else argmin_index
