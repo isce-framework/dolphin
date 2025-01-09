@@ -15,7 +15,7 @@ from numpy.typing import ArrayLike, NDArray
 from opera_utils import get_dates
 from scipy import ndimage
 
-from dolphin import DateOrDatetime, io, utils
+from dolphin import DateOrDatetime, io
 from dolphin._overviews import ImageType, create_overviews
 from dolphin._types import PathOrStr, ReferencePoint
 from dolphin.utils import flatten, format_dates, full_suffix, get_nearest_date_idx
@@ -146,7 +146,7 @@ def run(
         ref_point = ReferencePoint(row=reference_point[0], col=reference_point[1])
 
     ifg_date_pairs = [get_dates(f) for f in unwrapped_paths]
-    sar_dates = sorted(set(utils.flatten(ifg_date_pairs)))
+    sar_dates = sorted(set(flatten(ifg_date_pairs)))
     # if we did single-reference interferograms, for `n` sar dates, we will only have
     # `n-1` interferograms. Any more than n-1 ifgs means we need to invert
     is_single_reference = len(unwrapped_paths) == len(sar_dates) - 1
@@ -1380,7 +1380,7 @@ def create_nonzero_conncomp_counts(
         ) from e
 
     # Get unique dates and create the counting matrix
-    sar_dates: list[DateOrDatetime] = sorted(set(utils.flatten(ifg_date_pairs)))
+    sar_dates: list[DateOrDatetime] = sorted(set(flatten(ifg_date_pairs)))
 
     date_counting_matrix = np.abs(
         get_incidence_matrix(ifg_tuples, sar_dates, delete_first_date_column=False)
