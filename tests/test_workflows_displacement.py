@@ -91,8 +91,6 @@ def test_displacement_run_single_official_opera_naming(
         paths = displacement.run(cfg)
         assert paths.timeseries_paths is not None
         assert all(p.exists() for p in paths.timeseries_paths)
-        assert paths.timeseries_residual_paths is not None
-        assert all(p.exists() for p in paths.timeseries_residual_paths)
         assert paths.unwrapped_paths is not None
         assert all(get_raster_units(p) == "radians" for p in paths.unwrapped_paths)
         assert all(get_raster_units(p) == "meters" for p in paths.timeseries_paths)
@@ -100,6 +98,8 @@ def test_displacement_run_single_official_opera_naming(
             get_raster_units(p) == "radians" for p in paths.timeseries_residual_paths
         )
         assert all(full_suffix(p) == ".tif" for p in paths.timeseries_paths)
+        # nearest-1 network, so no residuals
+        assert paths.timeseries_residual_paths is None
 
 
 def run_displacement_stack(
@@ -118,8 +118,8 @@ def run_displacement_stack(
     paths = displacement.run(cfg)
     if run_unwrap:
         assert paths.timeseries_paths is not None
-        assert paths.timeseries_residual_paths is not None
         assert all(full_suffix(p) == ".tif" for p in paths.timeseries_paths)
+    assert paths.timeseries_residual_paths is None
 
 
 def test_stack_with_compSLCs(opera_slc_files, tmpdir):
@@ -227,7 +227,6 @@ def test_displacement_run_extra_reference_date(
         # The unwrapped/timeseries files should have a changeover to the new reference
         assert paths.unwrapped_paths is not None
         assert paths.timeseries_paths is not None
-        assert paths.timeseries_residual_paths is not None
 
         ts_names = [pp.name for pp in paths.timeseries_paths]
         assert ts_names == [
@@ -237,12 +236,14 @@ def test_displacement_run_extra_reference_date(
         ]
         assert all(get_raster_units(p) == "meters" for p in paths.timeseries_paths)
 
-        ts_residual_names = [pp.name for pp in paths.timeseries_residual_paths]
-        assert ts_residual_names == [
-            "residuals_20220101_20220102.tif",
-            "residuals_20220101_20220103.tif",
-            "residuals_20220103_20220104.tif",
-        ]
+        if len(paths.unwrapped_paths) > len(paths.timeseries_paths):
+            assert paths.timeseries_residual_paths is not None
+            ts_residual_names = [pp.name for pp in paths.timeseries_residual_paths]
+            assert ts_residual_names == [
+                "residuals_20220101_20220102.tif",
+                "residuals_20220101_20220103.tif",
+                "residuals_20220103_20220104.tif",
+            ]
 
         unw_names = [pp.name for pp in paths.unwrapped_paths]
         if cfg.unwrap_options.unwrap_method == "spurt":
