@@ -4,18 +4,18 @@
 
 ## [0.35.0](https://github.com/isce-framework/dolphin/compare/v0.34.0...v0.35.0) - 2025-12-09
 
-Added
+### Added
 
 - Compute timeseries inversion and save to rasters
 - `use_seasonal_coherence` parameter to simulate.py
 
-Changed
+### Changed
 
 - `keepdims` options to reader classes to avoid squeezing singleton dims
 - Using L1 inversion by default for timeseries
-- Using most recent compressed SLC as output for LAST_PER_MINISTACK
-- Adapted short wavelength filter to use gdal_fillnodata for edge effects mitigation
-- Removed numba dependency from simulate.py
+- Using most recent compressed SLC as output for `LAST_PER_MINISTACK`
+- Adapted short wavelength filter to use `gdal_fillnodata` for edge effects mitigation
+- Removed Numba dependency from `simulate.py`
 
 ### Fixed
 
