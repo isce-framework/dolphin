@@ -94,9 +94,6 @@ def test_displacement_run_single_official_opera_naming(
         assert paths.unwrapped_paths is not None
         assert all(get_raster_units(p) == "radians" for p in paths.unwrapped_paths)
         assert all(get_raster_units(p) == "meters" for p in paths.timeseries_paths)
-        assert all(
-            get_raster_units(p) == "radians" for p in paths.timeseries_residual_paths
-        )
         assert all(full_suffix(p) == ".tif" for p in paths.timeseries_paths)
         # nearest-1 network, so no residuals
         assert paths.timeseries_residual_paths is None
@@ -238,6 +235,10 @@ def test_displacement_run_extra_reference_date(
 
         if len(paths.unwrapped_paths) > len(paths.timeseries_paths):
             assert paths.timeseries_residual_paths is not None
+            assert all(
+                get_raster_units(p) == "radians"
+                for p in paths.timeseries_residual_paths
+            )
             ts_residual_names = [pp.name for pp in paths.timeseries_residual_paths]
             assert ts_residual_names == [
                 "residuals_20220101_20220102.tif",
