@@ -57,7 +57,7 @@ def run(
     wavelength: float | None = None,
     add_overviews: bool = True,
     extra_reference_date: datetime | None = None,
-) -> tuple[list[Path], ReferencePoint]:
+) -> tuple[list[Path], list[Path] | None, ReferencePoint]:
     """Invert the unwrapped interferograms, estimate timeseries and phase velocity.
 
     Parameters
@@ -118,6 +118,9 @@ def run(
     -------
     inverted_phase_paths : list[Path]
         list of Paths to inverted interferograms (single reference phase series).
+    residual_paths : list[Path] | None
+        list of Paths to timeseries inversion residuals.
+        If no inversion is performed, this is be None.
     reference_point : ReferencePoint
         NamedTuple of reference (row, column) selected.
         If passed as input, simply returned back as output.
@@ -168,9 +171,10 @@ def run(
             reference_point=ref_point,
             wavelength=wavelength,
         )
+        final_residual_paths = None
     else:
         logger.info("Inverting network of %s unwrapped ifgs", len(unwrapped_paths))
-        inverted_phase_paths = invert_unw_network(
+        inverted_phase_paths, residual_paths = invert_unw_network(
             unw_file_list=unwrapped_paths,
             conncomp_file_list=conncomp_paths,
             reference=ref_point,
@@ -182,8 +186,11 @@ def run(
         )
         if extra_reference_date is None:
             final_ts_paths = inverted_phase_paths
+            final_residual_paths = residual_paths
         else:
-            final_ts_paths = _redo_reference(inverted_phase_paths, extra_reference_date)
+            final_ts_paths, final_residual_paths = _redo_reference(
+                inverted_phase_paths, residual_paths, extra_reference_date
+            )
 
     if add_overviews:
         logger.info("Creating overviews for timeseries images")
@@ -215,11 +222,13 @@ def run(
             num_threads=num_threads,
         )
 
-    return final_ts_paths, ref_point
+    return final_ts_paths, final_residual_paths, ref_point
 
 
 def _redo_reference(
-    inverted_phase_paths: Sequence[Path], extra_reference_date: datetime
+    inverted_phase_paths: Sequence[Path],
+    residual_paths: Sequence[Path],
+    extra_reference_date: datetime,
 ):
     """Reset the reference date in `inverted_phase_paths`.
 
@@ -228,6 +237,11 @@ def _redo_reference(
     E.g Given the (day 1, day 2), ..., (day 1, day N) pairs, outputs
     (1, 2), (1, 3), ...(1, r), (r, r+1), ..., (r, N)
     where r is the index of the `extra_reference_date`
+
+    Also resets the reference date in `residual_paths` with a simple renaming
+    rather than a new difference calculation.
+    We only need to rename because it's the *secondary* date that matters for
+    the residual calculation.
     """
     output_path = inverted_phase_paths[0].parent
     inverted_date_pairs: list[tuple[datetime, datetime]] = [
@@ -247,6 +261,8 @@ def _redo_reference(
     extra_out_dir.mkdir(exist_ok=True)
     units = io.get_raster_units(inverted_phase_paths[0])
 
+    # Copy the first part
+    final_residual_paths = list(residual_paths[: extra_ref_idx + 1])
     for idx in range(extra_ref_idx + 1, len(inverted_date_pairs)):
         # To create the interferogram (r, r+1), we subtract
         # (1, r) from (1, r+1)
@@ -262,6 +278,12 @@ def _redo_reference(
             units=units,
         )
 
+        # rename the reference date in the residual timeseries
+        new_residual_name = f"residuals_{new_stem}.tif"
+        final_residual_paths.append(
+            residual_paths[idx].rename(output_path / new_residual_name)
+        )
+
     for idx, p in enumerate(inverted_phase_paths):
         if idx <= extra_ref_idx:
             p.rename(extra_out_dir / p.name)
@@ -271,7 +293,7 @@ def _redo_reference(
     final_out = []
     for p in extra_out_dir.glob("*.tif"):
         final_out.append(p.rename(output_path / p.name))
-    return sorted(final_out)
+    return sorted(final_out), sorted(final_residual_paths)
 
 
 def _convert_and_reference(
@@ -878,7 +900,7 @@ def invert_unw_network(
     method: InversionMethod = InversionMethod.L2,
     block_shape: tuple[int, int] = (256, 256),
     num_threads: int = 4,
-) -> list[Path]:
+) -> tuple[list[Path], list[Path]]:
     """Perform pixel-wise inversion of unwrapped network to get phase per date.
 
     Parameters
@@ -926,6 +948,8 @@ def invert_unw_network(
     -------
     out_paths : list[Path]
         List of the output files created by the inversion.
+    residual_paths : list[Path]
+        List of the output files containing the residuals.
 
     """
     if ifg_date_pairs is None:
@@ -948,13 +972,13 @@ def invert_unw_network(
         Path(output_dir) / (f"{format_dates(ref_date, d)}{suffix}")
         for d in sar_dates[1:]
     ]
-    if all(p.exists() for p in out_paths):
-        logger.info("All output files already exist, skipping inversion")
-        return out_paths
     out_residuals_paths = [
         Path(output_dir) / (f"residuals_{format_dates(ref_date, d)}{suffix}")
         for d in sar_dates[1:]
     ]
+    if all(p.exists() for p in out_paths):
+        logger.info("All output files already exist, skipping inversion")
+        return out_paths, out_residuals_paths
 
     summed_residuals_path = Path(output_dir) / "unw_inversion_residuals.tif"
     logger.info(f"Inverting network using {method.upper()}-norm minimization")
@@ -1088,7 +1112,7 @@ def invert_unw_network(
     io.set_raster_units(summed_residuals_path, "radians")
 
     logger.info("Completed invert_unw_network")
-    return out_paths
+    return out_paths, out_residuals_paths
 
 
 @jit
