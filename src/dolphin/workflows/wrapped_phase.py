@@ -80,13 +80,17 @@ def run(
     non_compressed_slcs = [
         f for f, is_comp in zip(input_file_list, is_compressed) if not is_comp
     ]
-
+    layover_shadow_mask = (
+        cfg.layover_shadow_mask_files[0] if cfg.layover_shadow_mask_files else None
+    )
     # Create a mask file from input bounding polygons and/or specified output bounds
     mask_filename = _get_mask(
         output_dir=cfg.work_directory,
         output_bounds=cfg.output_options.bounds,
+        output_bounds_wkt=cfg.output_options.bounds_wkt,
         output_bounds_epsg=cfg.output_options.bounds_epsg,
         like_filename=vrt_stack.outfile,
+        layover_shadow_mask=layover_shadow_mask,
         cslc_file_list=non_compressed_slcs,
     )
 
@@ -158,6 +162,13 @@ def run(
         logger.info(f"Running sequential EMI step in {pl_path}")
         kwargs = tqdm_kwargs | {"desc": f"Phase linking ({pl_path})"}
 
+        # Figure out if we should compute phase similarity based on single-ref,
+        # or using nearest-3 interferograms
+        is_single_ref = _is_single_reference_network(
+            cfg.interferogram_network, cfg.unwrap_options.unwrap_method
+        )
+        similarity_nearest_n = None if is_single_ref else 3
+
         # TODO: Need a good way to store the nslc attribute in the PS file...
         # If we pre-compute it from some big stack, we need to use that for SHP
         # finding, not use the size of `slc_vrt_file`
@@ -178,6 +189,7 @@ def run(
             strides=strides,
             use_evd=cfg.phase_linking.use_evd,
             beta=cfg.phase_linking.beta,
+            zero_correlation_threshold=cfg.phase_linking.zero_correlation_threshold,
             mask_file=mask_filename,
             ps_mask_file=ps_output,
             amp_mean_file=cfg.ps_options._amp_mean_file,
@@ -185,9 +197,11 @@ def run(
             shp_method=cfg.phase_linking.shp_method,
             shp_alpha=cfg.phase_linking.shp_alpha,
             shp_nslc=shp_nslc,
+            baseline_lag=cfg.phase_linking.baseline_lag,
+            compressed_slc_plan=cfg.phase_linking.compressed_slc_plan,
+            similarity_nearest_n=similarity_nearest_n,
             cslc_date_fmt=cfg.input_options.cslc_date_fmt,
             block_shape=cfg.worker_settings.block_shape,
-            baseline_lag=cfg.phase_linking.baseline_lag,
             **kwargs,
         )
     # Dump the used options for JSON parsing
@@ -226,16 +240,18 @@ def run(
     # Reading direct nearest-3 ifgs is not working due to some slicing problem
     # so we need to just give it single reference ifgs, all referenced to the beginning
     # of the stack
-    extra_reference_date = (
-        # For spurt / networks of unwrappings, we ignore this this "changeover" date
-        # It will get applied in the `timeseries/` step
-        cfg.output_options.extra_reference_date
-        if (
-            cfg.unwrap_options.unwrap_method != UnwrapMethod.SPURT
-            or cfg.interferogram_network.max_bandwidth is not None
-        )
-        else None
-    )
+    # For spurt / networks of unwrapping, we ignore this this "changeover" date
+    # It will get applied in the `timeseries/` step
+    is_using_spurt = cfg.unwrap_options.unwrap_method == UnwrapMethod.SPURT
+    # Same thing for nearest-N interferograms: we just form then normally, then
+    # do a final, post-timeseries re-reference.
+    is_using_short_baseline_ifgs = cfg.interferogram_network.max_bandwidth is not None
+
+    if is_using_spurt or is_using_short_baseline_ifgs:
+        extra_reference_date = None
+    else:
+        extra_reference_date = cfg.output_options.extra_reference_date
+
     ifg_file_list: list[Path] = []
     ifg_file_list = create_ifgs(
         interferogram_network=ifg_network,
@@ -346,24 +362,27 @@ def create_ifgs(
         manual_reference_idx = get_nearest_date_idx(
             secondary_dates, extra_reference_date
         )
-
+        # The first part simply takes a `.conj()` of the phase linking outputs
         single_ref_ifgs = [
             interferogram.convert_pl_to_ifg(
-                f, reference_date=reference_date, output_dir=ifg_dir, dry_run=dry_run
+                f,
+                reference_date=reference_date,  # this is the `phase_linking.output_idx`
+                output_dir=ifg_dir,
+                dry_run=dry_run,
             )
             for f in phase_linked_slcs[: manual_reference_idx + 1]
         ]
-        single_ref_ifgs.extend(
-            [
-                interferogram.convert_pl_to_ifg(
-                    f,
-                    reference_date=extra_reference_date,
-                    output_dir=ifg_dir,
-                    dry_run=dry_run,
-                )
-                for f in phase_linked_slcs[manual_reference_idx + 1 :]
-            ]
-        )
+        # the second part now uses the "extra" date as the ifg reference
+        extra_ref_file = phase_linked_slcs[manual_reference_idx]
+        for f in phase_linked_slcs[manual_reference_idx + 1 :]:
+            v = interferogram.VRTInterferogram(
+                ref_slc=extra_ref_file,
+                sec_slc=f,
+                outdir=ifg_dir,
+                write=not dry_run,
+                verify_slcs=not dry_run,
+            )
+            single_ref_ifgs.append(v.path)  # type: ignore[arg-type]
 
     if interferogram_network.indexes and interferogram_network.indexes == [(0, -1)]:
         ifg_file_list.append(single_ref_ifgs[-1])
@@ -448,48 +467,61 @@ def _get_input_dates(
 def _get_mask(
     output_dir: Path,
     output_bounds: Bbox | tuple[float, float, float, float] | None,
+    output_bounds_wkt: str | None,
     output_bounds_epsg: int,
     like_filename: Filename,
+    layover_shadow_mask: Filename | None,
     cslc_file_list: Sequence[Filename],
 ) -> Path | None:
     # Make the nodata mask from the polygons, if we're using OPERA CSLCs
+    mask_files: list[Path] = []
 
     try:
         nodata_mask_file = output_dir / "nodata_mask.tif"
         make_nodata_mask(
             opera_file_list=cslc_file_list,
             out_file=nodata_mask_file,
-            buffer_pixels=200,
+            buffer_pixels=800,
         )
+        mask_files.append(nodata_mask_file)
     except Exception as e:
         logger.warning(f"Could not make nodata mask: {e}")
         nodata_mask_file = None
 
-    mask_filename: Path | None = None
     # Also mask outside the area of interest if we've specified a small bounds
-    if output_bounds is not None:
+    if output_bounds is not None or output_bounds_wkt is not None:
         # Make a mask just from the bounds
         bounds_mask_filename = output_dir / "bounds_mask.tif"
         masking.create_bounds_mask(
             bounds=output_bounds,
+            bounds_wkt=output_bounds_wkt,
             bounds_epsg=output_bounds_epsg,
             output_filename=bounds_mask_filename,
             like_filename=like_filename,
         )
+        mask_files.append(bounds_mask_filename)
 
-        # Then combine with the nodata mask
-        if nodata_mask_file is not None:
-            combined_mask_filename = output_dir / "combined_mask.tif"
-            if not combined_mask_filename.exists():
-                masking.combine_mask_files(
-                    mask_files=[bounds_mask_filename, nodata_mask_file],
-                    output_file=combined_mask_filename,
-                    output_convention=masking.MaskConvention.ZERO_IS_NODATA,
-                )
-            mask_filename = combined_mask_filename
-        else:
-            mask_filename = bounds_mask_filename
-    else:
-        mask_filename = nodata_mask_file
+    if layover_shadow_mask is not None:
+        mask_files.append(Path(layover_shadow_mask))
 
-    return mask_filename
+    if not mask_files:
+        return None
+
+    combined_mask_filename = output_dir / "combined_mask.tif"
+    if not combined_mask_filename.exists():
+        masking.combine_mask_files(
+            mask_files=mask_files,
+            output_file=combined_mask_filename,
+            output_convention=masking.MaskConvention.ZERO_IS_NODATA,
+        )
+    return combined_mask_filename
+
+
+def _is_single_reference_network(
+    ifg_network: InterferogramNetwork, unwrap_method: UnwrapMethod
+):
+    return (
+        unwrap_method != UnwrapMethod.SPURT
+        and ifg_network.max_bandwidth is None
+        and ifg_network.max_temporal_baseline is None
+    )

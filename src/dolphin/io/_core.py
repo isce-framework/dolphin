@@ -22,35 +22,38 @@ from pyproj import CRS
 from dolphin._types import Bbox, Filename, Strides
 from dolphin.utils import compute_out_shape, gdal_to_numpy_type, numpy_to_gdal_type
 
+from ._paths import S3Path
+
 gdal.UseExceptions()
 logger = logging.getLogger(__name__)
 
 __all__ = [
-    "load_gdal",
-    "write_arr",
-    "write_block",
-    "format_nc_filename",
-    "copy_projection",
-    "get_raster_xysize",
-    "get_raster_crs",
-    "get_raster_bounds",
-    "get_raster_nodata",
-    "get_raster_bounds",
-    "get_raster_dtype",
-    "get_raster_metadata",
-    "get_raster_units",
-    "set_raster_units",
-    "get_raster_description",
-    "set_raster_description",
-    "get_raster_gt",
-    "get_raster_driver",
-    "get_raster_chunk_size",
-    "set_raster_metadata",
-    "DEFAULT_ENVI_OPTIONS",
     "DEFAULT_DATETIME_FORMAT",
+    "DEFAULT_ENVI_OPTIONS",
     "DEFAULT_HDF5_OPTIONS",
     "DEFAULT_TIFF_OPTIONS",
     "DEFAULT_TILE_SHAPE",
+    "copy_projection",
+    "format_nc_filename",
+    "get_raster_bounds",
+    "get_raster_bounds",
+    "get_raster_chunk_size",
+    "get_raster_crs",
+    "get_raster_description",
+    "get_raster_driver",
+    "get_raster_dtype",
+    "get_raster_gt",
+    "get_raster_metadata",
+    "get_raster_nodata",
+    "get_raster_units",
+    "get_raster_xysize",
+    "load_gdal",
+    "set_raster_description",
+    "set_raster_metadata",
+    "set_raster_nodata",
+    "set_raster_units",
+    "write_arr",
+    "write_block",
 ]
 
 
@@ -79,6 +82,13 @@ DEFAULT_HDF5_OPTIONS = {
     "compression_opts": 4,
     "shuffle": True,
 }
+
+
+def _get_gdal_ds(filename: Filename, update: bool = False) -> gdal.Dataset:
+    mode = gdal.GA_Update if update else gdal.GA_ReadOnly
+    if str(filename).startswith("s3://"):
+        return gdal.Open(S3Path(str(filename)).to_gdal(), mode)
+    return gdal.Open(fspath(filename))
 
 
 def load_gdal(
@@ -120,7 +130,7 @@ def load_gdal(
         where y = height // subsample_factor and x = width // subsample_factor.
 
     """
-    ds = gdal.Open(fspath(filename))
+    ds = _get_gdal_ds(filename)
     nrows, ncols = ds.RasterYSize, ds.RasterXSize
 
     if overview is not None:
@@ -226,7 +236,7 @@ def format_nc_filename(filename: Filename, ds_name: Optional[str] = None) -> str
 
 def copy_projection(src_file: Filename, dst_file: Filename) -> None:
     """Copy projection/geotransform from `src_file` to `dst_file`."""
-    ds_src = gdal.Open(fspath(src_file))
+    ds_src = _get_gdal_ds(src_file)
     projection = ds_src.GetProjection()
     geotransform = ds_src.GetGeoTransform()
     nodata = ds_src.GetRasterBand(1).GetNoDataValue()
@@ -250,7 +260,7 @@ def copy_projection(src_file: Filename, dst_file: Filename) -> None:
 
 def get_raster_xysize(filename: Filename) -> tuple[int, int]:
     """Get the xsize/ysize of a GDAL-readable raster."""
-    ds = gdal.Open(fspath(filename))
+    ds = _get_gdal_ds(filename)
     xsize, ysize = ds.RasterXSize, ds.RasterYSize
     ds = None
     return xsize, ysize
@@ -272,8 +282,31 @@ def get_raster_nodata(filename: Filename, band: int = 1) -> Optional[float]:
         Nodata value, or None if not found.
 
     """
-    ds = gdal.Open(fspath(filename))
+    ds = _get_gdal_ds(filename)
     return ds.GetRasterBand(band).GetNoDataValue()
+
+
+def set_raster_nodata(filename: Filename, nodata: float, band: int | None = None):
+    """Set the nodata value for a raster.
+
+    Parameters
+    ----------
+    filename : Filename
+        Path to the file to load.
+    nodata : float
+        The nodata value to set.
+    band : int, optional
+        The band to set the nodata value for, by default None
+        (sets the nodata value for all bands).
+
+    """
+    ds = gdal.Open(fspath(filename), gdal.GA_Update)
+    if band is None:
+        for i in range(ds.RasterCount):
+            ds.GetRasterBand(i + 1).SetNoDataValue(nodata)
+    else:
+        ds.GetRasterBand(band).SetNoDataValue(nodata)
+    ds = None
 
 
 def get_raster_crs(filename: Filename) -> CRS:
@@ -290,7 +323,7 @@ def get_raster_crs(filename: Filename) -> CRS:
         CRS.
 
     """
-    ds = gdal.Open(fspath(filename))
+    ds = _get_gdal_ds(filename)
     return CRS.from_wkt(ds.GetProjection())
 
 
@@ -308,7 +341,7 @@ def get_raster_gt(filename: Filename) -> list[float]:
         6 floats representing a GDAL Geotransform.
 
     """
-    ds = gdal.Open(fspath(filename))
+    ds = _get_gdal_ds(filename)
     return ds.GetGeoTransform()
 
 
@@ -326,7 +359,7 @@ def get_raster_dtype(filename: Filename) -> np.dtype:
         Data type.
 
     """
-    ds = gdal.Open(fspath(filename))
+    ds = _get_gdal_ds(filename)
     return gdal_to_numpy_type(ds.GetRasterBand(1).DataType)
 
 
@@ -344,7 +377,7 @@ def get_raster_driver(filename: Filename) -> str:
         Driver name.
 
     """
-    ds = gdal.Open(fspath(filename))
+    ds = _get_gdal_ds(filename)
     return ds.GetDriver().ShortName
 
 
@@ -356,7 +389,7 @@ def get_raster_bounds(
         if filename is None:
             msg = "Must provide either `filename` or `ds`"
             raise ValueError(msg)
-        ds = gdal.Open(fspath(filename))
+        ds = _get_gdal_ds(filename)
 
     gt = ds.GetGeoTransform()
     xsize, ysize = ds.RasterXSize, ds.RasterYSize
@@ -383,7 +416,7 @@ def get_raster_metadata(filename: Filename, domain: str = ""):
         Dictionary of metadata.
 
     """
-    ds = gdal.Open(fspath(filename))
+    ds = _get_gdal_ds(filename)
     return ds.GetMetadata(domain)
 
 
@@ -421,7 +454,7 @@ def get_raster_description(filename: Filename, band: int = 1):
         Band to get description for. Default is 1.
 
     """
-    ds = gdal.Open(fspath(filename), gdal.GA_Update)
+    ds = _get_gdal_ds(filename)
     bnd = ds.GetRasterBand(band)
     return bnd.GetDescription()
 
@@ -458,7 +491,7 @@ def get_raster_units(filename: Filename, band: int = 1) -> str | None:
         Default is 1.
 
     """
-    ds = gdal.Open(fspath(filename))
+    ds = _get_gdal_ds(filename)
     bnd = ds.GetRasterBand(band)
     return bnd.GetUnitType() or None
 
@@ -518,7 +551,7 @@ def _apply_gt(
     """Read the (possibly inverse) geotransform, apply to the x/y coordinates."""
     if gt is None:
         if ds is None:
-            ds = gdal.Open(fspath(filename))
+            ds = _get_gdal_ds(filename)
             gt = ds.GetGeoTransform()
             ds = None
         else:
@@ -774,10 +807,7 @@ class FileInfo:
         projection: Optional[Any] = None,
         nodata: Optional[float] = None,
     ) -> FileInfo:
-        if like_filename is not None:
-            ds_like = gdal.Open(fspath(like_filename))
-        else:
-            ds_like = None
+        ds_like = _get_gdal_ds(like_filename) if like_filename is not None else None
 
         xsize = ysize = gdal_dtype = None
         if arr is not None:
@@ -790,6 +820,8 @@ class FileInfo:
             if shape is not None:
                 ysize, xsize = shape
             else:
+                if ds_like is None:
+                    raise ValueError("Must provide shape if no `like_filename`")
                 xsize, ysize = ds_like.RasterXSize, ds_like.RasterYSize
                 # If using strides, adjust the output shape
                 if strides is not None:
@@ -800,6 +832,8 @@ class FileInfo:
             if dtype is not None:
                 gdal_dtype = numpy_to_gdal_type(dtype)
             else:
+                if ds_like is None:
+                    raise ValueError("Must provide dtype if no `like_filename`")
                 gdal_dtype = ds_like.GetRasterBand(1).DataType
 
         if any(v is None for v in (xsize, ysize, gdal_dtype)):
@@ -862,7 +896,7 @@ def get_raster_chunk_size(filename: Filename) -> list[int]:
 
     This is called blockXsize, blockYsize by GDAL.
     """
-    ds = gdal.Open(fspath(filename))
+    ds = _get_gdal_ds(filename)
     block_size = ds.GetRasterBand(1).GetBlockSize()
     for i in range(2, ds.RasterCount + 1):
         if block_size != ds.GetRasterBand(i).GetBlockSize():

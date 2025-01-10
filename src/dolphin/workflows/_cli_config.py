@@ -26,6 +26,7 @@ def create_config(
     mask_file: Optional[str] = None,
     zero_where_masked: bool = False,
     ministack_size: Optional[int] = 15,
+    use_evd: bool = False,
     half_window_size: tuple[int, int] = (11, 5),
     shp_method: ShpMethod = ShpMethod.GLRT,
     baseline_lag: Optional[int] = None,
@@ -98,6 +99,7 @@ def create_config(
             "ministack_size": ministack_size,
             "half_window": {"x": half_window_size[0], "y": half_window_size[1]},
             "shp_method": shp_method,
+            "use_evd": use_evd,
             "baseline_lag": baseline_lag,
         },
         ps_options={
@@ -220,6 +222,11 @@ def get_parser(subparser=None, subcommand_name="run"):
         "--ministack-size",
         default=15,
         help="Strides/decimation factor (x, y) (in pixels) to use when determining",
+    )
+    pl_group.add_argument(
+        "--use-evd",
+        action="store_true",
+        help="Use EVD for phase linking instead of EMI/CPL",
     )
     # Half window size for the phase linking algorithm
     pl_group.add_argument(

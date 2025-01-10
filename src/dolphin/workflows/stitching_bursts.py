@@ -132,6 +132,7 @@ def run(
             temp_coh_file_list,
             outfile=stitched_temp_coh_file,
             driver="GTiff",
+            resample_alg="nearest",
             out_bounds=out_bounds,
             out_bounds_epsg=output_options.bounds_epsg,
         )
@@ -157,28 +158,33 @@ def run(
             amp_dispersion_list,
             outfile=stitched_amp_disp_file,
             driver="GTiff",
+            resample_alg="nearest",
             out_bounds=out_bounds,
             out_bounds_epsg=output_options.bounds_epsg,
         )
         repack_raster(stitched_temp_coh_file, keep_bits=10)
 
     stitched_shp_count_file = stitched_ifg_dir / "shp_counts.tif"
-    stitching.merge_images(
-        shp_count_file_list,
-        outfile=stitched_shp_count_file,
-        driver="GTiff",
-        out_bounds=out_bounds,
-        out_bounds_epsg=output_options.bounds_epsg,
-    )
+    if not stitched_shp_count_file.exists():
+        stitching.merge_images(
+            shp_count_file_list,
+            outfile=stitched_shp_count_file,
+            driver="GTiff",
+            resample_alg="nearest",
+            out_bounds=out_bounds,
+            out_bounds_epsg=output_options.bounds_epsg,
+        )
 
     stitched_similarity_file = stitched_ifg_dir / "similarity.tif"
-    stitching.merge_images(
-        similarity_file_list,
-        outfile=stitched_similarity_file,
-        driver="GTiff",
-        out_bounds=out_bounds,
-        out_bounds_epsg=output_options.bounds_epsg,
-    )
+    if not stitched_similarity_file.exists():
+        stitching.merge_images(
+            similarity_file_list,
+            outfile=stitched_similarity_file,
+            driver="GTiff",
+            resample_alg="nearest",
+            out_bounds=out_bounds,
+            out_bounds_epsg=output_options.bounds_epsg,
+        )
 
     if output_options.add_overviews:
         logger.info("Creating overviews for stitched images")

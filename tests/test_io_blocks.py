@@ -147,6 +147,14 @@ class TestBlockManager:
             assert row_slice.stop < nrows - out_row_margin
             assert col_slice.stop < ncols - out_col_margin
 
+    def test_zero_trim_size(self):
+        bm = StridedBlockManager(
+            (7, 7), (100, 100), Strides(3, 3), half_window=HalfWindow(1, 1)
+        )
+        in_row_trim, in_col_trim = next(iter(bm.iter_blocks()))[-1]
+        assert get_slice_length(in_row_trim, data_size=7) == 7
+        assert get_slice_length(in_col_trim, data_size=7) == 7
+
 
 # @pytest.mark.skip(reason="Uses old logic ")
 class TestFakeProcess:

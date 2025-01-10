@@ -1,7 +1,7 @@
 markdown
 mkdocs
 mkdocs-gen-files
-mkdocs-jupyter
+mkdocs-jupyter==0.25.0
 mkdocs-literate-nav
 mkdocs-material
 mkdocs-section-index

@@ -34,16 +34,16 @@ from ._utils import _ensure_slices, _unpack_3d_slices
 logger = logging.getLogger(__name__)
 
 __all__ = [
-    "DatasetReader",
-    "StackReader",
     "BinaryReader",
     "BinaryStackReader",
+    "DatasetReader",
+    "EagerLoader",
     "HDF5Reader",
     "HDF5StackReader",
     "RasterReader",
     "RasterStackReader",
+    "StackReader",
     "VRTStack",
-    "EagerLoader",
 ]
 
 
@@ -242,6 +242,10 @@ class HDF5Reader(DatasetReader):
     keep_open: bool = False
     """bool : If True, keep the HDF5 file handle open for faster reading."""
 
+    keepdims: bool = True
+    """bool : Maintain the dimension of the point array. If set to False, will
+    skip `squeeze` on outputs with one dimension size of 1. Default is True."""
+
     def __post_init__(self):
         filename = Path(self.filename)
 
@@ -328,12 +332,17 @@ class RasterReader(DatasetReader):
     chunks: Optional[tuple[int, int]] = None
     """Optional[tuple[int, int]] : Chunk shape of the dataset, or None if unchunked."""
 
+    keepdims: bool = True
+    """bool : Maintain the dimension of the point array. If set to False, will
+    skip `squeeze` on outputs with one dimension size of 1. Default is True."""
+
     @classmethod
     def from_file(
         cls,
         filename: Filename,
         band: int = 1,
         nodata: Optional[float] = None,
+        keepdims: bool = True,
         keep_open: bool = False,
         **options,
     ) -> RasterReader:
@@ -355,6 +364,7 @@ class RasterReader(DatasetReader):
                 shape=shape,
                 dtype=dtype,
                 nodata=nodata,
+                keepdims=keepdims,
                 keep_open=keep_open,
                 chunks=chunks,
             )
@@ -397,11 +407,17 @@ class RasterReader(DatasetReader):
         # Note that Rasterio doesn't use the `step` of a slice, so we need to
         # manually slice the output array.
         r_step, c_step = r_slice.step or 1, c_slice.step or 1
-        return out_masked[::r_step, ::c_step].squeeze()
+        if self.keepdims:
+            return out_masked[::r_step, ::c_step]
+        else:
+            return out_masked[::r_step, ::c_step].squeeze()
 
 
 def _read_3d(
-    key: tuple[Index, ...], readers: Sequence[DatasetReader], num_threads: int = 1
+    key: tuple[Index, ...],
+    readers: Sequence[DatasetReader],
+    num_threads: int = 1,
+    keepdims: bool = True,
 ):
     bands, r_slice, c_slice = _unpack_3d_slices(key)
 
@@ -423,8 +439,7 @@ def _read_3d(
             results = executor.map(lambda i: readers[i][r_slice, c_slice], band_idxs)
         out = np.stack(list(results), axis=0)
 
-    # TODO: Do i want a "keep_dims" option to not collapse singleton dimensions?
-    return np.squeeze(out)
+    return out if keepdims else np.squeeze(out)
 
 
 @dataclass
@@ -433,11 +448,14 @@ class BaseStackReader(StackReader):
 
     file_list: Sequence[Filename]
     readers: Sequence[DatasetReader]
+    keepdims: bool = True
     num_threads: int = 1
     nodata: Optional[float] = None
 
     def __getitem__(self, key: tuple[Index, ...], /) -> np.ndarray:
-        return _read_3d(key, self.readers, num_threads=self.num_threads)
+        return _read_3d(
+            key, self.readers, num_threads=self.num_threads, keepdims=self.keepdims
+        )
 
     @property
     def shape_2d(self):
@@ -618,6 +636,7 @@ class RasterStackReader(BaseStackReader):
         cls,
         file_list: Sequence[Filename],
         bands: int | Sequence[int] = 1,
+        keepdims: bool = True,
         keep_open: bool = False,
         num_threads: int = 1,
         nodata: Optional[float] = None,
@@ -632,6 +651,10 @@ class RasterStackReader(BaseStackReader):
             Band to read from each file.
             If a single int, will be used for all files.
             Default = 1.
+        keepdims : bool
+            Maintain the dimension of the point array. If set to False, will
+            skip `squeeze` on outputs with one dimension size of 1.
+            Default is False.
         keep_open : bool, optional (default False)
             If True, keep the rasterio file handles open for faster reading.
         num_threads : int, optional (default 1)
@@ -649,14 +672,20 @@ class RasterStackReader(BaseStackReader):
             bands = [bands] * len(file_list)
 
         readers = [
-            RasterReader.from_file(f, band=b, keep_open=keep_open)
+            RasterReader.from_file(f, band=b, keep_open=keep_open, keepdims=keepdims)
             for (f, b) in zip(file_list, bands)
         ]
         # Check if nodata values were found in the files
         nds = {r.nodata for r in readers}
         if len(nds) == 1:
             nodata = nds.pop()
-        return cls(file_list, readers, num_threads=num_threads, nodata=nodata)
+        return cls(
+            file_list,
+            readers,
+            num_threads=num_threads,
+            nodata=nodata,
+            keepdims=keepdims,
+        )
 
 
 # Masked versions of each of the 2D/3D readers
@@ -995,7 +1024,7 @@ def _assert_images_same_size(files):
     with ThreadPoolExecutor(5) as executor:
         sizes = list(executor.map(io.get_raster_xysize, files))
     if len(set(sizes)) > 1:
-        msg = f"Not files have same raster (x, y) size:\n{set(sizes)}"
+        msg = f"Not all files have the same raster (x, y) size:\n{set(sizes)}"
         raise ValueError(msg)
 
 

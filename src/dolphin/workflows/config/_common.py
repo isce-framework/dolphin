@@ -10,7 +10,6 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
-    NaiveDatetime,
     PrivateAttr,
     field_validator,
     model_validator,
@@ -19,6 +18,7 @@ from pydantic import (
 from dolphin import __version__ as _dolphin_version
 from dolphin._types import Bbox
 from dolphin.io import DEFAULT_HDF5_OPTIONS, DEFAULT_TIFF_OPTIONS
+from dolphin.stack import CompressedSlcPlan
 
 from ._enums import ShpMethod
 from ._yaml_model import YamlModel
@@ -28,12 +28,12 @@ logger = logging.getLogger(__name__)
 __all__ = [
     "HalfWindow",
     "InputOptions",
-    "OutputOptions",
-    "WorkerSettings",
-    "PsOptions",
-    "PhaseLinkingOptions",
     "InterferogramNetwork",
+    "OutputOptions",
+    "PhaseLinkingOptions",
+    "PsOptions",
     "TimeseriesOptions",
+    "WorkerSettings",
 ]
 
 
@@ -73,7 +73,7 @@ class PhaseLinkingOptions(BaseModel, extra="forbid"):
 
     _directory: Path = PrivateAttr(Path("linked_phase"))
     ministack_size: int = Field(
-        10, description="Size of the ministack for sequential estimator.", gt=1
+        15, description="Size of the ministack for sequential estimator.", gt=1
     )
     max_num_compressed: int = Field(
         100,
@@ -105,10 +105,22 @@ class PhaseLinkingOptions(BaseModel, extra="forbid"):
         ge=0.0,
         le=1.0,
     )
+    zero_correlation_threshold: float = Field(
+        0.00,
+        description=(
+            "Snap correlation values in the coherence matrix below this value to 0."
+        ),
+        ge=0.0,
+        le=1.0,
+    )
     shp_method: ShpMethod = ShpMethod.GLRT
     shp_alpha: float = Field(
-        0.005,
-        description="Significance level (probability of false alarm) for SHP tests.",
+        0.001,
+        description=(
+            "Significance level (probability of false alarm) for SHP tests. Lower"
+            " numbers include more pixels within the multilook window during covariance"
+            " estimation."
+        ),
         gt=0.0,
         lt=1.0,
     )
@@ -129,6 +141,14 @@ class PhaseLinkingOptions(BaseModel, extra="forbid"):
             "`n` interferograms. `baseline_line` must be positive."
         ),
     )
+    compressed_slc_plan: CompressedSlcPlan = CompressedSlcPlan.ALWAYS_FIRST
+
+    @field_validator("compressed_slc_plan", mode="before")
+    @classmethod
+    def _replace_none(cls, v):
+        if v is None:
+            return CompressedSlcPlan.ALWAYS_FIRST
+        return v
 
 
 class InterferogramNetwork(BaseModel, extra="forbid"):
@@ -191,7 +211,7 @@ class TimeseriesOptions(BaseModel, extra="forbid"):
         ),
     )
     method: Literal["L1", "L2"] = Field(
-        "L2", description="Norm to use during timeseries inversion."
+        "L1", description="Norm to use during timeseries inversion."
     )
     reference_point: Optional[tuple[int, int]] = Field(
         None,
@@ -301,8 +321,18 @@ class OutputOptions(BaseModel, extra="forbid"):
             "e.g. `bbox=[-150.2,65.0,-150.1,65.5]`"
         ),
     )
+    bounds_wkt: Optional[str] = Field(
+        None,
+        description=(
+            "Area of interest as a simple Polygon in well-known-text (WKT) format."
+            " Can pass a string, or a `.wkt` filename containing the Polygon text."
+        ),
+    )
     bounds_epsg: int = Field(
-        4326, description="EPSG code for the `bounds` coordinates, if specified."
+        4326,
+        description=(
+            "EPSG code for the `bounds` or `bounds_wkt` coordinates, if specified."
+        ),
     )
 
     hdf5_creation_options: dict = Field(
@@ -327,7 +357,7 @@ class OutputOptions(BaseModel, extra="forbid"):
     )
     # Note: we use NaiveDatetime, since other datetime parsing results in Naive
     # (no TzInfo) datetimes, which can't be compared to datetimes with timezones
-    extra_reference_date: Optional[NaiveDatetime] = Field(
+    extra_reference_date: Optional[datetime] = Field(
         None,
         description=(
             "Specify an extra reference datetime in UTC. Adding this lets you"
@@ -339,9 +369,20 @@ class OutputOptions(BaseModel, extra="forbid"):
     )
 
     # validators
+    @field_validator("bounds_wkt", mode="after")
+    @classmethod
+    def _read_wkt_file(cls, bounds_wkt: str):
+        if bounds_wkt and bounds_wkt.endswith(".wkt"):
+            return Path(bounds_wkt).read_text()
+        return bounds_wkt
+
     @field_validator("bounds", mode="after")
     @classmethod
-    def _convert_bbox(cls, bounds):
+    def _check_and_convert_bounds(cls, bounds, info):
+        bounds_wkt = info.data.get("bounds_wkt")
+        if bounds is not None and bounds_wkt is not None:
+            msg = "Cannot specify both bounds and bounds_wkt."
+            raise ValueError(msg)
         if bounds:
             return Bbox(*bounds)
         return bounds
@@ -379,6 +420,13 @@ class OutputOptions(BaseModel, extra="forbid"):
             msg = "output_resolution not yet implemented. Use `strides`."
             raise NotImplementedError(msg)
         return strides
+
+    @field_validator("extra_reference_date", mode="after")
+    @classmethod
+    def _strip_timezone(cls, extra_reference_date):
+        if extra_reference_date is None:
+            return None
+        return extra_reference_date.replace(tzinfo=None)
 
 
 class WorkflowBase(YamlModel):
@@ -427,9 +475,9 @@ class WorkflowBase(YamlModel):
     # Stores the list of directories to be created by the workflow
     _directory_list: list[Path] = PrivateAttr(default_factory=list)
 
-    def model_post_init(self, __context: Any) -> None:
+    def model_post_init(self, context: Any, /) -> None:
         """After validation, set up properties for use during workflow run."""
-        super().model_post_init(__context)
+        super().model_post_init(context)
         # Ensure outputs from workflow steps are within work directory.
         if not self.keep_paths_relative:
             # Save all directories as absolute paths

@@ -26,11 +26,11 @@ from ._utils import _unpack_3d_slices
 
 __all__ = [
     "BackgroundBlockWriter",
-    "DatasetWriter",
-    "DatasetStackWriter",
-    "RasterWriter",
     "BackgroundRasterWriter",
     "BackgroundStackWriter",
+    "DatasetStackWriter",
+    "DatasetWriter",
+    "RasterWriter",
 ]
 
 if TYPE_CHECKING:

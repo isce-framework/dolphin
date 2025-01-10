@@ -11,11 +11,11 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 from jax import Array, jit, lax, vmap
-from numpy.typing import ArrayLike
+from numpy.typing import ArrayLike, NDArray
 from opera_utils import get_dates
 from scipy import ndimage
 
-from dolphin import DateOrDatetime, io, utils
+from dolphin import DateOrDatetime, io
 from dolphin._overviews import ImageType, create_overviews
 from dolphin._types import PathOrStr, ReferencePoint
 from dolphin.utils import flatten, format_dates, full_suffix, get_nearest_date_idx
@@ -41,23 +41,23 @@ class ReferencePointError(ValueError):
 
 def run(
     unwrapped_paths: Sequence[PathOrStr],
-    conncomp_paths: Sequence[PathOrStr],
+    conncomp_paths: Sequence[PathOrStr] | None,
     condition_file: PathOrStr,
     condition: CallFunc,
     output_dir: PathOrStr,
-    method: InversionMethod = InversionMethod.L2,
+    method: InversionMethod = InversionMethod.L1,
     run_velocity: bool = False,
     corr_paths: Sequence[PathOrStr] | None = None,
     weight_velocity_by_corr: bool = False,
     velocity_file: Optional[PathOrStr] = None,
-    correlation_threshold: float = 0.2,
+    correlation_threshold: float = 0.0,
     block_shape: tuple[int, int] = (256, 256),
     num_threads: int = 4,
     reference_point: tuple[int, int] = (-1, -1),
     wavelength: float | None = None,
     add_overviews: bool = True,
     extra_reference_date: datetime | None = None,
-) -> tuple[list[Path], ReferencePoint]:
+) -> tuple[list[Path], list[Path] | None, ReferencePoint]:
     """Invert the unwrapped interferograms, estimate timeseries and phase velocity.
 
     Parameters
@@ -118,6 +118,9 @@ def run(
     -------
     inverted_phase_paths : list[Path]
         list of Paths to inverted interferograms (single reference phase series).
+    residual_paths : list[Path] | None
+        list of Paths to timeseries inversion residuals.
+        If no inversion is performed, this is be None.
     reference_point : ReferencePoint
         NamedTuple of reference (row, column) selected.
         If passed as input, simply returned back as output.
@@ -130,6 +133,7 @@ def run(
     in both ascending and descending tracks imply uplift).
 
     """
+    unwrapped_paths = sorted(unwrapped_paths, key=str)
     Path(output_dir).mkdir(exist_ok=True, parents=True)
 
     condition_func = argmax_index if condition == CallFunc.MAX else argmin_index
@@ -145,7 +149,7 @@ def run(
         ref_point = ReferencePoint(row=reference_point[0], col=reference_point[1])
 
     ifg_date_pairs = [get_dates(f) for f in unwrapped_paths]
-    sar_dates = sorted(set(utils.flatten(ifg_date_pairs)))
+    sar_dates = sorted(set(flatten(ifg_date_pairs)))
     # if we did single-reference interferograms, for `n` sar dates, we will only have
     # `n-1` interferograms. Any more than n-1 ifgs means we need to invert
     is_single_reference = len(unwrapped_paths) == len(sar_dates) - 1
@@ -167,10 +171,12 @@ def run(
             reference_point=ref_point,
             wavelength=wavelength,
         )
+        final_residual_paths = None
     else:
         logger.info("Inverting network of %s unwrapped ifgs", len(unwrapped_paths))
-        inverted_phase_paths = invert_unw_network(
+        inverted_phase_paths, residual_paths = invert_unw_network(
             unw_file_list=unwrapped_paths,
+            conncomp_file_list=conncomp_paths,
             reference=ref_point,
             output_dir=output_dir,
             block_shape=block_shape,
@@ -180,12 +186,15 @@ def run(
         )
         if extra_reference_date is None:
             final_ts_paths = inverted_phase_paths
+            final_residual_paths = residual_paths
         else:
-            final_ts_paths = _redo_reference(inverted_phase_paths, extra_reference_date)
+            final_ts_paths, final_residual_paths = _redo_reference(
+                inverted_phase_paths, residual_paths, extra_reference_date
+            )
 
     if add_overviews:
         logger.info("Creating overviews for timeseries images")
-        create_overviews(final_ts_paths, image_type=ImageType.UNWRAPPED)
+        create_overviews(final_ts_paths, image_type=ImageType.UNWRAPPED, max_workers=2)
 
     if run_velocity:
         logger.info("Estimating phase velocity")
@@ -213,11 +222,13 @@ def run(
             num_threads=num_threads,
         )
 
-    return final_ts_paths, ref_point
+    return final_ts_paths, final_residual_paths, ref_point
 
 
 def _redo_reference(
-    inverted_phase_paths: Sequence[Path], extra_reference_date: datetime
+    inverted_phase_paths: Sequence[Path],
+    residual_paths: Sequence[Path],
+    extra_reference_date: datetime,
 ):
     """Reset the reference date in `inverted_phase_paths`.
 
@@ -226,6 +237,11 @@ def _redo_reference(
     E.g Given the (day 1, day 2), ..., (day 1, day N) pairs, outputs
     (1, 2), (1, 3), ...(1, r), (r, r+1), ..., (r, N)
     where r is the index of the `extra_reference_date`
+
+    Also resets the reference date in `residual_paths` with a simple renaming
+    rather than a new difference calculation.
+    We only need to rename because it's the *secondary* date that matters for
+    the residual calculation.
     """
     output_path = inverted_phase_paths[0].parent
     inverted_date_pairs: list[tuple[datetime, datetime]] = [
@@ -245,6 +261,8 @@ def _redo_reference(
     extra_out_dir.mkdir(exist_ok=True)
     units = io.get_raster_units(inverted_phase_paths[0])
 
+    # Copy the first part
+    final_residual_paths = list(residual_paths[: extra_ref_idx + 1])
     for idx in range(extra_ref_idx + 1, len(inverted_date_pairs)):
         # To create the interferogram (r, r+1), we subtract
         # (1, r) from (1, r+1)
@@ -260,6 +278,12 @@ def _redo_reference(
             units=units,
         )
 
+        # rename the reference date in the residual timeseries
+        new_residual_name = f"residuals_{new_stem}.tif"
+        final_residual_paths.append(
+            residual_paths[idx].rename(output_path / new_residual_name)
+        )
+
     for idx, p in enumerate(inverted_phase_paths):
         if idx <= extra_ref_idx:
             p.rename(extra_out_dir / p.name)
@@ -269,7 +293,7 @@ def _redo_reference(
     final_out = []
     for p in extra_out_dir.glob("*.tif"):
         final_out.append(p.rename(output_path / p.name))
-    return sorted(final_out)
+    return sorted(final_out), sorted(final_residual_paths)
 
 
 def _convert_and_reference(
@@ -307,7 +331,7 @@ def _convert_and_reference(
         ref_value = arr_radians.filled(np.nan)[ref_row, ref_col]
         if np.isnan(ref_value):
             logger.warning(
-                "{ref_point!r} is NaN for {p} . Skipping reference subtraction."
+                f"{ref_value!r} is NaN for {p} . Skipping reference subtraction."
             )
         else:
             arr_radians -= ref_value
@@ -365,12 +389,49 @@ def argmax_index(arr: ArrayLike) -> tuple[int, ...]:
 
 
 @jit
+def censored_lstsq(A, B, M):
+    """Solves least squares problem subject to missing data in the right hand side.
+
+    Parameters
+    ----------
+    A : ndarray
+        m x n system matrix.
+    B : ndarray
+        m x k matrix representing the k right hand side data vectors of size m.
+    M : ndarray
+        m x k boolean matrix of missing data (`False` indicate missing values)
+
+    Returns
+    -------
+    X : ndarray
+        n x k matrix that minimizes norm(M*(AX - B))
+    residuals : np.array 1D
+        Sums of (k,) squared residuals: squared Euclidean 2-norm for `b - A @ x`
+
+    Reference
+    ---------
+    http://alexhwilliams.info/itsneuronalblog/2018/02/26/censored-lstsq/
+
+    """
+    # if B is a vector, simply drop out corresponding rows in A
+    if B.ndim == 1 or B.shape[1] == 1:
+        return jnp.linalg.lstsq(A[M], B[M])[0]
+
+    # else solve via tensor representation
+    rhs = jnp.dot(A.T, M * B).T[:, :, None]  # k x n x 1 tensor
+    T = jnp.matmul(A.T[None, :, :], M.T[:, :, None] * A[None, :, :])  # k x n x n tensor
+    x = jnp.squeeze(jnp.linalg.solve(T, rhs)).T  # transpose to get n x k
+    residuals = jnp.linalg.norm(A @ x - (B * M.astype(int)), axis=0)
+    return x, residuals
+
+
+@jit
 def weighted_lstsq_single(
     A: ArrayLike,
     b: ArrayLike,
     weights: ArrayLike,
 ) -> Array:
-    r"""Perform weighted least for one data vector.
+    r"""Perform weighted least squares for one data vector.
 
     Minimizes the weighted 2-norm of the residual vector:
 
@@ -382,7 +443,7 @@ def weighted_lstsq_single(
 
     Parameters
     ----------
-    A : Arraylike
+    A : ArrayLike
         Incidence matrix of shape (n_ifgs, n_sar_dates - 1)
     b : ArrayLike, 1D
         The phase differences between the ifg pairs
@@ -416,8 +477,11 @@ def weighted_lstsq_single(
 
 @jit
 def invert_stack(
-    A: ArrayLike, dphi: ArrayLike, weights: ArrayLike | None = None
-) -> Array:
+    A: ArrayLike,
+    dphi: ArrayLike,
+    weights: ArrayLike | None = None,
+    missing_data_flags: ArrayLike | None = None,
+) -> tuple[Array, Array]:
     """Solve the SBAS problem for a stack of unwrapped phase differences.
 
     Parameters
@@ -430,6 +494,11 @@ def invert_stack(
         The weights for each element of `dphi`.
         Same shape as `dphi`.
         If not provided, all weights are set to 1 (ordinary least squares).
+    missing_data_flags : ArrayLike, optional
+        Boolean matrix, same shape as `dphi`, indicating a missing value in `dphi`.
+        If provided, the least squares result will ignore these entries.
+        Example may come from having connected component masks indicate unreliable
+        values in `dphi` for certain interferograms.
 
     Returns
     -------
@@ -457,6 +526,12 @@ def invert_stack(
         # Reshape the phase and residuals to be 3D
         phase = phase_cols.reshape(-1, n_rows, n_cols)
         residuals = residuals_cols.reshape(n_rows, n_cols)
+    elif missing_data_flags is not None:
+        b = dphi.reshape(n_ifgs, -1)
+        missing_data = missing_data_flags.reshape(n_ifgs, -1)
+        phase_cols, residuals_cols = censored_lstsq(A, b, missing_data)
+        phase = phase_cols.reshape(-1, n_rows, n_cols)
+        residuals = residuals_cols.reshape(n_rows, n_cols)
     else:
         # vectorize the solve function to work on 2D and 3D arrays
         # We are not vectorizing over the A matrix, only the dphi vector
@@ -472,7 +547,9 @@ def invert_stack(
 
 
 def get_incidence_matrix(
-    ifg_pairs: Sequence[tuple[T, T]], sar_idxs: Sequence[T] | None = None
+    ifg_pairs: Sequence[tuple[T, T]],
+    sar_idxs: Sequence[T] | None = None,
+    delete_first_date_column: bool = True,
 ) -> np.ndarray:
     """Build the indicator matrix from a list of ifg pairs (index 1, index 2).
 
@@ -486,6 +563,10 @@ def get_incidence_matrix(
         were formed from.
         Otherwise, created from the unique entries in `ifg_pairs`.
         Only provide if there are some dates which are not present in `ifg_pairs`.
+    delete_first_date_column : bool
+        If True, removes the first column of the matrix to make it full column rank.
+        Size will be `n_sar_dates - 1` columns.
+        Otherwise, the matrix will have `n_sar_dates`, but rank `n_sar_dates - 1`.
 
     Returns
     -------
@@ -501,13 +582,13 @@ def get_incidence_matrix(
         sar_idxs = sorted(set(flatten(ifg_pairs)))
 
     M = len(ifg_pairs)
-    N = len(sar_idxs) - 1
+    col_iter = sar_idxs[1:] if delete_first_date_column else sar_idxs
+    N = len(col_iter)
     A = np.zeros((M, N))
 
     # Create a dictionary mapping sar dates to matrix columns
     # We take the first SAR acquisition to be time 0, leave out of matrix
-    date_to_col = {date: i for i, date in enumerate(sar_idxs[1:])}
-    # Populate the matrix
+    date_to_col = {date: i for i, date in enumerate(col_iter)}
     for i, (early, later) in enumerate(ifg_pairs):
         if early in date_to_col:
             A[i, date_to_col[early]] = -1
@@ -570,7 +651,7 @@ def estimate_velocity(
     unw_pixels = unw_stack.reshape(n_time, -1)
     if weight_stack is None:
         # For jnp.polyfit(...), coeffs[0] is slope, coeffs[1] is the intercept
-        velos = jnp.polyfit(x_arr, unw_pixels, deg=1, rcond=None)[0]
+        velocities = jnp.polyfit(x_arr, unw_pixels, deg=1, rcond=None)[0]
     else:
         # We use the same x inputs for all output pixels
         if unw_stack.shape != weight_stack.shape:
@@ -582,12 +663,12 @@ def estimate_velocity(
 
         weights_pixels = weight_stack.reshape(n_time, 1, -1)
 
-        velos = vmap(estimate_velocity_pixel, in_axes=(None, -1, -1))(
+        velocities = vmap(estimate_velocity_pixel, in_axes=(None, -1, -1))(
             x_arr, unw_pixels, weights_pixels
         )
-    # Currently `velos` is in units / day,
+    # Currently `velocities` is in units / day,
     days_per_year = 365.25
-    return velos.reshape(n_rows, n_cols) * days_per_year
+    return velocities.reshape(n_rows, n_cols) * days_per_year
 
 
 def datetime_to_float(dates: Sequence[DateOrDatetime]) -> np.ndarray:
@@ -739,7 +820,7 @@ def create_velocity(
         logger.info("Creating overviews for velocity image")
         create_overviews([output_file])
     if units := io.get_raster_units(unw_file_list[0]):
-        io.set_raster_units(output_file, units=units)
+        io.set_raster_units(output_file, units=f"{units} / year")
     logger.info("Completed create_velocity")
 
 
@@ -810,15 +891,16 @@ def invert_unw_network(
     unw_file_list: Sequence[PathOrStr],
     reference: ReferencePoint,
     output_dir: PathOrStr,
+    conncomp_file_list: Sequence[PathOrStr] | None = None,
     cor_file_list: Sequence[PathOrStr] | None = None,
-    cor_threshold: float = 0.2,
+    cor_threshold: float = 0.0,
     n_cor_looks: int = 1,
     ifg_date_pairs: Sequence[Sequence[DateOrDatetime]] | None = None,
     wavelength: float | None = None,
     method: InversionMethod = InversionMethod.L2,
     block_shape: tuple[int, int] = (256, 256),
     num_threads: int = 4,
-) -> list[Path]:
+) -> tuple[list[Path], list[Path]]:
     """Perform pixel-wise inversion of unwrapped network to get phase per date.
 
     Parameters
@@ -831,11 +913,15 @@ def invert_unw_network(
         from all other points when solving.
     output_dir : PathOrStr
         The directory to save the output files
+    conncomp_file_list : Sequence[PathOrStr], optional
+        Sequence connected component files, one per file in `unwrapped_paths`.
+        Used to ignore interferogram pixels whose connected component label is zero.
     cor_file_list : Sequence[PathOrStr], optional
-        List of correlation files to use for weighting the inversion
+        List of correlation files to use for weighting the inversion.
+        Cannot be used if `conncomp_file_list` is passed.
     cor_threshold : float, optional
         The correlation threshold to use for weighting the inversion
-        Default is 0.2
+        Default is 0.0
     n_cor_looks : int, optional
         The number of looks used to form the input correlation data, used
         to convert correlation to phase variance.
@@ -862,6 +948,8 @@ def invert_unw_network(
     -------
     out_paths : list[Path]
         List of the output files created by the inversion.
+    residual_paths : list[Path]
+        List of the output files containing the residuals.
 
     """
     if ifg_date_pairs is None:
@@ -869,7 +957,7 @@ def invert_unw_network(
 
     try:
         # Ensure it's a list of pairs
-        ifg_tuples = [(ref, sec) for (ref, sec) in ifg_date_pairs]  # noqa: C416
+        ifg_tuples = [(ref, sec) for (ref, sec) in ifg_date_pairs]
     except ValueError as e:
         raise ValueError(
             "Each item in `ifg_date_pairs` must be a sequence of length 2"
@@ -881,24 +969,59 @@ def invert_unw_network(
     suffix = ".tif"
     # Create the `n_sar_dates - 1` output files (skipping the 0 reference raster)
     out_paths = [
-        Path(output_dir) / (format_dates(ref_date, d) + suffix) for d in sar_dates[1:]
+        Path(output_dir) / (f"{format_dates(ref_date, d)}{suffix}")
+        for d in sar_dates[1:]
+    ]
+    out_residuals_paths = [
+        Path(output_dir) / (f"residuals_{format_dates(ref_date, d)}{suffix}")
+        for d in sar_dates[1:]
     ]
     if all(p.exists() for p in out_paths):
         logger.info("All output files already exist, skipping inversion")
-        return out_paths
+        return out_paths, out_residuals_paths
+
+    summed_residuals_path = Path(output_dir) / "unw_inversion_residuals.tif"
     logger.info(f"Inverting network using {method.upper()}-norm minimization")
 
     A = get_incidence_matrix(ifg_pairs=ifg_tuples, sar_idxs=sar_dates)
 
+    unw_nodataval = io.get_raster_nodata(unw_file_list[0])
     out_vrt_name = Path(output_dir) / "unw_network.vrt"
     unw_reader = io.VRTStack(
-        file_list=unw_file_list, outfile=out_vrt_name, skip_size_check=True
+        file_list=unw_file_list,
+        outfile=out_vrt_name,
+        skip_size_check=True,
+        read_masked=True,
     )
     cor_vrt_name = Path(output_dir) / "cor_network.vrt"
+    conncomp_vrt_name = Path(output_dir) / "conncomp_network.vrt"
+
+    if conncomp_file_list is not None and method == "L2":
+        conncomp_reader = io.VRTStack(
+            file_list=conncomp_file_list,
+            outfile=conncomp_vrt_name,
+            skip_size_check=True,
+            read_masked=True,
+        )
+        readers = [unw_reader, conncomp_reader]
+        logger.info("Masking unw pixels during inversion using connected components.")
+    elif cor_file_list is not None and method == "L2":
+        cor_reader = io.VRTStack(
+            file_list=cor_file_list, outfile=cor_vrt_name, skip_size_check=True
+        )
+        readers = [unw_reader, cor_reader]
+        logger.info("Using correlation to weight unw inversion")
+    else:
+        readers = [unw_reader]
+        logger.info("Using unweighted unw inversion")
 
     # Get the reference point data
     ref_row, ref_col = reference
     ref_data = unw_reader[:, ref_row, ref_col].reshape(-1, 1, 1)
+    if ref_data.mask.sum() > 0:
+        logger.warning(f"Masked data found at {ref_row}, {ref_col}.")
+        logger.warning("Zeroing out reference pixel. Results may be wrong.")
+        ref_data = 0 * ref_data.data
 
     if wavelength is not None:
         # Positive values are motion towards the radar
@@ -911,42 +1034,61 @@ def invert_unw_network(
     def read_and_solve(
         readers: Sequence[io.StackReader], rows: slice, cols: slice
     ) -> tuple[slice, slice, np.ndarray]:
+        unw_reader = readers[0]
+        stack = unw_reader[:, rows, cols]
+        masked_pixel_sum: NDArray[np.bool_] = stack.mask.sum(axis=0)
+        # Mask the output if any inputs are missing
+        masked_pixels = masked_pixel_sum > 0
+        # Setup the (optional) second reader: either conncomps, or correlation
         if len(readers) == 2 and method == "L2":
-            unw_reader, cor_reader = readers
-            stack = unw_reader[:, rows, cols]
-            cor = cor_reader[:, rows, cols]
-            weights = correlation_to_variance(cor, n_cor_looks)
-            weights[cor < cor_threshold] = 0
+            if conncomp_file_list is not None:
+                # Use censored least squares based on the conncomp labels
+                missing_data_flags = readers[1][:, rows, cols].filled(0) != 0
+                weights = None
+            else:
+                # Weight the inversion by correlation-derived variance
+                cor = readers[1][:, rows, cols]
+                weights = correlation_to_variance(cor, n_cor_looks)
+                weights[cor < cor_threshold] = 0
+                missing_data_flags = None
         else:
-            stack = readers[0][:, rows, cols]
-            weights = None
+            weights = missing_data_flags = None
 
-        # subtract the reference
-        stack = stack - ref_data
+        # subtract the reference, convert to numpy
+        stack = (stack - ref_data).filled(0)
 
-        # TODO: possible second input for weights? from conncomps
         # TODO: do i want to write residuals too? Do i need
-        # to have multiple writers then?
-        phases = invert_stack(A, stack, weights)[0]
+        # to have multiple writers then, or a StackWriter?
         if method.upper() == "L1":
-            phases = invert_stack_l1(A, stack)[0]
+            phases, residual_sum = invert_stack_l1(A, stack)
         else:
-            phases = invert_stack(A, stack, weights)[0]
+            phases, residual_sum = invert_stack(A, stack, weights, missing_data_flags)
+
+        # Compute the full residuals, then sum them per date
+        # residuals_per_date = np.asarray(_get_residuals_per_date(A, stack, phases))
+        residuals_per_date = _get_residuals_per_date(A, stack, phases)
+
         # Convert to meters, with LOS convention:
-        return constant * np.asarray(phases), rows, cols
-
-    if cor_file_list is not None:
-        cor_reader = io.VRTStack(
-            file_list=cor_file_list, outfile=cor_vrt_name, skip_size_check=True
+        out_displacement = constant * np.asarray(phases)
+        # Set the masked pixels to be nodata in the output, and in the residuals
+        out_displacement[:, masked_pixels] = unw_nodataval
+        residuals_per_date = np.asarray(
+            residuals_per_date.at[:, masked_pixels].set(np.nan)
         )
-        readers = [unw_reader, cor_reader]
-        logger.info("Using correlation to weight unw inversion")
-    else:
-        readers = [unw_reader]
-        logger.info("Using unweighted unw inversion")
+        residual_sum = np.where(masked_pixels, np.nan, np.asarray(residual_sum))
 
+        return (
+            np.vstack([out_displacement, residuals_per_date, residual_sum[np.newaxis]]),
+            rows,
+            cols,
+        )
+
+    # Combined writer for all output files
     writer = io.BackgroundStackWriter(
-        out_paths, like_filename=unw_file_list[0], units=units
+        [*out_paths, *out_residuals_paths, summed_residuals_path],
+        like_filename=unw_file_list[0],
+        # Using np.nan for the residuals, since it's not a valid phase
+        nodata=np.nan,
     )
 
     io.process_blocks(
@@ -957,16 +1099,57 @@ def invert_unw_network(
         num_threads=num_threads,
     )
     writer.notify_finished()
+    # Set the nodata for the outputs back to `unw_nodataval`
+    for p in out_paths:
+        if unw_nodataval is not None:
+            io.set_raster_nodata(p, unw_nodataval)
+
+        io.set_raster_units(p, units)
+
+    # Residuals are always radians
+    for p in out_residuals_paths:
+        io.set_raster_units(p, "radians")
+    io.set_raster_units(summed_residuals_path, "radians")
 
     logger.info("Completed invert_unw_network")
-    return out_paths
+    return out_paths, out_residuals_paths
+
+
+@jit
+def _get_residuals_per_date(
+    A: ArrayLike, x_stack: ArrayLike, b_stack: ArrayLike
+) -> Array:
+    """Sum the time series inversion residuals per date.
+
+    Parameters
+    ----------
+    A : ArrayLike
+       The matrix A in the equation Ax = b.
+    x_stack : ArrayLike
+        The 3D stack of solved phases from the inversion.
+        Shape is (n_dates, n_rows, n_cols)
+    b_stack : ArrayLike
+        The 3D input stack of data.
+        shape is (n_ifgs, n_rows, n_cols)
+
+    Returns
+    -------
+    Array
+        Residuals per date, shape=(n_dates, n_rows, n_cols)
+
+    """
+    resids_all = jnp.abs(
+        A @ b_stack.reshape(A.shape[1], -1) - x_stack.reshape(A.shape[0], -1)
+    )
+    # Running abs(A).T @ b sums only the residuals involved in each date
+    return (jnp.abs(A).T @ resids_all).reshape(b_stack.shape)
 
 
 def correlation_to_variance(correlation: ArrayLike, nlooks: int) -> Array:
     r"""Convert interferometric correlation to phase variance.
 
-    Uses the CRLB formula from Rodriguez, 1992 [1]_ to get the phase variance,
-    \sigma_{\phi}^2:
+    Uses the Cramer-Rao Lower Bound (CRLB) formula from Rodriguez, 1992 [1]_ to
+    get the phase variance, \sigma_{\phi}^2:
 
     \[
         \sigma_{\phi}^{2} = \frac{1}{2N_{L}} \frac{1 - \gamma^{2}}{\gamma^{2}}
@@ -1109,14 +1292,14 @@ def _get_largest_conncomp_mask(
     conncomp_intersection = io.load_gdal(conncomp_intersection_file, masked=True)
 
     # Find the largest conncomp region in the intersection
-    label, nlabels = ndimage.label(
+    label, n_labels = ndimage.label(
         conncomp_intersection.filled(0), structure=np.ones((3, 3))
     )
-    if nlabels == 0:
+    if n_labels == 0:
         raise ReferencePointError(
             "Connected components intersection left no valid regions"
         )
-    logger.info("Found %d connected components in intersection", nlabels)
+    logger.info("Found %d connected components in intersection", n_labels)
 
     # Make a mask of the largest conncomp:
     # Find the label with the most pixels using bincount
@@ -1214,7 +1397,7 @@ def least_absolute_deviations(
 
 
 @jit
-def invert_stack_l1(A: ArrayLike, dphi: ArrayLike) -> Array:
+def invert_stack_l1(A: ArrayLike, dphi: ArrayLike) -> tuple[Array, Array]:
     R = jax.scipy.linalg.cholesky(A.T @ A, lower=True)
 
     # vectorize the solve function to work on 2D and 3D arrays
@@ -1230,3 +1413,109 @@ def invert_stack_l1(A: ArrayLike, dphi: ArrayLike) -> Array:
     # residuals = jnp.sum(residual_vecs, axis=0)
 
     return phase, residuals
+
+
+def create_nonzero_conncomp_counts(
+    conncomp_file_list: Sequence[PathOrStr],
+    output_dir: PathOrStr,
+    ifg_date_pairs: Sequence[Sequence[DateOrDatetime]] | None = None,
+    block_shape: tuple[int, int] = (256, 256),
+    num_threads: int = 4,
+) -> list[Path]:
+    """Count the number of valid interferograms per date.
+
+    Parameters
+    ----------
+    conncomp_file_list : Sequence[PathOrStr]
+        List of connected component files
+    output_dir : PathOrStr
+        The directory to save the output files
+    ifg_date_pairs : Sequence[Sequence[DateOrDatetime]], optional
+        List of date pairs corresponding to the interferograms.
+        If not provided, will be parsed from filenames.
+    block_shape : tuple[int, int], optional
+        The shape of the blocks to process in parallel.
+    num_threads : int
+        The number of parallel blocks to process at once.
+
+    Returns
+    -------
+    out_paths : list[Path]
+        List of output files, one per unique date
+
+    """
+    output_dir = Path(output_dir)
+    output_dir.mkdir(exist_ok=True, parents=True)
+
+    if ifg_date_pairs is None:
+        ifg_date_pairs = [get_dates(str(f))[:2] for f in conncomp_file_list]
+    try:
+        # Ensure it's a list of pairs
+        ifg_tuples = [(ref, sec) for (ref, sec) in ifg_date_pairs]
+    except ValueError as e:
+        raise ValueError(
+            "Each item in `ifg_date_pairs` must be a sequence of length 2"
+        ) from e
+
+    # Get unique dates and create the counting matrix
+    sar_dates: list[DateOrDatetime] = sorted(set(flatten(ifg_date_pairs)))
+
+    date_counting_matrix = np.abs(
+        get_incidence_matrix(ifg_tuples, sar_dates, delete_first_date_column=False)
+    )
+
+    # Create output paths for each date
+    suffix = "_valid_count.tif"
+    out_paths = [output_dir / f"{d.strftime('%Y%m%d')}{suffix}" for d in sar_dates]
+
+    if all(p.exists() for p in out_paths):
+        logger.info("All output files exist, skipping counting")
+        return out_paths
+
+    logger.info("Counting valid interferograms per date")
+
+    # Create VRT stack for reading
+    vrt_name = Path(output_dir) / "conncomp_network.vrt"
+    conncomp_reader = io.VRTStack(
+        file_list=conncomp_file_list,
+        outfile=vrt_name,
+        skip_size_check=True,
+        read_masked=True,
+    )
+
+    def count_by_date(
+        readers: Sequence[io.StackReader], rows: slice, cols: slice
+    ) -> tuple[np.ndarray, slice, slice]:
+        """Process each block by counting valid interferograms per date."""
+        stack = readers[0][:, rows, cols]
+        valid_mask = stack.filled(0) != 0  # Shape: (n_ifgs, block_rows, block_cols)
+
+        # Use the counting matrix to map from interferograms to dates
+        # For each pixel, multiply the valid_mask to get counts per date
+        # Reshape valid_mask to (n_ifgs, -1) to handle all pixels at once
+        valid_flat = valid_mask.reshape(valid_mask.shape[0], -1)
+        # Matrix multiply to get counts per date
+        # (date_counting_matrix.T) is shape (n_sar_dates, n_ifgs), and each row
+        # has a number of 1s equal to the nonzero conncomps for that date.
+        date_count_cols = date_counting_matrix.T @ valid_flat
+        date_counts = date_count_cols.reshape(-1, *valid_mask.shape[1:])
+
+        return date_counts, rows, cols
+
+    # Setup writer for all output files
+    writer = io.BackgroundStackWriter(
+        out_paths, like_filename=conncomp_file_list[0], dtype=np.uint16, units="count"
+    )
+
+    # Process the blocks
+    io.process_blocks(
+        readers=[conncomp_reader],
+        writer=writer,
+        func=count_by_date,
+        block_shape=block_shape,
+        num_threads=num_threads,
+    )
+    writer.notify_finished()
+
+    logger.info("Completed counting valid interferograms per date")
+    return out_paths
