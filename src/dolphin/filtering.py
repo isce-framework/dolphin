@@ -43,8 +43,8 @@ def filter_long_wavelength(
         Default is 1.
     fill_value : float, optional
         Value to place in output pixels which were masked.
-        If 'None', masked pixels are filled with interpolated values 
-        using 'gdal_fillnodata' before filtering to suppress outliers.
+        If `None`, masked pixels are filled with interpolated values 
+        using `gdal_fillnodata` before filtering to suppress outliers.
     scratch_dir : Path, optional
         Directory to use for temporary files. If not provided, uses system default
         for Python's tempfile module.
