@@ -16,7 +16,7 @@ from scipy import fft, ndimage
 def filter_long_wavelength(
     unwrapped_phase: ArrayLike,
     bad_pixel_mask: ArrayLike,
-    wavelength_cutoff: float = 50 * 1e3,
+    wavelength_cutoff: float = 25 * 1e3,
     pixel_spacing: float = 30,
     workers: int = 1,
     fill_value: float | None = None,
@@ -34,7 +34,7 @@ def filter_long_wavelength(
     wavelength_cutoff : float
         Spatial wavelength threshold to filter the unwrapped phase.
         Signals with wavelength longer than 'wavelength_cutoff' are filtered out.
-        The default is 50*1e3 (m).
+        The default is 25*1e3 (m).
     pixel_spacing : float
         Pixel spatial spacing. Assume same spacing for x, y axes.
         The default is 30 (m).
@@ -43,8 +43,8 @@ def filter_long_wavelength(
         Default is 1.
     fill_value : float, optional
         Value to place in output pixels which were masked.
-        If `None`, masked pixels are filled with the ramp value fitted
-        before filtering to suppress outliers.
+        If `None`, masked pixels are filled with interpolated values
+        using `gdal_fillnodata` before filtering to suppress outliers.
     scratch_dir : Path, optional
         Directory to use for temporary files. If not provided, uses system default
         for Python's tempfile module.
@@ -127,7 +127,7 @@ def filter_long_wavelength(
         unwrapped_phase.dtype
     )
 
-    filtered_ifg = filled_data - lowpass_filtered * in_bounds_pixels
+    filtered_ifg = (filled_data - lowpass_filtered) * in_bounds_pixels
     if fill_value is not None:
         good_pixel_mask = np.logical_not(bad_pixel_mask)
         total_valid_mask = in_bounds_pixels & good_pixel_mask
@@ -150,7 +150,7 @@ def filter_rasters(
     cor_filenames: list[Path] | None = None,
     conncomp_filenames: list[Path] | None = None,
     temporal_coherence_filename: Path | None = None,
-    wavelength_cutoff: float = 50_000,
+    wavelength_cutoff: float = 25_000,
     correlation_cutoff: float = 0.5,
     output_dir: Path | None = None,
     max_workers: int = 4,
