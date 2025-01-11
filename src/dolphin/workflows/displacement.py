@@ -10,7 +10,7 @@ from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 
-from opera_utils import group_by_burst, group_by_date  # , get_dates
+from opera_utils import group_by_burst, group_by_date
 from tqdm.auto import tqdm
 
 from dolphin import __version__, io, timeseries, utils
@@ -20,7 +20,7 @@ from dolphin.workflows import CallFunc
 
 from . import stitching_bursts, unwrapping, wrapped_phase
 from ._utils import _create_burst_cfg, _remove_dir_if_empty, parse_ionosphere_files
-from .config import DisplacementWorkflow  # , TimeseriesOptions
+from .config import DisplacementWorkflow
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +40,7 @@ class OutputPaths:
     unwrapped_paths: list[Path] | None
     conncomp_paths: list[Path] | None
     timeseries_paths: list[Path] | None
+    timeseries_residual_paths: list[Path] | None
     tropospheric_corrections: list[Path] | None
     ionospheric_corrections: list[Path] | None
     reference_point: ReferencePoint | None
@@ -225,6 +226,7 @@ def run(
             unwrapped_paths=None,
             conncomp_paths=None,
             timeseries_paths=None,
+            timeseries_residual_paths=None,
             tropospheric_corrections=None,
             ionospheric_corrections=None,
             reference_point=None,
@@ -254,7 +256,7 @@ def run(
     if ts_opts.run_inversion or ts_opts.run_velocity:
         # the output of run_timeseries is not currently used so pre-commit removes it
         # let's add back if we need it
-        timeseries_paths, reference_point = timeseries.run(
+        timeseries_paths, timeseries_residual_paths, reference_point = timeseries.run(
             unwrapped_paths=unwrapped_paths,
             conncomp_paths=conncomp_paths,
             corr_paths=stitched_paths.interferometric_corr_paths,
@@ -275,6 +277,7 @@ def run(
 
     else:
         timeseries_paths = None
+        timeseries_residual_paths = None
         reference_point = None
 
     # ##############################################
@@ -375,6 +378,7 @@ def run(
         # unwrapped_paths=inverted_phase_paths,
         conncomp_paths=conncomp_paths,
         timeseries_paths=timeseries_paths,
+        timeseries_residual_paths=timeseries_residual_paths,
         tropospheric_corrections=tropo_paths,
         ionospheric_corrections=iono_paths,
         reference_point=reference_point,

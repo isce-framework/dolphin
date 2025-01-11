@@ -220,7 +220,7 @@ class TestInvert:
         output_dir = tmp_path / "output"
         output_dir.mkdir()
         ref_point = (0, 0)
-        out_files = timeseries.invert_unw_network(
+        out_files, out_residuals = timeseries.invert_unw_network(
             unw_file_list=unw_files,
             reference=ref_point,
             output_dir=output_dir,
@@ -236,6 +236,9 @@ class TestInvert:
         sar_phases = data[1]
         # Account for the flip in sign for LOS convention:
         npt.assert_allclose(solved_stack, -1 * sar_phases[1:], atol=1e-5)
+
+        residuals = io.RasterStackReader.from_file_list(out_residuals)[:, :, :]
+        npt.assert_allclose(residuals, 0, atol=1e-4)
 
 
 class TestVelocity:
