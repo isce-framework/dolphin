@@ -465,28 +465,29 @@ class MiniStackPlanner(BaseStack):
 
             if compressed_idx is not None:
                 compressed_reference_idx = compressed_idx
-                output_reference_idx = self.output_reference_idx
             elif self.compressed_slc_plan == CompressedSlcPlan.ALWAYS_FIRST:
                 # Simplest operational version: CompSLCs have same base phase,
                 # but different "residual" added on
                 # We use the `output_reference_idx`, 0 by default, but this index
                 # may be passed in if we are manually specifying an output
                 compressed_reference_idx = self.output_reference_idx
-                output_reference_idx = self.output_reference_idx
             elif self.compressed_slc_plan == CompressedSlcPlan.FIRST_PER_MINISTACK:
                 # Like Ansari, 2017 paper: each ministack is "self contained"
                 compressed_reference_idx = num_ccslc
                 # Ansari, 2017 also had output_reference_idx = num_ccslcs, and
                 # used the "Datum Adjustment" step to get outputs relative to day 0
                 # Here, we'll use 0 (or manually specifed)
-                output_reference_idx = self.output_reference_idx
             elif self.compressed_slc_plan == CompressedSlcPlan.LAST_PER_MINISTACK:
                 # Alternative that allows sequential interferograms across ministacks
                 compressed_reference_idx = -1
+
+            if self.compressed_slc_plan == CompressedSlcPlan.LAST_PER_MINISTACK:
                 # For this, we'll always use the most recent compressed SLC as output
                 # reference so that we can connected stacks, but minimize the temporal
                 # baseline of interferograms we form
                 output_reference_idx = num_ccslc - 1
+            else:
+                output_reference_idx = self.output_reference_idx
 
             cur_ministack = MiniStackInfo(
                 file_list=combined_files,
