@@ -10,8 +10,10 @@ from typing import Optional, Sequence
 import numpy as np
 from tqdm.auto import tqdm
 
-from dolphin import goldstein, interpolate, io
+from dolphin import io
 from dolphin._types import Filename
+from dolphin.goldstein import goldstein
+from dolphin.interpolation import interpolate
 from dolphin.utils import DummyProcessPoolExecutor, full_suffix
 from dolphin.workflows import UnwrapMethod, UnwrapOptions
 

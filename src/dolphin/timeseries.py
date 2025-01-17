@@ -953,7 +953,7 @@ def invert_unw_network(
 
     """
     if ifg_date_pairs is None:
-        ifg_date_pairs = [get_dates(f) for f in unw_file_list]
+        ifg_date_pairs = [get_dates(f)[:2] for f in unw_file_list]
 
     try:
         # Ensure it's a list of pairs
