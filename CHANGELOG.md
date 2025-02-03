@@ -8,8 +8,9 @@
   - Picks the center of mass instead of arbitrary `argmax` result
   - Rename `condition_file` to `quality_file`
 
-### Changed
-- Removed `condition` parameter in `timeeries` reference point functions
+### Removed
+
+- Removed `condition` parameter in `timeseries` reference point functions
 - Removed `CallFunc` enum
 
 ## [0.35.1](https://github.com/isce-framework/dolphin/compare/v0.35.0...v0.35.1) - 2025-01-15

@@ -1240,7 +1240,7 @@ def select_reference_point(
                 num_threads=num_threads,
             )
         except ReferencePointError:
-            msg = "Unable to find find a connected component intersection."
+            msg = "Unable to find a connected component intersection."
             msg += f"Proceeding using only {quality_file = }"
             logger.warning(msg, exc_info=True)
 
