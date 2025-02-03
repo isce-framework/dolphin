@@ -136,7 +136,6 @@ def run(
     unwrapped_paths = sorted(unwrapped_paths, key=str)
     Path(output_dir).mkdir(exist_ok=True, parents=True)
 
-    condition_func = argmax_index if condition == CallFunc.MAX else argmin_index
     if reference_point == (-1, -1):
         logger.info("Selecting a reference point for unwrapped interferograms")
         ref_point = select_reference_point(
@@ -1171,7 +1170,8 @@ def select_reference_point(
     *,
     condition_file: PathOrStr,
     output_dir: Path,
-    condition_func: Callable[[ArrayLike], tuple[int, ...]] = argmin_index,
+    condition: CallFunc = CallFunc.MAX,
+    candidate_threshold: float = 0.95,
     ccl_file_list: Sequence[PathOrStr] | None = None,
     block_shape: tuple[int, int] = (256, 256),
     num_threads: int = 4,
@@ -1192,9 +1192,17 @@ def select_reference_point(
         temporal coherence in `ccl_file_list`
     output_dir: Path
         Path to store the computed "conncomp_intersection.tif" raster
-    condition_func: Callable[[ArrayLike, ]]
-        The function to apply to the condition file,
-        for example numpy.argmin which finds the pixel with lowest value
+    condition_func: CallFunc
+        The function to apply to the condition file, for example CallFunc.MIN
+        which finds the pixel with lowest value.
+        Default = CallFunc.MAX
+    candidate_threshold: float
+        The threshold for the condition function to be considered a candidate
+        reference point pixel.
+        If the condition function is CallFunc.MAX, then only pixels with values
+        in `condition_file` greater than `candidate_threshold` will be considered
+        a candidate.
+        Default = 0.95
     ccl_file_list : Sequence[PathOrStr]
         List of connected component label phase files.
     block_shape : tuple[int, int]
@@ -1239,11 +1247,39 @@ def select_reference_point(
             msg += f"Proceeding using only {condition_file = }"
             logger.warning(msg, exc_info=True)
 
-    # Mask out where the conncomps aren't equal to the largest
-    condition_file_values.mask = condition_file_values.mask | (~isin_largest_conncomp)
+    # Create a candidate mask: above threshold:
+    if condition == CallFunc.MAX:
+        is_candidate = condition_file_values > candidate_threshold
+    else:  # CallFunc.MIN
+        is_candidate = condition_file_values < candidate_threshold
+    # Add the candidate mask to the conncomp mask, masking where the conncomps aren't
+    # equal to the largest component label
+    is_candidate &= isin_largest_conncomp
 
-    # Pick the (unmasked) point with the condition applied to condition file
-    ref_row, ref_col = condition_func(condition_file_values)
+    # 2) Label the connected components of candidate pixels.
+    labeled, n_objects = ndimage.label(is_candidate, structure=np.ones((3, 3)))
+
+    if n_objects > 0:
+        logger.warning(
+            f"No pixels above threshold={candidate_threshold}. Choosing best among available."
+        )
+        condition_func = argmax_index if condition == CallFunc.MAX else argmin_index
+        ref_row, ref_col = condition_func(condition_file_values)
+    else:
+        # 3) Find the largest connected component.
+        label_counts = np.bincount(labeled.ravel())
+        label_counts[0] = 0  # ignore background label "0"
+        largest_label = label_counts.argmax()
+        largest_component = labeled == largest_label
+
+        # 4) Compute the float centroid of this largest component.
+        row_c, col_c = ndimage.center_of_mass(largest_component)
+
+        # 5) Among valid pixels in that region, find the one closest to the centroid.
+        rows, cols = np.nonzero(largest_component)
+        dist_sq = (rows - row_c) ** 2 + (cols - col_c) ** 2
+        i_min = dist_sq.argmin()
+        ref_row, ref_col = rows[i_min], cols[i_min]
 
     # Cast to `int` to avoid having `np.int64` types
     ref_point = ReferencePoint(int(ref_row), int(ref_col))

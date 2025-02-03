@@ -7,6 +7,7 @@ import pytest
 from numpy.linalg import lstsq as lstsq_numpy
 
 from dolphin import io, timeseries
+from dolphin.timeseries import CallFunc
 from dolphin.utils import format_dates
 
 NUM_DATES = 10
@@ -270,6 +271,85 @@ class TestVelocity:
         velocities = timeseries.estimate_velocity(x_arr, sar_phases, None)
         assert velocities.shape == (SHAPE[0], SHAPE[1])
         npt.assert_allclose(velocities, expected_velo, atol=1e-5)
+
+
+class TestReferencePoint:
+    def test_all_ones_center(self, tmp_path):
+        # All coherence=1 => pick the true center pixel.
+        shape = (31, 31)
+        arr = np.ones(shape, dtype="float32")
+
+        coh_file = tmp_path / "coh_ones.tif"
+        io.write_arr(arr=arr, output_name=coh_file)
+
+        ref_point = timeseries.select_reference_point(
+            condition_file=coh_file,
+            output_dir=tmp_path,
+            condition=CallFunc.MAX,
+            candidate_threshold=0.95,  # everything is above 0.95
+            ccl_file_list=None,
+        )
+        npt.assert_equal((ref_point.row, ref_point.col), (15, 15))
+
+    def test_half_03_half_099(self, tmp_path):
+        # Left half=0.3, right half=0.99 => reference point should be
+        # near the center of the right side.
+        shape = (31, 31)
+        arr = np.full(shape, 0.3, dtype="float32")
+        # Make right half, 16 to 30, high coherence
+        arr[:, 16:] = 0.99
+
+        coh_file = tmp_path / "coh_half_03_099.tif"
+        io.write_arr(arr=arr, output_name=coh_file)
+
+        ref_point = timeseries.select_reference_point(
+            condition_file=coh_file,
+            output_dir=tmp_path,
+            condition=CallFunc.MAX,
+            candidate_threshold=0.95,
+            ccl_file_list=None,
+        )
+        # Expect the center row=15, and roughly col=23 for columns 16..30.
+        npt.assert_equal((ref_point.row, ref_point.col), (15, 23))
+
+    def test_with_conncomp(self, tmp_path):
+        """Make a temporal coherence with left half=0.3, right half=1.0.
+
+        Make the connected-component labels have top half=0, bottom half=1.
+
+        Reference point is in the bottom-right quadrant where
+        coherence > threshold AND conncomp == 1
+        """
+        shape = (31, 31)
+
+        # Coherence array: left half=0.3, right half=1.0
+        coh = np.full(shape, 0.3, dtype="float32")
+        coh[:, 16:] = 1.0
+
+        coh_file = tmp_path / "coh_left03_right1.tif"
+        io.write_arr(arr=coh, output_name=coh_file)
+
+        # ConnComp label: top half=0, bottom half=1
+        # So only rows >= 15 are labeled '1'.
+        ccl = np.zeros(shape, dtype="uint16")
+        ccl[16:, :] = 1
+
+        ccl_file1 = tmp_path / "conncomp_bottom_half.tif"
+        io.write_arr(arr=ccl, output_name=ccl_file1)
+        # Add another conncomp file with all good pixels
+        ccl_file2 = tmp_path / "conncomp_full.tif"
+        io.write_arr(arr=np.ones_like(ccl), output_name=ccl_file2)
+
+        ref_point = timeseries.select_reference_point(
+            ccl_file_list=[ccl_file1, ccl_file2],
+            condition_file=coh_file,
+            output_dir=tmp_path,
+            condition=CallFunc.MAX,
+            candidate_threshold=0.95,
+        )
+
+        # Bottom half => rows [16..30], right half => cols [16..30].
+        npt.assert_equal((ref_point.row, ref_point.col), (23, 23))
 
 
 if __name__ == "__main__":
