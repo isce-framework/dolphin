@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import datetime
 import sys
 from enum import Enum
 from os import PathLike
@@ -72,8 +71,6 @@ class HalfWindow(NamedTuple):
 # Used for callable types
 T = TypeVar("T")
 P = ParamSpec("P")
-
-DateOrDatetime = Union[datetime.datetime, datetime.date]
 
 
 class ReferencePoint(NamedTuple):
