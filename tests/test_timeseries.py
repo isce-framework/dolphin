@@ -7,7 +7,6 @@ import pytest
 from numpy.linalg import lstsq as lstsq_numpy
 
 from dolphin import io, timeseries
-from dolphin.timeseries import CallFunc
 from dolphin.utils import format_dates
 
 NUM_DATES = 10
@@ -283,9 +282,8 @@ class TestReferencePoint:
         io.write_arr(arr=arr, output_name=coh_file)
 
         ref_point = timeseries.select_reference_point(
-            condition_file=coh_file,
+            quality_file=coh_file,
             output_dir=tmp_path,
-            condition=CallFunc.MAX,
             candidate_threshold=0.95,  # everything is above 0.95
             ccl_file_list=None,
         )
@@ -303,9 +301,8 @@ class TestReferencePoint:
         io.write_arr(arr=arr, output_name=coh_file)
 
         ref_point = timeseries.select_reference_point(
-            condition_file=coh_file,
+            quality_file=coh_file,
             output_dir=tmp_path,
-            condition=CallFunc.MAX,
             candidate_threshold=0.95,
             ccl_file_list=None,
         )
@@ -342,9 +339,8 @@ class TestReferencePoint:
 
         ref_point = timeseries.select_reference_point(
             ccl_file_list=[ccl_file1, ccl_file2],
-            condition_file=coh_file,
+            quality_file=coh_file,
             output_dir=tmp_path,
-            condition=CallFunc.MAX,
             candidate_threshold=0.95,
         )
 

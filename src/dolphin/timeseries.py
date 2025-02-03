@@ -19,7 +19,6 @@ from dolphin import io
 from dolphin._overviews import ImageType, create_overviews
 from dolphin._types import PathOrStr, ReferencePoint
 from dolphin.utils import flatten, format_dates, full_suffix, get_nearest_date_idx
-from dolphin.workflows import CallFunc
 
 T = TypeVar("T")
 DateOrDatetime = datetime | date
@@ -42,8 +41,7 @@ class ReferencePointError(ValueError):
 def run(
     unwrapped_paths: Sequence[PathOrStr],
     conncomp_paths: Sequence[PathOrStr] | None,
-    condition_file: PathOrStr,
-    condition: CallFunc,
+    quality_file: PathOrStr,
     output_dir: PathOrStr,
     method: InversionMethod = InversionMethod.L1,
     reference_candidate_threshold: float = 0.95,
@@ -67,13 +65,9 @@ def run(
         Sequence unwrapped interferograms to invert.
     conncomp_paths : Sequence[Path]
         Sequence connected component files, one per file in `unwrapped_paths`
-    condition_file: PathOrStr
+    quality_file: PathOrStr
         A file with the same size as each raster, like amplitude dispersion or
         temporal coherence
-    condition: CallFunc
-        The function to apply to the condition file,
-        for example numpy.argmin which finds the pixel with lowest value
-        the options are [min, max]
     output_dir : Path
         Path to the output directory.
     method : str, choices = "L1", "L2"
@@ -81,12 +75,11 @@ def run(
         Default is L2, which uses least squares to solve Ax = b (faster).
         "L1" minimizes |Ax - b|_1 at each pixel.
     reference_candidate_threshold: float
-        The threshold for the condition function to be considered a candidate
+        The threshold for the quality metric to be considered a candidate
         reference point pixel.
-        If the condition function is CallFunc.MAX, then only pixels with values
-        in `condition_file` greater than `reference_candidate_threshold` will be
-        considered a candidate.
-        Default = 0.95
+        Only pixels with values in `quality_file` greater than
+        `reference_candidate_threshold` will be considered a candidate.
+        Default is 0.95.
     run_velocity : bool
         Whether to run velocity estimation on the inverted phase series
     corr_paths : Sequence[Path], optional
@@ -147,9 +140,8 @@ def run(
     if reference_point == (-1, -1):
         logger.info("Selecting a reference point for unwrapped interferograms")
         ref_point = select_reference_point(
-            condition_file=condition_file,
+            quality_file=quality_file,
             output_dir=Path(output_dir),
-            condition=condition,
             candidate_threshold=reference_candidate_threshold,
             ccl_file_list=conncomp_paths,
         )
@@ -1176,9 +1168,8 @@ def correlation_to_variance(correlation: ArrayLike, nlooks: int) -> Array:
 
 def select_reference_point(
     *,
-    condition_file: PathOrStr,
+    quality_file: PathOrStr,
     output_dir: Path,
-    condition: CallFunc = CallFunc.MAX,
     candidate_threshold: float = 0.95,
     ccl_file_list: Sequence[PathOrStr] | None = None,
     block_shape: tuple[int, int] = (256, 256),
@@ -1186,30 +1177,27 @@ def select_reference_point(
 ) -> ReferencePoint:
     """Automatically select a reference point for a stack of unwrapped interferograms.
 
-    Uses the condition file and (optionally) connected component labels.
+    Uses the quality file and (optionally) connected component labels.
     The point is selected which
 
-    1. has the condition applied to condition file. for example: has the lowest
-       amplitude dispersion
-    2. (optionally) is within intersection of all nonzero connected component labels
+    1. (optionally) is within intersection of all nonzero connected component labels
+    2. Has value in `quality_file` above the threshold `candidate_threshold`
+
+    Among all points which meet this, the centroid selected using the function
+    `scipy.ndimage.center_of_mass`.
 
     Parameters
     ----------
-    condition_file: PathOrStr
-        A file with the same size as each raster, like amplitude dispersion or
-        temporal coherence in `ccl_file_list`
+    quality_file: PathOrStr
+        A file with the same size as each raster in `ccl_file_list` containing a quality
+        metric, such as temporal coherence.
     output_dir: Path
         Path to store the computed "conncomp_intersection.tif" raster
-    condition: CallFunc
-        The function to apply to the condition file, for example CallFunc.MIN
-        which finds the pixel with lowest value.
-        Default = CallFunc.MAX
     candidate_threshold: float
-        The threshold for the condition function to be considered a candidate
+        The threshold for the quality metric function to be considered a candidate
         reference point pixel.
-        If the condition function is CallFunc.MAX, then only pixels with values
-        in `condition_file` greater than `candidate_threshold` will be considered
-        a candidate.
+        Only pixels with values in `quality_file` greater than `candidate_threshold` are
+        considered a candidate.
         Default = 0.95
     ccl_file_list : Sequence[PathOrStr]
         List of connected component label phase files.
@@ -1239,10 +1227,10 @@ def select_reference_point(
         return ref_point
 
     logger.info("Selecting reference point")
-    condition_file_values = io.load_gdal(condition_file, masked=True)
+    quality_file_values = io.load_gdal(quality_file, masked=True)
 
     # Start with all points as valid candidates
-    isin_largest_conncomp = np.ones(condition_file_values.shape, dtype=bool)
+    isin_largest_conncomp = np.ones(quality_file_values.shape, dtype=bool)
     if ccl_file_list:
         try:
             isin_largest_conncomp = _get_largest_conncomp_mask(
@@ -1253,14 +1241,11 @@ def select_reference_point(
             )
         except ReferencePointError:
             msg = "Unable to find find a connected component intersection."
-            msg += f"Proceeding using only {condition_file = }"
+            msg += f"Proceeding using only {quality_file = }"
             logger.warning(msg, exc_info=True)
 
     # Find pixels meeting the threshold criteria
-    if condition == CallFunc.MAX:
-        is_candidate = condition_file_values > candidate_threshold
-    else:  # CallFunc.MIN
-        is_candidate = condition_file_values < candidate_threshold
+    is_candidate = quality_file_values > candidate_threshold
 
     # Restrict candidates to the largest connected component region
     is_candidate &= isin_largest_conncomp
@@ -1274,8 +1259,7 @@ def select_reference_point(
             f"No pixels above threshold={candidate_threshold}. Choosing best among"
             " available."
         )
-        condition_func = argmax_index if condition == CallFunc.MAX else argmin_index
-        ref_row, ref_col = condition_func(condition_file_values)
+        ref_row, ref_col = argmax_index(quality_file_values)
     else:
         # Find the largest region of connected candidate pixels
         label_counts = np.bincount(labeled.ravel())
