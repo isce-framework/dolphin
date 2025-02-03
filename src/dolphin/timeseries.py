@@ -46,6 +46,7 @@ def run(
     condition: CallFunc,
     output_dir: PathOrStr,
     method: InversionMethod = InversionMethod.L1,
+    reference_candidate_threshold: float = 0.95,
     run_velocity: bool = False,
     corr_paths: Sequence[PathOrStr] | None = None,
     weight_velocity_by_corr: bool = False,
@@ -79,6 +80,13 @@ def run(
         Inversion method to use when solving Ax = b.
         Default is L2, which uses least squares to solve Ax = b (faster).
         "L1" minimizes |Ax - b|_1 at each pixel.
+    reference_candidate_threshold: float
+        The threshold for the condition function to be considered a candidate
+        reference point pixel.
+        If the condition function is CallFunc.MAX, then only pixels with values
+        in `condition_file` greater than `reference_candidate_threshold` will be
+        considered a candidate.
+        Default = 0.95
     run_velocity : bool
         Whether to run velocity estimation on the inverted phase series
     corr_paths : Sequence[Path], optional
@@ -141,7 +149,8 @@ def run(
         ref_point = select_reference_point(
             condition_file=condition_file,
             output_dir=Path(output_dir),
-            condition_func=condition_func,
+            condition=condition,
+            candidate_threshold=reference_candidate_threshold,
             ccl_file_list=conncomp_paths,
         )
     else:
@@ -968,11 +977,10 @@ def invert_unw_network(
     suffix = ".tif"
     # Create the `n_sar_dates - 1` output files (skipping the 0 reference raster)
     out_paths = [
-        Path(output_dir) / (f"{format_dates(ref_date, d)}{suffix}")
-        for d in sar_dates[1:]
+        Path(output_dir) / f"{format_dates(ref_date, d)}{suffix}" for d in sar_dates[1:]
     ]
     out_residuals_paths = [
-        Path(output_dir) / (f"residuals_{format_dates(ref_date, d)}{suffix}")
+        Path(output_dir) / f"residuals_{format_dates(ref_date, d)}{suffix}"
         for d in sar_dates[1:]
     ]
     if all(p.exists() for p in out_paths):
@@ -1192,7 +1200,7 @@ def select_reference_point(
         temporal coherence in `ccl_file_list`
     output_dir: Path
         Path to store the computed "conncomp_intersection.tif" raster
-    condition_func: CallFunc
+    condition: CallFunc
         The function to apply to the condition file, for example CallFunc.MIN
         which finds the pixel with lowest value.
         Default = CallFunc.MAX
@@ -1233,6 +1241,7 @@ def select_reference_point(
     logger.info("Selecting reference point")
     condition_file_values = io.load_gdal(condition_file, masked=True)
 
+    # Start with all points as valid candidates
     isin_largest_conncomp = np.ones(condition_file_values.shape, dtype=bool)
     if ccl_file_list:
         try:
@@ -1247,35 +1256,35 @@ def select_reference_point(
             msg += f"Proceeding using only {condition_file = }"
             logger.warning(msg, exc_info=True)
 
-    # Create a candidate mask: above threshold:
+    # Find pixels meeting the threshold criteria
     if condition == CallFunc.MAX:
         is_candidate = condition_file_values > candidate_threshold
     else:  # CallFunc.MIN
         is_candidate = condition_file_values < candidate_threshold
-    # Add the candidate mask to the conncomp mask, masking where the conncomps aren't
-    # equal to the largest component label
+
+    # Restrict candidates to the largest connected component region
     is_candidate &= isin_largest_conncomp
 
-    # 2) Label the connected components of candidate pixels.
+    # Find connected regions within candidate pixels
     labeled, n_objects = ndimage.label(is_candidate, structure=np.ones((3, 3)))
 
-    if n_objects > 0:
+    if n_objects == 0:
+        # If no candidates meet threshold, pick best available point
         logger.warning(
-            f"No pixels above threshold={candidate_threshold}. Choosing best among available."
+            f"No pixels above threshold={candidate_threshold}. Choosing best among"
+            " available."
         )
         condition_func = argmax_index if condition == CallFunc.MAX else argmin_index
         ref_row, ref_col = condition_func(condition_file_values)
     else:
-        # 3) Find the largest connected component.
+        # Find the largest region of connected candidate pixels
         label_counts = np.bincount(labeled.ravel())
-        label_counts[0] = 0  # ignore background label "0"
+        label_counts[0] = 0  # ignore background
         largest_label = label_counts.argmax()
         largest_component = labeled == largest_label
 
-        # 4) Compute the float centroid of this largest component.
+        # Select point closest to center of largest region
         row_c, col_c = ndimage.center_of_mass(largest_component)
-
-        # 5) Among valid pixels in that region, find the one closest to the centroid.
         rows, cols = np.nonzero(largest_component)
         dist_sq = (rows - row_c) ** 2 + (cols - col_c) ** 2
         i_min = dist_sq.argmin()
