@@ -1,8 +1,27 @@
 # Changelog
 
-## [Unreleased](https://github.com/isce-framework/dolphin/compare/v0.30.0...main)
+## [Unreleased](https://github.com/isce-framework/dolphin/compare/v0.35.1...main)
 
-## [0.35.0](https://github.com/isce-framework/dolphin/compare/v0.34.0...v0.35.0) - 2025-12-09
+### Changed
+
+- `timeseries.py`: Auto reference point selection
+  - Picks the center of mass instead of arbitrary `argmax` result
+  - Rename `condition_file` to `quality_file`
+
+### Removed
+
+- Removed `condition` parameter in `timeseries` reference point functions
+- Removed `CallFunc` enum
+
+## [0.35.1](https://github.com/isce-framework/dolphin/compare/v0.35.0...v0.35.1) - 2025-01-15
+
+### Fixed
+
+- `filtering.py` Fix in_bounds_pixels masking, set default to 25 km
+- Set `output_reference_idx` separately from `compressed_reference_idx` during phase linking setup
+
+
+## [0.35.0](https://github.com/isce-framework/dolphin/compare/v0.34.0...v0.35.0) - 2025-01-09
 
 ### Added
 

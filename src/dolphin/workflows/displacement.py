@@ -16,7 +16,6 @@ from tqdm.auto import tqdm
 from dolphin import __version__, io, timeseries, utils
 from dolphin._log import log_runtime, setup_logging
 from dolphin.timeseries import ReferencePoint
-from dolphin.workflows import CallFunc
 
 from . import stitching_bursts, unwrapping, wrapped_phase
 from ._utils import _create_burst_cfg, _remove_dir_if_empty, parse_ionosphere_files
@@ -260,8 +259,10 @@ def run(
             unwrapped_paths=unwrapped_paths,
             conncomp_paths=conncomp_paths,
             corr_paths=stitched_paths.interferometric_corr_paths,
-            condition_file=stitched_paths.temp_coh_file,
-            condition=CallFunc.MAX,
+            # TODO: Right now we don't have the option to pick a different candidate
+            # or quality file. Figure out if this is worth exposing
+            quality_file=stitched_paths.temp_coh_file,
+            reference_candidate_threshold=0.95,
             output_dir=ts_opts._directory,
             method=timeseries.InversionMethod(ts_opts.method),
             run_velocity=ts_opts.run_velocity,
