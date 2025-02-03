@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import date, datetime
 from enum import Enum
 from pathlib import Path
 from tempfile import NamedTemporaryFile
@@ -15,14 +15,14 @@ from numpy.typing import ArrayLike, NDArray
 from opera_utils import get_dates
 from scipy import ndimage
 
-from dolphin import DateOrDatetime, io
+from dolphin import io
 from dolphin._overviews import ImageType, create_overviews
 from dolphin._types import PathOrStr, ReferencePoint
 from dolphin.utils import flatten, format_dates, full_suffix, get_nearest_date_idx
 from dolphin.workflows import CallFunc
 
 T = TypeVar("T")
-
+DateOrDatetime = datetime | date
 logger = logging.getLogger(__name__)
 
 __all__ = ["run"]
@@ -1131,7 +1131,7 @@ def _get_residuals_per_date(
     Parameters
     ----------
     A : ArrayLike
-       The matrix A in the equation Ax = b.
+        The matrix A in the equation Ax = b.
     x_stack : ArrayLike
         The 3D stack of solved phases from the inversion.
         Shape is (n_dates, n_rows, n_cols)

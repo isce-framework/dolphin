@@ -14,10 +14,11 @@ import numpy as np
 from opera_utils import get_dates
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-from dolphin._types import DateOrDatetime, Filename
+from dolphin._types import Filename
 from dolphin.io import DEFAULT_DATETIME_FORMAT
 from dolphin.utils import format_dates
 
+DateOrDatetime = datetime | date
 logger = logging.getLogger(__name__)
 
 
