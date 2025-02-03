@@ -20,7 +20,8 @@ def test_derived_vrt_interferogram(slc_file_list):
 
     assert ifg.path.name == "20220101_20220102.int.vrt"
     assert io.get_raster_xysize(ifg.path) == io.get_raster_xysize(slc_file_list[0])
-    assert ifg.dates == (datetime(2022, 1, 1), datetime(2022, 1, 2))
+    assert ifg.ref_date == datetime(2022, 1, 1)
+    assert ifg.sec_date == datetime(2022, 1, 2)
 
     arr0 = io.load_gdal(slc_file_list[0])
     arr1 = io.load_gdal(slc_file_list[1])
@@ -31,9 +32,7 @@ def test_derived_vrt_interferogram(slc_file_list):
 
 def test_specify_dates(slc_file_list):
     ref_slc, sec_slc = slc_file_list[0:2]
-    ref_date, sec_date = datetime(2022, 1, 1), datetime(2022, 1, 2)
     ifg = VRTInterferogram(ref_slc=ref_slc, sec_slc=sec_slc)
-    assert ifg.dates == (ref_date, sec_date)
     assert ifg.path.name == "20220101_20220102.int.vrt"
 
     # Check other dates don't fail or get overwritten
@@ -42,14 +41,14 @@ def test_specify_dates(slc_file_list):
     ifg = VRTInterferogram(
         ref_slc=ref_slc, sec_slc=sec_slc, ref_date=ref_date2, sec_date=sec_date2
     )
-    assert ifg.dates == (ref_date2, sec_date2)
+    assert ifg.ref_date == ref_date2
+    assert ifg.sec_date == sec_date2
     assert ifg.path.name == "20230202_20230203.int.vrt"
+
     # One at a time check
     ifg = VRTInterferogram(ref_slc=ref_slc, sec_slc=sec_slc, ref_date=ref_date2)
-    assert ifg.dates == (ref_date2, sec_date)
     assert ifg.path.name == "20230202_20220102.int.vrt"
     ifg = VRTInterferogram(ref_slc=ref_slc, sec_slc=sec_slc, sec_date=sec_date2)
-    assert ifg.dates == (ref_date, sec_date2)
     assert ifg.path.name == "20220101_20230203.int.vrt"
 
 
