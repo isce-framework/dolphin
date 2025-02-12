@@ -22,7 +22,7 @@ from dolphin._types import Bbox, Filename, P, Strides, T
 DateOrDatetime = Union[datetime.date, datetime.datetime]
 
 gdal.UseExceptions()
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("dolphin")
 
 
 def numpy_to_gdal_type(np_dtype: DTypeLike) -> int:
@@ -46,6 +46,7 @@ def numpy_to_gdal_type(np_dtype: DTypeLike) -> int:
 
     """
     np_dtype = np.dtype(np_dtype)
+    logger.info("huh")
 
     if np.issubdtype(bool, np_dtype):
         return gdalconst.GDT_Byte
