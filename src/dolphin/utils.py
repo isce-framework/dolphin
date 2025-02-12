@@ -11,7 +11,7 @@ from concurrent.futures import Executor, Future
 from itertools import chain
 from multiprocessing import cpu_count
 from pathlib import Path
-from typing import Any, Iterable, Literal, Optional, Sequence, Union
+from typing import Iterable, Literal, Optional, Sequence, Union
 
 import numpy as np
 from numpy.typing import ArrayLike, DTypeLike
@@ -464,7 +464,7 @@ def get_cpu_count():
     return cpu_count()
 
 
-def flatten(list_of_lists: Iterable[Iterable[Any]]) -> chain[Any]:
+def flatten(list_of_lists: Iterable[Iterable[T]]) -> chain[T]:
     """Flatten one level of a nested iterable."""
     return chain.from_iterable(list_of_lists)
 
