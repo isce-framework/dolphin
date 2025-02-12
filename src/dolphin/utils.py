@@ -46,7 +46,6 @@ def numpy_to_gdal_type(np_dtype: DTypeLike) -> int:
 
     """
     np_dtype = np.dtype(np_dtype)
-    logger.info("huh")
 
     if np.issubdtype(bool, np_dtype):
         return gdalconst.GDT_Byte
