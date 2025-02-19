@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import csv
-from functools import lru_cache, partial
-from pathlib import Path
+from functools import partial
 
 import jax.numpy as jnp
 from jax import Array, jit, lax, vmap
@@ -12,28 +10,16 @@ from scipy import stats
 from dolphin.utils import compute_out_shape
 
 
-@lru_cache
-def _read_cutoff_csv():
-    filename = Path(__file__).parent / "glrt_cutoffs.csv"
-
-    result = {}
-    with open(filename) as file:
-        reader = csv.DictReader(file)
-        for row in reader:
-            n = int(row["N"])
-            alpha = float(row["alpha"])
-            cutoff = float(row["cutoff"])
-            result[(n, alpha)] = cutoff
-
-    return result
-
-
-@partial(jit, static_argnames=["halfwin_rowcol", "strides", "alpha"])
+@partial(
+    jit,
+    static_argnames=["halfwin_rowcol", "strides", "nslc", "alpha"],
+)
 def estimate_neighbors(
     mean: ArrayLike,
     var: ArrayLike,
     halfwin_rowcol: tuple[int, int],
     strides: tuple[int, int] = (1, 1),
+    nslc: int = 1,
     alpha: float = 0.001,
 ):
     """Estimate the number of neighbors based on the GLRT."""
@@ -72,7 +58,9 @@ def estimate_neighbors(
         scale_2 = _get_window(scale_squared, in_r, in_c, half_row, half_col)
         # Compute the GLRT test statistic.
         scale_pooled = (scale_1 + scale_2) / 2
-        test_stat = 2 * jnp.log(scale_pooled) - jnp.log(scale_1) - jnp.log(scale_2)
+        test_stat = nslc * (
+            2 * jnp.log(scale_pooled) - jnp.log(scale_1) - jnp.log(scale_2)
+        )
 
         return threshold > test_stat
 

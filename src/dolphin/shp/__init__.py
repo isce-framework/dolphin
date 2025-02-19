@@ -94,6 +94,7 @@ def estimate_neighbors(
             var=var,
             halfwin_rowcol=halfwin_rowcol,
             strides=tuple(strides),
+            nslc=nslc,
             alpha=alpha,
         )
     elif method.lower() == ShpMethod.KS:
