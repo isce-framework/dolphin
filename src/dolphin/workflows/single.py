@@ -191,7 +191,7 @@ def run_wrapped_phase_single(
         neighbor_arrays = shp.estimate_neighbors(
             halfwin_rowcol=(yhalf, xhalf),
             alpha=shp_alpha,
-            strides=Strides(*strides_tup),
+            strides=Strides(y=strides_tup[0], x=strides_tup[1]),
             mean=amp_mean[in_rows, in_cols] if amp_mean is not None else None,
             var=amp_variance[in_rows, in_cols] if amp_variance is not None else None,
             nslc=shp_nslc,
