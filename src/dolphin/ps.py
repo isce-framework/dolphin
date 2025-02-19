@@ -18,7 +18,7 @@ from dolphin.io import EagerLoader, StackReader, repack_raster
 
 gdal.UseExceptions()
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("dolphin")
 
 NODATA_VALUES = {"ps": 255, "amp_dispersion": 0.0, "amp_mean": 0.0}
 
@@ -399,7 +399,7 @@ def combine_means(means: ArrayLike, N: ArrayLike) -> np.ndarray:
 
 def combine_amplitude_dispersions(
     dispersions: np.ndarray, means: np.ndarray, N: ArrayLike | Sequence
-) -> np.ndarray:
+) -> tuple[np.ndarray, np.ndarray]:
     r"""Compute the combined amplitude dispersion from multiple groups.
 
     Given several ADs where difference numbers of images, N, went in,

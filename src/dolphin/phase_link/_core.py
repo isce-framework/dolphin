@@ -18,7 +18,7 @@ from . import covariance, metrics
 from ._eigenvalues import eigh_largest_stack, eigh_smallest_stack
 from ._ps_filling import fill_ps_pixels
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("dolphin")
 
 
 DEFAULT_STRIDES = Strides(1, 1)
@@ -65,6 +65,7 @@ def run_phase_linking(
     strides: Strides = DEFAULT_STRIDES,
     use_evd: bool = False,
     beta: float = 0.0,
+    zero_correlation_threshold: float = 0.0,
     reference_idx: int = 0,
     nodata_mask: ArrayLike | None = None,
     mask_input_ps: bool = False,
@@ -96,6 +97,9 @@ def run_phase_linking(
         the EMI algorithm.
     beta : float, optional
         The regularization parameter, by default 0 (no regularization).
+    zero_correlation_threshold : float, optional
+        Snap correlation values in the coherence matrix below this value to 0.
+        Default is 0 (no clipping).
     reference_idx : int, optional
         The index of the (non compressed) reference SLC, by default 0
     nodata_mask : ArrayLike, optional
@@ -191,6 +195,7 @@ def run_phase_linking(
         strides=strides,
         use_evd=use_evd,
         beta=beta,
+        zero_correlation_threshold=zero_correlation_threshold,
         reference_idx=reference_idx,
         neighbor_arrays=neighbor_arrays,
         calc_average_coh=calc_average_coh,
@@ -247,6 +252,7 @@ def run_cpl(
     strides: Strides,
     use_evd: bool = False,
     beta: float = 0,
+    zero_correlation_threshold: float = 0.0,
     reference_idx: int = 0,
     neighbor_arrays: Optional[np.ndarray] = None,
     calc_average_coh: bool = False,
@@ -272,6 +278,9 @@ def run_cpl(
         the EMI algorithm.
     beta : float, optional
         The regularization parameter, by default 0 (no regularization).
+    zero_correlation_threshold : float, optional
+        Snap correlation values in the coherence matrix below this value to 0.
+        Default is 0 (no clipping).
     reference_idx : int, optional
         The index of the (non compressed) reference SLC, by default 0
     use_slc_amp : bool, optional
@@ -328,6 +337,7 @@ def run_cpl(
         C_arrays,
         use_evd=use_evd,
         beta=beta,
+        zero_correlation_threshold=zero_correlation_threshold,
         reference_idx=reference_idx,
     )
     # Get the temporal coherence
@@ -364,6 +374,7 @@ def process_coherence_matrices(
     C_arrays,
     use_evd: bool = False,
     beta: float = 0.0,
+    zero_correlation_threshold: float = 0.0,
     reference_idx: int = 0,
 ) -> tuple[Array, Array, Array]:
     """Estimate the linked phase for a stack of coherence matrices.
@@ -383,6 +394,9 @@ def process_coherence_matrices(
         The regularization parameter for inverting Gamma = |C|
         The regularization is applied as (1 - beta) * Gamma + beta * I
         Default is 0 (no regularization).
+    zero_correlation_threshold : float, optional
+        Snap correlation values in the coherence matrix below this value to 0.
+        Default is 0 (no clipping).
     reference_idx : int, optional
         The index of the reference acquisition, by default 0
         All outputs are multiplied by the conjugate of the data at this index.
@@ -401,9 +415,9 @@ def process_coherence_matrices(
     """
     rows, cols, n, _ = C_arrays.shape
 
+    evd_eig_vals, evd_eig_vecs = eigh_largest_stack(C_arrays * jnp.abs(C_arrays))
     if use_evd:
         # EVD
-        evd_eig_vals, evd_eig_vecs = eigh_largest_stack(C_arrays)
         eig_vals, eig_vecs = evd_eig_vals, evd_eig_vecs
         estimator = jnp.zeros(eig_vals.shape, dtype=bool)
     else:
@@ -420,6 +434,8 @@ def process_coherence_matrices(
         if beta > 0:
             # Perform regularization
             Gamma = (1 - beta) * Gamma + beta * Id
+        # Assume correlation below `zero_correlation_threshold` is 0
+        Gamma = jnp.where(Gamma < zero_correlation_threshold, 0, Gamma)
 
         # Attempt to invert Gamma
         cho, is_lower = cho_factor(Gamma)
@@ -449,7 +465,6 @@ def process_coherence_matrices(
         inv_has_nans_3d = jnp.tile(inv_has_nans[:, :, None], (1, 1, n))
 
         # For EVD, or places where inverting |Gamma| failed: fall back to computing EVD
-        evd_eig_vals, evd_eig_vecs = eigh_largest_stack(C_arrays)
         eig_vecs = lax.select(
             inv_has_nans_3d,
             # Run this on True: EVD, since we failed to invert:

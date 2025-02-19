@@ -6,11 +6,12 @@ from typing import Optional
 import numpy as np
 from numpy.typing import ArrayLike
 
+from dolphin import Strides
 from dolphin.workflows import ShpMethod
 
 from . import _glrt, _ks
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("dolphin")
 
 __all__ = ["estimate_neighbors"]
 
@@ -19,7 +20,7 @@ def estimate_neighbors(
     *,
     halfwin_rowcol: tuple[int, int],
     alpha: float,
-    strides: Optional[dict[str, int]] = None,
+    strides: Optional[Strides] = None,
     mean: Optional[ArrayLike] = None,
     var: Optional[ArrayLike] = None,
     nslc: Optional[int] = None,
@@ -72,7 +73,7 @@ def estimate_neighbors(
 
     """
     if strides is None:
-        strides = (1, 1)
+        strides = Strides(x=1, y=1)
     if prune_disconnected:
         logger.warning("`prune_disconnected` is deprecated: ignoring")
 
@@ -92,8 +93,7 @@ def estimate_neighbors(
             mean=mean,
             var=var,
             halfwin_rowcol=halfwin_rowcol,
-            strides=strides,
-            nslc=nslc,
+            strides=tuple(strides),
             alpha=alpha,
         )
     elif method.lower() == ShpMethod.KS:

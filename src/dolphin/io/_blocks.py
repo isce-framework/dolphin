@@ -22,7 +22,7 @@ __all__ = [
 ]
 
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("dolphin")
 
 
 @dataclass(frozen=True)
@@ -146,12 +146,11 @@ def get_full_res_trim(
 ) -> BlockIndices:
     in_no_pad_rows, in_no_pad_cols = in_no_pad_block
     in_rows, in_cols = in_block
-    trim_full_col = slice(
-        in_no_pad_cols.start - in_cols.start, in_no_pad_cols.stop - in_cols.stop
-    )
-    trim_full_row = slice(
-        in_no_pad_rows.start - in_rows.start, in_no_pad_rows.stop - in_rows.stop
-    )
+    # If the stops are the same, return None instead of slice(0, 0)
+    col_stop = (in_no_pad_cols.stop - in_cols.stop) or None
+    row_stop = (in_no_pad_rows.stop - in_rows.stop) or None
+    trim_full_col = slice(in_no_pad_cols.start - in_cols.start, col_stop)
+    trim_full_row = slice(in_no_pad_rows.start - in_rows.start, row_stop)
     return BlockIndices.from_slices(trim_full_row, trim_full_col)
 
 

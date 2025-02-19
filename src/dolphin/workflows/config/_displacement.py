@@ -27,14 +27,14 @@ from ._common import (
     WorkflowBase,
     _read_file_list_or_glob,
 )
-from ._unwrap_options import UnwrapOptions
+from ._unwrap_options import UnwrapMethod, UnwrapOptions
 
 __all__ = [
-    "DisplacementWorkflow",
     "CorrectionOptions",
+    "DisplacementWorkflow",
 ]
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("dolphin")
 
 
 # Add a class for troposphere, ionosphere corrections, with geometry files and DEM
@@ -131,6 +131,14 @@ class DisplacementWorkflow(WorkflowBase):
             " calculation. If none provided, computed using the input SLC stack."
         ),
     )
+    layover_shadow_mask_files: list[Path] = Field(
+        default_factory=list,
+        description=(
+            "Paths to layover/shadow binary masks, where 0 indicates a pixel in"
+            " layover/shadow, 1 is a good pixel. If none provided, no masking is"
+            " performed for layover/shadow."
+        ),
+    )
 
     phase_linking: PhaseLinkingOptions = Field(default_factory=PhaseLinkingOptions)
     interferogram_network: InterferogramNetwork = Field(
@@ -185,9 +193,9 @@ class DisplacementWorkflow(WorkflowBase):
 
         return self
 
-    def model_post_init(self, __context: Any) -> None:
+    def model_post_init(self, context: Any, /) -> None:
         """After validation, set up properties for use during workflow run."""
-        super().model_post_init(__context)
+        super().model_post_init(context)
 
         if self.input_options.wavelength is None and self.cslc_file_list:
             # Try to infer the wavelength from filenames
@@ -246,3 +254,15 @@ class DisplacementWorkflow(WorkflowBase):
         self.timeseries_options._velocity_file = (
             work_dir / self.timeseries_options._velocity_file
         )
+
+        # Modify interferogram options if using spurt for 3d unwrapping,
+        # which only does nearest-3 interferograms
+        if self.unwrap_options.unwrap_method == UnwrapMethod.SPURT:
+            logger.info(
+                "Using spurt: will form single reference interferograms, later convert"
+                " to nearest-3"
+            )
+            self.interferogram_network.reference_idx = 0
+            # Force all other network options to None
+            for attr in ["max_bandwidth", "max_temporal_baseline", "indexes"]:
+                setattr(self.interferogram_network, attr, None)

@@ -18,7 +18,7 @@ __all__ = [
     "PsWorkflow",
 ]
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("dolphin")
 
 
 class PsWorkflow(WorkflowBase):
@@ -37,6 +37,14 @@ class PsWorkflow(WorkflowBase):
     # Options for each step in the workflow
     ps_options: PsOptions = Field(default_factory=PsOptions)
     output_options: OutputOptions = Field(default_factory=OutputOptions)
+    layover_shadow_mask_files: list[Path] = Field(
+        default_factory=list,
+        description=(
+            "Paths to layover/shadow binary masks, where 0 indicates a pixel in"
+            " layover/shadow, 1 is a good pixel. If none provided, no masking is"
+            " performed for layover/shadow."
+        ),
+    )
 
     # internal helpers
     model_config = ConfigDict(
@@ -49,9 +57,9 @@ class PsWorkflow(WorkflowBase):
         _read_file_list_or_glob
     )
 
-    def model_post_init(self, __context: Any) -> None:
+    def model_post_init(self, context: Any, /) -> None:
         """After validation, set up properties for use during workflow run."""
-        super().model_post_init(__context)
+        super().model_post_init(context)
         # Ensure outputs from workflow steps are within work directory.
         if not self.keep_paths_relative:
             # Resolve all CSLC paths:

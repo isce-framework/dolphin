@@ -4,6 +4,7 @@ from scipy.stats import rayleigh
 
 from dolphin import shp
 from dolphin.phase_link import simulate
+from dolphin.shp import ShpMethod
 from dolphin.shp._common import remove_unconnected
 
 simulate._seed(1234)
@@ -101,7 +102,7 @@ def test_shp_ks(slcs):
         halfwin_rowcol=halfwin_rowcol,
         nslc=NUM_SLCS,
         alpha=1.0,
-        method="ks",
+        method=ShpMethod.KS,
     )
     shps_mid_pixel = neighbors[5, 5]
     assert shps_mid_pixel.sum() == 0  # only itself
@@ -109,7 +110,7 @@ def test_shp_ks(slcs):
 
 def test_shp_half_mean_different(mean, var):
     """Run a test where half the image has different mean"""
-    method = "glrt"
+    method = ShpMethod.GLRT
 
     halfwin_rowcol = (5, 5)
     # make the top half different amplitude
@@ -184,7 +185,7 @@ def test_shp_glrt_nodata_0(mean, var, strides):
 
 
 @pytest.mark.parametrize("method", ["glrt", "ks"])
-@pytest.mark.parametrize("alpha", [0.01, 0.05])
+@pytest.mark.parametrize("alpha", [0.001, 0.005])
 @pytest.mark.parametrize("strides", [(1, 1), (2, 2)])
 def test_shp_statistics(method, alpha, strides):
     """Check that with repeated tries, the alpha is correct."""

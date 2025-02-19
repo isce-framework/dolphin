@@ -13,7 +13,7 @@ from shapely.geometry import box
 import dolphin.atmosphere._utils as utils
 import dolphin.atmosphere.model_levels as ml
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("dolphin")
 
 _ZMIN = np.float64(-100)  # minimum required height
 _ZREF = np.float64(26000)  # maximum integration height
@@ -342,10 +342,10 @@ class WeatherModel(ABC):
         # Get the integrated ZTD
         wet_total, hydro_total = np.zeros(wet.shape), np.zeros(hydro.shape)
         for level in range(wet.shape[2]):
-            wet_total[..., level] = 1e-6 * np.trapz(
+            wet_total[..., level] = 1e-6 * np.trapezoid(
                 wet[..., level:], x=self._zs[level:], axis=2
             )
-            hydro_total[..., level] = 1e-6 * np.trapz(
+            hydro_total[..., level] = 1e-6 * np.trapezoid(
                 hydro[..., level:], x=self._zs[level:], axis=2
             )
         self._hydrostatic_ztd = hydro_total

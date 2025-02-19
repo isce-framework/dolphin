@@ -7,6 +7,7 @@ from pathlib import Path
 import jax.numpy as jnp
 from jax import Array, jit, lax, vmap
 from numpy.typing import ArrayLike
+from scipy import stats
 
 from dolphin.utils import compute_out_shape
 
@@ -27,18 +28,17 @@ def _read_cutoff_csv():
     return result
 
 
-@partial(jit, static_argnames=["halfwin_rowcol", "strides", "nslc", "alpha"])
+@partial(jit, static_argnames=["halfwin_rowcol", "strides", "alpha"])
 def estimate_neighbors(
     mean: ArrayLike,
     var: ArrayLike,
     halfwin_rowcol: tuple[int, int],
-    nslc: int,
     strides: tuple[int, int] = (1, 1),
     alpha: float = 0.001,
 ):
     """Estimate the number of neighbors based on the GLRT."""
     # Convert mean/var to the Rayleigh scale parameter
-    rows, cols = mean.shape
+    rows, cols = jnp.asarray(mean).shape
     half_row, half_col = halfwin_rowcol
     row_strides, col_strides = strides
     # window_size = rsize * csize
@@ -47,8 +47,10 @@ def estimate_neighbors(
     in_c_start = col_strides // 2
     out_rows, out_cols = compute_out_shape((rows, cols), strides)
 
-    scale_squared = (var + mean**2) / 2
-    threshold = get_cutoff_jax(alpha=alpha, N=nslc)
+    scale_squared = (jnp.asarray(var) + jnp.asarray(mean) ** 2) / 2
+    # threshold = get_cutoff_jax(alpha=alpha, N=nslc)
+    # 1 Degree of freedom, regardless of N
+    threshold = stats.chi2.ppf(1 - alpha, df=1)
 
     def _get_window(arr, r: int, c: int, half_row: int, half_col: int) -> Array:
         r0 = r - half_row
@@ -84,32 +86,3 @@ def estimate_neighbors(
     # Then in 3d
     _process_3d = vmap(_process_2d)
     return _process_3d(out_r_indices, out_c_indices)
-
-
-def get_cutoff(alpha: float, N: int) -> float:
-    r"""Compute the upper cutoff for the GLRT test statistic.
-
-    Statistic is
-
-    \[
-    2\log(\sigma_{pooled}) - \log(\sigma_{p}) -\log(\sigma_{q})
-    \]
-
-    Parameters
-    ----------
-    alpha: float
-        Significance level (0 < alpha < 1).
-    N: int
-        Number of samples.
-
-    Returns
-    -------
-    float
-        Cutoff value for the GLRT test statistic.
-
-    """
-    n_alpha_to_cutoff = _read_cutoff_csv()
-    return n_alpha_to_cutoff[(max(N, 50), alpha)]
-
-
-get_cutoff_jax = jit(get_cutoff, static_argnames=["alpha", "N"])

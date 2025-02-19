@@ -12,7 +12,7 @@ from dolphin.utils import full_suffix
 from ._constants import CONNCOMP_SUFFIX, DEFAULT_CCL_NODATA, DEFAULT_UNW_NODATA
 from ._utils import _zero_from_mask
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("dolphin")
 
 
 def unwrap_snaphu_py(
@@ -28,6 +28,8 @@ def unwrap_snaphu_py(
     unw_nodata: Optional[float] = DEFAULT_UNW_NODATA,
     ccl_nodata: Optional[int] = DEFAULT_CCL_NODATA,
     init_method: str = "mst",
+    single_tile_reoptimize: bool = False,
+    min_conncomp_frac: float = 0.001,
     cost: str = "smooth",
     scratchdir: Optional[Filename] = None,
 ) -> tuple[Path, Path]:
@@ -67,6 +69,16 @@ def unwrap_snaphu_py(
         Nodata value for the connected component labels.
     init_method : str, choices = {"mcf", "mst"}
         initialization method, by default "mst"
+    single_tile_reoptimize : bool
+        If True, after unwrapping with multiple tiles, an additional post-processing
+        unwrapping step is performed to re-optimize the unwrapped phase using a single
+        tile. This option is disregarded when `ntiles` is (1, 1). It supersedes the
+        `regrow_conncomps` option -- if both are enabled, only the single-tile
+        re-optimization step will be performed in order to avoid redundant computation.
+        Defaults to False.
+    min_conncomp_frac : float, optional
+        Minimum size of a single connected component, as a fraction of the total number
+        of pixels in the tile. Defaults to 1e-3
     cost : str
         Statistical cost mode.
         Default = "smooth"
@@ -114,6 +126,8 @@ def unwrap_snaphu_py(
             tile_overlap=tile_overlap,
             nproc=nproc,
             scratchdir=scratchdir,
+            single_tile_reoptimize=single_tile_reoptimize,
+            min_conncomp_frac=min_conncomp_frac,
             # https://github.com/isce-framework/snaphu-py/commit/a77cbe1ff115d96164985523987b1db3278970ed
             # On frame-sized ifgs, especially with decorrelation, defaults of
             # (500, 100) for (tile_cost_thresh, min_region_size) lead to

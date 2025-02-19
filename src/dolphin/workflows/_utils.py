@@ -13,7 +13,7 @@ from dolphin._types import Filename
 
 from .config import DisplacementWorkflow
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("dolphin")
 
 
 def _create_burst_cfg(
@@ -22,6 +22,7 @@ def _create_burst_cfg(
     grouped_slc_files: dict[str, list[Path]],
     grouped_amp_mean_files: dict[str, list[Path]],
     grouped_amp_dispersion_files: dict[str, list[Path]],
+    grouped_layover_shadow_mask_files: dict[str, list[Path]],
 ) -> DisplacementWorkflow:
     cfg_temp_dict = cfg.model_dump(exclude={"cslc_file_list"})
 
@@ -31,6 +32,9 @@ def _create_burst_cfg(
     cfg_temp_dict["cslc_file_list"] = grouped_slc_files[burst_id]
     cfg_temp_dict["amplitude_mean_files"] = grouped_amp_mean_files[burst_id]
     cfg_temp_dict["amplitude_dispersion_files"] = grouped_amp_dispersion_files[burst_id]
+    cfg_temp_dict["layover_shadow_mask_files"] = grouped_layover_shadow_mask_files[
+        burst_id
+    ]
     return DisplacementWorkflow(**cfg_temp_dict)
 
 

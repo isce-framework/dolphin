@@ -3,7 +3,6 @@ from enum import Enum
 __all__ = [
     "ShpMethod",
     "UnwrapMethod",
-    "CallFunc",
 ]
 
 
@@ -25,10 +24,3 @@ class UnwrapMethod(str, Enum):
     PHASS = "phass"
     SPURT = "spurt"
     WHIRLWIND = "whirlwind"
-
-
-class CallFunc(str, Enum):
-    """Call function for the timeseries method to find reference point."""
-
-    MIN = "min"
-    MAX = "max"

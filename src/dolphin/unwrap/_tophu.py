@@ -14,7 +14,7 @@ from dolphin.workflows import UnwrapMethod
 from ._constants import CONNCOMP_SUFFIX, DEFAULT_CCL_NODATA, DEFAULT_UNW_NODATA
 from ._utils import _redirect_unwrapping_log, _zero_from_mask
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("dolphin")
 
 
 def multiscale_unwrap(
@@ -185,5 +185,18 @@ def multiscale_unwrap(
     if zero_where_masked and mask_file is not None:
         logger.info(f"Zeroing unw/conncomp of pixels masked in {mask_file}")
         return _zero_from_mask(unw_filename, conncomp_filename, mask_file)
+    elif unwrap_method == UnwrapMethod.PHASS:
+        # Fill in the nan pixels with the nearest ambiguities
+        from ._post_process import interpolate_masked_gaps
+
+        with (
+            rio.open(unw_filename, mode="r+") as u_src,
+            rio.open(igram_rb.filepath) as i_src,
+        ):
+            unw = u_src.read(1)
+            ifg = i_src.read(1)
+            # nodata_mask = i_src.read_masks(1) != 0
+            interpolate_masked_gaps(unw, ifg)
+            u_src.write(unw, 1)
 
     return Path(unw_filename), Path(conncomp_filename)

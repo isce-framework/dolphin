@@ -13,14 +13,14 @@ from pydantic import (
 
 from ._enums import UnwrapMethod
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("dolphin")
 
 __all__ = [
-    "UnwrapOptions",
     "PreprocessOptions",
     "SnaphuOptions",
-    "TophuOptions",
     "SpurtOptions",
+    "TophuOptions",
+    "UnwrapOptions",
 ]
 
 
@@ -67,7 +67,17 @@ class PreprocessOptions(BaseModel, extra="forbid"):
         description="(for interpolation) Maximum radius to find scatterers.",
     )
     interpolation_cor_threshold: float = Field(
-        0.5,
+        0.3,
+        description=(
+            "Threshold on the correlation raster to use for interpolation. Pixels with"
+            " less than this value are replaced by a weighted combination of"
+            " neighboring pixels."
+        ),
+        ge=0.0,
+        le=1.0,
+    )
+    interpolation_similarity_threshold: float = Field(
+        0.3,
         description=(
             "Threshold on the correlation raster to use for interpolation. Pixels with"
             " less than this value are replaced by a weighted combination of"
@@ -103,6 +113,14 @@ class SnaphuOptions(BaseModel, extra="forbid"):
         "smooth",
         description="Statistical cost mode method for SNAPHU.",
     )
+    single_tile_reoptimize: bool = Field(
+        False,
+        description=(
+            "If True, after unwrapping with multiple tiles, an additional"
+            " post-processing unwrapping step is performed to re-optimize the unwrapped"
+            " phase using a single tile"
+        ),
+    )
 
     _to_tuple = field_validator("ntiles", "tile_overlap", mode="before")(to_tuple)
 
@@ -135,14 +153,14 @@ class SpurtGeneralSettings(BaseModel):
 class SpurtTilerSettings(BaseModel):
     """Class for holding tile generation settings."""
 
-    max_tiles: int = Field(16, description="Maximum number of tiles allowed.", ge=1)
+    max_tiles: int = Field(64, description="Maximum number of tiles allowed.", ge=1)
     target_points_for_generation: int = Field(
         120_000,
         description="Number of points used for determining tiles based on density.",
         gt=0,
     )
     target_points_per_tile: int = Field(
-        800_000, description="Target points per tile when generating tiles.", gt=0
+        900_000, description="Target points per tile when generating tiles.", gt=0
     )
     dilation_factor: float = Field(
         0.05,
@@ -233,11 +251,30 @@ class SpurtOptions(BaseModel, extra="forbid"):
     """
 
     temporal_coherence_threshold: float = Field(
-        0.6,
-        description="Temporal coherence to pick pixels used on an irregular grid",
+        0.7,
+        description="Temporal coherence to pick pixels used on an irregular grid.",
         ge=0.0,
         lt=1.0,
     )
+    similarity_threshold: float = Field(
+        0.5,
+        description=(
+            "Similarity to pick pixels used on an irregular grid. Any pixel with"
+            " similarity above `similarity_threshold` *or* above the temporal coherence"
+            " threshold is chosen."
+        ),
+        ge=0.0,
+        lt=1.0,
+    )
+    run_ambiguity_interpolation: bool = Field(
+        True,
+        description=(
+            "After running spurt, interpolate the values that were masked during"
+            " unwrapping (which are otherwise left as nan)."
+        ),
+    )
+    # TODO: do we want to allow a "AND" or "OR" option, so users can pick if they want
+    # `good_sim & good_temp_coh`, or `good_sim | good_temp_coh`
     general_settings: SpurtGeneralSettings = Field(default_factory=SpurtGeneralSettings)
     tiler_settings: SpurtTilerSettings = Field(default_factory=SpurtTilerSettings)
     solver_settings: SpurtSolverSettings = Field(default_factory=SpurtSolverSettings)

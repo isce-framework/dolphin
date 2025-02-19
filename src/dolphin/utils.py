@@ -11,7 +11,7 @@ from concurrent.futures import Executor, Future
 from itertools import chain
 from multiprocessing import cpu_count
 from pathlib import Path
-from typing import Any, Iterable, Optional, Sequence, Union
+from typing import Any, Iterable, Literal, Optional, Sequence, Union
 
 import numpy as np
 from numpy.typing import ArrayLike, DTypeLike
@@ -22,7 +22,7 @@ from dolphin._types import Bbox, Filename, P, Strides, T
 DateOrDatetime = Union[datetime.date, datetime.datetime]
 
 gdal.UseExceptions()
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("dolphin")
 
 
 def numpy_to_gdal_type(np_dtype: DTypeLike) -> int:
@@ -589,6 +589,7 @@ def prepare_geometry(
                 out_nodata=nodata,
                 target_aligned_pixels=True,
                 strides=strides,
+                resample_alg="nearest",
                 overwrite=False,
                 options=options,
             )
@@ -692,3 +693,28 @@ class DummyProcessPoolExecutor(Executor):
 
     def map(self, fn: Callable[P, T], *iterables, **kwargs):  # noqa: D102
         return map(fn, *iterables)
+
+
+def get_nearest_date_idx(
+    input_items: Sequence[datetime.datetime],
+    requested: datetime.datetime,
+    outside_input_range: Literal["allow", "warn", "raise"] = "raise",
+) -> int:
+    """Find the index nearest to `requested` within `input_items`."""
+    sorted_inputs = sorted(input_items)
+    if not sorted_inputs[0] <= requested <= sorted_inputs[-1]:
+        msg = f"Requested {requested} falls outside of input range: "
+        msg += f"{sorted_inputs[0]}, {sorted_inputs[-1]}"
+        if outside_input_range == "raise":
+            raise ValueError(msg)
+        elif outside_input_range == "warn":
+            warnings.warn(msg, stacklevel=2)
+        else:
+            pass
+
+    nearest_idx = min(
+        range(len(input_items)),
+        key=lambda i: abs((input_items[i] - requested).total_seconds()),
+    )
+
+    return nearest_idx

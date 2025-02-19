@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import json
 import logging
 import logging.config
@@ -36,7 +38,7 @@ LOG_RECORD_BUILTIN_ATTRS = {
     "threadName",
     "taskName",
 }
-__all__ = ["setup_logging", "log_runtime"]
+__all__ = ["log_runtime", "setup_logging"]
 
 
 def setup_logging(
@@ -81,7 +83,7 @@ def log_runtime(f: Callable[P, T]) -> Callable[P, T]:
     def test_func():
         return 2 + 4
     """
-    logger = logging.getLogger(__name__)
+    logger = logging.getLogger("dolphin")
 
     @wraps(f)
     def wrapper(*args: P.args, **kwargs: P.kwargs):
@@ -119,9 +121,9 @@ class JSONFormatter(logging.Formatter):
 
     def _prepare_log_dict(self, record: logging.LogRecord):
         always_fields = {
-            "timestamp": datetime.fromtimestamp(
-                record.created, tz=timezone.utc
-            ).isoformat(),
+            "timestamp": (
+                datetime.fromtimestamp(record.created, tz=timezone.utc).isoformat()
+            ),
             "message": record.getMessage(),
         }
         if record.exc_info is not None:
