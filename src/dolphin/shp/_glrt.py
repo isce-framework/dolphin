@@ -38,15 +38,18 @@ def estimate_neighbors(
     # 1 Degree of freedom, regardless of N
     threshold = stats.chi2.ppf(1 - alpha, df=1)
 
+    window_rsize = 2 * half_row + 1
+    window_csize = 2 * half_col + 1
+    slice_sizes = (window_rsize, window_csize)
+
+    # Create indices for window rows and columns
+    window_row_indices = jnp.arange(window_rsize)
+    window_col_indices = jnp.arange(window_csize)
+
     def _get_window(arr, r: int, c: int, half_row: int, half_col: int) -> Array:
         r0 = r - half_row
         c0 = c - half_col
         start_indices = (r0, c0)
-
-        rsize = 2 * half_row + 1
-        csize = 2 * half_col + 1
-        slice_sizes = (rsize, csize)
-
         return lax.dynamic_slice(arr, start_indices, slice_sizes)
 
     def _process_row_col(out_r, out_c):
@@ -56,16 +59,27 @@ def estimate_neighbors(
         scale_1 = scale_squared[in_r, in_c]  # One pixel
         # and one window for scale 2, will broadcast
         scale_2 = _get_window(scale_squared, in_r, in_c, half_row, half_col)
-        # Compute the GLRT test statistic.
+
+        # Compute the starting indices for the window in the full image
+        r0 = in_r - half_row
+        c0 = in_c - half_col
+
+        # Determine valid indices within the bounds of the original image
+        valid_rows = (window_row_indices >= -r0) & (window_row_indices < rows - r0)
+        valid_cols = (window_col_indices >= -c0) & (window_col_indices < cols - c0)
+        valid_mask = jnp.outer(valid_rows, valid_cols)
+
+        # Compute the GLRT test statistic
         scale_pooled = (scale_1 + scale_2) / 2
         test_stat = nslc * (
             2 * jnp.log(scale_pooled) - jnp.log(scale_1) - jnp.log(scale_2)
         )
-
         is_shp = threshold > test_stat
-        # Now make sure we don't count self as a neighbor
-        is_shp = is_shp.at[in_r, in_c].set(False)
-        return is_shp
+
+        # Zero out edge pixels where window is not fully in bounds
+        is_shp = jnp.where(valid_mask, is_shp, False)
+        # Ensure current pixel is not counted as its own neighbor
+        return is_shp.at[half_row, half_col].set(False)
 
     # Now make a 2D grid of indices to access all output pixels
     out_r_indices, out_c_indices = jnp.meshgrid(
