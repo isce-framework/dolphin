@@ -62,7 +62,10 @@ def estimate_neighbors(
             2 * jnp.log(scale_pooled) - jnp.log(scale_1) - jnp.log(scale_2)
         )
 
-        return threshold > test_stat
+        is_shp = threshold > test_stat
+        # Now make sure we don't count self as a neighbor
+        is_shp = is_shp.at[in_r, in_c].set(False)
+        return is_shp
 
     # Now make a 2D grid of indices to access all output pixels
     out_r_indices, out_c_indices = jnp.meshgrid(
