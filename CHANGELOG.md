@@ -1,17 +1,31 @@
 # Changelog
 
-## [Unreleased](https://github.com/isce-framework/dolphin/compare/v0.35.1...main)
+## [Unreleased](https://github.com/isce-framework/dolphin/compare/v0.36.0...main)
+
+## [0.36.0](https://github.com/isce-framework/dolphin/compare/v0.35.1...v0.36.0) - 2025-02-21
+
+### Added
+
+- `utils.grow_nodata_region` to remove bad borders from images
 
 ### Changed
 
 - `timeseries.py`: Auto reference point selection
   - Picks the center of mass instead of arbitrary `argmax` result
   - Rename `condition_file` to `quality_file`
+- Convert `glrt` SHP method to use JAX insted of Numba
+- Remove import for `goldstein` and `filtering` from top level `__init_.py`
 
 ### Removed
 
 - Removed `condition` parameter in `timeseries` reference point functions
 - Removed `CallFunc` enum
+
+### Fixed
+
+- docs: Fix mathjax render, fix broken `DateOrDatetime` error
+- Replace `__name__` with "dolphin" in `getLogger` to fix missing log entries from `.jsonl` log files
+- Used `utils.grow_nodata_region` to remove bad borders from `shp_counts.tif`
 
 ## [0.35.1](https://github.com/isce-framework/dolphin/compare/v0.35.0...v0.35.1) - 2025-01-15
 
@@ -19,7 +33,6 @@
 
 - `filtering.py` Fix in_bounds_pixels masking, set default to 25 km
 - Set `output_reference_idx` separately from `compressed_reference_idx` during phase linking setup
-
 
 ## [0.35.0](https://github.com/isce-framework/dolphin/compare/v0.34.0...v0.35.0) - 2025-01-09
 
