@@ -15,7 +15,7 @@ from typing import Any, Mapping, Optional, Sequence, Union
 
 import h5py
 import numpy as np
-from numpy.typing import ArrayLike, DTypeLike
+from numpy.typing import ArrayLike, DTypeLike, NDArray
 from osgeo import gdal
 from pyproj import CRS
 
@@ -688,7 +688,7 @@ def write_arr(
 
 
 def write_block(
-    cur_block: ArrayLike,
+    cur_block: NDArray,
     filename: Filename,
     row_start: int,
     col_start: int,
@@ -738,7 +738,7 @@ def write_block(
 
 
 def _write_gdal(
-    cur_block: ArrayLike,
+    cur_block: NDArray,
     filename: Filename,
     row_start: int,
     col_start: int,
@@ -761,7 +761,7 @@ def _write_gdal(
 
 
 def _write_hdf5(
-    cur_block: ArrayLike,
+    cur_block: NDArray,
     filename: Filename,
     row_start: int,
     col_start: int,
