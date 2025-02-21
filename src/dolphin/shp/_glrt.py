@@ -22,19 +22,57 @@ def estimate_neighbors(
     nslc: int = 1,
     alpha: float = 0.001,
 ):
-    """Estimate the number of neighbors based on the GLRT."""
-    # Convert mean/var to the Rayleigh scale parameter
+    """Estimate the number of neighbors based on the GLRT.
+
+    Based on the method described in [@Parizzi2011AdaptiveInSARStack].
+    Assumes Rayleigh distributed amplitudes ([@Siddiqui1962ProblemsConnectedRayleigh])
+
+    Parameters
+    ----------
+    mean : ArrayLike, 2D
+        Mean amplitude of each pixel.
+    var: ArrayLike, 2D
+        Variance of each pixel's amplitude.
+    halfwin_rowcol : tuple[int, int]
+        Half the size of the block in (row, col) dimensions
+    strides: tuple[int, int]
+        The (x, y) strides (in pixels) to use for the sliding window.
+        By default (1, 1), or no stides (output size = input size).
+    nslc : int
+        Number of images in the stack used to compute `mean` and `var`.
+        Used to compute the degrees of freedom for the statistical test to
+        determine the threshold value.
+    alpha : float, default=0.05
+        Significance level at which to reject the null hypothesis.
+        Rejecting means declaring a neighbor is not a SHP.
+
+    Notes
+    -----
+    When `strides` is not (1, 1), the output first two dimensions
+    are smaller than `mean` and `var` by a factor of `strides`. This
+    will match the downstream shape of the strided phase linking results.
+
+    Returns
+    -------
+    is_shp : np.ndarray, 4D
+        Boolean array marking which neighbors are SHPs for each pixel in the block.
+        Shape is (out_rows, out_cols, window_rows, window_cols), where
+            `out_rows` and `out_cols` are computed by
+            `[dolphin.io.compute_out_shape][]`
+            `window_rows = 2 * halfwin_rowcol[0] + 1`
+            `window_cols = 2 * halfwin_rowcol[1] + 1`
+
+    """
     rows, cols = jnp.asarray(mean).shape
     half_row, half_col = halfwin_rowcol
     row_strides, col_strides = strides
-    # window_size = rsize * csize
 
     in_r_start = row_strides // 2
     in_c_start = col_strides // 2
     out_rows, out_cols = compute_out_shape((rows, cols), strides)
 
+    # Convert mean/var to the Rayleigh scale parameter
     scale_squared = (jnp.asarray(var) + jnp.asarray(mean) ** 2) / 2
-    # threshold = get_cutoff_jax(alpha=alpha, N=nslc)
     # 1 Degree of freedom, regardless of N
     threshold = stats.chi2.ppf(1 - alpha, df=1)
 
@@ -57,7 +95,7 @@ def estimate_neighbors(
         in_c = in_c_start + out_c * col_strides
 
         scale_1 = scale_squared[in_r, in_c]  # One pixel
-        # and one window for scale 2, will broadcast
+        # and one window for scale 2, which broadcasts over scale_1
         scale_2 = _get_window(scale_squared, in_r, in_c, half_row, half_col)
 
         # Compute the starting indices for the window in the full image
@@ -86,8 +124,6 @@ def estimate_neighbors(
         jnp.arange(out_rows), jnp.arange(out_cols), indexing="ij"
     )
 
-    # Create the vectorized function in 2d
-    _process_2d = vmap(_process_row_col)
-    # Then in 3d
-    _process_3d = vmap(_process_2d)
+    # Create the vectorized function to run on all rows/columns
+    _process_3d = vmap(vmap(_process_row_col))
     return _process_3d(out_r_indices, out_c_indices)
