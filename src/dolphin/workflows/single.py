@@ -33,6 +33,7 @@ class OutputFile:
     dtype: DTypeLike
     strides: Optional[dict[str, int]] = None
     nbands: int = 1
+    nodata: float = 0
 
 
 @atomic_output(output_arg="output_folder", is_dir=True)
@@ -126,7 +127,12 @@ def run_wrapped_phase_single(
         ),
         OutputFile(output_folder / f"shp_counts_{start_end}.tif", np.uint16, strides),
         OutputFile(output_folder / f"eigenvalues_{start_end}.tif", np.float32, strides),
-        OutputFile(output_folder / f"estimator_{start_end}.tif", np.int8, strides),
+        OutputFile(
+            output_folder / f"estimator_{start_end}.tif",
+            np.int8,
+            strides,
+            nodata=255,
+        ),
         OutputFile(output_folder / f"avg_coh_{start_end}.tif", np.uint16, strides),
     ]
     for op in output_files:
@@ -137,7 +143,7 @@ def run_wrapped_phase_single(
             dtype=op.dtype,
             strides=op.strides,
             nbands=op.nbands,
-            nodata=0,
+            nodata=op.nodata,
         )
 
     # Iterate over the output grid
@@ -185,7 +191,7 @@ def run_wrapped_phase_single(
         neighbor_arrays = shp.estimate_neighbors(
             halfwin_rowcol=(yhalf, xhalf),
             alpha=shp_alpha,
-            strides=strides,
+            strides=Strides(y=strides_tup[0], x=strides_tup[1]),
             mean=amp_mean[in_rows, in_cols] if amp_mean is not None else None,
             var=amp_variance[in_rows, in_cols] if amp_variance is not None else None,
             nslc=shp_nslc,
@@ -269,7 +275,7 @@ def run_wrapped_phase_single(
         )
 
         # All other outputs are strided (smaller in size)
-        out_datas = [
+        out_datas: list[np.ndarray | None] = [
             pl_output.temp_coh,
             pl_output.shp_counts,
             pl_output.eigenvalues,
@@ -279,8 +285,9 @@ def run_wrapped_phase_single(
         for data, output_file in zip(out_datas, output_files[1:]):
             if data is None:  # May choose to skip some outputs, e.g. "avg_coh"
                 continue
+            trimmed_data = data[out_trim_rows, out_trim_cols]
             writer.queue_write(
-                data[out_trim_rows, out_trim_cols],
+                trimmed_data,
                 output_file.filename,
                 out_rows.start,
                 out_cols.start,

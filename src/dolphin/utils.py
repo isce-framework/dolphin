@@ -635,7 +635,9 @@ def prepare_geometry(
     return stitched_geo_list
 
 
-def compute_out_shape(shape: tuple[int, int], strides: Strides) -> tuple[int, int]:
+def compute_out_shape(
+    shape: tuple[int, int], strides: Strides | tuple[int, int]
+) -> tuple[int, int]:
     """Calculate the output size for an input `shape` and row/col `strides`.
 
     Parameters
