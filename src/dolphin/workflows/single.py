@@ -19,7 +19,7 @@ from dolphin.masking import load_mask_as_numpy
 from dolphin.phase_link import PhaseLinkRuntimeError, compress, run_phase_linking
 from dolphin.ps import calc_ps_block
 from dolphin.stack import MiniStackInfo
-from dolphin.utils import erode_edge_pixels
+from dolphin.utils import grow_nodata_region
 
 from .config import ShpMethod
 
@@ -299,8 +299,13 @@ def run_wrapped_phase_single(
                 continue
             output_file = output_files[key]
             trimmed_data = data[out_trim_rows, out_trim_cols]
+
             writer.queue_write(
-                trimmed_data,
+                # trimmed_data,
+                # Erode the edge pixels
+                grow_nodata_region(
+                    trimmed_data, nodata=output_file.nodata, n_pixels=2, copy=True
+                ),
                 output_file.filename,
                 out_rows.start,
                 out_cols.start,
@@ -315,11 +320,12 @@ def run_wrapped_phase_single(
     logger.info("Repacking for more compression")
     io.repack_rasters(phase_linked_slc_files, keep_bits=12)
 
-    logger.info("Eroding border of SHP rasters")
-    shp_file = output_files["shp_counts"]
-    shp_data = io.load_gdal(shp_file.filename)
-    erode_edge_pixels(shp_data, nodata=shp_file.nodata, n_pixels=2, copy=False)
-    io.write_block(shp_data, shp_file.filename, row_start=0, col_start=0)
+    # logger.info("Eroding border of SHP rasters")
+    # shp_file = output_files["shp_counts"]
+    # shp_data = io.load_gdal(shp_file.filename)
+    # # Eroding in blocks to avoid too-large rasters.
+    # erode_edge_pixels(shp_data, nodata=shp_file.nodata, n_pixels=2, copy=False)
+    # io.write_block(shp_data, shp_file.filename, row_start=0, col_start=0)
 
     logger.info("Creating similarity raster on outputs")
     similarity.create_similarities(
