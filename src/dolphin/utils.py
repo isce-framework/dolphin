@@ -755,13 +755,14 @@ def erode_edge_pixels(
     """
     from scipy import ndimage
 
+    arr = np.asarray(arr)
     if arr.ndim != 2:
         raise ValueError("Input array must be 2D.")
 
-    mask = np.asarray(arr) == nodata if not np.isnan(nodata) else np.isnan(arr)
+    mask = arr == nodata if not np.isnan(nodata) else np.isnan(arr)
     mask_expanded = ndimage.binary_dilation(
         mask, structure=np.ones((1 + 2 * n_pixels, 1 + 2 * n_pixels))
     )
-    out = np.asarray(arr).copy() if copy else np.asarray(arr)
+    out = arr.copy() if copy else arr
     out[mask_expanded] = nodata
     return out
