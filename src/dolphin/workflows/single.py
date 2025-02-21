@@ -287,7 +287,7 @@ def run_wrapped_phase_single(
                 continue
             trimmed_data = data[out_trim_rows, out_trim_cols]
             writer.queue_write(
-                _erode_edge_pixels(trimmed_data, nodata=output_file.nodata),
+                trimmed_data,
                 output_file.filename,
                 out_rows.start,
                 out_cols.start,
@@ -429,15 +429,3 @@ def setup_output_folder(
 
         phase_linked_slc_files.append(output_path)
     return phase_linked_slc_files
-
-
-def _erode_edge_pixels(arr: np.ndarray, nodata: float, n: int = 1) -> np.ndarray:
-    from scipy import ndimage
-
-    mask = arr == nodata if not np.isnan(nodata) else np.isnan(arr)
-    mask_expanded = ndimage.binary_dilation(
-        mask, structure=np.ones((1 + 2 * n, 1 + 2 * n))
-    )
-    out = arr.copy()
-    out[mask_expanded] = nodata
-    return out
