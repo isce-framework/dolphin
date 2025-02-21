@@ -718,3 +718,50 @@ def get_nearest_date_idx(
     )
 
     return nearest_idx
+
+
+def erode_edge_pixels(
+    arr: ArrayLike, nodata: float, n_pixels: int = 1, copy: bool = True
+) -> np.ndarray:
+    """Erode `n_pixels` from the border of a 2D array by updating its mask.
+
+    This function creates a mask from the `nodata` value, then extends the mask
+    inward from the boundaries by `n_pixels`.
+
+    Parameters
+    ----------
+    arr : numpy.ndarray
+        Input array containing the data and mask to be eroded
+    nodata : float
+        The value in `arr` that represents nodata.
+    n_pixels : int, optional
+        Number of pixels to erode from the border
+        Default is 2.
+    copy : bool, optional
+        Whether to copy the input data before eroding.
+        Default is True (no in-place modification is made).
+
+    Returns
+    -------
+    numpy.ndarray
+        Array with the same data, eroded by `n_pixels`.
+        If `copy` is False, the input array is modified in place.
+
+    Raises
+    ------
+    ValueError
+        If `arr` is not 2D.
+
+    """
+    from scipy import ndimage
+
+    if arr.ndim != 2:
+        raise ValueError("Input array must be 2D.")
+
+    mask = np.asarray(arr) == nodata if not np.isnan(nodata) else np.isnan(arr)
+    mask_expanded = ndimage.binary_dilation(
+        mask, structure=np.ones((1 + 2 * n_pixels, 1 + 2 * n_pixels))
+    )
+    out = np.asarray(arr).copy() if copy else np.asarray(arr)
+    out[mask_expanded] = nodata
+    return out
