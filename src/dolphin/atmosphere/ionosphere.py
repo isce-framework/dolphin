@@ -77,10 +77,6 @@ def estimate_ionospheric_delay(
     else:
         left, bottom, right, top = bounds
 
-    # Frame center latitude and longitude
-    latc = (top + bottom) / 2
-    lonc = (left + right) / 2
-
     # Read the incidence angle
     if "los_east" in geom_files:
         # ISCE3 geocoded products
@@ -108,6 +104,10 @@ def estimate_ionospheric_delay(
 
     output_paths: list[Path] = []
 
+    num_lats, num_lons = iono_inc_angle.shape
+    out_lats = np.linspace(top, bottom, num_lats)
+    out_lons = np.linspace(left, right, num_lons)
+    lat_grid, lon_grid = np.meshgrid(out_lats, out_lons, indexing="ij")
     for ifg in ifg_file_list:
         ref_date, sec_date = get_dates(ifg)
 
@@ -150,26 +150,15 @@ def estimate_ionospheric_delay(
         else:
             reference_time = oput.get_zero_doppler_time(slc_files[reference_date][0])
 
-        reference_vtec = read_zenith_tec(
-            time=reference_time,
-            tec_file=tec_files[(ref_date,)][0],
-            lat=latc,
-            lon=lonc,
+        # Calculate interpolated range delays
+        vtec_reference = read_zenith_tec(
+            reference_time, tec_files[(ref_date,)][0], lat_grid, lon_grid
         )
-
-        secondary_vtec = read_zenith_tec(
-            time=secondary_time,
-            tec_file=tec_files[(sec_date,)][0],
-            lat=latc,
-            lon=lonc,
+        range_delay_reference = vtec_to_range_delay(vtec_reference, inc_angle, freq)
+        vtec_secondary = read_zenith_tec(
+            secondary_time, tec_files[(sec_date,)][0], lat_grid, lon_grid
         )
-
-        range_delay_reference = vtec_to_range_delay(
-            reference_vtec, iono_inc_angle, freq
-        )
-        range_delay_secondary = vtec_to_range_delay(
-            secondary_vtec, iono_inc_angle, freq
-        )
+        range_delay_secondary = vtec_to_range_delay(vtec_secondary, inc_angle, freq)
 
         # For displacement output, positive corresponds to motion toward the satellite
         # If range_delay_secondary is smaller than range_delay_reference, then the
@@ -243,8 +232,7 @@ def read_zenith_tec(
         zenith TEC in TECU
 
     """
-    utc_seconds = time.hour * 3600.0 + time.minute * 60.0 + time.second
-
+    utc_seconds = (time.hour * 3600.0) + (time.minute * 60.0) + time.second
     return get_ionex_value(tec_file=tec_file, utc_sec=utc_seconds, lat=lat, lon=lon)
 
 
@@ -301,9 +289,9 @@ def get_ionex_value(
         Path of local TEC file
     utc_sec: float or 1D np.ndarray
         UTC time of the day in seconds
-    lat: ArrayLike (float or 1D np.ndarray)
+    lat: ArrayLike (float or np.ndarray)
         Latitude in degrees
-    lon: ArrayLike (float or 1D np.ndarray)
+    lon: ArrayLike (float or np.ndarray)
         Longitude in degrees
 
     Returns
@@ -329,9 +317,12 @@ def get_ionex_value(
 
     # Interpolate between consecutive TEC maps
     tec_val = interpolate.interpn(
-        points=(mins, np.ascontiguousarray(np.flip(lats)), lons),
-        values=np.flip(tec_maps, axis=1),
+        # points=(mins, np.ascontiguousarray(np.flip(lats)), lons),
+        # values=np.flip(tec_maps, axis=1),
+        points=(mins, lats, lons),
+        values=tec_maps,
         xi=(utc_min, lat, lon),
+        bounds_error=False,
         method="linear",
     )
     return tec_val
@@ -359,8 +350,14 @@ def read_ionex(
         3D array with vertical TEC in TECU
 
 
-    Source
-    ------
+    Notes
+    -----
+    The order of `mins` is ascending:
+    [   0.,  120.,  240.,  ..., 1200., 1320., 1440.]
+    The order of `lats` is descending, with 2.5 degree spacing
+    [ 87.5,  85. ,  82.5,  80., ..., -80. , -82.5, -85. , -87.5]
+    `lons` is ascending, with 5 degree spacing
+    [-180., -175., -170., ...,  170.,  175., 180.]
 
     """
 
