@@ -8,6 +8,7 @@ from typing import Mapping, Sequence
 
 import numpy as np
 import opera_utils as oput
+from numpy.typing import ArrayLike
 from opera_utils import get_dates
 from rasterio.crs import CRS
 from rasterio.warp import transform_bounds
@@ -218,9 +219,9 @@ def incidence_angle_ground_to_iono(inc_angle: np.ndarray, iono_height: float = 4
 
 
 def read_zenith_tec(
-    time: datetime.datetime, tec_file: Filename, lat: float, lon: float
-) -> float:
-    """Read and interpolate zenith TEC for the latitude and longitude of scene center.
+    time: datetime.datetime, tec_file: Filename, lat: ArrayLike, lon: ArrayLike
+) -> np.ndarray:
+    """Read and interpolate zenith TEC for one latitude and longitude.
 
     Parameters
     ----------
@@ -235,7 +236,7 @@ def read_zenith_tec(
 
     Returns
     -------
-    float
+    np.ndarray
         zenith TEC of the scene center in TECU.
 
     """
@@ -287,60 +288,49 @@ def vtec_to_range_delay(vtec: float, inc_angle: np.ndarray, freq: float):
 
 
 def get_ionex_value(
-    tec_file: Filename, utc_sec: float, lat: float, lon: float
-) -> float:
+    tec_file: Filename, utc_sec: float, lat: ArrayLike, lon: ArrayLike
+) -> np.ndarray:
     """Get the TEC value from input IONEX file for the input lat/lon/datetime.
 
     Parameters
     ----------
-    tec_file: Filename
-        path of local TEC file
-    utc_sec: float
+    tec_file: str
+        Path of local TEC file
+    utc_sec: float or 1D np.ndarray
         UTC time of the day in seconds
-    lat: float
-        latitude in degrees
-    lon: float
-        longitude in degrees
-
+    lat: ArrayLike (float or 1D np.ndarray)
+        Latitude in degrees
+    lon: ArrayLike (float or 1D np.ndarray)
+        Longitude in degrees
 
     Returns
     -------
-    float
-        vertical TEC value in TECU
+    tec_val: np.ndarray
+        Vertical TEC value in TECU
+
+    Notes
+    -----
+    If passing arrays for `lat` and `lon`, they must be the same shape.
+
+    Reference
+    ---------
+    Schaer, S., Gurtner, W., & Feltens, J. (1998). IONEX: The ionosphere map
+    exchange format version 1.1. Paper presented at the Proceedings of the IGS AC
+    workshop, Darmstadt, Germany.
 
     """
-    # time info
+    # Get the time of the day in minutes
     utc_min = utc_sec / 60.0
 
-    # read TEC file
     mins, lats, lons, tec_maps = read_ionex(tec_file)
 
-    # interpolate between consecutive rotated TEC maps
-    # reference: equation (3) in Schaer et al. (1998)
-
-    ind0 = np.where((mins - utc_min) <= 0)[0][-1]
-    ind1 = ind0 + 1
-
-    lon0 = lon + (utc_min - mins[ind0]) * 360.0 / (24.0 * 60.0)
-    lon1 = lon + (utc_min - mins[ind1]) * 360.0 / (24.0 * 60.0)
-
-    tec_val0 = interpolate.griddata(
-        points=(lons.flatten(), lats.flatten()),
-        values=tec_maps[ind0, :, :].flatten(),
-        xi=(lon0, lat),
+    # Interpolate between consecutive TEC maps
+    tec_val = interpolate.interpn(
+        points=(mins, np.ascontiguousarray(np.flip(lats)), lons),
+        values=np.flip(tec_maps, axis=1),
+        xi=(utc_min, lat, lon),
         method="linear",
     )
-
-    tec_val1 = interpolate.griddata(
-        points=(lons.flatten(), lats.flatten()),
-        values=tec_maps[ind1, :, :].flatten(),
-        xi=(lon1, lat),
-        method="linear",
-    )
-
-    tec_val = (mins[ind1] - utc_min) / (mins[ind1] - mins[ind0]) * tec_val0
-    +(utc_min - mins[ind0]) / (mins[ind1] - mins[ind0]) * tec_val1
-
     return tec_val
 
 
