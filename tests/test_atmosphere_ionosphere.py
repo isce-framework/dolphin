@@ -63,3 +63,24 @@ def test_get_ionex_value():
         lon,
     )
     assert np.allclose(tec_val, value, atol=1e-05, rtol=1e-05)
+
+
+def test_get_ionex_value_arrays():
+    """Test IONEX TEC data interpolation."""
+
+    # Lat/Lon coordinates over Chile
+    lat = [-21.3] * 3
+    lon = [-67.4] * 3
+
+    utc_sec = 23 * 3600 + 7 * 60
+
+    value = 64.96605174
+
+    # Perform comparison
+    tec_val = ionosphere.get_ionex_value(
+        TEST_TEC_FILE,
+        utc_sec,
+        lat,
+        lon,
+    )
+    assert np.allclose(tec_val, value, atol=1e-05, rtol=1e-05)

@@ -224,7 +224,7 @@ def incidence_angle_ground_to_iono(inc_angle: np.ndarray, iono_height: float = 4
 def read_zenith_tec(
     time: datetime.datetime, tec_file: Filename, lat: ArrayLike, lon: ArrayLike
 ) -> np.ndarray:
-    """Read and interpolate zenith TEC for one latitude and longitude.
+    """Read `tec_file` and interpolate zenith TEC for some latitudes and longitudes.
 
     Parameters
     ----------
@@ -232,15 +232,15 @@ def read_zenith_tec(
         datetime of the acquisition
     tec_file: Filename
         path to the tec file corresponding to slc date
-    lat: float
-        latitude of scene center
-    lon: float
-        longitude of scene center
+    lat: ArrayLike
+        Latitude(s) at which to calculate zenith TEC
+    lon: ArrayLike
+        Longitude(s) at which to calculate zenith TEC
 
     Returns
     -------
     np.ndarray
-        zenith TEC of the scene center in TECU.
+        zenith TEC in TECU
 
     """
     utc_seconds = time.hour * 3600.0 + time.minute * 60.0 + time.second
