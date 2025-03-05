@@ -317,8 +317,6 @@ def get_ionex_value(
 
     # Interpolate between consecutive TEC maps
     tec_val = interpolate.interpn(
-        # points=(mins, np.ascontiguousarray(np.flip(lats)), lons),
-        # values=np.flip(tec_maps, axis=1),
         points=(mins, lats, lons),
         values=tec_maps,
         xi=(utc_min, lat, lon),
