@@ -347,33 +347,37 @@ def get_ionex_value(
 def read_ionex(
     tec_file: Filename,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    """Read TEC file in IONEX format.
+    """Read Total Electron Content (TEC) file in IONEX format.
 
     Parameters
     ----------
-    tec_file: Filename
-        path to the TEC file in IONEX format
+    tec_file: str
+        Path to the TEC file in IONEX format
 
     Returns
     -------
     mins: np.ndarray
-        1D np.ndarray in size of (num_map), time of the day in minutes
-        (TEC maps are produced every few minute based on their predefined resolution,
-        num_map is the the number of TEC maps produced in a day)
+        1D array with time of the day in minutes
     lats: np.ndarray
-        1D np.ndarray in size of (num_lat), latitude  in degrees
+        1D array with latitude in degrees
     lons: np.ndarray
-        1D np.ndarray in size of (num_lon), longitude in degrees
+        1D array with longitude in degrees
     tec_maps: np.ndarray
-        3D np.ndarray in size of (num_map, num_lat, num_lon), vertical TEC in TECU
+        3D array with vertical TEC in TECU
+
+
+    Source
+    ------
 
     """
 
-    def parse_map(tec_map, key="TEC", exponent=-1):
-        tec_map = re.split(f".*END OF {key} MAP", tec_map)[0]
+    # functions for parsing strings from ionex file
+    # link: https://github.com/daniestevez/jupyter_notebooks/blob/master/IONEX.ipynb
+    def parse_map(tec_map_str, key="TEC", exponent=-1):
+        tec_map_str = re.split(f".*END OF {key} MAP", tec_map_str)[0]
         tec_map = [
             np.fromstring(x, sep=" ")
-            for x in re.split(".*LAT/LON1/LON2/DLON/H\\n", tec_map)[1:]
+            for x in re.split(".*LAT/LON1/LON2/DLON/H\\n", tec_map_str)[1:]
         ]
         return np.stack(tec_map) * 10**exponent
 
@@ -394,16 +398,16 @@ def read_ionex(
                 exponent = float(line.split()[0])
 
         # spatial coordinates
-        num_lat = int((lat1 - lat0) / lat_step + 1)
-        num_lon = int((lon1 - lon0) / lon_step + 1)
+        num_lat = (lat1 - lat0) // lat_step + 1
+        num_lon = (lon1 - lon0) // lon_step + 1
         lats = np.arange(lat0, lat0 + num_lat * lat_step, lat_step)
         lons = np.arange(lon0, lon0 + num_lon * lon_step, lon_step)
 
-        # time stamps
+        # time stamps in minutes
         min_step = 24 * 60 / (num_map - 1)
         mins = np.arange(0, num_map * min_step, min_step)
 
-        # read TEC and its RMS maps
+        # read TEC maps
         tec_maps = np.array(
             [
                 parse_map(t, key="TEC", exponent=exponent)
@@ -412,6 +416,4 @@ def read_ionex(
             dtype=np.float32,
         )
 
-    lon_2d, lat_2d = np.meshgrid(lons, lats, indexing="ij")
-
-    return mins, lat_2d, lon_2d, tec_maps
+    return mins, lats, lons, tec_maps
