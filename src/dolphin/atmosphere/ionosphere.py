@@ -171,8 +171,11 @@ def estimate_ionospheric_delay(
             secondary_vtec, iono_inc_angle, freq
         )
 
+        # For displacement output, positive corresponds to motion toward the satellite
+        # If range_delay_secondary is smaller than range_delay_reference, then the
+        # resulting delay difference is positive. A smaller secondary delay
+        # looks the same as motion toward the satellite.
         ifg_iono_range_delay = range_delay_reference - range_delay_secondary
-        # Convert to meters, where positive corresponds to motion toward the satellite
 
         if reference_point is not None:
             ref_row, ref_col = reference_point
