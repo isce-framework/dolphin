@@ -8,7 +8,6 @@ from typing import Mapping, Sequence
 
 import numpy as np
 import opera_utils as oput
-from numpy.typing import ArrayLike
 from opera_utils import get_dates
 from rasterio.crs import CRS
 from rasterio.warp import transform_bounds
@@ -165,15 +164,14 @@ def estimate_ionospheric_delay(
         )
 
         range_delay_reference = vtec_to_range_delay(
-            reference_vtec, iono_inc_angle, freq, obs_type="phase"
+            reference_vtec, iono_inc_angle, freq
         )
         range_delay_secondary = vtec_to_range_delay(
-            secondary_vtec, iono_inc_angle, freq, obs_type="phase"
+            secondary_vtec, iono_inc_angle, freq
         )
 
-        ifg_iono_range_delay_radians = range_delay_reference - range_delay_secondary
+        ifg_iono_range_delay = range_delay_reference - range_delay_secondary
         # Convert to meters, where positive corresponds to motion toward the satellite
-        ifg_iono_range_delay = -wavelength / (4 * np.pi) * ifg_iono_range_delay_radians
 
         if reference_point is not None:
             ref_row, ref_col = reference_point
@@ -190,7 +188,7 @@ def estimate_ionospheric_delay(
     return output_paths
 
 
-def incidence_angle_ground_to_iono(inc_angle: ArrayLike, iono_height: float = 450e3):
+def incidence_angle_ground_to_iono(inc_angle: np.ndarray, iono_height: float = 450e3):
     """Calibrate incidence angle on the ground surface to the ionosphere shell.
 
     Equation (11) in Yunjun et al. (2022, TGRS)
@@ -198,15 +196,14 @@ def incidence_angle_ground_to_iono(inc_angle: ArrayLike, iono_height: float = 45
     Parameters
     ----------
     inc_angle: np.ndarray
-        incidence angle on the ground in degrees
+        incidence angle (in degrees) on the ground
     iono_height: float
-        effective ionosphere height in meters
-        under the thin-shell assumption
+        effective ionosphere height in meters under the thin-shell assumption
 
     Returns
     -------
     np.ndarray
-        incidence angle on the iono shell in degrees
+        incidence angle (in degrees) on the iono shell
 
     """
     # convert degrees to radians
@@ -247,9 +244,7 @@ def read_zenith_tec(
     return get_ionex_value(tec_file=tec_file, utc_sec=utc_seconds, lat=lat, lon=lon)
 
 
-def vtec_to_range_delay(
-    vtec: float, inc_angle: np.ndarray, freq: float, obs_type: str = "phase"
-):
+def vtec_to_range_delay(vtec: float, inc_angle: np.ndarray, freq: float):
     """Calculate/predict the range delay in SAR from TEC in zenith direction.
 
     Equation (6-11) from Yunjun et al. (2022).
@@ -262,8 +257,6 @@ def vtec_to_range_delay(
         incidence angle at the ionospheric shell in deg
     freq: float
         radar carrier frequency in Hz.
-    obs_type: str
-        given the same iono, the impact on offset (amplitude) and phase is reversed.
 
     Returns
     -------
@@ -289,10 +282,6 @@ def vtec_to_range_delay(
 
     # calculate range delay based on equation (1) in Chen and Zebker (2012)
     range_delay = (tec * 1e16 * K / (freq**2)).astype(np.float32)
-
-    # group delay = phase advance * -1
-    if obs_type != "phase":
-        range_delay *= -1.0
 
     return range_delay
 
