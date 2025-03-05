@@ -70,6 +70,8 @@ def estimate_ionospheric_delay(
         List of newly created ionospheric phase delay corrections.
 
     """
+    from scipy.ndimage import zoom
+
     if epsg != 4326:
         left, bottom, right, top = transform_bounds(
             CRS.from_epsg(epsg), CRS.from_epsg(4326), *bounds
@@ -98,16 +100,31 @@ def estimate_ionospheric_delay(
     wavelength = oput.get_radar_wavelength(one_of_slcs)
     freq = SPEED_OF_LIGHT / wavelength
 
-    # output folder
     output_iono = output_dir / "ionosphere"
     output_iono.mkdir(exist_ok=True)
 
     output_paths: list[Path] = []
 
     num_lats, num_lons = iono_inc_angle.shape
-    out_lats = np.linspace(top, bottom, num_lats)
-    out_lons = np.linspace(left, right, num_lons)
-    lat_grid, lon_grid = np.meshgrid(out_lats, out_lons, indexing="ij")
+
+    downsample_factor: int = 10
+    # Create downsampled grid for efficiency
+    num_lats, num_lons = iono_inc_angle.shape
+    ds_num_lats = max(5, num_lats // downsample_factor)
+    ds_num_lons = max(5, num_lons // downsample_factor)
+
+    # Create the downsampled grid
+    ds_out_lats = np.linspace(top, bottom, ds_num_lats)
+    ds_out_lons = np.linspace(left, right, ds_num_lons)
+    ds_lat_grid, ds_lon_grid = np.meshgrid(ds_out_lats, ds_out_lons, indexing="ij")
+
+    # Downsample the incidence angle
+    ds_inc_angle = zoom(
+        iono_inc_angle, (ds_num_lats / num_lats, ds_num_lons / num_lons), order=1
+    )
+    # Ensure same size as the lat/lon grids
+    ds_inc_angle = ds_inc_angle[:ds_num_lats, :ds_num_lons]
+
     for ifg in ifg_file_list:
         ref_date, sec_date = get_dates(ifg)
 
@@ -152,19 +169,31 @@ def estimate_ionospheric_delay(
 
         # Calculate interpolated range delays
         vtec_reference = read_zenith_tec(
-            reference_time, tec_files[(ref_date,)][0], lat_grid, lon_grid
+            reference_time, tec_files[(ref_date,)][0], ds_lat_grid, ds_lon_grid
         )
-        range_delay_reference = vtec_to_range_delay(vtec_reference, inc_angle, freq)
+        # Make the downsampled (ds_) version
+        ds_range_delay_reference = vtec_to_range_delay(
+            vtec_reference, ds_inc_angle, freq
+        )
         vtec_secondary = read_zenith_tec(
-            secondary_time, tec_files[(sec_date,)][0], lat_grid, lon_grid
+            secondary_time, tec_files[(sec_date,)][0], ds_lat_grid, ds_lon_grid
         )
-        range_delay_secondary = vtec_to_range_delay(vtec_secondary, inc_angle, freq)
+        ds_range_delay_secondary = vtec_to_range_delay(
+            vtec_secondary, ds_inc_angle, freq
+        )
 
         # For displacement output, positive corresponds to motion toward the satellite
         # If range_delay_secondary is smaller than range_delay_reference, then the
         # resulting delay difference is positive. A smaller secondary delay
         # looks the same as motion toward the satellite.
-        ifg_iono_range_delay = range_delay_reference - range_delay_secondary
+        ds_ifg_iono_range_delay = ds_range_delay_reference - ds_range_delay_secondary
+
+        # Finally upsample the end result:
+        ifg_iono_range_delay = zoom(
+            ds_ifg_iono_range_delay,
+            (num_lats / ds_num_lats, num_lons / ds_num_lons),
+            order=1,
+        )
 
         if reference_point is not None:
             ref_row, ref_col = reference_point
