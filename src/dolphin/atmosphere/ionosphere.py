@@ -13,6 +13,7 @@ from opera_utils import get_dates
 from rasterio.crs import CRS
 from rasterio.warp import transform_bounds
 from scipy import interpolate
+from scipy.ndimage import zoom
 
 from dolphin import io
 from dolphin._types import Bbox, Filename
@@ -70,8 +71,6 @@ def estimate_ionospheric_delay(
         List of newly created ionospheric phase delay corrections.
 
     """
-    from scipy.ndimage import zoom
-
     if epsg != 4326:
         left, bottom, right, top = transform_bounds(
             CRS.from_epsg(epsg), CRS.from_epsg(4326), *bounds
@@ -184,7 +183,7 @@ def estimate_ionospheric_delay(
 
         # For displacement output, positive corresponds to motion toward the satellite
         # If range_delay_secondary is smaller than range_delay_reference, then the
-        # resulting delay difference is positive. A smaller secondary delay
+        # resulting delay difference is positive. A smaller excess secondary delay
         # looks the same as motion toward the satellite.
         ds_ifg_iono_range_delay = ds_range_delay_reference - ds_range_delay_secondary
 
@@ -240,13 +239,13 @@ def incidence_angle_ground_to_iono(inc_angle: np.ndarray, iono_height: float = 4
 
 
 def read_zenith_tec(
-    time: datetime.datetime, tec_file: Filename, lat: ArrayLike, lon: ArrayLike
+    dt: datetime.datetime, tec_file: Filename, lat: ArrayLike, lon: ArrayLike
 ) -> np.ndarray:
     """Read `tec_file` and interpolate zenith TEC for some latitudes and longitudes.
 
     Parameters
     ----------
-    time: datetime
+    dt: datetime
         datetime of the acquisition
     tec_file: Filename
         path to the tec file corresponding to slc date
@@ -261,7 +260,7 @@ def read_zenith_tec(
         zenith TEC in TECU
 
     """
-    utc_seconds = (time.hour * 3600.0) + (time.minute * 60.0) + time.second
+    utc_seconds = (dt.hour * 3600.0) + (dt.minute * 60.0) + dt.second
     return get_ionex_value(tec_file=tec_file, utc_sec=utc_seconds, lat=lat, lon=lon)
 
 
