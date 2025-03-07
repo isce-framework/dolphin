@@ -662,18 +662,9 @@ def write_arr(
     if fi.geotransform is not None:
         ds_out.SetGeoTransform(fi.geotransform)
 
-    # Write the actual data
-    if arr is not None:
-        if arr.ndim == 2:
-            arr = arr[np.newaxis, ...]
-        for i in range(fi.nbands):
-            logger.debug(f"Writing band {i+1}/{fi.nbands}")
-            bnd = ds_out.GetRasterBand(i + 1)
-            bnd.WriteArray(arr[i])
-
     # Set the nodata/units/description for each band
     for i in range(fi.nbands):
-        logger.debug(f"Setting nodata for band {i+1}/{fi.nbands}")
+        logger.debug(f"Setting nodata for band {i + 1}/{fi.nbands}")
         bnd = ds_out.GetRasterBand(i + 1)
         # Note: right now we're assuming the nodata/units/description
         if fi.nodata is not None:
@@ -682,6 +673,15 @@ def write_arr(
             bnd.SetUnitType(units)
         if description is not None:
             bnd.SetDescription(description)
+
+    # Write the actual data
+    if arr is not None:
+        if arr.ndim == 2:
+            arr = arr[np.newaxis, ...]
+        for i in range(fi.nbands):
+            logger.debug(f"Writing band {i + 1}/{fi.nbands}")
+            bnd = ds_out.GetRasterBand(i + 1)
+            bnd.WriteArray(arr[i])
 
     ds_out.FlushCache()
     ds_out = None
