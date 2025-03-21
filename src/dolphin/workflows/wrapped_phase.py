@@ -473,7 +473,7 @@ def _get_mask(
     like_filename: Filename,
     layover_shadow_mask: Filename | None,
     cslc_file_list: Sequence[Filename],
-    subdataset: str | None,
+    subdataset: str | None = None,
 ) -> Path | None:
     # Make the nodata mask from the polygons, if we're using OPERA CSLCs
     mask_files: list[Path] = []
