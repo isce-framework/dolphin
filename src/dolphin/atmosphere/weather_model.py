@@ -793,7 +793,7 @@ class ECMWF(WeatherModel):
 
         if z.size == 0:
             raise RuntimeError(
-                "There is no data in z, " "you may have a problem with your mask"
+                "There is no data in z, you may have a problem with your mask"
             )
 
         return lats, lons, xs, ys, t, q, lnsp, z
