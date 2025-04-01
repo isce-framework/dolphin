@@ -15,7 +15,7 @@ from typing import Any, Mapping, Optional, Sequence, Union
 
 import h5py
 import numpy as np
-from numpy.typing import ArrayLike, DTypeLike
+from numpy.typing import ArrayLike, DTypeLike, NDArray
 from osgeo import gdal
 from pyproj import CRS
 
@@ -25,7 +25,7 @@ from dolphin.utils import compute_out_shape, gdal_to_numpy_type, numpy_to_gdal_t
 from ._paths import S3Path
 
 gdal.UseExceptions()
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("dolphin")
 
 __all__ = [
     "DEFAULT_DATETIME_FORMAT",
@@ -50,6 +50,7 @@ __all__ = [
     "load_gdal",
     "set_raster_description",
     "set_raster_metadata",
+    "set_raster_nodata",
     "set_raster_units",
     "write_arr",
     "write_block",
@@ -83,9 +84,10 @@ DEFAULT_HDF5_OPTIONS = {
 }
 
 
-def _get_gdal_ds(filename: Filename) -> gdal.Dataset:
+def _get_gdal_ds(filename: Filename, update: bool = False) -> gdal.Dataset:
+    mode = gdal.GA_Update if update else gdal.GA_ReadOnly
     if str(filename).startswith("s3://"):
-        return gdal.Open(S3Path(str(filename)).to_gdal())
+        return gdal.Open(S3Path(str(filename)).to_gdal(), mode)
     return gdal.Open(fspath(filename))
 
 
@@ -282,6 +284,29 @@ def get_raster_nodata(filename: Filename, band: int = 1) -> Optional[float]:
     """
     ds = _get_gdal_ds(filename)
     return ds.GetRasterBand(band).GetNoDataValue()
+
+
+def set_raster_nodata(filename: Filename, nodata: float, band: int | None = None):
+    """Set the nodata value for a raster.
+
+    Parameters
+    ----------
+    filename : Filename
+        Path to the file to load.
+    nodata : float
+        The nodata value to set.
+    band : int, optional
+        The band to set the nodata value for, by default None
+        (sets the nodata value for all bands).
+
+    """
+    ds = gdal.Open(fspath(filename), gdal.GA_Update)
+    if band is None:
+        for i in range(ds.RasterCount):
+            ds.GetRasterBand(i + 1).SetNoDataValue(nodata)
+    else:
+        ds.GetRasterBand(band).SetNoDataValue(nodata)
+    ds = None
 
 
 def get_raster_crs(filename: Filename) -> CRS:
@@ -637,18 +662,9 @@ def write_arr(
     if fi.geotransform is not None:
         ds_out.SetGeoTransform(fi.geotransform)
 
-    # Write the actual data
-    if arr is not None:
-        if arr.ndim == 2:
-            arr = arr[np.newaxis, ...]
-        for i in range(fi.nbands):
-            logger.debug(f"Writing band {i+1}/{fi.nbands}")
-            bnd = ds_out.GetRasterBand(i + 1)
-            bnd.WriteArray(arr[i])
-
     # Set the nodata/units/description for each band
     for i in range(fi.nbands):
-        logger.debug(f"Setting nodata for band {i+1}/{fi.nbands}")
+        logger.debug(f"Setting nodata for band {i + 1}/{fi.nbands}")
         bnd = ds_out.GetRasterBand(i + 1)
         # Note: right now we're assuming the nodata/units/description
         if fi.nodata is not None:
@@ -658,12 +674,21 @@ def write_arr(
         if description is not None:
             bnd.SetDescription(description)
 
+    # Write the actual data
+    if arr is not None:
+        if arr.ndim == 2:
+            arr = arr[np.newaxis, ...]
+        for i in range(fi.nbands):
+            logger.debug(f"Writing band {i + 1}/{fi.nbands}")
+            bnd = ds_out.GetRasterBand(i + 1)
+            bnd.WriteArray(arr[i])
+
     ds_out.FlushCache()
     ds_out = None
 
 
 def write_block(
-    cur_block: ArrayLike,
+    cur_block: NDArray,
     filename: Filename,
     row_start: int,
     col_start: int,
@@ -713,7 +738,7 @@ def write_block(
 
 
 def _write_gdal(
-    cur_block: ArrayLike,
+    cur_block: NDArray,
     filename: Filename,
     row_start: int,
     col_start: int,
@@ -736,7 +761,7 @@ def _write_gdal(
 
 
 def _write_hdf5(
-    cur_block: ArrayLike,
+    cur_block: NDArray,
     filename: Filename,
     row_start: int,
     col_start: int,

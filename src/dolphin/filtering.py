@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import multiprocessing as mp
+import tempfile
 from concurrent.futures import ProcessPoolExecutor
 from itertools import repeat
 from pathlib import Path
@@ -8,16 +9,18 @@ from typing import Sequence
 
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
+from osgeo_utils.gdal_fillnodata import gdal_fillnodata
 from scipy import fft, ndimage
 
 
 def filter_long_wavelength(
     unwrapped_phase: ArrayLike,
     bad_pixel_mask: ArrayLike,
-    wavelength_cutoff: float = 50 * 1e3,
+    wavelength_cutoff: float = 25 * 1e3,
     pixel_spacing: float = 30,
     workers: int = 1,
     fill_value: float | None = None,
+    scratch_dir: Path | None = None,
 ) -> np.ndarray:
     """Filter out signals with spatial wavelength longer than a threshold.
 
@@ -27,21 +30,24 @@ def filter_long_wavelength(
         Unwrapped interferogram phase to filter.
     bad_pixel_mask : ArrayLike
         Boolean array with same shape as `unwrapped_phase` where `True` indicates a
-        pixel to ignore during ramp fitting
+        pixel to ignore during missing-data filling.
     wavelength_cutoff : float
         Spatial wavelength threshold to filter the unwrapped phase.
         Signals with wavelength longer than 'wavelength_cutoff' are filtered out.
-        The default is 50*1e3 (m).
+        The default is 25*1e3 (meters).
     pixel_spacing : float
         Pixel spatial spacing. Assume same spacing for x, y axes.
-        The default is 30 (m).
+        The default is 30 (meters).
     workers : int
         Number of `fft` workers to use for `scipy.fft.fft2`.
         Default is 1.
     fill_value : float, optional
         Value to place in output pixels which were masked.
-        If `None`, masked pixels are filled with the ramp value fitted
-        before filtering to suppress outliers.
+        If `None`, masked pixels are filled with interpolated values
+        using `gdal_fillnodata` before filtering to suppress outliers.
+    scratch_dir : Path, optional
+        Directory to use for temporary files. If not provided, uses system default
+        for Python's tempfile module.
 
     Returns
     -------
@@ -55,101 +61,119 @@ def filter_long_wavelength(
         If wavelength_cutoff too large for image size/pixel spacing.
 
     """
-    good_pixel_mask = np.logical_not(bad_pixel_mask)
-
-    rows, cols = unwrapped_phase.shape
-    unw0 = np.nan_to_num(unwrapped_phase)
-    # Take either nan or 0 pixels in `unwrapped_phase` to be nodata
-    nodata_mask = unw0 == 0
-    in_bounds_pixels = np.logical_not(nodata_mask)
-
-    total_valid_mask = in_bounds_pixels & good_pixel_mask
-
-    plane = fit_ramp_plane(unw0, total_valid_mask)
-    # Remove the plane, setting to 0 where we had no data for the plane fit:
-    unw_ifg_interp = np.where(total_valid_mask, unw0, plane)
+    from dolphin import io
 
     # Find the filter `sigma` which gives the correct cutoff in meters
     sigma = _compute_filter_sigma(wavelength_cutoff, pixel_spacing, cutoff_value=0.5)
+    rows, cols = unwrapped_phase.shape
 
-    if sigma > unw0.shape[0] or sigma > unw0.shape[0]:
+    if sigma > rows or sigma > cols:
         msg = f"{wavelength_cutoff = } too large for image."
         msg += f"Shape = {(rows, cols)}, and {pixel_spacing = }"
         raise ValueError(msg)
-    # Pad the array with edge values
-    # The padding extends further than the default "radius = 2*sigma + 1",
-    # which given specified in `gaussian_filter`
-    # https://docs.scipy.org/doc/scipy/reference/generated/scipy.ndimage.gaussian_filter.html#scipy.ndimage.gaussian_filter
-    pad_rows = pad_cols = int(3 * sigma)
-    # See here for illustration of `mode="reflect"`
-    # https://scikit-image.org/docs/stable/auto_examples/transform/plot_edge_modes.html#interpolation-edge-modes
-    padded = np.pad(
-        unw_ifg_interp, ((pad_rows, pad_rows), (pad_cols, pad_cols)), mode="reflect"
-    )
+
+    # Work on a copy of the displacement field to avoid modifying the input
+    displacement = np.nan_to_num(unwrapped_phase)
+
+    # Take either nan or 0 pixels in `unwrapped_phase` to be nodata
+    nodata_mask = displacement == 0
+    in_bounds_pixels = np.logical_not(nodata_mask)
+
+    # Convert bad pixels to NaN for GDAL fillnodata
+    displacement[bad_pixel_mask] = np.nan
+
+    # Calculate the number of pixels for max_distance based on wavelength
+    max_distance_pixels = int((wavelength_cutoff / 2) / pixel_spacing)
+
+    scratch_dir = Path(scratch_dir) if scratch_dir is not None else None
+
+    # Create temporary directory in the specified location or system default
+    with tempfile.TemporaryDirectory(dir=scratch_dir) as temp_dir:
+        tmp_path = Path(temp_dir)
+        # Create paths for temporary files in the temp directory
+        temp_src = tmp_path / "src.tif"
+        temp_dst = tmp_path / "filled.tif"
+
+        # Save the array to a temporary GeoTIFF
+        io.write_arr(
+            arr=displacement,
+            nodata=np.nan,
+            output_name=temp_src,
+            shape=(rows, cols),
+            dtype=displacement.dtype,
+        )
+
+        # Fill nodata using GDAL
+        gdal_fillnodata(
+            src_filename=str(temp_src),
+            dst_filename=str(temp_dst),
+            max_distance=max_distance_pixels,
+            smoothing_iterations=0,
+            interpolation="nearest",
+            quiet=True,
+        )
+
+        filled_data = io.load_gdal(temp_dst, masked=True).filled(0)
 
     # Apply Gaussian filter
-    result = fft.fft2(padded, workers=workers)
-    result = ndimage.fourier_gaussian(result, sigma=sigma)
+    lowpass_filtered = fft.fft2(filled_data, workers=workers)
+    lowpass_filtered = ndimage.fourier_gaussian(lowpass_filtered, sigma=sigma)
     # Make sure to only take the real part (ifft returns complex)
-    result = fft.ifft2(result, workers=workers).real.astype(unwrapped_phase.dtype)
+    lowpass_filtered = fft.ifft2(lowpass_filtered, workers=workers).real.astype(
+        unwrapped_phase.dtype
+    )
 
-    # Crop back to original size
-    lowpass_filtered = result[pad_rows:-pad_rows, pad_cols:-pad_cols]
-
-    filtered_ifg = unw_ifg_interp - lowpass_filtered * in_bounds_pixels
+    filtered_ifg = (filled_data - lowpass_filtered) * in_bounds_pixels
     if fill_value is not None:
+        good_pixel_mask = np.logical_not(bad_pixel_mask)
+        total_valid_mask = in_bounds_pixels & good_pixel_mask
         return np.where(total_valid_mask, filtered_ifg, fill_value)
     else:
         return filtered_ifg
 
 
 def _compute_filter_sigma(
-    wavelength_cutoff: float, pixel_spacing: float, cutoff_value: float = 0.5
+    wavelength_cutoff: float, pixel_spacing: float, cutoff_value: float = 0.25
 ) -> float:
-    sigma_f = 1 / wavelength_cutoff / np.sqrt(np.log(1 / cutoff_value))
-    sigma_x = 1 / np.pi / 2 / sigma_f
-    sigma = sigma_x / pixel_spacing
-    return sigma
+    """Compute the standard deviation (sigma) in pixel units for a Gaussian filter.
 
+    The frequency response reaches the value `cutoff_value` at the cutoff frequency
+    `f_c = 1/wavelength_cutoff`.
 
-def fit_ramp_plane(unw_ifg: ArrayLike, mask: ArrayLike) -> np.ndarray:
-    """Fit a ramp plane to the given data.
+    A spatial Gaussian filter is proportional to
+        g(x) = exp(-x^2 / (2*sigma^2))
+    whose Fourier transform is
+        G(f) = exp(-2*pi^2*sigma^2*f^2).
+
+    We set the response at f_c = 1/wavelength_cutoff to be equal to `cutoff_value`:
+        exp(-2*pi^2*sigma^2*(1/wavelength_cutoff)^2) = cutoff_value.
+
+    Taking the logarithm and solving for sigma (in spatial units):
+        sigma = (wavelength_cutoff * sqrt(-ln(cutoff_value))) / (sqrt(2)*pi).
+
+    Sigma is converted from spatial units to pixel units by dividing by pixel_spacing.
 
     Parameters
     ----------
-    unw_ifg : ArrayLike
-        2D array where the unwrapped interferogram data is stored.
-    mask : ArrayLike
-        2D boolean array indicating the valid (non-NaN) pixels.
+    wavelength_cutoff : float
+        The cutoff wavelength (in the same spatial units as pixel_spacing)
+    pixel_spacing : float
+        The size of one pixel in spatial units.
+    cutoff_value : float, optional
+        The desired filter response at f_c = 1/wavelength_cutoff.
+        Default is 0.25, -6 dB.
 
     Returns
     -------
-    np.ndarray
-        2D array of the fitted ramp plane.
+    float
+        The standard deviation (sigma) in pixel units for the Gaussian filter.
 
     """
-    # Extract data for non-NaN & masked pixels
-    Y = unw_ifg[mask]
-    Xdata = np.argwhere(mask)  # Get indices of non-NaN & masked pixels
-
-    # Include the intercept term (bias) in the model
-    X = np.c_[np.ones((len(Xdata))), Xdata]
-
-    # Compute the parameter vector theta using the least squares solution
-    theta = np.linalg.pinv(X.T @ X) @ X.T @ Y
-
-    # Prepare grid for the entire image
-    nrow, ncol = unw_ifg.shape
-    X1_, X2_ = np.mgrid[:nrow, :ncol]
-    X_ = np.hstack(
-        (np.reshape(X1_, (nrow * ncol, 1)), np.reshape(X2_, (nrow * ncol, 1)))
+    sigma_spatial = (
+        wavelength_cutoff * np.sqrt(-np.log(cutoff_value)) / (np.sqrt(2) * np.pi)
     )
-    X_ = np.hstack((np.ones((nrow * ncol, 1)), X_))
-
-    # Compute the fitted plane
-    plane = np.reshape(X_ @ theta, (nrow, ncol))
-
-    return plane
+    sigma_pixels = sigma_spatial / pixel_spacing
+    return sigma_pixels
 
 
 def filter_rasters(
@@ -157,7 +181,7 @@ def filter_rasters(
     cor_filenames: list[Path] | None = None,
     conncomp_filenames: list[Path] | None = None,
     temporal_coherence_filename: Path | None = None,
-    wavelength_cutoff: float = 50_000,
+    wavelength_cutoff: float = 25_000,
     correlation_cutoff: float = 0.5,
     output_dir: Path | None = None,
     max_workers: int = 4,

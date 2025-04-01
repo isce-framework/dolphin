@@ -13,13 +13,14 @@ from opera_utils import get_dates
 from rasterio.crs import CRS
 from rasterio.warp import transform_bounds
 from scipy import interpolate
+from scipy.ndimage import zoom
 
 from dolphin import io
 from dolphin._types import Bbox, Filename
 from dolphin.timeseries import ReferencePoint
 from dolphin.utils import format_date_pair
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("dolphin")
 
 ###########
 
@@ -77,10 +78,6 @@ def estimate_ionospheric_delay(
     else:
         left, bottom, right, top = bounds
 
-    # Frame center latitude and longitude
-    latc = (top + bottom) / 2
-    lonc = (left + right) / 2
-
     # Read the incidence angle
     if "los_east" in geom_files:
         # ISCE3 geocoded products
@@ -102,11 +99,30 @@ def estimate_ionospheric_delay(
     wavelength = oput.get_radar_wavelength(one_of_slcs)
     freq = SPEED_OF_LIGHT / wavelength
 
-    # output folder
     output_iono = output_dir / "ionosphere"
     output_iono.mkdir(exist_ok=True)
 
     output_paths: list[Path] = []
+
+    num_lats, num_lons = iono_inc_angle.shape
+
+    downsample_factor: int = 10
+    # Create downsampled grid for efficiency
+    num_lats, num_lons = iono_inc_angle.shape
+    ds_num_lats = max(5, num_lats // downsample_factor)
+    ds_num_lons = max(5, num_lons // downsample_factor)
+
+    # Create the downsampled grid
+    ds_out_lats = np.linspace(top, bottom, ds_num_lats)
+    ds_out_lons = np.linspace(left, right, ds_num_lons)
+    ds_lat_grid, ds_lon_grid = np.meshgrid(ds_out_lats, ds_out_lons, indexing="ij")
+
+    # Downsample the incidence angle
+    ds_inc_angle = zoom(
+        iono_inc_angle, (ds_num_lats / num_lats, ds_num_lons / num_lons), order=1
+    )
+    # Ensure same size as the lat/lon grids
+    ds_inc_angle = ds_inc_angle[:ds_num_lats, :ds_num_lons]
 
     for ifg in ifg_file_list:
         ref_date, sec_date = get_dates(ifg)
@@ -150,30 +166,33 @@ def estimate_ionospheric_delay(
         else:
             reference_time = oput.get_zero_doppler_time(slc_files[reference_date][0])
 
-        reference_vtec = read_zenith_tec(
-            time=reference_time,
-            tec_file=tec_files[(ref_date,)][0],
-            lat=latc,
-            lon=lonc,
+        # Calculate interpolated range delays
+        vtec_reference = read_zenith_tec(
+            reference_time, tec_files[(ref_date,)][0], ds_lat_grid, ds_lon_grid
+        )
+        # Make the downsampled (ds_) version
+        ds_range_delay_reference = vtec_to_range_delay(
+            vtec_reference, ds_inc_angle, freq
+        )
+        vtec_secondary = read_zenith_tec(
+            secondary_time, tec_files[(sec_date,)][0], ds_lat_grid, ds_lon_grid
+        )
+        ds_range_delay_secondary = vtec_to_range_delay(
+            vtec_secondary, ds_inc_angle, freq
         )
 
-        secondary_vtec = read_zenith_tec(
-            time=secondary_time,
-            tec_file=tec_files[(sec_date,)][0],
-            lat=latc,
-            lon=lonc,
-        )
+        # For displacement output, positive corresponds to motion toward the satellite
+        # If range_delay_secondary is smaller than range_delay_reference, then the
+        # resulting delay difference is positive. A smaller excess secondary delay
+        # looks the same as motion toward the satellite.
+        ds_ifg_iono_range_delay = ds_range_delay_reference - ds_range_delay_secondary
 
-        range_delay_reference = vtec_to_range_delay(
-            reference_vtec, iono_inc_angle, freq, obs_type="phase"
+        # Finally upsample the end result:
+        ifg_iono_range_delay = zoom(
+            ds_ifg_iono_range_delay,
+            (num_lats / ds_num_lats, num_lons / ds_num_lons),
+            order=1,
         )
-        range_delay_secondary = vtec_to_range_delay(
-            secondary_vtec, iono_inc_angle, freq, obs_type="phase"
-        )
-
-        ifg_iono_range_delay_radians = range_delay_reference - range_delay_secondary
-        # Convert to meters, where positive corresponds to motion toward the satellite
-        ifg_iono_range_delay = -wavelength / (4 * np.pi) * ifg_iono_range_delay_radians
 
         if reference_point is not None:
             ref_row, ref_col = reference_point
@@ -190,7 +209,7 @@ def estimate_ionospheric_delay(
     return output_paths
 
 
-def incidence_angle_ground_to_iono(inc_angle: ArrayLike, iono_height: float = 450e3):
+def incidence_angle_ground_to_iono(inc_angle: np.ndarray, iono_height: float = 450e3):
     """Calibrate incidence angle on the ground surface to the ionosphere shell.
 
     Equation (11) in Yunjun et al. (2022, TGRS)
@@ -198,15 +217,14 @@ def incidence_angle_ground_to_iono(inc_angle: ArrayLike, iono_height: float = 45
     Parameters
     ----------
     inc_angle: np.ndarray
-        incidence angle on the ground in degrees
+        incidence angle (in degrees) on the ground
     iono_height: float
-        effective ionosphere height in meters
-        under the thin-shell assumption
+        effective ionosphere height in meters under the thin-shell assumption
 
     Returns
     -------
     np.ndarray
-        incidence angle on the iono shell in degrees
+        incidence angle (in degrees) on the iono shell
 
     """
     # convert degrees to radians
@@ -221,35 +239,32 @@ def incidence_angle_ground_to_iono(inc_angle: ArrayLike, iono_height: float = 45
 
 
 def read_zenith_tec(
-    time: datetime.datetime, tec_file: Filename, lat: float, lon: float
-) -> float:
-    """Read and interpolate zenith TEC for the latitude and longitude of scene center.
+    dt: datetime.datetime, tec_file: Filename, lat: ArrayLike, lon: ArrayLike
+) -> np.ndarray:
+    """Read `tec_file` and interpolate zenith TEC for some latitudes and longitudes.
 
     Parameters
     ----------
-    time: datetime
+    dt: datetime
         datetime of the acquisition
     tec_file: Filename
         path to the tec file corresponding to slc date
-    lat: float
-        latitude of scene center
-    lon: float
-        longitude of scene center
+    lat: ArrayLike
+        Latitude(s) at which to calculate zenith TEC
+    lon: ArrayLike
+        Longitude(s) at which to calculate zenith TEC
 
     Returns
     -------
-    float
-        zenith TEC of the scene center in TECU.
+    np.ndarray
+        zenith TEC in TECU
 
     """
-    utc_seconds = time.hour * 3600.0 + time.minute * 60.0 + time.second
-
+    utc_seconds = (dt.hour * 3600.0) + (dt.minute * 60.0) + dt.second
     return get_ionex_value(tec_file=tec_file, utc_sec=utc_seconds, lat=lat, lon=lon)
 
 
-def vtec_to_range_delay(
-    vtec: float, inc_angle: np.ndarray, freq: float, obs_type: str = "phase"
-):
+def vtec_to_range_delay(vtec: float, inc_angle: np.ndarray, freq: float):
     """Calculate/predict the range delay in SAR from TEC in zenith direction.
 
     Equation (6-11) from Yunjun et al. (2022).
@@ -262,8 +277,6 @@ def vtec_to_range_delay(
         incidence angle at the ionospheric shell in deg
     freq: float
         radar carrier frequency in Hz.
-    obs_type: str
-        given the same iono, the impact on offset (amplitude) and phase is reversed.
 
     Returns
     -------
@@ -290,101 +303,97 @@ def vtec_to_range_delay(
     # calculate range delay based on equation (1) in Chen and Zebker (2012)
     range_delay = (tec * 1e16 * K / (freq**2)).astype(np.float32)
 
-    # group delay = phase advance * -1
-    if obs_type != "phase":
-        range_delay *= -1.0
-
     return range_delay
 
 
 def get_ionex_value(
-    tec_file: Filename, utc_sec: float, lat: float, lon: float
-) -> float:
+    tec_file: Filename, utc_sec: float, lat: ArrayLike, lon: ArrayLike
+) -> np.ndarray:
     """Get the TEC value from input IONEX file for the input lat/lon/datetime.
 
     Parameters
     ----------
-    tec_file: Filename
-        path of local TEC file
-    utc_sec: float
+    tec_file: str
+        Path of local TEC file
+    utc_sec: float or 1D np.ndarray
         UTC time of the day in seconds
-    lat: float
-        latitude in degrees
-    lon: float
-        longitude in degrees
-
+    lat: ArrayLike (float or np.ndarray)
+        Latitude in degrees
+    lon: ArrayLike (float or np.ndarray)
+        Longitude in degrees
 
     Returns
     -------
-    float
-        vertical TEC value in TECU
+    tec_val: np.ndarray
+        Vertical TEC value in TECU
+
+    Notes
+    -----
+    If passing arrays for `lat` and `lon`, they must be the same shape.
+
+    Reference
+    ---------
+    Schaer, S., Gurtner, W., & Feltens, J. (1998). IONEX: The ionosphere map
+    exchange format version 1.1. Paper presented at the Proceedings of the IGS AC
+    workshop, Darmstadt, Germany.
 
     """
-    # time info
+    # Get the time of the day in minutes
     utc_min = utc_sec / 60.0
 
-    # read TEC file
     mins, lats, lons, tec_maps = read_ionex(tec_file)
 
-    # interpolate between consecutive rotated TEC maps
-    # reference: equation (3) in Schaer et al. (1998)
-
-    ind0 = np.where((mins - utc_min) <= 0)[0][-1]
-    ind1 = ind0 + 1
-
-    lon0 = lon + (utc_min - mins[ind0]) * 360.0 / (24.0 * 60.0)
-    lon1 = lon + (utc_min - mins[ind1]) * 360.0 / (24.0 * 60.0)
-
-    tec_val0 = interpolate.griddata(
-        points=(lons.flatten(), lats.flatten()),
-        values=tec_maps[ind0, :, :].flatten(),
-        xi=(lon0, lat),
+    # Interpolate between consecutive TEC maps
+    tec_val = interpolate.interpn(
+        points=(mins, lats, lons),
+        values=tec_maps,
+        xi=(utc_min, lat, lon),
+        bounds_error=False,
         method="linear",
     )
-
-    tec_val1 = interpolate.griddata(
-        points=(lons.flatten(), lats.flatten()),
-        values=tec_maps[ind1, :, :].flatten(),
-        xi=(lon1, lat),
-        method="linear",
-    )
-
-    tec_val = (mins[ind1] - utc_min) / (mins[ind1] - mins[ind0]) * tec_val0
-    +(utc_min - mins[ind0]) / (mins[ind1] - mins[ind0]) * tec_val1
-
     return tec_val
 
 
 def read_ionex(
     tec_file: Filename,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    """Read TEC file in IONEX format.
+    """Read Total Electron Content (TEC) file in IONEX format.
 
     Parameters
     ----------
-    tec_file: Filename
-        path to the TEC file in IONEX format
+    tec_file: str
+        Path to the TEC file in IONEX format
 
     Returns
     -------
     mins: np.ndarray
-        1D np.ndarray in size of (num_map), time of the day in minutes
-        (TEC maps are produced every few minute based on their predefined resolution,
-        num_map is the the number of TEC maps produced in a day)
+        1D array with time of the day in minutes
     lats: np.ndarray
-        1D np.ndarray in size of (num_lat), latitude  in degrees
+        1D array with latitude in degrees
     lons: np.ndarray
-        1D np.ndarray in size of (num_lon), longitude in degrees
+        1D array with longitude in degrees
     tec_maps: np.ndarray
-        3D np.ndarray in size of (num_map, num_lat, num_lon), vertical TEC in TECU
+        3D array with vertical TEC in TECU
+
+
+    Notes
+    -----
+    The order of `mins` is ascending:
+    [   0.,  120.,  240.,  ..., 1200., 1320., 1440.]
+    The order of `lats` is descending, with 2.5 degree spacing
+    [ 87.5,  85. ,  82.5,  80., ..., -80. , -82.5, -85. , -87.5]
+    `lons` is ascending, with 5 degree spacing
+    [-180., -175., -170., ...,  170.,  175., 180.]
 
     """
 
-    def parse_map(tec_map, key="TEC", exponent=-1):
-        tec_map = re.split(f".*END OF {key} MAP", tec_map)[0]
+    # functions for parsing strings from ionex file
+    # link: https://github.com/daniestevez/jupyter_notebooks/blob/master/IONEX.ipynb
+    def parse_map(tec_map_str, key="TEC", exponent=-1):
+        tec_map_str = re.split(f".*END OF {key} MAP", tec_map_str)[0]
         tec_map = [
             np.fromstring(x, sep=" ")
-            for x in re.split(".*LAT/LON1/LON2/DLON/H\\n", tec_map)[1:]
+            for x in re.split(".*LAT/LON1/LON2/DLON/H\\n", tec_map_str)[1:]
         ]
         return np.stack(tec_map) * 10**exponent
 
@@ -405,16 +414,16 @@ def read_ionex(
                 exponent = float(line.split()[0])
 
         # spatial coordinates
-        num_lat = int((lat1 - lat0) / lat_step + 1)
-        num_lon = int((lon1 - lon0) / lon_step + 1)
+        num_lat = (lat1 - lat0) // lat_step + 1
+        num_lon = (lon1 - lon0) // lon_step + 1
         lats = np.arange(lat0, lat0 + num_lat * lat_step, lat_step)
         lons = np.arange(lon0, lon0 + num_lon * lon_step, lon_step)
 
-        # time stamps
+        # time stamps in minutes
         min_step = 24 * 60 / (num_map - 1)
         mins = np.arange(0, num_map * min_step, min_step)
 
-        # read TEC and its RMS maps
+        # read TEC maps
         tec_maps = np.array(
             [
                 parse_map(t, key="TEC", exponent=exponent)
@@ -423,6 +432,4 @@ def read_ionex(
             dtype=np.float32,
         )
 
-    lon_2d, lat_2d = np.meshgrid(lons, lats, indexing="ij")
-
-    return mins, lat_2d, lon_2d, tec_maps
+    return mins, lats, lons, tec_maps

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 from math import exp, sqrt
-from typing import Optional
 
 import numba
 import numpy as np
@@ -14,7 +13,7 @@ from dolphin.utils import _get_slices, compute_out_shape
 
 from ._common import remove_unconnected
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("dolphin")
 
 
 _get_slices = numba.njit(_get_slices)
@@ -24,7 +23,7 @@ def estimate_neighbors(
     amp_stack: ArrayLike,
     halfwin_rowcol: tuple[int, int],
     alpha: float,
-    strides: Optional[dict[str, int]] = None,
+    strides: tuple[int, int] = (1, 1),
     is_sorted: bool = False,
     prune_disconnected: bool = False,
 ):
@@ -37,16 +36,13 @@ def estimate_neighbors(
     #     neighbor_arrays,
     # )
 
-    if strides is None:
-        strides = {"x": 1, "y": 1}
     sorted_amp_stack = amp_stack if is_sorted else np.sort(amp_stack, axis=0)
 
     num_slc, rows, cols = sorted_amp_stack.shape
     ecdf_dist_cutoff = _get_ecdf_critical_distance(num_slc, alpha)
     logger.debug(f"ecdf_dist_cutoff: {ecdf_dist_cutoff}")
 
-    strides_rowcol = strides["y"], strides["x"]
-    out_rows, out_cols = compute_out_shape((rows, cols), Strides(*strides_rowcol))
+    out_rows, out_cols = compute_out_shape((rows, cols), Strides(*strides))
     half_row, half_col = halfwin_rowcol
     is_shp = np.zeros(
         (out_rows, out_cols, 2 * half_row + 1, 2 * half_col + 1), dtype=np.bool_
@@ -55,7 +51,7 @@ def estimate_neighbors(
     _loop_over_neighbors(
         sorted_amp_stack,
         halfwin_rowcol,
-        strides_rowcol,
+        strides,
         ecdf_dist_cutoff,
         prune_disconnected,
         is_shp,

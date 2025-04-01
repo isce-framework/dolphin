@@ -1,10 +1,11 @@
-"""Combine estimated DS phases with PS phases to form interferograms."""
+"""Module for creating interferograms and networks of interferograms."""
 
 from __future__ import annotations
 
 import itertools
 import logging
 from dataclasses import dataclass
+from datetime import date, datetime
 from os import fspath
 from pathlib import Path
 from typing import Any, Iterable, Literal, Optional, Sequence, Union
@@ -17,12 +18,13 @@ from pydantic import BaseModel, Field, ValidationInfo, field_validator, model_va
 from tqdm.contrib.concurrent import thread_map
 
 from dolphin import io, utils
-from dolphin._types import DateOrDatetime, Filename, T
+from dolphin._types import Filename, T
 from dolphin.filtering import gaussian_filter_nan
 
 gdal.UseExceptions()
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("dolphin")
+DateOrDatetime = Union[datetime, date]
 
 DEFAULT_SUFFIX = ".int.vrt"
 
@@ -248,10 +250,6 @@ class VRTInterferogram(BaseModel, extra="allow"):
         xsize, ysize = io.get_raster_xysize(self.path)
         return (ysize, xsize)
 
-    @property
-    def dates(self):  # noqa: D102
-        return (self.ref_date, self.sec_date)
-
     @classmethod
     def from_vrt_file(cls, path: Filename) -> VRTInterferogram:
         """Load a VRTInterferogram from an existing VRT file.
@@ -312,7 +310,7 @@ class Network:
         Date format to use when parsing dates from the input files (only
         used if setting `max_temporal_baseline`).
         defaults to '%Y%m%d'.
-    dates: Sequence[DateOrDatetime], optional
+    dates: Sequence[datetime | date], optional
         Alternative to `date_format`: manually specify the date/datetime of each item in
         `slc_list` instead of parsing the name.
         Only used for `max_temporal_baseline` networks.

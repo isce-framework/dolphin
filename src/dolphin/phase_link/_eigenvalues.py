@@ -22,7 +22,7 @@ from jax.typing import ArrayLike
 # so now instead of one scalar eigenvalue, we have (rows, cols) eigenvalues
 
 
-@partial(jit, static_argnames=("mu"))
+@partial(jit, static_argnames="mu")
 def eigh_smallest_stack(
     C_arrays: ArrayLike,
     mu: float,

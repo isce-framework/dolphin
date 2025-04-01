@@ -16,13 +16,12 @@ from tqdm.auto import tqdm
 from dolphin import __version__, timeseries, utils
 from dolphin._log import log_runtime, setup_logging
 from dolphin.timeseries import ReferencePoint
-from dolphin.workflows import CallFunc
 
 from . import stitching_bursts, unwrapping, wrapped_phase
 from ._utils import _create_burst_cfg, _remove_dir_if_empty
 from .config import DisplacementWorkflow
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("dolphin")
 
 
 @dataclass
@@ -40,6 +39,7 @@ class OutputPaths:
     unwrapped_paths: list[Path] | None
     conncomp_paths: list[Path] | None
     timeseries_paths: list[Path] | None
+    timeseries_residual_paths: list[Path] | None
     reference_point: ReferencePoint | None
 
 
@@ -62,8 +62,7 @@ def run(
     if cfg.log_file is None:
         cfg.log_file = cfg.work_directory / "dolphin.log"
     # Set the logging level for all `dolphin.` modules
-    for logger_name in ["dolphin", "spurt"]:
-        setup_logging(logger_name=logger_name, debug=debug, filename=cfg.log_file)
+    setup_logging(logger_name="dolphin", debug=debug, filename=cfg.log_file)
     # TODO: need to pass the cfg filename for the logger
     logger.debug(cfg.model_dump())
 
@@ -219,6 +218,7 @@ def run(
             unwrapped_paths=None,
             conncomp_paths=None,
             timeseries_paths=None,
+            timeseries_residual_paths=None,
             reference_point=None,
         )
 
@@ -243,12 +243,14 @@ def run(
     if ts_opts.run_inversion or ts_opts.run_velocity:
         # the output of run_timeseries is not currently used so pre-commit removes it
         # let's add back if we need it
-        timeseries_paths, reference_point = timeseries.run(
+        timeseries_paths, timeseries_residual_paths, reference_point = timeseries.run(
             unwrapped_paths=unwrapped_paths,
             conncomp_paths=conncomp_paths,
             corr_paths=stitched_paths.interferometric_corr_paths,
-            condition_file=stitched_paths.temp_coh_file,
-            condition=CallFunc.MAX,
+            # TODO: Right now we don't have the option to pick a different candidate
+            # or quality file. Figure out if this is worth exposing
+            quality_file=stitched_paths.temp_coh_file,
+            reference_candidate_threshold=0.95,
             output_dir=ts_opts._directory,
             method=timeseries.InversionMethod(ts_opts.method),
             run_velocity=ts_opts.run_velocity,
@@ -264,6 +266,7 @@ def run(
 
     else:
         timeseries_paths = None
+        timeseries_residual_paths = None
         reference_point = None
 
     # Print the maximum memory usage for each worker
@@ -285,6 +288,7 @@ def run(
         # unwrapped_paths=inverted_phase_paths,
         conncomp_paths=conncomp_paths,
         timeseries_paths=timeseries_paths,
+        timeseries_residual_paths=timeseries_residual_paths,
         reference_point=reference_point,
     )
 

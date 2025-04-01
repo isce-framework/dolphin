@@ -17,7 +17,7 @@ from dolphin.workflows import UnwrapMethod
 from . import InterferogramNetwork, sequential
 from .config import DisplacementWorkflow
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("dolphin")
 
 
 @log_runtime
@@ -92,6 +92,7 @@ def run(
         like_filename=vrt_stack.outfile,
         layover_shadow_mask=layover_shadow_mask,
         cslc_file_list=non_compressed_slcs,
+        subdataset=subdataset,
     )
 
     nodata_mask = masking.load_mask_as_numpy(mask_filename) if mask_filename else None
@@ -472,16 +473,17 @@ def _get_mask(
     like_filename: Filename,
     layover_shadow_mask: Filename | None,
     cslc_file_list: Sequence[Filename],
+    subdataset: str | None = None,
 ) -> Path | None:
     # Make the nodata mask from the polygons, if we're using OPERA CSLCs
     mask_files: list[Path] = []
-
     try:
         nodata_mask_file = output_dir / "nodata_mask.tif"
         make_nodata_mask(
             opera_file_list=cslc_file_list,
             out_file=nodata_mask_file,
             buffer_pixels=800,
+            dset_name=subdataset,
         )
         mask_files.append(nodata_mask_file)
     except Exception as e:

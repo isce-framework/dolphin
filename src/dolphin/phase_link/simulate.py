@@ -9,11 +9,9 @@ from __future__ import annotations
 import numpy as np
 import numpy.linalg as la
 import scipy.ndimage as ndi
-from numba import njit
 from numpy.typing import ArrayLike
 
 
-@njit(cache=True)
 def _ccg_noise(N: int) -> np.array:
     return (np.random.randn(N) + 1j * np.random.randn(N)) / np.sqrt(2)
 
@@ -21,7 +19,6 @@ def _ccg_noise(N: int) -> np.array:
 rng = np.random.default_rng()
 
 
-@njit(cache=True)
 def _seed(a):
     """Seed the random number generator for numba.
 
@@ -75,6 +72,7 @@ def simulate_coh(
     acq_interval: int = 12,
     add_signal: bool = False,
     signal_std: float = 0.1,
+    use_seasonal_coherence: bool = False,
 ) -> np.array:
     """Simulate a correlation matrix for a pixel.
 
@@ -94,6 +92,8 @@ def simulate_coh(
         Whether to add a simulated signal.
     signal_std : float
         The standard deviation of the simulated signal.
+    use_seasonal_coherence : bool
+        Whether to use a seasonal coherence model.
 
     Returns
     -------
@@ -116,7 +116,14 @@ def simulate_coh(
     else:
         noisy_truth = truth = np.zeros(len(time), dtype=np.float64)
 
-    C = simulate_coh_stack(time, gamma0, gamma_inf, Tau0, noisy_truth).squeeze()
+    C = simulate_coh_stack(
+        time,
+        gamma0,
+        gamma_inf,
+        Tau0,
+        noisy_truth,
+        use_seasonal_coherence=use_seasonal_coherence,
+    ).squeeze()
     return C, truth
 
 
@@ -127,6 +134,7 @@ def simulate_coh_stack(
     Tau0: np.ndarray,
     signal: np.ndarray,
     amplitudes: ArrayLike | None = None,
+    use_seasonal_coherence: bool = False,
 ) -> np.ndarray:
     """Create a coherence matrix at each pixel.
 
@@ -146,6 +154,8 @@ def simulate_coh_stack(
     amplitudes: ArrayLike, optional
         If provided, set the amplitudes of the output pixels.
         Default is to use all ones.
+    use_seasonal_coherence : bool
+        Whether to use a seasonal coherence model.
 
     Returns
     -------
@@ -161,13 +171,23 @@ def simulate_coh_stack(
     Tau0 = np.atleast_2d(Tau0)[:, :, None, None]
     if amplitudes is None:
         amplitudes = np.ones((num_time, 1, 1), dtype=np.float32)
-
-    gamma = (gamma0 - gamma_inf) * np.exp(time_diff / Tau0) + gamma_inf
-    phase_diff = signal[:, None] - signal[None, :]
     # Multiply each pixel by (a a^T)
     A = np.einsum("irc,jrc->rcij", amplitudes, amplitudes)
-    C = A * gamma * np.exp(1j * phase_diff)
 
+    phase_diff = signal[:, None] - signal[None, :]
+    C = A * np.exp(1j * phase_diff)
+    exp_decay = (gamma0 - gamma_inf) * np.exp(time_diff / Tau0) + gamma_inf
+    C = C * exp_decay
+
+    if use_seasonal_coherence:
+        a_factor = 0.5 * (1 + np.sqrt(gamma_inf))
+        b_factor = 0.5 * (1 - np.sqrt(gamma_inf))
+        seasonal_factor = (
+            a_factor + b_factor * np.cos(2 * np.pi * time_diff / 365.25)
+        ) ** 2
+        # Ensure it is a valid coherence multiplier
+        seasonal_factor = np.clip(seasonal_factor, 0, 1)
+        C = C * seasonal_factor
     rl, cl = np.tril_indices(num_time, k=-1)
 
     C[..., rl, cl] = np.conj(np.transpose(C, axes=(0, 1, 3, 2))[..., rl, cl])
@@ -231,7 +251,6 @@ def rmse(x, y, axis=None):
     return np.sqrt(np.mean((x - y) ** 2, axis=axis))
 
 
-@njit(cache=True)
 def mle(cov_mat, beta=0.00):
     """Estimate the linked phase using the MLE estimator.
 
@@ -266,7 +285,6 @@ def mle(cov_mat, beta=0.00):
     return evd_estimate.astype(dtype)
 
 
-@njit(cache=True)
 def evd(cov_mat):
     """Estimate the linked phase the largest eigenvector of `cov_mat`."""
     # estimate the wrapped phase based on the eigenvalue decomp of the cov. matrix

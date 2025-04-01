@@ -10,8 +10,10 @@ from typing import Optional, Sequence
 import numpy as np
 from tqdm.auto import tqdm
 
-from dolphin import goldstein, interpolate, io
+from dolphin import io
 from dolphin._types import Filename
+from dolphin.goldstein import goldstein
+from dolphin.interpolation import interpolate
 from dolphin.utils import DummyProcessPoolExecutor, full_suffix
 from dolphin.workflows import UnwrapMethod, UnwrapOptions
 
@@ -29,7 +31,7 @@ from ._unwrap_3d import unwrap_spurt
 from ._utils import create_combined_mask, set_nodata_values
 from ._whirlwind import unwrap_whirlwind
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("dolphin")
 
 __all__ = ["run", "unwrap"]
 

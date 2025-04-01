@@ -41,6 +41,15 @@ def test_ps_options_defaults():
     assert pso._amp_mean_file == Path("PS/amp_mean.tif")
 
 
+def test_ps_options_zero_and_negative_threshold():
+    # Change directory so the creation of the default files doesn't fail
+    pso = config.PsOptions(amp_dispersion_threshold=0.0)
+    assert pso.amp_dispersion_threshold == 0
+
+    with pytest.raises(pydantic.ValidationError):
+        config.PsOptions(amp_dispersion_threshold=-0.1)
+
+
 def test_phase_linking_options_defaults():
     opts = config.PhaseLinkingOptions()
     assert opts.ministack_size == 15
