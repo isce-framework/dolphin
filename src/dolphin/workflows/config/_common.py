@@ -484,7 +484,7 @@ class WorkflowBase(YamlModel):
             d.mkdir(parents=True, exist_ok=True)
 
 
-def _read_file_list_or_glob(cls, value):  # noqa: ARG001:
+def _read_file_list_or_glob(cls, value):  # noqa: ARG001
     """Check if the input file list is a glob pattern or a text file.
 
     If it's a text file, read the lines and return a list of Path objects.
