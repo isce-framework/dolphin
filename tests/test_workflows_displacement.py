@@ -61,12 +61,7 @@ def test_displacement_run_single(opera_slc_files: list[Path], tmpdir):
 
 
 def test_displacement_run_single_official_opera_naming(
-    opera_slc_files_official: list[Path],
-    # weather_model_files: list[Path],
-    # tec_files: list[Path],
-    # dem_file: Path,
-    # opera_static_files_official: list[Path],
-    tmpdir,
+    opera_slc_files_official: list[Path], tmpdir
 ):
     with tmpdir.as_cwd():
         cfg = config.DisplacementWorkflow(
@@ -77,15 +72,6 @@ def test_displacement_run_single_official_opera_naming(
             phase_linking={
                 "ministack_size": 500,
             },
-            # # TODO: this is not working
-            # # either move to disp-s1 test with real data,
-            # # or.. something else
-            # correction_options={
-            #     "troposphere_files": weather_model_files,
-            #     "ionosphere_files": tec_files,
-            #     "dem_file": dem_file,
-            #     "geometry_files": opera_static_files_official,
-            # },
             unwrap_options={"run_unwrap": True},
         )
         paths = displacement.run(cfg)

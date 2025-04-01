@@ -37,6 +37,9 @@ def run(
 ) -> CorrectionPaths:
     """Run the corrections workflow on the displacement outputs.
 
+    Note: Currently this workflow only supports ionospheric corrections
+    on OPERA CSLC input datasets.
+
     Parameters
     ----------
     cfg : DisplacementWorkflow
@@ -62,11 +65,10 @@ def run(
     if cfg.log_file is None:
         cfg.log_file = cfg.work_directory / "dolphin.log"
     # Set the logging level for all `dolphin.` modules
-    for logger_name in ["dolphin", "spurt"]:
-        setup_logging(logger_name=logger_name, debug=debug, filename=cfg.log_file)
+    setup_logging(logger_name="dolphin", debug=debug, filename=cfg.log_file)
     logger.debug(cfg.model_dump())
 
-    if len(correction_options.geometry_files) > 0:
+    if len(correction_options.geometry_files) == 0:
         raise ValueError("No geometry files passed to run the corrections workflow")
 
     grouped_iono_files = parse_ionosphere_files(
@@ -90,6 +92,7 @@ def run(
 
     crs = io.get_raster_crs(timeseries_paths[0])
     epsg = crs.to_epsg()
+    assert epsg is not None
     out_bounds = io.get_raster_bounds(timeseries_paths[0])
     frame_geometry_files = utils.prepare_geometry(
         geometry_dir=geometry_dir,
