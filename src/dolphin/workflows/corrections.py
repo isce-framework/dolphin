@@ -104,6 +104,13 @@ def run(
         strides=cfg.output_options.strides,
     )
 
+    if reference_point is None:
+        from dolphin.timeseries import _read_reference_point
+
+        ref_file = Path(timeseries_paths[0]).parent / "reference_point.txt"
+        ref = _read_reference_point(ref_file)
+    else:
+        ref = ReferencePoint(*reference_point)
     logger.info(
         "Calculating ionospheric corrections for %s files",
         len(timeseries_paths),
@@ -114,7 +121,7 @@ def run(
         slc_files=grouped_slc_files,
         tec_files=grouped_iono_files,
         geom_files=frame_geometry_files,
-        reference_point=reference_point,
+        reference_point=ref,
         output_dir=out_dir,
         epsg=epsg,
         bounds=out_bounds,
