@@ -8,9 +8,9 @@ from dolphin.workflows import config, corrections, displacement
 
 TEST_STATIC_FILES = [
     Path(__file__).parent
-    / "data/opera-s1-static-packed/OPERA_L2_CSLC-S1-STATIC_T087-185683-IW2_20140403_S1A_v1.0.h5.repack.h5",  # noqa: E501
+    / "data/opera-s1-static-packed/OPERA_L2_CSLC-S1-STATIC_T087-185683-IW2_20140403_S1A_v1.0.repacked.h5",  # noqa: E501
     Path(__file__).parent
-    / "data/opera-s1-static-packed/OPERA_L2_CSLC-S1-STATIC_T087-185684-IW2_20140403_S1A_v1.0.h5.repack.h5",  # noqa: E501
+    / "data/opera-s1-static-packed/OPERA_L2_CSLC-S1-STATIC_T087-185684-IW2_20140403_S1A_v1.0.repacked.h5",  # noqa: E501
 ]
 
 
