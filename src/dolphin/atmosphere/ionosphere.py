@@ -44,6 +44,9 @@ def estimate_ionospheric_delay(
 ) -> list[Path]:
     """Estimate the range delay (in meters) caused by ionosphere for each interferogram.
 
+    Note: Currently this workflow only supports ionospheric corrections
+    on OPERA CSLC input datasets.
+
     Parameters
     ----------
     ifg_file_list : list[Path]
