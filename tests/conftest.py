@@ -289,7 +289,7 @@ def raster_with_zero_block(tmp_path, tiled_raster_100_by_200):
 
 
 DX, DY = 5, -10
-X0, Y0 = 246362.5, 3422995.0
+X0, Y0 = 246362.5, 2153130.0
 GRID_MAPPING_DSET = "spatial_ref"
 
 
@@ -319,7 +319,7 @@ def opera_slc_files(tmp_path) -> list[Path]:
             yoff = Y0 + i * shape[0] / 2
             create_test_nc(
                 fname,
-                epsg=32615,
+                epsg=32605,
                 data_ds_name=ds_name,
                 # The "dummy" is so that two datasets are created in the file
                 # otherwise GDAL doesn't respect the NETCDF:file:/path/to/nested/data
@@ -327,6 +327,8 @@ def opera_slc_files(tmp_path) -> list[Path]:
                 data=slc_stack[i],
                 xoff=X0,
                 yoff=yoff,
+                dx=DX,
+                dy=abs(DY),
             )
             with h5py.File(fname, "a") as hf:
                 hf[
@@ -380,7 +382,7 @@ def opera_slc_files_official(tmp_path) -> list[Path]:
             yoff = Y0 + i * shape[0] / 2
             create_test_nc(
                 fname,
-                epsg=32615,
+                epsg=32605,
                 data_ds_name=ds_name,
                 # The "dummy" is so that two datasets are created in the file
                 # otherwise GDAL doesn't respect the NETCDF:file:/path/to/nested/data

@@ -67,7 +67,7 @@ def test_displacement_run_single_official_opera_naming(
         cfg = config.DisplacementWorkflow(
             cslc_file_list=opera_slc_files_official,
             input_options={"subdataset": "/data/VV"},
-            output_options={"strides": {"x": 2, "y": 2}},
+            output_options={"strides": {"x": 6, "y": 3}},
             interferogram_network={"max_bandwidth": 1},
             phase_linking={
                 "ministack_size": 500,

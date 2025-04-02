@@ -38,6 +38,7 @@ def test_corrections_run_single(
         cfg = config.DisplacementWorkflow(
             cslc_file_list=opera_slc_files,
             input_options={"subdataset": "/data/VV"},
+            output_options={"strides": {"x": 6, "y": 3}},
             interferogram_network={
                 "indexes": [(0, -1)],
                 "max_bandwidth": 2,
