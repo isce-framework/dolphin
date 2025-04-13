@@ -69,7 +69,7 @@ def unwrap_spurt(
     # expected in the one directory
     for fn in ifg_filenames:
         new_path = scratch_path / Path(fn).name
-        if not new_path.exists():
+        if not new_path.is_symlink():
             new_path.symlink_to(fn)
 
     cmd = [
