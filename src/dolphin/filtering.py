@@ -9,8 +9,6 @@ from typing import Sequence
 
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
-from osgeo_utils.gdal_fillnodata import gdal_fillnodata
-from scipy import fft, ndimage
 
 
 def filter_long_wavelength(
@@ -61,6 +59,9 @@ def filter_long_wavelength(
         If wavelength_cutoff too large for image size/pixel spacing.
 
     """
+    from osgeo_utils.gdal_fillnodata import gdal_fillnodata
+    from scipy import fft, ndimage
+
     from dolphin import io
 
     # Find the filter `sigma` which gives the correct cutoff in meters

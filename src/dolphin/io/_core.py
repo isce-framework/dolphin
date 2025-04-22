@@ -712,7 +712,7 @@ def write_block(
         If None, writes to band 1 (for 2D), or all bands if `cur_block.ndim = 3`.
     dset : str
         (For writing to HDF5/NetCDF files) The name of the string dataset
-        withing `filename` to write to.
+        within `filename` to write to.
 
     Raises
     ------

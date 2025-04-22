@@ -168,7 +168,7 @@ def multiscale_unwrap(
         coherence_rb = tophu.RasterBand(corr_filename)
 
     if log_to_file and not _user_gave_callback:
-        # Note that if they gave an arbitrary callback, we dont know the logger
+        # Note that if they gave an arbitrary callback, we don't know the logger
         _redirect_unwrapping_log(unw_filename, unwrap_method.value)
 
     tophu.multiscale_unwrap(

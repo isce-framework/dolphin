@@ -210,7 +210,7 @@ class BackgroundReader(BackgroundWorker):
     """Base class for reading data in a background thread (pre-fetching).
 
     After instantiating an object, a client sends it data selection parameters
-    (slices, indices, etc.) via the `queue_read` method and retrives the result
+    (slices, indices, etc.) via the `queue_read` method and retrieves the result
     with the `get_data` method.  In order to get useful concurrency, that
     usually means you'll want to queue the read for the next data block before
     starting work on the current block.  The reader remains active until

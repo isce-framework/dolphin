@@ -361,14 +361,14 @@ class MiniStackInfo(BaseStack):
     def output_reference_date(self):
         """Date of the reference phase of the stack."""
         # Note this works for either a length-1 tuple (real SLC), or for
-        # the compressed SLC formate (ref, start, end)
+        # the compressed SLC format (ref, start, end)
         return self.dates[self.output_reference_idx][0]
 
     @property
     def compressed_reference_date(self):
         """Date of the reference phase of the stack."""
         # Note this works for either a length-1 tuple (real SLC), or for
-        # the compressed SLC formate (ref, start, end)
+        # the compressed SLC format (ref, start, end)
         return self.dates[self.compressed_reference_idx][0]
 
     def get_compressed_slc_info(self) -> CompressedSlcInfo:
@@ -477,7 +477,7 @@ class MiniStackPlanner(BaseStack):
                 compressed_reference_idx = num_ccslc
                 # Ansari, 2017 also had output_reference_idx = num_ccslcs, and
                 # used the "Datum Adjustment" step to get outputs relative to day 0
-                # Here, we'll use 0 (or manually specifed)
+                # Here, we'll use 0 (or manually specified)
             elif self.compressed_slc_plan == CompressedSlcPlan.LAST_PER_MINISTACK:
                 # Alternative that allows sequential interferograms across ministacks
                 compressed_reference_idx = -1
