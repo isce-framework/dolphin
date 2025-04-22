@@ -697,7 +697,7 @@ def datetime_to_float(dates: Sequence[DateOrDatetime]) -> np.ndarray:
 def create_velocity(
     unw_file_list: Sequence[PathOrStr],
     output_file: PathOrStr,
-    reference: ReferencePoint,
+    reference: ReferencePoint | None = None,
     date_list: Sequence[DateOrDatetime] | None = None,
     cor_file_list: Sequence[PathOrStr] | None = None,
     cor_threshold: float = 0.2,
@@ -717,9 +717,10 @@ def create_velocity(
         List of unwrapped phase files.
     output_file : PathOrStr
         The output file to save the velocity to.
-    reference : ReferencePoint
+    reference : ReferencePoint, optional
         The (row, col) to use as reference before fitting the velocity.
         This point will be subtracted from all other points before solving.
+        If not provided, no subtraction will be performed.
     date_list : Sequence[DateOrDatetime], optional
         List of dates corresponding to the unwrapped phase files.
         If not provided, will be parsed from filenames in `unw_file_list`.
@@ -772,9 +773,12 @@ def create_velocity(
         cor_reader = None
 
     # Read in the reference point
-    ref_row, ref_col = reference
-    logger.info(f"Reading phase reference pixel {reference}")
-    ref_data = unw_reader[:, ref_row, ref_col].reshape(-1, 1, 1)
+    if reference is not None:
+        ref_row, ref_col = reference
+        logger.info(f"Reading phase reference pixel {reference}")
+        ref_data = unw_reader[:, ref_row, ref_col].reshape(-1, 1, 1)
+    else:
+        ref_data = np.zeros((len(unw_file_list), 1, 1))
 
     def read_and_fit(
         readers: Sequence[io.StackReader], rows: slice, cols: slice
