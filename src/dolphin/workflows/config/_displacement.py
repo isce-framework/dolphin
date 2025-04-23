@@ -39,7 +39,7 @@ logger = logging.getLogger("dolphin")
 
 # Add a class for troposphere, ionosphere corrections, with geometry files and DEM
 class CorrectionOptions(BaseModel, extra="forbid"):
-    """Configuration for the auxillary phase corrections."""
+    """Configuration for the auxiliary phase corrections."""
 
     _atm_directory: Path = Path("atmosphere")
     _iono_date_fmt: list[str] = ["%j0.%y", "%Y%j0000"]

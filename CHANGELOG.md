@@ -13,7 +13,7 @@
 - `timeseries.py`: Auto reference point selection
   - Picks the center of mass instead of arbitrary `argmax` result
   - Rename `condition_file` to `quality_file`
-- Convert `glrt` SHP method to use JAX insted of Numba
+- Convert `glrt` SHP method to use JAX instead of Numba
 - Remove import for `goldstein` and `filtering` from top level `__init_.py`
 
 ### Removed
@@ -450,7 +450,7 @@
 - Added `RasterWriter` and `BackgroundRasterWriter` implementations of this protocol
 - Refactored phase linking
   - Covariance and EVD/MLE use `jax`
-  - This combines the implementation of CPU/GPU, and removes the need for usign `pymp`
+  - This combines the implementation of CPU/GPU, and removes the need for using `pymp`
 - Added `utils.disable_gpu` to stop the use ofr a GPU even if it's available
 
 ### Changed
@@ -508,7 +508,7 @@
 ### Added
 - Ability to unwrap interferograms with the [`snaphu-py`](https://github.com/isce-framework/snaphu-py) (not a required dependency)
 - Added ability to make annual ifgs in `Network`
-- Start of tropospheric corection support in `dolphin.atmosphere` using PyAPS and Raider packages
+- Start of tropospheric correction support in `dolphin.atmosphere` using PyAPS and Raider packages
 - Expose the unwrap skipping with `dolphin config --no-unwrap`
 
 ### Changed
@@ -659,7 +659,7 @@ Now optional:
 - Pydantic models were upgraded to V2
 - Refactored the blockwise IO into `_blocks.py`.
   - The iteration now happens over the output grid for easier dilating/padding when using `strides`
-  - New classes with `BlockIndices` and `BlockManager` for easier mangement of the different slices
+  - New classes with `BlockIndices` and `BlockManager` for easier management of the different slices
 
 ### Dependencies
 
