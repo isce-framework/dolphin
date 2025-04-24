@@ -108,6 +108,13 @@ The full set of options is written to the configuration file; you can edit this 
 ./docker/build-docker-image.sh
 ```
 
+## Citation
+
+If you use `dolphin` in your research, please cite:
+
+Staniewicz et al., (2024). Dolphin: A Python package for large-scale InSAR PS/DS processing.
+Journal of Open Source Software, 9(103), 6997, https://doi.org/10.21105/joss.06997
+
 ## Contributing
 
 We welcome many forms of contributing, including testing, bug reports, and documentation fixes. If you think you've found a problem, please let us know! You can raise an [issue](https://github.com/isce-framework/dolphin/issues) on the repository, where there are templates for Bug Reports and Feature Requests. If you have a general question of idea, feel free to raise it in the [Discussions](https://github.com/isce-framework/dolphin/discussions) page.

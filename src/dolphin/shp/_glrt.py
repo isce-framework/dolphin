@@ -37,14 +37,15 @@ def estimate_neighbors(
         Half the size of the block in (row, col) dimensions
     strides: tuple[int, int]
         The (x, y) strides (in pixels) to use for the sliding window.
-        By default (1, 1), or no stides (output size = input size).
+        By default (1, 1), or no strides (output size = input size).
     nslc : int
         Number of images in the stack used to compute `mean` and `var`.
         Used to compute the degrees of freedom for the statistical test to
         determine the threshold value.
-    alpha : float, default=0.05
+    alpha : float
         Significance level at which to reject the null hypothesis.
         Rejecting means declaring a neighbor is not a SHP.
+        Default is 0.001.
 
     Notes
     -----
