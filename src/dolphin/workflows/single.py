@@ -60,7 +60,7 @@ def run_wrapped_phase_single(
     similarity_nearest_n: int | None = None,
     block_shape: tuple[int, int] = (512, 512),
     baseline_lag: Optional[int] = None,
-    num_workers: int = 4,
+    max_workers: int = 1,
     **tqdm_kwargs,
 ):
     """Estimate wrapped phase for one ministack.
@@ -185,7 +185,7 @@ def run_wrapped_phase_single(
     write_lock = Lock()
     read_lock = Lock()
 
-    Executor = ThreadPoolExecutor if num_workers > 1 else DummyProcessPoolExecutor
+    Executor = ThreadPoolExecutor if max_workers > 1 else DummyProcessPoolExecutor
     pbar = tqdm(total=len(blocks), **tqdm_kwargs)
 
     def _process_block(
@@ -273,7 +273,6 @@ def run_wrapped_phase_single(
         )
 
         with write_lock:
-            logger.info(f"{pl_output.cpx_phase[0].shape, out_rows, out_cols}")
             # ### Save results ###
             for img, f in zip(
                 pl_output.cpx_phase[first_real_slc_idx:, out_trim_rows, out_trim_cols],
@@ -313,8 +312,7 @@ def run_wrapped_phase_single(
                 trimmed_data = data[out_trim_rows, out_trim_cols]
 
                 writer.queue_write(
-                    # trimmed_data,
-                    # Erode the edge pixels
+                    # Erode the edge pixels before writing:
                     grow_nodata_region(
                         trimmed_data, nodata=output_file.nodata, n_pixels=2, copy=True
                     ),
@@ -324,7 +322,7 @@ def run_wrapped_phase_single(
                 )
             pbar.update()
 
-    with Executor(num_workers) as exc:
+    with Executor(max_workers) as exc:
         # Consume all blocks from the `.map` call
         deque(exc.map(_process_block, blocks))
 
