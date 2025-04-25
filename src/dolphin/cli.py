@@ -1,11 +1,3 @@
-# import argparse
-# import sys
-
-# import dolphin._cli_filter
-# import dolphin._cli_timeseries
-# import dolphin._cli_unwrap
-
-
 def main() -> None:
     """Top-level command line interface to the workflows."""
     import tyro
@@ -13,7 +5,6 @@ def main() -> None:
     from dolphin.filtering import filter_rasters
     from dolphin.unwrap import run as run_unwrap
     from dolphin.workflows._cli_config import ConfigCli
-    from dolphin.workflows._cli_run import run as run_cli
 
     tyro.extras.subcommand_cli_from_dict(
         {
@@ -29,3 +20,24 @@ def main() -> None:
 
     # TODO: Check how to slot this into tyro's argparse
     # parser.add_argument("--version", action="version", version=__version__)
+
+
+def run_cli(
+    config_file: str,
+    debug: bool = False,
+) -> None:
+    """Run the displacement workflow.
+
+    Parameters
+    ----------
+    config_file : str
+        YAML file containing the workflow options.
+    debug : bool, optional
+        Enable debug logging, by default False.
+
+    """
+    from .workflows import displacement
+    from .workflows.config import DisplacementWorkflow
+
+    cfg = DisplacementWorkflow.from_yaml(config_file)
+    displacement.run(cfg, debug=debug)
