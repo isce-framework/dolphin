@@ -83,7 +83,7 @@ def log_runtime(f: Callable[P, T]) -> Callable[P, T]:
     def test_func():
         return 2 + 4
     """
-    logger = logging.getLogger(__name__)
+    logger = logging.getLogger("dolphin")
 
     @wraps(f)
     def wrapper(*args: P.args, **kwargs: P.kwargs):
@@ -121,9 +121,9 @@ class JSONFormatter(logging.Formatter):
 
     def _prepare_log_dict(self, record: logging.LogRecord):
         always_fields = {
-            "timestamp": datetime.fromtimestamp(
-                record.created, tz=timezone.utc
-            ).isoformat(),
+            "timestamp": (
+                datetime.fromtimestamp(record.created, tz=timezone.utc).isoformat()
+            ),
             "message": record.getMessage(),
         }
         if record.exc_info is not None:

@@ -22,7 +22,7 @@ from dolphin._types import Bbox, Filename, P, Strides, T
 DateOrDatetime = Union[datetime.date, datetime.datetime]
 
 gdal.UseExceptions()
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("dolphin")
 
 
 def numpy_to_gdal_type(np_dtype: DTypeLike) -> int:
@@ -458,7 +458,7 @@ def get_cpu_count():
         cfs_quota_us = get_cpu_quota()
         cfs_period_us = get_cpu_period()
         if cfs_quota_us > 0 and cfs_period_us > 0:
-            return int(math.ceil(cfs_quota_us / cfs_period_us))
+            return math.ceil(cfs_quota_us / cfs_period_us)
     except Exception:
         pass
     return cpu_count()
@@ -635,7 +635,9 @@ def prepare_geometry(
     return stitched_geo_list
 
 
-def compute_out_shape(shape: tuple[int, int], strides: Strides) -> tuple[int, int]:
+def compute_out_shape(
+    shape: tuple[int, int], strides: Strides | tuple[int, int]
+) -> tuple[int, int]:
     """Calculate the output size for an input `shape` and row/col `strides`.
 
     Parameters
@@ -716,3 +718,54 @@ def get_nearest_date_idx(
     )
 
     return nearest_idx
+
+
+def grow_nodata_region(
+    arr: ArrayLike, nodata: float, n_pixels: int = 1, copy: bool = True
+) -> np.ndarray:
+    """Grow the `nodata` region of `arr` by  `n_pixels`.
+
+    This function erodes valid pixels in `arr` by making a mask from the `nodata` value
+    and then extends the mask inward by `n_pixels`.
+
+    If `arr` has no `nodata` value, the function returns `arr` unchanged.
+
+    Parameters
+    ----------
+    arr : numpy.ndarray
+        Input array containing the data and mask to be eroded
+    nodata : float
+        The value in `arr` that represents nodata.
+    n_pixels : int, optional
+        Number of pixels to erode from the border
+        Default is 1.
+    copy : bool, optional
+        Whether to copy the input data before eroding.
+        Default is True (no in-place modification is made).
+
+    Returns
+    -------
+    numpy.ndarray
+        Array with the same data, eroded by `n_pixels`.
+        If `copy` is False, the input array is modified in place.
+
+    Raises
+    ------
+    ValueError
+        If `arr` is not 2D.
+
+    """
+    from scipy import ndimage
+
+    arr = np.asarray(arr)
+    if arr.ndim != 2:
+        raise ValueError("Input array must be 2D.")
+
+    mask = arr == nodata if not np.isnan(nodata) else np.isnan(arr)
+    # "growing" the invalid (nodata) area equivalently "erodes" the valid data
+    mask_expanded = ndimage.binary_dilation(
+        mask, structure=np.ones((1 + 2 * n_pixels, 1 + 2 * n_pixels))
+    )
+    out = arr.copy() if copy else arr
+    out[mask_expanded] = nodata
+    return out

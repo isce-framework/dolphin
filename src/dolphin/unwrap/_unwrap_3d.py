@@ -21,7 +21,7 @@ from dolphin.workflows.config import SpurtOptions
 from ._constants import CONNCOMP_SUFFIX, DEFAULT_CCL_NODATA, UNW_SUFFIX
 from ._post_process import interpolate_masked_gaps
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("dolphin")
 
 DEFAULT_OPTIONS = SpurtOptions()
 
@@ -69,7 +69,7 @@ def unwrap_spurt(
     # expected in the one directory
     for fn in ifg_filenames:
         new_path = scratch_path / Path(fn).name
-        if not new_path.exists():
+        if not new_path.is_symlink():
             new_path.symlink_to(fn)
 
     cmd = [

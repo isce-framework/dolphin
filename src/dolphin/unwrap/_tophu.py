@@ -14,7 +14,7 @@ from dolphin.workflows import UnwrapMethod
 from ._constants import CONNCOMP_SUFFIX, DEFAULT_CCL_NODATA, DEFAULT_UNW_NODATA
 from ._utils import _redirect_unwrapping_log, _zero_from_mask
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("dolphin")
 
 
 def multiscale_unwrap(
@@ -168,7 +168,7 @@ def multiscale_unwrap(
         coherence_rb = tophu.RasterBand(corr_filename)
 
     if log_to_file and not _user_gave_callback:
-        # Note that if they gave an arbitrary callback, we dont know the logger
+        # Note that if they gave an arbitrary callback, we don't know the logger
         _redirect_unwrapping_log(unw_filename, unwrap_method.value)
 
     tophu.multiscale_unwrap(

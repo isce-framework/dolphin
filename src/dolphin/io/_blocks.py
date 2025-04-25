@@ -22,7 +22,7 @@ __all__ = [
 ]
 
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("dolphin")
 
 
 @dataclass(frozen=True)
@@ -132,7 +132,7 @@ slice(90, 190, None)), (slice(90, 180, None), slice(180, 250, None))]
             yield BlockIndices(cur_row, row_stop, cur_col, col_stop)
 
             cur_col += width
-            if cur_col < last_col:  # dont bring back if already at edge
+            if cur_col < last_col:  # don't bring back if already at edge
                 cur_col -= col_overlap
 
         cur_row += height

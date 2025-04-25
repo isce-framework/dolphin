@@ -36,7 +36,18 @@ def create_test_nc(
         # Create groups in the same file to make multiple SubDatasets
         [
             create_test_nc(
-                outfile, epsg, s, data, data_ds_name, shape, dtype, xoff, yoff, "a"
+                outfile,
+                epsg,
+                s,
+                data,
+                data_ds_name,
+                shape,
+                dtype,
+                xoff,
+                yoff,
+                "a",
+                dx=dx,
+                dy=dy,
             )
             for s in subdir
         ]

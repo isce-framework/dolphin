@@ -1,8 +1,40 @@
 # Changelog
 
-## [Unreleased](https://github.com/isce-framework/dolphin/compare/v0.30.0...main)
+## [Unreleased](https://github.com/isce-framework/dolphin/compare/v0.36.0...main)
 
-## [0.35.0](https://github.com/isce-framework/dolphin/compare/v0.34.0...v0.35.0) - 2025-12-09
+## [0.36.0](https://github.com/isce-framework/dolphin/compare/v0.35.1...v0.36.0) - 2025-02-21
+
+### Added
+
+- `utils.grow_nodata_region` to remove bad borders from images
+
+### Changed
+
+- `timeseries.py`: Auto reference point selection
+  - Picks the center of mass instead of arbitrary `argmax` result
+  - Rename `condition_file` to `quality_file`
+- Convert `glrt` SHP method to use JAX instead of Numba
+- Remove import for `goldstein` and `filtering` from top level `__init_.py`
+
+### Removed
+
+- Removed `condition` parameter in `timeseries` reference point functions
+- Removed `CallFunc` enum
+
+### Fixed
+
+- docs: Fix mathjax render, fix broken `DateOrDatetime` error
+- Replace `__name__` with "dolphin" in `getLogger` to fix missing log entries from `.jsonl` log files
+- Used `utils.grow_nodata_region` to remove bad borders from `shp_counts.tif`
+
+## [0.35.1](https://github.com/isce-framework/dolphin/compare/v0.35.0...v0.35.1) - 2025-01-15
+
+### Fixed
+
+- `filtering.py` Fix in_bounds_pixels masking, set default to 25 km
+- Set `output_reference_idx` separately from `compressed_reference_idx` during phase linking setup
+
+## [0.35.0](https://github.com/isce-framework/dolphin/compare/v0.34.0...v0.35.0) - 2025-01-09
 
 ### Added
 
@@ -418,7 +450,7 @@
 - Added `RasterWriter` and `BackgroundRasterWriter` implementations of this protocol
 - Refactored phase linking
   - Covariance and EVD/MLE use `jax`
-  - This combines the implementation of CPU/GPU, and removes the need for usign `pymp`
+  - This combines the implementation of CPU/GPU, and removes the need for using `pymp`
 - Added `utils.disable_gpu` to stop the use ofr a GPU even if it's available
 
 ### Changed
@@ -476,7 +508,7 @@
 ### Added
 - Ability to unwrap interferograms with the [`snaphu-py`](https://github.com/isce-framework/snaphu-py) (not a required dependency)
 - Added ability to make annual ifgs in `Network`
-- Start of tropospheric corection support in `dolphin.atmosphere` using PyAPS and Raider packages
+- Start of tropospheric correction support in `dolphin.atmosphere` using PyAPS and Raider packages
 - Expose the unwrap skipping with `dolphin config --no-unwrap`
 
 ### Changed
@@ -627,7 +659,7 @@ Now optional:
 - Pydantic models were upgraded to V2
 - Refactored the blockwise IO into `_blocks.py`.
   - The iteration now happens over the output grid for easier dilating/padding when using `strides`
-  - New classes with `BlockIndices` and `BlockManager` for easier mangement of the different slices
+  - New classes with `BlockIndices` and `BlockManager` for easier management of the different slices
 
 ### Dependencies
 

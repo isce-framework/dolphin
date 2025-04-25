@@ -9,8 +9,6 @@ from typing import Sequence
 
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
-from osgeo_utils.gdal_fillnodata import gdal_fillnodata
-from scipy import fft, ndimage
 
 
 def filter_long_wavelength(
@@ -30,14 +28,14 @@ def filter_long_wavelength(
         Unwrapped interferogram phase to filter.
     bad_pixel_mask : ArrayLike
         Boolean array with same shape as `unwrapped_phase` where `True` indicates a
-        pixel to ignore during ramp fitting
+        pixel to ignore during missing-data filling.
     wavelength_cutoff : float
         Spatial wavelength threshold to filter the unwrapped phase.
         Signals with wavelength longer than 'wavelength_cutoff' are filtered out.
-        The default is 25*1e3 (m).
+        The default is 25*1e3 (meters).
     pixel_spacing : float
         Pixel spatial spacing. Assume same spacing for x, y axes.
-        The default is 30 (m).
+        The default is 30 (meters).
     workers : int
         Number of `fft` workers to use for `scipy.fft.fft2`.
         Default is 1.
@@ -61,6 +59,9 @@ def filter_long_wavelength(
         If wavelength_cutoff too large for image size/pixel spacing.
 
     """
+    from osgeo_utils.gdal_fillnodata import gdal_fillnodata
+    from scipy import fft, ndimage
+
     from dolphin import io
 
     # Find the filter `sigma` which gives the correct cutoff in meters
@@ -84,10 +85,6 @@ def filter_long_wavelength(
 
     # Calculate the number of pixels for max_distance based on wavelength
     max_distance_pixels = int((wavelength_cutoff / 2) / pixel_spacing)
-
-    # Create temporary files for GDAL processing
-    temp_src = Path("temp_src.tif")
-    temp_dst = Path("temp_filled.tif")
 
     scratch_dir = Path(scratch_dir) if scratch_dir is not None else None
 
@@ -137,12 +134,47 @@ def filter_long_wavelength(
 
 
 def _compute_filter_sigma(
-    wavelength_cutoff: float, pixel_spacing: float, cutoff_value: float = 0.5
+    wavelength_cutoff: float, pixel_spacing: float, cutoff_value: float = 0.25
 ) -> float:
-    sigma_f = 1 / wavelength_cutoff / np.sqrt(np.log(1 / cutoff_value))
-    sigma_x = 1 / np.pi / 2 / sigma_f
-    sigma = sigma_x / pixel_spacing
-    return sigma
+    """Compute the standard deviation (sigma) in pixel units for a Gaussian filter.
+
+    The frequency response reaches the value `cutoff_value` at the cutoff frequency
+    `f_c = 1/wavelength_cutoff`.
+
+    A spatial Gaussian filter is proportional to
+        g(x) = exp(-x^2 / (2*sigma^2))
+    whose Fourier transform is
+        G(f) = exp(-2*pi^2*sigma^2*f^2).
+
+    We set the response at f_c = 1/wavelength_cutoff to be equal to `cutoff_value`:
+        exp(-2*pi^2*sigma^2*(1/wavelength_cutoff)^2) = cutoff_value.
+
+    Taking the logarithm and solving for sigma (in spatial units):
+        sigma = (wavelength_cutoff * sqrt(-ln(cutoff_value))) / (sqrt(2)*pi).
+
+    Sigma is converted from spatial units to pixel units by dividing by pixel_spacing.
+
+    Parameters
+    ----------
+    wavelength_cutoff : float
+        The cutoff wavelength (in the same spatial units as pixel_spacing)
+    pixel_spacing : float
+        The size of one pixel in spatial units.
+    cutoff_value : float, optional
+        The desired filter response at f_c = 1/wavelength_cutoff.
+        Default is 0.25, -6 dB.
+
+    Returns
+    -------
+    float
+        The standard deviation (sigma) in pixel units for the Gaussian filter.
+
+    """
+    sigma_spatial = (
+        wavelength_cutoff * np.sqrt(-np.log(cutoff_value)) / (np.sqrt(2) * np.pi)
+    )
+    sigma_pixels = sigma_spatial / pixel_spacing
+    return sigma_pixels
 
 
 def filter_rasters(

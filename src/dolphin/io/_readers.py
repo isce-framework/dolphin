@@ -31,7 +31,7 @@ from ._background import _DEFAULT_TIMEOUT, BackgroundReader
 from ._paths import S3Path
 from ._utils import _ensure_slices, _unpack_3d_slices
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("dolphin")
 
 __all__ = [
     "BinaryReader",
@@ -910,7 +910,7 @@ class VRTStack(StackReader):
             return self.read_stack(band=index + 1)
 
         # TODO: raise an error if they try to skip like [::2, ::2]
-        # or pass it to read_stack... but I dont think I need to support it.
+        # or pass it to read_stack... but I don't think I need to support it.
         n, rows, cols = index
         if isinstance(rows, int):
             rows = slice(rows, rows + 1)

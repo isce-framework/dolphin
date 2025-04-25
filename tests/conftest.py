@@ -289,13 +289,15 @@ def raster_with_zero_block(tmp_path, tiled_raster_100_by_200):
 
 
 DX, DY = 5, -10
-X0, Y0 = 246362.5, 3422995.0
+X0, Y0 = 246362.5, 2153130.0
 GRID_MAPPING_DSET = "spatial_ref"
 
 
 @pytest.fixture()
 def opera_slc_files(tmp_path) -> list[Path]:
     """Save the slc stack as a series of NetCDF files."""
+    import h5py
+
     start_date = 20220101
     shape = (4, 128, 128)
     slc_stack = (np.random.rand(*shape) + 1j * np.random.rand(*shape)).astype(
@@ -317,7 +319,7 @@ def opera_slc_files(tmp_path) -> list[Path]:
             yoff = Y0 + i * shape[0] / 2
             create_test_nc(
                 fname,
-                epsg=32615,
+                epsg=32605,
                 data_ds_name=ds_name,
                 # The "dummy" is so that two datasets are created in the file
                 # otherwise GDAL doesn't respect the NETCDF:file:/path/to/nested/data
@@ -325,7 +327,19 @@ def opera_slc_files(tmp_path) -> list[Path]:
                 data=slc_stack[i],
                 xoff=X0,
                 yoff=yoff,
+                dx=DX,
+                dy=abs(DY),
             )
+            with h5py.File(fname, "a") as hf:
+                hf[
+                    "/metadata/processing_information/input_burst_metadata/wavelength"
+                ] = 0.0554658
+                start_dt = datetime.datetime.strptime(f"{start_date + i}", "%Y%m%d")
+                # 2021-07-24 00:51:33.299551
+                out_fmt = "%Y-%m-%d %H:%M:%S.%f"
+                hf["/identification/zero_doppler_start_time"] = start_dt.strftime(
+                    out_fmt
+                )
             file_list.append(Path(fname))
 
     return file_list
@@ -333,6 +347,8 @@ def opera_slc_files(tmp_path) -> list[Path]:
 
 @pytest.fixture()
 def opera_slc_files_official(tmp_path) -> list[Path]:
+    import h5py
+
     base = "OPERA_L2_CSLC-S1"
     ending = "20230101T100506Z_S1A_VV_v1.0"
     # expected = {
@@ -366,7 +382,7 @@ def opera_slc_files_official(tmp_path) -> list[Path]:
             yoff = Y0 + i * shape[0] / 2
             create_test_nc(
                 fname,
-                epsg=32615,
+                epsg=32605,
                 data_ds_name=ds_name,
                 # The "dummy" is so that two datasets are created in the file
                 # otherwise GDAL doesn't respect the NETCDF:file:/path/to/nested/data
@@ -378,98 +394,17 @@ def opera_slc_files_official(tmp_path) -> list[Path]:
                 dy=DY,
             )
             file_list.append(Path(fname))
+            with h5py.File(fname, "a") as hf:
+                hf[
+                    "/metadata/processing_information/input_burst_metadata/wavelength"
+                ] = 0.0554658
+                # "2021-07-24 00:51:33.299551"
+                out_fmt = "%Y-%m-%d %H:%M:%S.%f"
+                hf["/identification/zero_doppler_start_time"] = (
+                    start + i * dt
+                ).strftime(out_fmt)
 
     return file_list
-
-
-@pytest.fixture()
-def opera_static_files_official(tmp_path) -> list[Path]:
-    base = "OPERA_L2_CSLC-S1-STATIC"
-    ending = "20140403_S1A_v1.0.h5"
-
-    d = tmp_path / "input_static_layers"
-    d.mkdir()
-    file_list = []
-
-    for burst_id in ["T087-185683-IW2", "T087-185684-IW2"]:
-        fname = d / f"{base}_{burst_id}_{ending}"
-        create_static_layer_h5(fname)
-        file_list.append(Path(fname))
-
-    return file_list
-
-
-def create_static_layer_h5(filename):
-    import h5py
-    from pyproj import CRS
-
-    with h5py.File(filename, "w") as f:
-        grp = f.create_group("/data")
-        shape = (4965, 19878)  # Adjust shape as needed
-
-        # Create datasets with specified values
-        dsets = []
-        dsets.append(grp.create_dataset("layover_shadow_mask", shape, dtype=np.uint16))
-        dsets.append(
-            grp.create_dataset(
-                "los_east", shape, dtype=np.float32, data=0.7 * np.ones(shape)
-            )
-        )
-        dsets.append(
-            grp.create_dataset(
-                "los_north", shape, dtype=np.float32, data=-0.11 * np.ones(shape)
-            )
-        )
-        # Make the "grid_mapping" dataset
-        # https://github.com/corteva/rioxarray/blob/21284f67db536d9c104aa872ab0bbc261259e59e/rioxarray/rioxarray.py#L34
-        # grid_ds = grp.create_dataset(GRID_MAPPING_DSET, data=32615)
-        grid_ds = f.create_dataset(GRID_MAPPING_DSET, data=32615)
-        grid_ds.attrs.update(CRS.from_epsg(32615).to_cf())
-        crs_wkt = CRS.from_epsg(32615).to_wkt()
-        crs_attrs = {"crs_wkt": crs_wkt, "spatial_ref": crs_wkt}
-        grid_ds.attrs.update(crs_attrs)
-
-        xs = np.arange(X0, X0 + shape[1] * DX, DX)
-        ys = np.arange(Y0, Y0 + shape[0] * DY, DY)
-        x_ds = grp.create_dataset(
-            "x_coordinates", (shape[1],), dtype=np.float32, data=xs
-        )
-        y_ds = grp.create_dataset(
-            "y_coordinates", (shape[0],), dtype=np.float32, data=ys
-        )
-        x_ds.make_scale()
-        y_ds.make_scale()
-        for ds in dsets:
-            ds.attrs.update({"grid_mapping": GRID_MAPPING_DSET})
-            ds.dims[1].attach_scale(x_ds)
-            ds.dims[0].attach_scale(y_ds)
-
-
-@pytest.fixture()
-def weather_model_files():
-    data_dir = Path("tests/data")
-    with open(data_dir / "weather_model_files.txt") as f:
-        return f.readlines()
-
-
-@pytest.fixture()
-def tec_files():
-    data_dir = Path("tests/data")
-    with open(data_dir / "tec_files.txt") as f:
-        return f.readlines()
-
-
-@pytest.fixture()
-def dem_file(tmp_path, slc_stack):
-    fname = tmp_path / "dem.tif"
-    shape = slc_stack.shape
-    dem = np.random.rand(shape[-2], shape[-1]) + 1000
-    # Write to a file
-    driver = gdal.GetDriverByName("GTiff")
-    ds = driver.Create(str(fname), shape[-1], shape[-2], 1, gdal.GDT_Float32)
-    ds.GetRasterBand(1).WriteArray(dem)
-    ds = None
-    return fname
 
 
 # For unwrapping/overviews

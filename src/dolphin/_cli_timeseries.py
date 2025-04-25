@@ -4,8 +4,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from dolphin._log import setup_logging
-from dolphin.timeseries import InversionMethod
-from dolphin.workflows import CallFunc
 
 if TYPE_CHECKING:
     _SubparserType = argparse._SubParsersAction[argparse.ArgumentParser]
@@ -57,26 +55,16 @@ def get_parser(subparser=None, subcommand_name="timeseries") -> argparse.Argumen
         ),
     )
     parser.add_argument(
-        "--condition-file",
+        "--quality-file",
         help=(
             "A file with the same size as each raster, like amplitude dispersion or "
             "temporal coherence to find reference point"
         ),
     )
     parser.add_argument(
-        "--condition",
-        type=CallFunc,
-        default=CallFunc.MIN,
-        help=(
-            "A condition to apply to condition file to find the reference point. "
-            "Options are [min, max]. default=min"
-        ),
-    )
-    parser.add_argument(
         "--method",
-        type=InversionMethod,
-        choices=list(InversionMethod),
-        default=InversionMethod.L1,
+        choices=["L1", "L2"],
+        default="L1",
         help=(
             "Inversion method to use when solving Ax = b. L2 uses least squares"
             " (faster), L1 minimizes |Ax - b|_1"

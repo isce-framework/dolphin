@@ -23,7 +23,7 @@ from dolphin.stack import CompressedSlcPlan
 from ._enums import ShpMethod
 from ._yaml_model import YamlModel
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("dolphin")
 
 __all__ = [
     "HalfWindow",
@@ -48,7 +48,7 @@ class PsOptions(BaseModel, extra="forbid"):
     amp_dispersion_threshold: float = Field(
         0.25,
         description="Amplitude dispersion threshold to consider a pixel a PS.",
-        gt=0.0,
+        ge=0.0,
     )
 
 
@@ -490,7 +490,7 @@ class WorkflowBase(YamlModel):
             d.mkdir(parents=True, exist_ok=True)
 
 
-def _read_file_list_or_glob(cls, value):  # noqa: ARG001:
+def _read_file_list_or_glob(cls, value):  # noqa: ARG001
     """Check if the input file list is a glob pattern or a text file.
 
     If it's a text file, read the lines and return a list of Path objects.

@@ -14,15 +14,16 @@ from tqdm.auto import tqdm
 from dolphin import io, shp, similarity
 from dolphin._decorators import atomic_output
 from dolphin._types import Filename, HalfWindow, Strides
-from dolphin.io import EagerLoader, StridedBlockManager, VRTStack
+from dolphin.io import BlockIndices, EagerLoader, StridedBlockManager, VRTStack
 from dolphin.masking import load_mask_as_numpy
 from dolphin.phase_link import PhaseLinkRuntimeError, compress, run_phase_linking
 from dolphin.ps import calc_ps_block
 from dolphin.stack import MiniStackInfo
+from dolphin.utils import grow_nodata_region
 
 from .config import ShpMethod
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("dolphin")
 
 __all__ = ["run_wrapped_phase_single"]
 
@@ -33,6 +34,7 @@ class OutputFile:
     dtype: DTypeLike
     strides: Optional[dict[str, int]] = None
     nbands: int = 1
+    nodata: float = 0
 
 
 @atomic_output(output_arg="output_folder", is_dir=True)
@@ -128,19 +130,33 @@ def run_wrapped_phase_single(
 
     # Use the real-SLC date range for output file naming
     start_end = ministack.real_slc_date_range_str
-    output_files: list[OutputFile] = [
+    output_files: dict[str, OutputFile] = {
         # The compressed SLC does not used strides, but has extra band for dispersion
-        OutputFile(output_folder / comp_slc_info.filename, np.complex64, nbands=2),
+        "compressed_slc": OutputFile(
+            output_folder / comp_slc_info.filename, np.complex64, nbands=2
+        ),
         # but all the rest do:
-        OutputFile(
+        "temporal_coherence": OutputFile(
             output_folder / f"temporal_coherence_{start_end}.tif", np.float32, strides
         ),
-        OutputFile(output_folder / f"shp_counts_{start_end}.tif", np.uint16, strides),
-        OutputFile(output_folder / f"eigenvalues_{start_end}.tif", np.float32, strides),
-        OutputFile(output_folder / f"estimator_{start_end}.tif", np.int8, strides),
-        OutputFile(output_folder / f"avg_coh_{start_end}.tif", np.uint16, strides),
-    ]
-    for op in output_files:
+        "shp_counts": OutputFile(
+            output_folder / f"shp_counts_{start_end}.tif", np.uint16, strides
+        ),
+        "eigenvalues": OutputFile(
+            output_folder / f"eigenvalues_{start_end}.tif", np.float32, strides
+        ),
+        "estimator": OutputFile(
+            output_folder / f"estimator_{start_end}.tif",
+            np.int8,
+            strides,
+            nodata=255,
+        ),
+        "avg_coh": OutputFile(
+            output_folder / f"avg_coh_{start_end}.tif", np.uint16, strides
+        ),
+    }
+
+    for op in output_files.values():
         io.write_arr(
             arr=None,
             like_filename=vrt_stack.outfile,
@@ -148,7 +164,7 @@ def run_wrapped_phase_single(
             dtype=op.dtype,
             strides=op.strides,
             nbands=op.nbands,
-            nodata=0,
+            nodata=op.nodata,
         )
 
     # Iterate over the output grid
@@ -161,7 +177,9 @@ def run_wrapped_phase_single(
     # Set up the background loader
     loader = EagerLoader(reader=vrt_stack, block_shape=block_shape)
     # Queue all input slices, skip ones that are all nodata
-    blocks = []
+    blocks: list[
+        tuple[BlockIndices, BlockIndices, BlockIndices, BlockIndices, BlockIndices]
+    ] = []
     # Queue all input slices, skip ones that are all nodata
     for b in block_manager.iter_blocks():
         in_rows, in_cols = b[2]
@@ -196,7 +214,7 @@ def run_wrapped_phase_single(
         neighbor_arrays = shp.estimate_neighbors(
             halfwin_rowcol=(yhalf, xhalf),
             alpha=shp_alpha,
-            strides=strides,
+            strides=Strides(y=strides_tup[0], x=strides_tup[1]),
             mean=amp_mean[in_rows, in_cols] if amp_mean is not None else None,
             var=amp_variance[in_rows, in_cols] if amp_variance is not None else None,
             nslc=shp_nslc,
@@ -269,7 +287,7 @@ def run_wrapped_phase_single(
         # Save the compressed SLC block
         writer.queue_write(
             cur_comp_slc,
-            output_files[0].filename,
+            output_files["compressed_slc"].filename,
             in_no_pad_rows.start,
             in_no_pad_cols.start,
             band=1,
@@ -277,25 +295,32 @@ def run_wrapped_phase_single(
         # Save the amplitude dispersion of the real SLC data
         writer.queue_write(
             cur_amp_dispersion,
-            output_files[0].filename,
+            output_files["compressed_slc"].filename,
             in_no_pad_rows.start,
             in_no_pad_cols.start,
             band=2,
         )
 
         # All other outputs are strided (smaller in size)
-        out_datas = [
-            pl_output.temp_coh,
-            pl_output.shp_counts,
-            pl_output.eigenvalues,
-            pl_output.estimator,
-            pl_output.avg_coh,
-        ]
-        for data, output_file in zip(out_datas, output_files[1:]):
+        out_datas: dict[str, np.ndarray | None] = {
+            "temporal_coherence": pl_output.temp_coh,
+            "shp_counts": pl_output.shp_counts,
+            "eigenvalues": pl_output.eigenvalues,
+            "estimator": pl_output.estimator,
+            "avg_coh": pl_output.avg_coh,
+        }
+        for key, data in out_datas.items():
             if data is None:  # May choose to skip some outputs, e.g. "avg_coh"
                 continue
+            output_file = output_files[key]
+            trimmed_data = data[out_trim_rows, out_trim_cols]
+
             writer.queue_write(
-                data[out_trim_rows, out_trim_cols],
+                # trimmed_data,
+                # Erode the edge pixels
+                grow_nodata_region(
+                    trimmed_data, nodata=output_file.nodata, n_pixels=2, copy=True
+                ),
                 output_file.filename,
                 out_rows.start,
                 out_cols.start,
@@ -310,6 +335,13 @@ def run_wrapped_phase_single(
     logger.info("Repacking for more compression")
     io.repack_rasters(phase_linked_slc_files, keep_bits=12)
 
+    # logger.info("Eroding border of SHP rasters")
+    # shp_file = output_files["shp_counts"]
+    # shp_data = io.load_gdal(shp_file.filename)
+    # # Eroding in blocks to avoid too-large rasters.
+    # erode_edge_pixels(shp_data, nodata=shp_file.nodata, n_pixels=2, copy=False)
+    # io.write_block(shp_data, shp_file.filename, row_start=0, col_start=0)
+
     logger.info("Creating similarity raster on outputs")
     similarity.create_similarities(
         phase_linked_slc_files,
@@ -320,7 +352,7 @@ def run_wrapped_phase_single(
         block_shape=block_shape,
     )
 
-    written_comp_slc = output_files[0]
+    written_comp_slc = output_files["compressed_slc"]
     ccslc_info = ministack.get_compressed_slc_info()
     ccslc_info.write_metadata(output_file=written_comp_slc.filename)
     # TODO: Does it make sense to return anything from this?
