@@ -499,7 +499,7 @@ def process_coherence_matrices(
     # Compute Fisher Information Matrix
     X = 2 * num_looks * (Gamma * Gamma_inv - Id.astype("float32"))
     # Compute CRLB for each pixel
-    crlb_std_dev = _compute_crlb_jax(X, num_looks, reference_idx)
+    crlb_std_dev = _compute_crlb(X, reference_idx)
 
     # Now the shape of eig_vecs is (rows, cols, nslc)
     # at pixel (r, c), eig_vecs[r, c] is the largest (smallest) eigenvector if
@@ -540,7 +540,7 @@ def decimate(arr: ArrayLike, strides: Strides) -> Array:
 
 
 @jit
-def _compute_crlb_jax(X: ArrayLike, reference_idx: int) -> Array:
+def _compute_crlb(X: Array, reference_idx: int) -> Array:
     rows, cols, n, _ = X.shape
     # Compute the CRLB standard deviation
 
@@ -549,6 +549,7 @@ def _compute_crlb_jax(X: ArrayLike, reference_idx: int) -> Array:
     # First row is 0 (using day 0 as reference)
     # Theta[1:, :] = np.eye(N - 1)  # Last N-1 rows are identity
     # More efficient computation of Theta.T @ X @ Theta
+
     # Instead of explicit matrix multiplication, directly extract relevant elements
     # We want all elements except the reference row/column
     row_idx = jnp.concatenate(
