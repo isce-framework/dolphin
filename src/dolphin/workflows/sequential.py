@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import datetime
 import logging
-from itertools import chain
 from os import fspath
 from pathlib import Path
 from typing import Optional, Sequence
@@ -55,7 +54,7 @@ def run_wrapped_phase_sequential(
     block_shape: tuple[int, int] = (512, 512),
     baseline_lag: Optional[int] = None,
     **tqdm_kwargs,
-) -> tuple[list[Path], list[Path], Path, Path, Path]:
+) -> tuple[list[Path], list[Path], list[Path], Path, Path, Path]:
     """Estimate wrapped phase using batches of ministacks."""
     if strides is None:
         strides = {"x": 1, "y": 1}
@@ -87,7 +86,8 @@ def run_wrapped_phase_sequential(
         shp_nslc = slc_vrt_stack.shape[0]
 
     # list where each item is [output_slc_files] from a ministack
-    output_slc_files: list[list] = []
+    output_slc_files: list[Path] = []
+    crlb_files: list[Path] = []
     # Each item is the temp_coh/shp_count file from a ministack
     temp_coh_files: list[Path] = []
     similarity_files: list[Path] = []
@@ -140,12 +140,14 @@ def run_wrapped_phase_sequential(
 
         (
             cur_output_files,
+            cur_crlb_files,
             cur_comp_slc_file,
             temp_coh_file,
             similarity_file,
             shp_count_file,
         ) = _get_outputs_from_folder(cur_output_folder)
-        output_slc_files.append(cur_output_files)
+        crlb_files.extend(cur_crlb_files)
+        output_slc_files.extend(cur_output_files)
         temp_coh_files.append(temp_coh_file)
         similarity_files.append(similarity_file)
         shp_count_files.append(shp_count_file)
@@ -181,12 +183,10 @@ def run_wrapped_phase_sequential(
             output_folder / similarity_files[0].name
         )
 
-    # Combine the separate SLC output lists into a single list
-    all_slc_files = list(chain.from_iterable(output_slc_files))
     all_comp_slc_files = [ms.get_compressed_slc_info().path for ms in ministacks]
 
     out_pl_slcs = []
-    for slc_fname in all_slc_files:
+    for slc_fname in output_slc_files:
         slc_fname.rename(output_folder / slc_fname.name)
         out_pl_slcs.append(output_folder / slc_fname.name)
 
@@ -197,6 +197,7 @@ def run_wrapped_phase_sequential(
 
     return (
         out_pl_slcs,
+        crlb_files,
         comp_slc_outputs,
         output_temp_coh_file,
         output_shp_count_file,
@@ -206,16 +207,27 @@ def run_wrapped_phase_sequential(
 
 def _get_outputs_from_folder(
     output_folder: Path,
-) -> tuple[list[Path], Path, Path, Path, Path]:
+) -> tuple[list[Path], list[Path], Path, Path, Path, Path]:
     cur_output_files = sorted(output_folder.glob("2*.slc.tif"))
+
     cur_comp_slc_file = next(output_folder.glob("compressed_*"))
     temp_coh_file = next(output_folder.glob("temporal_coherence_*"))
     similarity_file = next(output_folder.glob("similarity*"))
     shp_count_file = next(output_folder.glob("shp_counts_*"))
     # Currently ignoring to not stitch:
     # eigenvalues, estimator, avg_coh
+    # Move and rename to "crlb_<date>.tif" crlb files to distinguish from the SLCs
+    crlb_new_files = [
+        p.with_name(f"crlb_{p.name.replace('.slc.tif', '.tif')}")
+        for p in sorted((output_folder / "crlb").glob("*"))
+    ]
+    existing_crlb_files = sorted((output_folder / "crlb").glob("*"))
+    for old_p, new_p in zip(existing_crlb_files, crlb_new_files):
+        old_p.rename(new_p)
+
     return (
         cur_output_files,
+        crlb_new_files,
         cur_comp_slc_file,
         temp_coh_file,
         similarity_file,

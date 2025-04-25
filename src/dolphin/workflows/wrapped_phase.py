@@ -23,7 +23,7 @@ logger = logging.getLogger("dolphin")
 @log_runtime
 def run(
     cfg: DisplacementWorkflow, debug: bool = False, tqdm_kwargs=None
-) -> tuple[list[Path], list[Path], Path, Path, Path, Path, Path]:
+) -> tuple[list[Path], list[Path], list[Path], Path, Path, Path, Path, Path]:
     """Run the displacement workflow on a stack of SLCs.
 
     Parameters
@@ -41,6 +41,8 @@ def run(
     -------
     ifg_file_list : list[Path]
         list of Paths to virtual interferograms created.
+    crlb_files : list[Path]
+        Paths to the output Cramer Rao Lower Bound (CRLB) files.
     comp_slc_file_list : list[Path]
         Paths to the compressed SLC files created from each ministack.
     temp_coh_file : Path
@@ -159,6 +161,7 @@ def run(
         temp_coh_file = next(pl_path.glob("temporal_coherence*tif"))
         shp_count_file = next(pl_path.glob("shp_count*tif"))
         similarity_file = next(pl_path.glob("*similarity*tif"))
+        crlb_files = sorted(pl_path.rglob("crlb*tif"))
     else:
         logger.info(f"Running sequential EMI step in {pl_path}")
         kwargs = tqdm_kwargs | {"desc": f"Phase linking ({pl_path})"}
@@ -176,6 +179,7 @@ def run(
         shp_nslc = None
         (
             phase_linked_slcs,
+            crlb_files,
             comp_slc_list,
             temp_coh_file,
             shp_count_file,
@@ -224,6 +228,7 @@ def run(
         logger.info(f"Skipping interferogram step, {len(existing_ifgs)} exists")
         return (
             existing_ifgs,
+            crlb_files,
             comp_slc_list,
             temp_coh_file,
             ps_looked_file,
@@ -263,6 +268,7 @@ def run(
     )
     return (
         ifg_file_list,
+        crlb_files,
         comp_slc_list,
         temp_coh_file,
         ps_looked_file,

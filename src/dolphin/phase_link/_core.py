@@ -338,6 +338,7 @@ def run_cpl(
         C_arrays = C_arrays.at[:, :, l_rows, l_cols].set(0.0 + 0j)
 
     num_looks = (2 * half_window[0] + 1) * (2 * half_window[1] + 1)
+    reference_idx = ns + reference_idx if reference_idx < 0 else reference_idx
     cpx_phase, eigenvalues, estimator, crlb_std_dev = process_coherence_matrices(
         C_arrays,
         use_evd=use_evd,
