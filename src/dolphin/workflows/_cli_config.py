@@ -4,13 +4,14 @@ import sys
 from pathlib import Path
 from typing import Any
 
-import tyro
 from pydantic import Field, model_validator
 
 from dolphin.workflows import DisplacementWorkflow
 
 
 class ConfigCli(DisplacementWorkflow):
+    """Create a configuration file for a displacement workflow."""
+
     print_empty: bool = Field(
         False,
         description="Print an empty YAML file with only default filled to `outfile`.",
@@ -31,8 +32,9 @@ class ConfigCli(DisplacementWorkflow):
             return data
         return data
 
-
-if __name__ == "__main__":
-    cfg = tyro.cli(ConfigCli)
-    print(f"Saving configuration to {cfg.outfile!s}", file=sys.stderr)
-    cfg.to_yaml(cfg.outfile)
+    @model_validator(mode="after")
+    @classmethod
+    def save_config(cls, data: Any) -> Any:
+        print(f"Saving configuration to {data.outfile!s}", file=sys.stderr)
+        data.to_yaml(data.outfile)
+        return data
