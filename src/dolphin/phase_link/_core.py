@@ -539,7 +539,7 @@ def decimate(arr: ArrayLike, strides: Strides) -> Array:
     return arr[..., start_r:end_r:ys, start_c:end_c:xs]
 
 
-@jit
+@partial(jit, static_argnums=(1,))
 def _compute_crlb(X: Array, reference_idx: int) -> Array:
     rows, cols, n, _ = X.shape
     # Compute the CRLB standard deviation
