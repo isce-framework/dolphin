@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import glob
 import logging
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal, Optional
 
@@ -463,10 +463,6 @@ class WorkflowBase(YamlModel):
             "Path to output log file (in addition to logging to `stderr`)."
             " Default logs to `dolphin.log` within `work_directory`"
         ),
-    )
-    creation_time_utc: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        description="Time the config file was created",
     )
 
     model_config = ConfigDict(extra="allow")
