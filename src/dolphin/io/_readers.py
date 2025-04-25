@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import mmap
+from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from os import fspath
@@ -474,14 +475,14 @@ class BaseStackReader(StackReader):
 class BinaryStackReader(BaseStackReader):
     @classmethod
     def from_file_list(
-        cls, file_list: Sequence[Filename], shape_2d: tuple[int, int], dtype: np.dtype
+        cls, files: Iterator[Filename], shape_2d: tuple[int, int], dtype: np.dtype
     ) -> BinaryStackReader:
         """Create a BinaryStackReader from a list of files.
 
         Parameters
         ----------
-        file_list : Sequence[Filename]
-            List of paths to the files to read.
+        files : Iterator[Filename]
+            Iterator of paths to the files to read.
         shape_2d : tuple[int, int]
             Shape of each file.
         dtype : np.dtype
@@ -493,9 +494,8 @@ class BinaryStackReader(BaseStackReader):
             The BinaryStackReader object.
 
         """
-        readers = [
-            BinaryReader(Path(f), shape=shape_2d, dtype=dtype) for f in file_list
-        ]
+        file_list = list(files)
+        readers = [BinaryReader(Path(f), shape=shape_2d, dtype=dtype) for f in files]
         return cls(file_list=file_list, readers=readers, num_threads=1)
 
     @classmethod
@@ -570,7 +570,7 @@ class HDF5StackReader(BaseStackReader):
     @classmethod
     def from_file_list(
         cls,
-        file_list: Sequence[Filename],
+        files: Iterator[Filename],
         dset_names: str | Sequence[str],
         keep_open: bool = False,
         num_threads: int = 1,
@@ -580,8 +580,8 @@ class HDF5StackReader(BaseStackReader):
 
         Parameters
         ----------
-        file_list : Sequence[Filename]
-            List of paths to the files to read.
+        files : Iterator[Filename]
+            Iterator of paths to the files to read.
         dset_names : str | Sequence[str]
             Name of the dataset to read from each file.
             If a single string, will be used for all files.
@@ -599,6 +599,7 @@ class HDF5StackReader(BaseStackReader):
             The HDF5StackReader object.
 
         """
+        file_list = list(files)
         if isinstance(dset_names, str):
             dset_names = [dset_names] * len(file_list)
 
@@ -634,7 +635,7 @@ class RasterStackReader(BaseStackReader):
     @classmethod
     def from_file_list(
         cls,
-        file_list: Sequence[Filename],
+        files: Iterator[Filename],
         bands: int | Sequence[int] = 1,
         keepdims: bool = True,
         keep_open: bool = False,
@@ -645,8 +646,8 @@ class RasterStackReader(BaseStackReader):
 
         Parameters
         ----------
-        file_list : Sequence[Filename]
-            List of paths to the files to read.
+        files : Iterator[Filename]
+            Iterator of paths to the files to read.
         bands : int | Sequence[int]
             Band to read from each file.
             If a single int, will be used for all files.
@@ -668,6 +669,7 @@ class RasterStackReader(BaseStackReader):
             The RasterStackReader object.
 
         """
+        file_list = list(files)
         if isinstance(bands, int):
             bands = [bands] * len(file_list)
 
