@@ -235,6 +235,7 @@ def run_wrapped_phase_single(
                 neighbor_arrays=neighbor_arrays,
                 baseline_lag=baseline_lag,
                 avg_mag=amp_mean[in_rows, in_cols] if amp_mean is not None else None,
+                first_real_slc_idx=ministack.first_real_slc_idx,
             )
         except PhaseLinkRuntimeError as e:
             # note: this is a warning instead of info, since it should
