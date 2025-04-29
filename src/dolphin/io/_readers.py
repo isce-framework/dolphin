@@ -494,9 +494,9 @@ class BinaryStackReader(BaseStackReader):
             The BinaryStackReader object.
 
         """
-        file_list = list(files)
+        files = list(file_list)
         readers = [BinaryReader(Path(f), shape=shape_2d, dtype=dtype) for f in files]
-        return cls(file_list=file_list, readers=readers, num_threads=1)
+        return cls(file_list=files, readers=readers, num_threads=1)
 
     @classmethod
     def from_gdal(
@@ -599,20 +599,20 @@ class HDF5StackReader(BaseStackReader):
             The HDF5StackReader object.
 
         """
-        file_list = list(files)
+        files = list(file_list)
         if isinstance(dset_names, str):
-            dset_names = [dset_names] * len(file_list)
+            dset_names = [dset_names] * len(files)
 
         readers = [
             HDF5Reader(Path(f), dset_name=dn, keep_open=keep_open, nodata=nodata)
-            for (f, dn) in zip(file_list, dset_names)
+            for (f, dn) in zip(files, dset_names)
         ]
         # Check if nodata values were found in the files
         nds = {r.nodata for r in readers}
         if len(nds) == 1:
             nodata = nds.pop()
 
-        return cls(file_list, readers, num_threads=num_threads, nodata=nodata)
+        return cls(files, readers, num_threads=num_threads, nodata=nodata)
 
 
 @dataclass
@@ -669,20 +669,20 @@ class RasterStackReader(BaseStackReader):
             The RasterStackReader object.
 
         """
-        file_list = list(files)
+        files = list(file_list)
         if isinstance(bands, int):
-            bands = [bands] * len(file_list)
+            bands = [bands] * len(files)
 
         readers = [
             RasterReader.from_file(f, band=b, keep_open=keep_open, keepdims=keepdims)
-            for (f, b) in zip(file_list, bands)
+            for (f, b) in zip(files, bands)
         ]
         # Check if nodata values were found in the files
         nds = {r.nodata for r in readers}
         if len(nds) == 1:
             nodata = nds.pop()
         return cls(
-            file_list,
+            files,
             readers,
             num_threads=num_threads,
             nodata=nodata,
