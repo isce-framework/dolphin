@@ -475,13 +475,13 @@ class BaseStackReader(StackReader):
 class BinaryStackReader(BaseStackReader):
     @classmethod
     def from_file_list(
-        cls, files: Iterator[Filename], shape_2d: tuple[int, int], dtype: np.dtype
+        cls, file_list: Iterator[Filename], shape_2d: tuple[int, int], dtype: np.dtype
     ) -> BinaryStackReader:
         """Create a BinaryStackReader from a list of files.
 
         Parameters
         ----------
-        files : Iterator[Filename]
+        file_list : Iterator[Filename]
             Iterator of paths to the files to read.
         shape_2d : tuple[int, int]
             Shape of each file.
@@ -570,7 +570,7 @@ class HDF5StackReader(BaseStackReader):
     @classmethod
     def from_file_list(
         cls,
-        files: Iterator[Filename],
+        file_list: Iterator[Filename],
         dset_names: str | Sequence[str],
         keep_open: bool = False,
         num_threads: int = 1,
@@ -580,7 +580,7 @@ class HDF5StackReader(BaseStackReader):
 
         Parameters
         ----------
-        files : Iterator[Filename]
+        file_list : Iterator[Filename]
             Iterator of paths to the files to read.
         dset_names : str | Sequence[str]
             Name of the dataset to read from each file.
@@ -635,7 +635,7 @@ class RasterStackReader(BaseStackReader):
     @classmethod
     def from_file_list(
         cls,
-        files: Iterator[Filename],
+        file_list: Iterator[Filename],
         bands: int | Sequence[int] = 1,
         keepdims: bool = True,
         keep_open: bool = False,
@@ -646,7 +646,7 @@ class RasterStackReader(BaseStackReader):
 
         Parameters
         ----------
-        files : Iterator[Filename]
+        file_list : Iterator[Filename]
             Iterator of paths to the files to read.
         bands : int | Sequence[int]
             Band to read from each file.
@@ -745,7 +745,6 @@ class VRTStack(StackReader):
             else:
                 logger.debug(f"Overwriting {outfile}")
 
-        # files: list[Filename] = [Path(f) for f in file_list]
         self._use_abs_path = use_abs_path
         files: list[Filename | S3Path]
         if any(str(f).startswith("s3://") for f in file_list):
