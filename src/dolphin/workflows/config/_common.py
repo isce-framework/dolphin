@@ -84,11 +84,11 @@ class PhaseLinkingOptions(BaseModel, extra="forbid"):
         ),
         gt=0,
     )
-    output_reference_idx: int = Field(
-        0,
+    output_reference_idx: Optional[int] = Field(
+        None,
         description=(
-            "Index of input SLC to use for making phase linked interferograms after"
-            " EVD/EMI."
+            "Index of the SLC to use as interferogram reference after phase linking. If"
+            " not set, uses the CompressedSlcPlan default"
         ),
     )
     half_window: HalfWindow = HalfWindow()
