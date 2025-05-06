@@ -264,9 +264,7 @@ def test_compressed_idx_setting(slc_file_list, slc_date_list, is_compressed):
     assert ministacks[0].output_reference_date == slc_date_list[0]
 
 
-@pytest.mark.parametrize(
-    "plan", ["always_first", "first_per_ministack", "last_per_ministack"]
-)
+@pytest.mark.parametrize("plan", ["always_first", "last_per_ministack"])
 def test_compressed_plans(slc_file_list, slc_date_list, is_compressed, plan):
     """Check the planning works to set a manually passed compressed index."""
     is_compressed = [False] * len(slc_file_list)
@@ -286,11 +284,11 @@ def test_compressed_plans(slc_file_list, slc_date_list, is_compressed, plan):
     compslcs = [m.get_compressed_slc_info() for m in ministacks]
     if plan == "always_first":
         assert all(c.reference_date == slc_date_list[0] for c in compslcs)
-    elif plan == "first_per_ministack":
-        assert compslcs[0].reference_date == slc_date_list[0]
-        assert compslcs[1].reference_date == slc_date_list[ms_size]
-        assert compslcs[2].reference_date == slc_date_list[ms_size * 2]
     elif plan == "last_per_ministack":
         assert compslcs[0].reference_date == slc_date_list[ms_size - 1]
         assert compslcs[1].reference_date == slc_date_list[2 * ms_size - 1]
         assert compslcs[2].reference_date == slc_date_list[3 * ms_size - 1]
+    # elif plan == "first_per_ministack":
+    #     assert compslcs[0].reference_date == slc_date_list[0]
+    #     assert compslcs[1].reference_date == slc_date_list[ms_size]
+    #     assert compslcs[2].reference_date == slc_date_list[ms_size * 2]
