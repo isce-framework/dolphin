@@ -95,23 +95,6 @@ def get_gtiff_options(
     return options
 
 
-def _format_for_gdal(options: dict[str, str]) -> list[str]:
-    """Output creation options as a list of -co strings for GDAL.
-
-    Parameters
-    ----------
-    options : dict[str, str]
-        Dict of creation options usable in Rasterio.
-
-    Returns
-    -------
-    list[str]
-        List -co options for GDAL.
-
-    """
-    return [f"{k.upper()}={v}" for k, v in options.items()]
-
-
 def repack_raster(
     raster_path: Path,
     output_dir: Path | None = None,

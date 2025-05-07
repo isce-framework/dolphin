@@ -6,6 +6,7 @@ import logging
 import math
 import subprocess
 import tempfile
+from collections.abc import Mapping
 from datetime import datetime
 from os import fspath
 from pathlib import Path
@@ -133,7 +134,7 @@ def merge_images(
     target_aligned_pixels: bool = True,
     out_bounds: Optional[Bbox] = None,
     out_bounds_epsg: Optional[int] = None,
-    strides: Optional[dict[str, int]] = None,
+    strides: Optional[Mapping[str, int]] = None,
     driver: str = "GTiff",
     out_nodata: Optional[float] = 0,
     out_dtype: Optional[DTypeLike] = None,
@@ -293,7 +294,7 @@ def merge_images(
 
 def get_downsampled_vrts(
     filenames: Sequence[Filename],
-    strides: dict[str, int],
+    strides: Mapping[str, int],
     dirname: Filename,
 ) -> list[Path]:
     """Create downsampled VRTs from a list of files.
