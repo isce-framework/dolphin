@@ -476,7 +476,6 @@ class MiniStackPlanner(BaseStack):
 
             if compressed_idx is not None:
                 compressed_reference_idx = compressed_idx
-
             elif self.compressed_slc_plan == CompressedSlcPlan.ALWAYS_FIRST:
                 # Here, CompSLCs have same base phase, but different "residual" added on
                 compressed_reference_idx = max(0, num_ccslc - 1)
