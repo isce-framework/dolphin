@@ -265,6 +265,7 @@ def run(
         contained_compressed_slcs=any(is_compressed),
         reference_date=reference_date,
         extra_reference_date=extra_reference_date,
+        file_date_fmt=cfg.input_options.cslc_date_fmt,
     )
     return (
         ifg_file_list,
@@ -284,6 +285,7 @@ def create_ifgs(
     reference_date: datetime.datetime,
     extra_reference_date: datetime.datetime | None = None,
     dry_run: bool = False,
+    file_date_fmt: str = "%Y%m%d",
 ) -> list[Path]:
     """Create the list of interferograms for the `phase_linked_slcs`.
 
@@ -305,6 +307,9 @@ def create_ifgs(
     dry_run : bool
         Flag indicating that the ifgs should not be written to disk.
         Default = False (ifgs will be created).
+    file_date_fmt : str, optional
+        The format string to use when parsing the dates from the file names.
+        Default is "%Y%m%d".
 
     Returns
     -------
@@ -326,7 +331,7 @@ def create_ifgs(
 
     ifg_file_list: list[Path] = []
 
-    secondary_dates = [get_dates(f)[0] for f in phase_linked_slcs]
+    secondary_dates = [get_dates(f, fmt=file_date_fmt)[0] for f in phase_linked_slcs]
     # TODO: if we manually set an ifg network (i.e. not rely on spurt),
     # we may still want to just pass it right to `Network`
     if not contained_compressed_slcs and extra_reference_date is None:
@@ -447,7 +452,7 @@ def create_ifgs(
     for p in written_ifgs - requested_ifgs:
         p.unlink()
 
-    if len(set(get_dates(ifg_file_list[0]))) == 1:
+    if len(set(get_dates(ifg_file_list[0], fmt=file_date_fmt))) == 1:
         same_date_ifg = ifg_file_list.pop(0)
         same_date_ifg.unlink()
     return ifg_file_list

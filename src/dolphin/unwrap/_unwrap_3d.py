@@ -206,8 +206,11 @@ def _process_single_unw(
     ifg_filenames: Sequence[PathOrStr],
     output_dir: Path,
     profile: dict,
+    file_date_fmt: str,
 ):
-    unw, wrapped_phase = _reform_wrapped_phase(unw_filename, ifg_filenames)
+    unw, wrapped_phase = _reform_wrapped_phase(
+        unw_filename, ifg_filenames, file_date_fmt=file_date_fmt
+    )
     interpolate_masked_gaps(unw, wrapped_phase)
     # Save the updated unwrapped phase
     kwargs = profile | {
@@ -225,6 +228,7 @@ def filled_masked_unw_regions(
     ifg_filenames: Sequence[PathOrStr],
     output_dir: Path | None = None,
     max_workers: int = 3,
+    file_date_fmt: str = "%Y%m%d",
 ) -> None:
     """Fill the nan gaps in `unw_filenames` using the wrapped `ifg_filenames`.
 
@@ -244,6 +248,9 @@ def filled_masked_unw_regions(
     max_workers : int
         Number of parallel unwrapped files to process at once.
         Default is 3.
+    file_date_fmt : str, optional
+        The format string to use when parsing the dates from the file names.
+        Default is "%Y%m%d".
 
     """
     if output_dir is None:
@@ -256,6 +263,7 @@ def filled_masked_unw_regions(
         ifg_filenames=ifg_filenames,
         output_dir=output_dir,
         profile=profile,
+        file_date_fmt=file_date_fmt,
     )
 
     # Use multiprocessing to process files in parallel
@@ -264,7 +272,7 @@ def filled_masked_unw_regions(
 
 
 def _reform_wrapped_phase(
-    unw_filename: PathOrStr, ifg_filenames: Sequence[PathOrStr]
+    unw_filename: PathOrStr, ifg_filenames: Sequence[PathOrStr], file_date_fmt: str
 ) -> tuple[NDArray[np.float64], NDArray[np.complex64]]:
     """Load unwrapped phase, and re-calculate the corresponding wrapped phase.
 
@@ -273,11 +281,11 @@ def _reform_wrapped_phase(
     the `ifg1 = (day1_day4)`, `ifg2 = (day1_day5)`, and compute `a * b.conj()`.
     """
     # Extract dates from unw_filename
-    unw_dates = get_dates(Path(unw_filename))
+    unw_dates = get_dates(Path(unw_filename), fmt=file_date_fmt)
 
     date1, date2 = unw_dates
 
-    ifg_date_tuples = [get_dates(p) for p in ifg_filenames]
+    ifg_date_tuples = [get_dates(p, fmt=file_date_fmt) for p in ifg_filenames]
     if len({tup[0] for tup in ifg_date_tuples}) > 1:
         raise ValueError(
             "ifg_filenames must contain only single-reference interferograms"
@@ -287,7 +295,7 @@ def _reform_wrapped_phase(
     ifg1_name = None
     ifg2_name = None
     for ifg in ifg_filenames:
-        ifg_dates = get_dates(Path(ifg))
+        ifg_dates = get_dates(Path(ifg), fmt=file_date_fmt)
         if len(ifg_dates) != 2:
             continue
         if ifg_dates == unw_dates:
