@@ -233,7 +233,8 @@ def run(
         )
 
     logger.info(f"Creating virtual interferograms from {len(phase_linked_slcs)} files")
-    ref_idx = cfg.phase_linking.output_reference_idx or 0
+    num_ccslc = sum(is_compressed)
+    ref_idx = cfg.phase_linking.output_reference_idx or max(0, num_ccslc - 1)
 
     def base_phase_date(filename):
         """Get the base phase of either real of compressed slcs."""
