@@ -31,6 +31,7 @@ class OutputPaths:
     comp_slc_dict: dict[str, list[Path]]
     stitched_ifg_paths: list[Path]
     stitched_cor_paths: list[Path]
+    stitched_crlb_files: list[Path]
     stitched_temp_coh_file: Path
     stitched_ps_file: Path
     stitched_amp_dispersion_file: Path
@@ -126,6 +127,7 @@ def run(
         wrapped_phase_cfgs = [(b, cfg)]
 
     ifg_file_list: list[Path] = []
+    crlb_files: list[Path] = []
     temp_coh_file_list: list[Path] = []
     ps_file_list: list[Path] = []
     amp_dispersion_file_list: list[Path] = []
@@ -164,6 +166,7 @@ def run(
         for fut, burst in fut_to_burst.items():
             (
                 cur_ifg_list,
+                cur_crlb_files,
                 comp_slcs,
                 temp_coh,
                 ps_file,
@@ -172,6 +175,7 @@ def run(
                 similarity,
             ) = fut.result()
             ifg_file_list.extend(cur_ifg_list)
+            crlb_files.extend(cur_crlb_files)
             comp_slc_dict[burst] = comp_slcs
             temp_coh_file_list.append(temp_coh)
             ps_file_list.append(ps_file)
@@ -191,6 +195,7 @@ def run(
         ifg_file_list=ifg_file_list,
         temp_coh_file_list=temp_coh_file_list,
         ps_file_list=ps_file_list,
+        crlb_file_list=crlb_files,
         amp_dispersion_list=amp_dispersion_file_list,
         shp_count_file_list=shp_count_file_list,
         similarity_file_list=similarity_file_list,
@@ -210,6 +215,7 @@ def run(
             comp_slc_dict=comp_slc_dict,
             stitched_ifg_paths=stitched_paths.ifg_paths,
             stitched_cor_paths=stitched_paths.interferometric_corr_paths,
+            stitched_crlb_files=stitched_paths.crlb_paths,
             stitched_temp_coh_file=stitched_paths.temp_coh_file,
             stitched_ps_file=stitched_paths.ps_file,
             stitched_amp_dispersion_file=stitched_paths.amp_dispersion_file,
@@ -275,6 +281,7 @@ def run(
         comp_slc_dict=comp_slc_dict,
         stitched_ifg_paths=stitched_paths.ifg_paths,
         stitched_cor_paths=stitched_paths.interferometric_corr_paths,
+        stitched_crlb_files=stitched_paths.crlb_paths,
         stitched_temp_coh_file=stitched_paths.temp_coh_file,
         stitched_ps_file=stitched_paths.ps_file,
         stitched_amp_dispersion_file=stitched_paths.amp_dispersion_file,
