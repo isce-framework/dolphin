@@ -54,6 +54,7 @@ def run_wrapped_phase_sequential(
     cslc_date_fmt: str = "%Y%m%d",
     block_shape: tuple[int, int] = (512, 512),
     baseline_lag: Optional[int] = None,
+    max_workers: int = 1,
     **tqdm_kwargs,
 ) -> tuple[list[Path], list[Path], Path, Path, Path]:
     """Estimate wrapped phase using batches of ministacks."""
@@ -135,6 +136,7 @@ def run_wrapped_phase_sequential(
                 similarity_nearest_n=similarity_nearest_n,
                 block_shape=block_shape,
                 baseline_lag=baseline_lag,
+                max_workers=max_workers,
                 **tqdm_kwargs,
             )
 

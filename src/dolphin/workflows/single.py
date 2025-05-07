@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import logging
+from collections import deque
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -19,7 +21,7 @@ from dolphin.masking import load_mask_as_numpy
 from dolphin.phase_link import PhaseLinkRuntimeError, compress, run_phase_linking
 from dolphin.ps import calc_ps_block
 from dolphin.stack import MiniStackInfo
-from dolphin.utils import grow_nodata_region
+from dolphin.utils import DummyProcessPoolExecutor, grow_nodata_region
 
 from .config import ShpMethod
 
@@ -58,6 +60,7 @@ def run_wrapped_phase_single(
     similarity_nearest_n: int | None = None,
     block_shape: tuple[int, int] = (512, 512),
     baseline_lag: Optional[int] = None,
+    max_workers: int = 1,
     **tqdm_kwargs,
 ):
     """Estimate wrapped phase for one ministack.
@@ -86,7 +89,6 @@ def run_wrapped_phase_single(
     nodata_mask = _get_nodata_mask(mask_file, nrows, ncols)
     ps_mask = _get_ps_mask(ps_mask_file, nrows, ncols)
     amp_mean, amp_variance = _get_amp_mean_variance(amp_mean_file, amp_dispersion_file)
-    amp_stack: Optional[np.ndarray] = None
 
     xhalf, yhalf = half_window["x"], half_window["y"]
 
@@ -175,29 +177,38 @@ def run_wrapped_phase_single(
         # nodata_mask is numpy convention: True for bad (masked).
         if nodata_mask[in_rows, in_cols].all():
             continue
-        loader.queue_read(in_rows, in_cols)
+        # loader.queue_read(in_rows, in_cols)
         blocks.append(b)
+    ###########################
+    from threading import Lock
 
-    logger.info(f"Iterating over {block_shape} blocks, {len(blocks)} total")
-    for (
-        (out_rows, out_cols),
-        (out_trim_rows, out_trim_cols),
-        (in_rows, in_cols),
-        (in_no_pad_rows, in_no_pad_cols),
-        (in_trim_rows, in_trim_cols),
-    ) in tqdm(blocks, **tqdm_kwargs):
-        logger.debug(f"{out_rows = }, {out_cols = }, {in_rows = }, {in_no_pad_rows = }")
+    write_lock = Lock()
+    read_lock = Lock()
 
-        cur_data, (read_rows, read_cols) = loader.get_data()
+    Executor = ThreadPoolExecutor if max_workers > 1 else DummyProcessPoolExecutor
+    pbar = tqdm(total=len(blocks), **tqdm_kwargs)
+
+    def _process_block(
+        block: tuple[
+            BlockIndices, BlockIndices, BlockIndices, BlockIndices, BlockIndices
+        ],
+    ):
+        (
+            (out_rows, out_cols),
+            (out_trim_rows, out_trim_cols),
+            (in_rows, in_cols),
+            (in_no_pad_rows, in_no_pad_cols),
+            (in_trim_rows, in_trim_cols),
+        ) = block
+        with read_lock:
+            cur_data, _ = loader.read(in_rows, in_cols)
         if np.all(cur_data == 0) or np.isnan(cur_data).all():
-            continue
-        assert read_rows == in_rows and read_cols == in_cols
+            return block, None, None, None
 
         cur_data = cur_data.astype(np.complex64)
 
-        if shp_method == "ks":
-            # Only actually compute if we need this one
-            amp_stack = np.abs(cur_data)
+        # Only actually compute if we need this one
+        amp_stack = np.abs(cur_data) if shp_method == "ks" else None
 
         # Compute the neighbor_arrays for this block
         neighbor_arrays = shp.estimate_neighbors(
@@ -236,7 +247,7 @@ def run_wrapped_phase_single(
                 logger.debug(msg)
             else:
                 logger.warning(msg)
-            continue
+            return block, None, None, None
 
         # Fill in the nan values with 0
         np.nan_to_num(pl_output.cpx_phase, copy=False)
@@ -247,12 +258,6 @@ def run_wrapped_phase_single(
         assert len(pl_output.cpx_phase[first_real_slc_idx:]) == len(
             phase_linked_slc_files
         )
-
-        for img, f in zip(
-            pl_output.cpx_phase[first_real_slc_idx:, out_trim_rows, out_trim_cols],
-            phase_linked_slc_files,
-        ):
-            writer.queue_write(img, f, out_rows.start, out_cols.start)
 
         # Compress the ministack using only the non-compressed SLCs
         # Get the mean to set as pixel magnitudes
@@ -267,65 +272,68 @@ def run_wrapped_phase_single(
             reference_idx=ministack.compressed_reference_idx,
         )
 
-        # ### Save results ###
+        with write_lock:
+            # ### Save results ###
+            for img, f in zip(
+                pl_output.cpx_phase[first_real_slc_idx:, out_trim_rows, out_trim_cols],
+                phase_linked_slc_files,
+            ):
+                writer.queue_write(img, f, out_rows.start, out_cols.start)
 
-        # Save the compressed SLC block
-        writer.queue_write(
-            cur_comp_slc,
-            output_files["compressed_slc"].filename,
-            in_no_pad_rows.start,
-            in_no_pad_cols.start,
-            band=1,
-        )
-        # Save the amplitude dispersion of the real SLC data
-        writer.queue_write(
-            cur_amp_dispersion,
-            output_files["compressed_slc"].filename,
-            in_no_pad_rows.start,
-            in_no_pad_cols.start,
-            band=2,
-        )
-
-        # All other outputs are strided (smaller in size)
-        out_datas: dict[str, np.ndarray | None] = {
-            "temporal_coherence": pl_output.temp_coh,
-            "shp_counts": pl_output.shp_counts,
-            "eigenvalues": pl_output.eigenvalues,
-            "estimator": pl_output.estimator,
-            "avg_coh": pl_output.avg_coh,
-        }
-        for key, data in out_datas.items():
-            if data is None:  # May choose to skip some outputs, e.g. "avg_coh"
-                continue
-            output_file = output_files[key]
-            trimmed_data = data[out_trim_rows, out_trim_cols]
-
+            # Save the compressed SLC block
             writer.queue_write(
-                # trimmed_data,
-                # Erode the edge pixels
-                grow_nodata_region(
-                    trimmed_data, nodata=output_file.nodata, n_pixels=2, copy=True
-                ),
-                output_file.filename,
-                out_rows.start,
-                out_cols.start,
+                cur_comp_slc,
+                output_files["compressed_slc"].filename,
+                in_no_pad_rows.start,
+                in_no_pad_cols.start,
+                band=1,
+            )
+            # Save the amplitude dispersion of the real SLC data
+            writer.queue_write(
+                cur_amp_dispersion,
+                output_files["compressed_slc"].filename,
+                in_no_pad_rows.start,
+                in_no_pad_cols.start,
+                band=2,
             )
 
-    loader.notify_finished()
+            # All other outputs are strided (smaller in size)
+            out_datas: dict[str, np.ndarray | None] = {
+                "temporal_coherence": pl_output.temp_coh,
+                "shp_counts": pl_output.shp_counts,
+                "eigenvalues": pl_output.eigenvalues,
+                "estimator": pl_output.estimator,
+                "avg_coh": pl_output.avg_coh,
+            }
+            for key, data in out_datas.items():
+                if data is None:  # May choose to skip some outputs, e.g. "avg_coh"
+                    continue
+                output_file = output_files[key]
+                trimmed_data = data[out_trim_rows, out_trim_cols]
+
+                writer.queue_write(
+                    # Erode the edge pixels before writing:
+                    grow_nodata_region(
+                        trimmed_data, nodata=output_file.nodata, n_pixels=2, copy=True
+                    ),
+                    output_file.filename,
+                    out_rows.start,
+                    out_cols.start,
+                )
+            pbar.update()
+
+    with Executor(max_workers) as exc:
+        # Consume all blocks from the `.map` call
+        deque(exc.map(_process_block, blocks))
+
     # Block until all the writers for this ministack have finished
     logger.info(f"Waiting to write {writer.num_queued} blocks of data.")
     writer.notify_finished()
     logger.info(f"Finished ministack of size {vrt_stack.shape}.")
+    loader.notify_finished()
 
     logger.info("Repacking for more compression")
     io.repack_rasters(phase_linked_slc_files, keep_bits=12)
-
-    # logger.info("Eroding border of SHP rasters")
-    # shp_file = output_files["shp_counts"]
-    # shp_data = io.load_gdal(shp_file.filename)
-    # # Eroding in blocks to avoid too-large rasters.
-    # erode_edge_pixels(shp_data, nodata=shp_file.nodata, n_pixels=2, copy=False)
-    # io.write_block(shp_data, shp_file.filename, row_start=0, col_start=0)
 
     logger.info("Creating similarity raster on outputs")
     similarity.create_similarities(
