@@ -174,5 +174,5 @@ class TestBackgroundStackWriter:
         w5[:, rows, cols] = data2
         w5.close()
         written = load_gdal(output_file_list[0], rows=rows, cols=cols)
-        # Check for the samll floating point differences
+        # Check for the small floating point differences
         assert np.abs(written - data).max() > 1e-6

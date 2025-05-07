@@ -144,7 +144,7 @@ def test_separate_workflow_runs(slc_file_list, tmp_path):
     assert len(file_batches) == 3
     assert all(len(b) == 10 for b in file_batches)
     run_displacement_stack(p1, file_batches[0])
-    new_comp_slcs1 = sorted((p1 / "linked_phase").glob("compressed_*"))
+    new_comp_slcs1 = sorted((p1 / "phase_linking/linked_phase").glob("compressed_*"))
     assert len(new_comp_slcs1) == 1
     ifgs1 = sorted((p1 / "interferograms").glob("*.int.tif"))
     assert len(ifgs1) == 9
@@ -152,7 +152,7 @@ def test_separate_workflow_runs(slc_file_list, tmp_path):
     p2 = tmp_path / Path("second")
     files2 = new_comp_slcs1 + file_batches[1]
     run_displacement_stack(p2, files2)
-    new_comp_slcs2 = sorted((p2 / "linked_phase").glob("compressed_*"))
+    new_comp_slcs2 = sorted((p2 / "phase_linking/linked_phase").glob("compressed_*"))
     assert len(new_comp_slcs2) == 1
     ifgs2 = sorted((p2 / "interferograms").glob("*.int.tif"))
     assert len(ifgs2) == 10
