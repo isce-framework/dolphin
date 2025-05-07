@@ -49,7 +49,7 @@ def run_wrapped_phase_sequential(
     similarity_nearest_n: int | None = None,
     compressed_slc_plan: CompressedSlcPlan = CompressedSlcPlan.ALWAYS_FIRST,
     max_num_compressed: int = 100,
-    output_reference_idx: int = 0,
+    output_reference_idx: int | None = None,
     new_compressed_reference_idx: int | None = None,
     cslc_date_fmt: str = "%Y%m%d",
     block_shape: tuple[int, int] = (512, 512),

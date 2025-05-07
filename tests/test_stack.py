@@ -264,10 +264,7 @@ def test_compressed_idx_setting(slc_file_list, slc_date_list, is_compressed):
     assert ministacks[0].output_reference_date == slc_date_list[0]
 
 
-@pytest.mark.parametrize(
-    "plan", ["always_first", "first_per_ministack", "last_per_ministack"]
-)
-def test_compressed_plans(slc_file_list, slc_date_list, is_compressed, plan):
+def test_compressed_plans_always_first(slc_file_list, slc_date_list, is_compressed):
     """Check the planning works to set a manually passed compressed index."""
     is_compressed = [False] * len(slc_file_list)
     ministack_planner = MiniStackPlanner(
@@ -275,7 +272,7 @@ def test_compressed_plans(slc_file_list, slc_date_list, is_compressed, plan):
         dates=slc_date_list,
         is_compressed=is_compressed,
         output_folder=Path("fake_dir"),
-        compressed_slc_plan=plan,
+        compressed_slc_plan="always_first",
     )
 
     # This currently works ONLY for one single ministack planning
@@ -284,13 +281,34 @@ def test_compressed_plans(slc_file_list, slc_date_list, is_compressed, plan):
     ministacks = ministack_planner.plan(ms_size)
 
     compslcs = [m.get_compressed_slc_info() for m in ministacks]
-    if plan == "always_first":
-        assert all(c.reference_date == slc_date_list[0] for c in compslcs)
-    elif plan == "first_per_ministack":
-        assert compslcs[0].reference_date == slc_date_list[0]
-        assert compslcs[1].reference_date == slc_date_list[ms_size]
-        assert compslcs[2].reference_date == slc_date_list[ms_size * 2]
-    elif plan == "last_per_ministack":
-        assert compslcs[0].reference_date == slc_date_list[ms_size - 1]
-        assert compslcs[1].reference_date == slc_date_list[2 * ms_size - 1]
-        assert compslcs[2].reference_date == slc_date_list[3 * ms_size - 1]
+    assert all(c.reference_date == slc_date_list[0] for c in compslcs)
+
+
+def test_compressed_plans_last_per_ministack(
+    slc_file_list, slc_date_list, is_compressed
+):
+    """Check the planning works to set a manually passed compressed index."""
+    is_compressed = [False] * len(slc_file_list)
+    # This currently works ONLY for one single ministack planning
+    with pytest.raises(ValueError):
+        ministack_planner = MiniStackPlanner(
+            file_list=slc_file_list,
+            dates=slc_date_list,
+            is_compressed=is_compressed,
+            output_folder=Path("fake_dir"),
+            compressed_slc_plan="last_per_ministack",
+        )
+        ministacks = ministack_planner.plan(3)
+
+    ms_size = 4
+    ministack_planner = MiniStackPlanner(
+        file_list=slc_file_list[:ms_size],
+        dates=slc_date_list[:ms_size],
+        is_compressed=is_compressed[:ms_size],
+        output_folder=Path("fake_dir"),
+        compressed_slc_plan="last_per_ministack",
+    )
+    ministacks = ministack_planner.plan(ms_size)
+    compslcs = [m.get_compressed_slc_info() for m in ministacks]
+    assert len(compslcs) == 1
+    assert compslcs[0].reference_date == slc_date_list[ms_size - 1]

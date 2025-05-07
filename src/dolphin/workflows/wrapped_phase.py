@@ -233,9 +233,14 @@ def run(
         )
 
     logger.info(f"Creating virtual interferograms from {len(phase_linked_slcs)} files")
-    reference_date = [
-        get_dates(f, fmt=cfg.input_options.cslc_date_fmt)[0] for f in input_file_list
-    ][cfg.phase_linking.output_reference_idx]
+    num_ccslc = sum(is_compressed)
+    ref_idx = cfg.phase_linking.output_reference_idx or max(0, num_ccslc - 1)
+
+    def base_phase_date(filename):
+        """Get the base phase of either real of compressed slcs."""
+        return get_dates(filename, fmt=cfg.input_options.cslc_date_fmt)[0]
+
+    reference_date = [base_phase_date(f) for f in input_file_list][ref_idx]
 
     # TODO: remove this bad back to get around spurt's required input
     # Reading direct nearest-3 ifgs is not working due to some slicing problem
