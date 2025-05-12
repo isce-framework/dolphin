@@ -37,20 +37,22 @@ __all__ = ["run", "unwrap"]
 
 DEFAULT_OPTIONS = UnwrapOptions()
 
+PathOrStr = Path | str
+
 
 def run(
-    ifg_filenames: Sequence[Filename],
-    cor_filenames: Sequence[Filename],
-    output_path: Filename,
+    ifg_filenames: Sequence[PathOrStr],
+    cor_filenames: Sequence[PathOrStr],
+    output_path: PathOrStr,
     *,
     unwrap_options: UnwrapOptions = DEFAULT_OPTIONS,
     nlooks: float = 5,
-    temporal_coherence_filename: Filename | None = None,
-    similarity_filename: Filename | None = None,
-    mask_filename: Filename | None = None,
+    temporal_coherence_filename: PathOrStr | None = None,
+    similarity_filename: PathOrStr | None = None,
+    mask_filename: PathOrStr | None = None,
     unw_nodata: float | None = DEFAULT_UNW_NODATA,
     ccl_nodata: int | None = DEFAULT_CCL_NODATA,
-    scratchdir: Filename | None = None,
+    scratchdir: PathOrStr | None = None,
     delete_intermediate: bool = True,
     overwrite: bool = False,
 ) -> tuple[list[Path], list[Path]]:
