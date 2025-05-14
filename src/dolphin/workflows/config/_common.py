@@ -143,13 +143,6 @@ class PhaseLinkingOptions(BaseModel, extra="forbid"):
     )
     compressed_slc_plan: CompressedSlcPlan = CompressedSlcPlan.ALWAYS_FIRST
 
-    @field_validator("compressed_slc_plan", mode="before")
-    @classmethod
-    def _replace_none(cls, v):
-        if v is None:
-            return CompressedSlcPlan.ALWAYS_FIRST
-        return v
-
 
 class InterferogramNetwork(BaseModel, extra="forbid"):
     """Options to determine the type of network for interferogram formation.
@@ -328,7 +321,7 @@ class OutputOptions(BaseModel, extra="forbid"):
             " Can pass a string, or a `.wkt` filename containing the Polygon text."
         ),
     )
-    bounds_epsg: int = Field(
+    bounds_epsg: Optional[int] = Field(
         4326,
         description=(
             "EPSG code for the `bounds` or `bounds_wkt` coordinates, if specified."
@@ -386,6 +379,15 @@ class OutputOptions(BaseModel, extra="forbid"):
         if bounds:
             return Bbox(*bounds)
         return bounds
+
+    @field_validator("bounds_epsg", mode="after")
+    @classmethod
+    def _ensure_bounds_epsg(cls, bounds_epsg, info):
+        bounds = info.data.get("bounds")
+        if bounds is not None and bounds_epsg is None:
+            msg = "Must specify `bounds_epsg` if `bounds` is provided."
+            raise ValueError(msg)
+        return bounds_epsg
 
     @field_validator("strides")
     @classmethod
