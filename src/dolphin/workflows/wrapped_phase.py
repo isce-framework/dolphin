@@ -474,7 +474,7 @@ def _get_mask(
     output_dir: Path,
     output_bounds: Bbox | tuple[float, float, float, float] | None,
     output_bounds_wkt: str | None,
-    output_bounds_epsg: int,
+    output_bounds_epsg: int | None,
     like_filename: Filename,
     layover_shadow_mask: Filename | None,
     cslc_file_list: Sequence[Filename],
@@ -497,6 +497,8 @@ def _get_mask(
 
     # Also mask outside the area of interest if we've specified a small bounds
     if output_bounds is not None or output_bounds_wkt is not None:
+        if output_bounds_epsg is None:
+            raise ValueError("Must supply output_bounds_epsg for bounds")
         # Make a mask just from the bounds
         bounds_mask_filename = output_dir / "bounds_mask.tif"
         masking.create_bounds_mask(
