@@ -56,6 +56,7 @@ def run(
     wavelength: float | None = None,
     add_overviews: bool = True,
     extra_reference_date: datetime | None = None,
+    file_date_fmt: str = "%Y%m%d",
 ) -> tuple[list[Path], list[Path] | None, ReferencePoint]:
     """Invert the unwrapped interferograms, estimate timeseries and phase velocity.
 
@@ -114,6 +115,9 @@ def run(
     extra_reference_date : datetime.datetime, optional
         If provided, makes another set of interferograms referenced to this
         for all dates later than it.
+    file_date_fmt : str, optional
+        The format string to use when parsing the dates from the file names.
+        Default is "%Y%m%d".
 
     Returns
     -------
@@ -148,7 +152,7 @@ def run(
     else:
         ref_point = ReferencePoint(row=reference_point[0], col=reference_point[1])
 
-    ifg_date_pairs = [get_dates(f) for f in unwrapped_paths]
+    ifg_date_pairs = [get_dates(f, fmt=file_date_fmt) for f in unwrapped_paths]
     sar_dates = sorted(set(flatten(ifg_date_pairs)))
     # if we did single-reference interferograms, for `n` sar dates, we will only have
     # `n-1` interferograms. Any more than n-1 ifgs means we need to invert
@@ -189,7 +193,10 @@ def run(
             final_residual_paths = residual_paths
         else:
             final_ts_paths, final_residual_paths = _redo_reference(
-                inverted_phase_paths, residual_paths, extra_reference_date
+                inverted_phase_paths,
+                residual_paths,
+                extra_reference_date,
+                file_date_fmt=file_date_fmt,
             )
 
     if add_overviews:
@@ -229,6 +236,7 @@ def _redo_reference(
     inverted_phase_paths: Sequence[Path],
     residual_paths: Sequence[Path],
     extra_reference_date: datetime,
+    file_date_fmt: str = "%Y%m%d",
 ):
     """Reset the reference date in `inverted_phase_paths`.
 
@@ -244,8 +252,8 @@ def _redo_reference(
     the residual calculation.
     """
     output_path = inverted_phase_paths[0].parent
-    inverted_date_pairs: list[tuple[datetime, datetime]] = [
-        get_dates(p.stem)[:2] for p in inverted_phase_paths
+    inverted_date_pairs: list[list[datetime]] = [
+        get_dates(p.stem, fmt=file_date_fmt)[:2] for p in inverted_phase_paths
     ]
     secondary_dates = [pair[1] for pair in inverted_date_pairs]
     extra_ref_idx = get_nearest_date_idx(
@@ -704,6 +712,7 @@ def create_velocity(
     block_shape: tuple[int, int] = (256, 256),
     num_threads: int = 4,
     add_overviews: bool = True,
+    file_date_fmt: str = "%Y%m%d",
 ) -> None:
     """Perform pixel-wise (weighted) linear regression to estimate velocity.
 
@@ -739,6 +748,9 @@ def create_velocity(
     add_overviews : bool, optional
         If True, creates overviews of the new velocity raster.
         Default is True.
+    file_date_fmt : str, optional
+        The format string to use when parsing the dates from the file names.
+        Default is "%Y%m%d".
 
     """
     if Path(output_file).exists():
@@ -746,7 +758,7 @@ def create_velocity(
         return
 
     if date_list is None:
-        date_list = [get_dates(f)[1] for f in unw_file_list]
+        date_list = [get_dates(f, fmt=file_date_fmt)[1] for f in unw_file_list]
     x_arr = datetime_to_float(date_list)
 
     # Set up the input data readers
@@ -904,6 +916,7 @@ def invert_unw_network(
     method: InversionMethod = InversionMethod.L2,
     block_shape: tuple[int, int] = (256, 256),
     num_threads: int = 4,
+    file_date_fmt: str = "%Y%m%d",
 ) -> tuple[list[Path], list[Path]]:
     """Perform pixel-wise inversion of unwrapped network to get phase per date.
 
@@ -947,6 +960,9 @@ def invert_unw_network(
     num_threads : int
         The parallel blocks to process at once.
         Default is 4.
+    file_date_fmt : str, optional
+        The format string to use when parsing the dates from the file names.
+        Default is "%Y%m%d".
 
     Returns
     -------
@@ -957,7 +973,7 @@ def invert_unw_network(
 
     """
     if ifg_date_pairs is None:
-        ifg_date_pairs = [get_dates(f)[:2] for f in unw_file_list]
+        ifg_date_pairs = [get_dates(f, fmt=file_date_fmt)[:2] for f in unw_file_list]
 
     try:
         # Ensure it's a list of pairs
@@ -1454,6 +1470,7 @@ def create_nonzero_conncomp_counts(
     ifg_date_pairs: Sequence[Sequence[DateOrDatetime]] | None = None,
     block_shape: tuple[int, int] = (256, 256),
     num_threads: int = 4,
+    file_date_fmt: str = "%Y%m%d",
 ) -> list[Path]:
     """Count the number of valid interferograms per date.
 
@@ -1470,6 +1487,9 @@ def create_nonzero_conncomp_counts(
         The shape of the blocks to process in parallel.
     num_threads : int
         The number of parallel blocks to process at once.
+    file_date_fmt : str, optional
+        The format string to use when parsing the dates from the file names.
+        Default is "%Y%m%d".
 
     Returns
     -------
@@ -1481,7 +1501,9 @@ def create_nonzero_conncomp_counts(
     output_dir.mkdir(exist_ok=True, parents=True)
 
     if ifg_date_pairs is None:
-        ifg_date_pairs = [get_dates(str(f))[:2] for f in conncomp_file_list]
+        ifg_date_pairs = [
+            get_dates(str(f), fmt=file_date_fmt)[:2] for f in conncomp_file_list
+        ]
     try:
         # Ensure it's a list of pairs
         ifg_tuples = [(ref, sec) for (ref, sec) in ifg_date_pairs]

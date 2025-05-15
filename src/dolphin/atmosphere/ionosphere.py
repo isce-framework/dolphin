@@ -41,6 +41,7 @@ def estimate_ionospheric_delay(
     output_dir: Path,
     epsg: int,
     bounds: Bbox,
+    file_date_fmt: str = "%Y%m%d",
 ) -> list[Path]:
     """Estimate the range delay (in meters) caused by ionosphere for each interferogram.
 
@@ -67,6 +68,9 @@ def estimate_ionospheric_delay(
         the EPSG code of the input data
     bounds : Bbox
         Output bounds.
+    file_date_fmt : str, optional
+        The format string to use when parsing the dates from the file names.
+        Default is "%Y%m%d".
 
     Returns
     -------
@@ -128,7 +132,7 @@ def estimate_ionospheric_delay(
     ds_inc_angle = ds_inc_angle[:ds_num_lats, :ds_num_lons]
 
     for ifg in ifg_file_list:
-        ref_date, sec_date = get_dates(ifg)
+        ref_date, sec_date = get_dates(ifg, fmt=file_date_fmt)
 
         name = f"{format_date_pair(ref_date, sec_date)}_ionoDelay.tif"
         iono_delay_product_name = output_iono / name
