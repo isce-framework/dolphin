@@ -265,7 +265,9 @@ class WorkerSettings(BaseModel, extra="forbid"):
         ge=1,
         description=(
             "If processing separate spatial bursts, number of bursts to run in parallel"
-            " for wrapped-phase-estimation."
+            " for wrapped-phase-estimation. For large, single-swath SLC stacks (e.g."
+            " UAVSAR, NISAR), this sets the number of chunks processed in parallel"
+            " during phase linking."
         ),
     )
     block_shape: tuple[int, int] = Field(
