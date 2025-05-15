@@ -22,7 +22,10 @@ logger = logging.getLogger("dolphin")
 
 @log_runtime
 def run(
-    cfg: DisplacementWorkflow, debug: bool = False, tqdm_kwargs=None
+    cfg: DisplacementWorkflow,
+    debug: bool = False,
+    max_workers: int = 1,
+    tqdm_kwargs=None,
 ) -> tuple[list[Path], list[Path], Path, Path, Path, Path, Path]:
     """Run the displacement workflow on a stack of SLCs.
 
@@ -33,6 +36,8 @@ def run(
         for controlling the workflow.
     debug : bool, optional
         Enable debug logging, by default False.
+    max_workers : int, optional
+        Number of workers to use to process blocks during phase linking, by default 1.
     tqdm_kwargs : dict, optional
         dict of arguments to pass to `tqdm` (e.g. `position=n` for n parallel bars)
         See https://tqdm.github.io/docs/tqdm/#tqdm-objects for all options.
@@ -203,6 +208,7 @@ def run(
             similarity_nearest_n=similarity_nearest_n,
             cslc_date_fmt=cfg.input_options.cslc_date_fmt,
             block_shape=cfg.worker_settings.block_shape,
+            max_workers=max_workers,
             **kwargs,
         )
     # Dump the used options for JSON parsing

@@ -130,15 +130,16 @@ def run(
     # Now for each burst, run the wrapped phase estimation
     # Try running several bursts in parallel...
     # Use the Dummy one if not going parallel, as debugging is much simpler
-    num_parallel = min(cfg.worker_settings.n_parallel_bursts, len(grouped_slc_files))
+    num_workers = cfg.worker_settings.n_parallel_bursts
+    num_parallel = min(num_workers, len(grouped_slc_files))
     Executor = (
         ProcessPoolExecutor if num_parallel > 1 else utils.DummyProcessPoolExecutor
     )
-    mw = cfg.worker_settings.n_parallel_bursts
+    workers_per_burst = num_workers // num_parallel
     ctx = mp.get_context("spawn")
     tqdm.set_lock(ctx.RLock())
     with Executor(
-        max_workers=mw,
+        max_workers=num_workers,
         mp_context=ctx,
         initializer=tqdm.set_lock,
         initargs=(tqdm.get_lock(),),
@@ -148,6 +149,7 @@ def run(
                 wrapped_phase.run,
                 burst_cfg,
                 debug=debug,
+                max_workers=workers_per_burst,
                 tqdm_kwargs={
                     "position": i,
                 },
