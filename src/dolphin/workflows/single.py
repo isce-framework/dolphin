@@ -115,6 +115,17 @@ def run_wrapped_phase_single(
         nodata=0,
     )
 
+    crlb_output_folder = output_folder / "crlb"
+    crlb_output_folder.mkdir(exist_ok=True)
+    phase_linked_crlb_files = setup_output_folder(
+        ministack=ministack,
+        strides=strides,
+        dtype="float32",
+        output_folder=crlb_output_folder,
+        like_filename=vrt_stack.outfile,
+        nodata=0,
+    )
+
     comp_slc_info = ministack.get_compressed_slc_info()
 
     # Use the real-SLC date range for output file naming
@@ -224,6 +235,7 @@ def run_wrapped_phase_single(
                 neighbor_arrays=neighbor_arrays,
                 baseline_lag=baseline_lag,
                 avg_mag=amp_mean[in_rows, in_cols] if amp_mean is not None else None,
+                first_real_slc_idx=ministack.first_real_slc_idx,
             )
         except PhaseLinkRuntimeError as e:
             # note: this is a warning instead of info, since it should
@@ -248,9 +260,15 @@ def run_wrapped_phase_single(
             phase_linked_slc_files
         )
 
+        # ### Save results ###
         for img, f in zip(
             pl_output.cpx_phase[first_real_slc_idx:, out_trim_rows, out_trim_cols],
             phase_linked_slc_files,
+        ):
+            writer.queue_write(img, f, out_rows.start, out_cols.start)
+        for img, f in zip(
+            pl_output.crlb_std_dev[first_real_slc_idx:, out_trim_rows, out_trim_cols],
+            phase_linked_crlb_files,
         ):
             writer.queue_write(img, f, out_rows.start, out_cols.start)
 
@@ -266,8 +284,6 @@ def run_wrapped_phase_single(
             slc_mean=cur_data_mean,
             reference_idx=ministack.compressed_reference_idx,
         )
-
-        # ### Save results ###
 
         # Save the compressed SLC block
         writer.queue_write(
@@ -436,7 +452,7 @@ def setup_output_folder(
     start_idx = ministack.first_real_slc_idx
     date_strs = ministack.get_date_str_list()[start_idx:]
 
-    phase_linked_slc_files = []
+    output_files = []
     for filename in date_strs:
         slc_name = Path(filename).stem
         output_path = output_folder / f"{slc_name}.slc.tif"
@@ -452,5 +468,5 @@ def setup_output_folder(
             nodata=nodata,
         )
 
-        phase_linked_slc_files.append(output_path)
-    return phase_linked_slc_files
+        output_files.append(output_path)
+    return output_files
