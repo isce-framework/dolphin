@@ -1,4 +1,7 @@
-def main() -> None:
+import os
+
+
+def main() -> int:
     """Top-level command line interface to the workflows."""
     import tyro
 
@@ -20,6 +23,8 @@ def main() -> None:
 
     # TODO: Check how to slot this into tyro's argparse
     # parser.add_argument("--version", action="version", version=__version__)
+
+    return os.EX_OK
 
 
 def run_cli(
