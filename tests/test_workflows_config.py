@@ -106,7 +106,7 @@ def test_unwrap_options_defaults():
 
 def test_outputs_defaults():
     opts = config.OutputOptions()
-    assert opts.strides == {"x": 1, "y": 1}
+    assert opts.strides == config.Strides(x=1, y=1)
     assert opts.hdf5_creation_options == {
         "chunks": [128, 128],
         "compression": "gzip",
