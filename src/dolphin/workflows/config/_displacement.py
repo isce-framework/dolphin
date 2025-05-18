@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any, Optional
+from typing import Annotated, Any, Optional
 
+import tyro
 from opera_utils import get_burst_id, get_dates, sort_files_by_date
 from pydantic import (
     BaseModel,
@@ -73,7 +74,11 @@ class DisplacementWorkflow(WorkflowBase):
 
     # Paths to input/output files
     input_options: InputOptions = Field(default_factory=InputOptions)
-    cslc_file_list: list[Path] = Field(
+    cslc_file_list: Annotated[
+        list[Path],
+        # Add aliases for the CLI
+        tyro.conf.arg(aliases=("--cslc", "--slc-files")),
+    ] = Field(
         default_factory=list,
         description=(
             "list of CSLC files, or newline-delimited file "

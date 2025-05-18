@@ -4,8 +4,9 @@ import glob
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Literal, Optional
+from typing import Annotated, Any, Literal, Optional
 
+import tyro
 from pydantic import (
     BaseModel,
     ConfigDict,
@@ -32,6 +33,7 @@ __all__ = [
     "OutputOptions",
     "PhaseLinkingOptions",
     "PsOptions",
+    "Strides",
     "TimeseriesOptions",
     "WorkerSettings",
 ]
@@ -55,8 +57,14 @@ class PsOptions(BaseModel, extra="forbid"):
 class HalfWindow(BaseModel, extra="forbid"):
     """Class to hold half-window size for multi-looking during phase linking."""
 
-    x: int = Field(11, description="Half window size (in pixels) for x direction", gt=0)
-    y: int = Field(5, description="Half window size (in pixels) for y direction", gt=0)
+    y: Annotated[
+        int,
+        tyro.conf.arg(aliases=("--hwy",)),
+    ] = Field(5, description="Half window size (in pixels) for y direction", gt=0)
+    x: Annotated[
+        int,
+        tyro.conf.arg(aliases=("--hwx",)),
+    ] = Field(11, description="Half window size (in pixels) for x direction", gt=0)
 
     def to_looks(self):
         """Convert (x, y) half-window size to (row, column) looks."""
@@ -72,9 +80,10 @@ class PhaseLinkingOptions(BaseModel, extra="forbid"):
     """Configurable options for wrapped phase estimation."""
 
     _directory: Path = PrivateAttr(Path("linked_phase"))
-    ministack_size: int = Field(
-        15, description="Size of the ministack for sequential estimator.", gt=1
-    )
+    ministack_size: Annotated[
+        int,
+        tyro.conf.arg(aliases=("--ms",)),
+    ] = Field(15, description="Size of the ministack for sequential estimator.", gt=1)
     max_num_compressed: int = Field(
         100,
         description=(
@@ -92,7 +101,10 @@ class PhaseLinkingOptions(BaseModel, extra="forbid"):
         ),
     )
     half_window: HalfWindow = HalfWindow()
-    use_evd: bool = Field(
+    use_evd: Annotated[
+        bool,
+        tyro.conf.arg(aliases=("--use-evd",)),
+    ] = Field(
         False, description="Use EVD on the coherence instead of using the EMI algorithm"
     )
 
@@ -253,7 +265,10 @@ class WorkerSettings(BaseModel, extra="forbid"):
             " environment variable in each python process."
         ),
     )
-    n_parallel_bursts: int = Field(
+    n_parallel_bursts: Annotated[
+        int,
+        tyro.conf.arg(aliases=("--n-parallel-bursts",)),
+    ] = Field(
         default=1,
         ge=1,
         description=(
@@ -272,7 +287,10 @@ class WorkerSettings(BaseModel, extra="forbid"):
 class InputOptions(BaseModel, extra="forbid"):
     """Options specifying input datasets for workflow."""
 
-    subdataset: Optional[str] = Field(
+    subdataset: Annotated[
+        Optional[str],
+        tyro.conf.arg(aliases=("--subdataset", "--sds")),
+    ] = Field(
         None,
         description="If passing HDF5/NetCDF files, subdataset to use from CSLC files. ",
     )
@@ -290,18 +308,25 @@ class InputOptions(BaseModel, extra="forbid"):
     )
 
 
+class Strides(BaseModel, extra="forbid"):
+    """Specify the strides (decimation factor) to perform while processing input.
+
+    For example, strides of {x: 4, y: 2} would turn an input of shape (100, 100)
+    into an output of shape (50, 25).
+    """
+
+    y: Annotated[int, tyro.conf.arg(aliases=("--sy",))] = Field(
+        1, description="Decimation factor (stride) in the y/row direction", gt=0
+    )
+    x: Annotated[int, tyro.conf.arg(aliases=("--sx",))] = Field(
+        1, description="Decimation factor (stride) in the x/column direction", gt=0
+    )
+
+
 class OutputOptions(BaseModel, extra="forbid"):
     """Options for the output size/format/compressions."""
 
-    strides: dict[str, int] = Field(
-        {"x": 1, "y": 1},
-        description=(
-            "Specify the (x, y) strides (decimation factor) to perform while processing"
-            " input. For example, strides of {x: 4, y: 2} would turn an input"
-            " resolution of [5, 10] into an output resolution of [20, 20]."
-        ),
-        validate_default=True,
-    )
+    strides: Strides = Field(Strides(), validate_default=True)
     bounds: Optional[tuple[float, float, float, float]] = Field(
         None,
         description=(
@@ -309,17 +334,17 @@ class OutputOptions(BaseModel, extra="forbid"):
             "e.g. `bbox=[-150.2,65.0,-150.1,65.5]`"
         ),
     )
+    bounds_epsg: Optional[int] = Field(
+        4326,
+        description=(
+            "EPSG code for the `bounds` or `bounds_wkt` coordinates, if specified."
+        ),
+    )
     bounds_wkt: Optional[str] = Field(
         None,
         description=(
             "Area of interest as a simple Polygon in well-known-text (WKT) format."
             " Can pass a string, or a `.wkt` filename containing the Polygon text."
-        ),
-    )
-    bounds_epsg: Optional[int] = Field(
-        4326,
-        description=(
-            "EPSG code for the `bounds` or `bounds_wkt` coordinates, if specified."
         ),
     )
 
