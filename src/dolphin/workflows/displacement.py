@@ -77,7 +77,7 @@ def run(
         if "Could not parse burst id" not in str(e):
             raise
         # Otherwise, we have SLC files which are not OPERA burst files
-        grouped_slc_files = {"": cfg.cslc_file_list}
+        grouped_slc_files = {"phase_linking": cfg.cslc_file_list}
 
     if cfg.amplitude_dispersion_files:
         grouped_amp_dispersion_files = group_by_burst(cfg.amplitude_dispersion_files)
@@ -97,33 +97,26 @@ def run(
     # ######################################
     # 1. Burst-wise Wrapped phase estimation
     # ######################################
-    if len(grouped_slc_files) > 1:
-        logger.info(f"Found SLC files from {len(grouped_slc_files)} bursts")
-        wrapped_phase_cfgs = [
-            (
-                burst,  # Include the burst for logging purposes
-                _create_burst_cfg(
-                    cfg,
-                    burst,
-                    grouped_slc_files,
-                    grouped_amp_mean_files,
-                    grouped_amp_dispersion_files,
-                    grouped_layover_shadow_mask_files,
-                ),
-            )
-            for burst in grouped_slc_files
-        ]
-        for _, burst_cfg in wrapped_phase_cfgs:
-            burst_cfg.create_dir_tree()
-        # Remove the mid-level directories which will be empty due to re-grouping
-        _remove_dir_if_empty(cfg.phase_linking._directory)
-        _remove_dir_if_empty(cfg.ps_options._directory)
-
-    else:
-        # grab the only key (either a burst, or "") and use that
-        cfg.create_dir_tree()
-        b = next(iter(grouped_slc_files.keys()))
-        wrapped_phase_cfgs = [(b, cfg)]
+    logger.info(f"Found SLC files from {len(grouped_slc_files)} bursts")
+    wrapped_phase_cfgs = [
+        (
+            burst,  # Include the burst for logging purposes
+            _create_burst_cfg(
+                cfg,
+                burst,
+                grouped_slc_files,
+                grouped_amp_mean_files,
+                grouped_amp_dispersion_files,
+                grouped_layover_shadow_mask_files,
+            ),
+        )
+        for burst in grouped_slc_files
+    ]
+    for _, burst_cfg in wrapped_phase_cfgs:
+        burst_cfg.create_dir_tree()
+    # Remove the mid-level directories which will be empty due to re-grouping
+    _remove_dir_if_empty(cfg.phase_linking._directory)
+    _remove_dir_if_empty(cfg.ps_options._directory)
 
     ifg_file_list: list[Path] = []
     temp_coh_file_list: list[Path] = []
@@ -137,15 +130,16 @@ def run(
     # Now for each burst, run the wrapped phase estimation
     # Try running several bursts in parallel...
     # Use the Dummy one if not going parallel, as debugging is much simpler
-    num_parallel = min(cfg.worker_settings.n_parallel_bursts, len(grouped_slc_files))
+    num_workers = cfg.worker_settings.n_parallel_bursts
+    num_parallel = min(num_workers, len(grouped_slc_files))
     Executor = (
         ProcessPoolExecutor if num_parallel > 1 else utils.DummyProcessPoolExecutor
     )
-    mw = cfg.worker_settings.n_parallel_bursts
+    workers_per_burst = num_workers // num_parallel
     ctx = mp.get_context("spawn")
     tqdm.set_lock(ctx.RLock())
     with Executor(
-        max_workers=mw,
+        max_workers=num_workers,
         mp_context=ctx,
         initializer=tqdm.set_lock,
         initargs=(tqdm.get_lock(),),
@@ -155,6 +149,7 @@ def run(
                 wrapped_phase.run,
                 burst_cfg,
                 debug=debug,
+                max_workers=workers_per_burst,
                 tqdm_kwargs={
                     "position": i,
                 },

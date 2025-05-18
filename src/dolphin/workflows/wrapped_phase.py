@@ -22,7 +22,10 @@ logger = logging.getLogger("dolphin")
 
 @log_runtime
 def run(
-    cfg: DisplacementWorkflow, debug: bool = False, tqdm_kwargs=None
+    cfg: DisplacementWorkflow,
+    debug: bool = False,
+    max_workers: int = 1,
+    tqdm_kwargs=None,
 ) -> tuple[list[Path], list[Path], Path, Path, Path, Path, Path]:
     """Run the displacement workflow on a stack of SLCs.
 
@@ -33,6 +36,8 @@ def run(
         for controlling the workflow.
     debug : bool, optional
         Enable debug logging, by default False.
+    max_workers : int, optional
+        Number of workers to use to process blocks during phase linking, by default 1.
     tqdm_kwargs : dict, optional
         dict of arguments to pass to `tqdm` (e.g. `position=n` for n parallel bars)
         See https://tqdm.github.io/docs/tqdm/#tqdm-objects for all options.
@@ -203,6 +208,7 @@ def run(
             similarity_nearest_n=similarity_nearest_n,
             cslc_date_fmt=cfg.input_options.cslc_date_fmt,
             block_shape=cfg.worker_settings.block_shape,
+            max_workers=max_workers,
             **kwargs,
         )
     # Dump the used options for JSON parsing
@@ -233,9 +239,14 @@ def run(
         )
 
     logger.info(f"Creating virtual interferograms from {len(phase_linked_slcs)} files")
-    reference_date = [
-        get_dates(f, fmt=cfg.input_options.cslc_date_fmt)[0] for f in input_file_list
-    ][cfg.phase_linking.output_reference_idx]
+    num_ccslc = sum(is_compressed)
+    ref_idx = cfg.phase_linking.output_reference_idx or max(0, num_ccslc - 1)
+
+    def base_phase_date(filename):
+        """Get the base phase of either real of compressed slcs."""
+        return get_dates(filename, fmt=cfg.input_options.cslc_date_fmt)[0]
+
+    reference_date = [base_phase_date(f) for f in input_file_list][ref_idx]
 
     # TODO: remove this bad back to get around spurt's required input
     # Reading direct nearest-3 ifgs is not working due to some slicing problem
@@ -260,6 +271,7 @@ def run(
         contained_compressed_slcs=any(is_compressed),
         reference_date=reference_date,
         extra_reference_date=extra_reference_date,
+        file_date_fmt=cfg.input_options.cslc_date_fmt,
     )
     return (
         ifg_file_list,
@@ -279,6 +291,7 @@ def create_ifgs(
     reference_date: datetime.datetime,
     extra_reference_date: datetime.datetime | None = None,
     dry_run: bool = False,
+    file_date_fmt: str = "%Y%m%d",
 ) -> list[Path]:
     """Create the list of interferograms for the `phase_linked_slcs`.
 
@@ -300,6 +313,9 @@ def create_ifgs(
     dry_run : bool
         Flag indicating that the ifgs should not be written to disk.
         Default = False (ifgs will be created).
+    file_date_fmt : str, optional
+        The format string to use when parsing the dates from the file names.
+        Default is "%Y%m%d".
 
     Returns
     -------
@@ -321,7 +337,7 @@ def create_ifgs(
 
     ifg_file_list: list[Path] = []
 
-    secondary_dates = [get_dates(f)[0] for f in phase_linked_slcs]
+    secondary_dates = [get_dates(f, fmt=file_date_fmt)[0] for f in phase_linked_slcs]
     # TODO: if we manually set an ifg network (i.e. not rely on spurt),
     # we may still want to just pass it right to `Network`
     if not contained_compressed_slcs and extra_reference_date is None:
@@ -442,7 +458,7 @@ def create_ifgs(
     for p in written_ifgs - requested_ifgs:
         p.unlink()
 
-    if len(set(get_dates(ifg_file_list[0]))) == 1:
+    if len(set(get_dates(ifg_file_list[0], fmt=file_date_fmt))) == 1:
         same_date_ifg = ifg_file_list.pop(0)
         same_date_ifg.unlink()
     return ifg_file_list
@@ -469,7 +485,7 @@ def _get_mask(
     output_dir: Path,
     output_bounds: Bbox | tuple[float, float, float, float] | None,
     output_bounds_wkt: str | None,
-    output_bounds_epsg: int,
+    output_bounds_epsg: int | None,
     like_filename: Filename,
     layover_shadow_mask: Filename | None,
     cslc_file_list: Sequence[Filename],
@@ -492,6 +508,8 @@ def _get_mask(
 
     # Also mask outside the area of interest if we've specified a small bounds
     if output_bounds is not None or output_bounds_wkt is not None:
+        if output_bounds_epsg is None:
+            raise ValueError("Must supply output_bounds_epsg for bounds")
         # Make a mask just from the bounds
         bounds_mask_filename = output_dir / "bounds_mask.tif"
         masking.create_bounds_mask(

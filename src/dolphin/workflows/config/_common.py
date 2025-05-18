@@ -84,11 +84,11 @@ class PhaseLinkingOptions(BaseModel, extra="forbid"):
         ),
         gt=0,
     )
-    output_reference_idx: int = Field(
-        0,
+    output_reference_idx: Optional[int] = Field(
+        None,
         description=(
-            "Index of input SLC to use for making phase linked interferograms after"
-            " EVD/EMI."
+            "Index of the SLC to use as interferogram reference after phase linking. If"
+            " not set, uses the CompressedSlcPlan default"
         ),
     )
     half_window: HalfWindow = HalfWindow()
@@ -142,13 +142,6 @@ class PhaseLinkingOptions(BaseModel, extra="forbid"):
         ),
     )
     compressed_slc_plan: CompressedSlcPlan = CompressedSlcPlan.ALWAYS_FIRST
-
-    @field_validator("compressed_slc_plan", mode="before")
-    @classmethod
-    def _replace_none(cls, v):
-        if v is None:
-            return CompressedSlcPlan.ALWAYS_FIRST
-        return v
 
 
 class InterferogramNetwork(BaseModel, extra="forbid"):
@@ -265,7 +258,9 @@ class WorkerSettings(BaseModel, extra="forbid"):
         ge=1,
         description=(
             "If processing separate spatial bursts, number of bursts to run in parallel"
-            " for wrapped-phase-estimation."
+            " for wrapped-phase-estimation. For large, single-swath SLC stacks (e.g."
+            " UAVSAR, NISAR), this sets the number of chunks processed in parallel"
+            " during phase linking."
         ),
     )
     block_shape: tuple[int, int] = Field(
@@ -321,7 +316,7 @@ class OutputOptions(BaseModel, extra="forbid"):
             " Can pass a string, or a `.wkt` filename containing the Polygon text."
         ),
     )
-    bounds_epsg: int = Field(
+    bounds_epsg: Optional[int] = Field(
         4326,
         description=(
             "EPSG code for the `bounds` or `bounds_wkt` coordinates, if specified."
@@ -379,6 +374,15 @@ class OutputOptions(BaseModel, extra="forbid"):
         if bounds:
             return Bbox(*bounds)
         return bounds
+
+    @field_validator("bounds_epsg", mode="after")
+    @classmethod
+    def _ensure_bounds_epsg(cls, bounds_epsg, info):
+        bounds = info.data.get("bounds")
+        if bounds is not None and bounds_epsg is None:
+            msg = "Must specify `bounds_epsg` if `bounds` is provided."
+            raise ValueError(msg)
+        return bounds_epsg
 
     @field_validator("extra_reference_date", mode="after")
     @classmethod
