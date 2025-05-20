@@ -59,6 +59,15 @@ def test_displacement_run_single(opera_slc_files: list[Path], tmpdir):
             paths.timeseries_paths[0]
         )
 
+        # Check the structure of the per-burst wrapped phase directories
+        burst_dir = next(iter(paths.comp_slc_dict.values()))[0].parent.parent
+        assert (burst_dir / "PS").exists()
+        assert (burst_dir / "linked_phase").exists()
+        assert (burst_dir / "interferograms").exists()
+        # Check the non-phase linking folders were removed
+        assert not (burst_dir / "unwrapped").exists()
+        assert not (burst_dir / "timeseries").exists()
+
 
 def test_displacement_run_single_official_opera_naming(
     opera_slc_files_official: list[Path], tmpdir
