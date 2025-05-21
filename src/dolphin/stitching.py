@@ -218,7 +218,7 @@ def merge_images(
     temp_dir = tempfile.TemporaryDirectory()
 
     tmp_path = Path(temp_dir.name)
-    if strides is not None and strides["x"] > 1 and strides["y"] > 1:
+    if strides is not None and (strides["x"] > 1 or strides["y"] > 1):
         file_list = get_downsampled_vrts(
             file_list,
             strides=strides,
