@@ -1056,6 +1056,8 @@ def invert_unw_network(
         unw_reader = readers[0]
         stack = unw_reader[:, rows, cols]
         masked_pixel_sum: NDArray[np.bool_] = stack.mask.sum(axis=0)
+        if masked_pixel_sum == np.ma.nomask:
+            masked_pixel_sum = np.zeros(stack.shape[1:], dtype=bool)
         # Mask the output if any inputs are missing
         masked_pixels = masked_pixel_sum > 0
         # Setup the (optional) second reader: either conncomps, or correlation
