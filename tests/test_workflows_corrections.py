@@ -46,16 +46,16 @@ def test_corrections_run_single(
             phase_linking={
                 "ministack_size": 500,
             },
-            correction_options={
-                "ionosphere_files": tec_files,
-                "geometry_files": TEST_STATIC_FILES,
-            },
+        )
+        cfg_corrections = config.CorrectionOptions(
+            ionosphere_files=tec_files,
+            geometry_files=TEST_STATIC_FILES,
         )
         paths = displacement.run(cfg)
         assert paths.timeseries_paths is not None
         new_paths = corrections.run(
             cfg,
-            correction_options=cfg.correction_options,
+            correction_options=cfg_corrections,
             timeseries_paths=paths.timeseries_paths,
         )
         assert new_paths.ionospheric_corrections is not None

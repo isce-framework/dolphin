@@ -22,3 +22,4 @@ dependencies:
   - threadpoolctl>=3.0
   - tqdm>=4.60
   - typing_extensions>=3.10
+  - tyro>=0.9.20
