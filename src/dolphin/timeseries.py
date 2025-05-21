@@ -1060,10 +1060,11 @@ def invert_unw_network(
 
     def read_and_solve(
         readers: Sequence[io.StackReader], rows: slice, cols: slice
-    ) -> tuple[slice, slice, np.ndarray]:
+    ) -> tuple[np.ndarray, slice, slice]:
         unw_reader = readers[0]
         stack = unw_reader[:, rows, cols]
         masked_pixel_sum: NDArray[np.bool_] = stack.mask.sum(axis=0)
+        # Ensure we have a 2d mask
         if masked_pixel_sum == np.ma.nomask:
             masked_pixel_sum = np.zeros(stack.shape[1:], dtype=bool)
         # Mask the output if any inputs are missing
