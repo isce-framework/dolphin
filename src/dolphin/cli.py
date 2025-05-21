@@ -6,6 +6,7 @@ def main() -> int:
     import tyro
 
     from dolphin.filtering import filter_rasters
+    from dolphin.timeseries import run as run_timeseries
     from dolphin.unwrap import run as run_unwrap
     from dolphin.workflows._cli_config import ConfigCli
 
@@ -14,7 +15,7 @@ def main() -> int:
             "run": run_cli,
             "config": ConfigCli,
             "unwrap": run_unwrap,
-            # "timeseries": run_timeseries,
+            "timeseries": run_timeseries,
             # "velocity": create_velocity,
             "filter": filter_rasters,
         },
