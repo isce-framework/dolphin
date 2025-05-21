@@ -418,7 +418,7 @@ def test_config_ps_workflow_defaults(dir_with_1_slc):
     )
 
     assert c.input_options == config.InputOptions(subdataset="data")
-    # Need to compare `model_fields` because the new instance of `PsOptions`
+    # Need to compare `model_dump` because the new instance of `PsOptions`
     assert c.output_options == config.OutputOptions()
     # has different private directories
-    assert c.ps_options.model_fields == config.PsOptions().model_fields
+    assert c.ps_options.model_dump() == config.PsOptions().model_dump()
