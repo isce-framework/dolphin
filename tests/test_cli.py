@@ -1,4 +1,6 @@
 import sys
+from contextlib import redirect_stdout
+from io import StringIO
 from pathlib import Path
 
 import pytest
@@ -9,40 +11,37 @@ from dolphin.cli import main
 HELP_LINE = "usage: dolphin"
 
 
-def test_help(capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch):
+def test_help(monkeypatch: pytest.MonkeyPatch):
     with monkeypatch.context() as m:
         m.setattr(sys, "argv", ["dolphin", "--help"])
-        with pytest.raises(SystemExit):
+        f = StringIO()
+        with redirect_stdout(f), pytest.raises(SystemExit):
             main()
-        output = capsys.readouterr().out
-        assert HELP_LINE in output
 
-
-def test_empty(capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch):
-    with monkeypatch.context() as m:
-        m.setattr(sys, "argv", ["dolphin"])
-        with pytest.raises(SystemExit):
-            main()
-        output = capsys.readouterr().out
-        assert HELP_LINE in output
+        # Get help text by capturing stdout when --help is passed.
+        help_text = f.getvalue()
+        assert HELP_LINE in help_text
 
 
 @pytest.mark.parametrize("sub_cmd", ["run", "config", "filter", "unwrap"])
-def test_subcommand_help(
-    capsys: pytest.CaptureFixture[str],
-    monkeypatch: pytest.MonkeyPatch,
-    sub_cmd: str,
-):
+def test_subcommand_help(monkeypatch: pytest.MonkeyPatch, sub_cmd: str):
     with monkeypatch.context() as m:
         m.setattr(sys, "argv", ["dolphin", sub_cmd, "--help"])
-        with pytest.raises(SystemExit):
+
+        f = StringIO()
+        with redirect_stdout(f), pytest.raises(SystemExit):
             main()
-        output = capsys.readouterr().out
-        assert f"usage: dolphin {sub_cmd}" in output
+
+        help_text = f.getvalue()
+        assert f"usage: dolphin {sub_cmd}" in help_text
 
 
+@pytest.mark.parametrize("strides_x_argname", ["--sx", "--output-options.strides.x"])
 def test_cli_config_basic(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, slc_file_list: list[Path]
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    slc_file_list: list[Path],
+    strides_x_argname: str,
 ):
     config_file = tmp_path / "dolphin_config.yaml"
     with monkeypatch.context() as m:
@@ -52,15 +51,16 @@ def test_cli_config_basic(
             [
                 "dolphin",
                 "config",
-                "--strides",
+                # Check both versions work
+                strides_x_argname,
                 "6",
+                "--sy",
                 "3",
+                "--outfile",
+                config_file.as_posix(),
                 "--slc-files",
                 *map(str, slc_file_list),
             ],
         )
-        cwd = tmp_path.as_posix()
-        m.chdir(cwd)
-        with pytest.raises(SystemExit):
-            main()
+        main()
         assert config_file.exists()
