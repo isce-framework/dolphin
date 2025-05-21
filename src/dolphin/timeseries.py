@@ -1064,8 +1064,8 @@ def invert_unw_network(
         unw_reader = readers[0]
         stack = unw_reader[:, rows, cols]
         masked_pixel_sum: NDArray[np.bool_] = stack.mask.sum(axis=0)
-        # Ensure we have a 2d mask
-        if masked_pixel_sum == np.ma.nomask:
+        # Ensure we have a 2d mask (i.e., not np.ma.nomask)
+        if masked_pixel_sum.ndim == 0:
             masked_pixel_sum = np.zeros(stack.shape[1:], dtype=bool)
         # Mask the output if any inputs are missing
         masked_pixels = masked_pixel_sum > 0
