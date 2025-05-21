@@ -30,6 +30,7 @@ def main() -> int:
 
 def run_cli(
     config_file: str,
+    /,
     debug: bool = False,
 ) -> None:
     """Run the displacement workflow.
