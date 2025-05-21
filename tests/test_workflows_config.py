@@ -1,5 +1,4 @@
 import shutil
-from datetime import datetime, timezone
 from pathlib import Path
 
 import pydantic
@@ -189,8 +188,6 @@ def test_input_find_slcs(slc_file_list_nc):
     )
     dict2 = opts2.model_dump()
 
-    dict1.pop("creation_time_utc")
-    dict2.pop("creation_time_utc")
     assert dict1 == dict2
 
 
@@ -338,9 +335,6 @@ def test_config_displacement_workflow_defaults(dir_with_1_slc):
     assert c.interferogram_network.max_temporal_baseline is None
 
     assert c.unwrap_options._directory == Path("unwrapped").resolve()
-
-    now = datetime.now(timezone.utc)
-    assert (now - c.creation_time_utc).seconds == 0
 
 
 def test_config_create_dir_tree(tmpdir, slc_file_list_nc):
