@@ -1,6 +1,7 @@
 # Tutorials
 
 1. [Basic walkthrough notebook](notebooks/walkthrough-basic.ipynb)
+1. [A walkthrough of the phase linking algorithm](notebooks/theory-phase-linking.ipynb)
 1. [Compare phase linking algorithms on simulated data](notebooks/simulate-demo.ipynb)
 1. [Solving systems of unwrapped interferograms using $L_1$ norm minimization](notebooks/theory-l1-invert-congruence.ipynb)
 1. [Demonstrating high-pass spatial filtering effects with `dolphin.filter`](notebooks/demo-filtering-sizes.ipynb)
