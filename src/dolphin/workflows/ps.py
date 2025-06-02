@@ -108,10 +108,10 @@ def run(
         block_shape=cfg.worker_settings.block_shape,
     )
     # Save a looked version of the PS mask too
-    strides = cfg.output_options.strides
+    strides_dict = cfg.output_options.strides.model_dump()
     if compute_looked:
         ps_looked_file, amp_disp_looked = dolphin.ps.multilook_ps_files(
-            strides=strides,
+            strides=strides_dict,
             ps_mask_file=cfg.ps_options._output_file,
             amp_dispersion_file=cfg.ps_options._amp_dispersion_file,
         )

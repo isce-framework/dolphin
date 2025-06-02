@@ -4,18 +4,17 @@ import logging
 from pathlib import Path
 from typing import Annotated, Any, Optional
 
+import tyro
 from opera_utils import get_burst_id, get_dates, sort_files_by_date
 from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
-    StringConstraints,
     field_validator,
     model_validator,
 )
 
 from dolphin import constants
-from dolphin._types import TropoModel, TropoType
 
 from ._common import (
     InputOptions,
@@ -44,35 +43,6 @@ class CorrectionOptions(BaseModel, extra="forbid"):
     _atm_directory: Path = Path("atmosphere")
     _iono_date_fmt: list[str] = ["%j0.%y", "%Y%j0000"]
 
-    troposphere_files: list[Path] = Field(
-        default_factory=list,
-        description=(
-            "List of weather-model files (one per date) for tropospheric corrections"
-        ),
-    )
-
-    tropo_date_fmt: str = Field(
-        "%Y%m%d",
-        description="Format of dates contained in weather-model filenames",
-    )
-
-    tropo_package: Annotated[str, StringConstraints(to_lower=True)] = Field(
-        "pyaps",
-        description="Package for tropospheric correction. Choices: pyaps, raider",
-    )
-
-    tropo_model: TropoModel = Field(
-        TropoModel.ECMWF, description="source of the atmospheric model."
-    )
-
-    tropo_delay_type: TropoType = Field(
-        TropoType.COMB,
-        description=(
-            "Tropospheric delay type to calculate, comb contains both wet "
-            "and dry delays."
-        ),
-    )
-
     ionosphere_files: list[Path] = Field(
         default_factory=list,
         description=(
@@ -93,9 +63,7 @@ class CorrectionOptions(BaseModel, extra="forbid"):
         description="DEM file for tropospheric/ topographic phase corrections.",
     )
 
-    @field_validator(
-        "troposphere_files", "ionosphere_files", "geometry_files", mode="before"
-    )
+    @field_validator("ionosphere_files", "geometry_files", mode="before")
     @classmethod
     def _to_empty_list(cls, v):
         return v if v is not None else []
@@ -106,13 +74,19 @@ class DisplacementWorkflow(WorkflowBase):
 
     # Paths to input/output files
     input_options: InputOptions = Field(default_factory=InputOptions)
-    cslc_file_list: list[Path] = Field(
+    cslc_file_list: Annotated[
+        list[Path],
+        # Add aliases for the CLI
+        tyro.conf.arg(aliases=("--cslc", "--slc-files")),
+    ] = Field(
         default_factory=list,
         description=(
             "list of CSLC files, or newline-delimited file "
             "containing list of CSLC files."
         ),
     )
+    require_cslc_files: bool = Field(True, description="", exclude=True)
+
     output_options: OutputOptions = Field(default_factory=OutputOptions)
 
     # Options for each step in the workflow
@@ -146,7 +120,6 @@ class DisplacementWorkflow(WorkflowBase):
     )
     unwrap_options: UnwrapOptions = Field(default_factory=UnwrapOptions)
     timeseries_options: TimeseriesOptions = Field(default_factory=TimeseriesOptions)
-    correction_options: CorrectionOptions = Field(default_factory=CorrectionOptions)
 
     # internal helpers
     # Stores the list of directories to be created by the workflow
@@ -162,6 +135,8 @@ class DisplacementWorkflow(WorkflowBase):
 
     @model_validator(mode="after")
     def _check_input_files_exist(self) -> DisplacementWorkflow:
+        if not self.require_cslc_files:
+            return self
         file_list = self.cslc_file_list
         if not file_list:
             msg = "Must specify list of input SLC files."
