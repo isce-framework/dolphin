@@ -116,7 +116,7 @@ def _get_matching_mask(
 ) -> Path:
     """Create a mask with the same size/projection as `match_file`."""
     # Check that the input mask is the same size as the ifgs:
-    if io.get_raster_xysize(mask_file) == match_file:
+    if io.get_raster_xysize(mask_file) == io.get_raster_xysize(match_file):
         logger.info(f"Using {mask_file} to mask during unwrapping")
         output_mask = Path(mask_file)
     else:
