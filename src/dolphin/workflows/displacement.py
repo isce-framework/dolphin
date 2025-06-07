@@ -244,6 +244,7 @@ def run(
             corr_paths=stitched_paths.interferometric_corr_paths,
             # TODO: Right now we don't have the option to pick a different candidate
             # or quality file. Figure out if this is worth exposing
+            reference_point=cfg.timeseries_options.reference_point,
             quality_file=stitched_paths.temp_coh_file,
             reference_candidate_threshold=0.95,
             output_dir=ts_opts._directory,
