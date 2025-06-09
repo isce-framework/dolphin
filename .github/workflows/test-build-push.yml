@@ -53,7 +53,7 @@ jobs:
       - name: Install test dependencies
         # Remove pytest pin when fixed: https://github.com/pytest-dev/pytest-cov/issues/693
         run: |
-          python -m pip install -r tests/requirements.txt "pytest<8.4" "ortools!=9.13"
+          python -m pip install -r tests/requirements.txt "pytest<8.4" "ortools!=9.13.*"
           python -m pip install --no-deps \
             "snaphu>=0.4.0" \
             git+https://github.com/isce-framework/tophu@main \
