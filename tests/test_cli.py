@@ -1,5 +1,5 @@
 import sys
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from pathlib import Path
 
@@ -10,6 +10,17 @@ from dolphin.cli import main
 
 # Match the start of help output
 HELP_LINE = "usage: dolphin"
+
+
+def test_empty(monkeypatch: pytest.MonkeyPatch):
+    with monkeypatch.context() as m:
+        m.setattr(sys, "argv", ["dolphin"])
+        f = StringIO()
+        with redirect_stderr(f), pytest.raises(SystemExit):
+            main()
+
+        help_text = f.getvalue()
+        assert "Required options" in help_text
 
 
 def test_help(monkeypatch: pytest.MonkeyPatch):
