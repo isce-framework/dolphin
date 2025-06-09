@@ -21,6 +21,7 @@ jobs:
             spec: >-
               isce3-cpu
               dask
+              numpy<2.3
 
       fail-fast: true
     name: ${{ matrix.os }} • ${{ matrix.deps.label }}
@@ -58,7 +59,7 @@ jobs:
           # TODO: remove when this is resolved:
           # https://github.com/pytest-dev/pytest-cov/issues/693
           # https://github.com/numba/numba/blob/release0.61/numba/__init__.py#L42-L45
-          pip install "pytest<8.4" "numpy<2.3"
+          pip install "pytest<8.4"
       - name: Enable numba boundscheck for better error catching
         run: |
           echo "NUMBA_BOUNDSCHECK=1" >> $GITHUB_ENV
