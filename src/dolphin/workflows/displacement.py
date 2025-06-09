@@ -114,9 +114,9 @@ def run(
     ]
     for _, burst_cfg in wrapped_phase_cfgs:
         burst_cfg.create_dir_tree()
-    # Remove the mid-level directories which will be empty due to re-grouping
-    _remove_dir_if_empty(cfg.phase_linking._directory)
-    _remove_dir_if_empty(cfg.ps_options._directory)
+        # Remove the mid-level directories which will be empty due to re-grouping
+        _remove_dir_if_empty(burst_cfg.timeseries_options._directory)
+        _remove_dir_if_empty(burst_cfg.unwrap_options._directory)
 
     ifg_file_list: list[Path] = []
     temp_coh_file_list: list[Path] = []
@@ -244,6 +244,7 @@ def run(
             corr_paths=stitched_paths.interferometric_corr_paths,
             # TODO: Right now we don't have the option to pick a different candidate
             # or quality file. Figure out if this is worth exposing
+            reference_point=cfg.timeseries_options.reference_point,
             quality_file=stitched_paths.temp_coh_file,
             reference_candidate_threshold=0.95,
             output_dir=ts_opts._directory,

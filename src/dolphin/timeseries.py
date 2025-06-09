@@ -52,7 +52,7 @@ def run(
     correlation_threshold: float = 0.0,
     block_shape: tuple[int, int] = (256, 256),
     num_threads: int = 4,
-    reference_point: tuple[int, int] = (-1, -1),
+    reference_point: tuple[int, int] | None = None,
     wavelength: float | None = None,
     add_overviews: bool = True,
     extra_reference_date: datetime | None = None,
@@ -141,7 +141,7 @@ def run(
     unwrapped_paths = sorted(unwrapped_paths, key=str)
     Path(output_dir).mkdir(exist_ok=True, parents=True)
 
-    if reference_point == (-1, -1):
+    if reference_point is None:
         logger.info("Selecting a reference point for unwrapped interferograms")
         if quality_file is None:
             raise ValueError("Must provide quality_file if not reference_point given")

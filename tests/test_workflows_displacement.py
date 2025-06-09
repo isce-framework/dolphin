@@ -28,6 +28,9 @@ def test_displacement_run_single(opera_slc_files: list[Path], tmpdir):
             phase_linking={
                 "ministack_size": 500,
             },
+            timeseries_options={
+                "reference_point": (5, 6),
+            },
         )
         paths = displacement.run(cfg)
 
@@ -58,6 +61,18 @@ def test_displacement_run_single(opera_slc_files: list[Path], tmpdir):
         assert get_raster_nodata(paths.unwrapped_paths[0]) == get_raster_nodata(
             paths.timeseries_paths[0]
         )
+
+        # Check the structure of the per-burst wrapped phase directories
+        burst_dir = next(iter(paths.comp_slc_dict.values()))[0].parent.parent
+        assert (burst_dir / "PS").exists()
+        assert (burst_dir / "linked_phase").exists()
+        assert (burst_dir / "interferograms").exists()
+        # Check the non-phase linking folders were removed
+        assert not (burst_dir / "unwrapped").exists()
+        assert not (burst_dir / "timeseries").exists()
+
+        # Check the reference point used
+        assert paths.reference_point == (5, 6)
 
 
 def test_displacement_run_single_official_opera_naming(
