@@ -18,6 +18,7 @@ jobs:
         deps:
           - label: Latest
             # we can't specify `tophu` for conda, not available on mac
+            # Numba pin: https://github.com/numba/numba/blob/release0.61/numba/__init__.py#L42-L45
             spec: >-
               isce3-cpu
               dask
@@ -46,21 +47,17 @@ jobs:
             channels:
               - conda-forge
       - name: Install
+        # TODO: remove ortools pin when fixed: https://github.com/google/or-tools/issues/4674
         run: |
+          python -m pip install --no-deps .
+      - name: Install test dependencies
+        # Remove pytest pin when fixed: https://github.com/pytest-dev/pytest-cov/issues/693
+        run: |
+          python -m pip install -r tests/requirements.txt "pytest<8.4" "ortools!=9.13"
           python -m pip install --no-deps \
             "snaphu>=0.4.0" \
             git+https://github.com/isce-framework/tophu@main \
             git+https://github.com/isce-framework/whirlwind@40defb38d2d6deca2819934788ebbc57e418e32d
-          # TODO: remove ortools pin when fixed: https://github.com/google/or-tools/issues/4674
-          python -m pip install spurt>=0.1.1 "ortools~=9.13"
-          python -m pip install --no-deps .
-      - name: Install test dependencies
-        run: |
-          pip install -r tests/requirements.txt
-          # TODO: remove when this is resolved:
-          # https://github.com/pytest-dev/pytest-cov/issues/693
-          # https://github.com/numba/numba/blob/release0.61/numba/__init__.py#L42-L45
-          pip install "pytest<8.4"
       - name: Enable numba boundscheck for better error catching
         run: |
           echo "NUMBA_BOUNDSCHECK=1" >> $GITHUB_ENV
