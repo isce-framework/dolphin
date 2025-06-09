@@ -3,6 +3,17 @@ import os
 
 def main() -> int:
     """Top-level command line interface to the workflows."""
+    import sys
+
+    from dolphin import __version__
+
+    # TODO: Is there any way to slot this into tyro's argparse
+    # Only found this hacky way
+    # https://github.com/brentyi/tyro/issues/132#issuecomment-1978319762
+    if sys.argv[1] == "--version":
+        print(__version__)
+        raise SystemExit(os.EX_OK)
+
     import tyro
 
     from dolphin.filtering import filter_rasters
@@ -16,14 +27,10 @@ def main() -> int:
             "config": ConfigCli,
             "unwrap": run_unwrap,
             "timeseries": run_timeseries,
-            # "velocity": create_velocity,
             "filter": filter_rasters,
         },
         prog=__package__,
     )
-
-    # TODO: Check how to slot this into tyro's argparse
-    # parser.add_argument("--version", action="version", version=__version__)
 
     return os.EX_OK
 

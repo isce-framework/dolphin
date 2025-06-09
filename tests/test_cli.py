@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from dolphin import __version__
 from dolphin.cli import main
 
 # Match the start of help output
@@ -21,6 +22,17 @@ def test_help(monkeypatch: pytest.MonkeyPatch):
         # Get help text by capturing stdout when --help is passed.
         help_text = f.getvalue()
         assert HELP_LINE in help_text
+
+
+def test_version(monkeypatch: pytest.MonkeyPatch):
+    with monkeypatch.context() as m:
+        m.setattr(sys, "argv", ["dolphin", "--version"])
+        f = StringIO()
+        with redirect_stdout(f), pytest.raises(SystemExit):
+            main()
+
+        version_text = f.getvalue()
+        assert __version__ in version_text
 
 
 @pytest.mark.parametrize("sub_cmd", ["run", "config", "filter", "unwrap"])
