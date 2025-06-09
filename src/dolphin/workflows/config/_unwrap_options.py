@@ -273,8 +273,6 @@ class SpurtOptions(BaseModel, extra="forbid"):
             " unwrapping (which are otherwise left as nan)."
         ),
     )
-    # TODO: do we want to allow a "AND" or "OR" option, so users can pick if they want
-    # `good_sim & good_temp_coh`, or `good_sim | good_temp_coh`
     general_settings: SpurtGeneralSettings = Field(default_factory=SpurtGeneralSettings)
     tiler_settings: SpurtTilerSettings = Field(default_factory=SpurtTilerSettings)
     solver_settings: SpurtSolverSettings = Field(default_factory=SpurtSolverSettings)

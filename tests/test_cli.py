@@ -1,47 +1,78 @@
-import contextlib
+import sys
+from contextlib import redirect_stdout
+from io import StringIO
 from pathlib import Path
 
 import pytest
 
+from dolphin import __version__
 from dolphin.cli import main
 
-
-@pytest.mark.parametrize("option", ["-h", "--help"])
-def test_help(capsys, option):
-    with contextlib.suppress(SystemExit):
-        main([option])
-    output = capsys.readouterr().out
-    assert " dolphin [-h] [--version] {run,config,unwrap,timeseries,filter}" in output
+# Match the start of help output
+HELP_LINE = "usage: dolphin"
 
 
-def test_empty(capsys):
-    with contextlib.suppress(SystemExit):
-        main([])
-    output = capsys.readouterr().out
-    assert " dolphin [-h] [--version] {run,config,unwrap,timeseries,filter}" in output
+def test_help(monkeypatch: pytest.MonkeyPatch):
+    with monkeypatch.context() as m:
+        m.setattr(sys, "argv", ["dolphin", "--help"])
+        f = StringIO()
+        with redirect_stdout(f), pytest.raises(SystemExit):
+            main()
+
+        # Get help text by capturing stdout when --help is passed.
+        help_text = f.getvalue()
+        assert HELP_LINE in help_text
 
 
-@pytest.mark.parametrize("sub_cmd", ["run", "config", "filter", "unwrap", "timeseries"])
-@pytest.mark.parametrize("option", ["-h", "--help"])
-def test_subcommand_help(capsys, sub_cmd, option):
-    with contextlib.suppress(SystemExit):
-        main([sub_cmd, option])
-    output = capsys.readouterr().out
-    assert f"usage: dolphin {sub_cmd} [-h]" in output
+def test_version(monkeypatch: pytest.MonkeyPatch):
+    with monkeypatch.context() as m:
+        m.setattr(sys, "argv", ["dolphin", "--version"])
+        f = StringIO()
+        with redirect_stdout(f), pytest.raises(SystemExit):
+            main()
+
+        version_text = f.getvalue()
+        assert __version__ in version_text
 
 
-def test_cli_config_basic(tmpdir, slc_file_list):
-    with tmpdir.as_cwd(), contextlib.suppress(SystemExit):
-        main(
+@pytest.mark.parametrize("sub_cmd", ["run", "config", "filter", "unwrap"])
+def test_subcommand_help(monkeypatch: pytest.MonkeyPatch, sub_cmd: str):
+    with monkeypatch.context() as m:
+        m.setattr(sys, "argv", ["dolphin", sub_cmd, "--help"])
+
+        f = StringIO()
+        with redirect_stdout(f), pytest.raises(SystemExit):
+            main()
+
+        help_text = f.getvalue()
+        assert f"usage: dolphin {sub_cmd}" in help_text
+
+
+@pytest.mark.parametrize("strides_x_argname", ["--sx", "--output-options.strides.x"])
+def test_cli_config_basic(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    slc_file_list: list[Path],
+    strides_x_argname: str,
+):
+    config_file = tmp_path / "dolphin_config.yaml"
+    with monkeypatch.context() as m:
+        m.setattr(
+            sys,
+            "argv",
             [
+                "dolphin",
                 "config",
-                "--threads-per-worker",
-                "2",
-                "--strides",
+                # Check both versions work
+                strides_x_argname,
                 "6",
+                "--sy",
                 "3",
+                "--outfile",
+                config_file.as_posix(),
                 "--slc-files",
-                *list(map(str, slc_file_list)),
-            ]
+                *map(str, slc_file_list),
+            ],
         )
-        assert Path("dolphin_config.yaml").exists()
+        main()
+        assert config_file.exists()

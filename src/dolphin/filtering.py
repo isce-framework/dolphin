@@ -189,10 +189,6 @@ def filter_rasters(
 ) -> list[Path]:
     """Filter a list of unwrapped interferogram files using a long-wavelength filter.
 
-    Remove long-wavelength components from each unwrapped interferogram.
-    It can optionally use temporal coherence, correlation, and connected component
-    information for masking.
-
     Parameters
     ----------
     unw_filenames : list[Path]
@@ -224,7 +220,10 @@ def filter_rasters(
 
     Notes
     -----
-    - If temporal_coherence_filename is provided, pixels with coherence < 0.5 are masked
+    Remove long-wavelength components from each unwrapped interferogram.
+    It can optionally use temporal coherence, correlation, and connected component
+    information for masking.
+
 
     """
     from dolphin import io

@@ -17,7 +17,7 @@ from scipy import ndimage
 
 from dolphin import io
 from dolphin._overviews import ImageType, create_overviews
-from dolphin._types import PathOrStr, ReferencePoint
+from dolphin._types import ReferencePoint
 from dolphin.utils import flatten, format_dates, full_suffix, get_nearest_date_idx
 
 T = TypeVar("T")
@@ -39,16 +39,16 @@ class ReferencePointError(ValueError):
 
 
 def run(
-    unwrapped_paths: Sequence[PathOrStr],
-    conncomp_paths: Sequence[PathOrStr] | None,
-    quality_file: PathOrStr,
-    output_dir: PathOrStr,
+    unwrapped_paths: Sequence[Path | str],
+    conncomp_paths: Sequence[Path | str] | None,
+    output_dir: Path | str,
+    quality_file: Path | str | None = None,
     method: InversionMethod = InversionMethod.L1,
     reference_candidate_threshold: float = 0.95,
     run_velocity: bool = False,
-    corr_paths: Sequence[PathOrStr] | None = None,
+    corr_paths: Sequence[Path | str] | None = None,
     weight_velocity_by_corr: bool = False,
-    velocity_file: Optional[PathOrStr] = None,
+    velocity_file: Optional[Path | str] = None,
     correlation_threshold: float = 0.0,
     block_shape: tuple[int, int] = (256, 256),
     num_threads: int = 4,
@@ -66,7 +66,7 @@ def run(
         Sequence unwrapped interferograms to invert.
     conncomp_paths : Sequence[Path]
         Sequence connected component files, one per file in `unwrapped_paths`
-    quality_file: PathOrStr
+    quality_file: Path | str
         A file with the same size as each raster, like amplitude dispersion or
         temporal coherence
     output_dir : Path
@@ -143,6 +143,8 @@ def run(
 
     if reference_point is None:
         logger.info("Selecting a reference point for unwrapped interferograms")
+        if quality_file is None:
+            raise ValueError("Must provide quality_file if not reference_point given")
         ref_point = select_reference_point(
             quality_file=quality_file,
             output_dir=Path(output_dir),
@@ -154,9 +156,15 @@ def run(
 
     ifg_date_pairs = [get_dates(f, fmt=file_date_fmt) for f in unwrapped_paths]
     sar_dates = sorted(set(flatten(ifg_date_pairs)))
+
     # if we did single-reference interferograms, for `n` sar dates, we will only have
     # `n-1` interferograms. Any more than n-1 ifgs means we need to invert
-    is_single_reference = len(unwrapped_paths) == len(sar_dates) - 1
+    reference_dates = [pair[0] for pair in ifg_date_pairs]
+    is_single_reference = (
+        (len(unwrapped_paths) == len(sar_dates) - 1)
+        and (len(set(reference_dates)) == 1)
+        and reference_dates[-1] == sar_dates[0]
+    )
     # TODO: Do we ever want to invert this case: the "trivial" network,
     # which has 1 ifg per date difference, but a moving reference date?
     # The extra condition to check is
@@ -305,9 +313,9 @@ def _redo_reference(
 
 
 def _convert_and_reference(
-    unwrapped_paths: Sequence[PathOrStr],
+    unwrapped_paths: Sequence[Path | str],
     *,
-    output_dir: PathOrStr,
+    output_dir: Path | str,
     reference_point: ReferencePoint,
     wavelength: float | None = None,
 ) -> list[Path]:
@@ -703,11 +711,11 @@ def datetime_to_float(dates: Sequence[DateOrDatetime]) -> np.ndarray:
 
 
 def create_velocity(
-    unw_file_list: Sequence[PathOrStr],
-    output_file: PathOrStr,
+    unw_file_list: Sequence[Path | str],
+    output_file: Path | str,
     reference: ReferencePoint | None = None,
     date_list: Sequence[DateOrDatetime] | None = None,
-    cor_file_list: Sequence[PathOrStr] | None = None,
+    cor_file_list: Sequence[Path | str] | None = None,
     cor_threshold: float = 0.2,
     block_shape: tuple[int, int] = (256, 256),
     num_threads: int = 4,
@@ -722,9 +730,9 @@ def create_velocity(
 
     Parameters
     ----------
-    unw_file_list : Sequence[PathOrStr]
+    unw_file_list : Sequence[Path | str]
         List of unwrapped phase files.
-    output_file : PathOrStr
+    output_file : Path | str
         The output file to save the velocity to.
     reference : ReferencePoint, optional
         The (row, col) to use as reference before fitting the velocity.
@@ -733,7 +741,7 @@ def create_velocity(
     date_list : Sequence[DateOrDatetime], optional
         List of dates corresponding to the unwrapped phase files.
         If not provided, will be parsed from filenames in `unw_file_list`.
-    cor_file_list : Sequence[PathOrStr], optional
+    cor_file_list : Sequence[Path | str], optional
         List of correlation files to use for weighting the velocity estimation.
         If not provided, all weights are set to 1.
     cor_threshold : float, optional
@@ -847,8 +855,8 @@ class AverageFunc(Protocol):
 
 
 def create_temporal_average(
-    file_list: Sequence[PathOrStr],
-    output_file: PathOrStr,
+    file_list: Sequence[Path | str],
+    output_file: Path | str,
     block_shape: tuple[int, int] = (256, 256),
     num_threads: int = 4,
     average_func: Callable[[ArrayLike, int], np.ndarray] = np.nanmean,
@@ -858,9 +866,9 @@ def create_temporal_average(
 
     Parameters
     ----------
-    file_list : Sequence[PathOrStr]
+    file_list : Sequence[Path | str]
         List of files to average
-    output_file : PathOrStr
+    output_file : Path | str
         The output file to save the average to
     block_shape : tuple[int, int], optional
         The shape of the blocks to process in parallel.
@@ -904,11 +912,11 @@ def create_temporal_average(
 
 
 def invert_unw_network(
-    unw_file_list: Sequence[PathOrStr],
+    unw_file_list: Sequence[Path | str],
     reference: ReferencePoint,
-    output_dir: PathOrStr,
-    conncomp_file_list: Sequence[PathOrStr] | None = None,
-    cor_file_list: Sequence[PathOrStr] | None = None,
+    output_dir: Path | str,
+    conncomp_file_list: Sequence[Path | str] | None = None,
+    cor_file_list: Sequence[Path | str] | None = None,
     cor_threshold: float = 0.0,
     n_cor_looks: int = 1,
     ifg_date_pairs: Sequence[Sequence[DateOrDatetime]] | None = None,
@@ -922,18 +930,18 @@ def invert_unw_network(
 
     Parameters
     ----------
-    unw_file_list : Sequence[PathOrStr]
+    unw_file_list : Sequence[Path | str]
         List of unwrapped phase files.
     reference : ReferencePoint
         The reference point to use for the inversion.
         The data vector from `unw_file_list` at this point will be subtracted
         from all other points when solving.
-    output_dir : PathOrStr
+    output_dir : Path | str
         The directory to save the output files
-    conncomp_file_list : Sequence[PathOrStr], optional
+    conncomp_file_list : Sequence[Path | str], optional
         Sequence connected component files, one per file in `unwrapped_paths`.
         Used to ignore interferogram pixels whose connected component label is zero.
-    cor_file_list : Sequence[PathOrStr], optional
+    cor_file_list : Sequence[Path | str], optional
         List of correlation files to use for weighting the inversion.
         Cannot be used if `conncomp_file_list` is passed.
     cor_threshold : float, optional
@@ -1052,10 +1060,13 @@ def invert_unw_network(
 
     def read_and_solve(
         readers: Sequence[io.StackReader], rows: slice, cols: slice
-    ) -> tuple[slice, slice, np.ndarray]:
+    ) -> tuple[np.ndarray, slice, slice]:
         unw_reader = readers[0]
         stack = unw_reader[:, rows, cols]
         masked_pixel_sum: NDArray[np.bool_] = stack.mask.sum(axis=0)
+        # Ensure we have a 2d mask (i.e., not np.ma.nomask)
+        if masked_pixel_sum.ndim == 0:
+            masked_pixel_sum = np.zeros(stack.shape[1:], dtype=bool)
         # Mask the output if any inputs are missing
         masked_pixels = masked_pixel_sum > 0
         # Setup the (optional) second reader: either conncomps, or correlation
@@ -1188,10 +1199,10 @@ def correlation_to_variance(correlation: ArrayLike, nlooks: int) -> Array:
 
 def select_reference_point(
     *,
-    quality_file: PathOrStr,
+    quality_file: Path | str,
     output_dir: Path,
     candidate_threshold: float = 0.95,
-    ccl_file_list: Sequence[PathOrStr] | None = None,
+    ccl_file_list: Sequence[Path | str] | None = None,
     block_shape: tuple[int, int] = (256, 256),
     num_threads: int = 4,
 ) -> ReferencePoint:
@@ -1208,7 +1219,7 @@ def select_reference_point(
 
     Parameters
     ----------
-    quality_file: PathOrStr
+    quality_file: Path | str
         A file with the same size as each raster in `ccl_file_list` containing a quality
         metric, such as temporal coherence.
     output_dir: Path
@@ -1219,7 +1230,7 @@ def select_reference_point(
         Only pixels with values in `quality_file` greater than `candidate_threshold` are
         considered a candidate.
         Default = 0.95
-    ccl_file_list : Sequence[PathOrStr]
+    ccl_file_list : Sequence[Path | str]
         List of connected component label phase files.
     block_shape : tuple[int, int]
         Size of blocks to read from while processing `ccl_file_list`
@@ -1311,7 +1322,7 @@ def _read_reference_point(output_file: Path):
 
 def _get_largest_conncomp_mask(
     output_dir: Path,
-    ccl_file_list: Sequence[PathOrStr] | None = None,
+    ccl_file_list: Sequence[Path | str] | None = None,
     block_shape: tuple[int, int] = (256, 256),
     num_threads: int = 4,
 ) -> np.ndarray:
@@ -1465,8 +1476,8 @@ def invert_stack_l1(A: ArrayLike, dphi: ArrayLike) -> tuple[Array, Array]:
 
 
 def create_nonzero_conncomp_counts(
-    conncomp_file_list: Sequence[PathOrStr],
-    output_dir: PathOrStr,
+    conncomp_file_list: Sequence[Path | str],
+    output_dir: Path | str,
     ifg_date_pairs: Sequence[Sequence[DateOrDatetime]] | None = None,
     block_shape: tuple[int, int] = (256, 256),
     num_threads: int = 4,
@@ -1476,9 +1487,9 @@ def create_nonzero_conncomp_counts(
 
     Parameters
     ----------
-    conncomp_file_list : Sequence[PathOrStr]
+    conncomp_file_list : Sequence[Path | str]
         List of connected component files
-    output_dir : PathOrStr
+    output_dir : Path | str
         The directory to save the output files
     ifg_date_pairs : Sequence[Sequence[DateOrDatetime]], optional
         List of date pairs corresponding to the interferograms.

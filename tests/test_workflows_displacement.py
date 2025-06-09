@@ -96,8 +96,8 @@ def test_displacement_run_single_official_opera_naming(
         assert all(get_raster_units(p) == "radians" for p in paths.unwrapped_paths)
         assert all(get_raster_units(p) == "meters" for p in paths.timeseries_paths)
         assert all(full_suffix(p) == ".tif" for p in paths.timeseries_paths)
-        # nearest-1 network, so no residuals
-        assert paths.timeseries_residual_paths is None
+        assert paths.timeseries_residual_paths is not None
+        assert all(p.exists() for p in paths.timeseries_residual_paths)
 
 
 def run_displacement_stack(

@@ -35,7 +35,7 @@ def run_wrapped_phase_sequential(
     output_folder: Path,
     ministack_size: int,
     half_window: dict,
-    strides: Optional[dict] = None,
+    strides: Optional[dict[str, int]] = None,
     mask_file: Optional[Filename] = None,
     ps_mask_file: Optional[Filename] = None,
     amp_mean_file: Optional[Filename] = None,

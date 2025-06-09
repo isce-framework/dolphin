@@ -102,7 +102,7 @@ def run(
         dem_file=correction_options.dem_file,
         epsg=epsg,
         out_bounds=out_bounds,
-        strides=cfg.output_options.strides,
+        strides=cfg.output_options.strides.model_dump(),
     )
 
     if reference_point is None:

@@ -59,15 +59,15 @@ select = [
   "E",   # pycodestyle (errors)
   "W",   # pycodestyle (warnings)
   # "EM",  # flake8-errmsg
-  "EXE", # flake8-executable
-  "F",   # Pyflakes
-  "I",   # isort
-  "ISC", # flake8-implicit-str-concat
-  "N",   # pep8-naming
+  "EXE",    # flake8-executable
+  "F",      # Pyflakes
+  "I",      # isort
+  "ISC",    # flake8-implicit-str-concat
+  "N",      # pep8-naming
   "NPY201", # numpy 2.0 depgrcations
-  "PGH", # pygrep-hooks
-  "PIE", # flake8-pie
-  "PL",  # Pylint
+  "PGH",    # pygrep-hooks
+  "PIE",    # flake8-pie
+  "PL",     # Pylint
   # "PT",  # flake8-pytest-style
   "PTH", # flake8-use-pathlib
   "PYI", # flake8-pyi
@@ -100,7 +100,7 @@ exclude = ["scripts"]
 "**/__init__.py" = ["F401", "F403"]
 "tests/**" = ["D", "N", "PTH"]
 "benchmarks/**" = ["D", "N", "PTH", "RUF", "ARG002"]
-"docs/mdx_bib.py" = ["ALL"] # ignore the vendored code
+"docs/mdx_bib.py" = ["ALL"]                          # ignore the vendored code
 
 [tool.ruff.lint.flake8-unused-arguments]
 # Whether to allow unused variadic arguments, like *args and **kwargs.
@@ -126,4 +126,6 @@ filterwarnings = [
   "ignore:.*pkg_resources.*",
   # remove after https://github.com/conda-forge/h5py-feedstock/issues/122 is solved:
   "ignore:h5py is running against HDF5.*:UserWarning",
+  # DeprecationWarning: ast.Str
+  "ignore:ast.Str is deprecated.*:DeprecationWarning",
 ]

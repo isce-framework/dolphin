@@ -132,9 +132,9 @@ def run(
         )
 
     # Save a looked version of the PS mask too
-    strides = cfg.output_options.strides
+    strides_dict = cfg.output_options.strides.model_dump()
     ps_looked_file, amp_disp_looked_file = ps.multilook_ps_files(
-        strides=strides,
+        strides=strides_dict,
         ps_mask_file=cfg.ps_options._output_file,
         amp_dispersion_file=cfg.ps_options._amp_dispersion_file,
     )
@@ -192,7 +192,7 @@ def run(
             output_reference_idx=cfg.phase_linking.output_reference_idx,
             new_compressed_reference_idx=new_compressed_slc_reference_idx,
             half_window=cfg.phase_linking.half_window.model_dump(),
-            strides=strides,
+            strides=strides_dict,
             use_evd=cfg.phase_linking.use_evd,
             beta=cfg.phase_linking.beta,
             zero_correlation_threshold=cfg.phase_linking.zero_correlation_threshold,

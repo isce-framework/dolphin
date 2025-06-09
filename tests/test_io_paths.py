@@ -16,6 +16,7 @@ pytestmark = pytest.mark.filterwarnings(
     "ignore::rasterio.errors.NotGeoreferencedWarning",
     # Botocore: DeprecationWarning: datetime.datetime.utcnow()
     "ignore:.*datetime.*:DeprecationWarning:botocore",
+    "ignore:.*io.FileIO.*:pytest.PytestUnraisableExceptionWarning",
 )
 
 

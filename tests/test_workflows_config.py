@@ -1,5 +1,4 @@
 import shutil
-from datetime import datetime, timezone
 from pathlib import Path
 
 import pydantic
@@ -106,7 +105,7 @@ def test_unwrap_options_defaults():
 
 def test_outputs_defaults():
     opts = config.OutputOptions()
-    assert opts.strides == {"x": 1, "y": 1}
+    assert opts.strides == config.Strides(x=1, y=1)
     assert opts.hdf5_creation_options == {
         "chunks": [128, 128],
         "compression": "gzip",
@@ -189,8 +188,6 @@ def test_input_find_slcs(slc_file_list_nc):
     )
     dict2 = opts2.model_dump()
 
-    dict1.pop("creation_time_utc")
-    dict2.pop("creation_time_utc")
     assert dict1 == dict2
 
 
@@ -339,9 +336,6 @@ def test_config_displacement_workflow_defaults(dir_with_1_slc):
 
     assert c.unwrap_options._directory == Path("unwrapped").resolve()
 
-    now = datetime.now(timezone.utc)
-    assert (now - c.creation_time_utc).seconds == 0
-
 
 def test_config_create_dir_tree(tmpdir, slc_file_list_nc):
     fname0 = "slc_20220101.nc"
@@ -424,7 +418,7 @@ def test_config_ps_workflow_defaults(dir_with_1_slc):
     )
 
     assert c.input_options == config.InputOptions(subdataset="data")
-    # Need to compare `model_fields` because the new instance of `PsOptions`
+    # Need to compare `model_dump` because the new instance of `PsOptions`
     assert c.output_options == config.OutputOptions()
     # has different private directories
-    assert c.ps_options.model_fields == config.PsOptions().model_fields
+    assert c.ps_options.model_dump() == config.PsOptions().model_dump()
