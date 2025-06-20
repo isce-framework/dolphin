@@ -68,6 +68,7 @@ test = [
   "shapely",
   "snaphu>=0.4.1",
   "spurt>=0.1.1",
+  "ortools!=9.13.*",
   "xarray>=2025",
 ]
 all = ["dolphin[test,docs]"]
