@@ -99,6 +99,9 @@ tqdm = ">=4.60"
 typing_extensions = ">=3.10"
 tyro = ">=0.9.20"
 
+# Like running pip install -e .
+[tool.pixi.pypi-dependencies]
+dolphin = { path = ".", editable = true }
 
 [tool.pixi.tasks]
 test = "python -m pytest"
