@@ -276,7 +276,7 @@ def run_wrapped_phase_single(
             # ### Save results ###
             for img, f in zip(
                 pl_output.cpx_phase[first_real_slc_idx:, out_trim_rows, out_trim_cols],
-                phase_linked_slc_files,
+                phase_linked_slc_files, strict=False,
             ):
                 writer.queue_write(img, f, out_rows.start, out_cols.start)
 

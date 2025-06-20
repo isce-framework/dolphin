@@ -407,14 +407,14 @@ def test_bad_sizes(slc_file_list, raster_10_by_20):
 
 def test_iter_blocks(vrt_stack):
     loader = EagerLoader(reader=vrt_stack, block_shape=(5, 5))
-    blocks, slices = zip(*list(loader.iter_blocks()))
+    blocks, slices = zip(*list(loader.iter_blocks()), strict=False)
     # (5, 10) total shape, breaks into 5x5 blocks
     assert len(blocks) == 2
     for b in blocks:
         assert b.shape == (len(vrt_stack), 5, 5)
 
     loader = EagerLoader(reader=vrt_stack, block_shape=(5, 2))
-    blocks, slices = zip(*list(loader.iter_blocks()))
+    blocks, slices = zip(*list(loader.iter_blocks()), strict=False)
     assert len(blocks) == 5
     for b in blocks:
         assert b.shape == (len(vrt_stack), 5, 2)
@@ -424,7 +424,7 @@ def test_tiled_iter_blocks(tmp_path, tiled_file_list):
     outfile = tmp_path / "stack.vrt"
     vrt_stack = VRTStack(tiled_file_list, outfile=outfile)
     loader = EagerLoader(reader=vrt_stack, block_shape=(32, 32))
-    blocks, slices = zip(*list(loader.iter_blocks()))
+    blocks, slices = zip(*list(loader.iter_blocks()), strict=False)
     # (100, 200) total shape, breaks into 32x32 blocks
     assert len(blocks) == len(slices) == 28
     for i, b in enumerate(blocks, start=1):
@@ -437,7 +437,7 @@ def test_tiled_iter_blocks(tmp_path, tiled_file_list):
                 assert b.shape == (len(vrt_stack), 32, 8)
 
     loader = EagerLoader(reader=vrt_stack, block_shape=(50, 100))
-    blocks, slices = zip(*list(loader.iter_blocks()))
+    blocks, slices = zip(*list(loader.iter_blocks()), strict=False)
     assert len(blocks) == len(slices) == 4
 
 
@@ -507,7 +507,7 @@ class TestEagerLoader:
         block_slice_tuples = list(loader.iter_blocks())
         assert not loader._thread.is_alive()
         assert len(block_slice_tuples) == 1
-        blocks, slices = zip(*list(block_slice_tuples))
+        blocks, slices = zip(*list(block_slice_tuples), strict=False)
         assert blocks[0].shape == (100, 200)
         rows, cols = slices[0]
         assert rows == slice(0, 100)
@@ -517,7 +517,7 @@ class TestEagerLoader:
         bs = (32, 32)
         reader = RasterReader.from_file(tiled_raster_100_by_200)
         loader = EagerLoader(reader=reader, block_shape=bs)
-        blocks, slices = zip(*list(loader.iter_blocks()))
+        blocks, slices = zip(*list(loader.iter_blocks()), strict=False)
 
         row_blocks = 100 // 32 + 1
         col_blocks = 200 // 32 + 1
@@ -532,7 +532,7 @@ class TestEagerLoader:
         # Block size that is a multiple of the raster size
         reader = RasterReader.from_file(tiled_raster_100_by_200)
         loader = EagerLoader(reader=reader, block_shape=(10, 20))
-        blocks, slices = zip(*list(loader.iter_blocks()))
+        blocks, slices = zip(*list(loader.iter_blocks()), strict=False)
 
         assert blocks[0].shape == (10, 20)
         for rs, cs in slices:
@@ -543,9 +543,9 @@ class TestEagerLoader:
         # Non-multiple block size
         reader = RasterReader.from_file(tiled_raster_100_by_200)
         loader = EagerLoader(reader=reader, block_shape=(32, 32))
-        blocks, slices = zip(*list(loader.iter_blocks()))
+        blocks, slices = zip(*list(loader.iter_blocks()), strict=False)
         assert blocks[0].shape == (32, 32)
-        for b, (rs, cs) in zip(blocks, slices):
+        for b, (rs, cs) in zip(blocks, slices, strict=False):
             assert b.shape == (rs.stop - rs.start, cs.stop - cs.start)
         loader.notify_finished()
 
@@ -560,7 +560,7 @@ class TestEagerLoader:
         bs = (100, 200)
         reader = RasterReader.from_file(tiled_raster_100_by_200)
         loader = EagerLoader(reader=reader, block_shape=bs)
-        blocks, slices = zip(*list(loader.iter_blocks()))
+        blocks, slices = zip(*list(loader.iter_blocks()), strict=False)
         loader.notify_finished()
 
         bs = (32, 32)
@@ -568,27 +568,27 @@ class TestEagerLoader:
         col_blocks = 200 // 32 + 1
         expected_num_blocks = row_blocks * col_blocks
         loader = EagerLoader(reader=reader, block_shape=bs)
-        blocks, slices = zip(*list(loader.iter_blocks()))
+        blocks, slices = zip(*list(loader.iter_blocks()), strict=False)
         assert len(blocks) == expected_num_blocks
         assert blocks[0].shape == bs
 
         # One nan should be fine, will get loaded
         reader = RasterReader.from_file(raster_with_nan)
         loader = EagerLoader(reader=reader, block_shape=bs)
-        blocks, slices = zip(*list(loader.iter_blocks()))
+        blocks, slices = zip(*list(loader.iter_blocks()), strict=False)
         loader.notify_finished()
         assert len(blocks) == expected_num_blocks
 
         # Now check entire block for a skipped block
         reader = RasterReader.from_file(raster_with_nan_block)
         loader = EagerLoader(reader=reader, block_shape=bs)
-        blocks, slices = zip(*list(loader.iter_blocks()))
+        blocks, slices = zip(*list(loader.iter_blocks()), strict=False)
         loader.notify_finished()
         assert len(blocks) == expected_num_blocks - 1
 
         # Now check entire block for a skipped block
         reader = RasterReader.from_file(raster_with_zero_block)
         loader = EagerLoader(reader=reader, block_shape=bs)
-        blocks, slices = zip(*list(loader.iter_blocks()))
+        blocks, slices = zip(*list(loader.iter_blocks()), strict=False)
         loader.notify_finished()
         assert len(blocks) == expected_num_blocks - 1
