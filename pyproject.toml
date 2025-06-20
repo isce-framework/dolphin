@@ -129,3 +129,38 @@ filterwarnings = [
   # DeprecationWarning: ast.Str
   "ignore:ast.Str is deprecated.*:DeprecationWarning",
 ]
+
+# Pixi configuration
+[tool.pixi.project]
+channels = ["conda-forge"]
+platforms = ["linux-64", "osx-64", "osx-arm64"]
+
+[tool.pixi.dependencies]
+python = ">=3.9"
+pip = ">=21.3"
+git = "*"
+gdal = ">=3.3"
+libgdal-netcdf = "*"
+libgdal-hdf5 = "*"
+h5py = ">=3.6"
+hdf5 = "!=1.12.2"
+jax = ">=0.4.19"
+numba = ">=0.56"
+numpy = ">=1.23"
+opera-utils = ">=0.4.1"
+pydantic = ">=2.1"
+pyproj = ">=3.3"
+rasterio = ">=1.3"
+"ruamel.yaml" = ">=0.15"
+scipy = ">=1.12"
+threadpoolctl = ">=3.0"
+tqdm = ">=4.60"
+typing_extensions = ">=3.10"
+tyro = ">=0.9.20"
+
+[tool.pixi.tasks]
+dolphin = "dolphin"
+test = "python -m pytest"
+lint = "ruff check src"
+format = "ruff format src"
+install-dev = "pip install -e ."
