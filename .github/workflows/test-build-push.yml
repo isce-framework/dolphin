@@ -31,14 +31,15 @@ jobs:
           cache: true
       - name: Install environment
         run: |
-          pixi install -e test
+          pixi install --environment test
       - name: Enable numba boundscheck for better error catching
         run: |
           echo "NUMBA_BOUNDSCHECK=1" >> $GITHUB_ENV
           echo "TQDM_DISABLE=1" >> $GITHUB_ENV
       - name: Test
+        # Run the task "test" inside the "test" environment with verbose output
         run: |
-          pixi run -e test pytest -n0 -vv --record-mode none
+          pixi run --environment test test -vv
 
   dockerize: # Based on Mintpy: https://github.com/insarlab/MintPy/blob/5ca554fef324b816f9130feec567e2cf463e41d2/.github/workflows/build-n-publish-to-pypi.yml
     name: Build Docker image and push to GitHub Container Registry

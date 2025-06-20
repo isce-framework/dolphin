@@ -105,11 +105,14 @@ dolphin = { path = ".", editable = true }
 
 [tool.pixi.tasks]
 test = "python -m pytest"
-check = "pre-commit run -a"
+check = "pre-commit run --all-files"
 
 [tool.pixi.feature.test.dependencies]
 isce3-cpu = "*"
 dask = "*"
+
+[tool.pixi.feature.test.pypi-dependencies]
+tophu = { git = "https://github.com/scottstanie/tophu.git", rev = "303470c203bfddb59bf4debdecd1fd949d0c8d54" }
 
 [tool.pixi.environments]
 default = { features = [], solve-group = "default" }
