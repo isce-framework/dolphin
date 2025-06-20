@@ -43,6 +43,7 @@ dynamic = ["version"]
 # extra requirements: `pip install dolphin[docs]` or `pip install .[docs]`
 [project.optional-dependencies]
 docs = [
+  "black[jupyter]",
   "markdown",
   "mkdocs",
   "mkdocs-gen-files",
@@ -51,12 +52,13 @@ docs = [
   "mkdocs-material",
   "mkdocs-section-index",
   "mkdocstrings",
+  "nbdime",
   "pybtex",
   "pymdown-extensions",
 ]
 test = [
   "asv",
-  "black",
+  "black[jupyter]",
   "boto3",
   "moto[server]",
   "pooch",
