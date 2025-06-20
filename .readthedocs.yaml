@@ -8,13 +8,9 @@ mkdocs:
 
 build:
   os: ubuntu-24.04
-  jobs:
-      create_environment:
-        - asdf plugin add pixi
-        - asdf install pixi latest
-        - asdf global pixi latest
-      install:
-        - pixi install -e docs
-      build:
-        html:
-          - pixi run -e docs -- mkdocs build --clean --site-dir $READTHEDOCS_OUTPUT/html --config-file mkdocs.yml
+  commands:
+    - asdf plugin add pixi
+    - asdf install pixi latest
+    - asdf global pixi latest
+    - pixi install -e docs
+    - pixi run -e docs -- mkdocs build --clean --site-dir $READTHEDOCS_OUTPUT/html --config-file mkdocs.yml
