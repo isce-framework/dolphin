@@ -102,7 +102,7 @@ def create_ps(
     # Initialize the output files with zeros
     file_list = [output_file, output_amp_dispersion_file, output_amp_mean_file]
     for fn, dtype, nodata in zip(
-        file_list, FILE_DTYPES.values(), NODATA_VALUES.values()
+        file_list, FILE_DTYPES.values(), NODATA_VALUES.values(), strict=False
     ):
         io.write_arr(
             arr=None,
@@ -160,7 +160,7 @@ def create_ps(
     writer.notify_finished()
     # Repack for better compression
     logger.info("Repacking PS rasters for better compression")
-    for fn, opt in zip(file_list, REPACK_OPTIONS.values()):
+    for fn, opt in zip(file_list, REPACK_OPTIONS.values(), strict=False):
         # Repack to a temp, then overwrite
         repack_raster(Path(fn), output_dir=None, **opt)
     logger.info("Finished writing out PS files")

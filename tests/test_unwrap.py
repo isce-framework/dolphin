@@ -305,7 +305,7 @@ class TestSpurt:
         name_template = d / f"{slc_date_list[0].strftime('%Y%m%d')}_{{date}}.int.tif"
 
         file_list = []
-        for cur_date, cur_ifg in zip(slc_date_list[1:], ifg_stack):
+        for cur_date, cur_ifg in zip(slc_date_list[1:], ifg_stack, strict=False):
             fname = str(name_template).format(date=cur_date.strftime("%Y%m%d"))
             file_list.append(Path(fname))
             io.write_arr(arr=cur_ifg, output_name=fname)

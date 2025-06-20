@@ -112,13 +112,19 @@ class BaseStack(BaseModel):
     @property
     def compressed_slc_file_list(self) -> list[Filename]:
         """List of compressed SLCs for this ministack."""
-        return [f for f, is_comp in zip(self.file_list, self.is_compressed) if is_comp]
+        return [
+            f
+            for f, is_comp in zip(self.file_list, self.is_compressed, strict=False)
+            if is_comp
+        ]
 
     @property
     def real_slc_file_list(self) -> list[Filename]:
         """List of real SLCs for this ministack."""
         return [
-            f for f, is_comp in zip(self.file_list, self.is_compressed) if not is_comp
+            f
+            for f, is_comp in zip(self.file_list, self.is_compressed, strict=False)
+            if not is_comp
         ]
 
     def get_date_str_list(self) -> list[str]:
@@ -379,7 +385,9 @@ class MiniStackInfo(BaseStack):
         real_slc_files: list[Filename] = []
         real_slc_dates: list[Sequence[DateOrDatetime]] = []
         comp_slc_files: list[Filename] = []
-        for f, d, is_comp in zip(self.file_list, self.dates, self.is_compressed):
+        for f, d, is_comp in zip(
+            self.file_list, self.dates, self.is_compressed, strict=False
+        ):
             if is_comp:
                 comp_slc_files.append(f)
             else:

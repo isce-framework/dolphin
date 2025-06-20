@@ -257,5 +257,5 @@ def _get_input_dates(
     # directly pass in dates?)
     return [
         dates[:1] if not is_comp else dates[:3]
-        for dates, is_comp in zip(input_dates, is_compressed)
+        for dates, is_comp in zip(input_dates, is_compressed, strict=False)
     ]
