@@ -10,7 +10,7 @@ def main() -> int:
     # TODO: Is there any way to slot this into tyro's argparse
     # Only found this hacky way
     # https://github.com/brentyi/tyro/issues/132#issuecomment-1978319762
-    if sys.argv[1] == "--version":
+    if len(sys.argv) > 1 and sys.argv[1] == "--version":
         print(__version__)
         raise SystemExit(os.EX_OK)
 
