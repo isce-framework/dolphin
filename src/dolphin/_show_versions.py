@@ -12,7 +12,6 @@ import platform
 import re
 import sys
 from importlib.metadata import metadata
-from typing import Optional
 
 import dolphin
 
@@ -35,7 +34,14 @@ def _get_sys_info() -> dict[str, str]:
     }
 
 
-def _get_unwrapping_options() -> dict[str, Optional[str]]:
+def _get_version(name: str) -> str | None:
+    try:
+        return importlib.metadata.version(name)
+    except importlib.metadata.PackageNotFoundError:
+        return None
+
+
+def _get_unwrapping_options() -> dict[str, str | None]:
     """Information on possible phase unwrapping libraries.
 
     Returns
@@ -45,15 +51,15 @@ def _get_unwrapping_options() -> dict[str, Optional[str]]:
 
     """
     return {
-        "snaphu": importlib.metadata.version("snaphu"),
-        "spurt": importlib.metadata.version("spurt"),
-        "isce3": importlib.metadata.version("isce3"),
-        "tophu": importlib.metadata.version("tophu"),
-        "whirlwind": importlib.metadata.version("whirlwind"),
+        "snaphu": _get_version("snaphu"),
+        "spurt": _get_version("spurt"),
+        "isce3": _get_version("isce3"),
+        "tophu": _get_version("tophu"),
+        "whirlwind": _get_version("whirlwind"),
     }
 
 
-def _get_deps_info() -> dict[str, Optional[str]]:
+def _get_deps_info() -> dict[str, str | None]:
     """Overview of the installed version of main dependencies.
 
     Returns
@@ -74,10 +80,10 @@ def _get_deps_info() -> dict[str, Optional[str]]:
     deps = [dep.replace("ruamel-yaml", "ruamel.yaml") for dep in deps]
     # Add `osgeo` for gdal (not listed in pip requirements)
     deps += ["gdal"]
-    return {name: importlib.metadata.version(name) for name in deps}
+    return {name: _get_version(name) for name in deps}
 
 
-def _get_gpu_info() -> dict[str, Optional[str]]:
+def _get_gpu_info() -> dict[str, str | None]:
     """Overview of the optional GPU packages.
 
     Returns
@@ -89,7 +95,7 @@ def _get_gpu_info() -> dict[str, Optional[str]]:
     from dolphin.utils import gpu_is_available
 
     return {
-        "jax": importlib.metadata.version("jax"),
+        "jax": _get_version("jax"),
         "gpu_is_available": str(gpu_is_available()),
     }
 

@@ -58,7 +58,7 @@ test = [
   "asv",
   "black",
   "boto3",
-  "moto",
+  "moto[server]",
   "pooch",
   "pre-commit",
   "pytest",
