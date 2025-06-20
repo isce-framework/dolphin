@@ -35,20 +35,6 @@ def _get_sys_info() -> dict[str, str]:
     }
 
 
-def _get_version(module_name: str) -> Optional[str]:
-    if module_name in sys.modules:
-        mod = sys.modules[module_name]
-    else:
-        try:
-            mod = importlib.import_module(module_name.replace("-", "_"))
-        except ImportError:
-            return None
-    try:
-        return mod.__version__
-    except AttributeError:
-        return mod.version
-
-
 def _get_unwrapping_options() -> dict[str, Optional[str]]:
     """Information on possible phase unwrapping libraries.
 
@@ -59,11 +45,11 @@ def _get_unwrapping_options() -> dict[str, Optional[str]]:
 
     """
     return {
-        "snaphu": _get_version("snaphu"),
-        "spurt": _get_version("spurt"),
-        "isce3": _get_version("isce3"),
-        "tophu": _get_version("tophu"),
-        "whirlwind": _get_version("whirlwind"),
+        "snaphu": importlib.metadata.version("snaphu"),
+        "spurt": importlib.metadata.version("spurt"),
+        "isce3": importlib.metadata.version("isce3"),
+        "tophu": importlib.metadata.version("tophu"),
+        "whirlwind": importlib.metadata.version("whirlwind"),
     }
 
 
@@ -87,8 +73,8 @@ def _get_deps_info() -> dict[str, Optional[str]]:
     # Replace 'ruamel-yaml' with 'ruamel.yaml'
     deps = [dep.replace("ruamel-yaml", "ruamel.yaml") for dep in deps]
     # Add `osgeo` for gdal (not listed in pip requirements)
-    deps += ["osgeo.gdal"]
-    return {name: _get_version(name) for name in deps}
+    deps += ["gdal"]
+    return {name: importlib.metadata.version(name) for name in deps}
 
 
 def _get_gpu_info() -> dict[str, Optional[str]]:
@@ -102,7 +88,10 @@ def _get_gpu_info() -> dict[str, Optional[str]]:
     """
     from dolphin.utils import gpu_is_available
 
-    return {"jax": _get_version("jax"), "gpu_is_available": str(gpu_is_available())}
+    return {
+        "jax": importlib.metadata.version("jax"),
+        "gpu_is_available": str(gpu_is_available()),
+    }
 
 
 def _print_info_dict(info_dict: dict) -> None:
