@@ -13,5 +13,6 @@ build:
     - asdf install pixi latest
     - asdf global pixi latest
     - pixi install -e docs
+    - pixi shell --environment docs
     - export PYTHONPATH="${PYTHONPATH}:${PWD}"
-    - pixi run -e docs -- mkdocs build --clean --site-dir $READTHEDOCS_OUTPUT/html --config-file mkdocs.yml
+    - mkdocs build --clean --site-dir $READTHEDOCS_OUTPUT/html --config-file mkdocs.yml
