@@ -75,7 +75,7 @@ def slc_file_list(tmp_path, slc_stack, slc_date_list):
     name_template = d / "{date}.slc.tif"
 
     file_list = []
-    for cur_date, cur_slc in zip(slc_date_list, slc_stack):
+    for cur_date, cur_slc in zip(slc_date_list, slc_stack, strict=False):
         fname = str(name_template).format(date=cur_date.strftime("%Y%m%d"))
         file_list.append(Path(fname))
         ds = driver.Create(fname, shape[-1], shape[-2], 1, gdal.GDT_CFloat32)
@@ -95,7 +95,7 @@ def slc_file_list_nc(tmp_path, slc_stack, slc_date_list):
     d.mkdir()
     name_template = d / "{date}.nc"
     file_list = []
-    for cur_date, cur_slc in zip(slc_date_list, slc_stack):
+    for cur_date, cur_slc in zip(slc_date_list, slc_stack, strict=False):
         fname = str(name_template).format(date=cur_date.strftime("%Y%m%d"))
         create_test_nc(fname, epsg=32615, subdir="/", data=cur_slc)
         assert 'AUTHORITY["EPSG","32615"]]' in gdal.Open(fname).GetProjection()
@@ -115,7 +115,7 @@ def slc_file_list_nc_wgs84(tmp_path, slc_stack, slc_date_list):
     d.mkdir()
     name_template = d / "{date}.nc"
     file_list = []
-    for cur_date, cur_slc in zip(slc_date_list, slc_stack):
+    for cur_date, cur_slc in zip(slc_date_list, slc_stack, strict=False):
         fname = str(name_template).format(date=cur_date.strftime("%Y%m%d"))
         create_test_nc(fname, epsg=4326, subdir="/", data=cur_slc)
         assert 'AUTHORITY["EPSG","4326"]]' in gdal.Open(fname).GetProjection()
@@ -135,7 +135,7 @@ def slc_file_list_nc_with_sds(tmp_path, slc_stack, slc_date_list):
     file_list = []
     subdirs = ["/data", "/data2"]
     ds_name = "VV"
-    for cur_date, cur_slc in zip(slc_date_list, slc_stack):
+    for cur_date, cur_slc in zip(slc_date_list, slc_stack, strict=False):
         fname = str(name_template).format(date=cur_date.strftime("%Y%m%d"))
         create_test_nc(
             fname, epsg=32615, subdir=subdirs, data_ds_name=ds_name, data=cur_slc

@@ -83,7 +83,7 @@ def run(
     is_compressed = ["compressed" in str(f).lower() for f in input_file_list]
 
     non_compressed_slcs = [
-        f for f, is_comp in zip(input_file_list, is_compressed) if not is_comp
+        f for f, is_comp in zip(input_file_list, is_compressed, strict=False) if not is_comp
     ]
     layover_shadow_mask = (
         cfg.layover_shadow_mask_files[0] if cfg.layover_shadow_mask_files else None
@@ -477,7 +477,7 @@ def _get_input_dates(
     # directly pass in dates?)
     return [
         dates[:1] if not is_comp else dates[:3]
-        for dates, is_comp in zip(input_dates, is_compressed)
+        for dates, is_comp in zip(input_dates, is_compressed, strict=False)
     ]
 
 
