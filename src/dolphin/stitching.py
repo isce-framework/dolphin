@@ -31,16 +31,13 @@ def merge_by_date(
     file_date_fmt: str = DEFAULT_DATETIME_FORMAT,
     output_dir: Filename = ".",
     driver: str = "GTiff",
-<<<<<<< Updated upstream
-    output_suffix: str = ".int.tif",
-=======
     output_suffix: str = ".tif",
     output_prefix: str = "",
->>>>>>> Stashed changes
     out_nodata: Optional[float] = 0,
     in_nodata: Optional[float] = None,
     out_bounds: Optional[Bbox] = None,
     out_bounds_epsg: Optional[int] = None,
+    resample_alg: str = "lanczos",
     options: Optional[Sequence[str]] = io.DEFAULT_TIFF_OPTIONS,
     num_workers: int = 1,
     overwrite: bool = False,
@@ -58,13 +55,9 @@ def merge_by_date(
     driver : str
         GDAL driver to use for output. Default is ENVI.
     output_suffix : str
-<<<<<<< Updated upstream
-        Suffix to use to output stitched filenames. Default is ".int"
-=======
         Suffix to use to output stitched filenames. Default is ".tif"
     output_prefix : str
         Prefix to use to output stitched filenames before dates. Default is ""
->>>>>>> Stashed changes
     out_nodata : Optional[float | str]
         Nodata value to use for output file. Default is 0.
     in_nodata : Optional[float | str]
@@ -76,6 +69,8 @@ def merge_by_date(
     out_bounds_epsg: Optional[int]
         EPSG code for the `out_bounds`.
         If not provided, assumed to match the projections of `file_list`.
+    resample_alg: str
+        Resampling algorithm to use. Default is "lanczos".
     options : Optional[Sequence[str]]
         Driver-specific creation options passed to GDAL.
         Default is [dolphin.io.DEFAULT_TIFF_OPTIONS][].
@@ -104,19 +99,8 @@ def merge_by_date(
 
     for dates, cur_images in grouped_images.items():
         logger.info(f"{dates}: Stitching {len(cur_images)} images.")
-<<<<<<< Updated upstream
-        if len(dates) == 2:
-            date_str = utils.format_date_pair(*dates)
-        elif len(dates) == 1:
-            date_str = dates[0].strftime(file_date_fmt)
-        else:
-            msg = f"Expected 1 or 2 dates: {dates}."
-            raise ValueError(msg)
-        outfile = Path(output_dir) / (date_str + output_suffix)
-=======
         date_str = utils.format_dates(*dates)
         outfile = Path(output_dir) / f"{output_prefix}{date_str}{output_suffix}"
->>>>>>> Stashed changes
         stitched_acq_times[dates] = outfile
 
     def process_date(args):
@@ -130,6 +114,7 @@ def merge_by_date(
             out_bounds=out_bounds,
             out_bounds_epsg=out_bounds_epsg,
             in_nodata=in_nodata,
+            resample_alg=resample_alg,
             options=options,
         )
 

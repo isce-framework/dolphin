@@ -3,12 +3,9 @@
 from __future__ import annotations
 
 import logging
-<<<<<<< Updated upstream
 from collections import deque
-from concurrent.futures import ThreadPoolExecutor
-=======
 from collections.abc import Callable
->>>>>>> Stashed changes
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -121,8 +118,6 @@ def run_wrapped_phase_single(
         like_filename=like_filename,
     )
 
-<<<<<<< Updated upstream
-=======
     crlb_output_folder = output_folder / "crlb"
     crlb_output_folder.mkdir(exist_ok=True)
     phase_linked_crlb_files = setup_output_folder(
@@ -143,7 +138,6 @@ def run_wrapped_phase_single(
         like_filename=like_filename,
     )
 
->>>>>>> Stashed changes
     comp_slc_info = ministack.get_compressed_slc_info()
 
     # Use the real-SLC date range for output file naming
@@ -262,6 +256,7 @@ def run_wrapped_phase_single(
                 neighbor_arrays=neighbor_arrays,
                 baseline_lag=baseline_lag,
                 avg_mag=amp_mean[in_rows, in_cols] if amp_mean is not None else None,
+                first_real_slc_idx=ministack.first_real_slc_idx,
             )
         except PhaseLinkRuntimeError as e:
             # note: this is a warning instead of info, since it should
@@ -280,36 +275,6 @@ def run_wrapped_phase_single(
         np.nan_to_num(pl_output.cpx_phase, copy=False)
         np.nan_to_num(pl_output.temp_coh, copy=False)
 
-        # Save each of the MLE estimates (ignoring those corresponding to
-        # compressed SLCs indexes)
-        assert len(pl_output.cpx_phase[first_real_slc_idx:]) == len(
-            phase_linked_slc_files
-        )
-
-<<<<<<< Updated upstream
-=======
-        # ### Save results ###
-        for img, f in zip(
-            pl_output.cpx_phase[first_real_slc_idx:, out_trim_rows, out_trim_cols],
-            phase_linked_slc_files,
-            strict=False,
-        ):
-            writer.queue_write(img, f, out_rows.start, out_cols.start)
-        for img, f in zip(
-            pl_output.crlb_std_dev[first_real_slc_idx:, out_trim_rows, out_trim_cols],
-            phase_linked_crlb_files,
-            strict=False,
-        ):
-            writer.queue_write(img, f, out_rows.start, out_cols.start)
-
-        # Save closure phases (N-2 images for N dates)
-        for i, closure_file in enumerate(closure_phase_files):
-            closure_img = pl_output.closure_phases[out_trim_rows, out_trim_cols, i]
-            writer.queue_write(
-                closure_img, closure_file, out_rows.start, out_cols.start
-            )
-
->>>>>>> Stashed changes
         # Compress the ministack using only the non-compressed SLCs
         # Get the mean to set as pixel magnitudes
         abs_stack = np.abs(cur_data[first_real_slc_idx:, in_trim_rows, in_trim_cols])
@@ -323,13 +288,34 @@ def run_wrapped_phase_single(
             reference_idx=ministack.compressed_reference_idx,
         )
 
+        # Save each of the MLE estimates (ignoring those corresponding to
+        # compressed SLCs indexes)
+        assert len(pl_output.cpx_phase[first_real_slc_idx:]) == len(
+            phase_linked_slc_files
+        )
+        # ### Save results ###
         with write_lock:
             # ### Save results ###
             for img, f in zip(
                 pl_output.cpx_phase[first_real_slc_idx:, out_trim_rows, out_trim_cols],
                 phase_linked_slc_files,
+                strict=True,
             ):
                 writer.queue_write(img, f, out_rows.start, out_cols.start)
+            for img, f in zip(
+                pl_output.crlb_std_dev[
+                    first_real_slc_idx:, out_trim_rows, out_trim_cols
+                ],
+                phase_linked_crlb_files,
+                strict=True,
+            ):
+                writer.queue_write(img, f, out_rows.start, out_cols.start)
+            # Save closure phases (N-2 images for N dates)
+            for i, closure_file in enumerate(closure_phase_files):
+                closure_img = pl_output.closure_phases[out_trim_rows, out_trim_cols, i]
+                writer.queue_write(
+                    closure_img, closure_file, out_rows.start, out_cols.start
+                )
 
             # Save the compressed SLC block
             writer.queue_write(
@@ -522,20 +508,10 @@ def setup_output_folder(
     # The latter is the tempdir made by @atomic_output
     output_folder.mkdir(exist_ok=True, parents=True)
 
-<<<<<<< Updated upstream
-    start_idx = ministack.first_real_slc_idx
-    date_strs = ministack.get_date_str_list()[start_idx:]
-
-    phase_linked_slc_files = []
-    for filename in date_strs:
-        slc_name = Path(filename).stem
-        output_path = output_folder / f"{slc_name}.slc.tif"
-=======
     filenames = name_generator(ministack)
     output_files = []
     for filename in filenames:
         output_path = output_folder / filename
->>>>>>> Stashed changes
 
         io.write_arr(
             arr=None,
@@ -547,12 +523,6 @@ def setup_output_folder(
             strides=strides,
             nodata=nodata,
         )
-<<<<<<< Updated upstream
-
-        phase_linked_slc_files.append(output_path)
-    return phase_linked_slc_files
-=======
         output_files.append(output_path)
 
     return output_files
->>>>>>> Stashed changes
