@@ -124,6 +124,7 @@ def run_wrapped_phase_single(
         ministack=ministack,
         name_generator=_name_crlbs,
         strides=strides,
+        dtype="float32",
         output_folder=crlb_output_folder,
         like_filename=like_filename,
     )
@@ -134,6 +135,7 @@ def run_wrapped_phase_single(
         ministack=ministack,
         name_generator=_name_closure_phases,
         strides=strides,
+        dtype="float32",
         output_folder=closure_phases_output_folder,
         like_filename=like_filename,
     )
