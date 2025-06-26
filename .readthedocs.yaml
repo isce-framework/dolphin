@@ -14,5 +14,8 @@ build:
     - asdf global pixi latest
     - pixi install -e docs
     - pixi shell --environment docs
+    # Avoiding problems from the local extension in docs/mdx_bib.py  :
+    # Config value 'markdown_extensions': Failed to load extension 'docs.mdx_bib'
+    # ModuleNotFoundError: No module named 'docs'
     - export PYTHONPATH="${PYTHONPATH}:${PWD}"
     - mkdocs build --clean --site-dir $READTHEDOCS_OUTPUT/html --config-file mkdocs.yml
