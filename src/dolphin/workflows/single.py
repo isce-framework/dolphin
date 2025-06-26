@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 import logging
+<<<<<<< Updated upstream
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor
+=======
+from collections.abc import Callable
+>>>>>>> Stashed changes
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -108,15 +112,38 @@ def run_wrapped_phase_single(
 
     logger.info(f"Total stack size (in pixels): {vrt_stack.shape}")
     # Set up the output folder with empty files to write into
+    like_filename = vrt_stack.outfile
     phase_linked_slc_files = setup_output_folder(
         ministack=ministack,
-        driver="GTiff",
+        name_generator=_name_slcs,
         strides=strides,
         output_folder=output_folder,
-        like_filename=vrt_stack.outfile,
-        nodata=0,
+        like_filename=like_filename,
     )
 
+<<<<<<< Updated upstream
+=======
+    crlb_output_folder = output_folder / "crlb"
+    crlb_output_folder.mkdir(exist_ok=True)
+    phase_linked_crlb_files = setup_output_folder(
+        ministack=ministack,
+        name_generator=_name_crlbs,
+        strides=strides,
+        output_folder=crlb_output_folder,
+        like_filename=like_filename,
+    )
+
+    closure_phases_output_folder = output_folder / "closure_phases"
+    closure_phases_output_folder.mkdir(exist_ok=True)
+    closure_phase_files = setup_output_folder(
+        ministack=ministack,
+        name_generator=_name_closure_phases,
+        strides=strides,
+        output_folder=closure_phases_output_folder,
+        like_filename=like_filename,
+    )
+
+>>>>>>> Stashed changes
     comp_slc_info = ministack.get_compressed_slc_info()
 
     # Use the real-SLC date range for output file naming
@@ -150,7 +177,7 @@ def run_wrapped_phase_single(
     for op in output_files.values():
         io.write_arr(
             arr=None,
-            like_filename=vrt_stack.outfile,
+            like_filename=like_filename,
             output_name=op.filename,
             dtype=op.dtype,
             strides=op.strides,
@@ -259,6 +286,30 @@ def run_wrapped_phase_single(
             phase_linked_slc_files
         )
 
+<<<<<<< Updated upstream
+=======
+        # ### Save results ###
+        for img, f in zip(
+            pl_output.cpx_phase[first_real_slc_idx:, out_trim_rows, out_trim_cols],
+            phase_linked_slc_files,
+            strict=False,
+        ):
+            writer.queue_write(img, f, out_rows.start, out_cols.start)
+        for img, f in zip(
+            pl_output.crlb_std_dev[first_real_slc_idx:, out_trim_rows, out_trim_cols],
+            phase_linked_crlb_files,
+            strict=False,
+        ):
+            writer.queue_write(img, f, out_rows.start, out_cols.start)
+
+        # Save closure phases (N-2 images for N dates)
+        for i, closure_file in enumerate(closure_phase_files):
+            closure_img = pl_output.closure_phases[out_trim_rows, out_trim_cols, i]
+            writer.queue_write(
+                closure_img, closure_file, out_rows.start, out_cols.start
+            )
+
+>>>>>>> Stashed changes
         # Compress the ministack using only the non-compressed SLCs
         # Get the mean to set as pixel magnitudes
         abs_stack = np.abs(cur_data[first_real_slc_idx:, in_trim_rows, in_trim_cols])
@@ -391,8 +442,34 @@ def _get_amp_mean_variance(
     return amp_mean, amp_variance
 
 
+def _name_slcs(ministack: MiniStackInfo) -> list[str]:
+    """Generate SLC filenames for the ministack."""
+    start_idx = ministack.first_real_slc_idx
+    date_strs = ministack.get_date_str_list()[start_idx:]
+    return [f"{Path(d).stem}.slc.tif" for d in date_strs]
+
+
+def _name_crlbs(ministack: MiniStackInfo) -> list[str]:
+    """Generate CRLB filenames for the ministack."""
+    start_idx = ministack.first_real_slc_idx
+    date_strs = ministack.get_date_str_list()[start_idx:]
+    return [f"crlb_{Path(d).stem}.tif" for d in date_strs]
+
+
+def _name_closure_phases(ministack: MiniStackInfo) -> list[str]:
+    """Generate closure phase triplet filenames for the ministack."""
+    date_strs = ministack.get_date_str_list()
+    # Get only the first date in case of compressed
+    date_strs = [d.split("_")[0] for d in date_strs]
+    # Create triplets
+    num_closure_phases = len(date_strs) - 2
+    date_triplets = ["_".join(date_strs[i : i + 3]) for i in range(num_closure_phases)]
+    return [f"closure_phase_{triplet}.tif" for triplet in date_triplets]
+
+
 def setup_output_folder(
     ministack: MiniStackInfo,
+    name_generator: Callable[[MiniStackInfo], list[str]],
     driver: str = "GTiff",
     dtype="complex64",
     like_filename: Optional[Filename] = None,
@@ -400,15 +477,18 @@ def setup_output_folder(
     nodata: Optional[float] = 0,
     output_folder: Optional[Path] = None,
 ) -> list[Path]:
-    """Create empty output files for each band after `start_idx` in `vrt_stack`.
+    """Create empty raster files in the output folder.
 
-    Also creates an empty file for the compressed SLC.
-    Used to prepare output for block processing.
+    Used to prepare outputs for phase linking, CRLB estimates,
+    and closure phase triplets.
 
     Parameters
     ----------
     ministack : MiniStackInfo
         [dolphin.stack.MiniStackInfo][] object for the current batch of SLCs
+    name_generator : Callable[[MiniStackInfo], list[str]]
+        Function that generates the names of the output files for a given
+        ministack.
     driver : str, optional
         Name of GDAL driver, by default "GTiff"
     dtype : str, optional
@@ -432,6 +512,7 @@ def setup_output_folder(
         list of saved empty files for the outputs of phase linking
 
     """
+    """Create empty output files using custom filename generation logic."""
     if strides is None:
         strides = {"y": 1, "x": 1}
     if output_folder is None:
@@ -441,6 +522,7 @@ def setup_output_folder(
     # The latter is the tempdir made by @atomic_output
     output_folder.mkdir(exist_ok=True, parents=True)
 
+<<<<<<< Updated upstream
     start_idx = ministack.first_real_slc_idx
     date_strs = ministack.get_date_str_list()[start_idx:]
 
@@ -448,6 +530,12 @@ def setup_output_folder(
     for filename in date_strs:
         slc_name = Path(filename).stem
         output_path = output_folder / f"{slc_name}.slc.tif"
+=======
+    filenames = name_generator(ministack)
+    output_files = []
+    for filename in filenames:
+        output_path = output_folder / filename
+>>>>>>> Stashed changes
 
         io.write_arr(
             arr=None,
@@ -459,6 +547,12 @@ def setup_output_folder(
             strides=strides,
             nodata=nodata,
         )
+<<<<<<< Updated upstream
 
         phase_linked_slc_files.append(output_path)
     return phase_linked_slc_files
+=======
+        output_files.append(output_path)
+
+    return output_files
+>>>>>>> Stashed changes

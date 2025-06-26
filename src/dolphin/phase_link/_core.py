@@ -15,6 +15,7 @@ from dolphin._types import HalfWindow, Strides
 from dolphin.utils import take_looks
 
 from . import covariance, metrics
+from ._closure_phase import compute_nearest_closure_phases_batch
 from ._eigenvalues import eigh_largest_stack, eigh_smallest_stack
 from ._ps_filling import fill_ps_pixels
 
@@ -55,6 +56,15 @@ class PhaseLinkOutput(NamedTuple):
     estimator: np.ndarray  # dtype: np.int8
     """The estimator type used for phase linking at each pixel."""
 
+<<<<<<< Updated upstream
+=======
+    crlb_std_dev: np.ndarray
+    """The CRLB standard deviation at each pixel."""
+
+    closure_phases: np.ndarray
+    """The closure phases at each pixel, for N-2 images."""
+
+>>>>>>> Stashed changes
     avg_coh: np.ndarray | None = None
     """Average coherence across dates for each SLC."""
 
@@ -242,6 +252,11 @@ def run_phase_linking(
         # Convert the rest to numpy for writing
         eigenvalues=np.asarray(cpl_out.eigenvalues),
         estimator=np.asarray(cpl_out.estimator),
+<<<<<<< Updated upstream
+=======
+        crlb_std_dev=np.asarray(cpl_out.crlb_std_dev),
+        closure_phases=np.asarray(cpl_out.closure_phases),
+>>>>>>> Stashed changes
         avg_coh=cpl_out.avg_coh,
     )
 
@@ -333,7 +348,11 @@ def run_cpl(
         C_arrays = C_arrays.at[:, :, u_rows, u_cols].set(0.0 + 0j)
         C_arrays = C_arrays.at[:, :, l_rows, l_cols].set(0.0 + 0j)
 
-    cpx_phase, eigenvalues, estimator = process_coherence_matrices(
+    closure_phases = compute_nearest_closure_phases_batch(C_arrays)
+
+    num_looks = (2 * half_window[0] + 1) * (2 * half_window[1] + 1)
+    reference_idx = ns + reference_idx if reference_idx < 0 else reference_idx
+    cpx_phase, eigenvalues, estimator, crlb_std_dev = process_coherence_matrices(
         C_arrays,
         use_evd=use_evd,
         beta=beta,
@@ -365,6 +384,11 @@ def run_cpl(
         shp_counts=shp_counts,
         eigenvalues=eigenvalues,
         estimator=estimator,
+<<<<<<< Updated upstream
+=======
+        crlb_std_dev=crlb_std_dev_reshaped,
+        closure_phases=closure_phases,
+>>>>>>> Stashed changes
         avg_coh=avg_coh,
     )
 

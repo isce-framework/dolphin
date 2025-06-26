@@ -27,6 +27,13 @@ class StitchedOutputs:
     """List of Paths to the stitched interferograms."""
     interferometric_corr_paths: list[Path]
     """List of Paths to interferometric correlation files created."""
+<<<<<<< Updated upstream
+=======
+    crlb_paths: list[Path]
+    """List of Paths to Cramer Rao Lower Bound (CRLB) files created."""
+    closure_phase_files: list[Path]
+    """List of Paths to closure phase files created."""
+>>>>>>> Stashed changes
     temp_coh_file: Path
     """Path to temporal correlation file created."""
     ps_file: Path
@@ -44,6 +51,11 @@ def run(
     ifg_file_list: Sequence[Path],
     temp_coh_file_list: Sequence[Path],
     ps_file_list: Sequence[Path],
+<<<<<<< Updated upstream
+=======
+    crlb_file_list: Sequence[Path],
+    closure_phase_file_list: Sequence[Path],
+>>>>>>> Stashed changes
     amp_dispersion_list: Sequence[Path],
     shp_count_file_list: Sequence[Path],
     similarity_file_list: Sequence[Path],
@@ -65,6 +77,13 @@ def run(
         Sequence of paths to the temporal coherence files.
     ps_file_list : Sequence[Path]
         Sequence of paths to the (looked) ps mask files.
+<<<<<<< Updated upstream
+=======
+    crlb_file_list : Sequence[Path]
+        Sequence of paths to the (looked) Cramer Rao Lower Bound (CRLB) files.
+    closure_phase_file_list : Sequence[Path]
+        Sequence of paths to the (looked) closure phase files.
+>>>>>>> Stashed changes
     amp_dispersion_list : Sequence[Path]
         Sequence of paths to the (looked) amplitude dispersion files.
     shp_count_file_list : Sequence[Path]
@@ -151,6 +170,35 @@ def run(
             out_bounds_epsg=output_options.bounds_epsg,
         )
 
+<<<<<<< Updated upstream
+=======
+    # Stitch the CRLB estimate files
+    date_to_crlb_path = stitching.merge_by_date(
+        image_file_list=crlb_file_list,
+        file_date_fmt=file_date_fmt,
+        output_dir=stitched_ifg_dir,
+        output_prefix="crlb_",
+        driver="GTiff",
+        out_bounds=out_bounds,
+        out_bounds_epsg=output_options.bounds_epsg,
+        num_workers=num_workers,
+    )
+    stitched_crlb_files = list(date_to_crlb_path.values())
+
+    # Stitch the closure phase files
+    date_to_closure_phase_path = stitching.merge_by_date(
+        image_file_list=closure_phase_file_list,
+        file_date_fmt=file_date_fmt,
+        output_dir=stitched_ifg_dir,
+        output_prefix="closure_phase_",
+        driver="GTiff",
+        out_bounds=out_bounds,
+        out_bounds_epsg=output_options.bounds_epsg,
+        num_workers=num_workers,
+    )
+    stitched_closure_phase_files = list(date_to_closure_phase_path.values())
+
+>>>>>>> Stashed changes
     # Stitch the amp dispersion files
     stitched_amp_disp_file = stitched_ifg_dir / "amp_dispersion_looked.tif"
     if not stitched_amp_disp_file.exists():
@@ -201,6 +249,11 @@ def run(
     return StitchedOutputs(
         stitched_ifg_paths,
         interferometric_corr_paths,
+<<<<<<< Updated upstream
+=======
+        stitched_crlb_files,
+        stitched_closure_phase_files,
+>>>>>>> Stashed changes
         stitched_temp_coh_file,
         stitched_ps_file,
         stitched_amp_disp_file,
