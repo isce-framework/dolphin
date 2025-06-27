@@ -142,9 +142,6 @@ def run_wrapped_phase_single(
             strides,
             nodata=255,
         ),
-        "avg_coh": OutputFile(
-            output_folder / f"avg_coh_{start_end}.tif", np.uint16, strides
-        ),
     }
 
     for op in output_files.values():
@@ -298,16 +295,13 @@ def run_wrapped_phase_single(
             )
 
             # All other outputs are strided (smaller in size)
-            out_datas: dict[str, np.ndarray | None] = {
+            out_datas: dict[str, np.ndarray] = {
                 "temporal_coherence": pl_output.temp_coh,
                 "shp_counts": pl_output.shp_counts,
                 "eigenvalues": pl_output.eigenvalues,
                 "estimator": pl_output.estimator,
-                "avg_coh": pl_output.avg_coh,
             }
             for key, data in out_datas.items():
-                if data is None:  # May choose to skip some outputs, e.g. "avg_coh"
-                    continue
                 output_file = output_files[key]
                 trimmed_data = data[out_trim_rows, out_trim_cols]
 
