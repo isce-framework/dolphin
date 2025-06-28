@@ -26,7 +26,7 @@ def run(
     debug: bool = False,
     max_workers: int = 1,
     tqdm_kwargs=None,
-) -> tuple[list[Path], list[Path], Path, Path, Path, Path, Path]:
+) -> tuple[list[Path], list[Path], list[Path], Path, Path, list[Path], list[Path]]:
     """Run the displacement workflow on a stack of SLCs.
 
     Parameters
@@ -48,16 +48,25 @@ def run(
         list of Paths to virtual interferograms created.
     comp_slc_file_list : list[Path]
         Paths to the compressed SLC files created from each ministack.
-    temp_coh_file : Path
-        Path to temporal coherence file created.
+    temp_coh_files : list[Path]
+        Paths to temporal coherence file created.
         In the case of a single phase linking step, this is from one phase linking step.
-        In the case of sequential phase linking, this is the average of all ministacks.
+        In the case of sequential phase linking, this from each ministack, and one average
+        of all ministacks.
     ps_looked_file : Path
         The multilooked boolean persistent scatterer file.
     amp_disp_looked_file : Path
         The multilooked amplitude dispersion file.
-    shp_count_file : Path
-        Path to the created SHP counts file.
+    shp_count_files : list[Path]
+        Paths to the created SHP counts files.
+        In the case of a single phase linking step, this is from one phase linking step.
+        In the case of sequential phase linking, this from each ministack, and one average
+        of all ministacks.
+    similarity_files : list[Path]
+        Paths to phase similarity files.
+        In the case of a single phase linking step, this is from one phase linking step.
+        In the case of sequential phase linking, this from each ministack, and one average
+        of all ministacks.
 
     """
     t0 = time.perf_counter()
@@ -161,9 +170,9 @@ def run(
     if len(phase_linked_slcs) > 0:
         logger.info(f"Skipping EVD step, {len(phase_linked_slcs)} files already exist")
         comp_slc_list = sorted(pl_path.glob("compressed*tif"))
-        temp_coh_file = next(pl_path.glob("temporal_coherence*tif"))
-        shp_count_file = next(pl_path.glob("shp_count*tif"))
-        similarity_file = next(pl_path.glob("*similarity*tif"))
+        temp_coh_files = sorted(pl_path.glob("temporal_coherence*tif"))
+        shp_count_files = sorted(pl_path.glob("shp_count*tif"))
+        similarity_files = sorted(pl_path.glob("*similarity*tif"))
     else:
         logger.info(f"Running sequential EMI step in {pl_path}")
         kwargs = tqdm_kwargs | {"desc": f"Phase linking ({pl_path})"}
@@ -182,9 +191,9 @@ def run(
         (
             phase_linked_slcs,
             comp_slc_list,
-            temp_coh_file,
-            shp_count_file,
-            similarity_file,
+            temp_coh_files,
+            shp_count_files,
+            similarity_files,
         ) = sequential.run_wrapped_phase_sequential(
             slc_vrt_stack=vrt_stack,
             output_folder=pl_path,
@@ -231,11 +240,11 @@ def run(
         return (
             existing_ifgs,
             comp_slc_list,
-            temp_coh_file,
+            temp_coh_files,
             ps_looked_file,
             amp_disp_looked_file,
-            shp_count_file,
-            similarity_file,
+            shp_count_files,
+            similarity_files,
         )
 
     logger.info(f"Creating virtual interferograms from {len(phase_linked_slcs)} files")
@@ -276,11 +285,11 @@ def run(
     return (
         ifg_file_list,
         comp_slc_list,
-        temp_coh_file,
+        temp_coh_files,
         ps_looked_file,
         amp_disp_looked_file,
-        shp_count_file,
-        similarity_file,
+        shp_count_files,
+        similarity_files,
     )
 
 
