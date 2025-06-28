@@ -315,6 +315,7 @@ def unwrap(
 
     unwrapper_ifg_filename = Path(ifg_filename)
     unwrapper_unw_filename = Path(unw_filename)
+    unwrapper_corr_filename = Path(corr_filename)
     name_change = "."
 
     ifg = io.load_gdal(ifg_filename, masked=True)
@@ -373,16 +374,16 @@ def unwrap(
 
         pre_interp_ifg = io.load_gdal(pre_interp_ifg_filename, masked=True).filled(0)
 
-        corr = io.load_gdal(corr_filename)
-        if similarity_filename and preproc_options.interpolation_similarity_threshold:
-            cutoff = preproc_options.interpolation_similarity_threshold
-            logger.info(f"Masking pixels with similarity below {cutoff}")
+        corr = io.load_gdal(corr_filename, masked=True).filled(0)
+        cutoff = preproc_options.interpolation_cor_threshold
+        logger.info(f"Masking pixels with correlation below {cutoff}")
+        coherent_pixel_mask = corr >= cutoff
+        if similarity_filename and (
+            sim_cutoff := preproc_options.interpolation_similarity_threshold
+        ):
+            logger.info(f"Masking pixels with similarity below {sim_cutoff}")
             sim = io.load_gdal(similarity_filename, masked=True).filled(0)
-            coherent_pixel_mask = sim[:] >= cutoff
-        else:
-            cutoff = preproc_options.interpolation_cor_threshold
-            logger.info(f"Masking pixels with correlation below {cutoff}")
-            coherent_pixel_mask = corr[:] >= cutoff
+            coherent_pixel_mask &= sim >= sim_cutoff
 
         logger.info(f"Interpolating {pre_interp_ifg_filename} -> {interp_ifg_filename}")
         modified_ifg = interpolate(
@@ -391,6 +392,14 @@ def unwrap(
             weight_cutoff=cutoff,
             max_radius=preproc_options.max_radius,
         )
+        # Now we set the pixels we masked to have 0 correlation so SNAHPU ignores them
+        masked_corr_filename = Path(scratchdir or ".") / (
+            Path(corr_filename).stem.split(".")[0] + ".masked.cor.tif"
+        )
+        io.write_arr(
+            arr=np.where(coherent_pixel_mask, corr, 0), output_name=masked_corr_filename
+        )
+        unwrapper_corr_filename = masked_corr_filename
 
         logger.info(f"Writing interpolated output to {interp_ifg_filename}")
         io.write_arr(
@@ -408,7 +417,7 @@ def unwrap(
         # Pass everything to snaphu-py
         unw_path, conncomp_path = unwrap_snaphu_py(
             unwrapper_ifg_filename,
-            corr_filename,
+            unwrapper_corr_filename,
             unwrapper_unw_filename,
             nlooks,
             ntiles=snaphu_opts.ntiles,
