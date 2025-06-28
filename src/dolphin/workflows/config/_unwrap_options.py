@@ -86,6 +86,16 @@ class PreprocessOptions(BaseModel, extra="forbid"):
         ge=0.0,
         le=1.0,
     )
+    zero_correlation_where_interpolating: bool = Field(
+        False,
+        description=(
+            "(for interpolation) Set the pixels where we have masked + interpolated"
+            " data to have 0 correlation for the unwrapper. If False, the interpolated"
+            " pixels keep their old correlation. If True, the behavior can be unwrapper"
+            " dependent (the unwrapper may choose to skip over these pixels when"
+            " solving)."
+        ),
+    )
 
 
 class SnaphuOptions(BaseModel, extra="forbid"):

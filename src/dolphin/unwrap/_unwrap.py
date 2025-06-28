@@ -392,14 +392,16 @@ def unwrap(
             weight_cutoff=cutoff,
             max_radius=preproc_options.max_radius,
         )
-        # Now we set the pixels we masked to have 0 correlation so SNAHPU ignores them
-        masked_corr_filename = Path(scratchdir or ".") / (
-            Path(corr_filename).stem.split(".")[0] + ".masked.cor.tif"
-        )
-        io.write_arr(
-            arr=np.where(coherent_pixel_mask, corr, 0), output_name=masked_corr_filename
-        )
-        unwrapper_corr_filename = masked_corr_filename
+        if preproc_options.zero_correlation_where_interpolating:
+            # Set the pixels we masked to have 0 correlation so SNAHPU ignores them
+            masked_corr_filename = Path(scratchdir or ".") / (
+                Path(corr_filename).stem.split(".")[0] + ".masked.cor.tif"
+            )
+            io.write_arr(
+                arr=np.where(coherent_pixel_mask, corr, 0),
+                output_name=masked_corr_filename,
+            )
+            unwrapper_corr_filename = masked_corr_filename
 
         logger.info(f"Writing interpolated output to {interp_ifg_filename}")
         io.write_arr(
