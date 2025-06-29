@@ -896,6 +896,9 @@ class VRTStack(StackReader):
             and self.outfile == other.outfile
         )
 
+    def __hash__(self):
+        return hash(self._gdal_file_strings)
+
     @property
     def ndim(self):
         return 3

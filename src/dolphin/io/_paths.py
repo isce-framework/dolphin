@@ -178,6 +178,9 @@ class S3Path(GeneralPath):
         else:
             return False
 
+    def __hash__(self):
+        return hash(self.get_path())
+
     def __repr__(self):
         return f'S3Path("{self.get_path()}")'
 

@@ -604,6 +604,9 @@ class Network:
     def __eq__(self, other):
         return self.ifg_list == other.ifg_list
 
+    def __hash__(self):
+        return hash(self.ifg_list)
+
 
 def estimate_correlation_from_phase(
     ifg: Union[VRTInterferogram, ArrayLike], window_size: int | tuple[int, int]
