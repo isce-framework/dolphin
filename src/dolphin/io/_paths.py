@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import logging
 import re
+from io import BytesIO
 from pathlib import Path
 from typing import Union
 from urllib.parse import ParseResult, urlparse
@@ -153,8 +154,6 @@ class S3Path(GeneralPath):
 
     def _download_as_bytes(self) -> bytes:
         """Download file to a `BytesIO` buffer to read as bytes."""
-        from io import BytesIO
-
         client = self._get_client()
 
         bio = BytesIO()

@@ -20,6 +20,7 @@ from tqdm.contrib.concurrent import thread_map
 from dolphin import io, utils
 from dolphin._types import Filename, T
 from dolphin.filtering import gaussian_filter_nan
+from dolphin.io._readers import _parse_vrt_file
 
 gdal.UseExceptions()
 
@@ -265,8 +266,6 @@ class VRTInterferogram(BaseModel, extra="allow"):
             VRTInterferogram object.
 
         """
-        from dolphin.io._readers import _parse_vrt_file
-
         # Use the parsing function
         (ref_slc, sec_slc), subdataset = _parse_vrt_file(path)
         if subdataset is not None:

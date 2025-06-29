@@ -19,6 +19,7 @@ from typing import (
 import h5py
 import numpy as np
 import rasterio as rio
+import rasterio.windows
 from numpy.typing import ArrayLike
 from opera_utils import get_dates, sort_files_by_date
 from osgeo import gdal
@@ -383,8 +384,6 @@ class RasterReader(DatasetReader):
         return self[:, :]
 
     def __getitem__(self, key: tuple[Index, ...], /) -> np.ndarray:
-        import rasterio.windows
-
         if key is ... or key == ():
             key = (slice(None), slice(None))
 

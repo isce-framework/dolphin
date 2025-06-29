@@ -97,6 +97,7 @@ ignore = [
 exclude = ["scripts"]
 
 [tool.ruff.lint.per-file-ignores]
+"src/dolphin/io/_paths.py" = ["PLC0415"]             # `import` should be at the top-level
 "**/__init__.py" = ["F401", "F403"]
 "tests/**" = ["D", "N", "PTH"]
 "benchmarks/**" = ["D", "N", "PTH", "RUF", "ARG002"]
