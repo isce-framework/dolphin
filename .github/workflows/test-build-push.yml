@@ -55,6 +55,7 @@ jobs:
         run: |
           python -m pip install -r tests/requirements.txt "pytest<8.4" "ortools!=9.13.*"
           python -m pip install --no-deps \
+            git+https://github.com/isce-framework/tophu@main \
             "snaphu>=0.4.0"
       - name: Enable numba boundscheck for better error catching
         run: |
