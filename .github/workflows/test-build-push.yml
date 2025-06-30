@@ -53,7 +53,7 @@ jobs:
       - name: Install test dependencies
         # Remove pytest pin when fixed: https://github.com/pytest-dev/pytest-cov/issues/693
         run: |
-          python -m pip install -r tests/requirements.txt "pytest<8.4" "ortools<9.13"
+          python -m pip install -r tests/requirements.txt "pytest<8.4" "ortools!=9.13.*"
           python -m pip install --no-deps \
             "snaphu>=0.4.0"
       - name: Enable numba boundscheck for better error catching
@@ -62,7 +62,7 @@ jobs:
           echo "TQDM_DISABLE=1" >> $GITHUB_ENV
       - name: Test (with numba boundscheck on)
         run: |
-          pytest -n0 --capture=no -vv tests/test_show_versions.py
+          pytest -n0 --capture=no -vv
       # https://community.codecov.com/t/numba-jitted-methods-are-not-captured-by-codecov/2649
       # - name: Coverage report
       #   uses: codecov/codecov-action@v2
