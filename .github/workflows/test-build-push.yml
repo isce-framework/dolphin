@@ -63,7 +63,7 @@ jobs:
           echo "TQDM_DISABLE=1" >> $GITHUB_ENV
       - name: Test (with numba boundscheck on)
         run: |
-          pytest -n0 -vv tests/test_show_versions.py
+          pytest -n0 --capture=no -vv tests/test_show_versions.py
       # https://community.codecov.com/t/numba-jitted-methods-are-not-captured-by-codecov/2649
       # - name: Coverage report
       #   uses: codecov/codecov-action@v2
