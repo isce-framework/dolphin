@@ -196,8 +196,10 @@ class InterferogramNetwork(BaseModel, extra="forbid"):
         indexes = self.indexes
         # Check if more than one has been set:
         if ref_idx is None and max_bw is None and max_tb is None and indexes is None:
-            logger.debug("No network configuration options were set. Using nearest-3.")
-            self.max_bandwidth = 3
+            logger.debug(
+                "No network configuration options were set. Using single-reference."
+            )
+            self.reference_idx = 0
         return self
 
 
