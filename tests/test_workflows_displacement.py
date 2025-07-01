@@ -101,8 +101,14 @@ def test_displacement_run_single_official_opera_naming(
 
 
 def run_displacement_stack(
-    path, file_list: list[Path], run_unwrap: bool = False, ministack_size: int = 500
+    path,
+    file_list: list[Path],
+    run_unwrap: bool = False,
+    ministack_size: int = 500,
+    interferogram_network=None,
 ):
+    if interferogram_network is None:
+        interferogram_network = {}
     cfg = config.DisplacementWorkflow(
         cslc_file_list=file_list,
         input_options={"subdataset": "/data/VV"},
@@ -112,12 +118,12 @@ def run_displacement_stack(
         },
         unwrap_options={"run_unwrap": run_unwrap},
         log_file=Path() / "dolphin.log",
+        interferogram_network=interferogram_network,
     )
     paths = displacement.run(cfg)
     if run_unwrap:
         assert paths.timeseries_paths is not None
         assert all(full_suffix(p) == ".tif" for p in paths.timeseries_paths)
-    assert paths.timeseries_residual_paths is None
 
 
 def test_stack_with_compSLCs(opera_slc_files, tmpdir):
@@ -148,7 +154,10 @@ def test_separate_workflow_runs(slc_file_list, tmp_path):
     interferograms as one sequential run.
     """
     p_all = tmp_path / "all"
-    run_displacement_stack(p_all, slc_file_list, ministack_size=10)
+    ifgs = {"reference_idx": 0}
+    run_displacement_stack(
+        p_all, slc_file_list, ministack_size=10, interferogram_network=ifgs
+    )
     all_ifgs = sorted((p_all / "interferograms").glob("*.int.tif"))
     assert len(all_ifgs) == 29
 
@@ -158,7 +167,7 @@ def test_separate_workflow_runs(slc_file_list, tmp_path):
     file_batches = [slc_file_list[i : i + ms] for i in range(0, len(slc_file_list), ms)]
     assert len(file_batches) == 3
     assert all(len(b) == 10 for b in file_batches)
-    run_displacement_stack(p1, file_batches[0])
+    run_displacement_stack(p1, file_batches[0], interferogram_network=ifgs)
     new_comp_slcs1 = sorted((p1 / "phase_linking/linked_phase").glob("compressed_*"))
     assert len(new_comp_slcs1) == 1
     ifgs1 = sorted((p1 / "interferograms").glob("*.int.tif"))
@@ -166,7 +175,7 @@ def test_separate_workflow_runs(slc_file_list, tmp_path):
 
     p2 = tmp_path / Path("second")
     files2 = new_comp_slcs1 + file_batches[1]
-    run_displacement_stack(p2, files2)
+    run_displacement_stack(p2, files2, interferogram_network=ifgs)
     new_comp_slcs2 = sorted((p2 / "phase_linking/linked_phase").glob("compressed_*"))
     assert len(new_comp_slcs2) == 1
     ifgs2 = sorted((p2 / "interferograms").glob("*.int.tif"))
@@ -174,7 +183,7 @@ def test_separate_workflow_runs(slc_file_list, tmp_path):
 
     p3 = tmp_path / Path("third")
     files3 = new_comp_slcs1 + new_comp_slcs2 + file_batches[2]
-    run_displacement_stack(p3, files3)
+    run_displacement_stack(p3, files3, interferogram_network=ifgs)
     ifgs3 = sorted((p3 / "interferograms").glob("*.int.tif"))
     assert len(ifgs3) == 10
 
@@ -187,7 +196,7 @@ def test_separate_workflow_runs(slc_file_list, tmp_path):
     # So the outputs should be the same
     p3_b = tmp_path / Path("third")
     files3_b = new_comp_slcs2 + file_batches[2]
-    run_displacement_stack(p3_b, files3_b)
+    run_displacement_stack(p3_b, files3_b, interferogram_network=ifgs)
     ifgs3_b = sorted((p3_b / "interferograms").glob("*.int.tif"))
     assert len(ifgs3_b) == 10
     # Names should be the same as the previous run
@@ -248,21 +257,14 @@ def test_displacement_run_extra_reference_date(
             ]
 
         unw_names = [pp.name for pp in paths.unwrapped_paths]
-        if cfg.unwrap_options.unwrap_method == "spurt":
-            assert unw_names == [
-                "20220101_20220102.unw.tif",
-                "20220101_20220103.unw.tif",
-                "20220101_20220104.unw.tif",
-                "20220102_20220103.unw.tif",
-                "20220102_20220104.unw.tif",
-                "20220103_20220104.unw.tif",
-            ]
-        else:
-            assert unw_names == [
-                "20220101_20220102.unw.tif",
-                "20220101_20220103.unw.tif",
-                "20220103_20220104.unw.tif",
-            ]
+        assert unw_names == [
+            "20220101_20220102.unw.tif",
+            "20220101_20220103.unw.tif",
+            "20220101_20220104.unw.tif",
+            "20220102_20220103.unw.tif",
+            "20220102_20220104.unw.tif",
+            "20220103_20220104.unw.tif",
+        ]
 
         assert all(get_raster_units(p) == "radians" for p in paths.unwrapped_paths)
         log_file.unlink()
