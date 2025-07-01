@@ -65,8 +65,8 @@ def test_phase_linking_options_bad_size():
 
 def test_interferogram_network_defaults():
     opts = config.InterferogramNetwork()
-    assert opts.reference_idx == 0
-    assert opts.max_bandwidth is None
+    assert opts.reference_idx is None
+    assert opts.max_bandwidth == 3
     assert opts.max_temporal_baseline is None
 
 
@@ -330,8 +330,8 @@ def test_config_displacement_workflow_defaults(dir_with_1_slc):
     assert c.phase_linking._directory == Path("linked_phase").resolve()
 
     assert c.interferogram_network._directory == Path("interferograms").resolve()
-    assert c.interferogram_network.reference_idx == 0
-    assert c.interferogram_network.max_bandwidth is None
+    assert c.interferogram_network.reference_idx is None
+    assert c.interferogram_network.max_bandwidth == 3
     assert c.interferogram_network.max_temporal_baseline is None
 
     assert c.unwrap_options._directory == Path("unwrapped").resolve()
