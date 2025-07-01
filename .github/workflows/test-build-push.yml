@@ -55,15 +55,15 @@ jobs:
         run: |
           python -m pip install -r tests/requirements.txt "pytest<8.4" "ortools!=9.13.*"
           python -m pip install --no-deps \
-            "snaphu>=0.4.0" \
-            git+https://github.com/isce-framework/whirlwind@40defb38d2d6deca2819934788ebbc57e418e32d
+            git+https://github.com/isce-framework/tophu@main \
+            "snaphu>=0.4.0"
       - name: Enable numba boundscheck for better error catching
         run: |
           echo "NUMBA_BOUNDSCHECK=1" >> $GITHUB_ENV
           echo "TQDM_DISABLE=1" >> $GITHUB_ENV
       - name: Test (with numba boundscheck on)
         run: |
-          pytest -n0 -vv
+          pytest -n0 --capture=no -vv
       # https://community.codecov.com/t/numba-jitted-methods-are-not-captured-by-codecov/2649
       # - name: Coverage report
       #   uses: codecov/codecov-action@v2

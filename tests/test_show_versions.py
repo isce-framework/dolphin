@@ -1,4 +1,18 @@
-from dolphin._show_versions import _get_deps_info, _get_sys_info, show_versions
+import pytest
+
+from dolphin._show_versions import (
+    _get_deps_info,
+    _get_sys_info,
+    _get_version,
+    show_versions,
+)
+
+
+@pytest.mark.parametrize(
+    "unwrapper", ["snaphu", "spurt", "isce3", "tophu", "whirlwind"]
+)
+def test_get_version_unwrapper(unwrapper):
+    _get_version(unwrapper)
 
 
 def test_get_sys_info():
