@@ -1,3 +1,4 @@
+# spurt>=0.1.1
 asv
 black
 boto3
@@ -10,5 +11,4 @@ pytest-randomly
 pytest-xdist
 shapely
 snaphu>=0.4.1
-spurt>=0.1.1
 xarray

@@ -215,7 +215,7 @@ def _get_outputs_from_folder(
     similarity_file = next(output_folder.glob("similarity*"))
     shp_count_file = next(output_folder.glob("shp_counts_*"))
     # Currently ignoring to not stitch:
-    # eigenvalues, estimator, avg_coh
+    # eigenvalues, estimator
     return (
         cur_output_files,
         cur_comp_slc_file,
