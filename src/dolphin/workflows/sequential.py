@@ -153,6 +153,16 @@ def run_wrapped_phase_sequential(
         shp_count_files.append(shp_count_file)
 
     ##############################################
+    # Move the per-ministack files into the `output_folder`
+    def move_to_output(files: list[Path], output_folder: Path) -> list[Path]:
+        tmp: list[Path] = []
+        for p in files:
+            tmp.append(p.rename(output_folder / p.name))
+        return tmp
+
+    temp_coh_files = move_to_output(temp_coh_files, output_folder)
+    shp_count_files = move_to_output(shp_count_files, output_folder)
+    similarity_files = move_to_output(similarity_files, output_folder)
 
     # Average the temporal coherence files in each ministack
     full_span = ministack_planner.real_slc_date_range_str
