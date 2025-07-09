@@ -56,7 +56,7 @@ def run_wrapped_phase_sequential(
     baseline_lag: Optional[int] = None,
     max_workers: int = 1,
     **tqdm_kwargs,
-) -> tuple[list[Path], list[Path], Path, Path, Path]:
+) -> tuple[list[Path], list[Path], list[Path], list[Path], list[Path]]:
     """Estimate wrapped phase using batches of ministacks."""
     if strides is None:
         strides = {"x": 1, "y": 1}
@@ -153,23 +153,35 @@ def run_wrapped_phase_sequential(
         shp_count_files.append(shp_count_file)
 
     ##############################################
+    # Move the per-ministack files into the `output_folder`
+    def move_to_output(files: list[Path], output_folder: Path) -> list[Path]:
+        tmp: list[Path] = []
+        for p in files:
+            tmp.append(p.rename(output_folder / p.name))
+        return tmp
+
+    temp_coh_files = move_to_output(temp_coh_files, output_folder)
+    shp_count_files = move_to_output(shp_count_files, output_folder)
+    similarity_files = move_to_output(similarity_files, output_folder)
 
     # Average the temporal coherence files in each ministack
     full_span = ministack_planner.real_slc_date_range_str
-    output_temp_coh_file = output_folder / f"temporal_coherence_average_{full_span}.tif"
-    output_shp_count_file = output_folder / f"shp_counts_average_{full_span}.tif"
+    avg_temp_coh_file = output_folder / f"temporal_coherence_average_{full_span}.tif"
+    avg_shp_count_file = output_folder / f"shp_counts_average_{full_span}.tif"
 
     # we can pass the list of files to gdal_calc, which interprets it
     # as a multi-band file
-    _average_rasters(temp_coh_files, output_temp_coh_file, "Float32")
-    _average_rasters(shp_count_files, output_shp_count_file, "Int16")
+    _average_rasters(temp_coh_files, avg_temp_coh_file, "Float32")
+    _average_rasters(shp_count_files, avg_shp_count_file, "Int16")
+    temp_coh_files.append(avg_temp_coh_file)
+    shp_count_files.append(avg_shp_count_file)
 
     if len(similarity_files) > 1:
         # Create one phase similarity raster on the whole wrapped time series
-        output_similarity_file = output_folder / f"similarity_full_{full_span}.tif"
+        full_similarity_file = output_folder / f"similarity_full_{full_span}.tif"
         create_similarities(
             ifg_file_list=cur_output_files,
-            output_file=output_similarity_file,
+            output_file=full_similarity_file,
             # TODO: any of these configurable?
             search_radius=11,
             sim_type="median",
@@ -179,9 +191,10 @@ def run_wrapped_phase_sequential(
             add_overviews=False,
         )
     else:
-        output_similarity_file = similarity_files[0].rename(
+        full_similarity_file = similarity_files[0].rename(
             output_folder / similarity_files[0].name
         )
+    similarity_files.append(full_similarity_file)
 
     # Combine the separate SLC output lists into a single list
     all_slc_files = list(chain.from_iterable(output_slc_files))
@@ -200,9 +213,9 @@ def run_wrapped_phase_sequential(
     return (
         out_pl_slcs,
         comp_slc_outputs,
-        output_temp_coh_file,
-        output_shp_count_file,
-        output_similarity_file,
+        temp_coh_files,
+        shp_count_files,
+        similarity_files,
     )
 
 
