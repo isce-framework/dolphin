@@ -36,6 +36,7 @@ def merge_by_date(
     in_nodata: Optional[float] = None,
     out_bounds: Optional[Bbox] = None,
     out_bounds_epsg: Optional[int] = None,
+    dest_epsg: Optional[int] = None,
     options: Optional[Sequence[str]] = io.DEFAULT_TIFF_OPTIONS,
     num_workers: int = 1,
     overwrite: bool = False,
@@ -65,6 +66,10 @@ def merge_by_date(
     out_bounds_epsg: Optional[int]
         EPSG code for the `out_bounds`.
         If not provided, assumed to match the projections of `file_list`.
+    dest_epsg: Optional[int]
+        EPSG code for the output projection.
+        If None, finds the most common projection
+        among the input files.
     options : Optional[Sequence[str]]
         Driver-specific creation options passed to GDAL.
         Default is [dolphin.io.DEFAULT_TIFF_OPTIONS][].
@@ -113,6 +118,7 @@ def merge_by_date(
             out_nodata=out_nodata,
             out_bounds=out_bounds,
             out_bounds_epsg=out_bounds_epsg,
+            dest_epsg=dest_epsg,
             in_nodata=in_nodata,
             options=options,
         )
@@ -134,6 +140,7 @@ def merge_images(
     target_aligned_pixels: bool = True,
     out_bounds: Optional[Bbox] = None,
     out_bounds_epsg: Optional[int] = None,
+    dest_epsg: Optional[int] = None,
     strides: Optional[Mapping[str, int]] = None,
     driver: str = "GTiff",
     out_nodata: Optional[float] = 0,
@@ -167,6 +174,9 @@ def merge_images(
     out_bounds_epsg: Optional[int]
         EPSG code for the `out_bounds`.
         If not provided, assumed to match the projections of `file_list`.
+    dest_epsg: Optional[int]
+        EPSG code for the output projection. If None, finds the most common projection
+        among the input files.
     strides : dict[str, int]
         subsample factor: {"x": x strides, "y": y strides}
     driver : str
@@ -213,7 +223,12 @@ def merge_images(
         return
 
     # Make sure all the files are in the same projection.
-    projection = _get_mode_projection(file_list)
+    if dest_epsg is not None:
+        srs = osr.SpatialReference()
+        srs.ImportFromEPSG(dest_epsg)
+        projection = srs.ExportToWkt()
+    else:
+        projection = _get_mode_projection(file_list)
     # If not, warp them to the most common projection using VRT files in a tempdir
     temp_dir = tempfile.TemporaryDirectory()
 
