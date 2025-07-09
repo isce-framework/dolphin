@@ -125,3 +125,19 @@ def _examples(N=10, gamma0=0.6, rho=0.8):
     # {Γ}nm = γ0 + (1 - γ0) δ{n-m};  # noqa: RUF003
     C_const_gamma = (1 - gamma0) * np.eye(N) + gamma0 * np.ones((N, N))
     return C_ar1, C_const_gamma
+
+
+def demo_from_slc_stack(  # noqa: D103
+    slc_vrt_filename: str = "slc_stack.vrt",
+    hw: int = 5,
+    center_pixel: tuple[int, int] = (50, 50),
+) -> np.ndarray:
+    from dolphin import io
+    from dolphin.phase_link import covariance
+
+    reader = io.VRTStack.from_vrt_file(slc_vrt_filename)
+    r0, c0 = center_pixel
+    samples = reader[:, r0 - hw : r0 + hw, c0 - hw : c0 + hw].reshape(len(reader), -1)
+    C = covariance.coh_mat_single(samples)
+    num_looks = 2 * (2 * hw + 1)
+    return compute_lower_bound_std(C, num_looks)
