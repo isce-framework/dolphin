@@ -31,11 +31,11 @@ class OutputPaths:
     comp_slc_dict: dict[str, list[Path]]
     stitched_ifg_paths: list[Path]
     stitched_cor_paths: list[Path]
-    stitched_temp_coh_file: Path
+    stitched_temp_coh_files: list[Path]
+    stitched_shp_count_files: list[Path]
+    stitched_similarity_files: list[Path]
     stitched_ps_file: Path
     stitched_amp_dispersion_file: Path
-    stitched_shp_count_file: Path
-    stitched_similarity_file: Path
     unwrapped_paths: list[Path] | None
     conncomp_paths: list[Path] | None
     timeseries_paths: list[Path] | None
@@ -160,19 +160,19 @@ def run(
             (
                 cur_ifg_list,
                 comp_slcs,
-                temp_coh,
+                temp_coh_files,
                 ps_file,
                 amp_disp_file,
-                shp_count,
-                similarity,
+                shp_count_files,
+                similarity_files,
             ) = fut.result()
             ifg_file_list.extend(cur_ifg_list)
             comp_slc_dict[burst] = comp_slcs
-            temp_coh_file_list.append(temp_coh)
+            temp_coh_file_list.extend(temp_coh_files)
             ps_file_list.append(ps_file)
             amp_dispersion_file_list.append(amp_disp_file)
-            shp_count_file_list.append(shp_count)
-            similarity_file_list.append(similarity)
+            shp_count_file_list.extend(shp_count_files)
+            similarity_file_list.extend(similarity_files)
 
     # ###################################
     # 2. Stitch burst-wise interferograms
@@ -205,11 +205,11 @@ def run(
             comp_slc_dict=comp_slc_dict,
             stitched_ifg_paths=stitched_paths.ifg_paths,
             stitched_cor_paths=stitched_paths.interferometric_corr_paths,
-            stitched_temp_coh_file=stitched_paths.temp_coh_file,
+            stitched_temp_coh_files=stitched_paths.temp_coh_files,
             stitched_ps_file=stitched_paths.ps_file,
             stitched_amp_dispersion_file=stitched_paths.amp_dispersion_file,
-            stitched_shp_count_file=stitched_paths.shp_count_file,
-            stitched_similarity_file=stitched_paths.similarity_file,
+            stitched_shp_count_files=stitched_paths.shp_count_files,
+            stitched_similarity_files=stitched_paths.similarity_files,
             unwrapped_paths=None,
             conncomp_paths=None,
             timeseries_paths=None,
@@ -219,11 +219,18 @@ def run(
 
     row_looks, col_looks = cfg.phase_linking.half_window.to_looks()
     nlooks = row_looks * col_looks
+
+    # TODO: Not sure if i'll ever want more than one quality file
+    # Dividing per-ministack in here would probably be complicated.
+    # It'll probably be better to make an entirely different workflow
+    # for that.
+    avg_temp_coh_file = stitched_paths.temp_coh_files[-1]
+    full_similarity_file = stitched_paths.similarity_files[-1]
     unwrapped_paths, conncomp_paths = unwrapping.run(
         ifg_file_list=stitched_paths.ifg_paths,
         cor_file_list=stitched_paths.interferometric_corr_paths,
-        temporal_coherence_filename=stitched_paths.temp_coh_file,
-        similarity_filename=stitched_paths.similarity_file,
+        temporal_coherence_filename=avg_temp_coh_file,
+        similarity_filename=full_similarity_file,
         nlooks=nlooks,
         unwrap_options=cfg.unwrap_options,
         mask_file=cfg.mask_file,
@@ -245,7 +252,7 @@ def run(
             # TODO: Right now we don't have the option to pick a different candidate
             # or quality file. Figure out if this is worth exposing
             reference_point=cfg.timeseries_options.reference_point,
-            quality_file=stitched_paths.temp_coh_file,
+            quality_file=avg_temp_coh_file,
             reference_candidate_threshold=0.95,
             output_dir=ts_opts._directory,
             method=timeseries.InversionMethod(ts_opts.method),
@@ -271,11 +278,11 @@ def run(
         comp_slc_dict=comp_slc_dict,
         stitched_ifg_paths=stitched_paths.ifg_paths,
         stitched_cor_paths=stitched_paths.interferometric_corr_paths,
-        stitched_temp_coh_file=stitched_paths.temp_coh_file,
+        stitched_temp_coh_files=stitched_paths.temp_coh_files,
         stitched_ps_file=stitched_paths.ps_file,
         stitched_amp_dispersion_file=stitched_paths.amp_dispersion_file,
-        stitched_shp_count_file=stitched_paths.shp_count_file,
-        stitched_similarity_file=stitched_paths.similarity_file,
+        stitched_shp_count_files=stitched_paths.shp_count_files,
+        stitched_similarity_files=stitched_paths.similarity_files,
         unwrapped_paths=unwrapped_paths,
         # TODO: Let's keep the unwrapped_paths since all the outputs are
         # corresponding to those and if we have a network unwrapping, the
