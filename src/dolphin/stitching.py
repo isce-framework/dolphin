@@ -32,10 +32,12 @@ def merge_by_date(
     output_dir: Filename = ".",
     driver: str = "GTiff",
     output_suffix: str = ".int.tif",
+    output_prefix: str = "",
     out_nodata: Optional[float] = 0,
     in_nodata: Optional[float] = None,
     out_bounds: Optional[Bbox] = None,
     out_bounds_epsg: Optional[int] = None,
+    resample_alg: str = "lanczos",
     dest_epsg: Optional[int] = None,
     options: Optional[Sequence[str]] = io.DEFAULT_TIFF_OPTIONS,
     num_workers: int = 1,
@@ -55,6 +57,8 @@ def merge_by_date(
         GDAL driver to use for output. Default is ENVI.
     output_suffix : str
         Suffix to use to output stitched filenames. Default is ".int"
+    output_prefix : str
+        Prefix to use to output stitched filenames before dates. Default is ""
     out_nodata : Optional[float | str]
         Nodata value to use for output file. Default is 0.
     in_nodata : Optional[float | str]
@@ -66,6 +70,8 @@ def merge_by_date(
     out_bounds_epsg: Optional[int]
         EPSG code for the `out_bounds`.
         If not provided, assumed to match the projections of `file_list`.
+    resample_alg: str
+        Resampling algorithm to use. Default is "lanczos".
     dest_epsg: Optional[int]
         EPSG code for the output projection.
         If None, finds the most common projection
@@ -105,7 +111,7 @@ def merge_by_date(
         else:
             msg = f"Expected 1 or 2 dates: {dates}."
             raise ValueError(msg)
-        outfile = Path(output_dir) / (date_str + output_suffix)
+        outfile = Path(output_dir) / f"{output_prefix}{date_str}{output_suffix}"
         stitched_acq_times[dates] = outfile
 
     def process_date(args):
@@ -120,6 +126,7 @@ def merge_by_date(
             out_bounds_epsg=out_bounds_epsg,
             dest_epsg=dest_epsg,
             in_nodata=in_nodata,
+            resample_alg=resample_alg,
             options=options,
         )
 
