@@ -1,12 +1,12 @@
 import jax
 import jax.numpy as jnp
-from jaxtyping import Array, Float
+from jax import Array
 
 
 @jax.jit
 def compute_nearest_closure_phases(
-    cov_matrix: Float[Array, "n n"],
-) -> Float[Array, " n-2"]:
+    cov_matrix: Array,
+) -> Array:
     """Compute the nearest-neighbor closure phases for a single covariance matrix."""
     # Extract the diagonals we need
     # First super-diagonal: Used for (i, i+1), then (i+1, i+2)
@@ -15,15 +15,15 @@ def compute_nearest_closure_phases(
     diag_2 = jnp.diag(cov_matrix, k=2)  # length N-2
 
     # Compute closure phases as complex numbers, then take the angle
-    closure_complex = diag_1[:-1] * diag_2[1:] * jnp.conj(diag_2)
+    closure_complex = diag_1[:-1] * diag_1[1:] * jnp.conj(diag_2)
     return jnp.angle(closure_complex)
 
 
 # Vectorized version for multiple covariance matrices (e.g., different pixels)
 @jax.jit
 def compute_nearest_closure_phases_batch(
-    cov_matrices: Float[Array, "r c n n"],
-) -> Float[Array, "r c n-2"]:
+    cov_matrices: Array,
+) -> Array:
     """Compute nearest-neighbor closure phases for a batch of covariance matrices.
 
     Parameters
