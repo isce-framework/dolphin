@@ -5,6 +5,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased](https://github.com/isce-framework/dolphin/compare/v0.40.0...HEAD)
 
+### Added
+
+- Added Cramér-Rao Lower Bound (CRLB) estimate rasters in https://github.com/isce-framework/dolphin/pull/577
+
 ## [0.40.0](https://github.com/isce-framework/dolphin/compare/v0.39.0...v0.40.0) - 2025-06-
 
 ### Fixed
