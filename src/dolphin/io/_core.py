@@ -48,6 +48,8 @@ __all__ = [
     "get_raster_units",
     "get_raster_xysize",
     "load_gdal",
+    "load_masked",
+    "load_overview",
     "set_raster_description",
     "set_raster_metadata",
     "set_raster_nodata",

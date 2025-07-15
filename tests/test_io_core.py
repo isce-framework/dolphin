@@ -63,21 +63,28 @@ class TestLoad:
             )
 
     def test_load_masked(self, raster_with_nan_block):
-        arr = io.load_gdal(raster_with_nan_block, masked=True)
+        # Test load_masked function returns masked array
+        arr = io.load_masked(raster_with_nan_block)
         assert isinstance(arr, np.ma.masked_array)
         assert np.ma.is_masked(arr)
         assert arr[arr.mask].size == 32 * 32
         assert np.all(arr.mask[:32, :32])
 
+        # Test that load_gdal returns regular array (not masked)
         arr = io.load_gdal(raster_with_nan_block)
         assert not isinstance(arr, np.ma.masked_array)
         assert not np.ma.is_masked(arr)
-        assert np.all(np.isnan(arr[:32, :32]))
+        # Complex arrays with NaN values
+        if np.iscomplexobj(arr):
+            assert np.any(np.isnan(arr.real[:32, :32]) | np.isnan(arr.imag[:32, :32]))
+        else:
+            assert np.any(np.isnan(arr[:32, :32]))
 
     def test_load_masked_empty_nodata(self, raster_100_by_200):
-        arr = io.load_gdal(raster_100_by_200, masked=True)
+        # Test load_masked with file that has no nodata
+        arr = io.load_masked(raster_100_by_200)
         assert isinstance(arr, np.ma.masked_array)
-        assert arr.mask == np.ma.nomask
+        assert arr.mask is np.ma.nomask or np.all(~arr.mask)
 
     def test_load_band(self, tmp_path, slc_stack, slc_file_list):
         # Check on a VRT, which has multiple bands

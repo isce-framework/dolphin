@@ -112,7 +112,7 @@ def combine_mask_files(
 
     for input_convention, mask_file in zip(input_conventions, mask_files):
         # TODO: if we separate input missing data from mask 1/0, this changes
-        mask = io.load_gdal(mask_file, masked=True).astype(bool)
+        mask = io.load_masked(mask_file).astype(bool)
         # Fill with "mask" value
         mask = mask.filled(bool(input_convention.value))
         if input_convention != MaskConvention.NUMPY:
@@ -160,7 +160,7 @@ def load_mask_as_numpy(mask_file: PathOrStr) -> np.ndarray:
 
     """
     # The mask file will by have 0s at invalid data, 1s at good
-    nodata_mask = io.load_gdal(mask_file, masked=True).astype(bool).filled(False)
+    nodata_mask = io.load_masked(mask_file).astype(bool).filled(False)
     # invert the mask so Trues are the missing data pixels
     nodata_mask = ~nodata_mask
     return nodata_mask
