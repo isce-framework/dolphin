@@ -10,12 +10,16 @@ from dolphin import io
 BUCKET_NAME = "fake-bucket"
 KEY = "unwrapped/20231009_20231021.unw.tif"
 URL = f"s3://{BUCKET_NAME}/{KEY}"
+PORT = 5123
+LOCALHOST_URL = f"http://localhost:{PORT}"
+LOCALHOST_ENDPOINT = f"localhost:{PORT}"
 
 pytestmark = pytest.mark.filterwarnings(
     # Dataset has no geotransform, gcps, or rpcs. The identity matrix will be returned.
     "ignore::rasterio.errors.NotGeoreferencedWarning",
     # Botocore: DeprecationWarning: datetime.datetime.utcnow()
     "ignore:.*datetime.*:DeprecationWarning:botocore",
+    "ignore:.*io.FileIO.*:pytest.PytestUnraisableExceptionWarning",
 )
 
 
@@ -36,7 +40,7 @@ def moto_server_handler(monkeymodule):
         with open(f.name, "rb") as fout:
             arr_bytes = fout.read()
 
-    local_server = ThreadedMotoServer(ip_address="127.0.0.1", port=5000)
+    local_server = ThreadedMotoServer(ip_address="127.0.0.1", port=PORT)
     local_server.start()
 
     monkeymodule.setenv("AWS_ACCESS_KEY_ID", "testing")
@@ -44,14 +48,14 @@ def moto_server_handler(monkeymodule):
     monkeymodule.setenv("AWS_SECURITY_TOKEN", "testing")
     monkeymodule.setenv("AWS_SESSION_TOKEN", "testing")
     monkeymodule.setenv("AWS_DEFAULT_REGION", "us-east-1")
-    monkeymodule.setenv("AWS_ENDPOINT_URL", "http://localhost:5000")
+    monkeymodule.setenv("AWS_ENDPOINT_URL", LOCALHOST_URL)
 
     # Post the dummy file to the local server
     with mock_aws():
         s3 = boto3.resource(
             service_name="s3",
             region_name="us-east-1",
-            endpoint_url="http://localhost:5000",
+            endpoint_url=LOCALHOST_URL,
         )
 
         b = s3.create_bucket(Bucket=BUCKET_NAME)
@@ -94,7 +98,7 @@ class TestS3Path:
         with rio.Env(
             aws_unsigned=True,
             AWS_HTTPS="NO",
-            AWS_S3_ENDPOINT="localhost:5000",
+            AWS_S3_ENDPOINT=LOCALHOST_ENDPOINT,
         ):
             with rio.open(URL) as src:
                 driver, shape = src.driver, src.shape
@@ -112,7 +116,7 @@ class TestS3Path:
         with gdal.config_options(
             {
                 "AWS_NO_SIGN_REQUEST": "YES",
-                "AWS_S3_ENDPOINT": "localhost:5000",
+                "AWS_S3_ENDPOINT": LOCALHOST_ENDPOINT,
                 "AWS_HTTPS": "NO",
             }
         ):

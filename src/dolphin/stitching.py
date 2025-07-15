@@ -6,6 +6,7 @@ import logging
 import math
 import subprocess
 import tempfile
+from collections.abc import Mapping
 from datetime import datetime
 from os import fspath
 from pathlib import Path
@@ -31,10 +32,13 @@ def merge_by_date(
     output_dir: Filename = ".",
     driver: str = "GTiff",
     output_suffix: str = ".int.tif",
+    output_prefix: str = "",
     out_nodata: Optional[float] = 0,
     in_nodata: Optional[float] = None,
     out_bounds: Optional[Bbox] = None,
     out_bounds_epsg: Optional[int] = None,
+    resample_alg: str = "lanczos",
+    dest_epsg: Optional[int] = None,
     options: Optional[Sequence[str]] = io.DEFAULT_TIFF_OPTIONS,
     num_workers: int = 1,
     overwrite: bool = False,
@@ -53,6 +57,8 @@ def merge_by_date(
         GDAL driver to use for output. Default is ENVI.
     output_suffix : str
         Suffix to use to output stitched filenames. Default is ".int"
+    output_prefix : str
+        Prefix to use to output stitched filenames before dates. Default is ""
     out_nodata : Optional[float | str]
         Nodata value to use for output file. Default is 0.
     in_nodata : Optional[float | str]
@@ -64,6 +70,12 @@ def merge_by_date(
     out_bounds_epsg: Optional[int]
         EPSG code for the `out_bounds`.
         If not provided, assumed to match the projections of `file_list`.
+    resample_alg: str
+        Resampling algorithm to use. Default is "lanczos".
+    dest_epsg: Optional[int]
+        EPSG code for the output projection.
+        If None, finds the most common projection
+        among the input files.
     options : Optional[Sequence[str]]
         Driver-specific creation options passed to GDAL.
         Default is [dolphin.io.DEFAULT_TIFF_OPTIONS][].
@@ -99,7 +111,7 @@ def merge_by_date(
         else:
             msg = f"Expected 1 or 2 dates: {dates}."
             raise ValueError(msg)
-        outfile = Path(output_dir) / (date_str + output_suffix)
+        outfile = Path(output_dir) / f"{output_prefix}{date_str}{output_suffix}"
         stitched_acq_times[dates] = outfile
 
     def process_date(args):
@@ -112,7 +124,9 @@ def merge_by_date(
             out_nodata=out_nodata,
             out_bounds=out_bounds,
             out_bounds_epsg=out_bounds_epsg,
+            dest_epsg=dest_epsg,
             in_nodata=in_nodata,
+            resample_alg=resample_alg,
             options=options,
         )
 
@@ -133,7 +147,8 @@ def merge_images(
     target_aligned_pixels: bool = True,
     out_bounds: Optional[Bbox] = None,
     out_bounds_epsg: Optional[int] = None,
-    strides: Optional[dict[str, int]] = None,
+    dest_epsg: Optional[int] = None,
+    strides: Optional[Mapping[str, int]] = None,
     driver: str = "GTiff",
     out_nodata: Optional[float] = 0,
     out_dtype: Optional[DTypeLike] = None,
@@ -166,6 +181,9 @@ def merge_images(
     out_bounds_epsg: Optional[int]
         EPSG code for the `out_bounds`.
         If not provided, assumed to match the projections of `file_list`.
+    dest_epsg: Optional[int]
+        EPSG code for the output projection. If None, finds the most common projection
+        among the input files.
     strides : dict[str, int]
         subsample factor: {"x": x strides, "y": y strides}
     driver : str
@@ -212,12 +230,17 @@ def merge_images(
         return
 
     # Make sure all the files are in the same projection.
-    projection = _get_mode_projection(file_list)
+    if dest_epsg is not None:
+        srs = osr.SpatialReference()
+        srs.ImportFromEPSG(dest_epsg)
+        projection = srs.ExportToWkt()
+    else:
+        projection = _get_mode_projection(file_list)
     # If not, warp them to the most common projection using VRT files in a tempdir
     temp_dir = tempfile.TemporaryDirectory()
 
     tmp_path = Path(temp_dir.name)
-    if strides is not None and strides["x"] > 1 and strides["y"] > 1:
+    if strides is not None and (strides["x"] > 1 or strides["y"] > 1):
         file_list = get_downsampled_vrts(
             file_list,
             strides=strides,
@@ -293,7 +316,7 @@ def merge_images(
 
 def get_downsampled_vrts(
     filenames: Sequence[Filename],
-    strides: dict[str, int],
+    strides: Mapping[str, int],
     dirname: Filename,
 ) -> list[Path]:
     """Create downsampled VRTs from a list of files.

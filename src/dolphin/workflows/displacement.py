@@ -10,15 +10,15 @@ from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 
-from opera_utils import group_by_burst, group_by_date
+from opera_utils import group_by_burst
 from tqdm.auto import tqdm
 
-from dolphin import __version__, io, timeseries, utils
+from dolphin import __version__, timeseries, utils
 from dolphin._log import log_runtime, setup_logging
 from dolphin.timeseries import ReferencePoint
 
 from . import stitching_bursts, unwrapping, wrapped_phase
-from ._utils import _create_burst_cfg, _remove_dir_if_empty, parse_ionosphere_files
+from ._utils import _create_burst_cfg, _remove_dir_if_empty
 from .config import DisplacementWorkflow
 
 logger = logging.getLogger("dolphin")
@@ -31,6 +31,7 @@ class OutputPaths:
     comp_slc_dict: dict[str, list[Path]]
     stitched_ifg_paths: list[Path]
     stitched_cor_paths: list[Path]
+    stitched_crlb_files: list[Path]
     stitched_temp_coh_file: Path
     stitched_ps_file: Path
     stitched_amp_dispersion_file: Path
@@ -40,8 +41,6 @@ class OutputPaths:
     conncomp_paths: list[Path] | None
     timeseries_paths: list[Path] | None
     timeseries_residual_paths: list[Path] | None
-    tropospheric_corrections: list[Path] | None
-    ionospheric_corrections: list[Path] | None
     reference_point: ReferencePoint | None
 
 
@@ -79,7 +78,7 @@ def run(
         if "Could not parse burst id" not in str(e):
             raise
         # Otherwise, we have SLC files which are not OPERA burst files
-        grouped_slc_files = {"": cfg.cslc_file_list}
+        grouped_slc_files = {"phase_linking": cfg.cslc_file_list}
 
     if cfg.amplitude_dispersion_files:
         grouped_amp_dispersion_files = group_by_burst(cfg.amplitude_dispersion_files)
@@ -96,42 +95,32 @@ def run(
     else:
         grouped_layover_shadow_mask_files = defaultdict(list)
 
-    grouped_iono_files = parse_ionosphere_files(
-        cfg.correction_options.ionosphere_files, cfg.correction_options._iono_date_fmt
-    )
-
     # ######################################
     # 1. Burst-wise Wrapped phase estimation
     # ######################################
-    if len(grouped_slc_files) > 1:
-        logger.info(f"Found SLC files from {len(grouped_slc_files)} bursts")
-        wrapped_phase_cfgs = [
-            (
-                burst,  # Include the burst for logging purposes
-                _create_burst_cfg(
-                    cfg,
-                    burst,
-                    grouped_slc_files,
-                    grouped_amp_mean_files,
-                    grouped_amp_dispersion_files,
-                    grouped_layover_shadow_mask_files,
-                ),
-            )
-            for burst in grouped_slc_files
-        ]
-        for _, burst_cfg in wrapped_phase_cfgs:
-            burst_cfg.create_dir_tree()
+    logger.info(f"Found SLC files from {len(grouped_slc_files)} bursts")
+    wrapped_phase_cfgs = [
+        (
+            burst,  # Include the burst for logging purposes
+            _create_burst_cfg(
+                cfg,
+                burst,
+                grouped_slc_files,
+                grouped_amp_mean_files,
+                grouped_amp_dispersion_files,
+                grouped_layover_shadow_mask_files,
+            ),
+        )
+        for burst in grouped_slc_files
+    ]
+    for _, burst_cfg in wrapped_phase_cfgs:
+        burst_cfg.create_dir_tree()
         # Remove the mid-level directories which will be empty due to re-grouping
-        _remove_dir_if_empty(cfg.phase_linking._directory)
-        _remove_dir_if_empty(cfg.ps_options._directory)
-
-    else:
-        # grab the only key (either a burst, or "") and use that
-        cfg.create_dir_tree()
-        b = next(iter(grouped_slc_files.keys()))
-        wrapped_phase_cfgs = [(b, cfg)]
+        _remove_dir_if_empty(burst_cfg.timeseries_options._directory)
+        _remove_dir_if_empty(burst_cfg.unwrap_options._directory)
 
     ifg_file_list: list[Path] = []
+    crlb_files: list[Path] = []
     temp_coh_file_list: list[Path] = []
     ps_file_list: list[Path] = []
     amp_dispersion_file_list: list[Path] = []
@@ -143,15 +132,16 @@ def run(
     # Now for each burst, run the wrapped phase estimation
     # Try running several bursts in parallel...
     # Use the Dummy one if not going parallel, as debugging is much simpler
-    num_parallel = min(cfg.worker_settings.n_parallel_bursts, len(grouped_slc_files))
+    num_workers = cfg.worker_settings.n_parallel_bursts
+    num_parallel = min(num_workers, len(grouped_slc_files))
     Executor = (
         ProcessPoolExecutor if num_parallel > 1 else utils.DummyProcessPoolExecutor
     )
-    mw = cfg.worker_settings.n_parallel_bursts
+    workers_per_burst = num_workers // num_parallel
     ctx = mp.get_context("spawn")
     tqdm.set_lock(ctx.RLock())
     with Executor(
-        max_workers=mw,
+        max_workers=num_workers,
         mp_context=ctx,
         initializer=tqdm.set_lock,
         initargs=(tqdm.get_lock(),),
@@ -161,6 +151,7 @@ def run(
                 wrapped_phase.run,
                 burst_cfg,
                 debug=debug,
+                max_workers=workers_per_burst,
                 tqdm_kwargs={
                     "position": i,
                 },
@@ -170,6 +161,7 @@ def run(
         for fut, burst in fut_to_burst.items():
             (
                 cur_ifg_list,
+                cur_crlb_files,
                 comp_slcs,
                 temp_coh,
                 ps_file,
@@ -178,6 +170,7 @@ def run(
                 similarity,
             ) = fut.result()
             ifg_file_list.extend(cur_ifg_list)
+            crlb_files.extend(cur_crlb_files)
             comp_slc_dict[burst] = comp_slcs
             temp_coh_file_list.append(temp_coh)
             ps_file_list.append(ps_file)
@@ -197,6 +190,7 @@ def run(
         ifg_file_list=ifg_file_list,
         temp_coh_file_list=temp_coh_file_list,
         ps_file_list=ps_file_list,
+        crlb_file_list=crlb_files,
         amp_dispersion_list=amp_dispersion_file_list,
         shp_count_file_list=shp_count_file_list,
         similarity_file_list=similarity_file_list,
@@ -216,6 +210,7 @@ def run(
             comp_slc_dict=comp_slc_dict,
             stitched_ifg_paths=stitched_paths.ifg_paths,
             stitched_cor_paths=stitched_paths.interferometric_corr_paths,
+            stitched_crlb_files=stitched_paths.crlb_paths,
             stitched_temp_coh_file=stitched_paths.temp_coh_file,
             stitched_ps_file=stitched_paths.ps_file,
             stitched_amp_dispersion_file=stitched_paths.amp_dispersion_file,
@@ -225,8 +220,6 @@ def run(
             conncomp_paths=None,
             timeseries_paths=None,
             timeseries_residual_paths=None,
-            tropospheric_corrections=None,
-            ionospheric_corrections=None,
             reference_point=None,
         )
 
@@ -248,9 +241,6 @@ def run(
 
     ts_opts = cfg.timeseries_options
     # Skip if we didn't ask for inversion/velocity
-    # TODO: the troposphere/ionosphere corrections rely on `timeseries_paths`
-    # Perhaps we should refactor those to not need files,
-    # or perhaps we should throw an error if they want corrections but not `timeseries`
     if ts_opts.run_inversion or ts_opts.run_velocity:
         # the output of run_timeseries is not currently used so pre-commit removes it
         # let's add back if we need it
@@ -260,6 +250,7 @@ def run(
             corr_paths=stitched_paths.interferometric_corr_paths,
             # TODO: Right now we don't have the option to pick a different candidate
             # or quality file. Figure out if this is worth exposing
+            reference_point=cfg.timeseries_options.reference_point,
             quality_file=stitched_paths.temp_coh_file,
             reference_candidate_threshold=0.95,
             output_dir=ts_opts._directory,
@@ -280,91 +271,13 @@ def run(
         timeseries_residual_paths = None
         reference_point = None
 
-    # ##############################################
-    # 5. Estimate corrections for each interferogram
-    # ##############################################
-    tropo_paths: list[Path] | None = None
-    iono_paths: list[Path] | None = None
-    if len(cfg.correction_options.geometry_files) > 0:
-        out_dir = cfg.work_directory / cfg.correction_options._atm_directory
-        out_dir.mkdir(exist_ok=True)
-        grouped_slc_files = group_by_date(cfg.cslc_file_list)
-
-        # Prepare frame geometry files
-        geometry_dir = out_dir / "geometry"
-        geometry_dir.mkdir(exist_ok=True)
-        assert timeseries_paths is not None
-        crs = io.get_raster_crs(timeseries_paths[0])
-        epsg = crs.to_epsg()
-        out_bounds = io.get_raster_bounds(timeseries_paths[0])
-        frame_geometry_files = utils.prepare_geometry(
-            geometry_dir=geometry_dir,
-            geo_files=cfg.correction_options.geometry_files,
-            matching_file=timeseries_paths[0],
-            dem_file=cfg.correction_options.dem_file,
-            epsg=epsg,
-            out_bounds=out_bounds,
-            strides=cfg.output_options.strides,
-        )
-
-        # Troposphere
-        if "height" not in frame_geometry_files:
-            logger.warning(
-                "DEM file is not given, skip estimating tropospheric corrections."
-            )
-        else:
-            if cfg.correction_options.troposphere_files:
-                from dolphin.atmosphere import estimate_tropospheric_delay
-
-                assert timeseries_paths is not None
-                logger.info(
-                    "Calculating tropospheric corrections for %s files.",
-                    len(timeseries_paths),
-                )
-                tropo_paths = estimate_tropospheric_delay(
-                    ifg_file_list=timeseries_paths,
-                    troposphere_files=cfg.correction_options.troposphere_files,
-                    file_date_fmt=cfg.correction_options.tropo_date_fmt,
-                    slc_files=grouped_slc_files,
-                    geom_files=frame_geometry_files,
-                    reference_point=reference_point,
-                    output_dir=out_dir,
-                    tropo_model=cfg.correction_options.tropo_model,
-                    tropo_delay_type=cfg.correction_options.tropo_delay_type,
-                    epsg=epsg,
-                    bounds=out_bounds,
-                )
-            else:
-                logger.info("No weather model, skip tropospheric correction.")
-
-        # Ionosphere
-        if grouped_iono_files:
-            from dolphin.atmosphere import estimate_ionospheric_delay
-
-            logger.info(
-                "Calculating ionospheric corrections for %s files",
-                len(timeseries_paths),
-            )
-            assert timeseries_paths is not None
-            iono_paths = estimate_ionospheric_delay(
-                ifg_file_list=timeseries_paths,
-                slc_files=grouped_slc_files,
-                tec_files=grouped_iono_files,
-                geom_files=frame_geometry_files,
-                reference_point=reference_point,
-                output_dir=out_dir,
-                epsg=epsg,
-                bounds=out_bounds,
-            )
-        else:
-            logger.info("No TEC files, skip ionospheric correction.")
-
     # Print the maximum memory usage for each worker
     _print_summary(cfg)
     return OutputPaths(
         comp_slc_dict=comp_slc_dict,
         stitched_ifg_paths=stitched_paths.ifg_paths,
         stitched_cor_paths=stitched_paths.interferometric_corr_paths,
+        stitched_crlb_files=stitched_paths.crlb_paths,
         stitched_temp_coh_file=stitched_paths.temp_coh_file,
         stitched_ps_file=stitched_paths.ps_file,
         stitched_amp_dispersion_file=stitched_paths.amp_dispersion_file,
@@ -379,8 +292,6 @@ def run(
         conncomp_paths=conncomp_paths,
         timeseries_paths=timeseries_paths,
         timeseries_residual_paths=timeseries_residual_paths,
-        tropospheric_corrections=tropo_paths,
-        ionospheric_corrections=iono_paths,
         reference_point=reference_point,
     )
 

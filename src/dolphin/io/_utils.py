@@ -95,23 +95,6 @@ def get_gtiff_options(
     return options
 
 
-def _format_for_gdal(options: dict[str, str]) -> list[str]:
-    """Output creation options as a list of -co strings for GDAL.
-
-    Parameters
-    ----------
-    options : dict[str, str]
-        Dict of creation options usable in Rasterio.
-
-    Returns
-    -------
-    list[str]
-        List -co options for GDAL.
-
-    """
-    return [f"{k.upper()}={v}" for k, v in options.items()]
-
-
 def repack_raster(
     raster_path: Path,
     output_dir: Path | None = None,
@@ -241,7 +224,7 @@ def repack_rasters(
     )
 
 
-def round_mantissa(z: np.ndarray, keep_bits=10) -> None:
+def round_mantissa(z: np.ndarray, keep_bits: int = 10) -> None:
     """Zero out mantissa bits of elements of array in place.
 
     Drops a specified number of bits from the floating point mantissa,
@@ -251,10 +234,11 @@ def round_mantissa(z: np.ndarray, keep_bits=10) -> None:
     ----------
     z : numpy.ndarray
         Real or complex array whose mantissas are to be zeroed out
-    keep_bits : int, optional
-        Number of bits to preserve in mantissa. Defaults to 10.
+    keep_bits : int
+        Number of bits to preserve in mantissa.
         Lower numbers will truncate the mantissa more and enable
         more compression.
+        Default is 10.
 
     References
     ----------

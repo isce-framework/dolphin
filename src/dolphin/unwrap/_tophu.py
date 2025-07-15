@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from os import fspath
 from pathlib import Path
 
 import numpy as np
@@ -12,7 +13,7 @@ from dolphin.utils import full_suffix
 from dolphin.workflows import UnwrapMethod
 
 from ._constants import CONNCOMP_SUFFIX, DEFAULT_CCL_NODATA, DEFAULT_UNW_NODATA
-from ._utils import _redirect_unwrapping_log, _zero_from_mask
+from ._utils import _zero_from_mask
 
 logger = logging.getLogger("dolphin")
 
@@ -168,7 +169,7 @@ def multiscale_unwrap(
         coherence_rb = tophu.RasterBand(corr_filename)
 
     if log_to_file and not _user_gave_callback:
-        # Note that if they gave an arbitrary callback, we dont know the logger
+        # Note that if they gave an arbitrary callback, we don't know the logger
         _redirect_unwrapping_log(unw_filename, unwrap_method.value)
 
     tophu.multiscale_unwrap(
@@ -200,3 +201,13 @@ def multiscale_unwrap(
             u_src.write(unw, 1)
 
     return Path(unw_filename), Path(conncomp_filename)
+
+
+def _redirect_unwrapping_log(unw_filename: Filename, method: str):
+    import journal
+
+    logfile = Path(unw_filename).with_suffix(".log")
+    journal.info(f"isce3.unwrap.{method}").device = journal.logfile(
+        fspath(logfile), "w"
+    )
+    logger.info(f"Logging unwrapping output to {logfile}")

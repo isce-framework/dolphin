@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import mmap
+from collections.abc import Iterable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from os import fspath
@@ -18,6 +19,7 @@ from typing import (
 import h5py
 import numpy as np
 import rasterio as rio
+import rasterio.windows
 from numpy.typing import ArrayLike
 from opera_utils import get_dates, sort_files_by_date
 from osgeo import gdal
@@ -382,8 +384,6 @@ class RasterReader(DatasetReader):
         return self[:, :]
 
     def __getitem__(self, key: tuple[Index, ...], /) -> np.ndarray:
-        import rasterio.windows
-
         if key is ... or key == ():
             key = (slice(None), slice(None))
 
@@ -474,14 +474,14 @@ class BaseStackReader(StackReader):
 class BinaryStackReader(BaseStackReader):
     @classmethod
     def from_file_list(
-        cls, file_list: Sequence[Filename], shape_2d: tuple[int, int], dtype: np.dtype
+        cls, file_list: Iterable[Filename], shape_2d: tuple[int, int], dtype: np.dtype
     ) -> BinaryStackReader:
         """Create a BinaryStackReader from a list of files.
 
         Parameters
         ----------
-        file_list : Sequence[Filename]
-            List of paths to the files to read.
+        file_list : Iterable[Filename]
+            Iterable of paths to the files to read.
         shape_2d : tuple[int, int]
             Shape of each file.
         dtype : np.dtype
@@ -493,10 +493,9 @@ class BinaryStackReader(BaseStackReader):
             The BinaryStackReader object.
 
         """
-        readers = [
-            BinaryReader(Path(f), shape=shape_2d, dtype=dtype) for f in file_list
-        ]
-        return cls(file_list=file_list, readers=readers, num_threads=1)
+        files = list(file_list)
+        readers = [BinaryReader(Path(f), shape=shape_2d, dtype=dtype) for f in files]
+        return cls(file_list=files, readers=readers, num_threads=1)
 
     @classmethod
     def from_gdal(
@@ -570,7 +569,7 @@ class HDF5StackReader(BaseStackReader):
     @classmethod
     def from_file_list(
         cls,
-        file_list: Sequence[Filename],
+        file_list: Iterable[Filename],
         dset_names: str | Sequence[str],
         keep_open: bool = False,
         num_threads: int = 1,
@@ -580,8 +579,8 @@ class HDF5StackReader(BaseStackReader):
 
         Parameters
         ----------
-        file_list : Sequence[Filename]
-            List of paths to the files to read.
+        file_list : Iterable[Filename]
+            Iterable of paths to the files to read.
         dset_names : str | Sequence[str]
             Name of the dataset to read from each file.
             If a single string, will be used for all files.
@@ -599,19 +598,20 @@ class HDF5StackReader(BaseStackReader):
             The HDF5StackReader object.
 
         """
+        files = list(file_list)
         if isinstance(dset_names, str):
-            dset_names = [dset_names] * len(file_list)
+            dset_names = [dset_names] * len(files)
 
         readers = [
             HDF5Reader(Path(f), dset_name=dn, keep_open=keep_open, nodata=nodata)
-            for (f, dn) in zip(file_list, dset_names)
+            for (f, dn) in zip(files, dset_names)
         ]
         # Check if nodata values were found in the files
         nds = {r.nodata for r in readers}
         if len(nds) == 1:
             nodata = nds.pop()
 
-        return cls(file_list, readers, num_threads=num_threads, nodata=nodata)
+        return cls(files, readers, num_threads=num_threads, nodata=nodata)
 
 
 @dataclass
@@ -634,7 +634,7 @@ class RasterStackReader(BaseStackReader):
     @classmethod
     def from_file_list(
         cls,
-        file_list: Sequence[Filename],
+        file_list: Iterable[Filename],
         bands: int | Sequence[int] = 1,
         keepdims: bool = True,
         keep_open: bool = False,
@@ -645,8 +645,8 @@ class RasterStackReader(BaseStackReader):
 
         Parameters
         ----------
-        file_list : Sequence[Filename]
-            List of paths to the files to read.
+        file_list : Iterable[Filename]
+            Iterable of paths to the files to read.
         bands : int | Sequence[int]
             Band to read from each file.
             If a single int, will be used for all files.
@@ -668,19 +668,20 @@ class RasterStackReader(BaseStackReader):
             The RasterStackReader object.
 
         """
+        files = list(file_list)
         if isinstance(bands, int):
-            bands = [bands] * len(file_list)
+            bands = [bands] * len(files)
 
         readers = [
             RasterReader.from_file(f, band=b, keep_open=keep_open, keepdims=keepdims)
-            for (f, b) in zip(file_list, bands)
+            for (f, b) in zip(files, bands)
         ]
         # Check if nodata values were found in the files
         nds = {r.nodata for r in readers}
         if len(nds) == 1:
             nodata = nds.pop()
         return cls(
-            file_list,
+            files,
             readers,
             num_threads=num_threads,
             nodata=nodata,
@@ -743,7 +744,6 @@ class VRTStack(StackReader):
             else:
                 logger.debug(f"Overwriting {outfile}")
 
-        # files: list[Filename] = [Path(f) for f in file_list]
         self._use_abs_path = use_abs_path
         files: list[Filename | S3Path]
         if any(str(f).startswith("s3://") for f in file_list):
@@ -895,6 +895,9 @@ class VRTStack(StackReader):
             and self.outfile == other.outfile
         )
 
+    def __hash__(self):
+        return hash(self._gdal_file_strings)
+
     @property
     def ndim(self):
         return 3
@@ -910,7 +913,7 @@ class VRTStack(StackReader):
             return self.read_stack(band=index + 1)
 
         # TODO: raise an error if they try to skip like [::2, ::2]
-        # or pass it to read_stack... but I dont think I need to support it.
+        # or pass it to read_stack... but I don't think I need to support it.
         n, rows, cols = index
         if isinstance(rows, int):
             rows = slice(rows, rows + 1)

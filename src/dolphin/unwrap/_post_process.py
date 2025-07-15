@@ -3,7 +3,6 @@ from __future__ import annotations
 import logging
 
 import numpy as np
-from numba import njit, stencil
 from numpy.typing import ArrayLike, NDArray
 from scipy import ndimage
 from scipy.interpolate import NearestNDInterpolator
@@ -11,38 +10,6 @@ from scipy.interpolate import NearestNDInterpolator
 TWOPI = 2 * np.pi
 
 logger = logging.getLogger("dolphin")
-
-
-@njit(nogil=True)
-def compute_phase_diffs(phase):
-    """Compute the total number phase jumps > pi between adjacent pixels.
-
-    If part of `phase` is known to be bad phase (e.g. over water),
-    the values should be set to zero or a masked array should be passed:
-
-        unwrapping_error(np.ma.masked_where(bad_area_mask, phase))
-
-
-    Parameters
-    ----------
-    phase : ArrayLike
-        Unwrapped interferogram phase.
-
-    Returns
-    -------
-    int
-        Total number of jumps exceeding pi.
-
-    """
-    return _compute_phase_diffs(phase)
-
-
-@stencil
-def _compute_phase_diffs(phase):
-    d1 = np.abs(phase[0, 0] - phase[0, 1]) / np.pi
-    d2 = np.abs(phase[0, 0] - phase[1, 0]) / np.pi
-    # Subtract 0.5 so that anything below 1 gets rounded to 0
-    return round(d1 - 0.5) + round(d2 - 0.5)
 
 
 def rewrap_to_twopi(arr: ArrayLike) -> np.ndarray:
@@ -133,9 +100,9 @@ def interpolate_masked_gaps(
     )
 
 
-def _resize(image: ArrayLike, output_shape: tuple[int, int]):
+def _resize(image: ArrayLike, output_shape: tuple[int, int]) -> np.ndarray:
     """Resize `image` to be the same shape as `output_shape`."""
-    input_shape = image.shape[-2:]
+    input_shape = np.asarray(image).shape[-2:]
     factors = np.divide(input_shape, output_shape)
 
     # Translate modes used by np.pad to those used by scipy.ndimage

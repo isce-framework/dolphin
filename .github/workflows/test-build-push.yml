@@ -18,9 +18,11 @@ jobs:
         deps:
           - label: Latest
             # we can't specify `tophu` for conda, not available on mac
+            # Numba pin: https://github.com/numba/numba/blob/release0.61/numba/__init__.py#L42-L45
             spec: >-
               isce3-cpu
               dask
+              numpy<2.3
 
       fail-fast: true
     name: ${{ matrix.os }} • ${{ matrix.deps.label }}
@@ -45,24 +47,23 @@ jobs:
             channels:
               - conda-forge
       - name: Install
+        # TODO: remove ortools pin when fixed: https://github.com/google/or-tools/issues/4674
         run: |
-          python -m pip install --no-deps \
-            "snaphu>=0.4.0" \
-            "opera-utils>=0.4.1" \
-            git+https://github.com/isce-framework/tophu@main \
-            git+https://github.com/isce-framework/whirlwind@40defb38d2d6deca2819934788ebbc57e418e32d
-          python -m pip install git+https://github.com/isce-framework/spurt@bd64ed4766a668fabdff4d312fcbb0d47344f632
           python -m pip install --no-deps .
       - name: Install test dependencies
+        # Remove pytest pin when fixed: https://github.com/pytest-dev/pytest-cov/issues/693
         run: |
-          micromamba install -f tests/requirements.txt -c conda-forge
+          python -m pip install -r tests/requirements.txt "pytest<8.4" "ortools!=9.13.*"
+          python -m pip install --no-deps \
+            git+https://github.com/isce-framework/tophu@main \
+            "snaphu>=0.4.0"
       - name: Enable numba boundscheck for better error catching
         run: |
           echo "NUMBA_BOUNDSCHECK=1" >> $GITHUB_ENV
           echo "TQDM_DISABLE=1" >> $GITHUB_ENV
       - name: Test (with numba boundscheck on)
         run: |
-          pytest -n0 -vv
+          pytest -n0 --capture=no -vv
       # https://community.codecov.com/t/numba-jitted-methods-are-not-captured-by-codecov/2649
       # - name: Coverage report
       #   uses: codecov/codecov-action@v2

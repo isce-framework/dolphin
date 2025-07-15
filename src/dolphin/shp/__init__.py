@@ -6,6 +6,7 @@ from typing import Optional
 import numpy as np
 from numpy.typing import ArrayLike
 
+from dolphin import Strides
 from dolphin.workflows import ShpMethod
 
 from . import _glrt, _ks
@@ -19,7 +20,7 @@ def estimate_neighbors(
     *,
     halfwin_rowcol: tuple[int, int],
     alpha: float,
-    strides: Optional[dict[str, int]] = None,
+    strides: Optional[Strides] = None,
     mean: Optional[ArrayLike] = None,
     var: Optional[ArrayLike] = None,
     nslc: Optional[int] = None,
@@ -71,11 +72,10 @@ def estimate_neighbors(
         - `method` not a valid `ShpMethod`
 
     """
-    import numba
-
     if strides is None:
-        strides = {"x": 1, "y": 1}
-    logger.debug(f"NUMBA THREADS: {numba.get_num_threads()}")
+        strides = Strides(x=1, y=1)
+    if prune_disconnected:
+        logger.warning("`prune_disconnected` is deprecated: ignoring")
 
     if method == ShpMethod.RECT:
         # No estimation needed
@@ -93,10 +93,9 @@ def estimate_neighbors(
             mean=mean,
             var=var,
             halfwin_rowcol=halfwin_rowcol,
-            strides=strides,
+            strides=tuple(strides),
             nslc=nslc,
             alpha=alpha,
-            prune_disconnected=prune_disconnected,
         )
     elif method.lower() == ShpMethod.KS:
         if amp_stack is None:

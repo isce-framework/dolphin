@@ -1,17 +1,131 @@
 # Changelog
 
-## [Unreleased](https://github.com/isce-framework/dolphin/compare/v0.35.1...main)
+All notable changes to this project will be documented in this file.
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+
+## [Unreleased](https://github.com/isce-framework/dolphin/compare/v0.40.0...HEAD)
+
+### Added
+
+- Added Cramér-Rao Lower Bound (CRLB) estimate rasters in https://github.com/isce-framework/dolphin/pull/577
+
+## [0.40.0](https://github.com/isce-framework/dolphin/compare/v0.39.0...v0.40.0) - 2025-06-
+
+### Fixed
+
+- Throw a better error for `dolphin` without any args
+
+### Changed
+
+- Remove `avg_coh` from optional phase linking outputs
+- `unwrap.py`: Combine sliding window mask with similarity mask for masking / interpolation
+
+## [0.39.0](https://github.com/isce-framework/dolphin/compare/v0.38.0...v0.39.0) - 2025-06-09
+
+Largest visible change: Switch CLI to use `tyro` by @scottstanie in https://github.com/isce-framework/dolphin/pull/578
+This involves multiple fixes and some breaking changes:
+
+- Fixed
+  - Missing arguments that were not configurable via the command line
+  - `dolphin unwrap` and `dolphin timesries` has several issues resulting from the function API being out of sync with the argparse API
+- `config` Changes:
+  - Strides must be specified as `--sx 6 --sy 3`, not `--strides 6 3`
+  - Several worker settings options like `--threads-per-worker` are not longer top-level command line options; you can specify them with `--worker-settings.threads-per-worker`
+
+### Added
+
+- Parallelize phase linking for single-swath case in `single.py` by @scottstanie in https://github.com/isce-framework/dolphin/pull/576
+- DOC: Add phase linking theory notebook to docs by @scottstanie in https://github.com/isce-framework/dolphin/pull/597
+- Add Github link to docs by @scottstanie in https://github.com/isce-framework/dolphin/pull/575
+- Add script to read GAMMA `.rslc` binary SLCs by @scottstanie in https://github.com/isce-framework/dolphin/pull/569
+- Add `keep_bits` to `BackgroundBlockWriter` API so writers can `round_mantissa` by @scottstanie in https://github.com/isce-framework/dolphin/pull/536
+
+### Changed
+
+- Make `reference` optional for velocity fitting by @scottstanie in https://github.com/isce-framework/dolphin/pull/571
+- Allow `Iterator[Filename]` to all readers with `.from_file_list` by @scottstanie in https://github.com/isce-framework/dolphin/pull/579
+- Fix to be `Iterable`, not `Iterator` API change for `_readers` from #579 by @scottstanie in https://github.com/isce-framework/dolphin/pull/582
+- Simplify reference index logic for `ALWAYS_FIRST` in `stack.py`, cut `FIRST_PER_MINISTACK` by @scottstanie in https://github.com/isce-framework/dolphin/pull/588
+- Remove single-burst special case in phase linking outputs by @scottstanie in https://github.com/isce-framework/dolphin/pull/574
+- Add `fmt=file_date_fmt` to all `get_dates` call to avoid file format assumptions by @scottstanie in https://github.com/isce-framework/dolphin/pull/585
+
+### Fixed
+
+- Run `fix_typos.sh` on repo by @scottstanie in https://github.com/isce-framework/dolphin/pull/572
+- Remove per-burst phase linking dirs that are empty by @scottstanie in https://github.com/isce-framework/dolphin/pull/595
+- `stitching.py`: fix strides check for either x or y by @scottstanie in https://github.com/isce-framework/dolphin/pull/596
+- Pass through `timeseries_options.reference_point` during `displacement.py` workflow by @scottstanie in https://github.com/isce-framework/dolphin/pull/602
+- `unwrapping.py`: fix comparison to avoid mask warping by @scottstanie in https://github.com/isce-framework/dolphin/pull/600
+
+### Removed
+
+- Remove unused `_utils` helper functions by @scottstanie in https://github.com/isce-framework/dolphin/pull/581
+- `OutputOptions`: Only require `bounds_epsg` if specifying `bounds`, cut `resolution` by @scottstanie in https://github.com/isce-framework/dolphin/pull/591
+- Remove old `glrt_cutoffs.csv` from `MANIFEST.in` by @scottstanie in https://github.com/isce-framework/dolphin/pull/573
+
+## [0.38.0](https://github.com/isce-framework/dolphin/compare/v0.37.0...v0.38.0) - 2025-04-15
+
+### Added
+
+- `demo-filtering-sizes.ipynb` for high-pass filtering cutoff demo by @scottstanie in https://github.com/isce-framework/dolphin/pull/561
+
+### Changed
+
+- **Breaking change**: Split corrections, remove raider pulled modules by @scottstanie in https://github.com/isce-framework/dolphin/pull/531
+
+### Fixed
+
+- Use `is_symlink` when checking for existing scratch files in spurt by @scottstanie in https://github.com/isce-framework/dolphin/pull/568
+
+## [0.37.0](https://github.com/isce-framework/dolphin/compare/v0.36.2...v0.37.0) - 2025-03-27
+
+### Changed
+
+- `filtering.py`: Change default `sigma` calculation, add docstring explanation by @scottstanie in https://github.com/isce-framework/dolphin/pull/560
+
+## [0.36.2](https://github.com/isce-framework/dolphin/compare/v0.36.1...v0.36.2) - 2025-03-25
+
+### Fixed
+
+- Update notebook walkthrough for new output structure by @scottstanie in https://github.com/isce-framework/dolphin/pull/558
+- Adding subdataset as input arguments because it is different for S1 and NISAR by @mirzaees in https://github.com/isce-framework/dolphin/pull/559
+
+## [0.36.1](https://github.com/isce-framework/dolphin/compare/v0.36.0...v0.36.1) - 2025-03-06
+
+### Fixed
+
+- Fix ionosphere reading and delay computation by @scottstanie in https://github.com/isce-framework/dolphin/pull/554
+- Let amp_dispersion_threshold be 0 to select no PS points by @scottstanie in https://github.com/isce-framework/dolphin/pull/553
+- Move `WriteArray` calls after `SetNoDataValue` calls by @scottstanie in https://github.com/isce-framework/dolphin/pull/555
+
+### Added
+
+- Add nisar wavelengths to `constants` by @mirzaees in https://github.com/isce-framework/dolphin/pull/551
+
+## [0.36.0](https://github.com/isce-framework/dolphin/compare/v0.35.1...v0.36.0) - 2025-02-21
+
+### Added
+
+- `utils.grow_nodata_region` to remove bad borders from images
 
 ### Changed
 
 - `timeseries.py`: Auto reference point selection
   - Picks the center of mass instead of arbitrary `argmax` result
   - Rename `condition_file` to `quality_file`
+- Convert `glrt` SHP method to use JAX instead of Numba
+- Remove import for `goldstein` and `filtering` from top level `__init_.py`
 
 ### Removed
 
 - Removed `condition` parameter in `timeseries` reference point functions
 - Removed `CallFunc` enum
+
+### Fixed
+
+- docs: Fix mathjax render, fix broken `DateOrDatetime` error
+- Replace `__name__` with "dolphin" in `getLogger` to fix missing log entries from `.jsonl` log files
+- Used `utils.grow_nodata_region` to remove bad borders from `shp_counts.tif`
 
 ## [0.35.1](https://github.com/isce-framework/dolphin/compare/v0.35.0...v0.35.1) - 2025-01-15
 
@@ -19,7 +133,6 @@
 
 - `filtering.py` Fix in_bounds_pixels masking, set default to 25 km
 - Set `output_reference_idx` separately from `compressed_reference_idx` during phase linking setup
-
 
 ## [0.35.0](https://github.com/isce-framework/dolphin/compare/v0.34.0...v0.35.0) - 2025-01-09
 
@@ -437,7 +550,7 @@
 - Added `RasterWriter` and `BackgroundRasterWriter` implementations of this protocol
 - Refactored phase linking
   - Covariance and EVD/MLE use `jax`
-  - This combines the implementation of CPU/GPU, and removes the need for usign `pymp`
+  - This combines the implementation of CPU/GPU, and removes the need for using `pymp`
 - Added `utils.disable_gpu` to stop the use ofr a GPU even if it's available
 
 ### Changed
@@ -495,7 +608,7 @@
 ### Added
 - Ability to unwrap interferograms with the [`snaphu-py`](https://github.com/isce-framework/snaphu-py) (not a required dependency)
 - Added ability to make annual ifgs in `Network`
-- Start of tropospheric corection support in `dolphin.atmosphere` using PyAPS and Raider packages
+- Start of tropospheric correction support in `dolphin.atmosphere` using PyAPS and Raider packages
 - Expose the unwrap skipping with `dolphin config --no-unwrap`
 
 ### Changed
@@ -646,7 +759,7 @@ Now optional:
 - Pydantic models were upgraded to V2
 - Refactored the blockwise IO into `_blocks.py`.
   - The iteration now happens over the output grid for easier dilating/padding when using `strides`
-  - New classes with `BlockIndices` and `BlockManager` for easier mangement of the different slices
+  - New classes with `BlockIndices` and `BlockManager` for easier management of the different slices
 
 ### Dependencies
 

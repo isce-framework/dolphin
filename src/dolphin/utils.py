@@ -17,7 +17,7 @@ import numpy as np
 from numpy.typing import ArrayLike, DTypeLike
 from osgeo import gdal, gdal_array, gdalconst
 
-from dolphin._types import Bbox, Filename, P, Strides, T
+from dolphin._types import Filename, P, Strides, T
 
 DateOrDatetime = Union[datetime.date, datetime.datetime]
 
@@ -458,7 +458,7 @@ def get_cpu_count():
         cfs_quota_us = get_cpu_quota()
         cfs_period_us = get_cpu_period()
         if cfs_quota_us > 0 and cfs_period_us > 0:
-            return int(math.ceil(cfs_quota_us / cfs_period_us))
+            return math.ceil(cfs_quota_us / cfs_period_us)
     except Exception:
         pass
     return cpu_count()
@@ -520,122 +520,9 @@ def format_dates(*dates: DateOrDatetime, fmt: str = "%Y%m%d", sep: str = "_") ->
 _format_date_pair = format_date_pair
 
 
-def prepare_geometry(
-    geometry_dir: Path,
-    geo_files: Sequence[Path],
-    matching_file: Path,
-    dem_file: Optional[Path],
-    epsg: int,
-    out_bounds: Bbox,
-    strides: Optional[dict[str, int]] = None,
-) -> dict[str, Path]:
-    """Prepare geometry files.
-
-    Parameters
-    ----------
-    geometry_dir : Path
-        Output directory for geometry files.
-    geo_files : list[Path]
-        list of geometry files.
-    matching_file : Path
-        Matching file.
-    dem_file : Optional[Path]
-        DEM file.
-    epsg : int
-        EPSG code.
-    out_bounds : Bbox
-        Output bounds.
-    strides : Dict[str, int], optional
-        Strides for resampling, by default {"x": 1, "y": 1}.
-
-    Returns
-    -------
-    Dict[str, Path]
-        Dictionary of prepared geometry files.
-
-    """
-    from dolphin import stitching
-    from dolphin.io import DEFAULT_TIFF_OPTIONS, format_nc_filename
-
-    if strides is None:
-        strides = {"x": 1, "y": 1}
-    geometry_dir.mkdir(exist_ok=True)
-
-    stitched_geo_list = {}
-
-    if geo_files[0].name.endswith(".h5"):
-        # ISCE3 geocoded SLCs
-        datasets = ["los_east", "los_north", "layover_shadow_mask"]
-        nodatas = [0, 0, 127]
-
-        for nodata, ds_name in zip(nodatas, datasets):
-            outfile = geometry_dir / f"{ds_name}.tif"
-            logger.info(f"Creating {outfile}")
-            stitched_geo_list[ds_name] = outfile
-            ds_path = f"/data/{ds_name}"
-            cur_files = [format_nc_filename(f, ds_name=ds_path) for f in geo_files]
-
-            if ds_name not in "layover_shadow_mask":
-                options = (*DEFAULT_TIFF_OPTIONS, "NBITS=16")
-            else:
-                options = DEFAULT_TIFF_OPTIONS
-            stitching.merge_images(
-                cur_files,
-                outfile=outfile,
-                driver="GTiff",
-                out_bounds=out_bounds,
-                out_bounds_epsg=epsg,
-                in_nodata=nodata,
-                out_nodata=nodata,
-                target_aligned_pixels=True,
-                strides=strides,
-                resample_alg="nearest",
-                overwrite=False,
-                options=options,
-            )
-
-        if dem_file:
-            height_file = geometry_dir / "height.tif"
-            stitched_geo_list["height"] = height_file
-            if not height_file.exists():
-                logger.info(f"Creating {height_file}")
-                stitching.warp_to_match(
-                    input_file=dem_file,
-                    match_file=matching_file,
-                    output_file=height_file,
-                    resample_alg="cubic",
-                )
-    else:
-        # ISCE2 radar coordinates
-        dsets = {
-            "hgt.rdr": "height",
-            "incLocal.rdr": "incidence_angle",
-            "lat.rdr": "latitude",
-            "lon.rdr": "longitude",
-        }
-
-        for geo_file in geo_files:
-            if geo_file.stem in dsets:
-                out_name = dsets[geo_file.stem]
-            elif geo_file.name in dsets:
-                out_name = dsets[geo_file.name]
-                continue
-
-            out_file = geometry_dir / (out_name + ".tif")
-            stitched_geo_list[out_name] = out_file
-            logger.info(f"Creating {out_file}")
-
-            stitching.warp_to_match(
-                input_file=geo_file,
-                match_file=matching_file,
-                output_file=out_file,
-                resample_alg="cubic",
-            )
-
-    return stitched_geo_list
-
-
-def compute_out_shape(shape: tuple[int, int], strides: Strides) -> tuple[int, int]:
+def compute_out_shape(
+    shape: tuple[int, int], strides: Strides | tuple[int, int]
+) -> tuple[int, int]:
     """Calculate the output size for an input `shape` and row/col `strides`.
 
     Parameters
@@ -716,3 +603,54 @@ def get_nearest_date_idx(
     )
 
     return nearest_idx
+
+
+def grow_nodata_region(
+    arr: ArrayLike, nodata: float, n_pixels: int = 1, copy: bool = True
+) -> np.ndarray:
+    """Grow the `nodata` region of `arr` by  `n_pixels`.
+
+    This function erodes valid pixels in `arr` by making a mask from the `nodata` value
+    and then extends the mask inward by `n_pixels`.
+
+    If `arr` has no `nodata` value, the function returns `arr` unchanged.
+
+    Parameters
+    ----------
+    arr : numpy.ndarray
+        Input array containing the data and mask to be eroded
+    nodata : float
+        The value in `arr` that represents nodata.
+    n_pixels : int, optional
+        Number of pixels to erode from the border
+        Default is 1.
+    copy : bool, optional
+        Whether to copy the input data before eroding.
+        Default is True (no in-place modification is made).
+
+    Returns
+    -------
+    numpy.ndarray
+        Array with the same data, eroded by `n_pixels`.
+        If `copy` is False, the input array is modified in place.
+
+    Raises
+    ------
+    ValueError
+        If `arr` is not 2D.
+
+    """
+    from scipy import ndimage
+
+    arr = np.asarray(arr)
+    if arr.ndim != 2:
+        raise ValueError("Input array must be 2D.")
+
+    mask = arr == nodata if not np.isnan(nodata) else np.isnan(arr)
+    # "growing" the invalid (nodata) area equivalently "erodes" the valid data
+    mask_expanded = ndimage.binary_dilation(
+        mask, structure=np.ones((1 + 2 * n_pixels, 1 + 2 * n_pixels))
+    )
+    out = arr.copy() if copy else arr
+    out[mask_expanded] = nodata
+    return out

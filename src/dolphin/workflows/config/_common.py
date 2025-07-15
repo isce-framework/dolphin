@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import glob
 import logging
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
-from typing import Any, Literal, Optional
+from typing import Annotated, Any, Literal, Optional
 
+import tyro
 from pydantic import (
     BaseModel,
     ConfigDict,
@@ -32,6 +33,7 @@ __all__ = [
     "OutputOptions",
     "PhaseLinkingOptions",
     "PsOptions",
+    "Strides",
     "TimeseriesOptions",
     "WorkerSettings",
 ]
@@ -48,15 +50,21 @@ class PsOptions(BaseModel, extra="forbid"):
     amp_dispersion_threshold: float = Field(
         0.25,
         description="Amplitude dispersion threshold to consider a pixel a PS.",
-        gt=0.0,
+        ge=0.0,
     )
 
 
 class HalfWindow(BaseModel, extra="forbid"):
     """Class to hold half-window size for multi-looking during phase linking."""
 
-    x: int = Field(11, description="Half window size (in pixels) for x direction", gt=0)
-    y: int = Field(5, description="Half window size (in pixels) for y direction", gt=0)
+    y: Annotated[
+        int,
+        tyro.conf.arg(aliases=("--hwy",)),
+    ] = Field(5, description="Half window size (in pixels) for y direction", gt=0)
+    x: Annotated[
+        int,
+        tyro.conf.arg(aliases=("--hwx",)),
+    ] = Field(11, description="Half window size (in pixels) for x direction", gt=0)
 
     def to_looks(self):
         """Convert (x, y) half-window size to (row, column) looks."""
@@ -72,9 +80,10 @@ class PhaseLinkingOptions(BaseModel, extra="forbid"):
     """Configurable options for wrapped phase estimation."""
 
     _directory: Path = PrivateAttr(Path("linked_phase"))
-    ministack_size: int = Field(
-        15, description="Size of the ministack for sequential estimator.", gt=1
-    )
+    ministack_size: Annotated[
+        int,
+        tyro.conf.arg(aliases=("--ms",)),
+    ] = Field(15, description="Size of the ministack for sequential estimator.", gt=1)
     max_num_compressed: int = Field(
         100,
         description=(
@@ -84,15 +93,18 @@ class PhaseLinkingOptions(BaseModel, extra="forbid"):
         ),
         gt=0,
     )
-    output_reference_idx: int = Field(
-        0,
+    output_reference_idx: Optional[int] = Field(
+        None,
         description=(
-            "Index of input SLC to use for making phase linked interferograms after"
-            " EVD/EMI."
+            "Index of the SLC to use as interferogram reference after phase linking. If"
+            " not set, uses the CompressedSlcPlan default"
         ),
     )
     half_window: HalfWindow = HalfWindow()
-    use_evd: bool = Field(
+    use_evd: Annotated[
+        bool,
+        tyro.conf.arg(aliases=("--use-evd",)),
+    ] = Field(
         False, description="Use EVD on the coherence instead of using the EMI algorithm"
     )
 
@@ -142,13 +154,6 @@ class PhaseLinkingOptions(BaseModel, extra="forbid"):
         ),
     )
     compressed_slc_plan: CompressedSlcPlan = CompressedSlcPlan.ALWAYS_FIRST
-
-    @field_validator("compressed_slc_plan", mode="before")
-    @classmethod
-    def _replace_none(cls, v):
-        if v is None:
-            return CompressedSlcPlan.ALWAYS_FIRST
-        return v
 
 
 class InterferogramNetwork(BaseModel, extra="forbid"):
@@ -260,12 +265,17 @@ class WorkerSettings(BaseModel, extra="forbid"):
             " environment variable in each python process."
         ),
     )
-    n_parallel_bursts: int = Field(
+    n_parallel_bursts: Annotated[
+        int,
+        tyro.conf.arg(aliases=("--n-parallel-bursts",)),
+    ] = Field(
         default=1,
         ge=1,
         description=(
             "If processing separate spatial bursts, number of bursts to run in parallel"
-            " for wrapped-phase-estimation."
+            " for wrapped-phase-estimation. For large, single-swath SLC stacks (e.g."
+            " UAVSAR, NISAR), this sets the number of chunks processed in parallel"
+            " during phase linking."
         ),
     )
     block_shape: tuple[int, int] = Field(
@@ -277,7 +287,10 @@ class WorkerSettings(BaseModel, extra="forbid"):
 class InputOptions(BaseModel, extra="forbid"):
     """Options specifying input datasets for workflow."""
 
-    subdataset: Optional[str] = Field(
+    subdataset: Annotated[
+        Optional[str],
+        tyro.conf.arg(aliases=("--subdataset", "--sds")),
+    ] = Field(
         None,
         description="If passing HDF5/NetCDF files, subdataset to use from CSLC files. ",
     )
@@ -295,25 +308,25 @@ class InputOptions(BaseModel, extra="forbid"):
     )
 
 
+class Strides(BaseModel, extra="forbid"):
+    """Specify the strides (decimation factor) to perform while processing input.
+
+    For example, strides of {x: 4, y: 2} would turn an input of shape (100, 100)
+    into an output of shape (50, 25).
+    """
+
+    y: Annotated[int, tyro.conf.arg(aliases=("--sy",))] = Field(
+        1, description="Decimation factor (stride) in the y/row direction", gt=0
+    )
+    x: Annotated[int, tyro.conf.arg(aliases=("--sx",))] = Field(
+        1, description="Decimation factor (stride) in the x/column direction", gt=0
+    )
+
+
 class OutputOptions(BaseModel, extra="forbid"):
     """Options for the output size/format/compressions."""
 
-    output_resolution: Optional[dict[str, int]] = Field(
-        # {"x": 20, "y": 20},
-        # TODO: how to get a blank "x" and "y" in the schema printed instead of nothing?
-        None,
-        description="Output (x, y) resolution (in units of input data)",
-    )
-    strides: dict[str, int] = Field(
-        {"x": 1, "y": 1},
-        description=(
-            "Alternative to specifying output resolution: Specify the (x, y) strides"
-            " (decimation factor) to perform while processing input. For example,"
-            " strides of [4, 2] would turn an input resolution of [5, 10] into an"
-            " output resolution of [20, 20]."
-        ),
-        validate_default=True,
-    )
+    strides: Strides = Field(Strides(), validate_default=True)
     bounds: Optional[tuple[float, float, float, float]] = Field(
         None,
         description=(
@@ -321,17 +334,17 @@ class OutputOptions(BaseModel, extra="forbid"):
             "e.g. `bbox=[-150.2,65.0,-150.1,65.5]`"
         ),
     )
+    bounds_epsg: Optional[int] = Field(
+        4326,
+        description=(
+            "EPSG code for the `bounds` or `bounds_wkt` coordinates, if specified."
+        ),
+    )
     bounds_wkt: Optional[str] = Field(
         None,
         description=(
             "Area of interest as a simple Polygon in well-known-text (WKT) format."
             " Can pass a string, or a `.wkt` filename containing the Polygon text."
-        ),
-    )
-    bounds_epsg: int = Field(
-        4326,
-        description=(
-            "EPSG code for the `bounds` or `bounds_wkt` coordinates, if specified."
         ),
     )
 
@@ -387,39 +400,14 @@ class OutputOptions(BaseModel, extra="forbid"):
             return Bbox(*bounds)
         return bounds
 
-    @field_validator("strides")
+    @field_validator("bounds_epsg", mode="after")
     @classmethod
-    def _check_strides_against_res(cls, strides, info):
-        """Compute the output resolution from the strides."""
-        resolution = info.data.get("output_resolution")
-        if strides is not None and resolution is not None:
-            msg = "Cannot specify both strides and output_resolution."
+    def _ensure_bounds_epsg(cls, bounds_epsg, info):
+        bounds = info.data.get("bounds")
+        if bounds is not None and bounds_epsg is None:
+            msg = "Must specify `bounds_epsg` if `bounds` is provided."
             raise ValueError(msg)
-        elif strides is None and resolution is None:
-            msg = "Must specify either strides or output_resolution."
-            raise ValueError(msg)
-
-        # Check that the dict has the correct keys
-        if strides is not None:
-            if set(strides.keys()) != {"x", "y"}:
-                msg = "Strides must be a dict with keys 'x' and 'y'"
-                raise ValueError(msg)
-            # and that the strides are integers
-            if not all(isinstance(v, int) for v in strides.values()):
-                msg = "Strides must be integers"
-                raise ValueError(msg)
-        if resolution is not None:
-            if set(resolution.keys()) != {"x", "y"}:
-                msg = "Resolution must be a dict with keys 'x' and 'y'"
-                raise ValueError(msg)
-            # and that the resolution is valid, > 0. Can be int or float
-            if any(v <= 0 for v in resolution.values()):
-                msg = "Resolutions must be > 0"
-                raise ValueError(msg)
-            # TODO: compute strides from resolution
-            msg = "output_resolution not yet implemented. Use `strides`."
-            raise NotImplementedError(msg)
-        return strides
+        return bounds_epsg
 
     @field_validator("extra_reference_date", mode="after")
     @classmethod
@@ -464,10 +452,6 @@ class WorkflowBase(YamlModel):
             " Default logs to `dolphin.log` within `work_directory`"
         ),
     )
-    creation_time_utc: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        description="Time the config file was created",
-    )
 
     model_config = ConfigDict(extra="allow")
     _dolphin_version: str = PrivateAttr(_dolphin_version)
@@ -490,7 +474,7 @@ class WorkflowBase(YamlModel):
             d.mkdir(parents=True, exist_ok=True)
 
 
-def _read_file_list_or_glob(cls, value):  # noqa: ARG001:
+def _read_file_list_or_glob(cls, value):  # noqa: ARG001
     """Check if the input file list is a glob pattern or a text file.
 
     If it's a text file, read the lines and return a list of Path objects.

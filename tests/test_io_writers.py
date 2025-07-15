@@ -158,3 +158,21 @@ class TestBackgroundStackWriter:
         w.close()
         for f in output_file_list:
             assert get_raster_units(f) == "custom units"
+
+    def test_stack_keepbits(self, slc_file_list, output_file_list):
+        data = np.random.randn(len(output_file_list), 5, 10)
+        rows, cols = slice(0, 5), slice(0, 10)
+
+        w = BackgroundStackWriter(output_file_list, like_filename=slc_file_list[0])
+        w[:, rows, cols] = data
+        w.close()
+
+        data2 = data.copy()
+        w5 = BackgroundStackWriter(
+            output_file_list, like_filename=slc_file_list[0], keep_bits=5
+        )
+        w5[:, rows, cols] = data2
+        w5.close()
+        written = load_gdal(output_file_list[0], rows=rows, cols=cols)
+        # Check for the small floating point differences
+        assert np.abs(written - data).max() > 1e-6

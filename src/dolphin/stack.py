@@ -361,14 +361,14 @@ class MiniStackInfo(BaseStack):
     def output_reference_date(self):
         """Date of the reference phase of the stack."""
         # Note this works for either a length-1 tuple (real SLC), or for
-        # the compressed SLC formate (ref, start, end)
+        # the compressed SLC format (ref, start, end)
         return self.dates[self.output_reference_idx][0]
 
     @property
     def compressed_reference_date(self):
         """Date of the reference phase of the stack."""
         # Note this works for either a length-1 tuple (real SLC), or for
-        # the compressed SLC formate (ref, start, end)
+        # the compressed SLC format (ref, start, end)
         return self.dates[self.compressed_reference_idx][0]
 
     def get_compressed_slc_info(self) -> CompressedSlcInfo:
@@ -402,9 +402,12 @@ class MiniStackPlanner(BaseStack):
     """Class for planning the processing of batches of SLCs."""
 
     max_num_compressed: int = 5
-    output_reference_idx: int = Field(
-        0,
-        description="Index of the SLC to use as reference during phase linking",
+    output_reference_idx: Optional[int] = Field(
+        None,
+        description=(
+            "Index of the SLC to use as interferogram reference after phase linking. If"
+            " not set, uses the CompressedSlcPlan default"
+        ),
     )
     compressed_slc_plan: CompressedSlcPlan = CompressedSlcPlan.ALWAYS_FIRST
 
@@ -416,13 +419,20 @@ class MiniStackPlanner(BaseStack):
             msg = "Cannot create ministacks with size < 2"
             raise ValueError(msg)
 
-        # For now, only allow `compressed_idx` when doing a single batch.
-        # The logic is more complicated for multiple `compressed_idx`s, and
-        # it's unclear who would need that
-        if compressed_idx is not None and ministack_size < len(self.file_list):
-            raise ValueError(
-                "Cannot set `compressed_idx` when creating multiple ministacks."
-            )
+        # Check for problems with multi-batch inputs.
+        # For now, `compressed_idx` logic is more complicated/ambiguous for multiple
+        # `compressed_idx`s, and it's unclear who would need that
+        # Likewise for `last_per_ministack` - useful for separate runs, but unclear
+        # not why you'd want it for multi-ministack sequential runs
+        if ministack_size < len(self.file_list):
+            if compressed_idx is not None:
+                raise ValueError(
+                    "Cannot set `compressed_idx` when creating multiple ministacks."
+                )
+            if self.compressed_slc_plan == CompressedSlcPlan.LAST_PER_MINISTACK:
+                raise ValueError(
+                    "'last_per_ministack' cannot be used for multiple ministacks"
+                )
 
         output_ministacks: list[MiniStackInfo] = []
 
@@ -467,28 +477,23 @@ class MiniStackPlanner(BaseStack):
             if compressed_idx is not None:
                 compressed_reference_idx = compressed_idx
             elif self.compressed_slc_plan == CompressedSlcPlan.ALWAYS_FIRST:
-                # Simplest operational version: CompSLCs have same base phase,
-                # but different "residual" added on
-                # We use the `output_reference_idx`, 0 by default, but this index
-                # may be passed in if we are manually specifying an output
-                compressed_reference_idx = self.output_reference_idx
-            elif self.compressed_slc_plan == CompressedSlcPlan.FIRST_PER_MINISTACK:
-                # Like Ansari, 2017 paper: each ministack is "self contained"
-                compressed_reference_idx = num_ccslc
-                # Ansari, 2017 also had output_reference_idx = num_ccslcs, and
-                # used the "Datum Adjustment" step to get outputs relative to day 0
-                # Here, we'll use 0 (or manually specifed)
+                # Here, CompSLCs have same base phase, but different "residual" added on
+                compressed_reference_idx = max(0, num_ccslc - 1)
             elif self.compressed_slc_plan == CompressedSlcPlan.LAST_PER_MINISTACK:
-                # Alternative that allows sequential interferograms across ministacks
+                # Here, CompSLCs have same base phase, but different "residual" added on
                 compressed_reference_idx = -1
 
-            if self.compressed_slc_plan == CompressedSlcPlan.LAST_PER_MINISTACK:
-                # For this, we'll always use the most recent compressed SLC as output
-                # reference so that we can connected stacks, but minimize the temporal
-                # baseline of interferograms we form
-                output_reference_idx = num_ccslc - 1
-            else:
+            # Set the `output_reference_idx`, used for making interferograms
+            if self.output_reference_idx is not None:
+                # may be passed in if we are manually specifying an output:
                 output_reference_idx = self.output_reference_idx
+            else:
+                # Otherwise, this will be the *latest* compressed SLC
+                # For the `ALWAYS_FIRST` plan, this leads to all interferograms
+                # looking like single-reference, relative to day 1
+                # For `LAST_PER_MINISTACK`, the interferograms are formed
+                # which are the shortest possible temporal baseline for the given inputs
+                output_reference_idx = max(0, num_ccslc - 1)
 
             cur_ministack = MiniStackInfo(
                 file_list=combined_files,

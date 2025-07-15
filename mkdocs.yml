@@ -1,4 +1,5 @@
 site_name: Documentation for dolphin
+repo_url: https://github.com/isce-framework/dolphin
 
 theme:
   name: "material"

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-from os import fspath
 from pathlib import Path
 
 import rasterio as rio
@@ -150,13 +149,3 @@ def _zero_from_mask(
             like_filename=corr_filename,
         )
     return zeroed_ifg_file, zeroed_corr_file
-
-
-def _redirect_unwrapping_log(unw_filename: Filename, method: str):
-    import journal
-
-    logfile = Path(unw_filename).with_suffix(".log")
-    journal.info(f"isce3.unwrap.{method}").device = journal.logfile(
-        fspath(logfile), "w"
-    )
-    logger.info(f"Logging unwrapping output to {logfile}")

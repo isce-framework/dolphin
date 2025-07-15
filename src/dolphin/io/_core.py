@@ -15,7 +15,7 @@ from typing import Any, Mapping, Optional, Sequence, Union
 
 import h5py
 import numpy as np
-from numpy.typing import ArrayLike, DTypeLike
+from numpy.typing import ArrayLike, DTypeLike, NDArray
 from osgeo import gdal
 from pyproj import CRS
 
@@ -600,8 +600,8 @@ def xy_to_rowcol(
     # Need to convert to int, otherwise we get a float
     if do_round:
         # round up to the nearest pixel, instead of banker's rounding
-        row = int(math.floor(row + 0.5))
-        col = int(math.floor(col + 0.5))
+        row = math.floor(row + 0.5)
+        col = math.floor(col + 0.5)
     return int(row), int(col)
 
 
@@ -722,18 +722,9 @@ def write_arr(
     if fi.geotransform is not None:
         ds_out.SetGeoTransform(fi.geotransform)
 
-    # Write the actual data
-    if arr is not None:
-        if arr.ndim == 2:
-            arr = arr[np.newaxis, ...]
-        for i in range(fi.nbands):
-            logger.debug(f"Writing band {i+1}/{fi.nbands}")
-            bnd = ds_out.GetRasterBand(i + 1)
-            bnd.WriteArray(arr[i])
-
     # Set the nodata/units/description for each band
     for i in range(fi.nbands):
-        logger.debug(f"Setting nodata for band {i+1}/{fi.nbands}")
+        logger.debug(f"Setting nodata for band {i + 1}/{fi.nbands}")
         bnd = ds_out.GetRasterBand(i + 1)
         # Note: right now we're assuming the nodata/units/description
         if fi.nodata is not None:
@@ -743,12 +734,21 @@ def write_arr(
         if description is not None:
             bnd.SetDescription(description)
 
+    # Write the actual data
+    if arr is not None:
+        if arr.ndim == 2:
+            arr = arr[np.newaxis, ...]
+        for i in range(fi.nbands):
+            logger.debug(f"Writing band {i + 1}/{fi.nbands}")
+            bnd = ds_out.GetRasterBand(i + 1)
+            bnd.WriteArray(arr[i])
+
     ds_out.FlushCache()
     ds_out = None
 
 
 def write_block(
-    cur_block: ArrayLike,
+    cur_block: NDArray,
     filename: Filename,
     row_start: int,
     col_start: int,
@@ -772,7 +772,7 @@ def write_block(
         If None, writes to band 1 (for 2D), or all bands if `cur_block.ndim = 3`.
     dset : str
         (For writing to HDF5/NetCDF files) The name of the string dataset
-        withing `filename` to write to.
+        within `filename` to write to.
 
     Raises
     ------
@@ -798,7 +798,7 @@ def write_block(
 
 
 def _write_gdal(
-    cur_block: ArrayLike,
+    cur_block: NDArray,
     filename: Filename,
     row_start: int,
     col_start: int,
@@ -821,7 +821,7 @@ def _write_gdal(
 
 
 def _write_hdf5(
-    cur_block: ArrayLike,
+    cur_block: NDArray,
     filename: Filename,
     row_start: int,
     col_start: int,

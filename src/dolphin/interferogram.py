@@ -20,6 +20,7 @@ from tqdm.contrib.concurrent import thread_map
 from dolphin import io, utils
 from dolphin._types import Filename, T
 from dolphin.filtering import gaussian_filter_nan
+from dolphin.io._readers import _parse_vrt_file
 
 gdal.UseExceptions()
 
@@ -265,8 +266,6 @@ class VRTInterferogram(BaseModel, extra="allow"):
             VRTInterferogram object.
 
         """
-        from dolphin.io._readers import _parse_vrt_file
-
         # Use the parsing function
         (ref_slc, sec_slc), subdataset = _parse_vrt_file(path)
         if subdataset is not None:
@@ -352,7 +351,7 @@ class Network:
         **kwargs: Any,
     ):
         if self.subdataset is None or isinstance(self.subdataset, str):
-            self._slc_to_subdataset = {slc: self.subdataset for slc in self.slc_list}
+            self._slc_to_subdataset = dict.fromkeys(self.slc_list, self.subdataset)
         else:
             # We're passing a sequence
             assert len(self.subdataset) == len(self.slc_list)
@@ -603,6 +602,9 @@ class Network:
 
     def __eq__(self, other):
         return self.ifg_list == other.ifg_list
+
+    def __hash__(self):
+        return hash(self.ifg_list)
 
 
 def estimate_correlation_from_phase(

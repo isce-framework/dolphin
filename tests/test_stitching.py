@@ -194,3 +194,41 @@ def test_merge_images_one_image_out_bounds_specified(
 
     b = io.get_raster_bounds(outfile2)
     assert b == buffered_bounds
+
+
+def test_merge_images_dest_epsg(tmp_path, shifted_slc_files):
+    """Test that dest_epsg parameter forces output to specified projection."""
+    # Test with EPSG:4326 (WGS84) - the input files are already in 4326
+    outfile_4326 = tmp_path / "stitched_4326.tif"
+    stitching.merge_images(shifted_slc_files, outfile_4326, dest_epsg=4326)
+
+    crs_4326 = io.get_raster_crs(outfile_4326)
+    assert crs_4326.to_epsg() == 4326
+
+
+def test_merge_images_dest_epsg_none_default_behavior(tmp_path, shifted_slc_files):
+    """Test that dest_epsg=None uses default behavior (most common projection)."""
+    # Test without dest_epsg (default behavior)
+    outfile_default = tmp_path / "stitched_default.tif"
+    stitching.merge_images(shifted_slc_files, outfile_default)
+
+    # Test with dest_epsg=None (explicit None)
+    outfile_none = tmp_path / "stitched_none.tif"
+    stitching.merge_images(shifted_slc_files, outfile_none, dest_epsg=None)
+
+    # Both should have the same projection (most common from inputs)
+    crs_default = io.get_raster_crs(outfile_default)
+    crs_none = io.get_raster_crs(outfile_none)
+    assert crs_default.to_epsg() == crs_none.to_epsg()
+
+
+def test_merge_by_date_dest_epsg(tmp_path, shifted_slc_files):
+    """Test that dest_epsg parameter works with merge_by_date function."""
+    result_dict = stitching.merge_by_date(
+        shifted_slc_files, output_dir=tmp_path, dest_epsg=4326
+    )
+
+    # Check that all output files have the correct projection
+    for outfile_path in result_dict.values():
+        crs = io.get_raster_crs(outfile_path)
+        assert crs.to_epsg() == 4326

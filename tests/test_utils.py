@@ -1,5 +1,6 @@
 import numpy as np
 import numpy.testing as npt
+import pytest
 
 from dolphin import utils
 
@@ -90,3 +91,85 @@ def test_upsample_nearest():
     assert upsampled3d.shape == (3, 4, 4)
     for img in upsampled3d:
         npt.assert_array_equal(img, upsampled)
+
+
+class TestGrowNodataRegion:
+    @pytest.mark.parametrize("nodata", [0, -9999.0, np.nan])
+    def test_basic_rectangle(self, nodata):
+        """Test basic rectangular data with nodata border."""
+        arr = np.full((5, 5), nodata)
+        # rows/cols 1,2,3 are valid
+        arr[1:4, 1:4] = 1
+        # After eroding 1, only the middle is left
+        expected = np.full((5, 5), nodata)
+        expected[2, 2] = 1
+
+        result = utils.grow_nodata_region(arr, nodata=nodata, n_pixels=1)
+        npt.assert_array_equal(result, expected)
+
+    def test_diagonal(self):
+        """Test diagonal line of data."""
+        arr = np.full((6, 6), -9999.0)
+        # Create diagonal line of data
+        np.fill_diagonal(arr, 100)
+        result = utils.grow_nodata_region(arr, nodata=-9999.0, n_pixels=1)
+
+        # Everything should be eroded due to 9-connectivity
+        expected = np.full((6, 6), -9999.0)
+        npt.assert_array_equal(result, expected)
+
+    def test_irregular_shape(self):
+        """Test irregular L-shaped data pattern."""
+        arr = np.full((5, 5), 0)
+        # Create L-shaped pattern
+        arr[1:4, 1] = 1  # vertical line
+        arr[3, 1:4] = 1  # horizontal line
+
+        result = utils.grow_nodata_region(arr, nodata=0, n_pixels=1)
+        # After erosion, both single-pixel lines are gone
+        expected = np.full((5, 5), 0)
+        npt.assert_array_equal(result, expected)
+
+    def test_no_copy(self):
+        """Test in-place modification when copy=False."""
+        arr = np.full((4, 4), 0)
+        arr[1:3, 1:3] = 1
+        original_arr = arr.copy()
+
+        result = utils.grow_nodata_region(arr, nodata=0, n_pixels=1, copy=False)
+        assert result is arr  # Should return same object
+        assert not np.array_equal(arr, original_arr)  # Should be modified
+
+    def test_larger_window(self):
+        """Test erosion with larger window size."""
+        arr = np.full((7, 7), 0)
+        arr[1:6, 1:6] = 1
+
+        result = utils.grow_nodata_region(arr, nodata=0, n_pixels=2)
+        expected = np.full((7, 7), 0)
+        expected[3, 3] = 1
+        npt.assert_array_equal(result, expected)
+
+    def test_all_nodata(self):
+        """Test array with all nodata values."""
+        arr = np.full((4, 4), 0)
+        result = utils.grow_nodata_region(arr, nodata=0, n_pixels=1)
+        npt.assert_array_equal(result, arr)
+
+    def test_all_valid(self):
+        """Test array with all valid values."""
+        arr = np.full((4, 4), 1)
+        result = utils.grow_nodata_region(arr, nodata=0, n_pixels=1)
+        npt.assert_array_equal(result, arr)
+
+    @pytest.mark.parametrize(
+        "invalid_input",
+        [
+            np.array([1, 2, 3]),  # 1D array
+            np.array([[[1]]]),  # 3D array
+        ],
+    )
+    def test_invalid_dimensions(self, invalid_input):
+        """Test that function raises error for non-2D arrays."""
+        with pytest.raises(ValueError):
+            utils.grow_nodata_region(invalid_input, nodata=-9999.0)
