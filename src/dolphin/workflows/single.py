@@ -271,6 +271,7 @@ def run_wrapped_phase_single(
 
         # Fill in the nan values with 0
         np.nan_to_num(pl_output.cpx_phase, copy=False)
+        np.nan_to_num(pl_output.crlb_std_dev, copy=False)
         np.nan_to_num(pl_output.temp_coh, copy=False)
 
         # Compress the ministack using only the non-compressed SLCs
