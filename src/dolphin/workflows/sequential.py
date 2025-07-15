@@ -90,7 +90,6 @@ def run_wrapped_phase_sequential(
     output_slc_files: list[Path] = []
     crlb_files: list[Path] = []
     closure_phase_files: list[Path] = []
-    # Each item is the temp_coh/shp_count file from a ministack
     temp_coh_files: list[Path] = []
     similarity_files: list[Path] = []
     shp_count_files: list[Path] = []
@@ -221,13 +220,19 @@ def _get_outputs_from_folder(
     similarity_file = next(output_folder.glob("similarity*"))
     shp_count_file = next(output_folder.glob("shp_counts_*"))
     # Currently ignoring to not stitch:
-    # eigenvalues, estimator, avg_coh
-    crlb_files = sorted(output_folder.glob("crlb/crlb_*.tif"))
     closure_phase_files = sorted(output_folder.glob("closure_phase/closure_phase*tif"))
+    # Move and rename to "crlb_<date>.tif" crlb files to distinguish from the SLCs
+    crlb_new_files = [
+        p.with_name(f"crlb_{p.name.replace('.slc.tif', '.tif')}")
+        for p in sorted((output_folder / "crlb").glob("*"))
+    ]
+    existing_crlb_files = sorted((output_folder / "crlb").glob("*"))
+    for old_p, new_p in zip(existing_crlb_files, crlb_new_files, strict=False):
+        old_p.rename(new_p)
 
     return (
         cur_output_files,
-        crlb_files,
+        crlb_new_files,
         closure_phase_files,
         cur_comp_slc_file,
         temp_coh_file,

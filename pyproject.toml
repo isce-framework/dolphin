@@ -79,20 +79,21 @@ select = [
 ]
 
 ignore = [
-  "D100",   # Missing docstring in public module
-  "D104",   # Missing docstring in public package
-  "D105",   # Missing docstring in magic method
-  "D203",   # 1 blank line required before class docstring
-  "D213",   # Multi-line docstring summary should start at the second line
-  "N803",   # Argument name should be lowercase
-  "N806",   # Variable _ in function should be lowercase
-  "PIE796", # Non-unique values are redundant and likely a mistake.
-  "PLR",    # Pylint Refactor
-  "PTH123", # `open()` should be replaced by `Path.open()`
-  "PTH207", # "Replace `glob` with `Path.glob` or `Path.rglob`
-  "ISC001", # The following rules may cause conflicts when used with the formatter
-  "TRY003", # Avoid specifying long messages outside the exception
-  "F722",   # Syntax error in forward annotation
+  "D100",    # Missing docstring in public module
+  "D104",    # Missing docstring in public package
+  "D105",    # Missing docstring in magic method
+  "D203",    # 1 blank line required before class docstring
+  "D213",    # Multi-line docstring summary should start at the second line
+  "N803",    # Argument name should be lowercase
+  "N806",    # Variable _ in function should be lowercase
+  "PIE796",  # Non-unique values are redundant and likely a mistake.
+  "PLR",     # Pylint Refactor
+  "PTH123",  # `open()` should be replaced by `Path.open()`
+  "PTH207",  # "Replace `glob` with `Path.glob` or `Path.rglob`
+  "ISC001",  # The following rules may cause conflicts when used with the formatter
+  "TRY003",  # Avoid specifying long messages outside the exception
+  "F722",    # Syntax error in forward annotation
+  "PLC0415", # `import` should be at the top-level
 ]
 
 exclude = ["scripts"]
