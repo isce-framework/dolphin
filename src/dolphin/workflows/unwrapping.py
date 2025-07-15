@@ -10,7 +10,6 @@ from typing import Sequence
 from dolphin import io, stitching, unwrap
 from dolphin._log import log_runtime
 from dolphin._overviews import ImageType, create_overviews
-from dolphin._types import PathOrStr
 
 from .config import UnwrapOptions
 
@@ -23,9 +22,9 @@ def run(
     cor_file_list: Sequence[Path],
     nlooks: float,
     unwrap_options: UnwrapOptions,
-    temporal_coherence_filename: PathOrStr | None = None,
-    similarity_filename: PathOrStr | None = None,
-    mask_file: PathOrStr | None = None,
+    temporal_coherence_filename: Path | str | None = None,
+    similarity_filename: Path | str | None = None,
+    mask_file: Path | str | None = None,
     add_overviews: bool = True,
 ) -> tuple[list[Path], list[Path]]:
     """Run the displacement workflow on a stack of SLCs.
@@ -112,11 +111,11 @@ def run(
 
 
 def _get_matching_mask(
-    mask_file: PathOrStr, output_dir: Path, match_file: PathOrStr
+    mask_file: Path | str, output_dir: Path, match_file: Path | str
 ) -> Path:
     """Create a mask with the same size/projection as `match_file`."""
     # Check that the input mask is the same size as the ifgs:
-    if io.get_raster_xysize(mask_file) == match_file:
+    if io.get_raster_xysize(mask_file) == io.get_raster_xysize(match_file):
         logger.info(f"Using {mask_file} to mask during unwrapping")
         output_mask = Path(mask_file)
     else:

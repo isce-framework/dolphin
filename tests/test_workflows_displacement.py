@@ -28,6 +28,9 @@ def test_displacement_run_single(opera_slc_files: list[Path], tmpdir):
             phase_linking={
                 "ministack_size": 500,
             },
+            timeseries_options={
+                "reference_point": (5, 6),
+            },
         )
         paths = displacement.run(cfg)
 
@@ -59,6 +62,18 @@ def test_displacement_run_single(opera_slc_files: list[Path], tmpdir):
             paths.timeseries_paths[0]
         )
 
+        # Check the structure of the per-burst wrapped phase directories
+        burst_dir = next(iter(paths.comp_slc_dict.values()))[0].parent.parent
+        assert (burst_dir / "PS").exists()
+        assert (burst_dir / "linked_phase").exists()
+        assert (burst_dir / "interferograms").exists()
+        # Check the non-phase linking folders were removed
+        assert not (burst_dir / "unwrapped").exists()
+        assert not (burst_dir / "timeseries").exists()
+
+        # Check the reference point used
+        assert paths.reference_point == (5, 6)
+
 
 def test_displacement_run_single_official_opera_naming(
     opera_slc_files_official: list[Path], tmpdir
@@ -81,8 +96,8 @@ def test_displacement_run_single_official_opera_naming(
         assert all(get_raster_units(p) == "radians" for p in paths.unwrapped_paths)
         assert all(get_raster_units(p) == "meters" for p in paths.timeseries_paths)
         assert all(full_suffix(p) == ".tif" for p in paths.timeseries_paths)
-        # nearest-1 network, so no residuals
-        assert paths.timeseries_residual_paths is None
+        assert paths.timeseries_residual_paths is not None
+        assert all(p.exists() for p in paths.timeseries_residual_paths)
 
 
 def run_displacement_stack(
@@ -144,7 +159,7 @@ def test_separate_workflow_runs(slc_file_list, tmp_path):
     assert len(file_batches) == 3
     assert all(len(b) == 10 for b in file_batches)
     run_displacement_stack(p1, file_batches[0])
-    new_comp_slcs1 = sorted((p1 / "linked_phase").glob("compressed_*"))
+    new_comp_slcs1 = sorted((p1 / "phase_linking/linked_phase").glob("compressed_*"))
     assert len(new_comp_slcs1) == 1
     ifgs1 = sorted((p1 / "interferograms").glob("*.int.tif"))
     assert len(ifgs1) == 9
@@ -152,7 +167,7 @@ def test_separate_workflow_runs(slc_file_list, tmp_path):
     p2 = tmp_path / Path("second")
     files2 = new_comp_slcs1 + file_batches[1]
     run_displacement_stack(p2, files2)
-    new_comp_slcs2 = sorted((p2 / "linked_phase").glob("compressed_*"))
+    new_comp_slcs2 = sorted((p2 / "phase_linking/linked_phase").glob("compressed_*"))
     assert len(new_comp_slcs2) == 1
     ifgs2 = sorted((p2 / "interferograms").glob("*.int.tif"))
     assert len(ifgs2) == 10

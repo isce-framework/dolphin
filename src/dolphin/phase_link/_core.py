@@ -58,9 +58,6 @@ class PhaseLinkOutput(NamedTuple):
     crlb_std_dev: np.ndarray
     """The CRLB standard deviation at each pixel."""
 
-    avg_coh: np.ndarray | None = None
-    """Average coherence across dates for each SLC."""
-
 
 def run_phase_linking(
     slc_stack: ArrayLike,
@@ -77,7 +74,6 @@ def run_phase_linking(
     neighbor_arrays: ArrayLike | None = None,
     avg_mag: ArrayLike | None = None,
     use_slc_amp: bool = False,
-    calc_average_coh: bool = False,
     baseline_lag: Optional[int] = None,
     first_real_slc_idx: int = 0,
 ) -> PhaseLinkOutput:
@@ -135,8 +131,6 @@ def run_phase_linking(
     use_slc_amp : bool, optional
         Whether to use the SLC amplitude when outputting the MLE estimate,
         or to set the SLC amplitude to 1.0. By default False.
-    calc_average_coh : bool, optional, default = False
-        Whether to calculate the average coherence for each SLC date.
     baseline_lag : int, optional, default=None
         lag for temporal baseline to do short temporal baseline inversion (STBAS)
     first_real_slc_idx : int, optional, default = 0
@@ -148,15 +142,7 @@ def run_phase_linking(
     Returns
     -------
     PhaseLinkOutput:
-        A Named tuple with the following fields
-    linked_phase : np.ndarray[np.complex64]
-        The estimated linked phase, with shape (n_images, n_rows, n_cols)
-    temp_coh : np.ndarray[np.float32]
-        The temporal coherence at each pixel, shape (n_rows, n_cols)
-    eigenvalues : np.ndarray[np.float32]
-        The smallest (largest) eigenvalue resulting from EMI (EVD).
-    `avg_coh` : np.ndarray[np.float32]
-        (only If `calc_average_coh` is True) the average coherence for each SLC date
+        A Named tuple with results from phase linking.
 
     """
     _, rows, cols = slc_stack.shape
@@ -206,7 +192,6 @@ def run_phase_linking(
         zero_correlation_threshold=zero_correlation_threshold,
         reference_idx=reference_idx,
         neighbor_arrays=neighbor_arrays,
-        calc_average_coh=calc_average_coh,
         baseline_lag=baseline_lag,
         first_real_slc_idx=first_real_slc_idx,
     )
@@ -252,7 +237,6 @@ def run_phase_linking(
         eigenvalues=np.asarray(cpl_out.eigenvalues),
         estimator=np.asarray(cpl_out.estimator),
         crlb_std_dev=np.asarray(cpl_out.crlb_std_dev),
-        avg_coh=cpl_out.avg_coh,
     )
 
 
@@ -265,7 +249,6 @@ def run_cpl(
     zero_correlation_threshold: float = 0.0,
     reference_idx: int = 0,
     neighbor_arrays: Optional[np.ndarray] = None,
-    calc_average_coh: bool = False,
     baseline_lag: Optional[int] = None,
     first_real_slc_idx: int = 0,
 ) -> PhaseLinkOutput:
@@ -300,9 +283,6 @@ def run_cpl(
     neighbor_arrays : np.ndarray, optional
         The neighbor arrays to use for SHP, shape = (n_rows, n_cols, *window_shape).
         If None, a rectangular window is used. By default None.
-    calc_average_coh : bool, default=False
-        If requested, the average of each row of the covariance matrix is computed
-        for the purposes of finding the best reference (highest coherence) date
     baseline_lag : int, optional, default=None
         StBAS parameter to include only nearest-N interferograms for phase linking.
         A `baseline_lag` of `n` will only include the closest `n` interferograms.
@@ -329,10 +309,6 @@ def run_cpl(
         The estimator used at each pixel.
         0 = EVD, 1 = EMI
         shape = (out_rows, out_cols)
-    avg_coh : np.ndarray | None
-        The average coherence of each row of the coherence matrix,
-        if requested.
-        shape = (nslc, out_rows, out_cols)
 
     """
     C_arrays = covariance.estimate_stack_covariance(
@@ -372,13 +348,6 @@ def run_cpl(
     else:
         shp_counts = jnp.sum(neighbor_arrays, axis=(-2, -1))
 
-    if calc_average_coh:
-        # If requested, average the Cov matrix at each row for reference selection
-        avg_coh_per_date = jnp.abs(C_arrays).mean(axis=3)
-        avg_coh = np.argmax(avg_coh_per_date, axis=2)
-    else:
-        avg_coh = None
-
     return PhaseLinkOutput(
         cpx_phase=cpx_phase_reshaped,
         temp_coh=temp_coh,
@@ -386,7 +355,6 @@ def run_cpl(
         eigenvalues=eigenvalues,
         estimator=estimator,
         crlb_std_dev=crlb_std_dev_reshaped,
-        avg_coh=avg_coh,
     )
 
 

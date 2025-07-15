@@ -34,7 +34,7 @@ def run_wrapped_phase_sequential(
     output_folder: Path,
     ministack_size: int,
     half_window: dict,
-    strides: Optional[dict] = None,
+    strides: Optional[dict[str, int]] = None,
     mask_file: Optional[Filename] = None,
     ps_mask_file: Optional[Filename] = None,
     amp_mean_file: Optional[Filename] = None,
@@ -48,11 +48,12 @@ def run_wrapped_phase_sequential(
     similarity_nearest_n: int | None = None,
     compressed_slc_plan: CompressedSlcPlan = CompressedSlcPlan.ALWAYS_FIRST,
     max_num_compressed: int = 100,
-    output_reference_idx: int = 0,
+    output_reference_idx: int | None = None,
     new_compressed_reference_idx: int | None = None,
     cslc_date_fmt: str = "%Y%m%d",
     block_shape: tuple[int, int] = (512, 512),
     baseline_lag: Optional[int] = None,
+    max_workers: int = 1,
     **tqdm_kwargs,
 ) -> tuple[list[Path], list[Path], list[Path], Path, Path, Path]:
     """Estimate wrapped phase using batches of ministacks."""
@@ -135,6 +136,7 @@ def run_wrapped_phase_sequential(
                 similarity_nearest_n=similarity_nearest_n,
                 block_shape=block_shape,
                 baseline_lag=baseline_lag,
+                max_workers=max_workers,
                 **tqdm_kwargs,
             )
 
@@ -215,7 +217,6 @@ def _get_outputs_from_folder(
     similarity_file = next(output_folder.glob("similarity*"))
     shp_count_file = next(output_folder.glob("shp_counts_*"))
     # Currently ignoring to not stitch:
-    # eigenvalues, estimator, avg_coh
     # Move and rename to "crlb_<date>.tif" crlb files to distinguish from the SLCs
     crlb_new_files = [
         p.with_name(f"crlb_{p.name.replace('.slc.tif', '.tif')}")
