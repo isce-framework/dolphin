@@ -161,7 +161,7 @@ def _make_slc_stack(out_path: Path, shape: tuple[int, int, int] = (10, 1024, 102
     name_template = out_path / "{date}.slc.tif"
 
     file_list = []
-    for cur_date, cur_slc in zip(slc_date_list, slc_stack):
+    for cur_date, cur_slc in zip(slc_date_list, slc_stack, strict=False):
         fname = str(name_template).format(date=cur_date.strftime("%Y%m%d"))
         file_list.append(Path(fname))
         ds = driver.Create(fname, shape[-1], shape[-2], 1, gdal.GDT_CFloat32)
