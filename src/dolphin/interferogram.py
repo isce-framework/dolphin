@@ -355,7 +355,9 @@ class Network:
         else:
             # We're passing a sequence
             assert len(self.subdataset) == len(self.slc_list)
-            self._slc_to_subdataset = dict(zip(self.slc_list, self.subdataset, strict=False))
+            self._slc_to_subdataset = dict(
+                zip(self.slc_list, self.subdataset, strict=False)
+            )
 
         if self.outdir is None:
             self.outdir = Path(self.slc_list[0]).parent
@@ -546,7 +548,9 @@ class Network:
         ifg_dates = Network.all_pairs(dates)
         baselines = [Network.temporal_baseline(ifg) for ifg in ifg_dates]
         return [
-            ifg for ifg, b in zip(ifg_strs, baselines, strict=False) if b <= max_temporal_baseline
+            ifg
+            for ifg, b in zip(ifg_strs, baselines, strict=False)
+            if b <= max_temporal_baseline
         ]
 
     @staticmethod
