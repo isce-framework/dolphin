@@ -15,10 +15,13 @@ class ConfigCli(DisplacementWorkflow):
     print_empty: bool = Field(
         False,
         description="Print an empty YAML file with only default filled to `outfile`.",
+        # hide these from the output dump
+        exclude=True,
     )
     outfile: Path = Field(
         description="Output file for the configuration.",
         default=Path("dolphin_config.yaml"),
+        exclude=True,
     )
 
     @model_validator(mode="before")
