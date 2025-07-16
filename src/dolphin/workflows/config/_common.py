@@ -154,6 +154,14 @@ class PhaseLinkingOptions(BaseModel, extra="forbid"):
         ),
     )
     compressed_slc_plan: CompressedSlcPlan = CompressedSlcPlan.ALWAYS_FIRST
+    write_closure_phase: bool = Field(
+        True,
+        description=(
+            "Write out (and stich, if processing multiple geocoded bursts) rasters"
+            " containing the sequential closure phase from the nearest-3 triplets in"
+            " the coherence matrix."
+        ),
+    )
 
 
 class InterferogramNetwork(BaseModel, extra="forbid"):

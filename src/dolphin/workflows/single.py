@@ -60,6 +60,7 @@ def run_wrapped_phase_single(
     shp_alpha: float = 0.05,
     shp_nslc: Optional[int] = None,
     similarity_nearest_n: int | None = None,
+    write_closure_phase: bool = True,
     block_shape: tuple[int, int] = (512, 512),
     baseline_lag: Optional[int] = None,
     max_workers: int = 1,
@@ -130,16 +131,17 @@ def run_wrapped_phase_single(
         like_filename=like_filename,
     )
 
-    closure_phases_output_folder = output_folder / "closure_phases"
-    closure_phases_output_folder.mkdir(exist_ok=True)
-    closure_phase_files = setup_output_folder(
-        ministack=ministack,
-        name_generator=_name_closure_phases,
-        strides=strides,
-        dtype="float32",
-        output_folder=closure_phases_output_folder,
-        like_filename=like_filename,
-    )
+    if write_closure_phase:
+        closure_phases_output_folder = output_folder / "closure_phases"
+        closure_phases_output_folder.mkdir(exist_ok=True)
+        closure_phase_files = setup_output_folder(
+            ministack=ministack,
+            name_generator=_name_closure_phases,
+            strides=strides,
+            dtype="float32",
+            output_folder=closure_phases_output_folder,
+            like_filename=like_filename,
+        )
 
     comp_slc_info = ministack.get_compressed_slc_info()
 
@@ -308,12 +310,16 @@ def run_wrapped_phase_single(
                 strict=True,
             ):
                 writer.queue_write(img, f, out_rows.start, out_cols.start)
-            # Save closure phases (N-2 images for N dates)
-            for i, closure_file in enumerate(closure_phase_files):
-                closure_img = pl_output.closure_phases[out_trim_rows, out_trim_cols, i]
-                writer.queue_write(
-                    closure_img, closure_file, out_rows.start, out_cols.start
-                )
+
+            if write_closure_phase:
+                # Save closure phases (N-2 images for N dates)
+                for i, closure_file in enumerate(closure_phase_files):
+                    closure_img = pl_output.closure_phases[
+                        out_trim_rows, out_trim_cols, i
+                    ]
+                    writer.queue_write(
+                        closure_img, closure_file, out_rows.start, out_cols.start
+                    )
 
             # Save the compressed SLC block
             writer.queue_write(
