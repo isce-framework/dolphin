@@ -14,7 +14,7 @@ def mask_files(tmp_path):
 
     all_masked = np.zeros(shape, dtype="uint8")
     file_list = []
-    for i in range(shape[0]):
+    for i in range(shape[0] // 3):
         fname = tmp_path / f"mask_{i}.tif"
         arr = all_masked.copy()
         # make first third, then middle, then end "good" pixels
@@ -29,12 +29,27 @@ def mask_files(tmp_path):
 @pytest.mark.parametrize("convention", [None, masking.MaskConvention.ZERO_IS_NODATA])
 def test_combine_mask_files(mask_files, convention):
     output_file = mask_files[0].parent / "combined.tif"
+    with pytest.warns(UserWarning, match="No valid pixels left in mask"):
+        masking.combine_mask_files(
+            mask_files=mask_files,
+            output_file=output_file,
+            input_conventions=convention,
+            raise_on_empty=False,
+        )
+    expected = np.zeros((9, 9), dtype="uint8")
+    np.testing.assert_array_equal(expected, io.load_gdal(output_file))
+
+
+def test_combine_mask_files_all(mask_files):
+    output_file = mask_files[0].parent / "combined.tif"
     masking.combine_mask_files(
         mask_files=mask_files,
         output_file=output_file,
-        input_conventions=convention,
+        output_convention=masking.MaskConvention.ZERO_IS_NODATA,
+        combine_method="all",
+        raise_on_empty=False,
     )
-    expected = np.zeros((9, 9), dtype="uint8")
+    expected = np.ones((9, 9), dtype="uint8")
     np.testing.assert_array_equal(expected, io.load_gdal(output_file))
 
 
