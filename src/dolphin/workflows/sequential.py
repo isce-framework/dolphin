@@ -220,7 +220,7 @@ def _get_outputs_from_folder(
     similarity_file = next(output_folder.glob("similarity*"))
     shp_count_file = next(output_folder.glob("shp_counts_*"))
     crlb_files = sorted(output_folder.glob("crlb/crlb*tif"))
-    closure_phase_files = sorted(output_folder.glob("closure_phase/closure_phase*tif"))
+    closure_phase_files = sorted(output_folder.glob("closure_phases/closure_phase*tif"))
 
     return (
         cur_output_files,
