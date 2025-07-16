@@ -221,20 +221,12 @@ def _get_outputs_from_folder(
     temp_coh_file = next(output_folder.glob("temporal_coherence_*"))
     similarity_file = next(output_folder.glob("similarity*"))
     shp_count_file = next(output_folder.glob("shp_counts_*"))
-    # Currently ignoring to not stitch:
-    closure_phase_files = sorted(output_folder.glob("closure_phase/closure_phase*tif"))
-    # Move and rename to "crlb_<date>.tif" crlb files to distinguish from the SLCs
-    crlb_new_files = [
-        p.with_name(f"crlb_{p.name.replace('.slc.tif', '.tif')}")
-        for p in sorted((output_folder / "crlb").glob("*"))
-    ]
-    existing_crlb_files = sorted((output_folder / "crlb").glob("*"))
-    for old_p, new_p in zip(existing_crlb_files, crlb_new_files, strict=False):
-        old_p.rename(new_p)
+    crlb_files = sorted(output_folder.glob("crlb/crlb*tif"))
+    closure_phase_files = sorted(output_folder.glob("closure_phases/closure_phase*tif"))
 
     return (
         cur_output_files,
-        crlb_new_files,
+        crlb_files,
         closure_phase_files,
         cur_comp_slc_file,
         temp_coh_file,
