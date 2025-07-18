@@ -121,7 +121,7 @@ def combine_mask_files(
         # "and" uses `logical_and` to shrink the full starting region (as 1s)
         mask_total = np.ones((ysize, xsize), dtype=bool)
 
-    for input_convention, mask_file in zip(input_conventions, mask_files):
+    for input_convention, mask_file in zip(input_conventions, mask_files, strict=False):
         # TODO: if we separate input missing data from mask 1/0, this changes
         mask = io.load_gdal(mask_file, masked=True).astype(bool)
         # Fill with "mask" value

@@ -179,7 +179,7 @@ def prepare_geometry(
         datasets = ["los_east", "los_north", "layover_shadow_mask"]
         nodatas = [0, 0, 127]
 
-        for nodata, ds_name in zip(nodatas, datasets):
+        for nodata, ds_name in zip(nodatas, datasets, strict=False):
             outfile = geometry_dir / f"{ds_name}.tif"
             logger.info(f"Creating {outfile}")
             stitched_geo_list[ds_name] = outfile
