@@ -379,7 +379,7 @@ def _get_ps_mask(
     ps_mask_file: Optional[Filename], nrows: int, ncols: int
 ) -> np.ndarray:
     if ps_mask_file is not None:
-        ps_mask = io.load_gdal(ps_mask_file, masked=True)
+        ps_mask = io.load_masked(ps_mask_file)
         # Fill the nodata values with false
         ps_mask = ps_mask.astype(bool).filled(False)
     else:
@@ -393,8 +393,8 @@ def _get_amp_mean_variance(
 ) -> tuple[np.ndarray, np.ndarray]:
     if amp_mean_file is not None and amp_dispersion_file is not None:
         # Note: have to fill, since numba (as of 0.57) can't do masked arrays
-        amp_mean = io.load_gdal(amp_mean_file, masked=True).filled(np.nan)
-        amp_dispersion = io.load_gdal(amp_dispersion_file, masked=True).filled(np.nan)
+        amp_mean = io.load_masked(amp_mean_file).filled(np.nan)
+        amp_dispersion = io.load_masked(amp_dispersion_file).filled(np.nan)
         # convert back to variance from dispersion: amp_disp = std_dev / mean
         amp_variance = (amp_dispersion * amp_mean) ** 2
     else:

@@ -253,7 +253,7 @@ def _use_existing_files(
     output_amp_dispersion_file: Filename,
     amp_dispersion_threshold: float,
 ) -> None:
-    amp_disp = io.load_gdal(existing_amp_dispersion_file, masked=True)
+    amp_disp = io.load_masked(existing_amp_dispersion_file)
     ps = amp_disp < amp_dispersion_threshold
     ps = ps.astype(np.uint8)
     # Set the PS nodata value to the max uint8 value
@@ -308,7 +308,7 @@ def multilook_ps_files(
     if Path(ps_out_path).exists():
         logger.info(f"{ps_out_path} exists, skipping.")
     else:
-        ps_mask = io.load_gdal(ps_mask_file, masked=True).astype(bool)
+        ps_mask = io.load_masked(ps_mask_file).astype(bool)
         ps_mask_looked = utils.take_looks(
             ps_mask, strides["y"], strides["x"], func_type="any", edge_strategy="pad"
         )
@@ -330,7 +330,7 @@ def multilook_ps_files(
     if amp_disp_out_path.exists():
         logger.info(f"{amp_disp_out_path} exists, skipping.")
     else:
-        amp_disp = io.load_gdal(amp_dispersion_file, masked=True)
+        amp_disp = io.load_masked(amp_dispersion_file)
         # We use `nanmin` assuming that the multilooked PS is using
         # the strongest PS (the one with the lowest amplitude dispersion)
         amp_disp_looked = utils.take_looks(

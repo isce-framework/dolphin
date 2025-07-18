@@ -114,7 +114,7 @@ def filter_long_wavelength(
             quiet=True,
         )
 
-        filled_data = io.load_gdal(temp_dst, masked=True).filled(0)
+        filled_data = io.load_masked(temp_dst).filled(0)
 
     # Apply Gaussian filter
     lowpass_filtered = fft.fft2(filled_data, workers=workers)
@@ -277,7 +277,7 @@ def _filter_and_save(
     if cor_path is not None:
         bad_pixel_mask |= io.load_gdal(cor_path) < correlation_cutoff
     if conncomp_path is not None:
-        bad_pixel_mask |= io.load_gdal(conncomp_path, masked=True).astype(bool) == 0
+        bad_pixel_mask |= io.load_masked(conncomp_path).astype(bool) == 0
 
     unw = io.load_gdal(unw_filename)
     filt_arr = filter_long_wavelength(

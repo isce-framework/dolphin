@@ -270,7 +270,7 @@ def _redo_reference(
     ref_date = secondary_dates[extra_ref_idx]
     logger.info(f"Re-referencing later timeseries files to {ref_date}")
     extra_ref_img = inverted_phase_paths[extra_ref_idx]
-    ref = io.load_gdal(extra_ref_img, masked=True)
+    ref = io.load_masked(extra_ref_img)
 
     # Use a temp directory while re-referencing
     extra_out_dir = inverted_phase_paths[0].parent / "extra"
@@ -285,7 +285,7 @@ def _redo_reference(
         cur_img = inverted_phase_paths[idx]
         new_stem = format_dates(ref_date, secondary_dates[idx])
         cur_output_name = extra_out_dir / f"{new_stem}.tif"
-        cur = io.load_gdal(cur_img, masked=True)
+        cur = io.load_masked(cur_img)
         new_out = cur - ref
         io.write_arr(
             arr=new_out,
@@ -341,7 +341,7 @@ def _convert_and_reference(
         if target.exists():  # Check to prevent overwriting
             continue
 
-        arr_radians = io.load_gdal(p, masked=True)
+        arr_radians = io.load_masked(p)
         nodataval = io.get_raster_nodata(p)
         # Reference to the
         ref_value = arr_radians.filled(np.nan)[ref_row, ref_col]
@@ -1258,7 +1258,7 @@ def select_reference_point(
         return ref_point
 
     logger.info("Selecting reference point")
-    quality_file_values = io.load_gdal(quality_file, masked=True)
+    quality_file_values = io.load_masked(quality_file)
 
     # Start with all points as valid candidates
     isin_largest_conncomp = np.ones(quality_file_values.shape, dtype=bool)
@@ -1349,7 +1349,7 @@ def _get_largest_conncomp_mask(
             read_masked=True,
         )
 
-    conncomp_intersection = io.load_gdal(conncomp_intersection_file, masked=True)
+    conncomp_intersection = io.load_masked(conncomp_intersection_file)
 
     # Find the largest conncomp region in the intersection
     label, n_labels = ndimage.label(
