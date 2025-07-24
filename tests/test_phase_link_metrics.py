@@ -25,7 +25,7 @@ def test_temp_coh():
     out_tc = []
     out_C = []
     out_truth = []
-    for sigma, (t_low, t_high) in zip(sigmas, expected_tcoh_bounds):
+    for sigma, (t_low, t_high) in zip(sigmas, expected_tcoh_bounds, strict=False):
         simulate._seed(1)
         C, truth = simulate.simulate_coh(
             num_acq=30,

@@ -486,7 +486,7 @@ class BackgroundStackWriter(BackgroundWriter, DatasetStackWriter):
             data = data[None, ...]
         if data.shape[0] != len(self.file_list):
             raise ValueError(f"{data.shape = }, but {len(self.file_list) = }")
-        for fn, layer in zip(self.file_list, data):
+        for fn, layer in zip(self.file_list, data, strict=False):
             if _do_round:
                 assert self.keep_bits is not None
                 round_mantissa(layer, keep_bits=self.keep_bits)

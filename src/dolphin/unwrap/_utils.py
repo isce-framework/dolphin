@@ -138,7 +138,7 @@ def _zero_from_mask(
 
     mask = io.load_gdal(mask_filename)
     for in_f, out_f in zip(
-        [ifg_filename, corr_filename], [zeroed_ifg_file, zeroed_corr_file]
+        [ifg_filename, corr_filename], [zeroed_ifg_file, zeroed_corr_file], strict=False
     ):
         arr = io.load_gdal(in_f)
         arr[mask == 0] = 0

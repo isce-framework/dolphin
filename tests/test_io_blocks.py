@@ -121,7 +121,9 @@ class TestBlockManager:
             BlockIndices(row_start=4, row_stop=5, col_start=3, col_stop=5),
         ]
 
-        outs, out_trim, ins, in_no_pads, in_trim = zip(*list(bm.iter_blocks()))
+        outs, out_trim, ins, in_no_pads, in_trim = zip(
+            *list(bm.iter_blocks()), strict=False
+        )
         assert outs == ins
         assert outs == in_no_pads
         assert all(

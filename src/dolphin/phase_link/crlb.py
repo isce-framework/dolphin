@@ -129,15 +129,18 @@ def _examples(N=10, gamma0=0.6, rho=0.8):
 
 def demo_from_slc_stack(  # noqa: D103
     slc_vrt_filename: str = "slc_stack.vrt",
-    hw: int = 5,
+    hw: tuple[int, int] = (5, 5),
     center_pixel: tuple[int, int] = (50, 50),
 ) -> np.ndarray:
     from dolphin import io
     from dolphin.phase_link import covariance
 
+    hwr, hwc = hw
     reader = io.VRTStack.from_vrt_file(slc_vrt_filename)
     r0, c0 = center_pixel
-    samples = reader[:, r0 - hw : r0 + hw, c0 - hw : c0 + hw].reshape(len(reader), -1)
+    samples = reader[:, r0 - hwr : r0 + hwr, c0 - hwc : c0 + hwc].reshape(
+        len(reader), -1
+    )
     C = covariance.coh_mat_single(samples)
-    num_looks = 2 * (2 * hw + 1)
+    num_looks = (2 * hwr + 1) * (2 * hwc + 1)
     return compute_lower_bound_std(C, num_looks)
