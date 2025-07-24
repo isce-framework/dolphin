@@ -61,6 +61,7 @@ def run_wrapped_phase_single(
     shp_nslc: Optional[int] = None,
     similarity_nearest_n: int | None = None,
     write_closure_phase: bool = True,
+    write_crlb: bool = True,
     block_shape: tuple[int, int] = (512, 512),
     baseline_lag: Optional[int] = None,
     max_workers: int = 1,
@@ -122,14 +123,15 @@ def run_wrapped_phase_single(
 
     crlb_output_folder = output_folder / "crlb"
     crlb_output_folder.mkdir(exist_ok=True)
-    phase_linked_crlb_files = setup_output_folder(
-        ministack=ministack,
-        name_generator=_name_crlbs,
-        strides=strides,
-        dtype="float32",
-        output_folder=crlb_output_folder,
-        like_filename=like_filename,
-    )
+    if write_crlb:
+        phase_linked_crlb_files = setup_output_folder(
+            ministack=ministack,
+            name_generator=_name_crlbs,
+            strides=strides,
+            dtype="float32",
+            output_folder=crlb_output_folder,
+            like_filename=like_filename,
+        )
 
     if write_closure_phase:
         closure_phases_output_folder = output_folder / "closure_phases"
@@ -303,14 +305,16 @@ def run_wrapped_phase_single(
                 strict=True,
             ):
                 writer.queue_write(img, f, out_rows.start, out_cols.start)
-            for img, f in zip(
-                pl_output.crlb_std_dev[
-                    first_real_slc_idx:, out_trim_rows, out_trim_cols
-                ],
-                phase_linked_crlb_files,
-                strict=True,
-            ):
-                writer.queue_write(img, f, out_rows.start, out_cols.start)
+
+            if write_crlb:
+                for img, f in zip(
+                    pl_output.crlb_std_dev[
+                        first_real_slc_idx:, out_trim_rows, out_trim_cols
+                    ],
+                    phase_linked_crlb_files,
+                    strict=True,
+                ):
+                    writer.queue_write(img, f, out_rows.start, out_cols.start)
 
             if write_closure_phase:
                 # Save closure phases (N-2 images for N dates)

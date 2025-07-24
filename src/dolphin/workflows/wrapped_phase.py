@@ -217,6 +217,7 @@ def run(
             compressed_slc_plan=cfg.phase_linking.compressed_slc_plan,
             similarity_nearest_n=similarity_nearest_n,
             cslc_date_fmt=cfg.input_options.cslc_date_fmt,
+            write_crlb=cfg.phase_linking.write_crlb,
             write_closure_phase=cfg.phase_linking.write_closure_phase,
             block_shape=cfg.worker_settings.block_shape,
             max_workers=max_workers,
