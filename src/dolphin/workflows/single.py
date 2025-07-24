@@ -123,6 +123,8 @@ def run_wrapped_phase_single(
 
     crlb_output_folder = output_folder / "crlb"
     crlb_output_folder.mkdir(exist_ok=True)
+    phase_linked_crlb_files: list[Path] = []
+    closure_phase_files: list[Path] = []
     if write_crlb:
         phase_linked_crlb_files = setup_output_folder(
             ministack=ministack,
@@ -375,7 +377,7 @@ def run_wrapped_phase_single(
     logger.info(f"Finished ministack of size {vrt_stack.shape}.")
     loader.notify_finished()
 
-    logger.info("Repacking for more compression")
+    logger.info("Repacking phase linking outputs for more compression")
     io.repack_rasters(phase_linked_slc_files, keep_bits=12)
 
     logger.info("Creating similarity raster on outputs")
@@ -387,6 +389,14 @@ def run_wrapped_phase_single(
         nearest_n=similarity_nearest_n,
         block_shape=block_shape,
     )
+
+    if write_crlb:
+        logger.info("Repacking CRLB files for more compression")
+        # CRLB needs only low precision output
+        io.repack_rasters(phase_linked_crlb_files, use_16_bits=True)
+    if write_closure_phase:
+        logger.info("Repacking CRLB files for more compression")
+        io.repack_rasters(closure_phase_files, keep_bits=10)
 
     written_comp_slc = output_files["compressed_slc"]
     ccslc_info = ministack.get_compressed_slc_info()
