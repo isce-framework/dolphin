@@ -958,14 +958,15 @@ class VRTStack(StackReader):
         """Read in the SLC stack."""
         if masked is None:
             masked = self._read_masked
-        data = io.load_gdal(
+        read_func = io.load_masked if masked else io.load_gdal
+        data = read_func(
             self.outfile,
             band=band,
             subsample_factor=subsample_factor,
             rows=rows,
             cols=cols,
-            masked=masked,
         )
+
         # Check to get around gdal `ds.ReadAsArray()` squashing dimensions
         if len(self) == 1 and keepdims:
             # Add the front (1,) dimension which is missing for a single file

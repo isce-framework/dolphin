@@ -318,7 +318,7 @@ def unwrap(
     unwrapper_corr_filename = Path(corr_filename)
     name_change = "."
 
-    ifg = io.load_gdal(ifg_filename, masked=True)
+    ifg = io.load_masked(ifg_filename)
     if unwrap_options.run_goldstein:
         suf = Path(unw_filename).suffix
         if suf == ".tif":
@@ -372,9 +372,9 @@ def unwrap(
             str(pre_interp_unw_filename).split(".")[0] + (name_change + "unw" + suf)
         )
 
-        pre_interp_ifg = io.load_gdal(pre_interp_ifg_filename, masked=True).filled(0)
+        pre_interp_ifg = io.load_masked(pre_interp_ifg_filename).filled(0)
 
-        corr = io.load_gdal(corr_filename, masked=True).filled(0)
+        corr = io.load_masked(corr_filename).filled(0)
         cutoff = preproc_options.interpolation_cor_threshold
         logger.info(f"Masking pixels with correlation below {cutoff}")
         coherent_pixel_mask = corr >= cutoff
@@ -382,7 +382,7 @@ def unwrap(
             sim_cutoff := preproc_options.interpolation_similarity_threshold
         ):
             logger.info(f"Masking pixels with similarity below {sim_cutoff}")
-            sim = io.load_gdal(similarity_filename, masked=True).filled(0)
+            sim = io.load_masked(similarity_filename).filled(0)
             coherent_pixel_mask &= sim >= sim_cutoff
 
         logger.info(f"Interpolating {pre_interp_ifg_filename} -> {interp_ifg_filename}")
@@ -478,7 +478,7 @@ def unwrap(
             "Transferring ambiguity numbers from filtered/interpolated"
             f" ifg {unwrapper_unw_filename}"
         )
-        unw_arr = io.load_gdal(unwrapper_unw_filename, masked=True).filled(unw_nodata)
+        unw_arr = io.load_masked(unwrapper_unw_filename).filled(unw_nodata)
 
         final_arr = transfer_ambiguities(np.angle(ifg), unw_arr)
         final_arr[ifg.mask] = unw_nodata
