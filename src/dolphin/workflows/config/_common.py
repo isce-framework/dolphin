@@ -162,7 +162,7 @@ class PhaseLinkingOptions(BaseModel, extra="forbid"):
         ),
     )
     write_closure_phase: bool = Field(
-        True,
+        False,
         description=(
             "Write out (and stitch, if processing multiple geocoded bursts) rasters"
             " containing the sequential closure phase from the nearest-3 triplets in"
