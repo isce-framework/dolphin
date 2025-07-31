@@ -26,7 +26,9 @@ def run(
     debug: bool = False,
     max_workers: int = 1,
     tqdm_kwargs=None,
-) -> tuple[list[Path], list[Path], list[Path], Path, Path, Path, Path, Path]:
+) -> tuple[
+    list[Path], list[Path], list[Path], list[Path], Path, Path, Path, Path, Path
+]:
     """Run the displacement workflow on a stack of SLCs.
 
     Parameters
@@ -85,7 +87,9 @@ def run(
     is_compressed = ["compressed" in str(f).lower() for f in input_file_list]
 
     non_compressed_slcs = [
-        f for f, is_comp in zip(input_file_list, is_compressed) if not is_comp
+        f
+        for f, is_comp in zip(input_file_list, is_compressed, strict=False)
+        if not is_comp
     ]
     layover_shadow_mask = (
         cfg.layover_shadow_mask_files[0] if cfg.layover_shadow_mask_files else None
@@ -167,6 +171,7 @@ def run(
         shp_count_file = next(pl_path.glob("shp_count*tif"))
         similarity_file = next(pl_path.glob("*similarity*tif"))
         crlb_files = sorted(pl_path.rglob("crlb*tif"))
+        closure_phase_files = sorted(pl_path.rglob("closure_phase*tif"))
     else:
         logger.info(f"Running sequential EMI step in {pl_path}")
         kwargs = tqdm_kwargs | {"desc": f"Phase linking ({pl_path})"}
@@ -185,6 +190,7 @@ def run(
         (
             phase_linked_slcs,
             crlb_files,
+            closure_phase_files,
             comp_slc_list,
             temp_coh_file,
             shp_count_file,
@@ -211,6 +217,8 @@ def run(
             compressed_slc_plan=cfg.phase_linking.compressed_slc_plan,
             similarity_nearest_n=similarity_nearest_n,
             cslc_date_fmt=cfg.input_options.cslc_date_fmt,
+            write_crlb=cfg.phase_linking.write_crlb,
+            write_closure_phase=cfg.phase_linking.write_closure_phase,
             block_shape=cfg.worker_settings.block_shape,
             max_workers=max_workers,
             **kwargs,
@@ -235,6 +243,7 @@ def run(
         return (
             existing_ifgs,
             crlb_files,
+            closure_phase_files,
             comp_slc_list,
             temp_coh_file,
             ps_looked_file,
@@ -281,6 +290,7 @@ def run(
     return (
         ifg_file_list,
         crlb_files,
+        closure_phase_files,
         comp_slc_list,
         temp_coh_file,
         ps_looked_file,
@@ -483,7 +493,7 @@ def _get_input_dates(
     # directly pass in dates?)
     return [
         dates[:1] if not is_comp else dates[:3]
-        for dates, is_comp in zip(input_dates, is_compressed)
+        for dates, is_comp in zip(input_dates, is_compressed, strict=False)
     ]
 
 

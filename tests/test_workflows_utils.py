@@ -8,7 +8,7 @@ from osgeo import gdal
 from dolphin import stack
 from dolphin.io import _readers
 from dolphin.workflows._utils import parse_ionosphere_files
-from dolphin.workflows.single import setup_output_folder
+from dolphin.workflows.single import _name_slcs, setup_output_folder
 
 
 def test_setup_output_folder(tmpdir, tiled_file_list):
@@ -21,6 +21,7 @@ def test_setup_output_folder(tmpdir, tiled_file_list):
     )
     out_file_list = setup_output_folder(
         ministack,
+        name_generator=_name_slcs,
         output_folder=Path(tmpdir),
         like_filename=vrt_stack.outfile,
         driver="GTiff",
@@ -42,6 +43,7 @@ def test_setup_output_folder(tmpdir, tiled_file_list):
     )
     out_file_list = setup_output_folder(
         m2,
+        name_generator=_name_slcs,
         output_folder=Path(tmpdir),
         like_filename=vrt_stack.outfile,
         driver="GTiff",
@@ -67,6 +69,7 @@ def test_setup_output_folder_strided(tmpdir, tiled_file_list, strides):
 
     out_file_list = setup_output_folder(
         ministack,
+        name_generator=_name_slcs,
         output_folder=Path(tmpdir),
         like_filename=vrt_stack.outfile,
         driver="GTiff",

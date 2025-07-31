@@ -208,7 +208,7 @@ class TestInvert:
 
         out = []
         # use the raster as a template
-        for pair, ifg in zip(ifg_date_pairs, ifgs):
+        for pair, ifg in zip(ifg_date_pairs, ifgs, strict=False):
             fname = tmp_path / (format_dates(*pair) + ".tif")
             io.write_arr(arr=ifg, output_name=fname, like_filename=raster_100_by_200)
             out.append(fname)

@@ -137,10 +137,10 @@ def run(
     ifg_suffixes = [full_suffix(f) for f in ifg_filenames]
     all_out_files = [
         (output_path / Path(f).name.replace(suf, UNW_SUFFIX))
-        for f, suf in zip(ifg_filenames, ifg_suffixes)
+        for f, suf in zip(ifg_filenames, ifg_suffixes, strict=False)
     ]
     in_files, out_files = [], []
-    for inf, outf in zip(ifg_filenames, all_out_files):
+    for inf, outf in zip(ifg_filenames, all_out_files, strict=False):
         if Path(outf).exists() and not overwrite:
             logger.info(f"{outf} exists. Skipping.")
             continue
@@ -180,7 +180,7 @@ def run(
                 delete_scratch=delete_intermediate,
             )
             for ifg_file, out_file, cor_file, cur_scratch in zip(
-                in_files, out_files, cor_filenames, scratch_dirs
+                in_files, out_files, cor_filenames, scratch_dirs, strict=False
             )
         ]
         for fut in tqdm(as_completed(futures)):

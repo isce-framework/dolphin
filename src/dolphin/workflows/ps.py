@@ -79,7 +79,9 @@ def run(
     is_compressed = ["compressed" in str(f).lower() for f in input_file_list]
 
     non_compressed_slcs = [
-        f for f, is_comp in zip(input_file_list, is_compressed) if not is_comp
+        f
+        for f, is_comp in zip(input_file_list, is_compressed, strict=False)
+        if not is_comp
     ]
 
     layover_shadow_mask = (

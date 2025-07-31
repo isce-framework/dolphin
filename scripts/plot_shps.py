@@ -45,7 +45,7 @@ def plot_shps(
         ncols=len(shp_methods), sharex=True, sharey=True, squeeze=False
     )
     axes = axes.ravel()
-    for ax, shp_method in zip(axes, shp_methods):
+    for ax, shp_method in zip(axes, shp_methods, strict=False):
         ax.imshow(_scale_mag(mean), cmap="gray")
         ax.set_title(shp_method)
 
