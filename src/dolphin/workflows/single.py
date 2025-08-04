@@ -395,7 +395,7 @@ def run_wrapped_phase_single(
         # CRLB needs only low precision output
         io.repack_rasters(phase_linked_crlb_files, use_16_bits=True)
     if write_closure_phase:
-        logger.info("Repacking CRLB files for more compression")
+        logger.info("Repacking closure phase files for more compression")
         io.repack_rasters(closure_phase_files, keep_bits=10)
 
     written_comp_slc = output_files["compressed_slc"]

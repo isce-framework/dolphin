@@ -28,13 +28,13 @@ def compute_nearest_closure_phases_batch(
 
     Parameters
     ----------
-    cov_matrices : jnp.ndarray
-        Complex (R, C, N, N) array of M covariance matrices
+    cov_matrices : Array
+        Complex (..., R, C, N, N) array of M covariance matrices
 
     Returns
     -------
-    jnp.ndarray
-        Closure phases: (R, C, N-2) array of closure phases
+    Array
+        Closure phases: (..., R, C, N-2) array of closure phases
 
     """
     return jax.vmap(jax.vmap(compute_nearest_closure_phases))(cov_matrices)
