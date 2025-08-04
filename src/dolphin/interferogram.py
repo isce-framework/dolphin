@@ -355,7 +355,9 @@ class Network:
         else:
             # We're passing a sequence
             assert len(self.subdataset) == len(self.slc_list)
-            self._slc_to_subdataset = dict(zip(self.slc_list, self.subdataset))
+            self._slc_to_subdataset = dict(
+                zip(self.slc_list, self.subdataset, strict=False)
+            )
 
         if self.outdir is None:
             self.outdir = Path(self.slc_list[0]).parent
@@ -367,7 +369,7 @@ class Network:
         if len(self.dates) != len(self.slc_list):
             msg = f"{len(self.dates) = }, but {len(self.slc_list) = }"
             raise ValueError(msg)
-        self._slc_to_date = dict(zip(self.slc_list, self.dates))
+        self._slc_to_date = dict(zip(self.slc_list, self.dates, strict=False))
 
         # Run the appropriate network creation based on the options we passed
         self.slc_file_pairs = self._make_ifg_pairs()
@@ -546,7 +548,9 @@ class Network:
         ifg_dates = Network.all_pairs(dates)
         baselines = [Network.temporal_baseline(ifg) for ifg in ifg_dates]
         return [
-            ifg for ifg, b in zip(ifg_strs, baselines) if b <= max_temporal_baseline
+            ifg
+            for ifg, b in zip(ifg_strs, baselines, strict=False)
+            if b <= max_temporal_baseline
         ]
 
     @staticmethod
@@ -567,7 +571,7 @@ class Network:
         date_to_file: dict[DateOrDatetime, tuple[T, T]] = {}
         slc_pairs = Network.all_pairs(slc_list)
         date_pairs = Network.all_pairs(dates)
-        for ifg, date_pair in zip(slc_pairs, date_pairs):
+        for ifg, date_pair in zip(slc_pairs, date_pairs, strict=False):
             early = date_pair[0]
             baseline_days = Network.temporal_baseline(date_pair)
             if abs(baseline_days - 365) > buffer_days:

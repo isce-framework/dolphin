@@ -12,7 +12,7 @@ from dolphin._log import log_runtime
 from dolphin._overviews import ImageType, create_image_overviews, create_overviews
 from dolphin._types import Bbox
 from dolphin.interferogram import estimate_interferometric_correlations
-from dolphin.io._utils import repack_raster
+from dolphin.io import EXTRA_COMPRESSED_TIFF_OPTIONS, repack_raster
 
 from .config import OutputOptions
 
@@ -29,6 +29,8 @@ class StitchedOutputs:
     """List of Paths to interferometric correlation files created."""
     crlb_paths: list[Path]
     """List of Paths to Cramer Rao Lower Bound (CRLB) files created."""
+    closure_phase_files: list[Path]
+    """List of Paths to closure phase files created."""
     temp_coh_file: Path
     """Path to temporal correlation file created."""
     ps_file: Path
@@ -47,6 +49,7 @@ def run(
     temp_coh_file_list: Sequence[Path],
     ps_file_list: Sequence[Path],
     crlb_file_list: Sequence[Path],
+    closure_phase_file_list: Sequence[Path],
     amp_dispersion_list: Sequence[Path],
     shp_count_file_list: Sequence[Path],
     similarity_file_list: Sequence[Path],
@@ -70,6 +73,8 @@ def run(
         Sequence of paths to the (looked) ps mask files.
     crlb_file_list : Sequence[Path]
         Sequence of paths to the (looked) Cramer Rao Lower Bound (CRLB) files.
+    closure_phase_file_list : Sequence[Path]
+        Sequence of paths to the (looked) closure phase files.
     amp_dispersion_list : Sequence[Path]
         Sequence of paths to the (looked) amplitude dispersion files.
     shp_count_file_list : Sequence[Path]
@@ -116,7 +121,6 @@ def run(
         file_date_fmt=file_date_fmt,
         output_dir=stitched_ifg_dir,
         output_suffix=".int.tif",
-        driver="GTiff",
         out_bounds=out_bounds,
         out_bounds_epsg=output_options.bounds_epsg,
         num_workers=num_workers,
@@ -128,6 +132,7 @@ def run(
         stitched_ifg_paths,
         window_size=corr_window_size,
         num_workers=num_workers,
+        options=EXTRA_COMPRESSED_TIFF_OPTIONS,
     )
 
     # Stitch the correlation files
@@ -136,10 +141,10 @@ def run(
         stitching.merge_images(
             temp_coh_file_list,
             outfile=stitched_temp_coh_file,
-            driver="GTiff",
             resample_alg="nearest",
             out_bounds=out_bounds,
             out_bounds_epsg=output_options.bounds_epsg,
+            options=EXTRA_COMPRESSED_TIFF_OPTIONS,
         )
         repack_raster(stitched_temp_coh_file, keep_bits=10)
 
@@ -150,7 +155,6 @@ def run(
             ps_file_list,
             outfile=stitched_ps_file,
             out_nodata=255,
-            driver="GTiff",
             resample_alg="nearest",
             out_bounds=out_bounds,
             out_bounds_epsg=output_options.bounds_epsg,
@@ -163,12 +167,25 @@ def run(
         output_dir=stitched_ifg_dir,
         output_suffix=".tif",
         output_prefix="crlb_",
-        driver="GTiff",
+        options=EXTRA_COMPRESSED_TIFF_OPTIONS,
         out_bounds=out_bounds,
         out_bounds_epsg=output_options.bounds_epsg,
         num_workers=num_workers,
     )
     stitched_crlb_files = list(date_to_crlb_path.values())
+
+    # Stitch the closure phase files
+    date_to_closure_phase_path = stitching.merge_by_date(
+        image_file_list=closure_phase_file_list,
+        file_date_fmt=file_date_fmt,
+        output_dir=stitched_ifg_dir,
+        output_prefix="closure_phase_",
+        options=EXTRA_COMPRESSED_TIFF_OPTIONS,
+        out_bounds=out_bounds,
+        out_bounds_epsg=output_options.bounds_epsg,
+        num_workers=num_workers,
+    )
+    stitched_closure_phase_files = list(date_to_closure_phase_path.values())
 
     # Stitch the amp dispersion files
     stitched_amp_disp_file = stitched_ifg_dir / "amp_dispersion_looked.tif"
@@ -176,7 +193,6 @@ def run(
         stitching.merge_images(
             amp_dispersion_list,
             outfile=stitched_amp_disp_file,
-            driver="GTiff",
             resample_alg="nearest",
             out_bounds=out_bounds,
             out_bounds_epsg=output_options.bounds_epsg,
@@ -188,7 +204,6 @@ def run(
         stitching.merge_images(
             shp_count_file_list,
             outfile=stitched_shp_count_file,
-            driver="GTiff",
             resample_alg="nearest",
             out_bounds=out_bounds,
             out_bounds_epsg=output_options.bounds_epsg,
@@ -199,7 +214,7 @@ def run(
         stitching.merge_images(
             similarity_file_list,
             outfile=stitched_similarity_file,
-            driver="GTiff",
+            options=EXTRA_COMPRESSED_TIFF_OPTIONS,
             resample_alg="nearest",
             out_bounds=out_bounds,
             out_bounds_epsg=output_options.bounds_epsg,
@@ -222,6 +237,7 @@ def run(
         stitched_ifg_paths,
         interferometric_corr_paths,
         stitched_crlb_files,
+        stitched_closure_phase_files,
         stitched_temp_coh_file,
         stitched_ps_file,
         stitched_amp_disp_file,

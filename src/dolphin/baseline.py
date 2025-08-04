@@ -120,7 +120,7 @@ def compute_baselines(
     orbit_sec = get_cslc_orbit(h5file_sec)
 
     baselines = []
-    for lon, lat in zip(lon_arr, lat_arr):
+    for lon, lat in zip(lon_arr, lat_arr, strict=False):
         llh_rad = np.deg2rad([lon, lat, height]).reshape((3, 1))
         az_time_ref, range_ref = isce3.geometry.geo2rdr(
             llh_rad,

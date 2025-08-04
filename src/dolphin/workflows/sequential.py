@@ -51,11 +51,13 @@ def run_wrapped_phase_sequential(
     output_reference_idx: int | None = None,
     new_compressed_reference_idx: int | None = None,
     cslc_date_fmt: str = "%Y%m%d",
+    write_closure_phase: bool = True,
+    write_crlb: bool = True,
     block_shape: tuple[int, int] = (512, 512),
     baseline_lag: Optional[int] = None,
     max_workers: int = 1,
     **tqdm_kwargs,
-) -> tuple[list[Path], list[Path], list[Path], Path, Path, Path]:
+) -> tuple[list[Path], list[Path], list[Path], list[Path], Path, Path, Path]:
     """Estimate wrapped phase using batches of ministacks."""
     if strides is None:
         strides = {"x": 1, "y": 1}
@@ -86,10 +88,10 @@ def run_wrapped_phase_sequential(
     if shp_nslc is None:
         shp_nslc = slc_vrt_stack.shape[0]
 
-    # list where each item is [output_slc_files] from a ministack
+    # list where each item is extended with output_slc_files from a ministack
     output_slc_files: list[Path] = []
     crlb_files: list[Path] = []
-    # Each item is the temp_coh/shp_count file from a ministack
+    closure_phase_files: list[Path] = []
     temp_coh_files: list[Path] = []
     similarity_files: list[Path] = []
     shp_count_files: list[Path] = []
@@ -134,6 +136,8 @@ def run_wrapped_phase_sequential(
                 shp_alpha=shp_alpha,
                 shp_nslc=shp_nslc,
                 similarity_nearest_n=similarity_nearest_n,
+                write_closure_phase=write_closure_phase,
+                write_crlb=write_crlb,
                 block_shape=block_shape,
                 baseline_lag=baseline_lag,
                 max_workers=max_workers,
@@ -143,12 +147,14 @@ def run_wrapped_phase_sequential(
         (
             cur_output_files,
             cur_crlb_files,
+            cur_closure_phase_files,
             cur_comp_slc_file,
             temp_coh_file,
             similarity_file,
             shp_count_file,
         ) = _get_outputs_from_folder(cur_output_folder)
         crlb_files.extend(cur_crlb_files)
+        closure_phase_files.extend(cur_closure_phase_files)
         output_slc_files.extend(cur_output_files)
         temp_coh_files.append(temp_coh_file)
         similarity_files.append(similarity_file)
@@ -200,6 +206,7 @@ def run_wrapped_phase_sequential(
     return (
         out_pl_slcs,
         crlb_files,
+        closure_phase_files,
         comp_slc_outputs,
         output_temp_coh_file,
         output_shp_count_file,
@@ -209,26 +216,20 @@ def run_wrapped_phase_sequential(
 
 def _get_outputs_from_folder(
     output_folder: Path,
-) -> tuple[list[Path], list[Path], Path, Path, Path, Path]:
+) -> tuple[list[Path], list[Path], list[Path], Path, Path, Path, Path]:
     cur_output_files = sorted(output_folder.glob("2*.slc.tif"))
 
     cur_comp_slc_file = next(output_folder.glob("compressed_*"))
     temp_coh_file = next(output_folder.glob("temporal_coherence_*"))
     similarity_file = next(output_folder.glob("similarity*"))
     shp_count_file = next(output_folder.glob("shp_counts_*"))
-    # Currently ignoring to not stitch:
-    # Move and rename to "crlb_<date>.tif" crlb files to distinguish from the SLCs
-    crlb_new_files = [
-        p.with_name(f"crlb_{p.name.replace('.slc.tif', '.tif')}")
-        for p in sorted((output_folder / "crlb").glob("*"))
-    ]
-    existing_crlb_files = sorted((output_folder / "crlb").glob("*"))
-    for old_p, new_p in zip(existing_crlb_files, crlb_new_files):
-        old_p.rename(new_p)
+    crlb_files = sorted(output_folder.glob("crlb/crlb*tif"))
+    closure_phase_files = sorted(output_folder.glob("closure_phases/closure_phase*tif"))
 
     return (
         cur_output_files,
-        crlb_new_files,
+        crlb_files,
+        closure_phase_files,
         cur_comp_slc_file,
         temp_coh_file,
         similarity_file,
@@ -268,5 +269,5 @@ def _get_input_dates(
     # directly pass in dates?)
     return [
         dates[:1] if not is_comp else dates[:3]
-        for dates, is_comp in zip(input_dates, is_compressed)
+        for dates, is_comp in zip(input_dates, is_compressed, strict=False)
     ]
