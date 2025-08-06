@@ -1,4 +1,11 @@
+from __future__ import annotations
+
+from functools import partial
+
+import jax.numpy as jnp
 import numpy as np
+from jax import Array, jit
+from jax.scipy.linalg import solve
 from numpy.linalg import inv
 from numpy.typing import ArrayLike
 
@@ -56,7 +63,7 @@ def compute_crlb(
         variance lower bound at each date.
 
     """  # noqa: E501
-    N = coherence_matrix.shape[0]
+    N = np.asarray(coherence_matrix).shape[0]
 
     # For direct phase estimation, Theta should be (N x (N-1))
     # This maps N-1 phase differences to N phases
@@ -76,8 +83,9 @@ def compute_crlb(
         # Add APS contribution
         R_aps_inv = np.eye(N) / aps_variance
         # Otherwise, use full hybrid version, equation (22)
-        fim = Theta.T @ (X + R_aps_inv) @ Theta
-        inv_fim = inv(fim - Theta.T @ X @ inv(X + R_aps_inv) @ X @ Theta)
+        A = Theta.T @ X @ inv(X + R_aps_inv) @ X @ Theta
+        fim = Theta.T @ X @ Theta - A
+        inv_fim = inv(fim)
 
     return inv_fim
 
@@ -117,6 +125,89 @@ def compute_lower_bound_std(
     return np.concatenate(([0], estimator_stddev))
 
 
+def _theta_X_theta_T(X: Array, ref: int) -> Array:  # noqa: N802
+    """Project an (N,N) FIM to (N-1,N-1) by deleting `ref` row/col.
+
+    Equivalent to the matmul:
+        Theta.T @ X @ Theta
+
+    where Theta is the (N,N-1) matrix with the row `ref` zero and the rest identity.
+    """
+    idx = jnp.concatenate([jnp.arange(ref), jnp.arange(ref + 1, X.shape[-1])])
+    return X[..., idx[:, None], idx]
+
+
+@partial(jit, static_argnums=(1,))
+def compute_crlb_jax(
+    coherence_matrices: Array,
+    num_looks: int,
+    reference_idx: int,
+    aps_variance: float = 1e-2,
+    jitter: float = 1e-4,
+) -> Array:
+    """Batched CRLB std-dev (per epoch) for a stack of Fisher Information Matrices.
+
+    See Tebaldini 2010, eqs. 21-22).
+
+    Parameters
+    ----------
+    coherence_matrices : Array
+        Complex Γ with shape (..., N, N).  Leading dimensions are batched.
+    num_looks : int
+        Number of independent looks, `L`.
+        Note that too-large `L` will lead to numerical instability.
+    reference_idx : int
+        Index of the reference epoch.
+    aps_variance : float
+        Variance of the APS.
+        Set to 0 to ignore APS contribution.
+        Default is 1e-2.
+    jitter : float
+        Diagonal fudge added to each SPD solve for extra robustness.
+        Default is 1e-4.
+
+    Returns
+    -------
+    Array
+        Standard-deviation lower bounds with shape (..., N) in radians.
+        Element 0 (reference epoch) is fixed to 0.
+
+    """
+    *batch, N, _ = coherence_matrices.shape
+    eye_N = jnp.eye(N, dtype=coherence_matrices.dtype)
+    eye_N1 = jnp.eye(N - 1, dtype=coherence_matrices.dtype)
+
+    # Fisher information X
+    #    X = 2/L * (|Γ| ∘ |Γ|⁻¹ - I)
+    abs_G = jnp.abs(coherence_matrices)
+    eyeN_batch = jnp.broadcast_to(eye_N, abs_G.shape)
+    abs_G = abs_G + jitter * eyeN_batch  # regularize to promote positive definiteness
+    abs_G_inv = solve(abs_G, eyeN_batch, assume_a="pos")
+
+    X = 2.0 * num_looks * (abs_G * abs_G_inv - eyeN_batch)  # Hadamard
+
+    # Decorrelation-only term  Θᵀ X Θ
+    F_base = _theta_X_theta_T(X, reference_idx)
+
+    # APS hybrid correction (eq. 22) if `aps_variance` != 0
+    #     A = Θᵀ X (X + R⁻¹)⁻¹ X Θ  ,  R⁻¹ = I/alpha
+    #     We compute (X + R⁻¹)⁻¹ (XΘ) via solve().
+    R_inv = eyeN_batch / aps_variance  # (...,N,N)
+    X_plus_R = X + R_inv + jitter * eyeN_batch  # SPD + εI
+    X_plus_R_inv = solve(X_plus_R, eyeN_batch, assume_a="pos")
+    A = _theta_X_theta_T(X @ X_plus_R_inv @ X, reference_idx)
+    FIM = F_base - A
+
+    # Invert FIM via solve();   Σ = FIM⁻¹
+    FIM = FIM + jitter * jnp.broadcast_to(eye_N1, FIM.shape)
+    Sigma = solve(FIM, jnp.broadcast_to(eye_N1, FIM.shape), assume_a="pos")
+
+    sig = jnp.sqrt(jnp.diagonal(Sigma, axis1=-2, axis2=-1))  # (...,N-1)
+    # insert 0 for reference epoch
+    sig = jnp.concatenate([jnp.zeros((*batch, 1), dtype=sig.dtype), sig], axis=-1)
+    return sig
+
+
 def _examples(N=10, gamma0=0.6, rho=0.8):
     """Make example covariance matrices used in Tebaldini, 2010."""
     idxs = np.abs(np.arange(N).reshape(-1, 1) - np.arange(N).reshape(1, -1))
@@ -131,7 +222,8 @@ def demo_from_slc_stack(  # noqa: D103
     slc_vrt_filename: str = "slc_stack.vrt",
     hw: tuple[int, int] = (5, 5),
     center_pixel: tuple[int, int] = (50, 50),
-) -> np.ndarray:
+    aps_variance: float = 0,
+) -> tuple[np.ndarray, np.ndarray]:
     from dolphin import io
     from dolphin.phase_link import covariance
 
@@ -142,5 +234,6 @@ def demo_from_slc_stack(  # noqa: D103
         len(reader), -1
     )
     C = covariance.coh_mat_single(samples)
-    num_looks = (2 * hwr + 1) * (2 * hwc + 1)
-    return compute_lower_bound_std(C, num_looks)
+    # num_looks = (2 * hwr + 1) * (2 * hwc + 1)
+    num_looks = np.sqrt(hwr * hwc)
+    return C, compute_lower_bound_std(C, num_looks, aps_variance=aps_variance)
