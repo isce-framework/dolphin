@@ -82,6 +82,7 @@ def run_phase_linking(
     use_slc_amp: bool = False,
     baseline_lag: Optional[int] = None,
     first_real_slc_idx: int = 0,
+    compute_crlb: bool = True,
 ) -> PhaseLinkOutput:
     """Estimate the linked phase for a stack of SLCs.
 
@@ -143,7 +144,8 @@ def run_phase_linking(
         The index of the first real SLC in the stack.
         This is only used for the CRLB computation.
         By default 0.
-
+    compute_crlb : bool, optional
+        Whether to compute the CRLB, by default True
 
     Returns
     -------
@@ -200,6 +202,7 @@ def run_phase_linking(
         neighbor_arrays=neighbor_arrays,
         baseline_lag=baseline_lag,
         first_real_slc_idx=first_real_slc_idx,
+        compute_crlb=compute_crlb,
     )
 
     # Get the smaller, looked versions of the masks
@@ -258,6 +261,7 @@ def run_cpl(
     neighbor_arrays: Optional[np.ndarray] = None,
     baseline_lag: Optional[int] = None,
     first_real_slc_idx: int = 0,
+    compute_crlb: bool = True,
 ) -> PhaseLinkOutput:
     """Run the Combined Phase Linking (CPL) algorithm.
 
@@ -298,6 +302,8 @@ def run_cpl(
         The index of the first real SLC in the stack.
         This is only used for the CRLB computation.
         By default 0.
+    compute_crlb : bool, optional
+        Whether to compute the CRLB, by default True
 
     Returns
     -------
@@ -345,6 +351,7 @@ def run_cpl(
         reference_idx=reference_idx,
         num_looks=num_looks,
         first_real_slc_idx=first_real_slc_idx,
+        compute_crlb=compute_crlb,
     )
     # Get the temporal coherence
     temp_coh = metrics.estimate_temp_coh(cpx_phase, C_arrays)
@@ -378,6 +385,7 @@ def run_cpl(
         "reference_idx",
         "num_looks",
         "first_real_slc_idx",
+        "compute_crlb",
     ),
 )
 def process_coherence_matrices(
@@ -388,6 +396,7 @@ def process_coherence_matrices(
     reference_idx: int = 0,
     num_looks: int = 1,
     first_real_slc_idx: int = 0,
+    compute_crlb: bool = True,
 ) -> tuple[Array, Array, Array, Array]:
     """Estimate the linked phase for a stack of coherence matrices.
 
@@ -419,6 +428,9 @@ def process_coherence_matrices(
         The index of the first real SLC in the stack.
         This is only used for the CRLB computation.
         By default 0.
+    compute_crlb : bool, optional
+        Whether to compute the CRLB
+        Default is True.
 
     Returns
     -------
@@ -503,7 +515,12 @@ def process_coherence_matrices(
         estimator = lax.select(inv_has_nans, evd_used, emi_used)
 
     # Compute CRLB for each pixel
-    crlb_std_dev = compute_crlb_jax(C_arrays, num_looks, max(first_real_slc_idx - 1, 0))
+    if compute_crlb:
+        crlb_std_dev = compute_crlb_jax(
+            C_arrays, num_looks, max(first_real_slc_idx - 1, 0)
+        )
+    else:
+        crlb_std_dev = jnp.zeros(C_arrays.shape[:-1], dtype=jnp.float32)
 
     # Now the shape of eig_vecs is (rows, cols, nslc)
     # at pixel (r, c), eig_vecs[r, c] is the largest (smallest) eigenvector if

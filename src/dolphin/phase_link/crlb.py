@@ -137,7 +137,7 @@ def _theta_X_theta_T(X: Array, ref: int) -> Array:  # noqa: N802
     return X[..., idx[:, None], idx]
 
 
-@partial(jit, static_argnums=(1, 2, 4))
+@partial(jit, static_argnums=(1, 2, 3, 4))
 def compute_crlb_jax(
     coherence_matrices: Array,
     num_looks: int,
@@ -193,11 +193,14 @@ def compute_crlb_jax(
     # APS hybrid correction (eq. 22) if `aps_variance` != 0
     #     A = Θᵀ X (X + R⁻¹)⁻¹ X Θ  ,  R⁻¹ = I/alpha
     #     We compute (X + R⁻¹)⁻¹ (XΘ) via solve().
-    R_inv = eyeN_batch / aps_variance  # (...,N,N)
-    X_plus_R = X + R_inv + jitter * eyeN_batch  # SPD + εI
-    X_plus_R_inv = solve(X_plus_R, eyeN_batch, assume_a="pos")
-    A = _theta_X_theta_T(X @ X_plus_R_inv @ X, reference_idx)
-    FIM = F_base - A
+    if aps_variance > 1e-6:
+        R_inv = eyeN_batch / aps_variance  # (...,N,N)
+        X_plus_R = X + R_inv + jitter * eyeN_batch  # SPD + εI
+        X_plus_R_inv = solve(X_plus_R, eyeN_batch, assume_a="pos")
+        A = _theta_X_theta_T(X @ X_plus_R_inv @ X, reference_idx)
+        FIM = F_base - A
+    else:
+        FIM = F_base
 
     # Invert FIM via solve();   Σ = FIM⁻¹
     FIM = FIM + jitter * jnp.broadcast_to(eye_N1, FIM.shape)
