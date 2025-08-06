@@ -6,12 +6,16 @@ build-backend = "setuptools.build_meta"
 name = "dolphin"
 description = "Workflows for generating surface displacement maps using InSAR"
 readme = { file = "README.md", content-type = "text/markdown" }
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 
 classifiers = [
   "Development Status :: 2 - Pre-Alpha",
   "Intended Audience :: Science/Research",
   "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
   "Operating System :: OS Independent",
 ]
 license = { file = "LICENSE.txt" }
@@ -92,6 +96,7 @@ ignore = [
   "PTH207",  # "Replace `glob` with `Path.glob` or `Path.rglob`
   "ISC001",  # The following rules may cause conflicts when used with the formatter
   "TRY003",  # Avoid specifying long messages outside the exception
+  "F722",    # Syntax error in forward annotation
   "PLC0415", # `import` should be at the top-level
 ]
 

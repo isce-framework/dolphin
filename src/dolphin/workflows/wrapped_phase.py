@@ -26,7 +26,17 @@ def run(
     debug: bool = False,
     max_workers: int = 1,
     tqdm_kwargs=None,
-) -> tuple[list[Path], list[Path], list[Path], Path, Path, list[Path], list[Path]]:
+) -> tuple[
+    list[Path],
+    list[Path],
+    list[Path],
+    list[Path],
+    list[Path],
+    Path,
+    Path,
+    list[Path],
+    list[Path],
+]:
     """Run the displacement workflow on a stack of SLCs.
 
     Parameters
@@ -46,13 +56,15 @@ def run(
     -------
     ifg_file_list : list[Path]
         list of Paths to virtual interferograms created.
+    crlb_files : list[Path]
+        Paths to the output Cramer Rao Lower Bound (CRLB) files.
     comp_slc_file_list : list[Path]
         Paths to the compressed SLC files created from each ministack.
     temp_coh_files : list[Path]
         Paths to temporal coherence file created.
         In the case of a single phase linking step, this is from one phase linking step.
-        In the case of sequential phase linking, this from each ministack, and one average
-        of all ministacks.
+        In the case of sequential phase linking, this from each ministack, and one
+        average of all ministacks.
     ps_looked_file : Path
         The multilooked boolean persistent scatterer file.
     amp_disp_looked_file : Path
@@ -60,13 +72,13 @@ def run(
     shp_count_files : list[Path]
         Paths to the created SHP counts files.
         In the case of a single phase linking step, this is from one phase linking step.
-        In the case of sequential phase linking, this from each ministack, and one average
-        of all ministacks.
+        In the case of sequential phase linking, this from each ministack, and one
+        average of all ministacks.
     similarity_files : list[Path]
         Paths to phase similarity files.
         In the case of a single phase linking step, this is from one phase linking step.
-        In the case of sequential phase linking, this from each ministack, and one average
-        of all ministacks.
+        In the case of sequential phase linking, this from each ministack, and one
+        average of all ministacks.
 
     """
     t0 = time.perf_counter()
@@ -92,7 +104,9 @@ def run(
     is_compressed = ["compressed" in str(f).lower() for f in input_file_list]
 
     non_compressed_slcs = [
-        f for f, is_comp in zip(input_file_list, is_compressed) if not is_comp
+        f
+        for f, is_comp in zip(input_file_list, is_compressed, strict=False)
+        if not is_comp
     ]
     layover_shadow_mask = (
         cfg.layover_shadow_mask_files[0] if cfg.layover_shadow_mask_files else None
@@ -173,6 +187,8 @@ def run(
         temp_coh_files = sorted(pl_path.glob("temporal_coherence*tif"))
         shp_count_files = sorted(pl_path.glob("shp_count*tif"))
         similarity_files = sorted(pl_path.glob("*similarity*tif"))
+        crlb_files = sorted(pl_path.rglob("crlb*tif"))
+        closure_phase_files = sorted(pl_path.rglob("closure_phase*tif"))
     else:
         logger.info(f"Running sequential EMI step in {pl_path}")
         kwargs = tqdm_kwargs | {"desc": f"Phase linking ({pl_path})"}
@@ -190,6 +206,8 @@ def run(
         shp_nslc = None
         (
             phase_linked_slcs,
+            crlb_files,
+            closure_phase_files,
             comp_slc_list,
             temp_coh_files,
             shp_count_files,
@@ -216,6 +234,8 @@ def run(
             compressed_slc_plan=cfg.phase_linking.compressed_slc_plan,
             similarity_nearest_n=similarity_nearest_n,
             cslc_date_fmt=cfg.input_options.cslc_date_fmt,
+            write_crlb=cfg.phase_linking.write_crlb,
+            write_closure_phase=cfg.phase_linking.write_closure_phase,
             block_shape=cfg.worker_settings.block_shape,
             max_workers=max_workers,
             **kwargs,
@@ -239,6 +259,8 @@ def run(
         logger.info(f"Skipping interferogram step, {len(existing_ifgs)} exists")
         return (
             existing_ifgs,
+            crlb_files,
+            closure_phase_files,
             comp_slc_list,
             temp_coh_files,
             ps_looked_file,
@@ -284,6 +306,8 @@ def run(
     )
     return (
         ifg_file_list,
+        crlb_files,
+        closure_phase_files,
         comp_slc_list,
         temp_coh_files,
         ps_looked_file,
@@ -486,7 +510,7 @@ def _get_input_dates(
     # directly pass in dates?)
     return [
         dates[:1] if not is_comp else dates[:3]
-        for dates, is_comp in zip(input_dates, is_compressed)
+        for dates, is_comp in zip(input_dates, is_compressed, strict=False)
     ]
 
 

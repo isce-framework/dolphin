@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import logging
 import tempfile
+import warnings
 from enum import IntEnum
 from os import fspath
 from pathlib import Path
-from typing import Optional, Sequence
+from typing import Literal, Sequence
 
 import numpy as np
 from osgeo import gdal
@@ -18,6 +19,10 @@ from dolphin._types import Bbox, PathOrStr
 gdal.UseExceptions()
 
 logger = logging.getLogger("dolphin")
+
+
+class MaskingError(ValueError):
+    """Exception indicating the mask was improperly built, no valid pixels remain."""
 
 
 class MaskConvention(IntEnum):
@@ -47,8 +52,9 @@ def combine_mask_files(
     output_file: PathOrStr,
     dtype: str = "uint8",
     output_convention: MaskConvention = MaskConvention.ZERO_IS_NODATA,
-    input_conventions: Optional[Sequence[MaskConvention]] = None,
-    combine_method: str = "any",
+    input_conventions: Sequence[MaskConvention] | None = None,
+    combine_method: Literal["any", "all"] = "any",
+    raise_on_empty: bool = True,
 ):
     """Combine multiple mask files into a single mask file.
 
@@ -74,6 +80,11 @@ def combine_mask_files(
         a masked pixel (the masked region grows larger).
         If 'all', the only pixels masked are those in which *all* input masks
         indicated a masked pixel (the masked region shrinks).
+    raise_on_empty : bool
+        If True, raises a `MaskingError` on the creation of a mask file with
+        no valid pixels.
+        Otherwise, raises a warning.
+        Default is True.
 
     Raises
     ------
@@ -106,11 +117,11 @@ def combine_mask_files(
     if combine_method == "any":
         # "any" will use `logical_or` to grow the region starting empty region (as 0s)
         mask_total = np.zeros((ysize, xsize), dtype=bool)
-    elif combine_method == "all":
+    else:
         # "and" uses `logical_and` to shrink the full starting region (as 1s)
         mask_total = np.ones((ysize, xsize), dtype=bool)
 
-    for input_convention, mask_file in zip(input_conventions, mask_files):
+    for input_convention, mask_file in zip(input_conventions, mask_files, strict=False):
         # TODO: if we separate input missing data from mask 1/0, this changes
         mask = io.load_gdal(mask_file, masked=True).astype(bool)
         # Fill with "mask" value
@@ -122,6 +133,14 @@ def combine_mask_files(
             mask_total = np.logical_or(mask_total, mask)
         elif combine_method == "all":
             mask_total = np.logical_and(mask_total, mask)
+
+    num_valid = mask_total.size - mask_total.sum()
+    if num_valid == 0:
+        msg = "No valid pixels left in mask"
+        if raise_on_empty:
+            raise MaskingError(msg)
+        else:
+            warnings.warn(msg, stacklevel=2)
 
     # Convert to output convention
     if output_convention == MaskConvention.SNAPHU:

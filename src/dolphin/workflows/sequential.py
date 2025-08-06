@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import datetime
 import logging
-from itertools import chain
 from os import fspath
 from pathlib import Path
 from typing import Optional, Sequence
@@ -52,11 +51,15 @@ def run_wrapped_phase_sequential(
     output_reference_idx: int | None = None,
     new_compressed_reference_idx: int | None = None,
     cslc_date_fmt: str = "%Y%m%d",
+    write_closure_phase: bool = True,
+    write_crlb: bool = True,
     block_shape: tuple[int, int] = (512, 512),
     baseline_lag: Optional[int] = None,
     max_workers: int = 1,
     **tqdm_kwargs,
-) -> tuple[list[Path], list[Path], list[Path], list[Path], list[Path]]:
+) -> tuple[
+    list[Path], list[Path], list[Path], list[Path], list[Path], list[Path], list[Path]
+]:
     """Estimate wrapped phase using batches of ministacks."""
     if strides is None:
         strides = {"x": 1, "y": 1}
@@ -87,9 +90,10 @@ def run_wrapped_phase_sequential(
     if shp_nslc is None:
         shp_nslc = slc_vrt_stack.shape[0]
 
-    # list where each item is [output_slc_files] from a ministack
-    output_slc_files: list[list] = []
-    # Each item is the temp_coh/shp_count file from a ministack
+    # list where each item is extended with output_slc_files from a ministack
+    output_slc_files: list[Path] = []
+    crlb_files: list[Path] = []
+    closure_phase_files: list[Path] = []
     temp_coh_files: list[Path] = []
     similarity_files: list[Path] = []
     shp_count_files: list[Path] = []
@@ -134,6 +138,8 @@ def run_wrapped_phase_sequential(
                 shp_alpha=shp_alpha,
                 shp_nslc=shp_nslc,
                 similarity_nearest_n=similarity_nearest_n,
+                write_closure_phase=write_closure_phase,
+                write_crlb=write_crlb,
                 block_shape=block_shape,
                 baseline_lag=baseline_lag,
                 max_workers=max_workers,
@@ -142,12 +148,16 @@ def run_wrapped_phase_sequential(
 
         (
             cur_output_files,
+            cur_crlb_files,
+            cur_closure_phase_files,
             cur_comp_slc_file,
             temp_coh_file,
             similarity_file,
             shp_count_file,
         ) = _get_outputs_from_folder(cur_output_folder)
-        output_slc_files.append(cur_output_files)
+        crlb_files.extend(cur_crlb_files)
+        closure_phase_files.extend(cur_closure_phase_files)
+        output_slc_files.extend(cur_output_files)
         temp_coh_files.append(temp_coh_file)
         similarity_files.append(similarity_file)
         shp_count_files.append(shp_count_file)
@@ -196,12 +206,10 @@ def run_wrapped_phase_sequential(
         )
     similarity_files.append(full_similarity_file)
 
-    # Combine the separate SLC output lists into a single list
-    all_slc_files = list(chain.from_iterable(output_slc_files))
     all_comp_slc_files = [ms.get_compressed_slc_info().path for ms in ministacks]
 
     out_pl_slcs = []
-    for slc_fname in all_slc_files:
+    for slc_fname in output_slc_files:
         slc_fname.rename(output_folder / slc_fname.name)
         out_pl_slcs.append(output_folder / slc_fname.name)
 
@@ -212,6 +220,8 @@ def run_wrapped_phase_sequential(
 
     return (
         out_pl_slcs,
+        crlb_files,
+        closure_phase_files,
         comp_slc_outputs,
         temp_coh_files,
         shp_count_files,
@@ -221,16 +231,20 @@ def run_wrapped_phase_sequential(
 
 def _get_outputs_from_folder(
     output_folder: Path,
-) -> tuple[list[Path], Path, Path, Path, Path]:
+) -> tuple[list[Path], list[Path], list[Path], Path, Path, Path, Path]:
     cur_output_files = sorted(output_folder.glob("2*.slc.tif"))
+
     cur_comp_slc_file = next(output_folder.glob("compressed_*"))
     temp_coh_file = next(output_folder.glob("temporal_coherence_*"))
     similarity_file = next(output_folder.glob("similarity*"))
     shp_count_file = next(output_folder.glob("shp_counts_*"))
-    # Currently ignoring to not stitch:
-    # eigenvalues, estimator
+    crlb_files = sorted(output_folder.glob("crlb/crlb*tif"))
+    closure_phase_files = sorted(output_folder.glob("closure_phases/closure_phase*tif"))
+
     return (
         cur_output_files,
+        crlb_files,
+        closure_phase_files,
         cur_comp_slc_file,
         temp_coh_file,
         similarity_file,
@@ -270,5 +284,5 @@ def _get_input_dates(
     # directly pass in dates?)
     return [
         dates[:1] if not is_comp else dates[:3]
-        for dates, is_comp in zip(input_dates, is_compressed)
+        for dates, is_comp in zip(input_dates, is_compressed, strict=False)
     ]

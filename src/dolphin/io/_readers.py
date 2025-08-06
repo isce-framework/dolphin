@@ -604,7 +604,7 @@ class HDF5StackReader(BaseStackReader):
 
         readers = [
             HDF5Reader(Path(f), dset_name=dn, keep_open=keep_open, nodata=nodata)
-            for (f, dn) in zip(files, dset_names)
+            for (f, dn) in zip(files, dset_names, strict=False)
         ]
         # Check if nodata values were found in the files
         nds = {r.nodata for r in readers}
@@ -674,7 +674,7 @@ class RasterStackReader(BaseStackReader):
 
         readers = [
             RasterReader.from_file(f, band=b, keep_open=keep_open, keepdims=keepdims)
-            for (f, b) in zip(files, bands)
+            for (f, b) in zip(files, bands, strict=False)
         ]
         # Check if nodata values were found in the files
         nds = {r.nodata for r in readers}

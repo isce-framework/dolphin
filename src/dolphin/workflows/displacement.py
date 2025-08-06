@@ -34,6 +34,8 @@ class OutputPaths:
     stitched_temp_coh_files: list[Path]
     stitched_shp_count_files: list[Path]
     stitched_similarity_files: list[Path]
+    stitched_crlb_files: list[Path]
+    stitched_closure_phase_files: list[Path]
     stitched_ps_file: Path
     stitched_amp_dispersion_file: Path
     unwrapped_paths: list[Path] | None
@@ -119,6 +121,8 @@ def run(
         _remove_dir_if_empty(burst_cfg.unwrap_options._directory)
 
     ifg_file_list: list[Path] = []
+    crlb_files: list[Path] = []
+    closure_phase_files: list[Path] = []
     temp_coh_file_list: list[Path] = []
     ps_file_list: list[Path] = []
     amp_dispersion_file_list: list[Path] = []
@@ -159,6 +163,8 @@ def run(
         for fut, burst in fut_to_burst.items():
             (
                 cur_ifg_list,
+                cur_crlb_files,
+                cur_closure_phase_files,
                 comp_slcs,
                 temp_coh_files,
                 ps_file,
@@ -167,6 +173,8 @@ def run(
                 similarity_files,
             ) = fut.result()
             ifg_file_list.extend(cur_ifg_list)
+            crlb_files.extend(cur_crlb_files)
+            closure_phase_files.extend(cur_closure_phase_files)
             comp_slc_dict[burst] = comp_slcs
             temp_coh_file_list.extend(temp_coh_files)
             ps_file_list.append(ps_file)
@@ -186,9 +194,11 @@ def run(
         ifg_file_list=ifg_file_list,
         temp_coh_file_list=temp_coh_file_list,
         ps_file_list=ps_file_list,
+        crlb_file_list=crlb_files,
         amp_dispersion_list=amp_dispersion_file_list,
         shp_count_file_list=shp_count_file_list,
         similarity_file_list=similarity_file_list,
+        closure_phase_file_list=closure_phase_files,
         stitched_ifg_dir=cfg.interferogram_network._directory,
         output_options=cfg.output_options,
         file_date_fmt=cfg.input_options.cslc_date_fmt,
@@ -210,6 +220,8 @@ def run(
             stitched_amp_dispersion_file=stitched_paths.amp_dispersion_file,
             stitched_shp_count_files=stitched_paths.shp_count_files,
             stitched_similarity_files=stitched_paths.similarity_files,
+            stitched_crlb_files=stitched_paths.crlb_paths,
+            stitched_closure_phase_files=stitched_paths.closure_phase_files,
             unwrapped_paths=None,
             conncomp_paths=None,
             timeseries_paths=None,
@@ -279,6 +291,8 @@ def run(
         stitched_ifg_paths=stitched_paths.ifg_paths,
         stitched_cor_paths=stitched_paths.interferometric_corr_paths,
         stitched_temp_coh_files=stitched_paths.temp_coh_files,
+        stitched_crlb_files=stitched_paths.crlb_paths,
+        stitched_closure_phase_files=stitched_paths.closure_phase_files,
         stitched_ps_file=stitched_paths.ps_file,
         stitched_amp_dispersion_file=stitched_paths.amp_dispersion_file,
         stitched_shp_count_files=stitched_paths.shp_count_files,

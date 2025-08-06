@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import logging
 from collections import deque
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
+from threading import Lock
 from typing import Optional
 
 import numpy as np
@@ -58,6 +60,8 @@ def run_wrapped_phase_single(
     shp_alpha: float = 0.05,
     shp_nslc: Optional[int] = None,
     similarity_nearest_n: int | None = None,
+    write_closure_phase: bool = True,
+    write_crlb: bool = True,
     block_shape: tuple[int, int] = (512, 512),
     baseline_lag: Optional[int] = None,
     max_workers: int = 1,
@@ -108,14 +112,40 @@ def run_wrapped_phase_single(
 
     logger.info(f"Total stack size (in pixels): {vrt_stack.shape}")
     # Set up the output folder with empty files to write into
+    like_filename = vrt_stack.outfile
     phase_linked_slc_files = setup_output_folder(
         ministack=ministack,
-        driver="GTiff",
+        name_generator=_name_slcs,
         strides=strides,
         output_folder=output_folder,
-        like_filename=vrt_stack.outfile,
-        nodata=0,
+        like_filename=like_filename,
     )
+
+    crlb_output_folder = output_folder / "crlb"
+    crlb_output_folder.mkdir(exist_ok=True)
+    phase_linked_crlb_files: list[Path] = []
+    closure_phase_files: list[Path] = []
+    if write_crlb:
+        phase_linked_crlb_files = setup_output_folder(
+            ministack=ministack,
+            name_generator=_name_crlbs,
+            strides=strides,
+            dtype="float32",
+            output_folder=crlb_output_folder,
+            like_filename=like_filename,
+        )
+
+    if write_closure_phase:
+        closure_phases_output_folder = output_folder / "closure_phases"
+        closure_phases_output_folder.mkdir(exist_ok=True)
+        closure_phase_files = setup_output_folder(
+            ministack=ministack,
+            name_generator=_name_closure_phases,
+            strides=strides,
+            dtype="float32",
+            output_folder=closure_phases_output_folder,
+            like_filename=like_filename,
+        )
 
     comp_slc_info = ministack.get_compressed_slc_info()
 
@@ -147,7 +177,7 @@ def run_wrapped_phase_single(
     for op in output_files.values():
         io.write_arr(
             arr=None,
-            like_filename=vrt_stack.outfile,
+            like_filename=like_filename,
             output_name=op.filename,
             dtype=op.dtype,
             strides=op.strides,
@@ -177,8 +207,6 @@ def run_wrapped_phase_single(
         # loader.queue_read(in_rows, in_cols)
         blocks.append(b)
     ###########################
-    from threading import Lock
-
     write_lock = Lock()
     read_lock = Lock()
 
@@ -232,6 +260,7 @@ def run_wrapped_phase_single(
                 neighbor_arrays=neighbor_arrays,
                 baseline_lag=baseline_lag,
                 avg_mag=amp_mean[in_rows, in_cols] if amp_mean is not None else None,
+                first_real_slc_idx=ministack.first_real_slc_idx,
             )
         except PhaseLinkRuntimeError as e:
             # note: this is a warning instead of info, since it should
@@ -248,13 +277,8 @@ def run_wrapped_phase_single(
 
         # Fill in the nan values with 0
         np.nan_to_num(pl_output.cpx_phase, copy=False)
+        np.nan_to_num(pl_output.crlb_std_dev, copy=False)
         np.nan_to_num(pl_output.temp_coh, copy=False)
-
-        # Save each of the MLE estimates (ignoring those corresponding to
-        # compressed SLCs indexes)
-        assert len(pl_output.cpx_phase[first_real_slc_idx:]) == len(
-            phase_linked_slc_files
-        )
 
         # Compress the ministack using only the non-compressed SLCs
         # Get the mean to set as pixel magnitudes
@@ -269,13 +293,40 @@ def run_wrapped_phase_single(
             reference_idx=ministack.compressed_reference_idx,
         )
 
+        # Save each of the MLE estimates (ignoring those corresponding to
+        # compressed SLCs indexes)
+        assert len(pl_output.cpx_phase[first_real_slc_idx:]) == len(
+            phase_linked_slc_files
+        )
+        # ### Save results ###
         with write_lock:
             # ### Save results ###
             for img, f in zip(
                 pl_output.cpx_phase[first_real_slc_idx:, out_trim_rows, out_trim_cols],
                 phase_linked_slc_files,
+                strict=True,
             ):
                 writer.queue_write(img, f, out_rows.start, out_cols.start)
+
+            if write_crlb:
+                for img, f in zip(
+                    pl_output.crlb_std_dev[
+                        first_real_slc_idx:, out_trim_rows, out_trim_cols
+                    ],
+                    phase_linked_crlb_files,
+                    strict=True,
+                ):
+                    writer.queue_write(img, f, out_rows.start, out_cols.start)
+
+            if write_closure_phase:
+                # Save closure phases (N-2 images for N dates)
+                for i, closure_file in enumerate(closure_phase_files):
+                    closure_img = pl_output.closure_phases[
+                        out_trim_rows, out_trim_cols, i
+                    ]
+                    writer.queue_write(
+                        closure_img, closure_file, out_rows.start, out_cols.start
+                    )
 
             # Save the compressed SLC block
             writer.queue_write(
@@ -326,7 +377,7 @@ def run_wrapped_phase_single(
     logger.info(f"Finished ministack of size {vrt_stack.shape}.")
     loader.notify_finished()
 
-    logger.info("Repacking for more compression")
+    logger.info("Repacking phase linking outputs for more compression")
     io.repack_rasters(phase_linked_slc_files, keep_bits=12)
 
     logger.info("Creating similarity raster on outputs")
@@ -338,6 +389,14 @@ def run_wrapped_phase_single(
         nearest_n=similarity_nearest_n,
         block_shape=block_shape,
     )
+
+    if write_crlb:
+        logger.info("Repacking CRLB files for more compression")
+        # CRLB needs only low precision output
+        io.repack_rasters(phase_linked_crlb_files, use_16_bits=True)
+    if write_closure_phase:
+        logger.info("Repacking closure phase files for more compression")
+        io.repack_rasters(closure_phase_files, keep_bits=10)
 
     written_comp_slc = output_files["compressed_slc"]
     ccslc_info = ministack.get_compressed_slc_info()
@@ -385,8 +444,34 @@ def _get_amp_mean_variance(
     return amp_mean, amp_variance
 
 
+def _name_slcs(ministack: MiniStackInfo) -> list[str]:
+    """Generate SLC filenames for the ministack."""
+    start_idx = ministack.first_real_slc_idx
+    date_strs = ministack.get_date_str_list()[start_idx:]
+    return [f"{Path(d).stem}.slc.tif" for d in date_strs]
+
+
+def _name_crlbs(ministack: MiniStackInfo) -> list[str]:
+    """Generate CRLB filenames for the ministack."""
+    start_idx = ministack.first_real_slc_idx
+    date_strs = ministack.get_date_str_list()[start_idx:]
+    return [f"crlb_{Path(d).stem}.tif" for d in date_strs]
+
+
+def _name_closure_phases(ministack: MiniStackInfo) -> list[str]:
+    """Generate closure phase triplet filenames for the ministack."""
+    date_strs = ministack.get_date_str_list()
+    # Get only the first date in case of compressed
+    date_strs = [d.split("_")[0] for d in date_strs]
+    # Create triplets
+    num_closure_phases = len(date_strs) - 2
+    date_triplets = ["_".join(date_strs[i : i + 3]) for i in range(num_closure_phases)]
+    return [f"closure_phase_{triplet}.tif" for triplet in date_triplets]
+
+
 def setup_output_folder(
     ministack: MiniStackInfo,
+    name_generator: Callable[[MiniStackInfo], list[str]],
     driver: str = "GTiff",
     dtype="complex64",
     like_filename: Optional[Filename] = None,
@@ -394,15 +479,18 @@ def setup_output_folder(
     nodata: Optional[float] = 0,
     output_folder: Optional[Path] = None,
 ) -> list[Path]:
-    """Create empty output files for each band after `start_idx` in `vrt_stack`.
+    """Create empty raster files in the output folder.
 
-    Also creates an empty file for the compressed SLC.
-    Used to prepare output for block processing.
+    Used to prepare outputs for phase linking, CRLB estimates,
+    and closure phase triplets.
 
     Parameters
     ----------
     ministack : MiniStackInfo
         [dolphin.stack.MiniStackInfo][] object for the current batch of SLCs
+    name_generator : Callable[[MiniStackInfo], list[str]]
+        Function that generates the names of the output files for a given
+        ministack.
     driver : str, optional
         Name of GDAL driver, by default "GTiff"
     dtype : str, optional
@@ -426,6 +514,7 @@ def setup_output_folder(
         list of saved empty files for the outputs of phase linking
 
     """
+    """Create empty output files using custom filename generation logic."""
     if strides is None:
         strides = {"y": 1, "x": 1}
     if output_folder is None:
@@ -435,13 +524,10 @@ def setup_output_folder(
     # The latter is the tempdir made by @atomic_output
     output_folder.mkdir(exist_ok=True, parents=True)
 
-    start_idx = ministack.first_real_slc_idx
-    date_strs = ministack.get_date_str_list()[start_idx:]
-
-    phase_linked_slc_files = []
-    for filename in date_strs:
-        slc_name = Path(filename).stem
-        output_path = output_folder / f"{slc_name}.slc.tif"
+    filenames = name_generator(ministack)
+    output_files = []
+    for filename in filenames:
+        output_path = output_folder / filename
 
         io.write_arr(
             arr=None,
@@ -453,6 +539,6 @@ def setup_output_folder(
             strides=strides,
             nodata=nodata,
         )
+        output_files.append(output_path)
 
-        phase_linked_slc_files.append(output_path)
-    return phase_linked_slc_files
+    return output_files
