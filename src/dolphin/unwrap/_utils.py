@@ -152,9 +152,10 @@ def _zero_from_mask(
     return zeroed_ifg_file, zeroed_corr_file
 
 
-def get_convex_hull_mask(good_mask: np.ndarray) -> np.ndarray:
+def get_convex_hull_mask(good_mask: np.ndarray, buffer_pixels: int = 0) -> np.ndarray:
     """Get a boolean image of the convex hull of `True` points in `good_mask`."""
     import numpy as np
+    from scipy.ndimage import binary_dilation
     from scipy.spatial import ConvexHull
 
     hull = ConvexHull(np.stack(np.where(good_mask)).T)
@@ -184,4 +185,8 @@ def get_convex_hull_mask(good_mask: np.ndarray) -> np.ndarray:
     is_inside_hull_flat = np.all(A @ all_coords.T + b[:, np.newaxis] <= 1e-6, axis=0)
 
     hull_mask = is_inside_hull_flat.reshape(good_mask.shape)
+    if buffer_pixels:
+        hull_mask = binary_dilation(
+            hull_mask, structure=np.ones((3, 3)), iterations=buffer_pixels
+        )
     return hull_mask
