@@ -332,8 +332,8 @@ def run_cpl(
         C_arrays = C_arrays.at[:, :, l_rows, l_cols].set(0.0 + 0j)
 
     closure_phases = compute_nearest_closure_phases_batch(C_arrays)
-    # num_looks = (2 * half_window[0] + 1) * (2 * half_window[1] + 1)
     # For a more conservative uncertainty estimate, use a smaller number of looks
+    # rather than `num_looks = (2 * half_window[0] + 1) * (2 * half_window[1] + 1)`
     num_looks = math.sqrt(half_window[0] * half_window[1])
 
     reference_idx = ns + reference_idx if reference_idx < 0 else reference_idx
