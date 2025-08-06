@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import math
 from enum import IntEnum
 from functools import partial
 from typing import NamedTuple, Optional
@@ -333,7 +334,7 @@ def run_cpl(
     closure_phases = compute_nearest_closure_phases_batch(C_arrays)
     # num_looks = (2 * half_window[0] + 1) * (2 * half_window[1] + 1)
     # For a more conservative uncertainty estimate, use a smaller number of looks
-    num_looks = jnp.sqrt(half_window[0] * half_window[1])
+    num_looks = math.sqrt(half_window[0] * half_window[1])
 
     reference_idx = ns + reference_idx if reference_idx < 0 else reference_idx
     cpx_phase, eigenvalues, estimator, crlb_std_dev = process_coherence_matrices(
@@ -370,7 +371,14 @@ def run_cpl(
 
 
 @partial(
-    jit, static_argnames=("use_evd", "beta", "reference_idx", "first_real_slc_idx")
+    jit,
+    static_argnames=(
+        "use_evd",
+        "beta",
+        "reference_idx",
+        "num_looks",
+        "first_real_slc_idx",
+    ),
 )
 def process_coherence_matrices(
     C_arrays,

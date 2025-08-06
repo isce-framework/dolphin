@@ -137,7 +137,7 @@ def _theta_X_theta_T(X: Array, ref: int) -> Array:  # noqa: N802
     return X[..., idx[:, None], idx]
 
 
-@partial(jit, static_argnums=(1, 2))
+@partial(jit, static_argnums=(1, 2, 4))
 def compute_crlb_jax(
     coherence_matrices: Array,
     num_looks: int,
@@ -158,6 +158,7 @@ def compute_crlb_jax(
         Note that too-large `L` will lead to numerical instability.
     reference_idx : int
         Index of the reference epoch.
+        Must be in the range [0, N-1].
     aps_variance : float
         Variance of the APS.
         Set to 0 to ignore APS contribution.
