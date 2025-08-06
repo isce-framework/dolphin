@@ -137,7 +137,7 @@ def _theta_X_theta_T(X: Array, ref: int) -> Array:  # noqa: N802
     return X[..., idx[:, None], idx]
 
 
-@partial(jit, static_argnums=(1,))
+@partial(jit, static_argnums=(1, 2))
 def compute_crlb_jax(
     coherence_matrices: Array,
     num_looks: int,
