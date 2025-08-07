@@ -267,7 +267,7 @@ def _redo_reference(
     inverted_phase_paths: Sequence[Path],
     residual_paths: Sequence[Path],
     extra_reference_date: datetime,
-    bad_pixel_mask: NDArray[np.bool_],
+    bad_pixel_mask: NDArray[bool],
     file_date_fmt: str = "%Y%m%d",
 ):
     """Reset the reference date in `inverted_phase_paths`.
@@ -343,7 +343,7 @@ def _convert_and_reference(
     *,
     output_dir: Path | str,
     reference_point: ReferencePoint,
-    bad_pixel_mask: NDArray[np.bool_],
+    bad_pixel_mask: NDArray[bool],
     wavelength: float | None = None,
 ) -> list[Path]:
     if wavelength is not None:
@@ -744,7 +744,7 @@ def create_velocity(
     output_file: Path | str,
     reference: ReferencePoint | None = None,
     date_list: Sequence[DateOrDatetime] | None = None,
-    bad_pixel_mask: NDArray[np.bool_] | None = None,
+    bad_pixel_mask: NDArray[bool] | None = None,
     cor_file_list: Sequence[Path | str] | None = None,
     cor_threshold: float = 0.2,
     block_shape: tuple[int, int] = (256, 256),
@@ -771,7 +771,7 @@ def create_velocity(
     date_list : Sequence[DateOrDatetime], optional
         List of dates corresponding to the unwrapped phase files.
         If not provided, will be parsed from filenames in `unw_file_list`.
-    bad_pixel_mask : NDArray[np.bool_], optional
+    bad_pixel_mask : NDArray[bool], optional
         A mask of bad pixels to exclude from the velocity estimation.
         Pixels which are `True` are set to nodata in the output raster.
     cor_file_list : Sequence[Path | str], optional
@@ -810,7 +810,7 @@ def create_velocity(
         skip_size_check=True,
     )
     if bad_pixel_mask is None:
-        bad_pixel_mask = np.zeros(unw_reader.shape[-2:], dtype=np.bool_)
+        bad_pixel_mask = np.zeros(unw_reader.shape[-2:], dtype=bool)
 
     if cor_file_list is not None:
         if len(cor_file_list) != len(unw_file_list):
@@ -959,7 +959,7 @@ def invert_unw_network(
     unw_file_list: Sequence[Path | str],
     reference: ReferencePoint,
     output_dir: Path | str,
-    bad_pixel_mask: NDArray[np.bool_] | None = None,
+    bad_pixel_mask: NDArray[bool] | None = None,
     conncomp_file_list: Sequence[Path | str] | None = None,
     cor_file_list: Sequence[Path | str] | None = None,
     cor_threshold: float = 0.0,
@@ -983,7 +983,7 @@ def invert_unw_network(
         from all other points when solving.
     output_dir : Path | str
         The directory to save the output files
-    bad_pixel_mask : NDArray[np.bool_], optional
+    bad_pixel_mask : NDArray[bool], optional
         Boolean mask, where `True` indicates a pixel to set to nodata,
         to apply to all output timeseries.
     conncomp_file_list : Sequence[Path | str], optional
@@ -1116,7 +1116,7 @@ def invert_unw_network(
         unw_reader = readers[0]
         stack = unw_reader[:, rows, cols]
         stack.mask |= bad_pixel_mask[rows, cols][None, :, :]
-        masked_pixel_sum: NDArray[np.bool_] = stack.mask.sum(axis=0)
+        masked_pixel_sum: NDArray[bool] = stack.mask.sum(axis=0)
         # Ensure we have a 2d mask (i.e., not np.ma.nomask)
         if masked_pixel_sum.ndim == 0:
             masked_pixel_sum = np.zeros(stack.shape[1:], dtype=bool)
