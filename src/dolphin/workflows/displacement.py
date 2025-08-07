@@ -176,6 +176,7 @@ def run(
             for i, (burst, burst_cfg) in enumerate(wrapped_phase_cfgs)
         }
         for fut, burst in fut_to_burst.items():
+            wrapped_phase_output = fut.result()
             (
                 cur_ifg_list,
                 cur_crlb_files,
@@ -186,7 +187,7 @@ def run(
                 amp_disp_file,
                 shp_count_files,
                 similarity_files,
-            ) = fut.result()
+            ) = wrapped_phase_output
             ifg_file_list.extend(cur_ifg_list)
             crlb_files.extend(cur_crlb_files)
             closure_phase_files.extend(cur_closure_phase_files)

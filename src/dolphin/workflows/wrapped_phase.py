@@ -4,7 +4,7 @@ import datetime
 import logging
 import time
 from pathlib import Path
-from typing import Optional, Sequence, cast
+from typing import NamedTuple, Optional, Sequence, cast
 
 from opera_utils import get_dates, make_nodata_mask
 
@@ -20,48 +20,21 @@ from .config import DisplacementWorkflow
 logger = logging.getLogger("dolphin")
 
 
-@log_runtime
-def run(
-    cfg: DisplacementWorkflow,
-    debug: bool = False,
-    max_workers: int = 1,
-    tqdm_kwargs=None,
-) -> tuple[
-    list[Path],
-    list[Path],
-    list[Path],
-    list[Path],
-    list[Path],
-    Path,
-    Path,
-    list[Path],
-    list[Path],
-]:
-    """Run the displacement workflow on a stack of SLCs.
+class WrappedPhaseOutput(NamedTuple):
+    """Output files of the wrapped_phase workflow.
 
-    Parameters
+    Attributes
     ----------
-    cfg : DisplacementWorkflow
-        [`DisplacementWorkflow`][dolphin.workflows.config.DisplacementWorkflow] object
-        for controlling the workflow.
-    debug : bool, optional
-        Enable debug logging, by default False.
-    max_workers : int, optional
-        Number of workers to use to process blocks during phase linking, by default 1.
-    tqdm_kwargs : dict, optional
-        dict of arguments to pass to `tqdm` (e.g. `position=n` for n parallel bars)
-        See https://tqdm.github.io/docs/tqdm/#tqdm-objects for all options.
-
-    Returns
-    -------
     ifg_file_list : list[Path]
         list of Paths to virtual interferograms created.
     crlb_files : list[Path]
         Paths to the output Cramer Rao Lower Bound (CRLB) files.
+    closure_phase_files : list[Path]
+        Paths to the output closure phase files.
     comp_slc_file_list : list[Path]
         Paths to the compressed SLC files created from each ministack.
     temp_coh_files : list[Path]
-        Paths to temporal coherence file created.
+        Paths to temporal coherence files created.
         In the case of a single phase linking step, this is from one phase linking step.
         In the case of sequential phase linking, this from each ministack, and one
         average of all ministacks.
@@ -79,6 +52,47 @@ def run(
         In the case of a single phase linking step, this is from one phase linking step.
         In the case of sequential phase linking, this from each ministack, and one
         average of all ministacks.
+
+    """
+
+    ifg_file_list: list[Path]
+    crlb_files: list[Path]
+    closure_phase_files: list[Path]
+    comp_slc_file_list: list[Path]
+    temp_coh_files: list[Path]
+    ps_looked_file: Path
+    amp_disp_looked_file: Path
+    shp_count_files: list[Path]
+    similarity_files: list[Path]
+
+
+@log_runtime
+def run(
+    cfg: DisplacementWorkflow,
+    debug: bool = False,
+    max_workers: int = 1,
+    tqdm_kwargs=None,
+) -> WrappedPhaseOutput:
+    """Run the displacement workflow on a stack of SLCs.
+
+    Parameters
+    ----------
+    cfg : DisplacementWorkflow
+        [`DisplacementWorkflow`][dolphin.workflows.config.DisplacementWorkflow] object
+        for controlling the workflow.
+    debug : bool, optional
+        Enable debug logging, by default False.
+    max_workers : int, optional
+        Number of workers to use to process blocks during phase linking, by default 1.
+    tqdm_kwargs : dict, optional
+        dict of arguments to pass to `tqdm` (e.g. `position=n` for n parallel bars)
+        See https://tqdm.github.io/docs/tqdm/#tqdm-objects for all options.
+
+    Returns
+    -------
+    WrappedPhaseOutput
+        [`WrappedPhaseOutput`][dolphin.workflows.wrapped_phase.WrappedPhaseOutput]
+        object containing the output files of the wrapped phase workflow.
 
     """
     t0 = time.perf_counter()
@@ -257,7 +271,7 @@ def run(
     existing_ifgs = list(ifg_network._directory.glob("*.int.vrt"))
     if len(existing_ifgs) > 0:
         logger.info(f"Skipping interferogram step, {len(existing_ifgs)} exists")
-        return (
+        return WrappedPhaseOutput(
             existing_ifgs,
             crlb_files,
             closure_phase_files,
@@ -304,7 +318,7 @@ def run(
         extra_reference_date=extra_reference_date,
         file_date_fmt=cfg.input_options.cslc_date_fmt,
     )
-    return (
+    return WrappedPhaseOutput(
         ifg_file_list,
         crlb_files,
         closure_phase_files,
