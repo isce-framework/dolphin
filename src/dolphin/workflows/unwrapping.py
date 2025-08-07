@@ -69,7 +69,7 @@ def run(
     output_path.mkdir(exist_ok=True, parents=True)
     if mask_file is not None:
         output_mask = _get_matching_raster(
-            mask_file=mask_file,
+            input_file=mask_file,
             output_dir=output_path,
             match_file=ifg_file_list[0],
         )
