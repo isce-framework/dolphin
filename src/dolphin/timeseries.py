@@ -878,6 +878,17 @@ def create_velocity(
         create_overviews([output_file])
     if units := io.get_raster_units(unw_file_list[0]):
         io.set_raster_units(output_file, units=f"{units} / year")
+    # Add start and end date to raster metadata
+    start_date = date_list[0]
+    end_date = date_list[-1]
+    io.set_raster_metadata(
+        output_file,
+        metadata={
+            "start_datetime": start_date.strftime(file_date_fmt),
+            "end_datetime": end_date.strftime(file_date_fmt),
+        },
+    )
+
     logger.info("Completed create_velocity")
 
 
