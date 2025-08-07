@@ -246,6 +246,14 @@ class TimeseriesOptions(BaseModel, extra="forbid"):
         True,
         description="Run the velocity estimation from the phase time series.",
     )
+    apply_mask_to_timeseries: bool = Field(
+        True,
+        description=(
+            "If providing a mask file, whether to apply the mask to the timeseries. If"
+            " True, the time series rasters will zero out pixels labeled as 0 in the"
+            " mask file."
+        ),
+    )
     correlation_threshold: float = Field(
         0.2,
         description="Pixels with correlation below this value will be masked out.",

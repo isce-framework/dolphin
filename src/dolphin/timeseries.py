@@ -18,6 +18,7 @@ from scipy import ndimage
 from dolphin import io
 from dolphin._overviews import ImageType, create_overviews
 from dolphin._types import ReferencePoint
+from dolphin.stitching import _get_matching_raster
 from dolphin.utils import flatten, format_dates, full_suffix, get_nearest_date_idx
 
 T = TypeVar("T")
@@ -46,6 +47,7 @@ def run(
     method: InversionMethod = InversionMethod.L1,
     reference_candidate_threshold: float = 0.95,
     run_velocity: bool = False,
+    mask_path: Path | str | None = None,
     corr_paths: Sequence[Path | str] | None = None,
     weight_velocity_by_corr: bool = False,
     velocity_file: Optional[Path | str] = None,
@@ -83,6 +85,10 @@ def run(
         Default is 0.95.
     run_velocity : bool
         Whether to run velocity estimation on the inverted phase series
+    mask_path : Path | str | None
+        Path to a mask file (uint8) to apply to the timeseries/velocity rasters.
+        0 values will be masked out in the timeseries and velocity rasters.
+        If not provided, no additional masking is done on outputs.
     corr_paths : Sequence[Path], optional
         Sequence interferometric correlation files, one per file in `unwrapped_paths`.
         If not provided, does no weighting by correlation.
@@ -139,7 +145,9 @@ def run(
 
     """
     unwrapped_paths = sorted(unwrapped_paths, key=str)
-    Path(output_dir).mkdir(exist_ok=True, parents=True)
+    output_path = Path(output_dir)
+    output_path.mkdir(exist_ok=True, parents=True)
+    cols, rows = io.get_raster_xysize(unwrapped_paths[0])
 
     if reference_point is None:
         logger.info("Selecting a reference point for unwrapped interferograms")
@@ -147,7 +155,7 @@ def run(
             raise ValueError("Must provide quality_file if not reference_point given")
         ref_point = select_reference_point(
             quality_file=quality_file,
-            output_dir=Path(output_dir),
+            output_dir=output_path,
             candidate_threshold=reference_candidate_threshold,
             ccl_file_list=conncomp_paths,
         )
@@ -156,6 +164,16 @@ def run(
 
     ifg_date_pairs = [get_dates(f, fmt=file_date_fmt) for f in unwrapped_paths]
     sar_dates = sorted(set(flatten(ifg_date_pairs)))
+
+    # Read in the binary mask
+    if mask_path is not None:
+        matching_mask_path = _get_matching_raster(
+            mask_path, output_path, unwrapped_paths[0]
+        )
+        mask = io.load_gdal(matching_mask_path, masked=True).filled(0)
+        bad_pixel_mask = mask == 0
+    else:
+        bad_pixel_mask = np.zeros((rows, cols), dtype=bool)
 
     # if we did single-reference interferograms, for `n` sar dates, we will only have
     # `n-1` interferograms. Any more than n-1 ifgs means we need to invert
@@ -179,9 +197,10 @@ def run(
         # Copy over the unwrapped paths to `timeseries/`
         final_ts_paths = _convert_and_reference(
             unwrapped_paths,
-            output_dir=output_dir,
+            output_dir=output_path,
             reference_point=ref_point,
             wavelength=wavelength,
+            bad_pixel_mask=bad_pixel_mask,
         )
         final_residual_paths = None
     else:
@@ -190,11 +209,12 @@ def run(
             unw_file_list=unwrapped_paths,
             conncomp_file_list=conncomp_paths,
             reference=ref_point,
-            output_dir=output_dir,
+            output_dir=output_path,
             block_shape=block_shape,
             num_threads=num_threads,
             wavelength=wavelength,
             method=method,
+            bad_pixel_mask=bad_pixel_mask,
         )
         if extra_reference_date is None:
             final_ts_paths = inverted_phase_paths
@@ -204,6 +224,7 @@ def run(
                 inverted_phase_paths,
                 residual_paths,
                 extra_reference_date,
+                bad_pixel_mask=bad_pixel_mask,
                 file_date_fmt=file_date_fmt,
             )
 
@@ -225,7 +246,7 @@ def run(
             )
 
         if velocity_file is None:
-            velocity_file = Path(output_dir) / "velocity.tif"
+            velocity_file = output_path / "velocity.tif"
 
         create_velocity(
             unw_file_list=final_ts_paths,
@@ -235,6 +256,8 @@ def run(
             cor_threshold=correlation_threshold,
             block_shape=block_shape,
             num_threads=num_threads,
+            file_date_fmt=file_date_fmt,
+            bad_pixel_mask=bad_pixel_mask,
         )
 
     return final_ts_paths, final_residual_paths, ref_point
@@ -244,6 +267,7 @@ def _redo_reference(
     inverted_phase_paths: Sequence[Path],
     residual_paths: Sequence[Path],
     extra_reference_date: datetime,
+    bad_pixel_mask: NDArray[np.bool_],
     file_date_fmt: str = "%Y%m%d",
 ):
     """Reset the reference date in `inverted_phase_paths`.
@@ -271,6 +295,8 @@ def _redo_reference(
     logger.info(f"Re-referencing later timeseries files to {ref_date}")
     extra_ref_img = inverted_phase_paths[extra_ref_idx]
     ref = io.load_gdal(extra_ref_img, masked=True)
+    # Applying here will propagate to all references
+    ref.mask = ref.mask | bad_pixel_mask
 
     # Use a temp directory while re-referencing
     extra_out_dir = inverted_phase_paths[0].parent / "extra"
@@ -317,6 +343,7 @@ def _convert_and_reference(
     *,
     output_dir: Path | str,
     reference_point: ReferencePoint,
+    bad_pixel_mask: NDArray[np.bool_],
     wavelength: float | None = None,
 ) -> list[Path]:
     if wavelength is not None:
@@ -342,6 +369,8 @@ def _convert_and_reference(
             continue
 
         arr_radians = io.load_gdal(p, masked=True)
+        # Apply the bad pixel mask
+        arr_radians.mask = arr_radians.mask | bad_pixel_mask
         nodataval = io.get_raster_nodata(p)
         # Reference to the
         ref_value = arr_radians.filled(np.nan)[ref_row, ref_col]
@@ -715,6 +744,7 @@ def create_velocity(
     output_file: Path | str,
     reference: ReferencePoint | None = None,
     date_list: Sequence[DateOrDatetime] | None = None,
+    bad_pixel_mask: NDArray[np.bool_] | None = None,
     cor_file_list: Sequence[Path | str] | None = None,
     cor_threshold: float = 0.2,
     block_shape: tuple[int, int] = (256, 256),
@@ -741,6 +771,9 @@ def create_velocity(
     date_list : Sequence[DateOrDatetime], optional
         List of dates corresponding to the unwrapped phase files.
         If not provided, will be parsed from filenames in `unw_file_list`.
+    bad_pixel_mask : NDArray[np.bool_], optional
+        A mask of bad pixels to exclude from the velocity estimation.
+        Pixels which are `True` are set to nodata in the output raster.
     cor_file_list : Sequence[Path | str], optional
         List of correlation files to use for weighting the velocity estimation.
         If not provided, all weights are set to 1.
@@ -776,6 +809,9 @@ def create_velocity(
         outfile=out_dir / "velocity_inputs.vrt",
         skip_size_check=True,
     )
+    if bad_pixel_mask is None:
+        bad_pixel_mask = np.zeros(unw_reader.shape[-2:], dtype=np.bool_)
+
     if cor_file_list is not None:
         if len(cor_file_list) != len(unw_file_list):
             msg = "Mismatch in number of input files provided:"
@@ -816,11 +852,8 @@ def create_velocity(
         # Reference the data
         unw_stack = unw_stack - ref_data
         # Fit a line to each pixel with weighted least squares
-        return (
-            estimate_velocity(x_arr=x_arr, unw_stack=unw_stack, weight_stack=weights),
-            rows,
-            cols,
-        )
+        velo = estimate_velocity(x_arr=x_arr, unw_stack=unw_stack, weight_stack=weights)
+        return (np.where(bad_pixel_mask[rows, cols], 0, velo), rows, cols)
 
     # Note: For some reason, the `RasterStackReader` is much slower than the VRT
     # for files on S3:
@@ -845,6 +878,17 @@ def create_velocity(
         create_overviews([output_file])
     if units := io.get_raster_units(unw_file_list[0]):
         io.set_raster_units(output_file, units=f"{units} / year")
+    # Add start and end date to raster metadata
+    start_date = date_list[0]
+    end_date = date_list[-1]
+    io.set_raster_metadata(
+        output_file,
+        metadata={
+            "start_datetime": start_date.strftime(file_date_fmt),
+            "end_datetime": end_date.strftime(file_date_fmt),
+        },
+    )
+
     logger.info("Completed create_velocity")
 
 
@@ -915,6 +959,7 @@ def invert_unw_network(
     unw_file_list: Sequence[Path | str],
     reference: ReferencePoint,
     output_dir: Path | str,
+    bad_pixel_mask: NDArray[np.bool_] | None = None,
     conncomp_file_list: Sequence[Path | str] | None = None,
     cor_file_list: Sequence[Path | str] | None = None,
     cor_threshold: float = 0.0,
@@ -938,9 +983,13 @@ def invert_unw_network(
         from all other points when solving.
     output_dir : Path | str
         The directory to save the output files
+    bad_pixel_mask : NDArray[np.bool_], optional
+        Boolean mask, where `True` indicates a pixel to set to nodata,
+        to apply to all output timeseries.
     conncomp_file_list : Sequence[Path | str], optional
-        Sequence connected component files, one per file in `unwrapped_paths`.
+        Sequence of connected component files, one per file in `unwrapped_paths`.
         Used to ignore interferogram pixels whose connected component label is zero.
+        If passed, `cor_file_list` cannot be passed.
     cor_file_list : Sequence[Path | str], optional
         List of correlation files to use for weighting the inversion.
         Cannot be used if `conncomp_file_list` is passed.
@@ -1023,6 +1072,9 @@ def invert_unw_network(
     cor_vrt_name = Path(output_dir) / "cor_network.vrt"
     conncomp_vrt_name = Path(output_dir) / "conncomp_network.vrt"
 
+    if bad_pixel_mask is None:
+        bad_pixel_mask = np.zeros(unw_reader.shape[-2:], dtype=bool)
+
     if conncomp_file_list is not None and method == "L2":
         conncomp_reader = io.VRTStack(
             file_list=conncomp_file_list,
@@ -1063,6 +1115,7 @@ def invert_unw_network(
     ) -> tuple[np.ndarray, slice, slice]:
         unw_reader = readers[0]
         stack = unw_reader[:, rows, cols]
+        stack.mask |= bad_pixel_mask[rows, cols][None, :, :]
         masked_pixel_sum: NDArray[np.bool_] = stack.mask.sum(axis=0)
         # Ensure we have a 2d mask (i.e., not np.ma.nomask)
         if masked_pixel_sum.ndim == 0:
