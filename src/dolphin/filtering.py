@@ -263,7 +263,7 @@ def _filter_and_save(
     conncomp_path: Path | None,
     output_dir: Path,
     wavelength_cutoff: float,
-    bad_pixel_mask: NDArray[bool],
+    bad_pixel_mask: NDArray[np.bool_],
     correlation_cutoff: float = 0.5,
 ) -> Path:
     """Filter one interferogram (wrapper for multiprocessing)."""

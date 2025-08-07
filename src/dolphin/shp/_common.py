@@ -31,7 +31,7 @@ def remove_unconnected(data: ArrayLike, inplace: bool = True) -> np.ndarray:
     if not inplace:
         data = data.copy()
     rows, cols = data.shape
-    visited = np.zeros((rows, cols), dtype=bool)
+    visited = np.zeros((rows, cols), dtype=np.bool_)
     # Using a stack instead of recursive calls for speed
     # Pre-allocate the stack
     max_stack_size = 1 + rows * cols

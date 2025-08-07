@@ -125,7 +125,7 @@ def test_estimate_stack_covariance_neighbors(slcs):
     C_nan = covariance.coh_mat_single(slc_samples_nan)
 
     slc_samples = slcs.reshape(num_slc, -1)
-    neighbor_mask = np.ones(slc_samples.shape[1], dtype=bool)
+    neighbor_mask = np.ones(slc_samples.shape[1], dtype=np.bool_)
     idx = np.ravel_multi_index((nan_row, nan_col), (rows, cols))
     neighbor_mask[idx] = False
 
@@ -146,7 +146,7 @@ def test_estimate_stack_covariance_neighbors_masked(slcs):
     C_nan = covariance.coh_mat_single(slc_samples_nan)
 
     slc_samples = slcs.reshape(num_slc, -1)
-    neighbor_mask = np.ones(slc_samples.shape[1], dtype=bool)
+    neighbor_mask = np.ones(slc_samples.shape[1], dtype=np.bool_)
     neighbor_mask[:] = True
     neighbor_mask[:cols] = False
 

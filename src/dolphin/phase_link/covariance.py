@@ -118,7 +118,7 @@ def coh_mat_single(
     nslc, nsamps = slc_samples.shape
 
     if neighbor_mask is None:
-        neighbor_mask = jnp.ones(nsamps, dtype=bool)
+        neighbor_mask = jnp.ones(nsamps, dtype=jnp.bool_)
     valid_samples_mask = ~jnp.isnan(slc_samples)
     combined_mask = valid_samples_mask & neighbor_mask[None, :]
 
