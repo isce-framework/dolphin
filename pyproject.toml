@@ -124,8 +124,7 @@ plugins = ["pydantic.mypy"]
 
 [tool.pytest.ini_options]
 doctest_optionflags = "NORMALIZE_WHITESPACE NUMBER"
-# addopts = "  --cov=dolphin  -n auto --maxprocesses=8 --doctest-modules --randomly-seed=1234 --ignore=scripts --ignore=docs --ignore=data --ignore=pkgs"
-addopts = " --cov=dolphin --doctest-modules --randomly-seed=1234 --ignore=scripts --ignore=benchmarks --ignore=docs --ignore=data --ignore=pkgs"
+addopts = " --cov=dolphin --doctest-modules --randomly-seed=1234 --ignore=scripts --ignore=benchmarks --ignore=docs --ignore=data"
 filterwarnings = [
   "error",
   # DeprecationWarning thrown in pkg_resources for older numba versions and llvmlite

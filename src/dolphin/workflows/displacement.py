@@ -31,18 +31,33 @@ class OutputPaths:
     comp_slc_dict: dict[str, list[Path]]
     stitched_ifg_paths: list[Path]
     stitched_cor_paths: list[Path]
+    stitched_temp_coh_files: list[Path]
+    stitched_shp_count_files: list[Path]
+    stitched_similarity_files: list[Path]
     stitched_crlb_files: list[Path]
     stitched_closure_phase_files: list[Path]
-    stitched_temp_coh_file: Path
     stitched_ps_file: Path
     stitched_amp_dispersion_file: Path
-    stitched_shp_count_file: Path
-    stitched_similarity_file: Path
     unwrapped_paths: list[Path] | None
     conncomp_paths: list[Path] | None
     timeseries_paths: list[Path] | None
     timeseries_residual_paths: list[Path] | None
     reference_point: ReferencePoint | None
+
+    @property
+    def stitched_temp_coh_file(self) -> Path:
+        """Backward compatibility: return the last temporal coherence file."""
+        return self.stitched_temp_coh_files[-1]
+
+    @property
+    def stitched_shp_count_file(self) -> Path:
+        """Backward compatibility: return the last SHP count file."""
+        return self.stitched_shp_count_files[-1]
+
+    @property
+    def stitched_similarity_file(self) -> Path:
+        """Backward compatibility: return the last similarity file."""
+        return self.stitched_similarity_files[-1]
 
 
 @log_runtime
@@ -161,26 +176,27 @@ def run(
             for i, (burst, burst_cfg) in enumerate(wrapped_phase_cfgs)
         }
         for fut, burst in fut_to_burst.items():
+            wrapped_phase_output = fut.result()
             (
                 cur_ifg_list,
                 cur_crlb_files,
                 cur_closure_phase_files,
                 comp_slcs,
-                temp_coh,
+                temp_coh_files,
                 ps_file,
                 amp_disp_file,
-                shp_count,
-                similarity,
-            ) = fut.result()
+                shp_count_files,
+                similarity_files,
+            ) = wrapped_phase_output
             ifg_file_list.extend(cur_ifg_list)
             crlb_files.extend(cur_crlb_files)
             closure_phase_files.extend(cur_closure_phase_files)
             comp_slc_dict[burst] = comp_slcs
-            temp_coh_file_list.append(temp_coh)
+            temp_coh_file_list.extend(temp_coh_files)
             ps_file_list.append(ps_file)
             amp_dispersion_file_list.append(amp_disp_file)
-            shp_count_file_list.append(shp_count)
-            similarity_file_list.append(similarity)
+            shp_count_file_list.extend(shp_count_files)
+            similarity_file_list.extend(similarity_files)
 
     # ###################################
     # 2. Stitch burst-wise interferograms
@@ -215,12 +231,12 @@ def run(
             comp_slc_dict=comp_slc_dict,
             stitched_ifg_paths=stitched_paths.ifg_paths,
             stitched_cor_paths=stitched_paths.interferometric_corr_paths,
-            stitched_crlb_files=stitched_paths.crlb_paths,
-            stitched_temp_coh_file=stitched_paths.temp_coh_file,
+            stitched_temp_coh_files=stitched_paths.temp_coh_files,
             stitched_ps_file=stitched_paths.ps_file,
             stitched_amp_dispersion_file=stitched_paths.amp_dispersion_file,
-            stitched_shp_count_file=stitched_paths.shp_count_file,
-            stitched_similarity_file=stitched_paths.similarity_file,
+            stitched_shp_count_files=stitched_paths.shp_count_files,
+            stitched_similarity_files=stitched_paths.similarity_files,
+            stitched_crlb_files=stitched_paths.crlb_paths,
             stitched_closure_phase_files=stitched_paths.closure_phase_files,
             unwrapped_paths=None,
             conncomp_paths=None,
@@ -231,11 +247,18 @@ def run(
 
     row_looks, col_looks = cfg.phase_linking.half_window.to_looks()
     nlooks = row_looks * col_looks
+
+    # TODO: Not sure if i'll ever want more than one quality file
+    # Dividing per-ministack in here would probably be complicated.
+    # It'll probably be better to make an entirely different workflow
+    # for that.
+    avg_temp_coh_file = stitched_paths.temp_coh_files[-1]
+    full_similarity_file = stitched_paths.similarity_files[-1]
     unwrapped_paths, conncomp_paths = unwrapping.run(
         ifg_file_list=stitched_paths.ifg_paths,
         cor_file_list=stitched_paths.interferometric_corr_paths,
-        temporal_coherence_filename=stitched_paths.temp_coh_file,
-        similarity_filename=stitched_paths.similarity_file,
+        temporal_coherence_filename=avg_temp_coh_file,
+        similarity_filename=full_similarity_file,
         nlooks=nlooks,
         unwrap_options=cfg.unwrap_options,
         mask_file=cfg.mask_file,
@@ -257,7 +280,7 @@ def run(
             # TODO: Right now we don't have the option to pick a different candidate
             # or quality file. Figure out if this is worth exposing
             reference_point=cfg.timeseries_options.reference_point,
-            quality_file=stitched_paths.temp_coh_file,
+            quality_file=avg_temp_coh_file,
             reference_candidate_threshold=0.95,
             output_dir=ts_opts._directory,
             method=timeseries.InversionMethod(ts_opts.method),
@@ -284,13 +307,13 @@ def run(
         comp_slc_dict=comp_slc_dict,
         stitched_ifg_paths=stitched_paths.ifg_paths,
         stitched_cor_paths=stitched_paths.interferometric_corr_paths,
+        stitched_temp_coh_files=stitched_paths.temp_coh_files,
         stitched_crlb_files=stitched_paths.crlb_paths,
         stitched_closure_phase_files=stitched_paths.closure_phase_files,
-        stitched_temp_coh_file=stitched_paths.temp_coh_file,
         stitched_ps_file=stitched_paths.ps_file,
         stitched_amp_dispersion_file=stitched_paths.amp_dispersion_file,
-        stitched_shp_count_file=stitched_paths.shp_count_file,
-        stitched_similarity_file=stitched_paths.similarity_file,
+        stitched_shp_count_files=stitched_paths.shp_count_files,
+        stitched_similarity_files=stitched_paths.similarity_files,
         unwrapped_paths=unwrapped_paths,
         # TODO: Let's keep the unwrapped_paths since all the outputs are
         # corresponding to those and if we have a network unwrapping, the

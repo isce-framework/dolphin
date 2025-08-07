@@ -50,17 +50,21 @@ def merge_by_date(
     image_file_list : Iterable[Filename]
         list of paths to images.
     file_date_fmt : Optional[str]
-        Format of the datetime in the filename. Default is %Y%m%d
+        Format of the datetime in the filename.
+        Default is %Y%m%d
     output_dir : Filename
         Path to output directory
     driver : str
-        GDAL driver to use for output. Default is ENVI.
+        GDAL driver to use for output. Default is "GTiff"
     output_suffix : str
-        Suffix to use to output stitched filenames. Default is ".tif"
+        Suffix to use to output stitched filenames.
+        Default is ".tif"
     output_prefix : str
-        Prefix to use to output stitched filenames before dates. Default is ""
+        Prefix to use to output stitched filenames before the date.
+        Default is ""
     out_nodata : Optional[float | str]
-        Nodata value to use for output file. Default is 0.
+        Nodata value to use for output file.
+        Default is 0.
     in_nodata : Optional[float | str]
         Override the files' `nodata` and use `in_nodata` during merging.
     out_bounds: Optional[tuple[float]]

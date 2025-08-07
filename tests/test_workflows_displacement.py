@@ -39,7 +39,7 @@ def test_displacement_run_single(opera_slc_files: list[Path], tmpdir):
         assert paths.stitched_ps_file.exists()
         assert all(p.exists() for p in paths.stitched_ifg_paths)
         assert all(p.exists() for p in paths.stitched_cor_paths)
-        assert paths.stitched_temp_coh_file.exists()
+        assert all(p.exists() for p in paths.stitched_temp_coh_files)
         assert paths.stitched_ps_file.exists()
         assert paths.stitched_amp_dispersion_file.exists()
         assert paths.unwrapped_paths is not None
