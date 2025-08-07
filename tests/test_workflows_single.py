@@ -1,3 +1,5 @@
+import pytest
+
 from dolphin import stack
 from dolphin.io import _readers
 from dolphin.phase_link import simulate
@@ -8,7 +10,8 @@ GPU_AVAILABLE = gpu_is_available()
 simulate._seed(1234)
 
 
-def test_sequential_gtiff(tmp_path, slc_file_list):
+@pytest.mark.parametrize("write_extra", [False, True])
+def test_sequential_gtiff(tmp_path, slc_file_list, write_extra: bool):
     """Run through the sequential estimation with a GeoTIFF stack."""
     vrt_file = tmp_path / "slc_stack.vrt"
     files = slc_file_list[:3]
@@ -31,6 +34,8 @@ def test_sequential_gtiff(tmp_path, slc_file_list):
         half_window=half_window,
         strides=strides,
         shp_method="rect",
+        write_crlb=write_extra,
+        write_closure_phase=write_extra,
     )
 
     assert output_folder.exists()

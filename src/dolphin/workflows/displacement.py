@@ -285,6 +285,7 @@ def run(
             method=timeseries.InversionMethod(ts_opts.method),
             run_velocity=ts_opts.run_velocity,
             velocity_file=ts_opts._velocity_file,
+            mask_path=cfg.mask_file if ts_opts.apply_mask_to_timeseries else None,
             correlation_threshold=ts_opts.correlation_threshold,
             num_threads=ts_opts.num_parallel_blocks,
             # TODO: do i care to configure block shape, or num threads from somewhere?
