@@ -650,3 +650,25 @@ def warp_to_match(
     )
 
     return Path(output_file)
+
+
+def _get_matching_raster(
+    mask_file: Path | str, output_dir: Path, match_file: Path | str
+) -> Path:
+    """Create a mask with the same size/projection as `match_file`."""
+    # Check that the input mask is the same size as the ifgs:
+    if io.get_raster_xysize(mask_file) == io.get_raster_xysize(match_file):
+        logger.info(f"Using {mask_file} to mask ")
+        output_mask = Path(mask_file)
+    else:
+        logger.info(f"Warping {mask_file} to match size of {match_file}")
+        output_mask = output_dir / "warped_mask.tif"
+        if output_mask.exists():
+            logger.info(f"Mask already exists at {output_mask}")
+        else:
+            warp_to_match(
+                input_file=mask_file,
+                match_file=match_file,
+                output_file=output_mask,
+            )
+    return output_mask
