@@ -182,14 +182,11 @@ def run_wrapped_phase_sequential(
     # we can pass the list of files to gdal_calc, which interprets it
     # as a multi-band file
 
-    _average_or_rename(temp_coh_files, avg_temp_coh_file, "Float32")
-    _average_or_rename(shp_count_files, avg_shp_count_file, "Int16")
     if len(temp_coh_files) > 1:
+        _average_or_rename(temp_coh_files, avg_temp_coh_file, "Float32")
+        _average_or_rename(shp_count_files, avg_shp_count_file, "Int16")
         temp_coh_files.append(avg_temp_coh_file)
         shp_count_files.append(avg_shp_count_file)
-    else:
-        temp_coh_files = [avg_temp_coh_file]
-        shp_count_files = [avg_shp_count_file]
 
     if len(similarity_files) > 1:
         # Create one phase similarity raster on the whole wrapped time series
@@ -205,11 +202,7 @@ def run_wrapped_phase_sequential(
             num_threads=2,
             add_overviews=False,
         )
-    else:
-        full_similarity_file = similarity_files[0].rename(
-            output_folder / similarity_files[0].name
-        )
-    similarity_files.append(full_similarity_file)
+        similarity_files.append(full_similarity_file)
 
     all_comp_slc_files = [ms.get_compressed_slc_info().path for ms in ministacks]
 

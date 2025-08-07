@@ -44,6 +44,21 @@ class OutputPaths:
     timeseries_residual_paths: list[Path] | None
     reference_point: ReferencePoint | None
 
+    @property
+    def stitched_temp_coh_file(self) -> Path:
+        """Backward compatibility: return the last temporal coherence file."""
+        return self.stitched_temp_coh_files[-1]
+
+    @property
+    def stitched_shp_count_file(self) -> Path:
+        """Backward compatibility: return the last SHP count file."""
+        return self.stitched_shp_count_files[-1]
+
+    @property
+    def stitched_similarity_file(self) -> Path:
+        """Backward compatibility: return the last similarity file."""
+        return self.stitched_similarity_files[-1]
+
 
 @log_runtime
 def run(
