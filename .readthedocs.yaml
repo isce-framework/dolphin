@@ -6,19 +6,16 @@ version: 2
 mkdocs:
   configuration: mkdocs.yml
 
-# Conda is causing "excessive memory usage"
-# https://docs.readthedocs.io/en/stable/guides/conda.html#making-builds-faster-with-mamba
 build:
-  os: "ubuntu-20.04"
-  tools:
-    python: "mambaforge-4.10"
-
-conda:
-  environment: conda-env.yml
-
-python:
-  install:
-    - method: pip
-      path: .
-      extra_requirements:
-        - docs
+  os: ubuntu-24.04
+  commands:
+    - asdf plugin add pixi
+    - asdf install pixi latest
+    - asdf global pixi latest
+    - pixi install -e docs
+    - pixi shell --environment docs
+    # Avoiding problems from the local extension in docs/mdx_bib.py  :
+    # Config value 'markdown_extensions': Failed to load extension 'docs.mdx_bib'
+    # ModuleNotFoundError: No module named 'docs'
+    - export PYTHONPATH="${PYTHONPATH}:${PWD}"
+    - mkdocs build --clean --site-dir $READTHEDOCS_OUTPUT/html --config-file mkdocs.yml

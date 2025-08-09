@@ -8,6 +8,24 @@ description = "Workflows for generating surface displacement maps using InSAR"
 readme = { file = "README.md", content-type = "text/markdown" }
 requires-python = ">=3.10"
 
+dependencies = [
+  "h5py>=3.6",
+  "jax>=0.4.19",
+  "numba>=0.56",
+  "numpy>=1.23",
+  "opera-utils>=0.16",
+  "pydantic>=2.1",
+  "pyproj>=3.3",
+  "rasterio>=1.3",
+  "ruamel_yaml>=0.15",
+  "scipy>=1.9",
+  "snaphu>=0.4.1",
+  "threadpoolctl>=3.0",
+  "tqdm>=4.60",
+  "typing_extensions>=3.10",
+  "tyro>=0.9.20",
+]
+
 classifiers = [
   "Development Status :: 2 - Pre-Alpha",
   "Intended Audience :: Science/Research",
@@ -24,7 +42,90 @@ license = { file = "LICENSE.txt" }
 # see section: setuptools_scm
 # https://setuptools.pypa.io/en/latest/userguide/pyproject_config.html#dynamic-metadata
 # dependencies will be read from text files
-dynamic = ["version", "dependencies", "optional-dependencies"]
+dynamic = ["version"]
+
+# extra requirements: `pip install dolphin[docs]` or `pip install .[docs]`
+[project.optional-dependencies]
+docs = [
+  "black[jupyter]",
+  "markdown",
+  "mkdocs",
+  "mkdocs-gen-files",
+  "mkdocs-jupyter==0.25.0",
+  "mkdocs-literate-nav",
+  "mkdocs-material",
+  "mkdocs-section-index",
+  "mkdocstrings-python",
+  "nbdime",
+  "pybtex",
+  "pymdown-extensions",
+]
+test = [
+  "asv",
+  "black[jupyter]",
+  "boto3",
+  "moto[server]",
+  "nbdime",
+  "pooch",
+  "pre-commit",
+  "pytest",
+  "pytest-cov",
+  "pytest-randomly",
+  "pytest-xdist",
+  "shapely",
+  "snaphu>=0.4.1",
+  "spurt>=0.1.1",
+  "ortools!=9.13.*",
+  "xarray>=2025",
+]
+all = ["dolphin[test,docs]"]
+
+# Pixi configuration
+[tool.pixi.project]
+channels = ["conda-forge"]
+platforms = ["linux-64", "osx-64", "osx-arm64"]
+
+[tool.pixi.dependencies]
+git = "*"
+gdal = ">=3.3"
+libgdal-netcdf = "*"
+libgdal-hdf5 = "*"
+h5py = ">=3.6"
+hdf5 = "!=1.12.2"
+jax = ">=0.4.19"
+numba = ">=0.56"
+numpy = ">=1.23"
+opera-utils = ">=0.4.1"
+pydantic = ">=2.1"
+pyproj = ">=3.3"
+rasterio = ">=1.3"
+"ruamel.yaml" = ">=0.15"
+scipy = ">=1.12"
+threadpoolctl = ">=3.0"
+tqdm = ">=4.60"
+typing_extensions = ">=3.10"
+tyro = ">=0.9.20"
+
+# Like running pip install -e .
+[tool.pixi.pypi-dependencies]
+dolphin = { path = ".", editable = true }
+
+[tool.pixi.tasks]
+test = "python -m pytest"
+check = "pre-commit run --all-files"
+
+[tool.pixi.feature.test.dependencies]
+isce3-cpu = "*"
+dask = "*"
+
+[tool.pixi.feature.test.pypi-dependencies]
+tophu = { git = "https://github.com/scottstanie/tophu.git", rev = "303470c203bfddb59bf4debdecd1fd949d0c8d54" }
+
+[tool.pixi.environments]
+default = { features = [], solve-group = "default" }
+test = { features = ["test"], solve-group = "default" }
+docs = { features = ["docs"], solve-group = "default" }
+all = { features = ["all", "docs", "test"], solve-group = "default" }
 
 [project.urls]
 Homepage = "https://github.com/isce-framework/dolphin"
@@ -34,14 +135,6 @@ Homepage = "https://github.com/isce-framework/dolphin"
 [project.scripts]
 dolphin = "dolphin.cli:main"
 
-[tool.setuptools.dynamic]
-dependencies = { file = ["requirements.txt"] }
-
-# extra requirements: `pip install dolphin[docs]` or `pip install .[docs]`
-[tool.setuptools.dynamic.optional-dependencies.docs]
-file = ["docs/requirements.txt"]
-[tool.setuptools.dynamic.optional-dependencies.test]
-file = ["tests/requirements.txt"]
 
 [tool.setuptools_scm]
 # https://github.com/pypa/setuptools_scm#configuration-parameters
@@ -111,7 +204,6 @@ exclude = ["scripts"]
 [tool.ruff.lint.flake8-unused-arguments]
 # Whether to allow unused variadic arguments, like *args and **kwargs.
 ignore-variadic-names = true
-
 
 [tool.black]
 preview = true

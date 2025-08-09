@@ -12,7 +12,6 @@ import platform
 import re
 import sys
 from importlib.metadata import metadata
-from typing import Optional
 
 import dolphin
 
@@ -35,21 +34,14 @@ def _get_sys_info() -> dict[str, str]:
     }
 
 
-def _get_version(module_name: str) -> Optional[str]:
-    if module_name in sys.modules:
-        mod = sys.modules[module_name]
-    else:
-        try:
-            mod = importlib.import_module(module_name.replace("-", "_"))
-        except ImportError:
-            return None
+def _get_version(name: str) -> str | None:
     try:
-        return mod.__version__
-    except AttributeError:
-        return mod.version
+        return importlib.metadata.version(name)
+    except importlib.metadata.PackageNotFoundError:
+        return None
 
 
-def _get_unwrapping_options() -> dict[str, Optional[str]]:
+def _get_unwrapping_options() -> dict[str, str | None]:
     """Information on possible phase unwrapping libraries.
 
     Returns
@@ -65,7 +57,7 @@ def _get_unwrapping_options() -> dict[str, Optional[str]]:
     return out
 
 
-def _get_deps_info() -> dict[str, Optional[str]]:
+def _get_deps_info() -> dict[str, str | None]:
     """Overview of the installed version of main dependencies.
 
     Returns
@@ -85,11 +77,11 @@ def _get_deps_info() -> dict[str, Optional[str]]:
     # Replace 'ruamel-yaml' with 'ruamel.yaml'
     deps = [dep.replace("ruamel-yaml", "ruamel.yaml") for dep in deps]
     # Add `osgeo` for gdal (not listed in pip requirements)
-    deps += ["osgeo.gdal"]
+    deps += ["gdal"]
     return {name: _get_version(name) for name in deps}
 
 
-def _get_gpu_info() -> dict[str, Optional[str]]:
+def _get_gpu_info() -> dict[str, str | None]:
     """Overview of the optional GPU packages.
 
     Returns
@@ -100,7 +92,10 @@ def _get_gpu_info() -> dict[str, Optional[str]]:
     """
     from dolphin.utils import gpu_is_available
 
-    return {"jax": _get_version("jax"), "gpu_is_available": str(gpu_is_available())}
+    return {
+        "jax": _get_version("jax"),
+        "gpu_is_available": str(gpu_is_available()),
+    }
 
 
 def _print_info_dict(info_dict: dict) -> None:

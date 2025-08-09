@@ -26,7 +26,7 @@ def test_get_sys_info():
 def test_get_deps_info():
     deps_info = _get_deps_info()
 
-    assert "osgeo.gdal" in deps_info
+    assert "gdal" in deps_info
     assert "numpy" in deps_info
     assert "pydantic" in deps_info
     assert "h5py" in deps_info
