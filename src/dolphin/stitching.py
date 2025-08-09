@@ -31,11 +31,14 @@ def merge_by_date(
     file_date_fmt: str = DEFAULT_DATETIME_FORMAT,
     output_dir: Filename = ".",
     driver: str = "GTiff",
-    output_suffix: str = ".int.tif",
+    output_suffix: str = ".tif",
+    output_prefix: str = "",
     out_nodata: Optional[float] = 0,
     in_nodata: Optional[float] = None,
     out_bounds: Optional[Bbox] = None,
     out_bounds_epsg: Optional[int] = None,
+    resample_alg: str = "lanczos",
+    dest_epsg: Optional[int] = None,
     options: Optional[Sequence[str]] = io.DEFAULT_TIFF_OPTIONS,
     num_workers: int = 1,
     overwrite: bool = False,
@@ -53,7 +56,9 @@ def merge_by_date(
     driver : str
         GDAL driver to use for output. Default is ENVI.
     output_suffix : str
-        Suffix to use to output stitched filenames. Default is ".int"
+        Suffix to use to output stitched filenames. Default is ".tif"
+    output_prefix : str
+        Prefix to use to output stitched filenames before dates. Default is ""
     out_nodata : Optional[float | str]
         Nodata value to use for output file. Default is 0.
     in_nodata : Optional[float | str]
@@ -65,6 +70,12 @@ def merge_by_date(
     out_bounds_epsg: Optional[int]
         EPSG code for the `out_bounds`.
         If not provided, assumed to match the projections of `file_list`.
+    resample_alg: str
+        Resampling algorithm to use. Default is "lanczos".
+    dest_epsg: Optional[int]
+        EPSG code for the output projection.
+        If None, finds the most common projection
+        among the input files.
     options : Optional[Sequence[str]]
         Driver-specific creation options passed to GDAL.
         Default is [dolphin.io.DEFAULT_TIFF_OPTIONS][].
@@ -93,14 +104,8 @@ def merge_by_date(
 
     for dates, cur_images in grouped_images.items():
         logger.info(f"{dates}: Stitching {len(cur_images)} images.")
-        if len(dates) == 2:
-            date_str = utils.format_date_pair(*dates)
-        elif len(dates) == 1:
-            date_str = dates[0].strftime(file_date_fmt)
-        else:
-            msg = f"Expected 1 or 2 dates: {dates}."
-            raise ValueError(msg)
-        outfile = Path(output_dir) / (date_str + output_suffix)
+        date_str = utils.format_dates(*dates)
+        outfile = Path(output_dir) / f"{output_prefix}{date_str}{output_suffix}"
         stitched_acq_times[dates] = outfile
 
     def process_date(args):
@@ -113,7 +118,9 @@ def merge_by_date(
             out_nodata=out_nodata,
             out_bounds=out_bounds,
             out_bounds_epsg=out_bounds_epsg,
+            dest_epsg=dest_epsg,
             in_nodata=in_nodata,
+            resample_alg=resample_alg,
             options=options,
         )
 
@@ -134,6 +141,7 @@ def merge_images(
     target_aligned_pixels: bool = True,
     out_bounds: Optional[Bbox] = None,
     out_bounds_epsg: Optional[int] = None,
+    dest_epsg: Optional[int] = None,
     strides: Optional[Mapping[str, int]] = None,
     driver: str = "GTiff",
     out_nodata: Optional[float] = 0,
@@ -167,6 +175,9 @@ def merge_images(
     out_bounds_epsg: Optional[int]
         EPSG code for the `out_bounds`.
         If not provided, assumed to match the projections of `file_list`.
+    dest_epsg: Optional[int]
+        EPSG code for the output projection. If None, finds the most common projection
+        among the input files.
     strides : dict[str, int]
         subsample factor: {"x": x strides, "y": y strides}
     driver : str
@@ -213,7 +224,12 @@ def merge_images(
         return
 
     # Make sure all the files are in the same projection.
-    projection = _get_mode_projection(file_list)
+    if dest_epsg is not None:
+        srs = osr.SpatialReference()
+        srs.ImportFromEPSG(dest_epsg)
+        projection = srs.ExportToWkt()
+    else:
+        projection = _get_mode_projection(file_list)
     # If not, warp them to the most common projection using VRT files in a tempdir
     temp_dir = tempfile.TemporaryDirectory()
 
@@ -634,3 +650,43 @@ def warp_to_match(
     )
 
     return Path(output_file)
+
+
+def _get_matching_raster(
+    input_file: Path | str,
+    output_dir: Path,
+    match_file: Path | str,
+) -> Path:
+    """Create an output with the same size/projection as `match_file`.
+
+    Parameters
+    ----------
+    input_file : Path | str
+        Path to the input file
+    output_dir : Path
+        Directory where warped mask will be saved if needed
+    match_file : Path | str
+        Reference file to match size/projection against
+
+    Returns
+    -------
+    Path
+        Path to the output file (original if already matching, or warped version)
+
+    """
+    # Check that the input mask is the same size as the ifgs:
+    if io.get_raster_xysize(input_file) == io.get_raster_xysize(match_file):
+        logger.info(f"Using {input_file}, already matches size of {match_file}")
+        output_mask = Path(input_file)
+    else:
+        logger.info(f"Warping {input_file} to match size of {match_file}")
+        output_mask = output_dir / f"warped_{Path(input_file).stem}.tif"
+        if output_mask.exists():
+            logger.info(f"Output already exists at {output_mask}")
+        else:
+            warp_to_match(
+                input_file=input_file,
+                match_file=match_file,
+                output_file=output_mask,
+            )
+    return output_mask

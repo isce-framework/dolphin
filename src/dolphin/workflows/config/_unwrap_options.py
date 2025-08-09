@@ -67,11 +67,11 @@ class PreprocessOptions(BaseModel, extra="forbid"):
         description="(for interpolation) Maximum radius to find scatterers.",
     )
     interpolation_cor_threshold: float = Field(
-        0.3,
+        0.25,
         description=(
-            "Threshold on the correlation raster to use for interpolation. Pixels with"
-            " less than this value are replaced by a weighted combination of"
-            " neighboring pixels."
+            "Threshold on the sliding-window correlation to use for"
+            " masking+interpolation.Pixels with less than this value are replaced by a"
+            " weighted combination of neighboring pixels."
         ),
         ge=0.0,
         le=1.0,
@@ -79,12 +79,22 @@ class PreprocessOptions(BaseModel, extra="forbid"):
     interpolation_similarity_threshold: float = Field(
         0.3,
         description=(
-            "Threshold on the correlation raster to use for interpolation. Pixels with"
-            " less than this value are replaced by a weighted combination of"
+            "Threshold on the phase similarity to use for masking+interpolation. "
+            "Pixels with less than this value are replaced by a weighted combination of"
             " neighboring pixels."
         ),
         ge=0.0,
         le=1.0,
+    )
+    zero_correlation_where_interpolating: bool = Field(
+        False,
+        description=(
+            "(for interpolation) Set the pixels where we have masked + interpolated"
+            " data to have 0 correlation for the unwrapper. If False, the interpolated"
+            " pixels keep their old correlation. If True, the behavior can be unwrapper"
+            " dependent (the unwrapper may choose to skip over these pixels when"
+            " solving)."
+        ),
     )
 
 

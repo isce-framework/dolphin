@@ -154,6 +154,21 @@ class PhaseLinkingOptions(BaseModel, extra="forbid"):
         ),
     )
     compressed_slc_plan: CompressedSlcPlan = CompressedSlcPlan.ALWAYS_FIRST
+    write_crlb: bool = Field(
+        True,
+        description=(
+            "Write out (and stitch, if processing multiple geocoded bursts) rasters"
+            " containing the Cramer-Rao Lower Bound (CRLB) estimates."
+        ),
+    )
+    write_closure_phase: bool = Field(
+        False,
+        description=(
+            "Write out (and stitch, if processing multiple geocoded bursts) rasters"
+            " containing the sequential closure phase from the nearest-3 triplets in"
+            " the coherence matrix."
+        ),
+    )
 
 
 class InterferogramNetwork(BaseModel, extra="forbid"):
@@ -230,6 +245,14 @@ class TimeseriesOptions(BaseModel, extra="forbid"):
     run_velocity: bool = Field(
         True,
         description="Run the velocity estimation from the phase time series.",
+    )
+    apply_mask_to_timeseries: bool = Field(
+        True,
+        description=(
+            "If providing a mask file, whether to apply the mask to the timeseries. If"
+            " True, the time series rasters will zero out pixels labeled as 0 in the"
+            " mask file."
+        ),
     )
     correlation_threshold: float = Field(
         0.2,

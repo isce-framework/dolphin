@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import math
 from enum import IntEnum
 from functools import partial
 from typing import NamedTuple, Optional
@@ -15,8 +16,10 @@ from dolphin._types import HalfWindow, Strides
 from dolphin.utils import take_looks
 
 from . import covariance, metrics
+from ._closure_phase import compute_nearest_closure_phases_batch
 from ._eigenvalues import eigh_largest_stack, eigh_smallest_stack
 from ._ps_filling import fill_ps_pixels
+from .crlb import compute_crlb_jax
 
 logger = logging.getLogger("dolphin")
 
@@ -55,8 +58,11 @@ class PhaseLinkOutput(NamedTuple):
     estimator: np.ndarray  # dtype: np.int8
     """The estimator type used for phase linking at each pixel."""
 
-    avg_coh: np.ndarray | None = None
-    """Average coherence across dates for each SLC."""
+    crlb_std_dev: np.ndarray
+    """The CRLB standard deviation at each pixel."""
+
+    closure_phases: np.ndarray
+    """The closure phases at each pixel, for N-2 images."""
 
 
 def run_phase_linking(
@@ -74,8 +80,9 @@ def run_phase_linking(
     neighbor_arrays: ArrayLike | None = None,
     avg_mag: ArrayLike | None = None,
     use_slc_amp: bool = False,
-    calc_average_coh: bool = False,
     baseline_lag: Optional[int] = None,
+    first_real_slc_idx: int = 0,
+    compute_crlb: bool = True,
 ) -> PhaseLinkOutput:
     """Estimate the linked phase for a stack of SLCs.
 
@@ -131,24 +138,19 @@ def run_phase_linking(
     use_slc_amp : bool, optional
         Whether to use the SLC amplitude when outputting the MLE estimate,
         or to set the SLC amplitude to 1.0. By default False.
-    calc_average_coh : bool, optional, default = False
-        Whether to calculate the average coherence for each SLC date.
     baseline_lag : int, optional, default=None
         lag for temporal baseline to do short temporal baseline inversion (STBAS)
-
+    first_real_slc_idx : int, optional, default = 0
+        The index of the first real SLC in the stack.
+        This is only used for the CRLB computation.
+        By default 0.
+    compute_crlb : bool, optional
+        Whether to compute the CRLB, by default True
 
     Returns
     -------
     PhaseLinkOutput:
-        A Named tuple with the following fields
-    linked_phase : np.ndarray[np.complex64]
-        The estimated linked phase, with shape (n_images, n_rows, n_cols)
-    temp_coh : np.ndarray[np.float32]
-        The temporal coherence at each pixel, shape (n_rows, n_cols)
-    eigenvalues : np.ndarray[np.float32]
-        The smallest (largest) eigenvalue resulting from EMI (EVD).
-    `avg_coh` : np.ndarray[np.float32]
-        (only If `calc_average_coh` is True) the average coherence for each SLC date
+        A Named tuple with results from phase linking.
 
     """
     _, rows, cols = slc_stack.shape
@@ -198,8 +200,9 @@ def run_phase_linking(
         zero_correlation_threshold=zero_correlation_threshold,
         reference_idx=reference_idx,
         neighbor_arrays=neighbor_arrays,
-        calc_average_coh=calc_average_coh,
         baseline_lag=baseline_lag,
+        first_real_slc_idx=first_real_slc_idx,
+        compute_crlb=compute_crlb,
     )
 
     # Get the smaller, looked versions of the masks
@@ -242,7 +245,8 @@ def run_phase_linking(
         # Convert the rest to numpy for writing
         eigenvalues=np.asarray(cpl_out.eigenvalues),
         estimator=np.asarray(cpl_out.estimator),
-        avg_coh=cpl_out.avg_coh,
+        crlb_std_dev=np.array(cpl_out.crlb_std_dev),
+        closure_phases=np.asarray(cpl_out.closure_phases),
     )
 
 
@@ -255,8 +259,9 @@ def run_cpl(
     zero_correlation_threshold: float = 0.0,
     reference_idx: int = 0,
     neighbor_arrays: Optional[np.ndarray] = None,
-    calc_average_coh: bool = False,
     baseline_lag: Optional[int] = None,
+    first_real_slc_idx: int = 0,
+    compute_crlb: bool = True,
 ) -> PhaseLinkOutput:
     """Run the Combined Phase Linking (CPL) algorithm.
 
@@ -289,13 +294,16 @@ def run_cpl(
     neighbor_arrays : np.ndarray, optional
         The neighbor arrays to use for SHP, shape = (n_rows, n_cols, *window_shape).
         If None, a rectangular window is used. By default None.
-    calc_average_coh : bool, default=False
-        If requested, the average of each row of the covariance matrix is computed
-        for the purposes of finding the best reference (highest coherence) date
     baseline_lag : int, optional, default=None
         StBAS parameter to include only nearest-N interferograms for phase linking.
         A `baseline_lag` of `n` will only include the closest `n` interferograms.
         `baseline_line` must be positive.
+    first_real_slc_idx : int, optional, default = 0
+        The index of the first real SLC in the stack.
+        This is only used for the CRLB computation.
+        By default 0.
+    compute_crlb : bool, optional
+        Whether to compute the CRLB, by default True
 
     Returns
     -------
@@ -314,10 +322,6 @@ def run_cpl(
         The estimator used at each pixel.
         0 = EVD, 1 = EMI
         shape = (out_rows, out_cols)
-    avg_coh : np.ndarray | None
-        The average coherence of each row of the coherence matrix,
-        if requested.
-        shape = (nslc, out_rows, out_cols)
 
     """
     C_arrays = covariance.estimate_stack_covariance(
@@ -333,18 +337,28 @@ def run_cpl(
         C_arrays = C_arrays.at[:, :, u_rows, u_cols].set(0.0 + 0j)
         C_arrays = C_arrays.at[:, :, l_rows, l_cols].set(0.0 + 0j)
 
-    cpx_phase, eigenvalues, estimator = process_coherence_matrices(
+    closure_phases = compute_nearest_closure_phases_batch(C_arrays)
+    # For a more conservative uncertainty estimate, use a smaller number of looks
+    # rather than `num_looks = (2 * half_window[0] + 1) * (2 * half_window[1] + 1)`
+    num_looks = math.sqrt(half_window[0] * half_window[1])
+
+    reference_idx = ns + reference_idx if reference_idx < 0 else reference_idx
+    cpx_phase, eigenvalues, estimator, crlb_std_dev = process_coherence_matrices(
         C_arrays,
         use_evd=use_evd,
         beta=beta,
         zero_correlation_threshold=zero_correlation_threshold,
         reference_idx=reference_idx,
+        num_looks=num_looks,
+        first_real_slc_idx=first_real_slc_idx,
+        compute_crlb=compute_crlb,
     )
     # Get the temporal coherence
     temp_coh = metrics.estimate_temp_coh(cpx_phase, C_arrays)
 
     # Reshape the (rows, cols, nslcs) output to be same as input stack
     cpx_phase_reshaped = jnp.moveaxis(cpx_phase, -1, 0)
+    crlb_std_dev_reshaped = jnp.moveaxis(crlb_std_dev, -1, 0)
 
     # Get the SHP counts for each pixel (if not using Rect window)
     if neighbor_arrays is None:
@@ -352,31 +366,38 @@ def run_cpl(
     else:
         shp_counts = jnp.sum(neighbor_arrays, axis=(-2, -1))
 
-    if calc_average_coh:
-        # If requested, average the Cov matrix at each row for reference selection
-        avg_coh_per_date = jnp.abs(C_arrays).mean(axis=3)
-        avg_coh = np.argmax(avg_coh_per_date, axis=2)
-    else:
-        avg_coh = None
-
     return PhaseLinkOutput(
         cpx_phase=cpx_phase_reshaped,
         temp_coh=temp_coh,
         shp_counts=shp_counts,
         eigenvalues=eigenvalues,
         estimator=estimator,
-        avg_coh=avg_coh,
+        crlb_std_dev=crlb_std_dev_reshaped,
+        closure_phases=closure_phases,
     )
 
 
-@partial(jit, static_argnames=("use_evd", "beta", "reference_idx"))
+@partial(
+    jit,
+    static_argnames=(
+        "use_evd",
+        "beta",
+        "reference_idx",
+        "num_looks",
+        "first_real_slc_idx",
+        "compute_crlb",
+    ),
+)
 def process_coherence_matrices(
     C_arrays,
     use_evd: bool = False,
     beta: float = 0.0,
     zero_correlation_threshold: float = 0.0,
     reference_idx: int = 0,
-) -> tuple[Array, Array, Array]:
+    num_looks: int = 1,
+    first_real_slc_idx: int = 0,
+    compute_crlb: bool = True,
+) -> tuple[Array, Array, Array, Array]:
     """Estimate the linked phase for a stack of coherence matrices.
 
     This function is used after coherence estimation to estimate the
@@ -400,6 +421,16 @@ def process_coherence_matrices(
     reference_idx : int, optional
         The index of the reference acquisition, by default 0
         All outputs are multiplied by the conjugate of the data at this index.
+    num_looks : int, optional
+        The number of looks used to form the input correlation data, used
+        during CRLB computation.
+    first_real_slc_idx : int, optional, default = 0
+        The index of the first real SLC in the stack.
+        This is only used for the CRLB computation.
+        By default 0.
+    compute_crlb : bool, optional
+        Whether to compute the CRLB
+        Default is True.
 
     Returns
     -------
@@ -411,11 +442,34 @@ def process_coherence_matrices(
     estimator : Array
         The estimator used at each pixel.
         0 = EVD, 1 = EMI
+    crlb_std_dev : ndarray[float32], shape = (rows, cols, nslc)
+        The CRLB standard deviation at each pixel.
 
     """
     rows, cols, n, _ = C_arrays.shape
 
     evd_eig_vals, evd_eig_vecs = eigh_largest_stack(C_arrays * jnp.abs(C_arrays))
+
+    Gamma = jnp.abs(C_arrays)
+
+    # Identity used for regularization and for solving
+    Id = jnp.eye(n, dtype=Gamma.dtype)
+    # repeat the identity matrix for each pixel
+    Id = jnp.tile(Id, (rows, cols, 1, 1))
+
+    if beta > 0:
+        # Perform regularization
+        Gamma = (1 - beta) * Gamma + beta * Id
+    # Assume correlation below `zero_correlation_threshold` is 0
+    Gamma = jnp.where(Gamma < zero_correlation_threshold, 0, Gamma)
+
+    # Attempt to invert Gamma
+    cho, is_lower = cho_factor(Gamma)
+
+    # Check: If it fails the cholesky factor, it's close to singular and
+    # we should just fall back to EVD
+    # Use the already- factored |Gamma|^-1, solving Ax = I gives the inverse
+    Gamma_inv = cho_solve((cho, is_lower), Id)
     if use_evd:
         # EVD
         eig_vals, eig_vecs = evd_eig_vals, evd_eig_vecs
@@ -424,26 +478,6 @@ def process_coherence_matrices(
         # EMI
         # estimate the wrapped phase based on the EMI paper
         # *smallest* eigenvalue decomposition of the (|Gamma|^-1  *  C) matrix
-
-        # Identity used for regularization and for solving
-        Id = jnp.eye(n, dtype=C_arrays.dtype)
-        # repeat the identity matrix for each pixel
-        Id = jnp.tile(Id, (rows, cols, 1, 1))
-
-        Gamma = jnp.abs(C_arrays)
-        if beta > 0:
-            # Perform regularization
-            Gamma = (1 - beta) * Gamma + beta * Id
-        # Assume correlation below `zero_correlation_threshold` is 0
-        Gamma = jnp.where(Gamma < zero_correlation_threshold, 0, Gamma)
-
-        # Attempt to invert Gamma
-        cho, is_lower = cho_factor(Gamma)
-
-        # Check: If it fails the cholesky factor, it's close to singular and
-        # we should just fall back to EVD
-        # Use the already- factored |Gamma|^-1, solving Ax = I gives the inverse
-        Gamma_inv = cho_solve((cho, is_lower), Id)
         # We're looking for the lambda nearest to 1. So shift by 0.99
         # Also, use the evd vectors as iteration starting point:
         mu = 0.99
@@ -480,6 +514,14 @@ def process_coherence_matrices(
         emi_used = jnp.ones(emi_eig_vals.shape, dtype=jnp.int8)
         estimator = lax.select(inv_has_nans, evd_used, emi_used)
 
+    # Compute CRLB for each pixel
+    if compute_crlb:
+        crlb_std_dev = compute_crlb_jax(
+            C_arrays, num_looks, max(first_real_slc_idx - 1, 0)
+        )
+    else:
+        crlb_std_dev = jnp.zeros(C_arrays.shape[:-1], dtype=jnp.float32)
+
     # Now the shape of eig_vecs is (rows, cols, nslc)
     # at pixel (r, c), eig_vecs[r, c] is the largest (smallest) eigenvector if
     # we picked EVD (EMI)
@@ -488,7 +530,7 @@ def process_coherence_matrices(
     # Make sure each still has 3 dims, then reference all phases to `ref`
     evd_estimate = eig_vecs * jnp.exp(-1j * jnp.angle(ref[:, :, None]))
 
-    return evd_estimate, eig_vals, estimator.astype("uint8")
+    return evd_estimate, eig_vals, estimator.astype("uint8"), crlb_std_dev
 
 
 def decimate(arr: ArrayLike, strides: Strides) -> Array:

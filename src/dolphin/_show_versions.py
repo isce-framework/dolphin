@@ -50,13 +50,11 @@ def _get_unwrapping_options() -> dict[str, str | None]:
         module information
 
     """
-    return {
-        "snaphu": _get_version("snaphu"),
-        "spurt": _get_version("spurt"),
-        "isce3": _get_version("isce3"),
-        "tophu": _get_version("tophu"),
-        "whirlwind": _get_version("whirlwind"),
-    }
+    out = {}
+    for unwrapper in ["snaphu", "spurt", "isce3", "tophu", "whirlwind"]:
+        out[unwrapper] = _get_version(unwrapper)
+        print(f"{unwrapper} : {out[unwrapper]}")
+    return out
 
 
 def _get_deps_info() -> dict[str, str | None]:
