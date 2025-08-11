@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import logging
 import math
+import os
+import re
 import subprocess
 import tempfile
 from collections.abc import Mapping
@@ -50,17 +52,21 @@ def merge_by_date(
     image_file_list : Iterable[Filename]
         list of paths to images.
     file_date_fmt : Optional[str]
-        Format of the datetime in the filename. Default is %Y%m%d
+        Format of the datetime in the filename.
+        Default is %Y%m%d
     output_dir : Filename
         Path to output directory
     driver : str
-        GDAL driver to use for output. Default is ENVI.
+        GDAL driver to use for output. Default is "GTiff"
     output_suffix : str
-        Suffix to use to output stitched filenames. Default is ".tif"
+        Suffix to use to output stitched filenames.
+        Default is ".tif"
     output_prefix : str
-        Prefix to use to output stitched filenames before dates. Default is ""
+        Prefix to use to output stitched filenames before the date.
+        Default is ""
     out_nodata : Optional[float | str]
-        Nodata value to use for output file. Default is 0.
+        Nodata value to use for output file.
+        Default is 0.
     in_nodata : Optional[float | str]
         Override the files' `nodata` and use `in_nodata` during merging.
     out_bounds: Optional[tuple[float]]
@@ -105,7 +111,16 @@ def merge_by_date(
     for dates, cur_images in grouped_images.items():
         logger.info(f"{dates}: Stitching {len(cur_images)} images.")
         date_str = utils.format_dates(*dates)
-        outfile = Path(output_dir) / f"{output_prefix}{date_str}{output_suffix}"
+        # If we passed files where different dates have different prefixes,
+        # we need to use the common prefix before the first date token
+        # e.g. if we have "temporal_coherence_<dates>,...
+        # "temporal_coherence_average_<dates>", this will use different prefixes
+        # before the merged date strings
+        if output_prefix == "auto":
+            prefix = _common_prefix_before_first_date(cur_images, file_date_fmt)
+        else:
+            prefix = output_prefix
+        outfile = Path(output_dir) / f"{prefix}{date_str}{output_suffix}"
         stitched_acq_times[dates] = outfile
 
     def process_date(args):
@@ -690,3 +705,21 @@ def _get_matching_raster(
                 output_file=output_mask,
             )
     return output_mask
+
+
+def _common_prefix_before_first_date(files: Sequence[Path], file_date_fmt: str) -> str:
+    """Find the longest common prefix of stems before first date token."""
+    from opera_utils._dates import _date_format_to_regex
+
+    pat = _date_format_to_regex(file_date_fmt)
+    candidates: list[str] = []
+    for p in files:
+        stem = p.stem
+        m = pat.search(stem)
+        candidates.append(stem[: m.start()] if m else stem)
+    if not candidates:
+        return ""
+    prefix = os.path.commonprefix(candidates)
+    # tidy trailing separators; preserve '_' if it already exists
+    prefix = re.sub(r"[-.\s]+$", "", prefix)
+    return prefix

@@ -263,7 +263,7 @@ class TimeseriesOptions(BaseModel, extra="forbid"):
     block_shape: tuple[int, int] = Field(
         (256, 256),
         description=(
-            "Size (rows, columns) of blocks of data to load at a time. 3D dimsion is"
+            "Size (rows, columns) of blocks of data to load at a time. 3D dimension is"
             " number of interferograms (during inversion) and number of SLC dates"
             " (during velocity fitting)"
         ),

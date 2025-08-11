@@ -27,20 +27,20 @@ class StitchedOutputs:
     """List of Paths to the stitched interferograms."""
     interferometric_corr_paths: list[Path]
     """List of Paths to interferometric correlation files created."""
+    temp_coh_files: list[Path]
+    """List of paths to temporal correlation file created."""
+    shp_count_files: list[Path]
+    """List of paths to SHP count files created."""
+    similarity_files: list[Path]
+    """List of paths to cosine similarity files created."""
     crlb_paths: list[Path]
     """List of Paths to Cramer Rao Lower Bound (CRLB) files created."""
     closure_phase_files: list[Path]
     """List of Paths to closure phase files created."""
-    temp_coh_file: Path
-    """Path to temporal correlation file created."""
     ps_file: Path
     """Path to ps mask file created."""
     amp_dispersion_file: Path
     """Path to amplitude dispersion file created."""
-    shp_count_file: Path
-    """Path to SHP count file created."""
-    similarity_file: Path
-    """Path to cosine similarity file created."""
 
 
 @log_runtime
@@ -98,18 +98,9 @@ def run(
 
     Returns
     -------
-    stitched_ifg_paths : list[Path]
-        list of Paths to the stitched interferograms.
-    interferometric_corr_paths : list[Path]
-        list of Paths to interferometric correlation files created.
-    stitched_temp_coh_file : Path
-        Path to temporal correlation file created.
-    stitched_ps_file : Path
-        Path to ps mask file created.
-    stitched_amp_disp_file : Path
-        Path to amplitude dispersion file created.
-    stitched_shp_count_file : Path
-        Path to SHP count file created.
+    stitched_outputs : StitchedOutputs
+        [`StitchedOutputs`][dolphin.workflows.stitching_bursts.StitchedOutputs] object
+        containing the output stitched ifgs and correlations
 
     """
     stitched_ifg_dir.mkdir(exist_ok=True, parents=True)
@@ -135,18 +126,41 @@ def run(
         options=EXTRA_COMPRESSED_TIFF_OPTIONS,
     )
 
-    # Stitch the correlation files
-    stitched_temp_coh_file = stitched_ifg_dir / "temporal_coherence.tif"
-    if not stitched_temp_coh_file.exists():
-        stitching.merge_images(
-            temp_coh_file_list,
-            outfile=stitched_temp_coh_file,
-            resample_alg="nearest",
-            out_bounds=out_bounds,
-            out_bounds_epsg=output_options.bounds_epsg,
-            options=EXTRA_COMPRESSED_TIFF_OPTIONS,
-        )
-        repack_raster(stitched_temp_coh_file, keep_bits=10)
+    # Stitch the temporal coherence files by date
+    date_to_temp_coh_path = stitching.merge_by_date(
+        image_file_list=temp_coh_file_list,
+        file_date_fmt=file_date_fmt,
+        output_dir=stitched_ifg_dir,
+        output_prefix="auto",
+        out_bounds=out_bounds,
+        out_bounds_epsg=output_options.bounds_epsg,
+        num_workers=num_workers,
+        options=EXTRA_COMPRESSED_TIFF_OPTIONS,
+    )
+    stitched_temp_coh_files = list(date_to_temp_coh_path.values())
+
+    date_to_shp_count_path = stitching.merge_by_date(
+        image_file_list=shp_count_file_list,
+        file_date_fmt=file_date_fmt,
+        output_dir=stitched_ifg_dir,
+        output_prefix="auto",
+        out_bounds=out_bounds,
+        out_bounds_epsg=output_options.bounds_epsg,
+        num_workers=num_workers,
+    )
+    stitched_shp_count_files = list(date_to_shp_count_path.values())
+
+    date_to_similarity_path = stitching.merge_by_date(
+        image_file_list=similarity_file_list,
+        file_date_fmt=file_date_fmt,
+        output_dir=stitched_ifg_dir,
+        output_prefix="auto",
+        out_bounds=out_bounds,
+        out_bounds_epsg=output_options.bounds_epsg,
+        num_workers=num_workers,
+        options=EXTRA_COMPRESSED_TIFF_OPTIONS,
+    )
+    stitched_similarity_files = list(date_to_similarity_path.values())
 
     # Stitch the looked PS files
     stitched_ps_file = stitched_ifg_dir / "ps_mask_looked.tif"
@@ -197,50 +211,26 @@ def run(
             out_bounds=out_bounds,
             out_bounds_epsg=output_options.bounds_epsg,
         )
-        repack_raster(stitched_temp_coh_file, keep_bits=10)
-
-    stitched_shp_count_file = stitched_ifg_dir / "shp_counts.tif"
-    if not stitched_shp_count_file.exists():
-        stitching.merge_images(
-            shp_count_file_list,
-            outfile=stitched_shp_count_file,
-            resample_alg="nearest",
-            out_bounds=out_bounds,
-            out_bounds_epsg=output_options.bounds_epsg,
-        )
-
-    stitched_similarity_file = stitched_ifg_dir / "similarity.tif"
-    if not stitched_similarity_file.exists():
-        stitching.merge_images(
-            similarity_file_list,
-            outfile=stitched_similarity_file,
-            options=EXTRA_COMPRESSED_TIFF_OPTIONS,
-            resample_alg="nearest",
-            out_bounds=out_bounds,
-            out_bounds_epsg=output_options.bounds_epsg,
-        )
+        repack_raster(stitched_amp_disp_file, keep_bits=10)
 
     if output_options.add_overviews:
         logger.info("Creating overviews for stitched images")
         create_overviews(stitched_ifg_paths, image_type=ImageType.INTERFEROGRAM)
         create_overviews(interferometric_corr_paths, image_type=ImageType.CORRELATION)
+        create_overviews(stitched_temp_coh_files, image_type=ImageType.CORRELATION)
+        create_overviews(stitched_shp_count_files, image_type=ImageType.PS)
+        create_overviews(stitched_similarity_files, image_type=ImageType.CORRELATION)
         create_image_overviews(stitched_ps_file, image_type=ImageType.PS)
-        create_overviews(stitched_crlb_files, image_type=ImageType.CORRELATION)
-        create_image_overviews(stitched_temp_coh_file, image_type=ImageType.CORRELATION)
         create_image_overviews(stitched_amp_disp_file, image_type=ImageType.CORRELATION)
-        create_image_overviews(stitched_shp_count_file, image_type=ImageType.PS)
-        create_image_overviews(
-            stitched_similarity_file, image_type=ImageType.CORRELATION
-        )
 
     return StitchedOutputs(
         stitched_ifg_paths,
         interferometric_corr_paths,
+        stitched_temp_coh_files,
+        stitched_shp_count_files,
+        stitched_similarity_files,
         stitched_crlb_files,
         stitched_closure_phase_files,
-        stitched_temp_coh_file,
         stitched_ps_file,
         stitched_amp_disp_file,
-        stitched_shp_count_file,
-        stitched_similarity_file,
     )
