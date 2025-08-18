@@ -11,11 +11,6 @@ import numpy.linalg as la
 import scipy.ndimage as ndi
 from numpy.typing import ArrayLike
 
-
-def _ccg_noise(N: int) -> np.array:
-    return (np.random.randn(N) + 1j * np.random.randn(N)) / np.sqrt(2)
-
-
 rng = np.random.default_rng()
 
 
@@ -27,7 +22,7 @@ def _seed(a):
     np.random.seed(a)
 
 
-def ccg_noise(N: int) -> np.array:
+def ccg_noise(N: int) -> np.ndarray:
     """Create N samples of standard complex circular Gaussian noise."""
     return (
         rng.normal(scale=1 / np.sqrt(2), size=2 * N)
@@ -38,7 +33,7 @@ def ccg_noise(N: int) -> np.array:
 
 def simulate_neighborhood_stack(
     corr_matrix: ArrayLike, neighbor_samples: int = 200
-) -> np.array:
+) -> np.ndarray:
     """Simulate one set of samples from a given correlation matrix.
 
     Parameters
@@ -50,7 +45,7 @@ def simulate_neighborhood_stack(
 
     Returns
     -------
-    np.array
+    np.ndarray
         A 2D array of shape (N, neighbor_samples) containing the simulated samples,
         where N is the number of pixels in the neighborhood.
 
@@ -73,7 +68,7 @@ def simulate_coh(
     add_signal: bool = False,
     signal_std: float = 0.1,
     use_seasonal_coherence: bool = False,
-) -> np.array:
+) -> np.ndarray:
     """Simulate a correlation matrix for a pixel.
 
     Parameters
@@ -97,9 +92,9 @@ def simulate_coh(
 
     Returns
     -------
-    np.array
+    np.ndarray
         The simulated correlation matrix.
-    np.array
+    np.ndarray
         The simulated truth signal.
 
     """
@@ -256,14 +251,14 @@ def mle(cov_mat, beta=0.00):
 
     Parameters
     ----------
-    cov_mat : np.array
+    cov_mat : np.ndarray
         The sample covariance matrix
     beta : float, optional
         The regularization parameter, by default 0.0
 
     Returns
     -------
-    np.array
+    np.ndarray
         The estimated linked phase
 
     """

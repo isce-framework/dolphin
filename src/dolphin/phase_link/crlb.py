@@ -11,7 +11,7 @@ from numpy.typing import ArrayLike
 
 
 def compute_crlb(
-    coherence_matrix: ArrayLike, num_looks: int, aps_variance: float = 0
+    coherence_matrix: ArrayLike, num_looks: int, aps_variance: float = 0.01
 ) -> np.ndarray:
     r"""Compute the Cramer-Rao Lower Bound (CRLB) for phase linking estimation.
 
@@ -91,7 +91,7 @@ def compute_crlb(
 
 
 def compute_lower_bound_std(
-    coherence_matrix: ArrayLike, num_looks: int, aps_variance: float = 0
+    coherence_matrix: ArrayLike, num_looks: int, aps_variance: float = 0.01
 ) -> np.ndarray:
     """Compute the Cramer Rao lower bound on the phase linking estimator variance.
 
@@ -100,14 +100,14 @@ def compute_lower_bound_std(
     Parameters
     ----------
     coherence_matrix : ArrayLike
-        Complex (true) coherence matrix (N x N)
+        Complex coherence matrix (N x N)
     num_looks : int
         Number of looks used in estimation
     aps_variance : float
-        Variance of the APS, in radians.
+        Variance of the APS, in radians squared.
         If 0, The bound only considers the variance due to phase decorrelation, not
         atmospheric noise.
-        Default is 0.
+        Default is 0.01.
 
     Returns
     -------
@@ -142,7 +142,7 @@ def compute_crlb_jax(
     coherence_matrices: Array,
     num_looks: int,
     reference_idx: int,
-    aps_variance: float = 1e-2,
+    aps_variance: float = 0.01,
     jitter: float = 1e-4,
 ) -> Array:
     """Batched CRLB std-dev (per epoch) for a stack of Fisher Information Matrices.
@@ -160,9 +160,9 @@ def compute_crlb_jax(
         Index of the reference epoch.
         Must be in the range [0, N-1].
     aps_variance : float
-        Variance of the APS.
+        Variance of the APS, in radians squared.
         Set to 0 to ignore APS contribution.
-        Default is 1e-2.
+        Default is 0.01.
     jitter : float
         Diagonal fudge added to each SPD solve for extra robustness.
         Default is 1e-4.
