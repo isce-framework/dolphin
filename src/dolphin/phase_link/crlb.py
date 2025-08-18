@@ -142,7 +142,7 @@ def compute_crlb_jax(
     coherence_matrices: Array,
     num_looks: int,
     reference_idx: int,
-    aps_variance: float = 1e-2,
+    aps_variance: float = 0,
     jitter: float = 1e-4,
 ) -> Array:
     """Batched CRLB std-dev (per epoch) for a stack of Fisher Information Matrices.
