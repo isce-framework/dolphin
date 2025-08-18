@@ -60,11 +60,11 @@ class HalfWindow(BaseModel, extra="forbid"):
     y: Annotated[
         int,
         tyro.conf.arg(aliases=("--hwy",)),
-    ] = Field(5, description="Half window size (in pixels) for y direction", gt=0)
+    ] = Field(7, description="Half window size (in pixels) for y direction", gt=0)
     x: Annotated[
         int,
         tyro.conf.arg(aliases=("--hwx",)),
-    ] = Field(11, description="Half window size (in pixels) for x direction", gt=0)
+    ] = Field(14, description="Half window size (in pixels) for x direction", gt=0)
 
     def to_looks(self):
         """Convert (x, y) half-window size to (row, column) looks."""
@@ -85,7 +85,7 @@ class PhaseLinkingOptions(BaseModel, extra="forbid"):
         tyro.conf.arg(aliases=("--ms",)),
     ] = Field(15, description="Size of the ministack for sequential estimator.", gt=1)
     max_num_compressed: int = Field(
-        100,
+        10,
         description=(
             "Maximum number of compressed images to use in sequential estimator."
             " If there are more ministacks than this, the earliest CCSLCs will be"
@@ -212,9 +212,9 @@ class InterferogramNetwork(BaseModel, extra="forbid"):
         # Check if more than one has been set:
         if ref_idx is None and max_bw is None and max_tb is None and indexes is None:
             logger.debug(
-                "No network configuration options were set. Using single-reference."
+                "No network configuration options were set. Using Nearest-3 network"
             )
-            self.reference_idx = 0
+            self.max_bandwidth = 3
         return self
 
 
