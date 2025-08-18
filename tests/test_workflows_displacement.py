@@ -110,6 +110,7 @@ def run_displacement_stack(
         phase_linking={
             "ministack_size": ministack_size,
         },
+        interferogram_network={"reference_idx": 0},
         unwrap_options={"run_unwrap": run_unwrap},
         log_file=Path() / "dolphin.log",
     )
@@ -217,6 +218,7 @@ def test_displacement_run_extra_reference_date(
             # First one is COMPRESSED_
             output_options={"extra_reference_date": "2022-01-03"},
             unwrap_options={"unwrap_method": unwrap_method},
+            interferogram_network={"reference_idx": 0},
             cslc_file_list=opera_slc_files,
             input_options={"subdataset": "/data/VV"},
             phase_linking={
