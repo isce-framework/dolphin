@@ -13,7 +13,6 @@ from pydantic import (
     Field,
     PrivateAttr,
     field_validator,
-    model_validator,
 )
 
 from dolphin import __version__ as _dolphin_version
@@ -202,20 +201,6 @@ class InterferogramNetwork(BaseModel, extra="forbid"):
             " interferograms to form."
         ),
     )
-
-    @model_validator(mode="after")
-    def _check_zero_parameters(self) -> InterferogramNetwork:
-        ref_idx = self.reference_idx
-        max_bw = self.max_bandwidth
-        max_tb = self.max_temporal_baseline
-        indexes = self.indexes
-        # Check if more than one has been set:
-        if ref_idx is None and max_bw is None and max_tb is None and indexes is None:
-            logger.debug(
-                "No network configuration options were set. Using Nearest-3 network"
-            )
-            self.max_bandwidth = 3
-        return self
 
 
 class TimeseriesOptions(BaseModel, extra="forbid"):
