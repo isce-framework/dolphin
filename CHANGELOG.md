@@ -1,9 +1,36 @@
 # Changelog
 
-All notable changes to this project will be documented in this file.
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+## [0.42.0](https://github.com/isce-framework/dolphin/compare/v0.41.0...v0.42.0) - 2025-08-19
 
-## [Unreleased](https://github.com/isce-framework/dolphin/compare/v0.40.0...HEAD)
+### Added
+
+### Changed
+- Update workflow defaults for larger half-window and nearest-3 (#634)
+
+### Fixed
+- Fixed JAX CRLB outputs for singular matrix cases
+- Updated `docs/sample_dolphin_config.yaml` for newer structure
+- Fix defaults in dolphin config CLI for interferogram_network settings (#636)
+
+## [0.41.0](https://github.com/isce-framework/dolphin/compare/v0.40.0...v0.41.0) - 2025-08-11
+
+### Added
+
+- `stitching.py`: Add support for specifying output projection by @scottstanie in [#607](https://github.com/isce-framework/dolphin/pull/607)
+- Added Cramér–Rao lower bound (CRLB) estimation output to phase linking results by @scottstanie in [#577](https://github.com/isce-framework/dolphin/pull/577)
+- Add UAVSAR_WAVELENGTH to constants by @scottstanie in [#620](https://github.com/isce-framework/dolphin/pull/620)
+- Add sequential closure phase rasters to phase linking output by @scottstanie in [#618](https://github.com/isce-framework/dolphin/pull/618)
+- Add `apply_mask_to_timeseries` to set masked pixels to nodata in outputs by @scottstanie in [#627](https://github.com/isce-framework/dolphin/pull/627)
+- Stitch and output all per-ministack `temporal_coherence_` and `similarity_` files by @scottstanie in [#615](https://github.com/isce-framework/dolphin/pull/615)
+
+### Changed
+- Fix numerical issues with CRLB calculation by @scottstanie in [#626](https://github.com/isce-framework/dolphin/pull/626)
+
+### Fixed
+- Fix hardcoded port 5000 for moto tests by @scottstanie in [#617](https://github.com/isce-framework/dolphin/pull/617)
+- `masking.py`: Raise `MaskingError` after creating an empty mask by @scottstanie in [#619](https://github.com/isce-framework/dolphin/pull/619)
+
+## [0.40.0](https://github.com/isce-framework/dolphin/compare/v0.39.0...v0.40.0) - 2025-06-30
 
 ### Added
 
