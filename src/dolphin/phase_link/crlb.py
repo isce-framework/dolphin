@@ -125,90 +125,130 @@ def compute_lower_bound_std(
     return np.concatenate(([0], estimator_stddev))
 
 
-def _theta_X_theta_T(X: Array, ref: int) -> Array:  # noqa: N802
-    """Project an (N,N) FIM to (N-1,N-1) by deleting `ref` row/col.
-
-    Equivalent to the matmul:
-        Theta.T @ X @ Theta
-
-    where Theta is the (N,N-1) matrix with the row `ref` zero and the rest identity.
-    """
-    idx = jnp.concatenate([jnp.arange(ref), jnp.arange(ref + 1, X.shape[-1])])
-    return X[..., idx[:, None], idx]
+def _theta_indices(n: int, ref: int) -> Array:
+    return jnp.concatenate([jnp.arange(ref), jnp.arange(ref + 1, n)])
 
 
-@partial(jit, static_argnums=(1, 2, 3, 4))
-def compute_crlb_jax(
-    coherence_matrices: Array,
-    num_looks: int,
-    reference_idx: int,
-    aps_variance: float = 0.01,
-    jitter: float = 1e-4,
+def _build_fisher_from_abs_gamma(
+    abs_G: Array, abs_G_inv: Array, num_looks: float
 ) -> Array:
-    """Batched CRLB std-dev (per epoch) for a stack of Fisher Information Matrices.
+    """Create the Fisher Information Matrix from |coherence matrix|.
 
-    See Tebaldini 2010, eqs. 21-22).
+    Useful when |coherence matrix| is already computed and inverted.
 
     Parameters
     ----------
-    coherence_matrices : Array
-        Complex Γ with shape (..., N, N).  Leading dimensions are batched.
-    num_looks : int
-        Number of independent looks, `L`.
-        Note that too-large `L` will lead to numerical instability.
-    reference_idx : int
-        Index of the reference epoch.
-        Must be in the range [0, N-1].
-    aps_variance : float
-        Variance of the APS, in radians squared.
-        Set to 0 to ignore APS contribution.
-        Default is 0.01.
-    jitter : float
-        Diagonal fudge added to each SPD solve for extra robustness.
-        Default is 1e-4.
+    abs_G : Array
+        Absolute value of the coherence matrix
+    abs_G_inv : Array
+        Inverse of the absolute value of the coherence matrix
+    num_looks : float
+        Number of looks used in the coherence matrix
 
     Returns
     -------
     Array
-        Standard-deviation lower bounds with shape (..., N) in radians.
-        Element 0 (reference epoch) is fixed to 0.
+        Fisher Information Matrix
 
     """
-    *batch, N, _ = coherence_matrices.shape
-    eye_N = jnp.eye(N, dtype=coherence_matrices.dtype)
-    eye_N1 = jnp.eye(N - 1, dtype=coherence_matrices.dtype)
+    eyeN = jnp.eye(abs_G.shape[-1], dtype=abs_G.dtype)
+    eyeN = jnp.broadcast_to(eyeN, abs_G.shape)
+    return 2.0 * num_looks * (abs_G * abs_G_inv - eyeN)
 
-    # Fisher information X
-    #    X = 2/L * (|Γ| ∘ |Γ|⁻¹ - I)
-    abs_G = jnp.abs(coherence_matrices)
-    eyeN_batch = jnp.broadcast_to(eye_N, abs_G.shape)
-    abs_G = abs_G + jitter * eyeN_batch  # regularize to promote positive definiteness
-    abs_G_inv = solve(abs_G, eyeN_batch, assume_a="pos")
 
-    X = 2.0 * num_looks * (abs_G * abs_G_inv - eyeN_batch)  # Hadamard
+def _crlb_from_x(
+    X: Array, reference_idx: int, aps_variance: float, fim_jitter: float
+) -> Array:
+    *batch, N, _ = X.shape
+    idx = _theta_indices(N, reference_idx)
 
-    # Decorrelation-only term  Θᵀ X Θ
-    F_base = _theta_X_theta_T(X, reference_idx)
+    eyeN = jnp.eye(N, dtype=X.dtype)
+    eyeN1 = jnp.eye(N - 1, dtype=X.dtype)
+    eyeN = jnp.broadcast_to(eyeN, X.shape)
+    eyeN1 = jnp.broadcast_to(eyeN1, (*batch, N - 1, N - 1))
 
-    # APS hybrid correction (eq. 22) if `aps_variance` != 0
-    #     A = Θᵀ X (X + R⁻¹)⁻¹ X Θ  ,  R⁻¹ = I/alpha
-    #     We compute (X + R⁻¹)⁻¹ (XΘ) via solve().
-    if aps_variance > 1e-6:
-        R_inv = eyeN_batch / aps_variance  # (...,N,N)
-        X_plus_R = X + R_inv + jitter * eyeN_batch  # SPD + εI
-        X_plus_R_inv = solve(X_plus_R, eyeN_batch, assume_a="pos")
-        A = _theta_X_theta_T(X @ X_plus_R_inv @ X, reference_idx)
+    # Θᵀ X Θ  by indexing
+    F_base = X[..., idx[:, None], idx]
+
+    if aps_variance > 0.0:
+        R_inv = eyeN / aps_variance
+        X_plus_R = X + R_inv + 0.0 * eyeN  # no implicit extra jitter here
+        # (X + R⁻¹)⁻¹ (X Θ) via solve, where Θ selects columns 'idx'
+        X_cols = X[..., :, idx]  # (..., N, N-1)
+        AXTheta = solve(X_plus_R, X_cols, assume_a="pos")  # (..., N, N-1)
+        A = (X @ AXTheta)[..., idx, :]  # (..., N-1, N-1)
         FIM = F_base - A
     else:
         FIM = F_base
 
-    # Invert FIM via solve();   Σ = FIM⁻¹
-    FIM = FIM + jitter * jnp.broadcast_to(eye_N1, FIM.shape)
-    Sigma = solve(FIM, jnp.broadcast_to(eye_N1, FIM.shape), assume_a="pos")
+    # Σ = inverse of FIM
+    if fim_jitter != 0.0:
+        FIM = FIM + fim_jitter * eyeN1
+    Sigma = solve(FIM, eyeN1, assume_a="pos")
+    sig = jnp.sqrt(jnp.diagonal(Sigma, axis1=-2, axis2=-1))
+    return jnp.insert(sig, reference_idx, 0.0, axis=-1)
 
-    sig = jnp.sqrt(jnp.diagonal(Sigma, axis1=-2, axis2=-1))  # (...,N-1)
-    # insert 0 for reference epoch
-    sig = jnp.concatenate([jnp.zeros((*batch, 1), dtype=sig.dtype), sig], axis=-1)
+
+@partial(jit, static_argnums=(1, 2, 3, 4, 5, 6, 7))
+def compute_crlb_jax(
+    coherence_matrices: Array,
+    num_looks: int,
+    reference_idx: int,
+    aps_variance: float = 0.0,
+    gamma_jitter: float = 0.0,
+    fim_jitter: float = 1e-6,
+    mask_zero_blocks: bool = True,
+    zero_tol: float = 1e-7,
+) -> Array:
+    """Compute CRLB for a batch of coherence matrices.
+
+    Parameters
+    ----------
+    coherence_matrices : Array
+        Coherence matrices, shape (..., N, N)
+    num_looks : int
+        Number of independent looks, `L`.
+    reference_idx : int
+        Reference epoch index (time index of 0 output)
+    aps_variance : float
+        Atmospheric phase screen variance.
+        If 0, APS term is skipped.
+    gamma_jitter : float
+        Jitter added to regularize the inversion of |Γ|.
+    fim_jitter : float
+        Jitter added to regularize the inversion of the Fisher Information Matrix.
+    mask_zero_blocks : bool
+        Set output to nan where |Γ| is (near) zero.
+        Default is True.
+    zero_tol : float
+        Tolerance for zero-blocks
+
+    """
+    *batch, N, _ = coherence_matrices.shape
+    eyeN = jnp.eye(N, dtype=coherence_matrices.dtype)
+    eyeNb = jnp.broadcast_to(eyeN, coherence_matrices.shape)
+
+    abs_G = jnp.abs(coherence_matrices)
+
+    # Detect obviously singular blocks (your toy Γ=0 case)
+    block_max = jnp.max(abs_G, axis=(-2, -1), keepdims=True)
+    is_zero_block = block_max < zero_tol  # (..., 1, 1)
+
+    # Keep the solve from crashing: replace zero-blocks by I *for the solve only*
+    abs_G_safe = abs_G + gamma_jitter * eyeNb
+    abs_G_safe = jnp.where(is_zero_block, eyeNb, abs_G_safe)
+
+    abs_G_inv = solve(abs_G_safe, eyeNb, assume_a="pos")
+
+    # Build X once and do the inverse-free CRLB from X
+    X = _build_fisher_from_abs_gamma(abs_G, abs_G_inv, num_looks)
+    sig = _crlb_from_x(X, reference_idx, aps_variance, fim_jitter)
+
+    if mask_zero_blocks:
+        # overwrite sigma on zero blocks to NaN to mimic NumPy error/NaN
+        mask = jnp.squeeze(is_zero_block, axis=(-2, -1))
+        nanv = jnp.full(sig.shape, jnp.nan, dtype=sig.dtype)
+        sig = jnp.where(mask, nanv, sig)
     return sig
 
 
