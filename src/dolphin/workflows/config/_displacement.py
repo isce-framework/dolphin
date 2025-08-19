@@ -114,12 +114,10 @@ class DisplacementWorkflow(WorkflowBase):
         ),
     )
 
-    phase_linking: PhaseLinkingOptions = Field(default_factory=PhaseLinkingOptions)
-    interferogram_network: InterferogramNetwork = Field(
-        default_factory=InterferogramNetwork
-    )
-    unwrap_options: UnwrapOptions = Field(default_factory=UnwrapOptions)
-    timeseries_options: TimeseriesOptions = Field(default_factory=TimeseriesOptions)
+    phase_linking: PhaseLinkingOptions
+    interferogram_network: InterferogramNetwork
+    unwrap_options: UnwrapOptions
+    timeseries_options: TimeseriesOptions
 
     # internal helpers
     # Stores the list of directories to be created by the workflow
