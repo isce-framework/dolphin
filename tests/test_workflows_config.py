@@ -64,9 +64,11 @@ def test_phase_linking_options_bad_size():
 
 
 def test_interferogram_network_defaults():
+    # Check that defaults are None
+    # The overwriting has moved to `DisplacementWorkflow` post init
     opts = config.InterferogramNetwork()
     assert opts.reference_idx is None
-    assert opts.max_bandwidth == 3
+    assert opts.max_bandwidth is None
     assert opts.max_temporal_baseline is None
 
 
