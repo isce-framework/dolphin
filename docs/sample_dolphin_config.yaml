@@ -29,7 +29,8 @@ worker_settings:
   #   Type: integer.
   threads_per_worker: 1
   # If processing separate spatial bursts, number of bursts to run in parallel for wrapped-
-  #   phase-estimation.
+  #   phase-estimation. For large, single-swath SLC stacks (e.g. UAVSAR, NISAR), this sets the
+  #   number of chunks processed in parallel during phase linking.
   #   Type: integer.
   n_parallel_bursts: 1
   # Size (rows, columns) of blocks of data to load at a time.
@@ -41,29 +42,28 @@ worker_settings:
 #   `dolphin.log` within `work_directory`.
 #   Type: string | null.
 log_file:
-# Time the config file was created.
-#   Type: string.
 # REQUIRED: list of CSLC files, or newline-delimited file containing list of CSLC files.
 #   Type: array.
 cslc_file_list: []
 output_options:
-  # Output (x, y) resolution (in units of input data).
-  #   Type: object | null.
-  output_resolution:
-  # Alternative to specifying output resolution: Specify the (x, y) strides (decimation
-  #   factor) to perform while processing input. For example, strides of [4, 2] would turn an
-  #   input resolution of [5, 10] into an output resolution of [20, 20].
-  #   Type: object.
   strides:
-    x: 1
+    # Decimation factor (stride) in the y/row direction.
+    #   Type: integer.
     y: 1
+    # Decimation factor (stride) in the x/column direction.
+    #   Type: integer.
+    x: 1
   # Area of interest: [left, bottom, right, top] coordinates. e.g.
   #   `bbox=[-150.2,65.0,-150.1,65.5]`.
   #   Type: array | null.
   bounds:
-  # EPSG code for the `bounds` coordinates, if specified.
-  #   Type: integer.
+  # EPSG code for the `bounds` or `bounds_wkt` coordinates, if specified.
+  #   Type: integer | null.
   bounds_epsg: 4326
+  # Area of interest as a simple Polygon in well-known-text (WKT) format. Can pass a string,
+  #   or a `.wkt` filename containing the Polygon text.
+  #   Type: string | null.
+  bounds_wkt:
   # Options for `create_dataset` with h5py.
   #   Type: object.
   hdf5_creation_options:
@@ -114,37 +114,46 @@ amplitude_dispersion_files: []
 #   none provided, computed using the input SLC stack.
 #   Type: array.
 amplitude_mean_files: []
+# Paths to layover/shadow binary masks, where 0 indicates a pixel in layover/shadow, 1 is a
+#   good pixel. If none provided, no masking is performed for layover/shadow.
+#   Type: array.
+layover_shadow_mask_files: []
 phase_linking:
   # Size of the ministack for sequential estimator.
   #   Type: integer.
-  ministack_size: 10
+  ministack_size: 15
   # Maximum number of compressed images to use in sequential estimator. If there are more
   #   ministacks than this, the earliest CCSLCs will be left out of the later stacks. .
   #   Type: integer.
-  max_num_compressed: 100
-  # Index of input SLC to use for making phase linked interferograms after EVD/EMI.
-  #   Type: integer.
-  output_reference_idx: 0
+  max_num_compressed: 10
+  # Index of the SLC to use as interferogram reference after phase linking. If not set, uses
+  #   the CompressedSlcPlan default.
+  #   Type: integer | null.
+  output_reference_idx:
   half_window:
-    # Half window size (in pixels) for x direction.
-    #   Type: integer.
-    x: 11
     # Half window size (in pixels) for y direction.
     #   Type: integer.
-    y: 5
+    y: 7
+    # Half window size (in pixels) for x direction.
+    #   Type: integer.
+    x: 14
   # Use EVD on the coherence instead of using the EMI algorithm.
   #   Type: boolean.
   use_evd: false
   # Beta regularization parameter for correlation matrix inversion. 0 is no regularization.
   #   Type: number.
   beta: 0.0
+  # Snap correlation values in the coherence matrix below this value to 0.
+  #   Type: number.
+  zero_correlation_threshold: 0.0
   # Method for finding SHPs during phase linking.
   #   Type: string.
   #   Options: ['glrt', 'ks', 'rect', 'rect'].
   shp_method: glrt
-  # Significance level (probability of false alarm) for SHP tests.
+  # Significance level (probability of false alarm) for SHP tests. Lower numbers include more
+  #   pixels within the multilook window during covariance estimation.
   #   Type: number.
-  shp_alpha: 0.005
+  shp_alpha: 0.001
   # If True, pixels labeled as PS will get set to NaN during phase linking to avoid summing
   #   their phase. Default of False means that the SHP algorithm will decide if a pixel should
   #   be included, regardless of its PS label.
@@ -155,13 +164,25 @@ phase_linking:
   #   must be positive.
   #   Type: integer | null.
   baseline_lag:
+  # Plan for creating Compressed SLCs during phase linking.
+  #   Type: string.
+  #   Options: ['always_first', 'first_per_ministack', 'last_per_ministack'].
+  compressed_slc_plan: always_first
+  # Write out (and stitch, if processing multiple geocoded bursts) rasters containing the
+  #   Cramer-Rao Lower Bound (CRLB) estimates.
+  #   Type: boolean.
+  write_crlb: true
+  # Write out (and stitch, if processing multiple geocoded bursts) rasters containing the
+  #   sequential closure phase from the nearest-3 triplets in the coherence matrix.
+  #   Type: boolean.
+  write_closure_phase: false
 interferogram_network:
   # For single-reference network: Index of the reference image in the network.
   #   Type: integer | null.
-  reference_idx: 0
+  reference_idx:
   # Max `n` to form the nearest-`n` interferograms by index.
   #   Type: integer | null.
-  max_bandwidth:
+  max_bandwidth: 3
   # Maximum temporal baseline of interferograms.
   #   Type: integer | null.
   max_temporal_baseline:
@@ -195,10 +216,20 @@ unwrap_options:
     # (for interpolation) Maximum radius to find scatterers.
     #   Type: integer.
     max_radius: 51
-    # Threshold on the correlation raster to use for interpolation. Pixels with less than this
-    #   value are replaced by a weighted combination of neighboring pixels.
+    # Threshold on the sliding-window correlation to use for masking+interpolation.Pixels with
+    #   less than this value are replaced by a weighted combination of neighboring pixels.
     #   Type: number.
-    interpolation_cor_threshold: 0.5
+    interpolation_cor_threshold: 0.25
+    # Threshold on the phase similarity to use for masking+interpolation. Pixels with less than
+    #   this value are replaced by a weighted combination of neighboring pixels.
+    #   Type: number.
+    interpolation_similarity_threshold: 0.3
+    # (for interpolation) Set the pixels where we have masked + interpolated data to have 0
+    #   correlation for the unwrapper. If False, the interpolated pixels keep their old
+    #   correlation. If True, the behavior can be unwrapper dependent (the unwrapper may choose
+    #   to skip over these pixels when solving).
+    #   Type: boolean.
+    zero_correlation_where_interpolating: false
   snaphu_options:
     # Number of tiles to split the inputs into using SNAPHU's internal tiling.
     #   Type: array.
@@ -221,6 +252,10 @@ unwrap_options:
     #   Type: string.
     #   Options: ['defo', 'smooth'].
     cost: smooth
+    # If True, after unwrapping with multiple tiles, an additional post-processing unwrapping
+    #   step is performed to re-optimize the unwrapped phase using a single tile.
+    #   Type: boolean.
+    single_tile_reoptimize: false
   tophu_options:
     # Number of tiles to split the inputs into.
     #   Type: array.
@@ -243,7 +278,15 @@ unwrap_options:
   spurt_options:
     # Temporal coherence to pick pixels used on an irregular grid.
     #   Type: number.
-    temporal_coherence_threshold: 0.6
+    temporal_coherence_threshold: 0.7
+    # Similarity to pick pixels used on an irregular grid. Any pixel with similarity above
+    #   `similarity_threshold` *or* above the temporal coherence threshold is chosen.
+    #   Type: number.
+    similarity_threshold: 0.5
+    # After running spurt, interpolate the values that were masked during unwrapping (which are
+    #   otherwise left as nan).
+    #   Type: boolean.
+    run_ambiguity_interpolation: true
     general_settings:
       # Tile up data spatially.
       #   Type: boolean.
@@ -251,13 +294,13 @@ unwrap_options:
     tiler_settings:
       # Maximum number of tiles allowed.
       #   Type: integer.
-      max_tiles: 16
+      max_tiles: 64
       # Number of points used for determining tiles based on density.
       #   Type: integer.
       target_points_for_generation: 120000
       # Target points per tile when generating tiles.
       #   Type: integer.
-      target_points_per_tile: 800000
+      target_points_per_tile: 900000
       # Dilation factor of non-overlapping tiles. 0.05 would lead to 5 percent dilation of the
       #   tile.
       #   Type: number.
@@ -298,7 +341,6 @@ unwrap_options:
       min_overlap_points: 25
       # Currently, only 'dirichlet' is supported.
       #   Type: dirichlet.
-      #   Options: ['dirichlet'].
       method: dirichlet
       # Method used to estimate bulk offset between tiles.
       #   Type: string.
@@ -316,7 +358,7 @@ timeseries_options:
   # Norm to use during timeseries inversion.
   #   Type: string.
   #   Options: ['L1', 'L2'].
-  method: L2
+  method: L1
   # Reference point (row, col) used if performing a time series inversion. If not provided, a
   #   point will be selected from a consistent connected component with low amplitude
   #   dispersion.
@@ -325,10 +367,14 @@ timeseries_options:
   # Run the velocity estimation from the phase time series.
   #   Type: boolean.
   run_velocity: true
+  # If providing a mask file, whether to apply the mask to the timeseries. If True, the time
+  #   series rasters will zero out pixels labeled as 0 in the mask file.
+  #   Type: boolean.
+  apply_mask_to_timeseries: true
   # Pixels with correlation below this value will be masked out.
   #   Type: number.
   correlation_threshold: 0.2
-  # Size (rows, columns) of blocks of data to load at a time. 3D dimsion is number of
+  # Size (rows, columns) of blocks of data to load at a time. 3D dimension is number of
   #   interferograms (during inversion) and number of SLC dates (during velocity fitting).
   #   Type: array.
   block_shape:
@@ -337,32 +383,3 @@ timeseries_options:
   # Number of parallel blocks to process at once.
   #   Type: integer.
   num_parallel_blocks: 4
-correction_options:
-  # List of weather-model files (one per date) for tropospheric corrections.
-  #   Type: array.
-  troposphere_files: []
-  # Format of dates contained in weather-model filenames.
-  #   Type: string.
-  tropo_date_fmt: '%Y%m%d'
-  # Package for tropospheric correction. Choices: pyaps, raider.
-  #   Type: string.
-  tropo_package: pyaps
-  # Enumeration representing different tropospheric models.
-  #   Type: string.
-  #   Options: ['ECMWF', 'ERA5', 'HRES', 'ERAINT', 'ERAI', 'MERRA', 'NARR', 'HRRR', 'GMAO'].
-  tropo_model: ECMWF
-  # Type of tropospheric delay.
-  #   Type: string.
-  #   Options: ['wet', 'dry', 'hydrostatic', 'comb'].
-  tropo_delay_type: comb
-  # List of GNSS-derived TEC maps for ionospheric corrections (one per date). Source is
-  #   https://cddis.nasa.gov/archive/gnss/products/ionex/.
-  #   Type: array.
-  ionosphere_files: []
-  # Line-of-sight geometry files for each burst/SLC stack area, for use in correction
-  #   computations.
-  #   Type: array.
-  geometry_files: []
-  # DEM file for tropospheric/ topographic phase corrections.
-  #   Type: string | null.
-  dem_file:
