@@ -13,6 +13,7 @@ from pydantic import (
     field_validator,
     model_validator,
 )
+from typing_extensions import Self
 
 from dolphin import constants
 
@@ -114,10 +115,12 @@ class DisplacementWorkflow(WorkflowBase):
         ),
     )
 
-    phase_linking: PhaseLinkingOptions
-    interferogram_network: InterferogramNetwork
-    unwrap_options: UnwrapOptions
-    timeseries_options: TimeseriesOptions
+    phase_linking: PhaseLinkingOptions = Field(default_factory=PhaseLinkingOptions)
+    interferogram_network: (
+        InterferogramNetwork  # = Field(default_factory=InterferogramNetwork)
+    )
+    unwrap_options: UnwrapOptions = Field(default_factory=UnwrapOptions)
+    timeseries_options: TimeseriesOptions = Field(default_factory=TimeseriesOptions)
 
     # internal helpers
     # Stores the list of directories to be created by the workflow
@@ -132,7 +135,22 @@ class DisplacementWorkflow(WorkflowBase):
     )
 
     @model_validator(mode="after")
-    def _check_input_files_exist(self) -> DisplacementWorkflow:
+    def _check_zero_interferogram_network(self: Self) -> Self:
+        ifg_network = self.interferogram_network
+        ref_idx = ifg_network.reference_idx
+        max_bw = ifg_network.max_bandwidth
+        max_tb = ifg_network.max_temporal_baseline
+        indexes = ifg_network.indexes
+        # Check if more than one has been set:
+        if ref_idx is None and max_bw is None and max_tb is None and indexes is None:
+            logger.info(
+                "No network configuration options were set. Using Nearest-3 network"
+            )
+            self.interferogram_network.max_bandwidth = 3
+        return self
+
+    @model_validator(mode="after")
+    def _check_input_files_exist(self) -> Self:
         if not self.require_cslc_files:
             return self
         file_list = self.cslc_file_list
