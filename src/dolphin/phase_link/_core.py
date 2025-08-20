@@ -15,11 +15,10 @@ from jax.typing import ArrayLike
 from dolphin._types import HalfWindow, Strides
 from dolphin.utils import take_looks
 
-from . import covariance, metrics
+from . import covariance, crlb, metrics
 from ._closure_phase import compute_nearest_closure_phases_batch
 from ._eigenvalues import eigh_largest_stack, eigh_smallest_stack
 from ._ps_filling import fill_ps_pixels
-from .crlb import compute_crlb_jax
 
 logger = logging.getLogger("dolphin")
 
@@ -455,7 +454,7 @@ def process_coherence_matrices(
     # Identity used for regularization and for solving
     Id = jnp.eye(n, dtype=Gamma.dtype)
     # repeat the identity matrix for each pixel
-    Id = jnp.tile(Id, (rows, cols, 1, 1))
+    Id = jnp.broadcast_to(Id, (rows, cols, n, n))
 
     if beta > 0:
         # Perform regularization
@@ -464,7 +463,8 @@ def process_coherence_matrices(
     Gamma = jnp.where(Gamma < zero_correlation_threshold, 0, Gamma)
 
     # Attempt to invert Gamma
-    cho, is_lower = cho_factor(Gamma)
+    gamma_jitter = 1e-6
+    cho, is_lower = cho_factor(Gamma + gamma_jitter * Id)
 
     # Check: If it fails the cholesky factor, it's close to singular and
     # we should just fall back to EVD
@@ -516,9 +516,10 @@ def process_coherence_matrices(
 
     # Compute CRLB for each pixel
     if compute_crlb:
-        crlb_std_dev = compute_crlb_jax(
-            C_arrays, num_looks, max(first_real_slc_idx - 1, 0)
-        )
+        # Build X once and do the inverse-free CRLB from X
+        X = crlb._build_fisher_from_abs_gamma(Gamma, Gamma_inv, num_looks)
+        crlb_std_dev = crlb._crlb_from_x(X, max(first_real_slc_idx - 1, 0), 0, 1e-6)
+
     else:
         crlb_std_dev = jnp.zeros(C_arrays.shape[:-1], dtype=jnp.float32)
 

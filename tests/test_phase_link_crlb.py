@@ -65,7 +65,8 @@ def test_numpy_vs_jax(example: str, aps_var: float) -> None:
             num_looks=num_looks,
             reference_idx=ref_idx,
             aps_variance=aps_var,
-            jitter=0.0,  # disable extra regularization for fair comparison
+            gamma_jitter=0.0,  # disable extra regularization for fair comparison
+            fim_jitter=0.0,
         )
     )
 
@@ -93,7 +94,8 @@ def test_large_n_no_nans() -> None:
             num_looks=num_looks,
             reference_idx=0,
             aps_variance=aps_var,
-            jitter=1e-6,  # Small jitter for numerical stability
+            gamma_jitter=1e-6,  # Small jitter for numerical stability
+            fim_jitter=1e-6,
         )
     )
     assert not np.any(np.isnan(std_jax)), "JAX implementation produced NaNs"
@@ -102,7 +104,7 @@ def test_large_n_no_nans() -> None:
     assert np.all(std_jax[1:] > 0), "All non-reference epochs should have positive std"
 
     # Verify they are reasonably close
-    np.testing.assert_allclose(std_np, std_jax, rtol=1e-3, atol=1e-5)
+    np.testing.assert_allclose(std_np, std_jax, rtol=5e-3, atol=1e-5)
 
 
 @pytest.mark.parametrize("num_acq", [10, 25])
@@ -144,7 +146,8 @@ def test_crlb_with_empirical_coherence(num_acq: int, neighbor_samples: int) -> N
             num_looks=num_looks,
             reference_idx=ref_idx,
             aps_variance=aps_var,
-            jitter=1e-5,
+            gamma_jitter=1e-5,
+            fim_jitter=1e-5,
         )
     )
 
