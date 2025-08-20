@@ -14,7 +14,7 @@ if __name__ == "__main__":
     for idx, fin in enumerate(reader.file_list):
         running_sum += reader[idx, :, :].filled(0).squeeze().astype("float64")
         fname = f"cumulative_closure_phase_{get_dates(fin)[1].strftime('%Y%m%d')}.tif"
-        fout = fin.parent / fname
+        fout = Path(fin).parent / fname
         io.write_arr(
             # Flip sign to match convention of displacement
             arr=running_sum.astype("float32")
