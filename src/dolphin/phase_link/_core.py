@@ -454,7 +454,6 @@ def process_coherence_matrices(
     # Identity used for regularization and for solving
     Id = jnp.eye(n, dtype=Gamma.dtype)
     # repeat the identity matrix for each pixel
-    # Id = jnp.tile(Id, (rows, cols, 1, 1))
     Id = jnp.broadcast_to(Id, (rows, cols, n, n))
 
     if beta > 0:
