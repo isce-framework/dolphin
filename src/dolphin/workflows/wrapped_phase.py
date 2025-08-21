@@ -448,16 +448,6 @@ def create_ifgs(
             )
             single_ref_ifgs.append(v.path)  # type: ignore[arg-type]
 
-    if interferogram_network.indexes and interferogram_network.indexes == [(0, -1)]:
-        ifg_file_list.append(single_ref_ifgs[-1])
-        # XXX Fix this hack for later
-        # # This isn't really what we want here, the logic is different than Network:
-        # ifgs = [
-        #     (single_ref_ifgs[ref_idx], single_ref_ifgs[sec_idx])
-        #     for ref_idx, sec_idx in interferogram_network.indexes
-        # ]
-        # ifg_file_list.extend(ifgs)
-
     if interferogram_network.reference_idx == 0:
         ifg_file_list.extend(single_ref_ifgs)
 
@@ -470,7 +460,7 @@ def create_ifgs(
     # If we requested max-bw-2 interferograms, we want
     # (1, 4), (1, 5), (4, 5), (4, 6), (5, 6)
     # (the same as though we had normal SLCs (1, 4, 5, 6) )
-    if interferogram_network.max_bandwidth is not None:
+    if interferogram_network.max_bandwidth is not None or interferogram_network.indexes:
         max_b = interferogram_network.max_bandwidth
         # Max bandwidth is easier: take the first `max_b` from `phase_linked_slcs`
         # (which are the (ref_date, ...) interferograms),...
@@ -479,6 +469,7 @@ def create_ifgs(
         network_rest = interferogram.Network(
             slc_list=phase_linked_slcs,
             max_bandwidth=max_b,
+            indexes=interferogram_network.indexes,
             outdir=ifg_dir,
             # Manually specify the dates, which come from the names of phase_linked_slcs
             dates=secondary_dates,
