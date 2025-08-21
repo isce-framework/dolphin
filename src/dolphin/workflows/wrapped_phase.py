@@ -478,7 +478,6 @@ def create_ifgs(
             raise ValueError(msg)
         ifg_file_list = cast(list[Path], [ifg.path for ifg in network.ifg_list])
         assert all(p is not None for p in ifg_file_list)
-        return ifg_file_list
 
     if interferogram_network.max_bandwidth is not None:
         max_b = interferogram_network.max_bandwidth
