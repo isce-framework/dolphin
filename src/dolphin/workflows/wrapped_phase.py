@@ -460,7 +460,27 @@ def create_ifgs(
     # If we requested max-bw-2 interferograms, we want
     # (1, 4), (1, 5), (4, 5), (4, 6), (5, 6)
     # (the same as though we had normal SLCs (1, 4, 5, 6) )
-    if interferogram_network.max_bandwidth is not None or interferogram_network.indexes:
+    if interferogram_network.indexes:
+        # TODO: if there are any (0, X) indexes, we need to pull from `single_ref_ifgs`
+        # ifgs_ref_date = single_ref_ifgs[:...]
+        network = interferogram.Network(
+            slc_list=phase_linked_slcs,
+            indexes=interferogram_network.indexes,
+            outdir=ifg_dir,
+            # Manually specify the dates, which come from the names of phase_linked_slcs
+            dates=secondary_dates,
+            write=not dry_run,
+            verify_slcs=not dry_run,
+        )
+        # Using `cast` to assert that the paths are not None
+        if len(network.ifg_list) == 0:
+            msg = "No interferograms were created"
+            raise ValueError(msg)
+        ifg_file_list = cast(list[Path], [ifg.path for ifg in network.ifg_list])
+        assert all(p is not None for p in ifg_file_list)
+        return ifg_file_list
+
+    if interferogram_network.max_bandwidth is not None:
         max_b = interferogram_network.max_bandwidth
         # Max bandwidth is easier: take the first `max_b` from `phase_linked_slcs`
         # (which are the (ref_date, ...) interferograms),...
@@ -478,7 +498,6 @@ def create_ifgs(
         )
         # Using `cast` to assert that the paths are not None
         ifgs_others = cast(list[Path], [ifg.path for ifg in network_rest.ifg_list])
-
         ifg_file_list.extend(ifgs_ref_date + ifgs_others)
 
     if interferogram_network.max_temporal_baseline is not None:
