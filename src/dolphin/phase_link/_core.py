@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import math
 from enum import IntEnum
 from functools import partial
 from typing import NamedTuple, Optional
@@ -14,7 +15,7 @@ from jax.typing import ArrayLike
 from dolphin._types import HalfWindow, Strides
 from dolphin.utils import take_looks
 
-from . import covariance, metrics
+from . import covariance, crlb, metrics
 from ._closure_phase import compute_nearest_closure_phases_batch
 from ._eigenvalues import eigh_largest_stack, eigh_smallest_stack
 from ._ps_filling import fill_ps_pixels
@@ -80,6 +81,7 @@ def run_phase_linking(
     use_slc_amp: bool = False,
     baseline_lag: Optional[int] = None,
     first_real_slc_idx: int = 0,
+    compute_crlb: bool = True,
 ) -> PhaseLinkOutput:
     """Estimate the linked phase for a stack of SLCs.
 
@@ -141,7 +143,8 @@ def run_phase_linking(
         The index of the first real SLC in the stack.
         This is only used for the CRLB computation.
         By default 0.
-
+    compute_crlb : bool, optional
+        Whether to compute the CRLB, by default True
 
     Returns
     -------
@@ -198,6 +201,7 @@ def run_phase_linking(
         neighbor_arrays=neighbor_arrays,
         baseline_lag=baseline_lag,
         first_real_slc_idx=first_real_slc_idx,
+        compute_crlb=compute_crlb,
     )
 
     # Get the smaller, looked versions of the masks
@@ -256,6 +260,7 @@ def run_cpl(
     neighbor_arrays: Optional[np.ndarray] = None,
     baseline_lag: Optional[int] = None,
     first_real_slc_idx: int = 0,
+    compute_crlb: bool = True,
 ) -> PhaseLinkOutput:
     """Run the Combined Phase Linking (CPL) algorithm.
 
@@ -296,6 +301,8 @@ def run_cpl(
         The index of the first real SLC in the stack.
         This is only used for the CRLB computation.
         By default 0.
+    compute_crlb : bool, optional
+        Whether to compute the CRLB, by default True
 
     Returns
     -------
@@ -330,7 +337,10 @@ def run_cpl(
         C_arrays = C_arrays.at[:, :, l_rows, l_cols].set(0.0 + 0j)
 
     closure_phases = compute_nearest_closure_phases_batch(C_arrays)
-    num_looks = (2 * half_window[0] + 1) * (2 * half_window[1] + 1)
+    # For a more conservative uncertainty estimate, use a smaller number of looks
+    # rather than `num_looks = (2 * half_window[0] + 1) * (2 * half_window[1] + 1)`
+    num_looks = math.sqrt(half_window[0] * half_window[1])
+
     reference_idx = ns + reference_idx if reference_idx < 0 else reference_idx
     cpx_phase, eigenvalues, estimator, crlb_std_dev = process_coherence_matrices(
         C_arrays,
@@ -340,6 +350,7 @@ def run_cpl(
         reference_idx=reference_idx,
         num_looks=num_looks,
         first_real_slc_idx=first_real_slc_idx,
+        compute_crlb=compute_crlb,
     )
     # Get the temporal coherence
     temp_coh = metrics.estimate_temp_coh(cpx_phase, C_arrays)
@@ -366,7 +377,15 @@ def run_cpl(
 
 
 @partial(
-    jit, static_argnames=("use_evd", "beta", "reference_idx", "first_real_slc_idx")
+    jit,
+    static_argnames=(
+        "use_evd",
+        "beta",
+        "reference_idx",
+        "num_looks",
+        "first_real_slc_idx",
+        "compute_crlb",
+    ),
 )
 def process_coherence_matrices(
     C_arrays,
@@ -376,6 +395,7 @@ def process_coherence_matrices(
     reference_idx: int = 0,
     num_looks: int = 1,
     first_real_slc_idx: int = 0,
+    compute_crlb: bool = True,
 ) -> tuple[Array, Array, Array, Array]:
     """Estimate the linked phase for a stack of coherence matrices.
 
@@ -407,6 +427,9 @@ def process_coherence_matrices(
         The index of the first real SLC in the stack.
         This is only used for the CRLB computation.
         By default 0.
+    compute_crlb : bool, optional
+        Whether to compute the CRLB
+        Default is True.
 
     Returns
     -------
@@ -431,7 +454,7 @@ def process_coherence_matrices(
     # Identity used for regularization and for solving
     Id = jnp.eye(n, dtype=Gamma.dtype)
     # repeat the identity matrix for each pixel
-    Id = jnp.tile(Id, (rows, cols, 1, 1))
+    Id = jnp.broadcast_to(Id, (rows, cols, n, n))
 
     if beta > 0:
         # Perform regularization
@@ -440,7 +463,8 @@ def process_coherence_matrices(
     Gamma = jnp.where(Gamma < zero_correlation_threshold, 0, Gamma)
 
     # Attempt to invert Gamma
-    cho, is_lower = cho_factor(Gamma)
+    gamma_jitter = 1e-6
+    cho, is_lower = cho_factor(Gamma + gamma_jitter * Id)
 
     # Check: If it fails the cholesky factor, it's close to singular and
     # we should just fall back to EVD
@@ -450,7 +474,6 @@ def process_coherence_matrices(
         # EVD
         eig_vals, eig_vecs = evd_eig_vals, evd_eig_vecs
         estimator = jnp.zeros(eig_vals.shape, dtype=bool)
-        crlb_std_dev = jnp.zeros(evd_eig_vecs.shape, dtype=jnp.float32)
     else:
         # EMI
         # estimate the wrapped phase based on the EMI paper
@@ -491,10 +514,14 @@ def process_coherence_matrices(
         emi_used = jnp.ones(emi_eig_vals.shape, dtype=jnp.int8)
         estimator = lax.select(inv_has_nans, evd_used, emi_used)
 
-    # Compute Fisher Information Matrix
-    X = 2 * num_looks * (Gamma * Gamma_inv - Id.astype("float32"))
     # Compute CRLB for each pixel
-    crlb_std_dev = _compute_crlb(X, max(first_real_slc_idx - 1, 0))
+    if compute_crlb:
+        # Build X once and do the inverse-free CRLB from X
+        X = crlb._build_fisher_from_abs_gamma(Gamma, Gamma_inv, num_looks)
+        crlb_std_dev = crlb._crlb_from_x(X, max(first_real_slc_idx - 1, 0), 0, 1e-6)
+
+    else:
+        crlb_std_dev = jnp.zeros(C_arrays.shape[:-1], dtype=jnp.float32)
 
     # Now the shape of eig_vecs is (rows, cols, nslc)
     # at pixel (r, c), eig_vecs[r, c] is the largest (smallest) eigenvector if
@@ -532,38 +559,6 @@ def decimate(arr: ArrayLike, strides: Strides) -> Array:
     end_r = (rows // ys) * ys + 1
     end_c = (cols // xs) * xs + 1
     return arr[..., start_r:end_r:ys, start_c:end_c:xs]
-
-
-@partial(jit, static_argnums=(1,))
-def _compute_crlb(X: Array, reference_idx: int) -> Array:
-    rows, cols, n, _ = X.shape
-    # Compute the CRLB standard deviation
-
-    # # Normally, we construct the Theta partial derivative matrix like this
-    # Theta = np.zeros((N, N - 1))
-    # First row is 0 (using day 0 as reference)
-    # Theta[1:, :] = np.eye(N - 1)  # Last N-1 rows are identity
-    # More efficient computation of Theta.T @ X @ Theta
-
-    # Instead of explicit matrix multiplication, directly extract relevant elements
-    # We want all elements except the reference row/column
-    row_idx = jnp.concatenate(
-        [jnp.arange(reference_idx), jnp.arange(reference_idx + 1, n)]
-    )
-    projected_fim = X[..., row_idx[:, None], row_idx]
-
-    # Invert each (n-1, n-1) matrix in the batch
-    # Use cholesky repeat the (n-1, n-1) identity matrix for each pixel
-    Id = jnp.tile(jnp.eye(n - 1, dtype=projected_fim.dtype), (rows, cols, 1, 1))
-    cho, is_lower = cho_factor(projected_fim)
-    crlb = cho_solve((cho, is_lower), Id)  # Shape: (rows, cols, n-1, n-1)
-
-    # Extract standard deviations from the diagonal of each CRLB matrix
-    # Shape: (rows, cols, n-1)
-    crlb_std_dev = jnp.sqrt(jnp.diagonal(crlb, axis1=-2, axis2=-1))
-    # Insert zeros at reference_idx to match evd_estimate shape (rows, cols, n)
-    crlb_std_dev = jnp.insert(crlb_std_dev, reference_idx, 0, axis=-1)
-    return crlb_std_dev
 
 
 def _raise_if_all_nan(slc_stack: np.ndarray):

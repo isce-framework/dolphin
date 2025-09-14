@@ -7,6 +7,7 @@ import pytest
 
 from dolphin import __version__
 from dolphin.cli import main
+from dolphin.workflows import DisplacementWorkflow
 
 # Match the start of help output
 HELP_LINE = "usage: dolphin"
@@ -87,3 +88,38 @@ def test_cli_config_basic(
         )
         main()
         assert config_file.exists()
+        cfg = DisplacementWorkflow.from_yaml(config_file)
+        assert cfg.interferogram_network.max_bandwidth == 3
+        assert cfg.interferogram_network.max_temporal_baseline is None
+        assert cfg.interferogram_network.reference_idx is None
+        assert cfg.interferogram_network.indexes is None
+
+
+def test_cli_config_interferogram_network_reference_idx(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    slc_file_list: list[Path],
+):
+    config_file = tmp_path / "dolphin_config.yaml"
+    with monkeypatch.context() as m:
+        m.setattr(
+            sys,
+            "argv",
+            [
+                "dolphin",
+                "config",
+                "--outfile",
+                config_file.as_posix(),
+                "--slc-files",
+                *map(str, slc_file_list),
+                "--interferogram-network.reference-idx",
+                "0",
+            ],
+        )
+        main()
+        assert config_file.exists()
+        cfg = DisplacementWorkflow.from_yaml(config_file)
+        assert cfg.interferogram_network.max_bandwidth is None
+        assert cfg.interferogram_network.max_temporal_baseline is None
+        assert cfg.interferogram_network.reference_idx == 0
+        assert cfg.interferogram_network.indexes is None

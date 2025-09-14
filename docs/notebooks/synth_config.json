@@ -1,0 +1,34 @@
+{
+  "output_dir": "./synthetic-demo",
+  "custom_covariance": {
+    "gamma_inf": 0.00,
+    "tau0": 60.0,
+    "gamma0": 1.0,
+    "seasonal_A": null,
+    "seasonal_B": null
+  },
+  "bounding_box": [
+    -117.74,
+    34.96,
+    -117.64,
+    35.04
+  ],
+  "start_date": "2020-01-01T00:00:00",
+  "dt": 12,
+  "num_dates": 20,
+  "res_y": 15.0,
+  "res_x": 15.0,
+  "crlb_num_looks": 121,
+  "include_turbulence": true,
+  "max_turbulence_amplitude": 5.0,
+  "include_deformation": true,
+  "max_defo_amplitude": 10.0,
+  "include_ramps": true,
+  "max_ramp_amplitude": 1.0,
+  "include_stratified": false,
+  "include_summed_truth": true,
+  "multilook_truth": [
+    2,
+    2
+  ]
+}

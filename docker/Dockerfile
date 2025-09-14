@@ -63,8 +63,6 @@ SHELL ["/usr/local/bin/_dockerfile_shell.sh"]
 # https://github.com/mamba-org/micromamba-docker#quick-start
 COPY --chown=$MAMBA_USER:$MAMBA_USER docker/specfile.txt /tmp/specfile.txt
 RUN micromamba install --yes --channel conda-forge -n base -f /tmp/specfile.txt && \
-    # cxx-compiler for whirlwind:
-    micromamba install --yes --channel conda-forge -n base cxx-compiler && \
     micromamba clean --all --yes
 
 COPY --chown=$MAMBA_USER:$MAMBA_USER . .
@@ -75,9 +73,7 @@ ARG MAMBA_DOCKERFILE_ACTIVATE=1
 # For now, manually install tophu/snaphu from git/pip
 RUN python -m pip install --no-deps \
     "snaphu>=0.4" \
-    git+https://github.com/isce-framework/tophu@66df96fc4645f6977421336ed96c553833216c07 \
-    git+https://github.com/isce-framework/spurt@main \
-    git+https://github.com/isce-framework/whirlwind@40defb38d2d6deca2819934788ebbc57e418e32d
+    git+https://github.com/isce-framework/spurt@main
 
 # --no-deps because they are installed with conda
 RUN python -m pip install --no-deps .

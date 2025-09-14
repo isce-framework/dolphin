@@ -7,9 +7,10 @@ import time
 from pathlib import Path
 from typing import Sequence
 
-from dolphin import io, stitching, unwrap
+from dolphin import unwrap
 from dolphin._log import log_runtime
 from dolphin._overviews import ImageType, create_overviews
+from dolphin.stitching import _get_matching_raster
 
 from .config import UnwrapOptions
 
@@ -67,8 +68,8 @@ def run(
     output_path = unwrap_options._directory
     output_path.mkdir(exist_ok=True, parents=True)
     if mask_file is not None:
-        output_mask = _get_matching_mask(
-            mask_file=mask_file,
+        output_mask = _get_matching_raster(
+            input_file=mask_file,
             output_dir=output_path,
             match_file=ifg_file_list[0],
         )
@@ -108,25 +109,3 @@ def run(
     )
 
     return (unwrapped_paths, conncomp_paths)
-
-
-def _get_matching_mask(
-    mask_file: Path | str, output_dir: Path, match_file: Path | str
-) -> Path:
-    """Create a mask with the same size/projection as `match_file`."""
-    # Check that the input mask is the same size as the ifgs:
-    if io.get_raster_xysize(mask_file) == io.get_raster_xysize(match_file):
-        logger.info(f"Using {mask_file} to mask during unwrapping")
-        output_mask = Path(mask_file)
-    else:
-        logger.info(f"Warping {mask_file} to match size of interferograms")
-        output_mask = output_dir / "warped_mask.tif"
-        if output_mask.exists():
-            logger.info(f"Mask already exists at {output_mask}")
-        else:
-            stitching.warp_to_match(
-                input_file=mask_file,
-                match_file=match_file,
-                output_file=output_mask,
-            )
-    return output_mask

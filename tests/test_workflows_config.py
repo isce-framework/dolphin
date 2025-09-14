@@ -12,14 +12,14 @@ from dolphin.workflows import UnwrapMethod, config
 # Testing what the defaults look like for each class
 def test_half_window_defaults():
     hw = config.HalfWindow()
-    assert hw.x == 11
-    assert hw.y == 5
-    assert hw.model_dump() == {"x": 11, "y": 5}
+    assert hw.x == 14
+    assert hw.y == 7
+    assert hw.model_dump() == {"x": 14, "y": 7}
 
 
 def test_half_window_to_looks():
     hw = config.HalfWindow()
-    row_looks, col_looks = (11, 23)
+    row_looks, col_looks = (15, 29)
     assert (row_looks, col_looks) == hw.to_looks()
     assert hw == config.HalfWindow.from_looks(row_looks, col_looks)
 
@@ -64,8 +64,10 @@ def test_phase_linking_options_bad_size():
 
 
 def test_interferogram_network_defaults():
+    # Check that defaults are None
+    # The overwriting has moved to `DisplacementWorkflow` post init
     opts = config.InterferogramNetwork()
-    assert opts.reference_idx == 0
+    assert opts.reference_idx is None
     assert opts.max_bandwidth is None
     assert opts.max_temporal_baseline is None
 
@@ -330,8 +332,8 @@ def test_config_displacement_workflow_defaults(dir_with_1_slc):
     assert c.phase_linking._directory == Path("linked_phase").resolve()
 
     assert c.interferogram_network._directory == Path("interferograms").resolve()
-    assert c.interferogram_network.reference_idx == 0
-    assert c.interferogram_network.max_bandwidth is None
+    assert c.interferogram_network.max_bandwidth == 3
+    assert c.interferogram_network.reference_idx is None
     assert c.interferogram_network.max_temporal_baseline is None
 
     assert c.unwrap_options._directory == Path("unwrapped").resolve()

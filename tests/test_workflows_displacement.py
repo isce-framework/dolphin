@@ -39,7 +39,7 @@ def test_displacement_run_single(opera_slc_files: list[Path], tmpdir):
         assert paths.stitched_ps_file.exists()
         assert all(p.exists() for p in paths.stitched_ifg_paths)
         assert all(p.exists() for p in paths.stitched_cor_paths)
-        assert paths.stitched_temp_coh_file.exists()
+        assert all(p.exists() for p in paths.stitched_temp_coh_files)
         assert paths.stitched_ps_file.exists()
         assert paths.stitched_amp_dispersion_file.exists()
         assert paths.unwrapped_paths is not None
@@ -102,7 +102,7 @@ def test_displacement_run_single_official_opera_naming(
 
 def run_displacement_stack(
     path, file_list: list[Path], run_unwrap: bool = False, ministack_size: int = 500
-):
+) -> displacement.OutputPaths:
     cfg = config.DisplacementWorkflow(
         cslc_file_list=file_list,
         input_options={"subdataset": "/data/VV"},
@@ -110,6 +110,7 @@ def run_displacement_stack(
         phase_linking={
             "ministack_size": ministack_size,
         },
+        interferogram_network={"reference_idx": 0},
         unwrap_options={"run_unwrap": run_unwrap},
         log_file=Path() / "dolphin.log",
     )
@@ -118,6 +119,7 @@ def run_displacement_stack(
         assert paths.timeseries_paths is not None
         assert all(full_suffix(p) == ".tif" for p in paths.timeseries_paths)
     assert paths.timeseries_residual_paths is None
+    return paths
 
 
 def test_stack_with_compSLCs(opera_slc_files, tmpdir):
@@ -148,12 +150,19 @@ def test_separate_workflow_runs(slc_file_list, tmp_path):
     interferograms as one sequential run.
     """
     p_all = tmp_path / "all"
-    run_displacement_stack(p_all, slc_file_list, ministack_size=10)
+    ms = 10
+    paths = run_displacement_stack(p_all, slc_file_list, ministack_size=ms)
     all_ifgs = sorted((p_all / "interferograms").glob("*.int.tif"))
     assert len(all_ifgs) == 29
+    # Check that the stitched results have the "_average" one returned
+    assert "_average" in paths.stitched_temp_coh_file.name
+    assert "_average" in paths.stitched_shp_count_file.name
+    assert "_full" in paths.stitched_similarity_file.name
+    assert len(paths.stitched_temp_coh_files) == (len(slc_file_list) // ms) + 1
+    assert len(paths.stitched_shp_count_files) == (len(slc_file_list) // ms) + 1
+    assert len(paths.stitched_similarity_files) == (len(slc_file_list) // ms) + 1
 
     p1 = tmp_path / Path("first")
-    ms = 10
     # Split into batches of 10
     file_batches = [slc_file_list[i : i + ms] for i in range(0, len(slc_file_list), ms)]
     assert len(file_batches) == 3
@@ -209,6 +218,7 @@ def test_displacement_run_extra_reference_date(
             # First one is COMPRESSED_
             output_options={"extra_reference_date": "2022-01-03"},
             unwrap_options={"unwrap_method": unwrap_method},
+            interferogram_network={"reference_idx": 0},
             cslc_file_list=opera_slc_files,
             input_options={"subdataset": "/data/VV"},
             phase_linking={

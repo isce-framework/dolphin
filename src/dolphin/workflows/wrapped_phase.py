@@ -4,7 +4,7 @@ import datetime
 import logging
 import time
 from pathlib import Path
-from typing import Optional, Sequence, cast
+from typing import NamedTuple, Optional, Sequence, cast
 
 from opera_utils import get_dates, make_nodata_mask
 
@@ -20,15 +20,59 @@ from .config import DisplacementWorkflow
 logger = logging.getLogger("dolphin")
 
 
+class WrappedPhaseOutput(NamedTuple):
+    """Output files of the wrapped_phase workflow.
+
+    Attributes
+    ----------
+    ifg_file_list : list[Path]
+        list of Paths to virtual interferograms created.
+    crlb_files : list[Path]
+        Paths to the output Cramer Rao Lower Bound (CRLB) files.
+    closure_phase_files : list[Path]
+        Paths to the output closure phase files.
+    comp_slc_file_list : list[Path]
+        Paths to the compressed SLC files created from each ministack.
+    temp_coh_files : list[Path]
+        Paths to temporal coherence files created.
+        In the case of a single phase linking step, this is from one phase linking step.
+        In the case of sequential phase linking, this from each ministack, and one
+        average of all ministacks.
+    ps_looked_file : Path
+        The multilooked boolean persistent scatterer file.
+    amp_disp_looked_file : Path
+        The multilooked amplitude dispersion file.
+    shp_count_files : list[Path]
+        Paths to the created SHP counts files.
+        In the case of a single phase linking step, this is from one phase linking step.
+        In the case of sequential phase linking, this from each ministack, and one
+        average of all ministacks.
+    similarity_files : list[Path]
+        Paths to phase similarity files.
+        In the case of a single phase linking step, this is from one phase linking step.
+        In the case of sequential phase linking, this from each ministack, and one
+        average of all ministacks.
+
+    """
+
+    ifg_file_list: list[Path]
+    crlb_files: list[Path]
+    closure_phase_files: list[Path]
+    comp_slc_file_list: list[Path]
+    temp_coh_files: list[Path]
+    ps_looked_file: Path
+    amp_disp_looked_file: Path
+    shp_count_files: list[Path]
+    similarity_files: list[Path]
+
+
 @log_runtime
 def run(
     cfg: DisplacementWorkflow,
     debug: bool = False,
     max_workers: int = 1,
     tqdm_kwargs=None,
-) -> tuple[
-    list[Path], list[Path], list[Path], list[Path], Path, Path, Path, Path, Path
-]:
+) -> WrappedPhaseOutput:
     """Run the displacement workflow on a stack of SLCs.
 
     Parameters
@@ -46,22 +90,9 @@ def run(
 
     Returns
     -------
-    ifg_file_list : list[Path]
-        list of Paths to virtual interferograms created.
-    crlb_files : list[Path]
-        Paths to the output Cramer Rao Lower Bound (CRLB) files.
-    comp_slc_file_list : list[Path]
-        Paths to the compressed SLC files created from each ministack.
-    temp_coh_file : Path
-        Path to temporal coherence file created.
-        In the case of a single phase linking step, this is from one phase linking step.
-        In the case of sequential phase linking, this is the average of all ministacks.
-    ps_looked_file : Path
-        The multilooked boolean persistent scatterer file.
-    amp_disp_looked_file : Path
-        The multilooked amplitude dispersion file.
-    shp_count_file : Path
-        Path to the created SHP counts file.
+    WrappedPhaseOutput
+        [`WrappedPhaseOutput`][dolphin.workflows.wrapped_phase.WrappedPhaseOutput]
+        object containing the output files of the wrapped phase workflow.
 
     """
     t0 = time.perf_counter()
@@ -167,9 +198,9 @@ def run(
     if len(phase_linked_slcs) > 0:
         logger.info(f"Skipping EVD step, {len(phase_linked_slcs)} files already exist")
         comp_slc_list = sorted(pl_path.glob("compressed*tif"))
-        temp_coh_file = next(pl_path.glob("temporal_coherence*tif"))
-        shp_count_file = next(pl_path.glob("shp_count*tif"))
-        similarity_file = next(pl_path.glob("*similarity*tif"))
+        temp_coh_files = sorted(pl_path.glob("temporal_coherence*tif"))
+        shp_count_files = sorted(pl_path.glob("shp_count*tif"))
+        similarity_files = sorted(pl_path.glob("*similarity*tif"))
         crlb_files = sorted(pl_path.rglob("crlb*tif"))
         closure_phase_files = sorted(pl_path.rglob("closure_phase*tif"))
     else:
@@ -192,9 +223,9 @@ def run(
             crlb_files,
             closure_phase_files,
             comp_slc_list,
-            temp_coh_file,
-            shp_count_file,
-            similarity_file,
+            temp_coh_files,
+            shp_count_files,
+            similarity_files,
         ) = sequential.run_wrapped_phase_sequential(
             slc_vrt_stack=vrt_stack,
             output_folder=pl_path,
@@ -240,16 +271,16 @@ def run(
     existing_ifgs = list(ifg_network._directory.glob("*.int.vrt"))
     if len(existing_ifgs) > 0:
         logger.info(f"Skipping interferogram step, {len(existing_ifgs)} exists")
-        return (
+        return WrappedPhaseOutput(
             existing_ifgs,
             crlb_files,
             closure_phase_files,
             comp_slc_list,
-            temp_coh_file,
+            temp_coh_files,
             ps_looked_file,
             amp_disp_looked_file,
-            shp_count_file,
-            similarity_file,
+            shp_count_files,
+            similarity_files,
         )
 
     logger.info(f"Creating virtual interferograms from {len(phase_linked_slcs)} files")
@@ -287,16 +318,16 @@ def run(
         extra_reference_date=extra_reference_date,
         file_date_fmt=cfg.input_options.cslc_date_fmt,
     )
-    return (
+    return WrappedPhaseOutput(
         ifg_file_list,
         crlb_files,
         closure_phase_files,
         comp_slc_list,
-        temp_coh_file,
+        temp_coh_files,
         ps_looked_file,
         amp_disp_looked_file,
-        shp_count_file,
-        similarity_file,
+        shp_count_files,
+        similarity_files,
     )
 
 
@@ -417,16 +448,6 @@ def create_ifgs(
             )
             single_ref_ifgs.append(v.path)  # type: ignore[arg-type]
 
-    if interferogram_network.indexes and interferogram_network.indexes == [(0, -1)]:
-        ifg_file_list.append(single_ref_ifgs[-1])
-        # XXX Fix this hack for later
-        # # This isn't really what we want here, the logic is different than Network:
-        # ifgs = [
-        #     (single_ref_ifgs[ref_idx], single_ref_ifgs[sec_idx])
-        #     for ref_idx, sec_idx in interferogram_network.indexes
-        # ]
-        # ifg_file_list.extend(ifgs)
-
     if interferogram_network.reference_idx == 0:
         ifg_file_list.extend(single_ref_ifgs)
 
@@ -439,6 +460,25 @@ def create_ifgs(
     # If we requested max-bw-2 interferograms, we want
     # (1, 4), (1, 5), (4, 5), (4, 6), (5, 6)
     # (the same as though we had normal SLCs (1, 4, 5, 6) )
+    if interferogram_network.indexes:
+        # TODO: if there are any (0, X) indexes, we need to pull from `single_ref_ifgs`
+        # ifgs_ref_date = single_ref_ifgs[:...]
+        network = interferogram.Network(
+            slc_list=phase_linked_slcs,
+            indexes=interferogram_network.indexes,
+            outdir=ifg_dir,
+            # Manually specify the dates, which come from the names of phase_linked_slcs
+            dates=secondary_dates,
+            write=not dry_run,
+            verify_slcs=not dry_run,
+        )
+        # Using `cast` to assert that the paths are not None
+        if len(network.ifg_list) == 0:
+            msg = "No interferograms were created"
+            raise ValueError(msg)
+        ifg_file_list = cast(list[Path], [ifg.path for ifg in network.ifg_list])
+        assert all(p is not None for p in ifg_file_list)
+
     if interferogram_network.max_bandwidth is not None:
         max_b = interferogram_network.max_bandwidth
         # Max bandwidth is easier: take the first `max_b` from `phase_linked_slcs`
@@ -448,6 +488,7 @@ def create_ifgs(
         network_rest = interferogram.Network(
             slc_list=phase_linked_slcs,
             max_bandwidth=max_b,
+            indexes=interferogram_network.indexes,
             outdir=ifg_dir,
             # Manually specify the dates, which come from the names of phase_linked_slcs
             dates=secondary_dates,
@@ -456,7 +497,6 @@ def create_ifgs(
         )
         # Using `cast` to assert that the paths are not None
         ifgs_others = cast(list[Path], [ifg.path for ifg in network_rest.ifg_list])
-
         ifg_file_list.extend(ifgs_ref_date + ifgs_others)
 
     if interferogram_network.max_temporal_baseline is not None:

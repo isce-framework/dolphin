@@ -13,7 +13,6 @@ from pydantic import (
     Field,
     PrivateAttr,
     field_validator,
-    model_validator,
 )
 
 from dolphin import __version__ as _dolphin_version
@@ -60,11 +59,11 @@ class HalfWindow(BaseModel, extra="forbid"):
     y: Annotated[
         int,
         tyro.conf.arg(aliases=("--hwy",)),
-    ] = Field(5, description="Half window size (in pixels) for y direction", gt=0)
+    ] = Field(7, description="Half window size (in pixels) for y direction", gt=0)
     x: Annotated[
         int,
         tyro.conf.arg(aliases=("--hwx",)),
-    ] = Field(11, description="Half window size (in pixels) for x direction", gt=0)
+    ] = Field(14, description="Half window size (in pixels) for x direction", gt=0)
 
     def to_looks(self):
         """Convert (x, y) half-window size to (row, column) looks."""
@@ -85,7 +84,7 @@ class PhaseLinkingOptions(BaseModel, extra="forbid"):
         tyro.conf.arg(aliases=("--ms",)),
     ] = Field(15, description="Size of the ministack for sequential estimator.", gt=1)
     max_num_compressed: int = Field(
-        100,
+        10,
         description=(
             "Maximum number of compressed images to use in sequential estimator."
             " If there are more ministacks than this, the earliest CCSLCs will be"
@@ -203,20 +202,6 @@ class InterferogramNetwork(BaseModel, extra="forbid"):
         ),
     )
 
-    @model_validator(mode="after")
-    def _check_zero_parameters(self) -> InterferogramNetwork:
-        ref_idx = self.reference_idx
-        max_bw = self.max_bandwidth
-        max_tb = self.max_temporal_baseline
-        indexes = self.indexes
-        # Check if more than one has been set:
-        if ref_idx is None and max_bw is None and max_tb is None and indexes is None:
-            logger.debug(
-                "No network configuration options were set. Using single-reference."
-            )
-            self.reference_idx = 0
-        return self
-
 
 class TimeseriesOptions(BaseModel, extra="forbid"):
     """Options for inversion/time series fitting."""
@@ -246,6 +231,14 @@ class TimeseriesOptions(BaseModel, extra="forbid"):
         True,
         description="Run the velocity estimation from the phase time series.",
     )
+    apply_mask_to_timeseries: bool = Field(
+        True,
+        description=(
+            "If providing a mask file, whether to apply the mask to the timeseries. If"
+            " True, the time series rasters will zero out pixels labeled as 0 in the"
+            " mask file."
+        ),
+    )
     correlation_threshold: float = Field(
         0.2,
         description="Pixels with correlation below this value will be masked out.",
@@ -255,7 +248,7 @@ class TimeseriesOptions(BaseModel, extra="forbid"):
     block_shape: tuple[int, int] = Field(
         (256, 256),
         description=(
-            "Size (rows, columns) of blocks of data to load at a time. 3D dimsion is"
+            "Size (rows, columns) of blocks of data to load at a time. 3D dimension is"
             " number of interferograms (during inversion) and number of SLC dates"
             " (during velocity fitting)"
         ),
