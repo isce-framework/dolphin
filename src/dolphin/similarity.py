@@ -99,7 +99,7 @@ def _create_loop_and_run(
     mask: ArrayLike | None,
     func: Callable[[ArrayLike], np.ndarray],
 ):
-    n_ifg, rows, cols = ifg_stack.shape
+    _n_ifg, rows, cols = ifg_stack.shape
     # Mark any nans/all zeros as invalid
     invalid_mask = np.nan_to_num(ifg_stack).sum(axis=0) == 0
     if not np.iscomplexobj(ifg_stack):

@@ -414,7 +414,7 @@ def test_iter_blocks(vrt_stack):
         assert b.shape == (len(vrt_stack), 5, 5)
 
     loader = EagerLoader(reader=vrt_stack, block_shape=(5, 2))
-    blocks, slices = zip(*list(loader.iter_blocks()), strict=False)
+    blocks, _slices = zip(*list(loader.iter_blocks()), strict=False)
     assert len(blocks) == 5
     for b in blocks:
         assert b.shape == (len(vrt_stack), 5, 2)
@@ -589,6 +589,6 @@ class TestEagerLoader:
         # Now check entire block for a skipped block
         reader = RasterReader.from_file(raster_with_zero_block)
         loader = EagerLoader(reader=reader, block_shape=bs)
-        blocks, slices = zip(*list(loader.iter_blocks()), strict=False)
+        blocks, _slices = zip(*list(loader.iter_blocks()), strict=False)
         loader.notify_finished()
         assert len(blocks) == expected_num_blocks - 1

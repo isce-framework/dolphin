@@ -67,7 +67,7 @@ def test_get_combined_bounds_gt(shifted_slc_files, shifted_slc_bounds):
 def test_get_combined_bounds_gt_different_proj(
     slc_file_list_nc, slc_file_list_nc_wgs84
 ):
-    bnds, gt = stitching.get_combined_bounds_nodata(*slc_file_list_nc)
+    bnds, _gt = stitching.get_combined_bounds_nodata(*slc_file_list_nc)
     assert bnds == (-5.5, -2.0, 4.5, 3.0)
 
     with pytest.raises(ValueError):

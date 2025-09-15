@@ -224,7 +224,7 @@ def compute_crlb_jax(
         Tolerance for zero-blocks
 
     """
-    *batch, N, _ = coherence_matrices.shape
+    *_batch, N, _ = coherence_matrices.shape
     eyeN = jnp.eye(N, dtype=coherence_matrices.dtype)
     eyeNb = jnp.broadcast_to(eyeN, coherence_matrices.shape)
 

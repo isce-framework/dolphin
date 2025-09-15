@@ -70,7 +70,7 @@ def _loop_over_neighbors(
     is_shp: ArrayLike,
 ):
     """Estimate the SHPs of each pixel of `amp_stack` on the CPU."""
-    num_slc, in_rows, in_cols = sorted_amp_stack.shape
+    _num_slc, in_rows, in_cols = sorted_amp_stack.shape
     out_rows, out_cols = is_shp.shape[:2]
 
     half_row, half_col = halfwin_rowcol
