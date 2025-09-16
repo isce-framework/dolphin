@@ -98,11 +98,27 @@ class TestStackSimilarity:
     def test_max_similarity_masked(self, ifg_stack, radius, func):
         rows, cols = ifg_stack.shape[-2:]
         mask = np.random.rand(rows, cols).round().astype(bool)
+        mask = np.array(
+            [
+                [True, False, False, True, False, False, False, False, True, True],
+                [False, True, True, True, True, True, True, True, False, True],
+                [True, False, False, False, False, True, True, False, True, False],
+                [True, True, True, True, True, False, True, False, False, False],
+                [False, False, True, True, True, True, True, True, False, True],
+            ]
+        )
+        # Note: bottom right is surrounded by nans, so it will flip to a nan similarity
+
         sim_func = getattr(similarity, f"{func}_similarity")
         sim = sim_func(ifg_stack, search_radius=radius, mask=mask)
 
         assert ((np.nan_to_num(sim) > -1) & (np.nan_to_num(sim) < 1)).all()
-        assert np.all(np.isnan(sim) == (~mask))
+        # The nan counts should be higher
+        assert ~np.all(np.isnan(sim))
+        assert np.isnan(sim).sum() >= (~mask).sum(), f"{sim = }, {mask = }"
+        # The bottom right
+        if radius == 2:
+            assert np.isnan(sim[-1, -1])
 
     def test_create_similarity(self, tmp_path, slc_file_list):
         outfile = tmp_path / "med_sim.tif"

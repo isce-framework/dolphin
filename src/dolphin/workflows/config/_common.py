@@ -335,6 +335,13 @@ class OutputOptions(BaseModel, extra="forbid"):
     """Options for the output size/format/compressions."""
 
     strides: Strides = Field(Strides(), validate_default=True)
+    epsg: Optional[int] = Field(
+        None,
+        description=(
+            "EPSG code of desired output products (for geocoded SLCs only)."
+            " If None, uses the most common projection of the input data."
+        ),
+    )
     bounds: Optional[tuple[float, float, float, float]] = Field(
         None,
         description=(

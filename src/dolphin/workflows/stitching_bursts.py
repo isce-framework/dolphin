@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
 
+from shapely import from_wkt
+
 from dolphin import stitching
 from dolphin._log import log_runtime
 from dolphin._overviews import ImageType, create_image_overviews, create_overviews
@@ -106,7 +108,13 @@ def run(
     stitched_ifg_dir.mkdir(exist_ok=True, parents=True)
     # Also preps for snaphu, which needs binary format with no nans
     logger.info("Stitching interferograms by date.")
-    out_bounds = Bbox(*output_options.bounds) if output_options.bounds else None
+    if output_options.bounds:
+        out_bounds = Bbox(*output_options.bounds) if output_options.bounds else None
+    elif output_options.bounds_wkt:
+        out_bounds = Bbox(*from_wkt(output_options.bounds_wkt).bounds)
+    else:
+        out_bounds = None
+
     date_to_ifg_path = stitching.merge_by_date(
         image_file_list=ifg_file_list,
         file_date_fmt=file_date_fmt,
@@ -114,6 +122,7 @@ def run(
         output_suffix=".int.tif",
         out_bounds=out_bounds,
         out_bounds_epsg=output_options.bounds_epsg,
+        dest_epsg=output_options.epsg,
         num_workers=num_workers,
     )
     stitched_ifg_paths = list(date_to_ifg_path.values())
@@ -134,6 +143,7 @@ def run(
         output_prefix="auto",
         out_bounds=out_bounds,
         out_bounds_epsg=output_options.bounds_epsg,
+        dest_epsg=output_options.epsg,
         num_workers=num_workers,
         options=EXTRA_COMPRESSED_TIFF_OPTIONS,
     )
@@ -146,6 +156,7 @@ def run(
         output_prefix="auto",
         out_bounds=out_bounds,
         out_bounds_epsg=output_options.bounds_epsg,
+        dest_epsg=output_options.epsg,
         num_workers=num_workers,
     )
     stitched_shp_count_files = list(date_to_shp_count_path.values())
@@ -157,6 +168,7 @@ def run(
         output_prefix="auto",
         out_bounds=out_bounds,
         out_bounds_epsg=output_options.bounds_epsg,
+        dest_epsg=output_options.epsg,
         num_workers=num_workers,
         options=EXTRA_COMPRESSED_TIFF_OPTIONS,
     )
@@ -172,6 +184,7 @@ def run(
             resample_alg="nearest",
             out_bounds=out_bounds,
             out_bounds_epsg=output_options.bounds_epsg,
+            dest_epsg=output_options.epsg,
         )
 
     # Stitch the CRLB estimate files
@@ -184,6 +197,7 @@ def run(
         options=EXTRA_COMPRESSED_TIFF_OPTIONS,
         out_bounds=out_bounds,
         out_bounds_epsg=output_options.bounds_epsg,
+        dest_epsg=output_options.epsg,
         num_workers=num_workers,
     )
     stitched_crlb_files = list(date_to_crlb_path.values())
@@ -197,6 +211,7 @@ def run(
         options=EXTRA_COMPRESSED_TIFF_OPTIONS,
         out_bounds=out_bounds,
         out_bounds_epsg=output_options.bounds_epsg,
+        dest_epsg=output_options.epsg,
         num_workers=num_workers,
     )
     stitched_closure_phase_files = list(date_to_closure_phase_path.values())
@@ -210,6 +225,7 @@ def run(
             resample_alg="nearest",
             out_bounds=out_bounds,
             out_bounds_epsg=output_options.bounds_epsg,
+            dest_epsg=output_options.epsg,
         )
         repack_raster(stitched_amp_disp_file, keep_bits=10)
 
