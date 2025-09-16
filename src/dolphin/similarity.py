@@ -172,7 +172,8 @@ def _make_loop_function(
                     cur_sim_vec[count] = phase_similarity(x0, x)
                     count += 1
                     # Assuming `summary_func` is nan-aware
-                out_similarity[r0, c0] = summary_func(cur_sim_vec[:count])
+                if count > 0:  # a 0 count will fail for `max`
+                    out_similarity[r0, c0] = summary_func(cur_sim_vec[:count])
         return out_similarity
 
     return _masked_sim_loop
