@@ -137,7 +137,7 @@ def test_compute_combined_amplitude_dispersions():
 
     amplitudes = np.random.randn(10, 2, 2) ** 2
 
-    amp_mean, amp_disp, _ = dolphin.ps.calc_ps_block(amplitudes)
+    _amp_mean, amp_disp, _ = dolphin.ps.calc_ps_block(amplitudes)
 
     N = [5, 4, 1]
 
@@ -148,7 +148,7 @@ def test_compute_combined_amplitude_dispersions():
     # Note: a dispersion of N=1 isn't really defined. we dont use that
     disp_inputs = np.stack([amp_disp_1, amp_disp_2, np.zeros_like(amplitudes[9])])
 
-    combined_disp, combined_mean = dolphin.ps.combine_amplitude_dispersions(
+    combined_disp, _combined_mean = dolphin.ps.combine_amplitude_dispersions(
         dispersions=disp_inputs, means=mean_inputs, N=N
     )
     assert_allclose(combined_disp, amp_disp, rtol=1e-5)

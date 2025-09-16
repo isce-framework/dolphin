@@ -39,13 +39,18 @@ def test_get_circle_idxs():
 
 
 def test_pixel_similarity():
-    x1, x2 = np.exp(1j * np.angle(np.random.randn(2, 50) + np.random.randn(2, 50) * 1j))
-    sim = similarity.phase_similarity(x1[:5], x2[:5])
-    assert -1 <= sim <= 1
+    np.random.seed(12)
+    phases1, phases2 = (
+        np.random.uniform(2 * np.pi, size=(50,)),
+        np.random.uniform(2 * np.pi, size=(50,)),
+    )
+    x1, x2 = np.exp(1j * phases1), np.exp(1j * phases2)
+    small_sims = [similarity.phase_similarity(x1[:n], x2[:n]) for n in range(2, 6)]
+    assert all(-1 <= sim <= 1 for sim in small_sims)
 
     # For random noise, the similarity should be closer to zero with more data
     sim_full = similarity.phase_similarity(x1, x2)
-    assert np.abs(sim_full) < np.abs(sim)
+    assert np.abs(sim_full) < np.mean(np.abs(small_sims))
 
     # self similarity == 1
     assert similarity.phase_similarity(x1, x1) == 1

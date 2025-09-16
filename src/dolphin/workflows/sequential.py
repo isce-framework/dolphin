@@ -150,7 +150,7 @@ def run_wrapped_phase_sequential(
             cur_output_files,
             cur_crlb_files,
             cur_closure_phase_files,
-            cur_comp_slc_file,
+            _cur_comp_slc_file,
             temp_coh_file,
             similarity_file,
             shp_count_file,

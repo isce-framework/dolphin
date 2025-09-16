@@ -115,7 +115,7 @@ def coh_mat_single(
 
     Note this requires `slc_samples` to be transposed from `coh_mat_single`.
     """
-    nslc, nsamps = slc_samples.shape
+    _nslc, nsamps = slc_samples.shape
 
     if neighbor_mask is None:
         neighbor_mask = jnp.ones(nsamps, dtype=jnp.bool_)

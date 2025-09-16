@@ -512,7 +512,7 @@ def weighted_lstsq_single(
     A_scaled = A * sqrt_weights[:, None]
 
     # Run the weighted least squares
-    x, residuals, rank, sing_vals = jnp.linalg.lstsq(A_scaled, b_scaled)
+    x, residuals, _rank, _sing_vals = jnp.linalg.lstsq(A_scaled, b_scaled)
     # TODO: do we need special handling?
     # if rank < A.shape[1]:
     #     # logger.warning("Rank deficient solution")
