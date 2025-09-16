@@ -102,7 +102,7 @@ class TestStackSimilarity:
         sim = sim_func(ifg_stack, search_radius=radius, mask=mask)
 
         assert ((np.nan_to_num(sim) > -1) & (np.nan_to_num(sim) < 1)).all()
-        assert np.all(np.isnan(sim) == (~mask))
+        assert np.all(np.isnan(sim) == (~mask)), f"{sim = }, but {mask = }"
 
     def test_create_similarity(self, tmp_path, slc_file_list):
         outfile = tmp_path / "med_sim.tif"
