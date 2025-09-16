@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 from opera_utils import group_by_burst
 
-from dolphin.io import get_raster_nodata, get_raster_units
+from dolphin.io import get_raster_crs, get_raster_nodata, get_raster_units
 from dolphin.utils import flatten, full_suffix
 from dolphin.workflows import config, displacement
 
@@ -276,3 +276,38 @@ def test_displacement_run_extra_reference_date(
 
         assert all(get_raster_units(p) == "radians" for p in paths.unwrapped_paths)
         log_file.unlink()
+
+
+def test_displacement_run_different_epsg(opera_slc_files: list[Path], tmpdir):
+    with tmpdir.as_cwd():
+        cfg = config.DisplacementWorkflow(
+            cslc_file_list=opera_slc_files,
+            input_options={"subdataset": "/data/VV"},
+            output_options={"epsg": 32606},
+            interferogram_network={
+                "indexes": [(0, -1)],
+                "max_bandwidth": 2,
+            },
+            phase_linking={
+                "ministack_size": 500,
+            },
+            timeseries_options={
+                "reference_point": (5, 6),
+            },
+        )
+        paths = displacement.run(cfg)
+
+        for path_list in [
+            paths.stitched_ifg_paths,
+            paths.stitched_cor_paths,
+            paths.stitched_temp_coh_files,
+            paths.unwrapped_paths,
+            paths.conncomp_paths,
+            paths.timeseries_paths,
+            paths.timeseries_residual_paths,
+        ]:
+            assert path_list is not None
+            for p in path_list:
+                assert get_raster_crs(p).to_epsg() == 32606
+        assert get_raster_crs(paths.stitched_ps_file).to_epsg() == 32606
+        assert get_raster_crs(paths.stitched_amp_dispersion_file).to_epsg() == 32606

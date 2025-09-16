@@ -135,6 +135,7 @@ def run(
         output_prefix="auto",
         out_bounds=out_bounds,
         out_bounds_epsg=output_options.bounds_epsg,
+        dest_epsg=output_options.epsg,
         num_workers=num_workers,
         options=EXTRA_COMPRESSED_TIFF_OPTIONS,
     )
@@ -147,6 +148,7 @@ def run(
         output_prefix="auto",
         out_bounds=out_bounds,
         out_bounds_epsg=output_options.bounds_epsg,
+        dest_epsg=output_options.epsg,
         num_workers=num_workers,
     )
     stitched_shp_count_files = list(date_to_shp_count_path.values())
@@ -158,6 +160,7 @@ def run(
         output_prefix="auto",
         out_bounds=out_bounds,
         out_bounds_epsg=output_options.bounds_epsg,
+        dest_epsg=output_options.epsg,
         num_workers=num_workers,
         options=EXTRA_COMPRESSED_TIFF_OPTIONS,
     )
@@ -173,6 +176,7 @@ def run(
             resample_alg="nearest",
             out_bounds=out_bounds,
             out_bounds_epsg=output_options.bounds_epsg,
+            dest_epsg=output_options.epsg,
         )
 
     # Stitch the CRLB estimate files
@@ -185,6 +189,7 @@ def run(
         options=EXTRA_COMPRESSED_TIFF_OPTIONS,
         out_bounds=out_bounds,
         out_bounds_epsg=output_options.bounds_epsg,
+        dest_epsg=output_options.epsg,
         num_workers=num_workers,
     )
     stitched_crlb_files = list(date_to_crlb_path.values())
@@ -198,6 +203,7 @@ def run(
         options=EXTRA_COMPRESSED_TIFF_OPTIONS,
         out_bounds=out_bounds,
         out_bounds_epsg=output_options.bounds_epsg,
+        dest_epsg=output_options.epsg,
         num_workers=num_workers,
     )
     stitched_closure_phase_files = list(date_to_closure_phase_path.values())
@@ -211,6 +217,7 @@ def run(
             resample_alg="nearest",
             out_bounds=out_bounds,
             out_bounds_epsg=output_options.bounds_epsg,
+            dest_epsg=output_options.epsg,
         )
         repack_raster(stitched_amp_disp_file, keep_bits=10)
 
