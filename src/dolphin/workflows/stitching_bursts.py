@@ -114,6 +114,7 @@ def run(
         output_suffix=".int.tif",
         out_bounds=out_bounds,
         out_bounds_epsg=output_options.bounds_epsg,
+        dest_epsg=output_options.epsg,
         num_workers=num_workers,
     )
     stitched_ifg_paths = list(date_to_ifg_path.values())
