@@ -1011,7 +1011,7 @@ def _parse_vrt_file(vrt_file):
     filepaths = []
     for name in file_strings:
         if name.upper().startswith("HDF5:") or name.upper().startswith("NETCDF:"):
-            prefix, filename, subdataset = name.split(":")
+            _prefix, filename, subdataset = name.split(":")
             # Clean up subdataset
             sds = subdataset.replace('"', "").replace("'", "").lstrip("/")
             # Remove quoting if it was present

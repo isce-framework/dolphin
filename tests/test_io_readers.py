@@ -5,6 +5,7 @@ import numpy.testing as npt
 import pytest
 import rasterio as rio
 from osgeo import gdal
+from rasterio.errors import NotGeoreferencedWarning
 
 from dolphin.io._readers import (
     BinaryReader,
@@ -30,8 +31,6 @@ slices_to_test = [slice(None), slice(1), slice(0, 10, 2)]
 @pytest.fixture(scope="module")
 def binary_file_list(tmp_path_factory, slc_stack):
     """Flat binary files in the ENVI format."""
-    import rasterio as rio
-    from rasterio.errors import NotGeoreferencedWarning
 
     shape = slc_stack[0].shape
     dtype = slc_stack.dtype
@@ -167,7 +166,7 @@ class TestHDF5:
 @pytest.fixture()
 def raster_reader(slc_file_list, slc_stack):
     # ignore georeferencing warnings
-    with pytest.warns(rio.errors.NotGeoreferencedWarning):
+    with pytest.warns(NotGeoreferencedWarning):
         r = RasterReader.from_file(slc_file_list[0])
     assert r.shape == slc_stack[0].shape
     assert r.dtype == slc_stack[0].dtype
@@ -194,7 +193,7 @@ def image_513(tmp_path_factory):
 
 def test_single_pixel_leftover_squeeze(image_513):
     # ignore georeferencing warnings
-    with pytest.warns(rio.errors.NotGeoreferencedWarning):
+    with pytest.warns(NotGeoreferencedWarning):
         r = RasterReader.from_file(image_513, keepdims=True)
         r2 = RasterReader.from_file(image_513, keepdims=False)
 
@@ -217,7 +216,7 @@ class TestRasterStack:
         slc_stack,
         keep_open,
     ):
-        with pytest.warns(rio.errors.NotGeoreferencedWarning):
+        with pytest.warns(NotGeoreferencedWarning):
             reader = RasterStackReader.from_file_list(
                 slc_file_list, keep_open=keep_open
             )
@@ -233,7 +232,7 @@ class TestRasterStack:
     def test_raster_stack_read_slices(
         self, slc_file_list, slc_stack, keep_open, dslice, rslice, cslice
     ):
-        with pytest.warns(rio.errors.NotGeoreferencedWarning):
+        with pytest.warns(NotGeoreferencedWarning):
             reader = RasterStackReader.from_file_list(
                 slc_file_list, keep_open=keep_open
             )
@@ -243,7 +242,7 @@ class TestRasterStack:
         npt.assert_array_almost_equal(s, expected)
 
     def test_single_pixel_leftover_squeeze(self, image_513):
-        with pytest.warns(rio.errors.NotGeoreferencedWarning):
+        with pytest.warns(NotGeoreferencedWarning):
             reader = RasterStackReader.from_file_list(
                 [image_513, image_513], keepdims=True
             )
@@ -407,14 +406,14 @@ def test_bad_sizes(slc_file_list, raster_10_by_20):
 
 def test_iter_blocks(vrt_stack):
     loader = EagerLoader(reader=vrt_stack, block_shape=(5, 5))
-    blocks, slices = zip(*list(loader.iter_blocks()), strict=False)
+    blocks, _slices = zip(*list(loader.iter_blocks()), strict=False)
     # (5, 10) total shape, breaks into 5x5 blocks
     assert len(blocks) == 2
     for b in blocks:
         assert b.shape == (len(vrt_stack), 5, 5)
 
     loader = EagerLoader(reader=vrt_stack, block_shape=(5, 2))
-    blocks, slices = zip(*list(loader.iter_blocks()), strict=False)
+    blocks, _slices = zip(*list(loader.iter_blocks()), strict=False)
     assert len(blocks) == 5
     for b in blocks:
         assert b.shape == (len(vrt_stack), 5, 2)
@@ -560,7 +559,7 @@ class TestEagerLoader:
         bs = (100, 200)
         reader = RasterReader.from_file(tiled_raster_100_by_200)
         loader = EagerLoader(reader=reader, block_shape=bs)
-        blocks, slices = zip(*list(loader.iter_blocks()), strict=False)
+        blocks, _slices = zip(*list(loader.iter_blocks()), strict=False)
         loader.notify_finished()
 
         bs = (32, 32)
@@ -568,27 +567,27 @@ class TestEagerLoader:
         col_blocks = 200 // 32 + 1
         expected_num_blocks = row_blocks * col_blocks
         loader = EagerLoader(reader=reader, block_shape=bs)
-        blocks, slices = zip(*list(loader.iter_blocks()), strict=False)
+        blocks, _slices = zip(*list(loader.iter_blocks()), strict=False)
         assert len(blocks) == expected_num_blocks
         assert blocks[0].shape == bs
 
         # One nan should be fine, will get loaded
         reader = RasterReader.from_file(raster_with_nan)
         loader = EagerLoader(reader=reader, block_shape=bs)
-        blocks, slices = zip(*list(loader.iter_blocks()), strict=False)
+        blocks, _slices = zip(*list(loader.iter_blocks()), strict=False)
         loader.notify_finished()
         assert len(blocks) == expected_num_blocks
 
         # Now check entire block for a skipped block
         reader = RasterReader.from_file(raster_with_nan_block)
         loader = EagerLoader(reader=reader, block_shape=bs)
-        blocks, slices = zip(*list(loader.iter_blocks()), strict=False)
+        blocks, _slices = zip(*list(loader.iter_blocks()), strict=False)
         loader.notify_finished()
         assert len(blocks) == expected_num_blocks - 1
 
         # Now check entire block for a skipped block
         reader = RasterReader.from_file(raster_with_zero_block)
         loader = EagerLoader(reader=reader, block_shape=bs)
-        blocks, slices = zip(*list(loader.iter_blocks()), strict=False)
+        blocks, _slices = zip(*list(loader.iter_blocks()), strict=False)
         loader.notify_finished()
         assert len(blocks) == expected_num_blocks - 1

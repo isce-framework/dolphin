@@ -286,7 +286,7 @@ def evd(cov_mat):
     # n = len(cov_mat)
     # lambda_, v = la.eigh(cov_mat, subset_by_index=[n - 1, n - 1])  # only scipy.linalg
     # v = v.flatten()
-    lambda_, v = la.eigh(cov_mat)
+    _lambda, v = la.eigh(cov_mat)
 
     # Biggest eigenvalue is the last one
     # reference to the first acquisition

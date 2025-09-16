@@ -102,7 +102,7 @@ class TestInvert:
         return timeseries.get_incidence_matrix(ifg_date_pairs)
 
     def test_basic(self, data, A):
-        sar_dates, sar_phases, ifg_date_pairs, ifgs = data
+        sar_dates, sar_phases, _ifg_date_pairs, ifgs = data
 
         # Get one pixel
         b = ifgs[:, -1, -1]
@@ -113,7 +113,7 @@ class TestInvert:
         assert np.array(residual).item() < 1e-5
 
     def test_l1_invert(self, data, A):
-        sar_dates, sar_phases, ifg_date_pairs, ifgs = data
+        sar_dates, sar_phases, _ifg_date_pairs, ifgs = data
 
         # Get one pixel
         b = ifgs[:, -1, -1].copy()
@@ -122,7 +122,7 @@ class TestInvert:
         b[0] += single_ifg_error
 
         R = np.linalg.cholesky(A.T @ A)
-        x, residual = timeseries.least_absolute_deviations(A, b, R)
+        x, _residual = timeseries.least_absolute_deviations(A, b, R)
         residuals = np.abs(b - A @ x)
         assert x.shape[0] == len(sar_dates) - 1
         npt.assert_allclose(x, sar_phases[1:, -1, -1], atol=1e-4)
@@ -130,7 +130,7 @@ class TestInvert:
         npt.assert_allclose(residuals[1:], 0, atol=1e-4)
 
     def test_invert_stack(self, data, A):
-        sar_dates, sar_phases, ifg_date_pairs, ifgs = data
+        _sar_dates, sar_phases, _ifg_date_pairs, ifgs = data
 
         phi_stack, residuals = timeseries.invert_stack(A, ifgs)
         assert phi_stack.shape == sar_phases[1:].shape
@@ -139,7 +139,7 @@ class TestInvert:
         npt.assert_array_less(residuals, 1e-5)
 
     def test_invert_stack_l1(self, data, A):
-        sar_dates, sar_phases, ifg_date_pairs, ifgs = data
+        _sar_dates, sar_phases, _ifg_date_pairs, ifgs = data
         ifgs = ifgs.copy()
         single_ifg_error = 100
         ifgs[0] += single_ifg_error
@@ -151,7 +151,7 @@ class TestInvert:
         npt.assert_allclose(residuals, single_ifg_error, atol=1e-3)
 
     def test_weighted_stack(self, data, A):
-        sar_dates, sar_phases, ifg_date_pairs, ifgs = data
+        sar_dates, sar_phases, _ifg_date_pairs, ifgs = data
 
         weights = np.ones_like(ifgs)
         phi, residuals = timeseries.invert_stack(A, ifgs, weights)
@@ -164,7 +164,7 @@ class TestInvert:
         npt.assert_allclose(residuals2, residuals, atol=1e-5)
 
     def test_censored_stack(self, data, A):
-        sar_dates, sar_phases, ifg_date_pairs, ifgs = data
+        sar_dates, sar_phases, _ifg_date_pairs, ifgs = data
 
         weights = None
         missing_data_flags = np.ones(ifgs.shape, dtype=bool)  # no missing data
@@ -180,7 +180,7 @@ class TestInvert:
 
     def test_remove_row_vs_weighted(self, data, A):
         """Check that removing a row/data point is equivalent to zero-weighting it."""
-        sar_dates, sar_phases, ifg_date_pairs, ifgs = data
+        _sar_dates, _sar_phases, _ifg_date_pairs, ifgs = data
         dphi = ifgs[:, -1, -1]
         # add noise to the ifgs, or we can't tell a difference
         dphi_noisy = dphi + np.random.normal(0, 0.3, dphi.shape)
@@ -204,7 +204,7 @@ class TestInvert:
     @pytest.fixture
     def unw_files(self, tmp_path, data, raster_100_by_200):
         """Write the data to disk and return the file names."""
-        sar_dates, sar_phases, ifg_date_pairs, ifgs = data
+        _sar_dates, _sar_phases, ifg_date_pairs, ifgs = data
 
         out = []
         # use the raster as a template
@@ -244,12 +244,12 @@ class TestInvert:
 class TestVelocity:
     @pytest.fixture
     def x_arr(self, data):
-        sar_dates, sar_phases, ifg_date_pairs, ifgs = data
+        sar_dates, _sar_phases, _ifg_date_pairs, _ifgs = data
         return timeseries.datetime_to_float(sar_dates)
 
     @pytest.fixture
     def expected_velo(self, data, x_arr):
-        sar_dates, sar_phases, ifg_date_pairs, ifgs = data
+        _sar_dates, sar_phases, _ifg_date_pairs, _ifgs = data
         out = np.zeros(SHAPE)
         for i in range(SHAPE[0]):
             for j in range(SHAPE[1]):
@@ -257,7 +257,7 @@ class TestVelocity:
         return out * 365.25
 
     def test_stack(self, data, x_arr, expected_velo):
-        sar_dates, sar_phases, ifg_date_pairs, ifgs = data
+        _sar_dates, sar_phases, _ifg_date_pairs, _ifgs = data
 
         weights = np.ones_like(sar_phases)
         velocities = timeseries.estimate_velocity(x_arr, sar_phases, weights)
@@ -265,7 +265,7 @@ class TestVelocity:
         npt.assert_allclose(velocities, expected_velo, atol=1e-5)
 
     def test_stack_unweighted(self, data, x_arr, expected_velo):
-        sar_dates, sar_phases, ifg_date_pairs, ifgs = data
+        _sar_dates, sar_phases, _ifg_date_pairs, _ifgs = data
 
         velocities = timeseries.estimate_velocity(x_arr, sar_phases, None)
         assert velocities.shape == (SHAPE[0], SHAPE[1])

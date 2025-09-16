@@ -329,7 +329,7 @@ class TestSpurt:
     def test_unwrap_spurt(self, tmp_path, ifg_file_list, temp_coh_raster):
         opts = SpurtOptions()
         unwrap_options = UnwrapOptions(unwrap_method="spurt", spurt_options=opts)
-        out_paths, conncomp_paths = dolphin.unwrap.run(
+        out_paths, _conncomp_paths = dolphin.unwrap.run(
             ifg_filenames=ifg_file_list,
             cor_filenames=ifg_file_list,  # NOT USED... but required for `run`?
             temporal_coherence_filename=temp_coh_raster,

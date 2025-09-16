@@ -138,7 +138,7 @@ def test_estimate_stack_covariance_neighbors(slcs):
 
 
 def test_estimate_stack_covariance_neighbors_masked(slcs):
-    num_slc, rows, cols = slcs.shape
+    num_slc, _rows, cols = slcs.shape
     # Now mask an entire row
     slc_stack_nan = slcs.copy()
     slc_stack_nan[:, 0, :] = np.nan

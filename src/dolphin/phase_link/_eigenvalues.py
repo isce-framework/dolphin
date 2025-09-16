@@ -129,7 +129,7 @@ def power_iteration(
         return jnp.logical_and(diff > tol, iters < max_iters)
 
     init_val = (vk, 1, 1)
-    vk, _, end_iters = while_loop(cond_fun, body_fun, init_val)
+    vk, _, _end_iters = while_loop(cond_fun, body_fun, init_val)
 
     # vk is normalized to 1, so no need to divide by (vk.T @ vk)
     eigenvalue = vk.conj() @ A @ vk
@@ -199,7 +199,7 @@ def inverse_iteration(
         return jnp.logical_and(diff > tol, iters < max_iters)
 
     init_val = (vk, 1.0, 1)
-    vk_sol, _, end_iters = while_loop(cond_fun, body_fun, init_val)
+    vk_sol, _, _end_iters = while_loop(cond_fun, body_fun, init_val)
 
     eigenvalue = vk_sol.conj() @ A @ vk_sol
     return eigenvalue, vk_sol
