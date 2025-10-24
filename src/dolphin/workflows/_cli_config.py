@@ -36,8 +36,7 @@ class ConfigCli(DisplacementWorkflow):
         return data
 
     @model_validator(mode="after")
-    @classmethod
-    def save_config(cls, data: Any) -> Any:
-        print(f"Saving configuration to {data.outfile!s}", file=sys.stderr)
-        data.to_yaml(data.outfile)
-        return data
+    def save_config(self) -> Any:
+        print(f"Saving configuration to {self.outfile!s}", file=sys.stderr)
+        self.to_yaml(self.outfile)
+        return self
