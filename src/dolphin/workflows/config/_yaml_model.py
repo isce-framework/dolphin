@@ -150,7 +150,7 @@ def _add_comments(
                 val = defs[ref_key]  # type: ignore[index] # noqa: PLW2901
             else:
                 # The reference is a sub schema, so we need to recurse
-                sub_schema = defs[ref_key]  # type:ignore[index]
+                sub_schema = defs[ref_key]  # type: ignore[index]
                 # Get the sub-model
                 sub_loaded_yaml = loaded_yaml[key]
                 # recurse on the sub-model
