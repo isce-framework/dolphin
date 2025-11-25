@@ -457,24 +457,58 @@ class MiniStackPlanner(BaseStack):
 
         for full_stack_idx in ministack_starts:
             cur_slice = slice(full_stack_idx, full_stack_idx + ministack_size)
-            cur_files = list(self.file_list[cur_slice]).copy()
-            cur_dates = list(self.dates[cur_slice]).copy()
 
-            # Read compressed*.tif files and if they do not exist use the compressed*.h5
-            comp_slc_files = [c.path for c in compressed_slc_infos]
-            # Add the existing compressed SLC files to the start, but
-            # limit the num comp slcs `max_num_compressed`
-            cur_comp_slc_files = comp_slc_files[-self.max_num_compressed :]
-            combined_files = cur_comp_slc_files + cur_files
+            # Extract only real SLCs from current slice to avoid duplicating
+            # compressed SLCs that will be added from compressed_slc_infos
+            cur_files = [
+                f
+                for f, is_comp in zip(
+                    self.file_list[cur_slice],
+                    self.is_compressed[cur_slice],
+                    strict=False,
+                )
+                if not is_comp
+            ]
+            cur_dates = [
+                d
+                for d, is_comp in zip(
+                    self.dates[cur_slice], self.is_compressed[cur_slice], strict=False
+                )
+                if not is_comp
+            ]
 
-            combined_dates = [
-                c.dates for c in compressed_slc_infos[-self.max_num_compressed :]
-            ] + cur_dates
+            # Get compressed SLC info for deduplication and dates
+            # Limit to the last `max_num_compressed` compressed SLCs
+            cur_comp_slc_infos = compressed_slc_infos[-self.max_num_compressed :]
 
-            num_ccslc = len(cur_comp_slc_files)
-            combined_is_compressed = num_ccslc * [True] + list(
-                self.is_compressed[cur_slice]
-            )
+            # Create list of tuples (file, dates, is_compressed) for deduplication
+            # Use file path as unique identifier for compressed SLCs
+            seen_comp_files = set()
+            comp_entries = []
+            for c_info in cur_comp_slc_infos:
+                file_path = str(c_info.path)
+                if file_path not in seen_comp_files:
+                    seen_comp_files.add(file_path)
+                    comp_entries.append((c_info.path, c_info.dates, True))
+
+            # Add real SLCs (no deduplication needed as they were already filtered)
+            real_entries = [
+                (f, d, False) for f, d in zip(cur_files, cur_dates, strict=False)
+            ]
+
+            # Combine and sort by first date in the date tuple
+            all_entries = comp_entries + real_entries
+            all_entries.sort(key=lambda x: x[1][0])
+
+            # Unpack sorted entries
+            combined_files = [entry[0] for entry in all_entries]
+            combined_dates = [entry[1] for entry in all_entries]
+            combined_is_compressed = [entry[2] for entry in all_entries]
+
+            # Find indices of compressed SLCs in the sorted list
+            compressed_indices = [
+                i for i, is_comp in enumerate(combined_is_compressed) if is_comp
+            ]
 
             # Make the current ministack output folder using the start/end dates
             new_date_str = format_dates(
@@ -486,7 +520,10 @@ class MiniStackPlanner(BaseStack):
                 compressed_reference_idx = compressed_idx
             elif self.compressed_slc_plan == CompressedSlcPlan.ALWAYS_FIRST:
                 # Here, CompSLCs have same base phase, but different "residual" added on
-                compressed_reference_idx = max(0, num_ccslc - 1)
+                # Use the latest (last) compressed SLC in the sorted list
+                compressed_reference_idx = (
+                    compressed_indices[-1] if compressed_indices else 0
+                )
             elif self.compressed_slc_plan == CompressedSlcPlan.LAST_PER_MINISTACK:
                 # Here, CompSLCs have same base phase, but different "residual" added on
                 compressed_reference_idx = -1
@@ -496,12 +533,14 @@ class MiniStackPlanner(BaseStack):
                 # may be passed in if we are manually specifying an output:
                 output_reference_idx = self.output_reference_idx
             else:
-                # Otherwise, this will be the *latest* compressed SLC
+                # Otherwise, this will be the *latest* compressed SLC in the sorted list
                 # For the `ALWAYS_FIRST` plan, this leads to all interferograms
                 # looking like single-reference, relative to day 1
                 # For `LAST_PER_MINISTACK`, the interferograms are formed
                 # which are the shortest possible temporal baseline for the given inputs
-                output_reference_idx = max(0, num_ccslc - 1)
+                output_reference_idx = (
+                    compressed_indices[-1] if compressed_indices else 0
+                )
 
             cur_ministack = MiniStackInfo(
                 file_list=combined_files,
