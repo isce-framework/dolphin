@@ -100,6 +100,16 @@ class BaseStack(BaseModel):
             raise ValueError(msg) from e
 
     @property
+    def real_slc_indices(self) -> np.ndarray:
+        """Array of indices of all real SLCs in the ministack."""
+        return np.where(~np.array(self.is_compressed))[0]
+
+    @property
+    def compressed_slc_indices(self) -> np.ndarray:
+        """Array of indices of all compressed SLCs in the ministack."""
+        return np.where(np.array(self.is_compressed))[0]
+
+    @property
     def real_slc_date_range(self) -> tuple[DateOrDatetime, DateOrDatetime]:
         """Date range of the real SLCs in the ministack."""
         return (self.dates[self.first_real_slc_idx][0], self.dates[-1][-1])
@@ -505,10 +515,29 @@ class MiniStackPlanner(BaseStack):
             combined_dates = [entry[1] for entry in all_entries]
             combined_is_compressed = [entry[2] for entry in all_entries]
 
-            # Find indices of compressed SLCs in the sorted list
-            compressed_indices = [
-                i for i, is_comp in enumerate(combined_is_compressed) if is_comp
-            ]
+            # Remove any compressed SLCs from the last 5 dates
+            # Check the last 5 entries (or fewer if list is shorter)
+            # this is because in the interferogram network, we will loose
+            # redundancy if we keep compressed SLCs at the end. we will have
+            # multiple similar interferograms plus a zero baseline interferogram
+            n_total = len(combined_files)
+            n_check = min(5, n_total)
+            if n_check > 0:
+                # Find indices of compressed SLCs in the last n_check entries
+                last_indices_to_remove = []
+                for i in range(n_total - n_check, n_total):
+                    if combined_is_compressed[i]:
+                        last_indices_to_remove.append(i)
+
+                # Only remove if we'll still have at least 2 SLCs remaining
+                if len(last_indices_to_remove) > 0:
+                    n_remaining = n_total - len(last_indices_to_remove)
+                    if n_remaining >= 2:
+                        # Remove in reverse order to maintain indices
+                        for idx in reversed(last_indices_to_remove):
+                            del combined_files[idx]
+                            del combined_dates[idx]
+                            del combined_is_compressed[idx]
 
             # Make the current ministack output folder using the start/end dates
             new_date_str = format_dates(
@@ -516,13 +545,26 @@ class MiniStackPlanner(BaseStack):
             )
             cur_output_folder = self.output_folder / new_date_str
 
+            # Create temporary ministack to access properties
+            cur_ministack = MiniStackInfo(
+                file_list=combined_files,
+                dates=combined_dates,
+                is_compressed=combined_is_compressed,
+                output_reference_idx=0,  # Will be updated below
+                compressed_reference_idx=0,  # Will be updated below
+                output_folder=cur_output_folder,
+            )
+
+            # Get indices using the ministack properties
+            compressed_indices = cur_ministack.compressed_slc_indices
+
             if compressed_idx is not None:
                 compressed_reference_idx = compressed_idx
             elif self.compressed_slc_plan == CompressedSlcPlan.ALWAYS_FIRST:
                 # Here, CompSLCs have same base phase, but different "residual" added on
                 # Use the latest (last) compressed SLC in the sorted list
                 compressed_reference_idx = (
-                    compressed_indices[-1] if compressed_indices else 0
+                    int(compressed_indices[-1]) if len(compressed_indices) > 0 else 0
                 )
             elif self.compressed_slc_plan == CompressedSlcPlan.LAST_PER_MINISTACK:
                 # Here, CompSLCs have same base phase, but different "residual" added on
@@ -539,17 +581,12 @@ class MiniStackPlanner(BaseStack):
                 # For `LAST_PER_MINISTACK`, the interferograms are formed
                 # which are the shortest possible temporal baseline for the given inputs
                 output_reference_idx = (
-                    compressed_indices[-1] if compressed_indices else 0
+                    int(compressed_indices[-1]) if len(compressed_indices) > 0 else 0
                 )
 
-            cur_ministack = MiniStackInfo(
-                file_list=combined_files,
-                dates=combined_dates,
-                is_compressed=combined_is_compressed,
-                output_reference_idx=output_reference_idx,
-                compressed_reference_idx=compressed_reference_idx,
-                output_folder=cur_output_folder,
-            )
+            # Update the reference indices
+            cur_ministack.output_reference_idx = output_reference_idx
+            cur_ministack.compressed_reference_idx = compressed_reference_idx
 
             output_ministacks.append(cur_ministack)
             cur_comp_slc = cur_ministack.get_compressed_slc_info()
