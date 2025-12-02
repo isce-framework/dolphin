@@ -26,9 +26,9 @@ from ._paths import S3Path
 
 gdal.UseExceptions()
 # For reducing page faults:
-# 1. Set GDAL cache to 2GB 
-gdal.SetCacheMax(2 * 1024 * 1024 * 1024) # 2GB in bytes
-# 2. Enable multi-threaded reads 
+# 1. Set GDAL cache to 2GB
+gdal.SetCacheMax(2 * 1024 * 1024 * 1024)  # 2GB in bytes
+# 2. Enable multi-threaded reads
 gdal.SetConfigOption("GDAL_NUM_THREADS", "4")
 logger = logging.getLogger("dolphin")
 
@@ -158,7 +158,7 @@ def load_gdal(
             bnd = ds = None
             return out
         logger.warning(f"Requested {overview = }, but none found for {filename}")
-    
+
     # # Measure cache use
     # cache_used = gdal.GetCacheUsed()
     # cache_max = gdal.GetCacheMax()
