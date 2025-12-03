@@ -282,28 +282,43 @@ def run_wrapped_phase_single(
         np.nan_to_num(pl_output.temp_coh, copy=False)
 
         # Compress the ministack using only the non-compressed SLCs
+        # First, handle re-referencing if needed (using full array indices)
+        pl_cpx_phase_full = pl_output.cpx_phase[:, out_trim_rows, out_trim_cols]
+        if ministack.compressed_reference_idx is not None:
+            ref_phase = pl_cpx_phase_full[ministack.compressed_reference_idx][
+                None, :, :
+            ]
+            pl_cpx_phase_referenced = pl_cpx_phase_full * ref_phase.conj()
+        else:
+            pl_cpx_phase_referenced = pl_cpx_phase_full
+
+        # Get only real SLC indices and filter the data
+        real_indices = ministack.real_slc_indices
+        cur_data_real = cur_data[real_indices, :, :][:, in_trim_rows, in_trim_cols]
+        pl_cpx_phase_real = pl_cpx_phase_referenced[real_indices, :, :]
+
         # Get the mean to set as pixel magnitudes
-        abs_stack = np.abs(cur_data[first_real_slc_idx:, in_trim_rows, in_trim_cols])
+        abs_stack = np.abs(cur_data_real)
         cur_data_mean, cur_amp_dispersion, _ = calc_ps_block(abs_stack)
+
         cur_comp_slc = compress(
-            # Get the inner portion of the full-res SLC data
-            cur_data[:, in_trim_rows, in_trim_cols],
-            pl_output.cpx_phase[:, out_trim_rows, out_trim_cols],
-            first_real_slc_idx=first_real_slc_idx,
+            # Pass only real SLC data (already filtered and trimmed)
+            cur_data_real,
+            pl_cpx_phase_real,
+            first_real_slc_idx=0,  # First index is now the first real SLC
             slc_mean=cur_data_mean,
-            reference_idx=ministack.compressed_reference_idx,
+            reference_idx=None,  # Already re-referenced above
         )
 
-        # Save each of the MLE estimates (ignoring those corresponding to
-        # compressed SLCs indexes)
-        assert len(pl_output.cpx_phase[first_real_slc_idx:]) == len(
-            phase_linked_slc_files
-        )
+        # Save each of the MLE estimates (only for real SLCs, not compressed ones)
+        assert len(real_indices) == len(phase_linked_slc_files)
         # ### Save results ###
         with write_lock:
             # ### Save results ###
             for img, f in zip(
-                pl_output.cpx_phase[first_real_slc_idx:, out_trim_rows, out_trim_cols],
+                pl_output.cpx_phase[real_indices, :, :][
+                    :, out_trim_rows, out_trim_cols
+                ],
                 phase_linked_slc_files,
                 strict=True,
             ):
@@ -311,8 +326,8 @@ def run_wrapped_phase_single(
 
             if write_crlb:
                 for img, f in zip(
-                    pl_output.crlb_std_dev[
-                        first_real_slc_idx:, out_trim_rows, out_trim_cols
+                    pl_output.crlb_std_dev[real_indices, :, :][
+                        :, out_trim_rows, out_trim_cols
                     ],
                     phase_linked_crlb_files,
                     strict=True,
@@ -446,16 +461,18 @@ def _get_amp_mean_variance(
 
 
 def _name_slcs(ministack: MiniStackInfo) -> list[str]:
-    """Generate SLC filenames for the ministack."""
-    start_idx = ministack.first_real_slc_idx
-    date_strs = ministack.get_date_str_list()[start_idx:]
+    """Generate SLC filenames for the ministack (only for real SLCs)."""
+    real_indices = ministack.real_slc_indices
+    all_date_strs = ministack.get_date_str_list()
+    date_strs = [all_date_strs[i] for i in real_indices]
     return [f"{Path(d).stem}.slc.tif" for d in date_strs]
 
 
 def _name_crlbs(ministack: MiniStackInfo) -> list[str]:
-    """Generate CRLB filenames for the ministack."""
-    start_idx = ministack.first_real_slc_idx
-    date_strs = ministack.get_date_str_list()[start_idx:]
+    """Generate CRLB filenames for the ministack (only for real SLCs)."""
+    real_indices = ministack.real_slc_indices
+    all_date_strs = ministack.get_date_str_list()
+    date_strs = [all_date_strs[i] for i in real_indices]
     return [f"crlb_{Path(d).stem}.tif" for d in date_strs]
 
 
