@@ -25,11 +25,6 @@ from dolphin.utils import compute_out_shape, gdal_to_numpy_type, numpy_to_gdal_t
 from ._paths import S3Path
 
 gdal.UseExceptions()
-# For reducing page faults:
-# 1. Set GDAL cache to 2GB
-gdal.SetCacheMax(2 * 1024 * 1024 * 1024)  # 2GB in bytes
-# 2. Enable multi-threaded reads
-gdal.SetConfigOption("GDAL_NUM_THREADS", "4")
 logger = logging.getLogger("dolphin")
 
 __all__ = [
@@ -159,11 +154,6 @@ def load_gdal(
             return out
         logger.warning(f"Requested {overview = }, but none found for {filename}")
 
-    # # Measure cache use
-    # cache_used = gdal.GetCacheUsed()
-    # cache_max = gdal.GetCacheMax()
-    # logger.info(f"GDAL cache: {cache_used}/{cache_max} bytes ({100*cache_used/cache_max:.1f}%)")
-
     # if rows or cols are not specified, load all rows/cols
     rows = slice(0, nrows) if rows in (None, slice(None)) else rows
     cols = slice(0, ncols) if cols in (None, slice(None)) else cols
@@ -203,11 +193,6 @@ def load_gdal(
         out = np.empty((nrows_out, ncols_out), dtype=dt)
         bnd = ds.GetRasterBand(band)
         bnd.ReadAsArray(xoff, yoff, xsize, ysize, buf_obj=out, resample_alg=resamp)
-
-    #  # Measure cache use
-    # cache_used = gdal.GetCacheUsed()
-    # cache_max = gdal.GetCacheMax()
-    # logger.info(f"GDAL cache: {cache_used}/{cache_max} bytes ({100*cache_used/cache_max:.1f}%)")
 
     if not masked:
         return out
