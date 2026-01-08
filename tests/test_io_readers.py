@@ -175,6 +175,24 @@ def raster_reader(slc_file_list, slc_stack):
     return r
 
 
+@pytest.fixture()
+def cint16_raster(tmp_path):
+    path = tmp_path / "cint16.tif"
+    data = (
+        np.arange(16, dtype=np.int16).reshape(4, 4)
+        + 1j * np.arange(16, dtype=np.int16).reshape(4, 4)
+    ).astype(np.complex64)
+
+    ds = gdal.GetDriverByName("GTiff").Create(str(path), 4, 4, 1, gdal.GDT_CInt16)
+    band = ds.GetRasterBand(1)
+    band.WriteArray(data)
+    band.SetNoDataValue(0)
+    ds.FlushCache()
+    ds = None
+
+    return path, data
+
+
 @pytest.fixture(scope="module")
 def image_513(tmp_path_factory):
     from dolphin import io
@@ -206,6 +224,14 @@ def test_single_pixel_leftover_squeeze(image_513):
     assert d.ndim == 1
     assert d.shape == (25,)
     assert r2[slice(64, 65), slice(64, 65)].ndim == 0
+
+
+def test_raster_reader_cint16(cint16_raster):
+    path, data = cint16_raster
+    with pytest.warns(NotGeoreferencedWarning):
+        reader = RasterReader.from_file(path)
+    assert reader.dtype == np.dtype("complex64")
+    npt.assert_array_equal(reader[:, :], data)
 
 
 class TestRasterStack:
