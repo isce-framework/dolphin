@@ -149,6 +149,13 @@ def run(
     output_path.mkdir(exist_ok=True, parents=True)
     cols, rows = io.get_raster_xysize(unwrapped_paths[0])
 
+    # Get matching mask path before reference point selection
+    matching_mask_path = None
+    if mask_path is not None:
+        matching_mask_path = _get_matching_raster(
+            mask_path, output_path, unwrapped_paths[0]
+        )
+
     if reference_point is None:
         logger.info("Selecting a reference point for unwrapped interferograms")
         if quality_file is None:
@@ -158,6 +165,7 @@ def run(
             output_dir=output_path,
             candidate_threshold=reference_candidate_threshold,
             ccl_file_list=conncomp_paths,
+            mask_file=matching_mask_path,
         )
     else:
         ref_point = ReferencePoint(row=reference_point[0], col=reference_point[1])
@@ -166,10 +174,7 @@ def run(
     sar_dates = sorted(set(flatten(ifg_date_pairs)))
 
     # Read in the binary mask
-    if mask_path is not None:
-        matching_mask_path = _get_matching_raster(
-            mask_path, output_path, unwrapped_paths[0]
-        )
+    if matching_mask_path is not None:
         mask = io.load_gdal(matching_mask_path, masked=True).filled(0)
         bad_pixel_mask = mask == 0
     else:
@@ -1258,6 +1263,7 @@ def select_reference_point(
     ccl_file_list: Sequence[Path | str] | None = None,
     block_shape: tuple[int, int] = (256, 256),
     num_threads: int = 4,
+    mask_file: Path | str | None = None,
 ) -> ReferencePoint:
     """Automatically select a reference point for a stack of unwrapped interferograms.
 
@@ -1266,6 +1272,7 @@ def select_reference_point(
 
     1. (optionally) is within intersection of all nonzero connected component labels
     2. Has value in `quality_file` above the threshold `candidate_threshold`
+    3. (optionally) is not in a masked (invalid) area
 
     Among all points which meet this, the centroid selected using the function
     `scipy.ndimage.center_of_mass`.
@@ -1291,6 +1298,10 @@ def select_reference_point(
     num_threads: int
         Number of parallel blocks to process.
         Default = 5
+    mask_file : Path | str | None
+        Optional binary mask file where 0 indicates invalid pixels.
+        If provided, masked pixels will be excluded from reference point selection.
+        Default = None
 
     Returns
     -------
@@ -1328,11 +1339,20 @@ def select_reference_point(
             msg += f"Proceeding using only {quality_file = }"
             logger.warning(msg, exc_info=True)
 
+    # Load mask if provided to exclude invalid pixels
+    is_valid_pixel = np.ones(quality_file_values.shape, dtype=bool)
+    if mask_file is not None:
+        mask = io.load_gdal(mask_file, masked=True).filled(0)
+        is_valid_pixel = mask != 0
+
     # Find pixels meeting the threshold criteria
     is_candidate = quality_file_values > candidate_threshold
 
     # Restrict candidates to the largest connected component region
     is_candidate &= isin_largest_conncomp
+
+    # Exclude masked pixels
+    is_candidate &= is_valid_pixel
 
     # Find connected regions within candidate pixels
     labeled, n_objects = ndimage.label(is_candidate, structure=np.ones((3, 3)))

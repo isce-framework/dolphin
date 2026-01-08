@@ -347,6 +347,84 @@ class TestReferencePoint:
         # Bottom half => rows [16..30], right half => cols [16..30].
         npt.assert_equal((ref_point.row, ref_point.col), (23, 23))
 
+    def test_with_mask(self, tmp_path):
+        """Test that masked pixels are excluded from reference point selection.
+
+        Create a quality file with high values on the left, and lower on the right.
+        Then mask the left side (water). The reference point should be on the right
+        (unmasked) side, even though it has lower quality values.
+        """
+        shape = (31, 31)
+
+        # Quality array: left half=1.0, right half=0.97
+        quality = np.full(shape, 0.97, dtype="float32")
+        quality[:, :16] = 1.0  # Left side has better quality
+
+        quality_file = tmp_path / "quality.tif"
+        io.write_arr(arr=quality, output_name=quality_file)
+
+        # Mask: left half=0 (masked/water), right half=1 (valid)
+        mask = np.ones(shape, dtype="uint8")
+        mask[:, :16] = 0  # Left side is masked (water)
+
+        mask_file = tmp_path / "mask.tif"
+        io.write_arr(arr=mask, output_name=mask_file)
+
+        # Select reference point with mask
+        ref_point = timeseries.select_reference_point(
+            quality_file=quality_file,
+            output_dir=tmp_path,
+            candidate_threshold=0.95,
+            ccl_file_list=None,
+            mask_file=mask_file,
+        )
+
+        # Reference point should be in the right half (cols >= 16)
+        # even though left half has better quality, because left is masked
+        assert ref_point.col >= 16, (
+            f"Reference point at col={ref_point.col} should be in unmasked region"
+            " (col >= 16)"
+        )
+        # Should be near center of right half
+        npt.assert_equal((ref_point.row, ref_point.col), (15, 23))
+
+    def test_mask_excludes_best_quality_pixel(self, tmp_path):
+        """Test that reference point avoids masked region even if it has best quality.
+
+        Create a single high-quality pixel in the center, but mask it.
+        The reference point should be elsewhere.
+        """
+        shape = (31, 31)
+
+        # Quality: all 0.96 except center pixel at 1.0
+        quality = np.full(shape, 0.96, dtype="float32")
+        quality[15, 15] = 1.0  # Center has best quality
+
+        quality_file = tmp_path / "quality.tif"
+        io.write_arr(arr=quality, output_name=quality_file)
+
+        # Mask: all valid except center
+        mask = np.ones(shape, dtype="uint8")
+        mask[15, 15] = 0  # Center is masked
+
+        mask_file = tmp_path / "mask.tif"
+        io.write_arr(arr=mask, output_name=mask_file)
+
+        # Select reference point with mask
+        ref_point = timeseries.select_reference_point(
+            quality_file=quality_file,
+            output_dir=tmp_path,
+            candidate_threshold=0.95,
+            ccl_file_list=None,
+            mask_file=mask_file,
+        )
+
+        # Reference point should NOT be at the masked center pixel
+        assert (ref_point.row, ref_point.col) != (
+            15,
+            15,
+        ), "Reference point should not be at masked center pixel"
+
 
 if __name__ == "__main__":
     sar_dates = make_sar_dates()
