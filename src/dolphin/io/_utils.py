@@ -279,3 +279,14 @@ def round_mantissa(z: np.ndarray, keep_bits: int = 10) -> None:
     half_quantum1 = (1 << (maskbits - 1)) - 1
     b += ((b >> maskbits) & 1) + half_quantum1
     b &= mask
+
+
+def _rasterio_to_numpy_dtype(dtypes: tuple[str, ...]) -> np.dtype:
+    """Numpy dtype from first entry of rasterio dataset.dtypes."""
+    # rasterio has some special dtype names (complex_int16 -> numpy.complex64)
+    if dtypes[0] == "complex_int16":
+        dtype = np.dtype("complex64")
+    else:
+        dtype = np.dtype(dtypes[0])
+
+    return dtype

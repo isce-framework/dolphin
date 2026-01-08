@@ -31,7 +31,7 @@ from dolphin.io._blocks import iter_blocks
 
 from ._background import _DEFAULT_TIMEOUT, BackgroundReader
 from ._paths import S3Path
-from ._utils import _ensure_slices, _unpack_3d_slices
+from ._utils import _ensure_slices, _rasterio_to_numpy_dtype, _unpack_3d_slices
 
 logger = logging.getLogger("dolphin")
 
@@ -189,12 +189,12 @@ class BinaryReader(DatasetReader):
         with rio.open(filename) as src:
             dtype = src.dtypes[band - 1]
             shape = src.shape
-            nodata = src.nodatavals[band - 1]
+            file_nodata = src.nodatavals[band - 1]
         return cls(
             Path(filename),
             shape=shape,
             dtype=dtype,
-            nodata=nodata or nodata,
+            nodata=nodata if nodata is not None else file_nodata,
         )
 
 
@@ -350,10 +350,10 @@ class RasterReader(DatasetReader):
     ) -> RasterReader:
         with rio.open(filename, "r", **options) as src:
             shape = (src.height, src.width)
-            dtype = np.dtype(src.dtypes[band - 1])
+            dtype = _rasterio_to_numpy_dtype(src.dtypes)
             driver = src.driver
             crs = src.crs
-            nodata = nodata or src.nodatavals[band - 1]
+            file_nodata = src.nodatavals[band - 1]
             transform = src.transform
             chunks = src.block_shapes[band - 1]
 
@@ -365,7 +365,7 @@ class RasterReader(DatasetReader):
                 transform=transform,
                 shape=shape,
                 dtype=dtype,
-                nodata=nodata,
+                nodata=nodata if nodata is not None else file_nodata,
                 keepdims=keepdims,
                 keep_open=keep_open,
                 chunks=chunks,
