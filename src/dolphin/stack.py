@@ -88,7 +88,42 @@ class BaseStack(BaseModel):
             lengths = f"{len(self.dates)} and {len(self.file_list)}"
             msg = f"dates and file_list must be the same length. Got {lengths}"
             raise ValueError(msg)
+        self._check_no_date_overlap()
         return self
+
+    def _check_no_date_overlap(self):
+        """Check that no real SLC dates overlap with the last compressed SLC date range.
+
+        The "last" compressed SLC is the one with the most recent end date.
+        """
+        # Extract (start_date, end_date) for compressed SLCs with 3+ dates
+        compressed_ranges = [
+            (dates[1], dates[2])
+            for dates, is_comp in zip(self.dates, self.is_compressed, strict=False)
+            if is_comp and len(dates) >= 3
+        ]
+        if not compressed_ranges:
+            return
+
+        # Get the range with the most recent end date
+        start_date, end_date = max(compressed_ranges, key=lambda x: x[1])
+
+        # Get all real SLC dates
+        real_slc_dates = [
+            dates[0]
+            for dates, is_comp in zip(self.dates, self.is_compressed, strict=False)
+            if not is_comp
+        ]
+
+        # Check for overlaps
+        overlapping = [d for d in real_slc_dates if start_date <= d <= end_date]
+        if overlapping:
+            msg = (
+                f"SLC date {overlapping[0]} overlaps with compressed SLC date range "
+                f"[{start_date}, {end_date}]. Real SLCs cannot have dates within "
+                "the date range of the most recent compressed SLC."
+            )
+            raise ValueError(msg)
 
     @property
     def first_real_slc_idx(self) -> int:
@@ -98,6 +133,16 @@ class BaseStack(BaseModel):
         except IndexError as e:
             msg = "No real SLCs in ministack"
             raise ValueError(msg) from e
+
+    @property
+    def real_slc_indices(self) -> np.ndarray:
+        """Array of indices of all real SLCs in the ministack."""
+        return np.where(~np.array(self.is_compressed))[0]
+
+    @property
+    def compressed_slc_indices(self) -> np.ndarray:
+        """Array of indices of all compressed SLCs in the ministack."""
+        return np.where(np.array(self.is_compressed))[0]
 
     @property
     def real_slc_date_range(self) -> tuple[DateOrDatetime, DateOrDatetime]:
@@ -457,24 +502,77 @@ class MiniStackPlanner(BaseStack):
 
         for full_stack_idx in ministack_starts:
             cur_slice = slice(full_stack_idx, full_stack_idx + ministack_size)
-            cur_files = list(self.file_list[cur_slice]).copy()
-            cur_dates = list(self.dates[cur_slice]).copy()
 
-            # Read compressed*.tif files and if they do not exist use the compressed*.h5
-            comp_slc_files = [c.path for c in compressed_slc_infos]
-            # Add the existing compressed SLC files to the start, but
-            # limit the num comp slcs `max_num_compressed`
-            cur_comp_slc_files = comp_slc_files[-self.max_num_compressed :]
-            combined_files = cur_comp_slc_files + cur_files
+            # Extract only real SLCs from current slice to avoid duplicating
+            # compressed SLCs that will be added from compressed_slc_infos
+            cur_files = [
+                f
+                for f, is_comp in zip(
+                    self.file_list[cur_slice],
+                    self.is_compressed[cur_slice],
+                    strict=False,
+                )
+                if not is_comp
+            ]
+            cur_dates = [
+                d
+                for d, is_comp in zip(
+                    self.dates[cur_slice], self.is_compressed[cur_slice], strict=False
+                )
+                if not is_comp
+            ]
 
-            combined_dates = [
-                c.dates for c in compressed_slc_infos[-self.max_num_compressed :]
-            ] + cur_dates
+            # Get compressed SLC info for deduplication and dates
+            # Limit to the last `max_num_compressed` compressed SLCs
+            cur_comp_slc_infos = compressed_slc_infos[-self.max_num_compressed :]
 
-            num_ccslc = len(cur_comp_slc_files)
-            combined_is_compressed = num_ccslc * [True] + list(
-                self.is_compressed[cur_slice]
-            )
+            # Create list of tuples (file, dates, is_compressed) for deduplication
+            # Use file path as unique identifier for compressed SLCs
+            seen_comp_files = set()
+            comp_entries = []
+            for c_info in cur_comp_slc_infos:
+                file_path = str(c_info.path)
+                if file_path not in seen_comp_files:
+                    seen_comp_files.add(file_path)
+                    comp_entries.append((c_info.path, c_info.dates, True))
+
+            # Add real SLCs (no deduplication needed as they were already filtered)
+            real_entries = [
+                (f, d, False) for f, d in zip(cur_files, cur_dates, strict=False)
+            ]
+
+            # Combine and sort by first date in the date tuple
+            all_entries = comp_entries + real_entries
+            all_entries.sort(key=lambda x: x[1][0])
+
+            # Unpack sorted entries
+            combined_files = [entry[0] for entry in all_entries]
+            combined_dates = [entry[1] for entry in all_entries]
+            combined_is_compressed = [entry[2] for entry in all_entries]
+
+            # Remove any compressed SLCs from the last 5 dates
+            # Check the last 5 entries (or fewer if list is shorter)
+            # this is because in the interferogram network, we will loose
+            # redundancy if we keep compressed SLCs at the end. we will have
+            # multiple similar interferograms plus a zero baseline interferogram
+            n_total = len(combined_files)
+            n_check = min(5, n_total)
+            if n_check > 0:
+                # Find indices of compressed SLCs in the last n_check entries
+                last_indices_to_remove = []
+                for i in range(n_total - n_check, n_total):
+                    if combined_is_compressed[i]:
+                        last_indices_to_remove.append(i)
+
+                # Only remove if we'll still have at least 2 SLCs remaining
+                if len(last_indices_to_remove) > 0:
+                    n_remaining = n_total - len(last_indices_to_remove)
+                    if n_remaining >= 2:
+                        # Remove in reverse order to maintain indices
+                        for idx in reversed(last_indices_to_remove):
+                            del combined_files[idx]
+                            del combined_dates[idx]
+                            del combined_is_compressed[idx]
 
             # Make the current ministack output folder using the start/end dates
             new_date_str = format_dates(
@@ -482,11 +580,27 @@ class MiniStackPlanner(BaseStack):
             )
             cur_output_folder = self.output_folder / new_date_str
 
+            # Create temporary ministack to access properties
+            cur_ministack = MiniStackInfo(
+                file_list=combined_files,
+                dates=combined_dates,
+                is_compressed=combined_is_compressed,
+                output_reference_idx=0,  # Will be updated below
+                compressed_reference_idx=0,  # Will be updated below
+                output_folder=cur_output_folder,
+            )
+
+            # Get indices using the ministack properties
+            compressed_indices = cur_ministack.compressed_slc_indices
+
             if compressed_idx is not None:
                 compressed_reference_idx = compressed_idx
             elif self.compressed_slc_plan == CompressedSlcPlan.ALWAYS_FIRST:
                 # Here, CompSLCs have same base phase, but different "residual" added on
-                compressed_reference_idx = max(0, num_ccslc - 1)
+                # Use the latest (last) compressed SLC in the sorted list
+                compressed_reference_idx = (
+                    int(compressed_indices[-1]) if len(compressed_indices) > 0 else 0
+                )
             elif self.compressed_slc_plan == CompressedSlcPlan.LAST_PER_MINISTACK:
                 # Here, CompSLCs have same base phase, but different "residual" added on
                 compressed_reference_idx = -1
@@ -496,21 +610,18 @@ class MiniStackPlanner(BaseStack):
                 # may be passed in if we are manually specifying an output:
                 output_reference_idx = self.output_reference_idx
             else:
-                # Otherwise, this will be the *latest* compressed SLC
+                # Otherwise, this will be the *latest* compressed SLC in the sorted list
                 # For the `ALWAYS_FIRST` plan, this leads to all interferograms
                 # looking like single-reference, relative to day 1
                 # For `LAST_PER_MINISTACK`, the interferograms are formed
                 # which are the shortest possible temporal baseline for the given inputs
-                output_reference_idx = max(0, num_ccslc - 1)
+                output_reference_idx = (
+                    int(compressed_indices[-1]) if len(compressed_indices) > 0 else 0
+                )
 
-            cur_ministack = MiniStackInfo(
-                file_list=combined_files,
-                dates=combined_dates,
-                is_compressed=combined_is_compressed,
-                output_reference_idx=output_reference_idx,
-                compressed_reference_idx=compressed_reference_idx,
-                output_folder=cur_output_folder,
-            )
+            # Update the reference indices
+            cur_ministack.output_reference_idx = output_reference_idx
+            cur_ministack.compressed_reference_idx = compressed_reference_idx
 
             output_ministacks.append(cur_ministack)
             cur_comp_slc = cur_ministack.get_compressed_slc_info()
