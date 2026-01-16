@@ -110,7 +110,6 @@ def filter_long_wavelength(
             dst_filename=str(temp_dst),
             max_distance=max_distance_pixels,
             smoothing_iterations=0,
-            interpolation="nearest",
             quiet=True,
         )
 
