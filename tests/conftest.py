@@ -314,7 +314,8 @@ def opera_slc_files(tmp_path) -> list[Path]:
         for i in range(len(slc_stack)):
             fname = d / f"{burst_id}_{start_date + i}_20231201.h5"
             if i == 0:
-                datestr = f"{start_date}_{start_date + i}_{start_date + len(slc_stack)}"
+                # Compressed SLC dates before real SLCs (Dec 2021)
+                datestr = f"{start_date}_20211226_20211231"
                 fname = d / f"COMPRESSED_{burst_id}_{datestr}.h5"
             yoff = Y0 + i * shape[0] / 2
             create_test_nc(
