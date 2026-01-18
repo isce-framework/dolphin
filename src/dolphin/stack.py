@@ -88,7 +88,42 @@ class BaseStack(BaseModel):
             lengths = f"{len(self.dates)} and {len(self.file_list)}"
             msg = f"dates and file_list must be the same length. Got {lengths}"
             raise ValueError(msg)
+        self._check_no_date_overlap()
         return self
+
+    def _check_no_date_overlap(self):
+        """Check that no real SLC dates overlap with the last compressed SLC date range.
+
+        The "last" compressed SLC is the one with the most recent end date.
+        """
+        # Extract (start_date, end_date) for compressed SLCs with 3+ dates
+        compressed_ranges = [
+            (dates[1], dates[2])
+            for dates, is_comp in zip(self.dates, self.is_compressed, strict=False)
+            if is_comp and len(dates) >= 3
+        ]
+        if not compressed_ranges:
+            return
+
+        # Get the range with the most recent end date
+        start_date, end_date = max(compressed_ranges, key=lambda x: x[1])
+
+        # Get all real SLC dates
+        real_slc_dates = [
+            dates[0]
+            for dates, is_comp in zip(self.dates, self.is_compressed, strict=False)
+            if not is_comp
+        ]
+
+        # Check for overlaps
+        overlapping = [d for d in real_slc_dates if start_date <= d <= end_date]
+        if overlapping:
+            msg = (
+                f"SLC date {overlapping[0]} overlaps with compressed SLC date range "
+                f"[{start_date}, {end_date}]. Real SLCs cannot have dates within "
+                "the date range of the most recent compressed SLC."
+            )
+            raise ValueError(msg)
 
     @property
     def first_real_slc_idx(self) -> int:
