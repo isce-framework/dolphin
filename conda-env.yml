@@ -2,21 +2,21 @@ name: dolphin-env
 channels:
   - conda-forge
 dependencies:
-  - python>=3.9
+  - python>=3.12
   - pip>=21.3  # https://pip.pypa.io/en/stable/reference/build-system/pyproject-toml/#editable-installation
   - git  # for pip install, due to setuptools_scm
-  - gdal>=3.3
+  - gdal>=3.9
   - libgdal-netcdf
   - libgdal-hdf5
   - h5py>=3.6
   - hdf5!=1.12.2 # https://github.com/SciTools/iris/issues/5187 and https://github.com/pydata/xarray/issues/7549
   - jax>=0.4.19
   - numba>=0.56
-  - numpy>=1.23
+  - numpy>=2.0
   - opera-utils>=0.4.1
   - pydantic>=2.1
   - pyproj>=3.3
-  - rasterio>=1.3
+  - rasterio>=1.5
   - ruamel.yaml>=0.15
   - scipy>=1.12 # "scipy 0.16+ is required for linear algebra", numba. 1.9 is the oldest version working with jax=0.4.19
   - threadpoolctl>=3.0
