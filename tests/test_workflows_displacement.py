@@ -243,7 +243,7 @@ def test_displacement_run_extra_reference_date(
         assert paths.unwrapped_paths is not None
         assert paths.timeseries_paths is not None
 
-        ts_names = [pp.name for pp in paths.timeseries_paths] 
+        ts_names = [pp.name for pp in paths.timeseries_paths]
         assert ts_names == [
             "20220101_20220102.tif",
             "20220101_20220103.tif",
