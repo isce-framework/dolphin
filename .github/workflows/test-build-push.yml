@@ -22,7 +22,7 @@ jobs:
             spec: >-
               isce3-cpu
               dask
-              
+
       fail-fast: true
     name: ${{ matrix.os }} • ${{ matrix.deps.label }}
     runs-on: ${{ matrix.os }}
