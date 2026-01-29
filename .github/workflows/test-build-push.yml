@@ -22,7 +22,6 @@ jobs:
             spec: >-
               isce3-cpu
               dask
-              numpy<2.3
 
       fail-fast: true
     name: ${{ matrix.os }} • ${{ matrix.deps.label }}
@@ -38,10 +37,11 @@ jobs:
         with:
           environment-file: conda-env.yml
           environment-name: dolphin-env
-          # persist on the same day.
-          cache-environment-key: environment-${{ steps.date.outputs.date }}
-          cache-downloads-key: downloads-${{ steps.date.outputs.date }}
+          # invalidate cache when env file or extra specs change
+          cache-environment-key: environment-${{ hashFiles('conda-env.yml') }}-${{ matrix.deps.label }}
+          cache-downloads-key: downloads-${{ hashFiles('conda-env.yml') }}
           generate-run-shell: false
+          post-cleanup: none
           create-args: ${{ matrix.deps.spec }}
           condarc: |
             channels:

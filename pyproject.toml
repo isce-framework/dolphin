@@ -133,4 +133,6 @@ filterwarnings = [
   "ignore:h5py is running against HDF5.*:UserWarning",
   # DeprecationWarning: ast.Str
   "ignore:ast.Str is deprecated.*:DeprecationWarning",
+  # ResourceWarning from unclosed temp files in third-party code (Python 3.13+)
+  "ignore::pytest.PytestUnraisableExceptionWarning",
 ]

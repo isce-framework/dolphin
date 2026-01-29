@@ -169,8 +169,9 @@ def run(
         out_bounds=out_bounds,
         out_bounds_epsg=output_options.bounds_epsg,
         dest_epsg=output_options.epsg,
+        resample_alg="nearest",
         num_workers=num_workers,
-        options=EXTRA_COMPRESSED_TIFF_OPTIONS,
+        # options=EXTRA_COMPRESSED_TIFF_OPTIONS,
     )
     stitched_similarity_files = list(date_to_similarity_path.values())
 
