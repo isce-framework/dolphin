@@ -147,6 +147,11 @@ def compute_baselines(
 
         pos_ref, velocity = orbit_ref.interpolate(az_time_ref)
         pos_sec, _ = orbit_sec.interpolate(az_time_sec)
+
+        # Accounting for along-track shift
+        rvelunit = velocity / np.linalg.norm(velocity)
+        pos_sec = pos_sec - np.dot(pos_sec - pos_ref, rvelunit) * rvelunit
+
         b = compute(
             llh_rad, pos_ref, pos_sec, range_ref, range_sec, velocity, ellipsoid
         )
