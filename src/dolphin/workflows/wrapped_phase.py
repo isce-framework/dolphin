@@ -246,6 +246,7 @@ def run(
             shp_nslc=shp_nslc,
             baseline_lag=cfg.phase_linking.baseline_lag,
             compressed_slc_plan=cfg.phase_linking.compressed_slc_plan,
+            max_num_compressed=cfg.phase_linking.max_num_compressed,
             similarity_nearest_n=similarity_nearest_n,
             cslc_date_fmt=cfg.input_options.cslc_date_fmt,
             write_crlb=cfg.phase_linking.write_crlb,
