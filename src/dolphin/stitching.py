@@ -270,7 +270,7 @@ def merge_images(
         out_bounds=out_bounds,
         out_bounds_epsg=out_bounds_epsg,
     )
-    (xmin, ymin, xmax, ymax) = bounds
+    xmin, ymin, xmax, ymax = bounds
     proj_win = (xmin, ymax, xmax, ymin)  # ul_lr = ulx, uly, lrx, lry
 
     # Write out the files for gdal_merge using the --optfile flag
