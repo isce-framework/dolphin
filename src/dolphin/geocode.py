@@ -1,4 +1,8 @@
-"""Geocode rasters from radar to geographic coordinates using geolocation arrays."""
+"""Geocode rasters from radar to geographic coordinates using geolocation arrays.
+
+Supports both ISCE3-style geometry (``y.tif``/``x.tif``) and ISCE2-style
+geometry (``lat.rdr``/``lon.rdr``) for per-pixel geolocation arrays.
+"""
 
 from __future__ import annotations
 
@@ -21,7 +25,7 @@ gdal.UseExceptions()
 
 logger = logging.getLogger("dolphin")
 
-__all__ = ["geocode_with_geolocation_arrays", "run"]
+__all__ = ["find_rasters_to_geocode", "geocode_with_geolocation_arrays", "run"]
 
 DEFAULT_TIFF_OPTIONS = (
     "COMPRESS=lzw",
@@ -323,6 +327,125 @@ def _create_alpha_from_mask(
     io.write_arr(arr=alpha, output_name=alpha_file, like_filename=mask_file)
 
 
+def find_rasters_to_geocode(
+    dolphin_work_dir: Path,
+    *,
+    include_interferograms: bool = False,
+    include_unwrapped: bool = True,
+    include_auxiliary: bool = False,
+) -> list[Path]:
+    """Find dolphin output rasters to geocode from the standard directory layout.
+
+    Parameters
+    ----------
+    dolphin_work_dir : Path
+        Path to dolphin work directory containing timeseries/, unwrapped/, etc.
+    include_interferograms : bool
+        Include wrapped interferograms, similarity, temporal coherence, and
+        multilooked coherence.
+    include_unwrapped : bool
+        Include unwrapped interferograms.
+    include_auxiliary : bool
+        Include auxiliary products (CRLB, amplitude dispersion).
+
+    Returns
+    -------
+    list[Path]
+        Sorted list of raster paths found.
+
+    """
+    rasters: list[Path] = []
+
+    # Time series outputs (displacement + velocity)
+    ts_dir = dolphin_work_dir / "timeseries"
+    if ts_dir.exists():
+        rasters.extend(sorted(ts_dir.glob("[0-9]*_[0-9]*.tif")))
+        velocity = ts_dir / "velocity.tif"
+        if velocity.exists():
+            rasters.append(velocity)
+
+    if include_unwrapped:
+        unw_dir = dolphin_work_dir / "unwrapped"
+        if unw_dir.exists():
+            rasters.extend(sorted(unw_dir.glob("*.unw.tif")))
+
+    if include_interferograms:
+        ifg_dir = dolphin_work_dir / "interferograms"
+        if ifg_dir.exists():
+            rasters.extend(sorted(ifg_dir.glob("*.int.tif")))
+            rasters.extend(sorted(ifg_dir.glob("*.int.cor.tif")))
+            rasters.extend(sorted(ifg_dir.glob("similarity_*.tif")))
+            rasters.extend(sorted(ifg_dir.glob("temporal_coherence*.tif")))
+            rasters.extend(sorted(ifg_dir.glob("multilooked_coherence*.tif")))
+
+    if include_auxiliary:
+        ifg_dir = dolphin_work_dir / "interferograms"
+        if ifg_dir.exists():
+            rasters.extend(sorted(ifg_dir.glob("crlb_*.tif")))
+            amp_disp = ifg_dir / "amp_dispersion_looked.tif"
+            if amp_disp.exists():
+                rasters.append(amp_disp)
+
+    return rasters
+
+
+def _to_geocoded_path(
+    in_file: Path,
+    *,
+    work_dir: Path,
+    geocoded_dir: Path,
+) -> Path:
+    """Map an input file path to its geocoded output, mirroring the directory tree."""
+    in_path = in_file.resolve()
+    wd = work_dir.resolve()
+    try:
+        rel = in_path.relative_to(wd)
+        return geocoded_dir / rel
+    except ValueError:
+        return geocoded_dir / in_path.name
+
+
+# (lat_name, lon_name) pairs in priority order
+_GEOLOCATION_PATTERNS: list[tuple[str, str]] = [
+    ("y.tif", "x.tif"),  # ISCE3 / dolphin
+    ("lat.rdr", "lon.rdr"),  # ISCE2 topsStack & stripmapStack
+    ("lat.rdr.full", "lon.rdr.full"),  # ISCE2 full-res variants
+]
+
+
+def _find_lat_lon_files(geometry_dir: Path) -> tuple[Path, Path]:
+    """Resolve latitude and longitude files from a geometry directory.
+
+    Searches for ISCE3-style (y.tif/x.tif) and ISCE2-style (lat.rdr/lon.rdr)
+    naming conventions.
+
+    Parameters
+    ----------
+    geometry_dir : Path
+        Directory containing geolocation rasters.
+
+    Returns
+    -------
+    tuple[Path, Path]
+        ``(lat_file, lon_file)`` paths.
+
+    Raises
+    ------
+    FileNotFoundError
+        If no recognized lat/lon pair is found.
+
+    """
+    for lat_name, lon_name in _GEOLOCATION_PATTERNS:
+        lat_candidate = geometry_dir / lat_name
+        lon_candidate = geometry_dir / lon_name
+        if lat_candidate.exists() and lon_candidate.exists():
+            return lat_candidate, lon_candidate
+
+    tried = ", ".join(f"{lat}/{lon}" for lat, lon in _GEOLOCATION_PATTERNS)
+    msg = f"No lat/lon files found in {geometry_dir}. Tried: {tried}"
+    raise FileNotFoundError(msg)
+
+
 def _geocode_one(
     in_out: tuple[Path, Path],
     *,
@@ -354,21 +477,31 @@ def _geocode_one(
 
 def run(
     input_files: Annotated[
-        list[Path],
+        list[Path] | None,
         tyro.conf.arg(
             aliases=["-i", "--input"],
             help="Input file(s) to geocode. Can be specified multiple times.",
         ),
-    ],
+    ] = None,
+    dolphin_dir: Annotated[
+        Path | None,
+        tyro.conf.arg(
+            aliases=["-d"],
+            help=(
+                "Dolphin work directory to bulk-geocode. Auto-discovers rasters"
+                " from timeseries/, unwrapped/, interferograms/ subdirectories."
+                " Output mirrors the directory structure under <dolphin-dir>/geocoded/."
+            ),
+        ),
+    ] = None,
     output: Annotated[
         Path | None,
         tyro.conf.arg(
             aliases=["-o"],
             help=(
                 "Output path. For single input, this is the output file path. "
-                "For multiple inputs, this should be a directory (files will be "
-                "named <input>.geo.tif). If not provided, outputs are written "
-                "alongside inputs."
+                "For multiple inputs or --dolphin-dir, this should be a directory."
+                " Default for --dolphin-dir: <dolphin-dir>/geocoded/."
             ),
         ),
     ] = None,
@@ -377,8 +510,8 @@ def run(
         tyro.conf.arg(
             aliases=["-g", "--geometry"],
             help=(
-                "Geometry directory containing y.tif (lat) and x.tif (lon). "
-                "Shorthand for --lat <dir>/y.tif --lon <dir>/x.tif."
+                "Geometry directory containing lat/lon files. "
+                "Auto-detects ISCE3 (y.tif/x.tif) and ISCE2 (lat.rdr/lon.rdr)."
             ),
         ),
     ] = None,
@@ -437,6 +570,9 @@ def run(
             ),
         ),
     ] = None,
+    include_interferograms: bool = False,
+    include_unwrapped: bool = True,
+    include_auxiliary: bool = False,
     resampling_method: str = "near",
     creation_options: Sequence[str] = DEFAULT_TIFF_OPTIONS,
     max_workers: Annotated[
@@ -452,8 +588,15 @@ def run(
     Transforms rasters from radar/swath geometry to geographic coordinates
     using per-pixel lat/lon arrays (e.g., from ISCE2/ISCE3 topo).
 
+    Provide either ``-i`` for specific files or ``-d`` to bulk-geocode
+    all outputs in a dolphin work directory.
+
     Examples
     --------
+    Bulk geocode a dolphin work directory:
+
+        dolphin geocode -d ./dolphin_output -g geometry/ -c dolphin_config.yaml
+
     Single file with geometry directory:
 
         dolphin geocode -i interferogram.tif -g geometry/
@@ -470,16 +613,20 @@ def run(
 
         dolphin geocode -i ifg.tif -g geometry/ --srs 32610 -s 30
 
-    Using explicit lat/lon files:
-
-        dolphin geocode -i ifg.tif --lat y.tif --lon x.tif
-
     """
+    from dolphin._log import setup_logging
+
+    setup_logging(logger_name="dolphin")
+
+    if not input_files and dolphin_dir is None:
+        msg = "Must provide either --input/-i files or --dolphin-dir/-d"
+        raise ValueError(msg)
+
     # Resolve lat/lon files
     if geometry_dir is not None:
         geometry_dir = Path(geometry_dir)
-        lat_file = geometry_dir / "y.tif"
-        lon_file = geometry_dir / "x.tif"
+        lat_file, lon_file = _find_lat_lon_files(geometry_dir)
+        logger.info("Using lat=%s, lon=%s", lat_file.name, lon_file.name)
 
     if lat_file is None or lon_file is None:
         msg = "Must provide either --geometry or both --lat and --lon"
@@ -507,31 +654,65 @@ def run(
     if spacing is not None:
         parsed_spacing = (spacing, spacing)
 
-    # Determine output paths
-    multiple_inputs = len(input_files) > 1
-    output_is_dir = output is not None and (output.is_dir() or multiple_inputs)
+    # Discover or use provided input files
+    if dolphin_dir is not None:
+        dolphin_dir = Path(dolphin_dir).resolve()
+        rasters = find_rasters_to_geocode(
+            dolphin_dir,
+            include_interferograms=include_interferograms,
+            include_unwrapped=include_unwrapped,
+            include_auxiliary=include_auxiliary,
+        )
+        if input_files:
+            rasters.extend(input_files)
+        logger.info("Found %d rasters to geocode", len(rasters))
 
-    if multiple_inputs and output is not None:
-        output.mkdir(parents=True, exist_ok=True)
-
-    # Build list of (input, output) pairs
-    io_pairs: list[tuple[Path, Path]] = []
-    skipped: list[Path] = []
-    for in_file in input_files:
-        in_path = Path(in_file)
+        # Default output is <dolphin_dir>/geocoded/
         if output is None:
-            out_path = in_path.with_suffix(f".geo{in_path.suffix}")
-        elif output_is_dir:
-            out_path = output / f"{in_path.stem}.geo{in_path.suffix}"
-        else:
-            out_path = output
+            output = dolphin_dir / "geocoded"
+        output_dir = Path(output).resolve()
+        output_dir.mkdir(parents=True, exist_ok=True)
 
-        # Skip if output exists and is newer than input
-        if out_path.exists() and out_path.stat().st_mtime >= in_path.stat().st_mtime:
-            logger.debug("Skipping %s (already exists)", out_path.name)
-            skipped.append(out_path)
-        else:
-            io_pairs.append((in_path, out_path))
+        # Build (input, output) pairs mirroring directory structure
+        io_pairs: list[tuple[Path, Path]] = []
+        skipped: list[Path] = []
+        for raster in rasters:
+            out_path = _to_geocoded_path(
+                raster, work_dir=dolphin_dir, geocoded_dir=output_dir
+            )
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            if out_path.exists() and out_path.stat().st_mtime >= raster.stat().st_mtime:
+                logger.debug("Skipping %s (already exists)", out_path.name)
+                skipped.append(out_path)
+            else:
+                io_pairs.append((raster, out_path))
+    else:
+        assert input_files is not None
+        multiple_inputs = len(input_files) > 1
+        output_is_dir = output is not None and (output.is_dir() or multiple_inputs)
+
+        if multiple_inputs and output is not None:
+            output.mkdir(parents=True, exist_ok=True)
+
+        io_pairs = []
+        skipped = []
+        for in_file in input_files:
+            in_path = Path(in_file)
+            if output is None:
+                out_path = in_path.with_suffix(f".geo{in_path.suffix}")
+            elif output_is_dir:
+                out_path = output / f"{in_path.stem}.geo{in_path.suffix}"
+            else:
+                out_path = output
+
+            if (
+                out_path.exists()
+                and out_path.stat().st_mtime >= in_path.stat().st_mtime
+            ):
+                logger.debug("Skipping %s (already exists)", out_path.name)
+                skipped.append(out_path)
+            else:
+                io_pairs.append((in_path, out_path))
 
     if not io_pairs:
         logger.info("All files already geocoded, skipping")
