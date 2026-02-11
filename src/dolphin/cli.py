@@ -17,6 +17,7 @@ def main() -> int:
     import tyro
 
     from dolphin.filtering import filter_rasters
+    from dolphin.geocode import run as run_geocode
     from dolphin.timeseries import run as run_timeseries
     from dolphin.unwrap import run as run_unwrap
     from dolphin.workflows._cli_config import ConfigCli
@@ -28,6 +29,7 @@ def main() -> int:
             "unwrap": run_unwrap,
             "timeseries": run_timeseries,
             "filter": filter_rasters,
+            "geocode": run_geocode,
         },
         prog=__package__,
     )
