@@ -61,9 +61,9 @@ nav:
 # - Tutorials:
 #   - Notebook page: notebooks/walkthrough-basic.ipynb
 #   # - Notebook page2: notebooks/walkthrough-basic.html
-# - how-to-guides.md
+- how-to-guides.md
+- faq.md
 # https://mkdocstrings.github.io/recipes/#generate-a-literate-navigation-file
 # trailing slash: that mkdocs-literate-nav knows a summary.md file is in that folder.
 - developer-setup.md
 - Code Reference: reference/
-# - background-theory.md
