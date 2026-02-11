@@ -126,7 +126,7 @@ def multiscale_unwrap(
     )
     # Used to track if we can redirect logs or not
 
-    (width, height) = io.get_raster_xysize(ifg_filename)
+    width, height = io.get_raster_xysize(ifg_filename)
     crs, transform = _get_rasterio_crs_transform(ifg_filename)
 
     unw_suffix = full_suffix(unw_filename)
