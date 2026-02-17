@@ -185,16 +185,22 @@ class VRTInterferogram(BaseModel, extra="allow"):
 
         ds1 = gdal.Open(fspath(self.ref_slc))
         ds2 = gdal.Open(fspath(self.sec_slc))
-        xsize, ysize = ds1.RasterXSize, ds1.RasterYSize
-        xsize2, ysize2 = ds2.RasterXSize, ds2.RasterYSize
-        if xsize != xsize2 or ysize != ysize2:
-            msg = f"Input files {self.ref_slc} and {self.sec_slc} are not the same size"
-            raise ValueError(msg)
-        gt1 = ds1.GetGeoTransform()
-        gt2 = ds2.GetGeoTransform()
-        if gt1 != gt2:
-            msg = f"{self.ref_slc} and {self.sec_slc} have different GeoTransforms"
-            raise ValueError(msg)
+        try:
+            xsize, ysize = ds1.RasterXSize, ds1.RasterYSize
+            xsize2, ysize2 = ds2.RasterXSize, ds2.RasterYSize
+            if xsize != xsize2 or ysize != ysize2:
+                msg = (
+                    f"Input files {self.ref_slc} and {self.sec_slc}"
+                    " are not the same size"
+                )
+                raise ValueError(msg)
+            gt1 = ds1.GetGeoTransform()
+            gt2 = ds2.GetGeoTransform()
+            if gt1 != gt2:
+                msg = f"{self.ref_slc} and {self.sec_slc} have different GeoTransforms"
+                raise ValueError(msg)
+        finally:
+            ds1 = ds2 = None
 
         return self
 
