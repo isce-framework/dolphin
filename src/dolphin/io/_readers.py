@@ -252,6 +252,7 @@ class HDF5Reader(DatasetReader):
         filename = Path(self.filename)
 
         hf = h5py.File(filename, "r")
+        close_on_exit = True
         try:
             dset = hf[self.dset_name]
             self.shape = dset.shape
@@ -261,14 +262,13 @@ class HDF5Reader(DatasetReader):
                 self.nodata = dset.attrs.get("_FillValue", None)
                 if self.nodata is None:
                     self.nodata = dset.attrs.get("missing_value", None)
-        except Exception:
-            hf.close()
-            raise
-        if self.keep_open:
-            self._hf = hf
-            self._dset = dset
-        else:
-            hf.close()
+            if self.keep_open:
+                self._hf = hf
+                self._dset = dset
+                close_on_exit = False
+        finally:
+            if close_on_exit:
+                hf.close()
 
     def close(self):
         """Close the underlying HDF5 file handle if it was kept open."""
@@ -276,6 +276,12 @@ class HDF5Reader(DatasetReader):
             self._hf.close()
 
     def __del__(self):
+        self.close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
         self.close()
 
     @property
@@ -393,6 +399,12 @@ class RasterReader(DatasetReader):
             self._src.close()
 
     def __del__(self):
+        self.close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
         self.close()
 
     @property
