@@ -252,19 +252,37 @@ class HDF5Reader(DatasetReader):
         filename = Path(self.filename)
 
         hf = h5py.File(filename, "r")
-        dset = hf[self.dset_name]
-        self.shape = dset.shape
-        self.dtype = dset.dtype
-        self.chunks = dset.chunks
-        if self.nodata is None:
-            self.nodata = dset.attrs.get("_FillValue", None)
+        close_on_exit = True
+        try:
+            dset = hf[self.dset_name]
+            self.shape = dset.shape
+            self.dtype = dset.dtype
+            self.chunks = dset.chunks
             if self.nodata is None:
-                self.nodata = dset.attrs.get("missing_value", None)
-        if self.keep_open:
-            self._hf = hf
-            self._dset = dset
-        else:
-            hf.close()
+                self.nodata = dset.attrs.get("_FillValue", None)
+                if self.nodata is None:
+                    self.nodata = dset.attrs.get("missing_value", None)
+            if self.keep_open:
+                self._hf = hf
+                self._dset = dset
+                close_on_exit = False
+        finally:
+            if close_on_exit:
+                hf.close()
+
+    def close(self):
+        """Close the underlying HDF5 file handle if it was kept open."""
+        if self.keep_open and hasattr(self, "_hf"):
+            self._hf.close()
+
+    def __del__(self):
+        self.close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        self.close()
 
     @property
     def ndim(self) -> int:  # type: ignore[override]
@@ -375,6 +393,20 @@ class RasterReader(DatasetReader):
         if self.keep_open:
             self._src = rio.open(self.filename, "r")
 
+    def close(self):
+        """Close the underlying rasterio dataset if it was kept open."""
+        if self.keep_open and hasattr(self, "_src"):
+            self._src.close()
+
+    def __del__(self):
+        self.close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        self.close()
+
     @property
     def ndim(self) -> int:  # type: ignore[override]
         """Int : Number of array dimensions."""
@@ -400,9 +432,9 @@ class RasterReader(DatasetReader):
         )
         if self.keep_open:
             out = self._src.read(self.band, window=window)
-
-        with rio.open(self.filename) as src:
-            out = src.read(self.band, window=window)
+        else:
+            with rio.open(self.filename) as src:
+                out = src.read(self.band, window=window)
         out_masked = _mask_array(out, self.nodata) if self.nodata is not None else out
         # Note that Rasterio doesn't use the `step` of a slice, so we need to
         # manually slice the output array.

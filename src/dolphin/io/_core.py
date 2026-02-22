@@ -520,12 +520,12 @@ def set_raster_units(filename: Filename, units: str, band: int | None = None) ->
 
     """
     ds = gdal.Open(fspath(filename), gdal.GA_Update)
-    if band is None:
-        bands = range(1, ds.RasterCount + 1)
+    bands = range(1, ds.RasterCount + 1) if band is None else range(band, band + 1)
     for i in bands:
         bnd = ds.GetRasterBand(i)
         bnd.SetUnitType(units)
         bnd.FlushCache()
+    ds = None
 
 
 def rowcol_to_xy(

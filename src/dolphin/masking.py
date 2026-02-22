@@ -267,5 +267,6 @@ def create_bounds_mask(
 
         # Now burn in the union of all polygons
         gdal.Rasterize(dst_ds, src_ds, burnValues=[1])
+        src_ds = dst_ds = None
 
     logger.info(f"Created {output_filename}")

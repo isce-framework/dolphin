@@ -420,11 +420,13 @@ def warp_to_projection(
         ds = gdal.Open(fspath(p))
         proj_in = ds.GetProjection()
         if proj_in == projection:
+            ds = None
             warped_files.append(p)
             continue
         warped_fn = Path(dirname) / _get_temp_filename(p, idx, "_warped")
         warped_fn = Path(dirname) / f"{p.stem}_{idx}_warped.vrt"
         from_srs_name = ds.GetSpatialRef().GetName()
+        ds = None
         to_srs_name = osr.SpatialReference(projection).GetName()
         logger.info(
             f"Reprojecting {p} from {from_srs_name} to match mode projection"
@@ -447,14 +449,22 @@ def warp_to_projection(
 
 def _get_mode_projection(filenames: Iterable[Filename]) -> str:
     """Get the most common projection in the list."""
-    projs = [gdal.Open(fspath(fn)).GetProjection() for fn in filenames]
+    projs = []
+    for fn in filenames:
+        ds = gdal.Open(fspath(fn))
+        projs.append(ds.GetProjection())
+        ds = None
     return max(set(projs), key=projs.count)
 
 
 def _get_resolution(filenames: Iterable[Filename]) -> tuple[float, float]:
     """Get the most common resolution in the list."""
-    gts = [gdal.Open(fspath(fn)).GetGeoTransform() for fn in filenames]
-    res = [(dx, dy) for (_, dx, _, _, _, dy) in gts]
+    res = []
+    for fn in filenames:
+        ds = gdal.Open(fspath(fn))
+        gt = ds.GetGeoTransform()
+        res.append((gt[1], gt[5]))
+        ds = None
     if len(set(res)) > 1:
         msg = f"The input files have different resolutions: {res}. "
         raise ValueError(msg)
@@ -518,6 +528,7 @@ def get_combined_bounds_nodata(
 
         resolutions.add((abs(dx), abs(dy)))  # dy is negative for north-up
         projs.add(ds.GetProjection())
+        ds = None
 
         xs.extend([left, right])
         ys.extend([bottom, top])
@@ -596,7 +607,7 @@ def _copy_set_nodata(
     bnd1 = ds_out.GetRasterBand(1)
     bnd1.WriteArray(arr)
     bnd1.SetNoDataValue(out_nodata)
-    ds_out = bnd1 = None
+    ds_out = ds_in = bnd1 = None
 
     return outfile
 
