@@ -252,18 +252,38 @@ def _use_existing_files(
     output_amp_mean_file: Filename,
     output_amp_dispersion_file: Filename,
     amp_dispersion_threshold: float,
+    block_shape: tuple[int, int] = (512, 512),
 ) -> None:
-    amp_disp = io.load_gdal(existing_amp_dispersion_file, masked=True)
-    ps = amp_disp < amp_dispersion_threshold
-    ps = ps.astype(np.uint8)
-    # Set the PS nodata value to the max uint8 value
-    ps[(amp_disp == 0) | amp_disp.mask] = NODATA_VALUES["ps"]
+    from dolphin.io._blocks import iter_blocks
+
+    full_cols, full_rows = io.get_raster_xysize(existing_amp_dispersion_file)
+    nd = io.get_raster_nodata(existing_amp_dispersion_file)
+
+    # Pre-create the output PS file
     io.write_arr(
-        arr=ps,
+        arr=None,
         like_filename=existing_amp_dispersion_file,
         output_name=output_file,
         nodata=NODATA_VALUES["ps"],
+        dtype=np.uint8,
     )
+
+    for block in iter_blocks(
+        arr_shape=(full_rows, full_cols), block_shape=block_shape
+    ):
+        rows = slice(block.row_start, block.row_stop)
+        cols = slice(block.col_start, block.col_stop)
+        amp_disp = io.load_gdal(existing_amp_dispersion_file, rows=rows, cols=cols)
+
+        ps = (amp_disp < amp_dispersion_threshold).astype(np.uint8)
+        # Set the PS nodata value where amp_disp is 0 or nodata
+        invalid = amp_disp == 0
+        if nd is not None:
+            invalid |= np.isnan(amp_disp) if np.isnan(nd) else (amp_disp == nd)
+        ps[invalid] = NODATA_VALUES["ps"]
+
+        io.write_block(ps, output_file, block.row_start, block.col_start)
+
     # Copy the existing amp mean file/amp dispersion file
     shutil.copy(existing_amp_dispersion_file, output_amp_dispersion_file)
     shutil.copy(existing_amp_mean_file, output_amp_mean_file)
