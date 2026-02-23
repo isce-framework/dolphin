@@ -133,8 +133,10 @@ def combine_mask_files(
     ):
         rows = slice(block.row_start, block.row_stop)
         cols = slice(block.col_start, block.col_stop)
-        block_rows = block.row_stop - block.row_start
-        block_cols = block.col_stop - block.col_start
+        row_stop: int = block.row_stop  # type: ignore[assignment]
+        col_stop: int = block.col_stop  # type: ignore[assignment]
+        block_rows = row_stop - block.row_start
+        block_cols = col_stop - block.col_start
 
         # Uses the numpy convention (1 = invalid, 0 = valid) for combining logic
         if combine_method == "any":
@@ -148,9 +150,7 @@ def combine_mask_files(
             mask = io.load_gdal(mask_file, rows=rows, cols=cols)
             nd = io.get_raster_nodata(mask_file)
             if nd is not None:
-                nodata_pixels = (
-                    np.isnan(mask) if np.isnan(nd) else (mask == nd)
-                )
+                nodata_pixels = np.isnan(mask) if np.isnan(nd) else (mask == nd)
             else:
                 nodata_pixels = np.zeros_like(mask, dtype=bool)
             mask = mask.astype(bool)
@@ -224,13 +224,15 @@ class _LazyMask:
 
     def __getitem__(self, key):
         rows, cols = key
+        # Normalize open-ended slices to the full extent
+        if isinstance(rows, slice) and rows.start is None:
+            rows = slice(0, self.shape[0])
+        if isinstance(cols, slice) and cols.start is None:
+            cols = slice(0, self.shape[1])
         block = io.load_gdal(self.filename, rows=rows, cols=cols)
         nd = self._nodata
         if nd is not None:
-            if np.isnan(nd):
-                nodata_pixels = np.isnan(block)
-            else:
-                nodata_pixels = block == nd
+            nodata_pixels = np.isnan(block) if np.isnan(nd) else block == nd
         else:
             nodata_pixels = np.zeros_like(block, dtype=bool)
         # Convention: 0=invalid → True (nodata), non-zero=valid → False
@@ -238,6 +240,13 @@ class _LazyMask:
         # Nodata pixels should also be True (masked)
         result[nodata_pixels] = True
         return result
+
+    def __array__(self, dtype=None):
+        """Materialize the full mask as a numpy array."""
+        arr = self[slice(None), slice(None)]
+        if dtype is not None:
+            arr = arr.astype(dtype)
+        return arr
 
     def all(self):
         """Check if all pixels are masked (nodata)."""

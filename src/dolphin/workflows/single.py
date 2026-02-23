@@ -472,20 +472,14 @@ def _get_nodata_mask(
     if mask_file is not None:
         # Return a lazy reader: loads blocks on demand and inverts
         # (mask file has 1=good, 0=bad; numpy convention is True=bad).
-        return _LazyRaster(
-            mask_file, nodata_fill=0, out_dtype=bool, invert=True
-        )
+        return _LazyRaster(mask_file, nodata_fill=0, out_dtype=bool, invert=True)
     else:
         return np.zeros((nrows, ncols), dtype=bool)
 
 
-def _get_ps_mask(
-    ps_mask_file: Optional[Filename], nrows: int, ncols: int
-):
+def _get_ps_mask(ps_mask_file: Optional[Filename], nrows: int, ncols: int):
     if ps_mask_file is not None:
-        return _LazyRaster(
-            ps_mask_file, nodata_fill=0, out_dtype=bool
-        )
+        return _LazyRaster(ps_mask_file, nodata_fill=0, out_dtype=bool)
     else:
         return np.zeros((nrows, ncols), dtype=bool)
 
@@ -493,16 +487,13 @@ def _get_ps_mask(
 def _get_amp_mean_variance(
     amp_mean_file: Optional[Filename],
     amp_dispersion_file: Optional[Filename],
-):
+) -> tuple[Optional[_LazyRaster], Optional[_LazyAmpVariance]]:
     if amp_mean_file is not None and amp_dispersion_file is not None:
-        amp_mean = _LazyRaster(
-            amp_mean_file, nodata_fill=np.nan, out_dtype=np.float32
+        return (
+            _LazyRaster(amp_mean_file, nodata_fill=np.nan, out_dtype=np.float32),
+            _LazyAmpVariance(amp_mean_file, amp_dispersion_file),
         )
-        amp_variance = _LazyAmpVariance(amp_mean_file, amp_dispersion_file)
-    else:
-        amp_mean = amp_variance = None
-
-    return amp_mean, amp_variance
+    return None, None
 
 
 def _name_slcs(ministack: MiniStackInfo) -> list[str]:

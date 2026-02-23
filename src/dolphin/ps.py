@@ -268,9 +268,7 @@ def _use_existing_files(
         dtype=np.uint8,
     )
 
-    for block in iter_blocks(
-        arr_shape=(full_rows, full_cols), block_shape=block_shape
-    ):
+    for block in iter_blocks(arr_shape=(full_rows, full_cols), block_shape=block_shape):
         rows = slice(block.row_start, block.row_stop)
         cols = slice(block.col_start, block.col_stop)
         amp_disp = io.load_gdal(existing_amp_dispersion_file, rows=rows, cols=cols)
@@ -415,9 +413,9 @@ def _multilook_file_in_blocks(
         block_shape=block_shape,
     ):
         out_row_start = block.row_start
-        out_row_stop = block.row_stop
+        out_row_stop: int = block.row_stop  # type: ignore[assignment]
         out_col_start = block.col_start
-        out_col_stop = block.col_stop
+        out_col_stop: int = block.col_stop  # type: ignore[assignment]
 
         # Map back to full-resolution input coordinates
         in_row_start = out_row_start * stride_y
