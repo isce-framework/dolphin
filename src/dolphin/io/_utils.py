@@ -96,7 +96,10 @@ def get_gtiff_options(
     if compression_type.lower().startswith("lerc") and max_error is not None:
         options["max_z_error"] = str(max_error)
     if use_16_bits:
-        options["nbits"] = "16"
+        from ._core import _can_use_nbits16
+
+        if _can_use_nbits16():
+            options["nbits"] = "16"
 
     return options
 

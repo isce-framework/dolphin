@@ -60,6 +60,25 @@ __all__ = [
 
 DEFAULT_DATETIME_FORMAT = "%Y%m%d"
 DEFAULT_TILE_SHAPE = [128, 128]
+
+
+def _can_use_nbits16() -> bool:
+    """Check if NBITS=16 can be safely used on float32 GeoTIFFs.
+
+    GDAL 3.11+ with Float16 support interprets NBITS=16 on float32 as a true
+    Float16 datatype (code 15). If the installed rasterio doesn't map that
+    code, every subsequent ``rasterio.open`` on such a file raises
+    ``KeyError: 15``.  We allow NBITS=16 only when either GDAL won't create
+    Float16 *or* rasterio already knows how to read it.
+    """
+    if not hasattr(gdal, "GDT_Float16"):
+        return True  # Old GDAL: NBITS=16 stays float32, no issue
+    # GDAL would create Float16; check rasterio can handle datatype 15
+    from rasterio.dtypes import dtype_fwd
+
+    return 15 in dtype_fwd
+
+
 # For use in rasterio
 DEFAULT_TIFF_OPTIONS_RIO = {
     "compress": "lzw",
@@ -70,12 +89,14 @@ DEFAULT_TIFF_OPTIONS_RIO = {
     "blockxsize": DEFAULT_TILE_SHAPE[1],
     "blockysize": DEFAULT_TILE_SHAPE[0],
 }
-EXTRA_COMPRESSED_TIFF_OPTIONS_RIO = DEFAULT_TIFF_OPTIONS_RIO | {
+_extra_compressed = {
     "blockxsize": 512,
     "blockysize": 512,
-    "nbits": 16,
     "predictor": 2,
 }
+if _can_use_nbits16():
+    _extra_compressed["nbits"] = 16
+EXTRA_COMPRESSED_TIFF_OPTIONS_RIO = DEFAULT_TIFF_OPTIONS_RIO | _extra_compressed
 # For gdal's bindings
 DEFAULT_TIFF_OPTIONS = tuple(
     f"{k.upper()}={v}" for k, v in DEFAULT_TIFF_OPTIONS_RIO.items()
