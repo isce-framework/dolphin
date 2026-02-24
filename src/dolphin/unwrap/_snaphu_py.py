@@ -5,6 +5,7 @@ from contextlib import ExitStack
 from pathlib import Path
 from typing import Optional
 
+from dolphin import io
 from dolphin._types import Filename
 from dolphin.io._core import DEFAULT_TIFF_OPTIONS_RIO
 from dolphin.utils import full_suffix
@@ -216,11 +217,13 @@ def grow_conncomp_snaphu(
             # passing to SNAPHU. Masked pixels can have large/garbage phase values
             # (e.g. after timeseries inversion) that inflate the cost network's
             # maximum flow and cause integer overflow regardless of zero_where_masked.
-            zeroed_unw_file, zeroed_corr_file = _zero_from_mask(
-                unw_filename, corr_filename, mask_filename
-            )
-            unw = stack.enter_context(snaphu.io.Raster(zeroed_unw_file))
-            corr = stack.enter_context(snaphu.io.Raster(zeroed_corr_file))
+            mask_arr = io.load_gdal(mask_filename)
+            for fname in [unw_filename, corr_filename]:
+                arr = io.load_gdal(fname)
+                arr[mask_arr == 0] = 0
+                io.write_arr(arr=arr, output_name=fname, like_filename=fname)
+            unw = stack.enter_context(snaphu.io.Raster(unw_filename))
+            corr = stack.enter_context(snaphu.io.Raster(corr_filename))
             mask = stack.enter_context(snaphu.io.Raster(mask_filename))
         else:
             unw = stack.enter_context(snaphu.io.Raster(unw_filename))
