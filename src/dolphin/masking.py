@@ -218,28 +218,20 @@ class _LazyMask:
 
     def __init__(self, filename: PathOrStr):
         self.filename = filename
-        self._nodata = io.get_raster_nodata(filename)
-        cols, rows = io.get_raster_xysize(filename)
-        self.shape = (rows, cols)
+        self._reader = io.RasterReader.from_file(filename)
+        self.shape = self._reader.shape
 
     def __getitem__(self, key):
         rows, cols = key
-        # Normalize open-ended slices to the full extent
-        if isinstance(rows, slice) and rows.start is None:
-            rows = slice(0, self.shape[0])
-        if isinstance(cols, slice) and cols.start is None:
-            cols = slice(0, self.shape[1])
-        block = io.load_gdal(self.filename, rows=rows, cols=cols)
-        nd = self._nodata
-        if nd is not None:
-            nodata_pixels = np.isnan(block) if np.isnan(nd) else block == nd
-        else:
-            nodata_pixels = np.zeros_like(block, dtype=bool)
+        # Delegate to RasterReader which uses rasterio.windows.Window.from_slices
+        # and handles open-ended slices, nodata detection, and masking consistently.
+        block = self._reader[rows, cols]
         # Convention: 0=invalid → True (nodata), non-zero=valid → False
-        result = ~block.astype(bool)
-        # Nodata pixels should also be True (masked)
-        result[nodata_pixels] = True
-        return result
+        # RasterReader returns np.ma.MaskedArray when nodata is set;
+        # fill masked (nodata) pixels with 0 so they become True after inversion.
+        if isinstance(block, np.ma.MaskedArray):
+            return ~block.filled(0).astype(bool)
+        return ~block.astype(bool)
 
     def __array__(self, dtype=None):
         """Materialize the full mask as a numpy array."""
