@@ -405,12 +405,12 @@ def run_wrapped_phase_single(
     # or just allow user to search through the `output_folder` they provided?
 
 
-class _LazyRaster:
-    """Thin wrapper that reads raster blocks from disk on demand.
+class _MappedRaster:
+    """Thin wrapper around RasterReader with optional post-processing on read.
 
-    Avoids loading the full raster into memory.  Supports ``arr[rows, cols]``
-    indexing where *rows* and *cols* are slices, which is how the processing
-    loop in `run_wrapped_phase_single` accesses these arrays.
+    Delegates all GDAL reading and nodata detection to RasterReader (which uses
+    rasterio.windows.Window.from_slices and handles open-ended slices correctly),
+    then optionally fills nodata, casts, or inverts the result.
     """
 
     def __init__(
@@ -421,27 +421,20 @@ class _LazyRaster:
         out_dtype: Optional[np.dtype] = None,
         invert: bool = False,
     ):
-        self.filename = filename
-        self.nodata_fill = nodata_fill
-        self.out_dtype = out_dtype
-        self.invert = invert
-        self._nodata = io.get_raster_nodata(filename)
-        cols, rows = io.get_raster_xysize(filename)
-        self.shape = (rows, cols)
+        self._reader = io.RasterReader.from_file(filename)
+        self.shape = self._reader.shape
+        self._nodata_fill = nodata_fill
+        self._out_dtype = out_dtype
+        self._invert = invert
 
     def __getitem__(self, key):
-        rows, cols = key
-        block = io.load_gdal(self.filename, rows=rows, cols=cols)
-        # Replace nodata values
-        if self._nodata is not None and self.nodata_fill is not None:
-            if np.isnan(self._nodata):
-                if not np.isnan(self.nodata_fill):
-                    np.nan_to_num(block, nan=self.nodata_fill, copy=False)
-            else:
-                block[block == self._nodata] = self.nodata_fill
-        if self.out_dtype is not None:
-            block = block.astype(self.out_dtype)
-        if self.invert:
+        block = self._reader[key]
+        # RasterReader returns np.ma.MaskedArray when nodata is set.
+        if self._nodata_fill is not None and isinstance(block, np.ma.MaskedArray):
+            block = block.filled(self._nodata_fill)
+        if self._out_dtype is not None:
+            block = block.astype(self._out_dtype)
+        if self._invert:
             block = ~block
         return block
 
@@ -450,10 +443,10 @@ class _LazyAmpVariance:
     """Lazily computes amplitude variance from mean and dispersion files."""
 
     def __init__(self, amp_mean_file: Filename, amp_dispersion_file: Filename):
-        self._mean = _LazyRaster(
+        self._mean = _MappedRaster(
             amp_mean_file, nodata_fill=np.nan, out_dtype=np.float32
         )
-        self._disp = _LazyRaster(
+        self._disp = _MappedRaster(
             amp_dispersion_file, nodata_fill=np.nan, out_dtype=np.float32
         )
         self.shape = self._mean.shape
@@ -468,18 +461,20 @@ def _get_nodata_mask(
     mask_file: Optional[Filename],
     nrows: int,
     ncols: int,
-):
+) -> _MappedRaster | np.ndarray:
     if mask_file is not None:
         # Return a lazy reader: loads blocks on demand and inverts
         # (mask file has 1=good, 0=bad; numpy convention is True=bad).
-        return _LazyRaster(mask_file, nodata_fill=0, out_dtype=bool, invert=True)
+        return _MappedRaster(mask_file, nodata_fill=0, out_dtype=bool, invert=True)
     else:
         return np.zeros((nrows, ncols), dtype=bool)
 
 
-def _get_ps_mask(ps_mask_file: Optional[Filename], nrows: int, ncols: int):
+def _get_ps_mask(
+    ps_mask_file: Optional[Filename], nrows: int, ncols: int
+) -> _MappedRaster | np.ndarray:
     if ps_mask_file is not None:
-        return _LazyRaster(ps_mask_file, nodata_fill=0, out_dtype=bool)
+        return _MappedRaster(ps_mask_file, nodata_fill=0, out_dtype=bool)
     else:
         return np.zeros((nrows, ncols), dtype=bool)
 
@@ -487,10 +482,10 @@ def _get_ps_mask(ps_mask_file: Optional[Filename], nrows: int, ncols: int):
 def _get_amp_mean_variance(
     amp_mean_file: Optional[Filename],
     amp_dispersion_file: Optional[Filename],
-) -> tuple[Optional[_LazyRaster], Optional[_LazyAmpVariance]]:
+) -> tuple[Optional[_MappedRaster], Optional[_LazyAmpVariance]]:
     if amp_mean_file is not None and amp_dispersion_file is not None:
         return (
-            _LazyRaster(amp_mean_file, nodata_fill=np.nan, out_dtype=np.float32),
+            _MappedRaster(amp_mean_file, nodata_fill=np.nan, out_dtype=np.float32),
             _LazyAmpVariance(amp_mean_file, amp_dispersion_file),
         )
     return None, None
