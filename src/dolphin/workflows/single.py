@@ -19,7 +19,6 @@ from dolphin import io, shp, similarity
 from dolphin._decorators import atomic_output
 from dolphin._types import Filename, HalfWindow, Strides
 from dolphin.io import BlockIndices, EagerLoader, StridedBlockManager, VRTStack
-from dolphin.masking import load_mask_as_numpy
 from dolphin.phase_link import PhaseLinkRuntimeError, compress, run_phase_linking
 from dolphin.ps import calc_ps_block
 from dolphin.stack import MiniStackInfo
@@ -406,43 +405,90 @@ def run_wrapped_phase_single(
     # or just allow user to search through the `output_folder` they provided?
 
 
+class _MappedRaster:
+    """Thin wrapper around RasterReader with optional post-processing on read.
+
+    Delegates all GDAL reading and nodata detection to RasterReader (which uses
+    rasterio.windows.Window.from_slices and handles open-ended slices correctly),
+    then optionally fills nodata, casts, or inverts the result.
+    """
+
+    def __init__(
+        self,
+        filename: Filename,
+        *,
+        nodata_fill=None,
+        out_dtype: Optional[np.dtype] = None,
+        invert: bool = False,
+    ):
+        self._reader = io.RasterReader.from_file(filename)
+        self.shape = self._reader.shape
+        self._nodata_fill = nodata_fill
+        self._out_dtype = out_dtype
+        self._invert = invert
+
+    def __getitem__(self, key):
+        block = self._reader[key]
+        # RasterReader returns np.ma.MaskedArray when nodata is set.
+        if self._nodata_fill is not None and isinstance(block, np.ma.MaskedArray):
+            block = block.filled(self._nodata_fill)
+        if self._out_dtype is not None:
+            block = block.astype(self._out_dtype)
+        if self._invert:
+            block = ~block
+        return block
+
+
+class _LazyAmpVariance:
+    """Lazily computes amplitude variance from mean and dispersion files."""
+
+    def __init__(self, amp_mean_file: Filename, amp_dispersion_file: Filename):
+        self._mean = _MappedRaster(
+            amp_mean_file, nodata_fill=np.nan, out_dtype=np.float32
+        )
+        self._disp = _MappedRaster(
+            amp_dispersion_file, nodata_fill=np.nan, out_dtype=np.float32
+        )
+        self.shape = self._mean.shape
+
+    def __getitem__(self, key):
+        mean_block = self._mean[key]
+        disp_block = self._disp[key]
+        return (disp_block * mean_block) ** 2
+
+
 def _get_nodata_mask(
     mask_file: Optional[Filename],
     nrows: int,
     ncols: int,
-) -> np.ndarray:
+) -> _MappedRaster | np.ndarray:
     if mask_file is not None:
-        return load_mask_as_numpy(mask_file)
+        # Return a lazy reader: loads blocks on demand and inverts
+        # (mask file has 1=good, 0=bad; numpy convention is True=bad).
+        return _MappedRaster(mask_file, nodata_fill=0, out_dtype=bool, invert=True)
     else:
         return np.zeros((nrows, ncols), dtype=bool)
 
 
 def _get_ps_mask(
     ps_mask_file: Optional[Filename], nrows: int, ncols: int
-) -> np.ndarray:
+) -> _MappedRaster | np.ndarray:
     if ps_mask_file is not None:
-        ps_mask = io.load_gdal(ps_mask_file, masked=True)
-        # Fill the nodata values with false
-        ps_mask = ps_mask.astype(bool).filled(False)
+        return _MappedRaster(ps_mask_file, nodata_fill=0, out_dtype=bool)
     else:
-        ps_mask = np.zeros((nrows, ncols), dtype=bool)
-    return ps_mask
+        return np.zeros((nrows, ncols), dtype=bool)
 
 
 def _get_amp_mean_variance(
     amp_mean_file: Optional[Filename],
     amp_dispersion_file: Optional[Filename],
-) -> tuple[np.ndarray, np.ndarray]:
+) -> tuple[Optional[_MappedRaster], Optional[_LazyAmpVariance]]:
     if amp_mean_file is not None and amp_dispersion_file is not None:
-        # Note: have to fill, since numba (as of 0.57) can't do masked arrays
-        amp_mean = io.load_gdal(amp_mean_file, masked=True).filled(np.nan)
-        amp_dispersion = io.load_gdal(amp_dispersion_file, masked=True).filled(np.nan)
-        # convert back to variance from dispersion: amp_disp = std_dev / mean
-        amp_variance = (amp_dispersion * amp_mean) ** 2
-    else:
-        amp_mean = amp_variance = None
-
-    return amp_mean, amp_variance
+        return (
+            _MappedRaster(amp_mean_file, nodata_fill=np.nan, out_dtype=np.float32),
+            _LazyAmpVariance(amp_mean_file, amp_dispersion_file),
+        )
+    return None, None
 
 
 def _name_slcs(ministack: MiniStackInfo) -> list[str]:

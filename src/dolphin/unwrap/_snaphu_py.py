@@ -211,8 +211,22 @@ def grow_conncomp_snaphu(
     cc_filename = str(unw_filename).replace(unw_suffix, CONNCOMP_SUFFIX)
 
     with ExitStack() as stack:
-        unw = stack.enter_context(snaphu.io.Raster(unw_filename))
-        corr = stack.enter_context(snaphu.io.Raster(corr_filename))
+        if mask_filename is not None:
+            # Zero masked regions in temporary copies rather than modifying the
+            # input files in-place. Masked pixels can have large/garbage phase
+            # values (e.g. after timeseries inversion) that inflate the cost
+            # network's maximum flow and cause integer overflow.
+            zeroed_unw_file, zeroed_corr_file = _zero_from_mask(
+                unw_filename, corr_filename, mask_filename
+            )
+            unw = stack.enter_context(snaphu.io.Raster(zeroed_unw_file))
+            corr = stack.enter_context(snaphu.io.Raster(zeroed_corr_file))
+            mask = stack.enter_context(snaphu.io.Raster(mask_filename))
+        else:
+            unw = stack.enter_context(snaphu.io.Raster(unw_filename))
+            corr = stack.enter_context(snaphu.io.Raster(corr_filename))
+            mask = None
+
         conncomp = stack.enter_context(
             snaphu.io.Raster.create(
                 cc_filename,
@@ -222,11 +236,6 @@ def grow_conncomp_snaphu(
                 **DEFAULT_TIFF_OPTIONS_RIO,
             )
         )
-
-        if mask_filename is not None:
-            mask = stack.enter_context(snaphu.io.Raster(mask_filename))
-        else:
-            mask = None
 
         snaphu.grow_conncomps(
             unw=unw,

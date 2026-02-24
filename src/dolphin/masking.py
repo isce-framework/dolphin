@@ -112,29 +112,68 @@ def combine_mask_files(
         )
         raise ValueError(msg)
 
-    # Uses the numpy convention (1 = invalid, 0 = valid) for combining logic
-    # Loop through mask files and update the total mask
-    if combine_method == "any":
-        # "any" will use `logical_or` to grow the region starting empty region (as 0s)
-        mask_total = np.zeros((ysize, xsize), dtype=bool)
-    else:
-        # "and" uses `logical_and` to shrink the full starting region (as 1s)
-        mask_total = np.ones((ysize, xsize), dtype=bool)
+    from dolphin.io._blocks import iter_blocks
 
-    for input_convention, mask_file in zip(input_conventions, mask_files, strict=False):
-        # TODO: if we separate input missing data from mask 1/0, this changes
-        mask = io.load_gdal(mask_file, masked=True).astype(bool)
-        # Fill with "mask" value
-        mask = mask.filled(bool(input_convention.value))
-        if input_convention != MaskConvention.NUMPY:
-            mask = ~mask
+    block_shape = (512, 512)
 
+    # Pre-create the output file
+    io.write_arr(
+        arr=None,
+        output_name=output_file,
+        like_filename=mask_files[0],
+        dtype=dtype,
+        nbands=1,
+        nodata=None,
+    )
+
+    num_valid = 0
+    for block in iter_blocks(
+        arr_shape=(ysize, xsize),
+        block_shape=block_shape,
+    ):
+        rows = slice(block.row_start, block.row_stop)
+        cols = slice(block.col_start, block.col_stop)
+        row_stop: int = block.row_stop  # type: ignore[assignment]
+        col_stop: int = block.col_stop  # type: ignore[assignment]
+        block_rows = row_stop - block.row_start
+        block_cols = col_stop - block.col_start
+
+        # Uses the numpy convention (1 = invalid, 0 = valid) for combining logic
         if combine_method == "any":
-            mask_total = np.logical_or(mask_total, mask)
-        elif combine_method == "all":
-            mask_total = np.logical_and(mask_total, mask)
+            mask_total = np.zeros((block_rows, block_cols), dtype=bool)
+        else:
+            mask_total = np.ones((block_rows, block_cols), dtype=bool)
 
-    num_valid = mask_total.size - mask_total.sum()
+        for input_convention, mask_file in zip(
+            input_conventions, mask_files, strict=False
+        ):
+            mask = io.load_gdal(mask_file, rows=rows, cols=cols)
+            nd = io.get_raster_nodata(mask_file)
+            if nd is not None:
+                nodata_pixels = np.isnan(mask) if np.isnan(nd) else (mask == nd)
+            else:
+                nodata_pixels = np.zeros_like(mask, dtype=bool)
+            mask = mask.astype(bool)
+            # Fill nodata with the convention's "mask" value
+            mask[nodata_pixels] = bool(input_convention.value)
+            if input_convention != MaskConvention.NUMPY:
+                mask = ~mask
+
+            if combine_method == "any":
+                np.logical_or(mask_total, mask, out=mask_total)
+            elif combine_method == "all":
+                np.logical_and(mask_total, mask, out=mask_total)
+
+        num_valid += mask_total.size - mask_total.sum()
+
+        # Convert to output convention
+        if output_convention == MaskConvention.SNAPHU:
+            mask_total = ~mask_total
+
+        io.write_block(
+            mask_total.astype(dtype), output_file, block.row_start, block.col_start
+        )
+
     if num_valid == 0:
         msg = "No valid pixels left in mask"
         if raise_on_empty:
@@ -142,47 +181,77 @@ def combine_mask_files(
         else:
             warnings.warn(msg, stacklevel=2)
 
-    # Convert to output convention
-    if output_convention == MaskConvention.SNAPHU:
-        mask_total = ~mask_total
 
-    io.write_arr(
-        arr=mask_total.astype(dtype),
-        output_name=output_file,
-        like_filename=mask_files[0],
-    )
+def load_mask_as_numpy(mask_file: PathOrStr) -> _LazyMask:
+    """Load `mask_file` as a lazy block-reading boolean array.
 
+    The returned object supports ``arr[row_slice, col_slice]`` and ``.all()``
+    so it can be used anywhere the previous full-array return was used, while
+    avoiding loading the entire raster into memory at once.
 
-def load_mask_as_numpy(mask_file: PathOrStr) -> np.ndarray:
-    """Load `mask_file` and convert it to a NumPy boolean array.
-
-    This function reads a mask file where 0 represents invalid data and 1 represents
-    good data. It converts the mask to a boolean numpy array where True values
-    indicate missing data (nodata) pixels, following the numpy masking convention.
+    The mask file is expected to use 0 for invalid data and 1 for good data.
+    The output follows the numpy masking convention where True indicates
+    nodata and False indicates valid data (i.e. the values are inverted).
 
     Parameters
     ----------
     mask_file : PathOrStr
-        Path to the mask file. Can be a string or a Path-like object.
+        Path to the mask file.
 
     Returns
     -------
-    np.ndarray
-        A boolean numpy array where True values indicate nodata (invalid) pixels
+    _LazyMask
+        A lazy array-like where True values indicate nodata (invalid) pixels
         and False values indicate valid data pixels.
 
-    Notes
-    -----
-    The input mask file is expected to use 0 for invalid data and 1 for good data.
-    The output mask follows the numpy masking convention where True indicates
-    nodata and False indicates valid data.
-
     """
-    # The mask file will by have 0s at invalid data, 1s at good
-    nodata_mask = io.load_gdal(mask_file, masked=True).astype(bool).filled(False)
-    # invert the mask so Trues are the missing data pixels
-    nodata_mask = ~nodata_mask
-    return nodata_mask
+    return _LazyMask(mask_file)
+
+
+class _LazyMask:
+    """Lazy raster reader for boolean masks.
+
+    Reads blocks on demand via ``__getitem__``, avoiding full-array allocation.
+    Supports the ``[row_slice, col_slice]`` and ``.all()`` interface that
+    callers of :func:`load_mask_as_numpy` rely on.
+    """
+
+    def __init__(self, filename: PathOrStr):
+        self.filename = filename
+        self._reader = io.RasterReader.from_file(filename)
+        self.shape = self._reader.shape
+
+    def __getitem__(self, key):
+        rows, cols = key
+        # Delegate to RasterReader which uses rasterio.windows.Window.from_slices
+        # and handles open-ended slices, nodata detection, and masking consistently.
+        block = self._reader[rows, cols]
+        # Convention: 0=invalid → True (nodata), non-zero=valid → False
+        # RasterReader returns np.ma.MaskedArray when nodata is set;
+        # fill masked (nodata) pixels with 0 so they become True after inversion.
+        if isinstance(block, np.ma.MaskedArray):
+            return ~block.filled(0).astype(bool)
+        return ~block.astype(bool)
+
+    def __array__(self, dtype=None):
+        """Materialize the full mask as a numpy array."""
+        arr = self[slice(None), slice(None)]
+        if dtype is not None:
+            arr = arr.astype(dtype)
+        return arr
+
+    def all(self):
+        """Check if all pixels are masked (nodata)."""
+        from dolphin.io._blocks import iter_blocks
+
+        for block in iter_blocks(arr_shape=self.shape, block_shape=(512, 512)):
+            chunk = self[
+                slice(block.row_start, block.row_stop),
+                slice(block.col_start, block.col_stop),
+            ]
+            if not chunk.all():
+                return False
+        return True
 
 
 def create_bounds_mask(

@@ -252,18 +252,36 @@ def _use_existing_files(
     output_amp_mean_file: Filename,
     output_amp_dispersion_file: Filename,
     amp_dispersion_threshold: float,
+    block_shape: tuple[int, int] = (512, 512),
 ) -> None:
-    amp_disp = io.load_gdal(existing_amp_dispersion_file, masked=True)
-    ps = amp_disp < amp_dispersion_threshold
-    ps = ps.astype(np.uint8)
-    # Set the PS nodata value to the max uint8 value
-    ps[(amp_disp == 0) | amp_disp.mask] = NODATA_VALUES["ps"]
+    from dolphin.io._blocks import iter_blocks
+
+    full_cols, full_rows = io.get_raster_xysize(existing_amp_dispersion_file)
+    nd = io.get_raster_nodata(existing_amp_dispersion_file)
+
+    # Pre-create the output PS file
     io.write_arr(
-        arr=ps,
+        arr=None,
         like_filename=existing_amp_dispersion_file,
         output_name=output_file,
         nodata=NODATA_VALUES["ps"],
+        dtype=np.uint8,
     )
+
+    for block in iter_blocks(arr_shape=(full_rows, full_cols), block_shape=block_shape):
+        rows = slice(block.row_start, block.row_stop)
+        cols = slice(block.col_start, block.col_stop)
+        amp_disp = io.load_gdal(existing_amp_dispersion_file, rows=rows, cols=cols)
+
+        ps = (amp_disp < amp_dispersion_threshold).astype(np.uint8)
+        # Set the PS nodata value where amp_disp is 0 or nodata
+        invalid = amp_disp == 0
+        if nd is not None:
+            invalid |= np.isnan(amp_disp) if np.isnan(nd) else (amp_disp == nd)
+        ps[invalid] = NODATA_VALUES["ps"]
+
+        io.write_block(ps, output_file, block.row_start, block.col_start)
+
     # Copy the existing amp mean file/amp dispersion file
     shutil.copy(existing_amp_dispersion_file, output_amp_dispersion_file)
     shutil.copy(existing_amp_mean_file, output_amp_mean_file)
@@ -273,8 +291,11 @@ def multilook_ps_files(
     strides: dict[str, int],
     ps_mask_file: Filename,
     amp_dispersion_file: Filename,
+    block_shape: tuple[int, int] = (512, 512),
 ) -> tuple[Path, Path]:
     """Create a multilooked version of the full-res PS mask/amplitude dispersion.
+
+    Processes the rasters in blocks to avoid loading entire files into memory.
 
     Parameters
     ----------
@@ -284,6 +305,10 @@ def multilook_ps_files(
         Name of input full-res uint8 PS mask file
     amp_dispersion_file : Filename
         Name of input full-res float32 amplitude dispersion file
+    block_shape : tuple[int, int], optional
+        The (row, col) block size for chunked processing on the *output* grid.
+        Input blocks are ``block_shape * strides``.
+        Default is (512, 512).
 
     Returns
     -------
@@ -300,6 +325,7 @@ def multilook_ps_files(
         return Path(ps_mask_file), Path(amp_dispersion_file)
     full_cols, full_rows = io.get_raster_xysize(ps_mask_file)
     out_rows, out_cols = full_rows // strides["y"], full_cols // strides["x"]
+    stride_y, stride_x = strides["y"], strides["x"]
 
     ps_suffix = Path(ps_mask_file).suffix
     ps_out_path = Path(str(ps_mask_file).replace(ps_suffix, f"_looked{ps_suffix}"))
@@ -308,19 +334,21 @@ def multilook_ps_files(
     if Path(ps_out_path).exists():
         logger.info(f"{ps_out_path} exists, skipping.")
     else:
-        ps_mask = io.load_gdal(ps_mask_file, masked=True).astype(bool)
-        ps_mask_looked = utils.take_looks(
-            ps_mask, strides["y"], strides["x"], func_type="any", edge_strategy="pad"
-        )
-        # make sure it's the same size as the MLE result/temp_coh after padding
-        ps_mask_looked = ps_mask_looked[:out_rows, :out_cols]
-        ps_mask_looked = ps_mask_looked.astype("uint8").filled(NODATA_VALUES["ps"])
-        io.write_arr(
-            arr=ps_mask_looked,
-            like_filename=ps_mask_file,
-            output_name=ps_out_path,
+        _multilook_file_in_blocks(
+            input_file=ps_mask_file,
+            output_file=ps_out_path,
+            full_rows=full_rows,
+            full_cols=full_cols,
+            out_rows=out_rows,
+            out_cols=out_cols,
+            stride_y=stride_y,
+            stride_x=stride_x,
             strides=strides,
+            func_type="any",
             nodata=NODATA_VALUES["ps"],
+            out_dtype=np.uint8,
+            is_bool=True,
+            block_shape=block_shape,
         )
 
     amp_disp_suffix = Path(amp_dispersion_file).suffix
@@ -330,26 +358,101 @@ def multilook_ps_files(
     if amp_disp_out_path.exists():
         logger.info(f"{amp_disp_out_path} exists, skipping.")
     else:
-        amp_disp = io.load_gdal(amp_dispersion_file, masked=True)
-        # We use `nanmin` assuming that the multilooked PS is using
-        # the strongest PS (the one with the lowest amplitude dispersion)
-        amp_disp_looked = utils.take_looks(
-            amp_disp,
-            strides["y"],
-            strides["x"],
-            func_type="nanmin",
-            edge_strategy="pad",
-        )
-        amp_disp_looked = amp_disp_looked[:out_rows, :out_cols]
-        amp_disp_looked = amp_disp_looked.filled(NODATA_VALUES["amp_dispersion"])
-        io.write_arr(
-            arr=amp_disp_looked,
-            like_filename=amp_dispersion_file,
-            output_name=amp_disp_out_path,
+        _multilook_file_in_blocks(
+            input_file=amp_dispersion_file,
+            output_file=amp_disp_out_path,
+            full_rows=full_rows,
+            full_cols=full_cols,
+            out_rows=out_rows,
+            out_cols=out_cols,
+            stride_y=stride_y,
+            stride_x=stride_x,
             strides=strides,
+            func_type="nanmin",
             nodata=NODATA_VALUES["amp_dispersion"],
+            out_dtype=np.float32,
+            is_bool=False,
+            block_shape=block_shape,
         )
     return ps_out_path, amp_disp_out_path
+
+
+def _multilook_file_in_blocks(
+    *,
+    input_file: Filename,
+    output_file: Path,
+    full_rows: int,
+    full_cols: int,
+    out_rows: int,
+    out_cols: int,
+    stride_y: int,
+    stride_x: int,
+    strides: dict[str, int],
+    func_type: str,
+    nodata: float,
+    out_dtype: np.dtype,
+    is_bool: bool,
+    block_shape: tuple[int, int],
+) -> None:
+    """Multilook a single raster file using block-wise reading/writing."""
+    from dolphin.io._blocks import iter_blocks
+
+    # Pre-create the empty output file
+    io.write_arr(
+        arr=None,
+        like_filename=input_file,
+        output_name=output_file,
+        strides=strides,
+        nodata=nodata,
+        dtype=out_dtype,
+    )
+
+    # Iterate over the *output* grid in blocks
+    for block in iter_blocks(
+        arr_shape=(out_rows, out_cols),
+        block_shape=block_shape,
+    ):
+        out_row_start = block.row_start
+        out_row_stop: int = block.row_stop  # type: ignore[assignment]
+        out_col_start = block.col_start
+        out_col_stop: int = block.col_stop  # type: ignore[assignment]
+
+        # Map back to full-resolution input coordinates
+        in_row_start = out_row_start * stride_y
+        in_col_start = out_col_start * stride_x
+        # Each output pixel needs exactly stride_y/stride_x input rows/cols;
+        # take_looks with edge_strategy="pad" handles non-divisible edges itself.
+        in_row_stop = min(out_row_stop * stride_y, full_rows)
+        in_col_stop = min(out_col_stop * stride_x, full_cols)
+
+        # Read the input block
+        in_block = io.load_gdal(
+            input_file,
+            masked=True,
+            rows=slice(in_row_start, in_row_stop),
+            cols=slice(in_col_start, in_col_stop),
+        )
+
+        if is_bool:
+            in_block = in_block.astype(bool)
+
+        # Multilook (take_looks) with padding for non-divisible edges
+        looked = utils.take_looks(
+            in_block, stride_y, stride_x, func_type=func_type, edge_strategy="pad"
+        )
+
+        # Trim to the expected output block size
+        expected_rows = out_row_stop - out_row_start
+        expected_cols = out_col_stop - out_col_start
+        looked = looked[:expected_rows, :expected_cols]
+
+        # Convert masked values to nodata and cast to output dtype
+        if is_bool:
+            looked = looked.astype(out_dtype).filled(nodata)
+        else:
+            looked = looked.filled(nodata)
+
+        io.write_block(looked, output_file, out_row_start, out_col_start)
 
 
 def combine_means(means: ArrayLike, N: ArrayLike) -> np.ndarray:

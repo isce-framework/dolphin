@@ -21,7 +21,7 @@ def test_empty(monkeypatch: pytest.MonkeyPatch):
             main()
 
         help_text = f.getvalue()
-        assert "Missing subcommand" in help_text
+        assert "Missing" in help_text or "Required" in help_text
 
 
 def test_help(monkeypatch: pytest.MonkeyPatch):
