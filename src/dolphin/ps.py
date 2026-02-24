@@ -420,9 +420,10 @@ def _multilook_file_in_blocks(
         # Map back to full-resolution input coordinates
         in_row_start = out_row_start * stride_y
         in_col_start = out_col_start * stride_x
-        # Extend input region to cover the full looks window; clamp to raster bounds
-        in_row_stop = min(out_row_stop * stride_y + (stride_y - 1), full_rows)
-        in_col_stop = min(out_col_stop * stride_x + (stride_x - 1), full_cols)
+        # Each output pixel needs exactly stride_y/stride_x input rows/cols;
+        # take_looks with edge_strategy="pad" handles non-divisible edges itself.
+        in_row_stop = min(out_row_stop * stride_y, full_rows)
+        in_col_stop = min(out_col_stop * stride_x, full_cols)
 
         # Read the input block
         in_block = io.load_gdal(
