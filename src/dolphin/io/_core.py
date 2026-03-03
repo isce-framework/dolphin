@@ -62,6 +62,26 @@ DEFAULT_DATETIME_FORMAT = "%Y%m%d"
 DEFAULT_TILE_SHAPE = [128, 128]
 
 
+def _patch_rasterio_float16() -> None:
+    """Register GDAL Float16 (type code 15) with rasterio if needed.
+
+    GDAL 3.11+ can produce Float16 GeoTIFFs (datatype code 15). If rasterio
+    doesn't have a mapping for code 15, every ``rasterio.open`` on such a file
+    raises ``KeyError: 15``. Patch the forward/reverse dtype dicts so rasterio
+    can open these files transparently.
+    """
+    if not hasattr(gdal, "GDT_Float16"):
+        return
+    from rasterio.dtypes import dtype_fwd, dtype_rev
+
+    if 15 not in dtype_fwd:
+        dtype_fwd[15] = "float16"
+        dtype_rev["float16"] = 15
+
+
+_patch_rasterio_float16()
+
+
 def _can_use_nbits16() -> bool:
     """Check if NBITS=16 can be safely used on float32 GeoTIFFs.
 
