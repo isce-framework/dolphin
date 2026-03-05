@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import datetime
 import logging
+import shutil
+import subprocess
 import time
+import xml.etree.ElementTree as ET
+from dataclasses import dataclass
 from pathlib import Path
 from typing import NamedTuple, Optional, Sequence, cast
 
@@ -10,7 +14,7 @@ from opera_utils import get_dates, make_nodata_mask
 
 from dolphin import Bbox, Filename, interferogram, masking, ps
 from dolphin._log import log_runtime, setup_logging
-from dolphin.io import VRTStack
+from dolphin.io import PhaseCorrectedStackReader, VRTStack
 from dolphin.utils import get_nearest_date_idx
 from dolphin.workflows import UnwrapMethod
 
@@ -103,6 +107,16 @@ def run(
     logger.info("Running wrapped phase estimation in %s", work_dir)
 
     input_file_list = cfg.cslc_file_list
+    phase_file_list = cfg.flat_earth_phase_file_list
+    if not phase_file_list and cfg.auto_gamma_flat_earth:
+        phase_file_list = _maybe_generate_gamma_sim_orb(
+            input_file_list=input_file_list,
+            date_fmt=cfg.input_options.cslc_date_fmt,
+            hgt_file=cfg.gamma_hgt_file,
+            reference_date=cfg.gamma_flat_earth_reference_date,
+            work_directory=cfg.work_directory,
+            scratch_dir=cfg.gamma_flat_earth_scratch_dir,
+        )
 
     # #############################################
     # Make a VRT pointing to the input SLC files
@@ -113,6 +127,20 @@ def run(
         subdataset=subdataset,
         outfile=cfg.work_directory / "slc_stack.vrt",
     )
+
+    phase_vrt_stack: Optional[VRTStack] = None
+    corrected_reader = vrt_stack
+    if phase_file_list:
+        phase_vrt_stack = VRTStack(
+            phase_file_list,
+            # Flat-earth phase rasters are typically plain rasters/VRTs.
+            # Do not force the SLC subdataset setting onto this stack.
+            subdataset=None,
+            outfile=cfg.work_directory / "flat_earth_phase_stack.vrt",
+        )
+        corrected_reader = PhaseCorrectedStackReader(
+            vrt_stack, phase_vrt_stack, phase_sign=cfg.gamma_phase_sign
+        )
 
     # Mark any files beginning with "compressed" as compressed
     is_compressed = ["compressed" in str(f).lower() for f in input_file_list]
@@ -155,7 +183,7 @@ def run(
 
         kwargs = tqdm_kwargs | {"desc": f"PS ({ps_output.parent})"}
         ps.create_ps(
-            reader=vrt_stack,
+            reader=corrected_reader,
             like_filename=vrt_stack.outfile,
             output_file=ps_output,
             output_amp_mean_file=cfg.ps_options._amp_mean_file,
@@ -228,6 +256,8 @@ def run(
             similarity_files,
         ) = sequential.run_wrapped_phase_sequential(
             slc_vrt_stack=vrt_stack,
+            phase_vrt_stack=phase_vrt_stack,
+            phase_sign=cfg.gamma_phase_sign,
             output_folder=pl_path,
             ministack_size=cfg.phase_linking.ministack_size,
             output_reference_idx=cfg.phase_linking.output_reference_idx,
@@ -330,6 +360,221 @@ def run(
         shp_count_files,
         similarity_files,
     )
+
+
+@dataclass
+class _GammaInput:
+    date_str: str
+    slc_bin: Path
+    slc_par: Path
+
+
+def _maybe_generate_gamma_sim_orb(
+    *,
+    input_file_list: Sequence[Path],
+    date_fmt: str,
+    hgt_file: Path | None,
+    reference_date: str | None,
+    work_directory: Path,
+    scratch_dir: Path | None,
+) -> list[Path]:
+    gamma_inputs = _parse_gamma_slc_inputs(input_file_list, date_fmt)
+    if not gamma_inputs:
+        logger.info("Inputs do not look like GAMMA RSLC VRTs, skipping auto sim_orb")
+        return []
+
+    if hgt_file is None:
+        msg = (
+            "Detected GAMMA SLC inputs, but `gamma_hgt_file` was not provided. "
+            "Set `gamma_hgt_file` or disable `auto_gamma_flat_earth`."
+        )
+        raise ValueError(msg)
+    if not hgt_file.exists():
+        raise FileNotFoundError(hgt_file)
+
+    for cmd in ("create_offset", "phase_sim_orb"):
+        if shutil.which(cmd) is None:
+            msg = f"Required GAMMA command not found in PATH: {cmd}"
+            raise RuntimeError(msg)
+
+    scratch = scratch_dir or (work_directory / "gamma_flat_earth")
+    scratch.mkdir(parents=True, exist_ok=True)
+    log_file = scratch / "gamma_flat_earth.log"
+
+    dates = [gi.date_str for gi in gamma_inputs]
+    ref_date = reference_date or dates[0]
+    if ref_date not in dates:
+        msg = f"Requested gamma_flat_earth_reference_date {ref_date} not in inputs"
+        raise ValueError(msg)
+
+    ref_idx = dates.index(ref_date)
+    ref_par = gamma_inputs[ref_idx].slc_par
+    xsize, ysize = _read_gamma_par_size(ref_par)
+    expected_nbytes = xsize * ysize * 4
+
+    # Fast path: if all simulated phase files already exist with expected size,
+    # skip running GAMMA commands and only ensure VRT sidecars are present.
+    sim_orb_vrts: list[Path] = []
+    all_complete = True
+    for gi in gamma_inputs:
+        sim_orb = scratch / f"{ref_date}_{gi.date_str}.sim_orb"
+        sim_orb_vrt = sim_orb.with_suffix(".sim_orb.vrt")
+        if not _is_complete_binary_file(sim_orb, expected_nbytes):
+            all_complete = False
+            break
+        _write_gamma_raw_vrt(
+            vrt_path=sim_orb_vrt,
+            bin_file=sim_orb,
+            xsize=xsize,
+            ysize=ysize,
+            gdal_dtype="Float32",
+            pixel_bytes=4,
+        )
+        sim_orb_vrts.append(sim_orb_vrt)
+
+    if all_complete:
+        logger.info(
+            "Found %d complete GAMMA sim_orb files, skipping create_offset/phase_sim_orb",
+            len(sim_orb_vrts),
+        )
+        return sim_orb_vrts
+
+    for gi in gamma_inputs:
+        off_par = scratch / f"{ref_date}_{gi.date_str}.off"
+        sim_orb = scratch / f"{ref_date}_{gi.date_str}.sim_orb"
+        sim_orb_vrt = sim_orb.with_suffix(".sim_orb.vrt")
+
+        create_offset_cmd = [
+            "create_offset",
+            str(ref_par),
+            str(gi.slc_par),
+            str(off_par),
+            "1",
+            "1",
+            "1",
+            "0",
+        ]
+        phase_sim_orb_cmd = [
+            "phase_sim_orb",
+            str(ref_par),
+            str(gi.slc_par),
+            str(off_par),
+            str(hgt_file),
+            str(sim_orb),
+            str(ref_par),
+            "-",
+            "-",
+            "1",
+            "1",
+        ]
+
+        with log_file.open("a", encoding="utf-8") as fid:
+            if _is_complete_binary_file(sim_orb, expected_nbytes):
+                fid.write(f"[skip] {sim_orb} exists and is complete\n")
+            else:
+                fid.write("[cmd] " + " ".join(create_offset_cmd) + "\n")
+                subprocess.run(create_offset_cmd, check=True, stdout=fid, stderr=fid)
+                fid.write("[cmd] " + " ".join(phase_sim_orb_cmd) + "\n")
+                subprocess.run(phase_sim_orb_cmd, check=True, stdout=fid, stderr=fid)
+
+        if not _is_complete_binary_file(sim_orb, expected_nbytes):
+            msg = f"GAMMA did not produce expected sim_orb file: {sim_orb}"
+            raise RuntimeError(msg)
+
+        _write_gamma_raw_vrt(
+            vrt_path=sim_orb_vrt,
+            bin_file=sim_orb,
+            xsize=xsize,
+            ysize=ysize,
+            gdal_dtype="Float32",
+            pixel_bytes=4,
+        )
+        sim_orb_vrts.append(sim_orb_vrt)
+
+    logger.info("Auto-generated %d GAMMA sim_orb files", len(sim_orb_vrts))
+    return sim_orb_vrts
+
+
+def _is_complete_binary_file(path: Path, expected_nbytes: int) -> bool:
+    if not path.exists():
+        return False
+    return path.stat().st_size >= expected_nbytes
+
+
+def _parse_gamma_slc_inputs(
+    input_file_list: Sequence[Path], date_fmt: str
+) -> list[_GammaInput]:
+    out: list[_GammaInput] = []
+    for f in input_file_list:
+        if f.suffix.lower() != ".vrt":
+            return []
+        date_match = get_dates(f, fmt=date_fmt)
+        if not date_match:
+            return []
+        src = _get_single_vrt_source_filename(f)
+        if src is None:
+            return []
+        if src.suffix.lower() not in {".rslc", ".slc"}:
+            return []
+        par = Path(str(src) + ".par")
+        if not par.exists():
+            return []
+        out.append(
+            _GammaInput(
+                date_str=date_match[0].strftime("%Y%m%d"),
+                slc_bin=src,
+                slc_par=par,
+            )
+        )
+    return out
+
+
+def _get_single_vrt_source_filename(vrt_file: Path) -> Path | None:
+    try:
+        tree = ET.parse(vrt_file)
+    except ET.ParseError:
+        return None
+    root = tree.getroot()
+    node = root.find(".//SourceFilename")
+    if node is None or node.text is None:
+        return None
+    src = Path(node.text)
+    if src.is_absolute():
+        return src
+    return (vrt_file.parent / src).resolve(strict=False)
+
+
+def _read_gamma_par_size(par_file: Path) -> tuple[int, int]:
+    vals: dict[str, str] = {}
+    for line in par_file.read_text().splitlines():
+        if ":" not in line:
+            continue
+        key, value = line.split(":", maxsplit=1)
+        vals[key.strip()] = value.strip()
+    return int(vals["range_samples"]), int(vals["azimuth_lines"])
+
+
+def _write_gamma_raw_vrt(
+    *,
+    vrt_path: Path,
+    bin_file: Path,
+    xsize: int,
+    ysize: int,
+    gdal_dtype: str,
+    pixel_bytes: int,
+) -> None:
+    line_bytes = pixel_bytes * xsize
+    with vrt_path.open("w", encoding="utf-8") as f:
+        f.write(f'<VRTDataset rasterXSize="{xsize}" rasterYSize="{ysize}">\n')
+        f.write(
+            f'  <VRTRasterBand dataType="{gdal_dtype}" band="1"'
+            ' subClass="VRTRawRasterBand">\n    <SourceFilename'
+            f' relativeToVRT="1">{bin_file.name}</SourceFilename>\n   '
+            " <ImageOffset>0</ImageOffset>\n   "
+            f" <PixelOffset>{pixel_bytes}</PixelOffset>\n   "
+            f" <LineOffset>{line_bytes}</LineOffset>\n   "
+            " <ByteOrder>MSB</ByteOrder>\n  </VRTRasterBand>\n</VRTDataset>\n"
+        )
 
 
 def create_ifgs(

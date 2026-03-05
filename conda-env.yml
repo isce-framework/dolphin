@@ -1,4 +1,4 @@
-name: dolphin-env
+name: dolphin
 channels:
   - conda-forge
 dependencies:

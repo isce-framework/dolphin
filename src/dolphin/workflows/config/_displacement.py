@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Annotated, Any, Optional
+from typing import Annotated, Any, Literal, Optional
 
 import tyro
 from opera_utils import get_burst_id, get_dates, sort_files_by_date
@@ -86,6 +86,53 @@ class DisplacementWorkflow(WorkflowBase):
             "containing list of CSLC files."
         ),
     )
+    flat_earth_phase_file_list: Annotated[
+        list[Path],
+        tyro.conf.arg(aliases=("--flat-earth-phase-files", "--gamma-sim-orb-files")),
+    ] = Field(
+        default_factory=list,
+        description=(
+            "Optional list of flat-earth phase rasters (radians), one per input SLC."
+            " If provided, Dolphin applies exp(1j * phase) to each SLC on-the-fly"
+            " during reading, avoiding intermediate corrected SLC files."
+        ),
+    )
+    auto_gamma_flat_earth: bool = Field(
+        True,
+        description=(
+            "If True, and flat_earth_phase_file_list is not provided, detect GAMMA"
+            " SLC inputs and auto-run create_offset + phase_sim_orb."
+        ),
+    )
+    gamma_hgt_file: Optional[Path] = Field(
+        None,
+        description=(
+            "DEM in radar coordinates (1x1 look) required by GAMMA phase_sim_orb"
+            " when auto_gamma_flat_earth is enabled."
+        ),
+    )
+    gamma_flat_earth_reference_date: Optional[str] = Field(
+        None,
+        description=(
+            "Reference date used for GAMMA flat-earth simulation."
+            " If None, uses the first sorted input SLC date."
+        ),
+    )
+    gamma_flat_earth_scratch_dir: Optional[Path] = Field(
+        None,
+        description=(
+            "Directory for GAMMA intermediate files (.off, .sim_orb, logs)."
+            " If None, defaults to <work_directory>/gamma_flat_earth."
+        ),
+    )
+    gamma_phase_sign: Literal[1, -1] = Field(
+        1,
+        description=(
+            "Sign used when applying simulated phase in Dolphin:"
+            " slc * exp(1j * sign * phase). Use -1 if your GAMMA convention"
+            " requires it."
+        ),
+    )
     require_cslc_files: bool = Field(True, description="", exclude=True)
 
     output_options: OutputOptions = Field(default_factory=OutputOptions)
@@ -133,6 +180,9 @@ class DisplacementWorkflow(WorkflowBase):
     _check_cslc_file_glob = field_validator("cslc_file_list", mode="before")(
         _read_file_list_or_glob
     )
+    _check_flat_earth_file_glob = field_validator(
+        "flat_earth_phase_file_list", mode="before"
+    )(_read_file_list_or_glob)
 
     @model_validator(mode="after")
     def _check_zero_interferogram_network(self: Self) -> Self:
@@ -177,10 +227,49 @@ class DisplacementWorkflow(WorkflowBase):
                 msg = "Must provide subdataset name for input NetCDF/HDF5 files."
                 raise ValueError(msg)
 
-        # Coerce the file_list to a sorted list of Path objects
-        self.cslc_file_list = [
+        # Coerce the SLC list to a sorted list of Path objects.
+        sorted_slcs = [
             Path(f) for f in sort_files_by_date(file_list, file_date_fmt=date_fmt)[0]
         ]
+        self.cslc_file_list = sorted_slcs
+
+        # If provided, sort flat-earth files to match the sorted SLC list by date.
+        if self.flat_earth_phase_file_list:
+            phase_files = [Path(f) for f in self.flat_earth_phase_file_list]
+            if len(phase_files) != len(sorted_slcs):
+                msg = (
+                    "flat_earth_phase_file_list must have same length as cslc_file_list."
+                    f" Got {len(phase_files)} and {len(sorted_slcs)}"
+                )
+                raise ValueError(msg)
+
+            phase_by_date = {}
+            for f in phase_files:
+                dates = get_dates(f, fmt=date_fmt)
+                if not dates:
+                    msg = (
+                        "All flat-earth phase files must include a parseable date "
+                        f"with format {date_fmt}: {f}"
+                    )
+                    raise ValueError(msg)
+                d = dates[0]
+                if d in phase_by_date:
+                    msg = f"Duplicate phase file date {d} for {f}"
+                    raise ValueError(msg)
+                phase_by_date[d] = f
+
+            ordered_phase_files: list[Path] = []
+            for slc_file in sorted_slcs:
+                slc_date = get_dates(slc_file, fmt=date_fmt)[0]
+                if slc_date not in phase_by_date:
+                    msg = (
+                        "Missing flat-earth phase file for SLC date "
+                        f"{slc_date} ({slc_file})"
+                    )
+                    raise ValueError(msg)
+                ordered_phase_files.append(phase_by_date[slc_date])
+
+            self.flat_earth_phase_file_list = ordered_phase_files
 
         return self
 
@@ -201,6 +290,15 @@ class DisplacementWorkflow(WorkflowBase):
         if not self.keep_paths_relative:
             # Resolve all CSLC paths:
             self.cslc_file_list = [p.resolve(strict=False) for p in self.cslc_file_list]
+            self.flat_earth_phase_file_list = [
+                p.resolve(strict=False) for p in self.flat_earth_phase_file_list
+            ]
+            if self.gamma_hgt_file is not None:
+                self.gamma_hgt_file = self.gamma_hgt_file.resolve(strict=False)
+            if self.gamma_flat_earth_scratch_dir is not None:
+                self.gamma_flat_earth_scratch_dir = (
+                    self.gamma_flat_earth_scratch_dir.resolve(strict=False)
+                )
 
         work_dir = self.work_directory
         # For each workflow step that has an output folder, move it inside

@@ -23,9 +23,10 @@ def create_gamma_vrts(par_files: Sequence[Path]) -> None:
     """
     gamma_format_to_gdal = {
         "SCOMPLEX": ("CInt16", 4),
-        # TODO: I dont know GAMMA formats?
-        # "FCOMPLEX": ("CFloat32", 8),
-        # "FLOAT": ("Float32", 4),
+        "FCOMPLEX": ("CFloat32", 8),
+        "FLOAT": ("Float32", 4),
+        "REAL*4": ("Float32", 4),
+        "REAL*8": ("Float64", 8),
     }
 
     key_val_re = re.compile(r"^(?P<key>[\w_]+):\s+(?P<value>.+)$")

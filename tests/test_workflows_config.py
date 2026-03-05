@@ -274,6 +274,48 @@ def test_input_date_sort(dir_with_2_slcs):
     assert opts.cslc_file_list == file_list
 
 
+def test_flat_earth_phase_list_sorted_to_match_slcs(dir_with_2_slcs):
+    slc_files = [Path(str(p)) for p in sorted(dir_with_2_slcs.glob("slc_*.nc"))]
+    # Intentionally reverse order to test date-based alignment.
+    phase_files = list(reversed(slc_files))
+
+    opts = config.DisplacementWorkflow(
+        cslc_file_list=slc_files,
+        flat_earth_phase_file_list=phase_files,
+        input_options={"subdataset": "data"},
+    )
+    assert opts.flat_earth_phase_file_list == slc_files
+
+
+def test_flat_earth_phase_list_length_mismatch(dir_with_2_slcs):
+    slc_files = [Path(str(p)) for p in sorted(dir_with_2_slcs.glob("slc_*.nc"))]
+
+    with pytest.raises(pydantic.ValidationError, match="same length"):
+        config.DisplacementWorkflow(
+            cslc_file_list=slc_files,
+            flat_earth_phase_file_list=slc_files[:1],
+            input_options={"subdataset": "data"},
+        )
+
+
+def test_gamma_auto_flat_earth_options(dir_with_2_slcs):
+    slc_files = [Path(str(p)) for p in sorted(dir_with_2_slcs.glob("slc_*.nc"))]
+    hgt = dir_with_2_slcs / "dem.rdc"
+    hgt.write_bytes(b"\x00")
+
+    opts = config.DisplacementWorkflow(
+        cslc_file_list=slc_files,
+        input_options={"subdataset": "data"},
+        gamma_hgt_file=hgt,
+        gamma_flat_earth_reference_date="20220101",
+        gamma_phase_sign=-1,
+    )
+    assert opts.auto_gamma_flat_earth is True
+    assert opts.gamma_hgt_file is not None
+    assert opts.gamma_flat_earth_reference_date == "20220101"
+    assert opts.gamma_phase_sign == -1
+
+
 def test_input_opera_cslc(tmp_path, slc_stack):
     """Check that we recognize the OPERA filename format."""
     # Make a file with the OPERA name like OPERA_BURST_RE

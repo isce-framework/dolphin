@@ -31,6 +31,8 @@ __all__ = ["run_wrapped_phase_sequential"]
 def run_wrapped_phase_sequential(
     *,
     slc_vrt_stack: VRTStack,
+    phase_vrt_stack: Optional[VRTStack] = None,
+    phase_sign: int = 1,
     output_folder: Path,
     ministack_size: int,
     half_window: dict,
@@ -65,6 +67,16 @@ def run_wrapped_phase_sequential(
         strides = {"x": 1, "y": 1}
     output_folder.mkdir(parents=True, exist_ok=True)
     input_file_list = slc_vrt_stack.file_list
+    phase_file_map: dict[str, Filename] = {}
+    if phase_vrt_stack is not None:
+        phase_file_map = {
+            str(slc): phase
+            for slc, phase in zip(
+                slc_vrt_stack.file_list,
+                phase_vrt_stack.file_list,
+                strict=True,
+            )
+        }
 
     is_compressed = ["compressed" in str(f).lower() for f in slc_vrt_stack.file_list]
     input_dates = _get_input_dates(input_file_list, is_compressed, cslc_date_fmt)
@@ -121,8 +133,21 @@ def run_wrapped_phase_sequential(
                 subdataset=slc_vrt_stack.subdataset,
             )
 
+            cur_phase_vrt: Optional[VRTStack] = None
+            if phase_vrt_stack is not None:
+                real_slc_files = cur_files[ministack.first_real_slc_idx :]
+                cur_phase_files = [phase_file_map[str(f)] for f in real_slc_files]
+                cur_phase_vrt = VRTStack(
+                    cur_phase_files,
+                    outfile=output_folder / f"{start_end}.flat_earth_phase.vrt",
+                    sort_files=False,
+                    subdataset=phase_vrt_stack.subdataset,
+                )
+
             run_wrapped_phase_single(
                 vrt_stack=cur_vrt,
+                phase_vrt_stack=cur_phase_vrt,
+                phase_sign=phase_sign,
                 ministack=ministack,
                 output_folder=cur_output_folder,
                 half_window=half_window,

@@ -18,7 +18,13 @@ from tqdm.auto import tqdm
 from dolphin import io, shp, similarity
 from dolphin._decorators import atomic_output
 from dolphin._types import Filename, HalfWindow, Strides
-from dolphin.io import BlockIndices, EagerLoader, StridedBlockManager, VRTStack
+from dolphin.io import (
+    BlockIndices,
+    EagerLoader,
+    PhaseCorrectedStackReader,
+    StridedBlockManager,
+    VRTStack,
+)
 from dolphin.phase_link import PhaseLinkRuntimeError, compress, run_phase_linking
 from dolphin.ps import calc_ps_block
 from dolphin.stack import MiniStackInfo
@@ -44,6 +50,8 @@ class OutputFile:
 def run_wrapped_phase_single(
     *,
     vrt_stack: VRTStack,
+    phase_vrt_stack: Optional[VRTStack] = None,
+    phase_sign: int = 1,
     ministack: MiniStackInfo,
     output_folder: Filename,
     half_window: dict,
@@ -192,7 +200,15 @@ def run_wrapped_phase_single(
         half_window=half_window_tup,
     )
     # Set up the background loader
-    loader = EagerLoader(reader=vrt_stack, block_shape=block_shape)
+    read_stack: io.StackReader = vrt_stack
+    if phase_vrt_stack is not None:
+        read_stack = PhaseCorrectedStackReader(
+            slc_stack=vrt_stack,
+            phase_stack=phase_vrt_stack,
+            start_idx=first_real_slc_idx,
+            phase_sign=phase_sign,
+        )
+    loader = EagerLoader(reader=read_stack, block_shape=block_shape)
     # Queue all input slices, skip ones that are all nodata
     blocks: list[
         tuple[BlockIndices, BlockIndices, BlockIndices, BlockIndices, BlockIndices]

@@ -42,6 +42,7 @@ __all__ = [
     "EagerLoader",
     "HDF5Reader",
     "HDF5StackReader",
+    "PhaseCorrectedStackReader",
     "RasterReader",
     "RasterStackReader",
     "StackReader",
@@ -1003,6 +1004,110 @@ class VRTStack(StackReader):
             # Add the front (1,) dimension which is missing for a single file
             data = data[None]
         return data
+
+
+@dataclass
+class PhaseCorrectedStackReader(StackReader):
+    """Apply a per-SLC phase correction stack to a complex SLC stack on reads.
+
+    The returned data are computed lazily as:
+
+        corrected = slc * exp(1j * phase)
+
+    without writing intermediate corrected SLC files.
+
+    Parameters
+    ----------
+    slc_stack : StackReader
+        Complex-valued SLC stack reader.
+    phase_stack : StackReader
+        Real-valued phase stack reader (radians). Must have the same raster shape as
+        `slc_stack`, and `phase_stack.shape[0] == slc_stack.shape[0] - start_idx`.
+    start_idx : int, optional
+        Starting band index in `slc_stack` where corrections should be applied.
+        Bands before `start_idx` are returned unchanged.
+    phase_sign : int, optional
+        Sign multiplier applied to phase, either +1 or -1.
+    """
+
+    slc_stack: StackReader
+    phase_stack: StackReader
+    start_idx: int = 0
+    phase_sign: int = 1
+
+    def __post_init__(self):
+        if self.start_idx < 0:
+            msg = f"{self.start_idx = } must be >= 0"
+            raise ValueError(msg)
+        if self.phase_sign not in (1, -1):
+            msg = f"{self.phase_sign = } must be one of (1, -1)"
+            raise ValueError(msg)
+
+        if self.slc_stack.shape[-2:] != self.phase_stack.shape[-2:]:
+            msg = (
+                "SLC and phase stacks must have matching (rows, cols): "
+                f"{self.slc_stack.shape[-2:]} != {self.phase_stack.shape[-2:]}"
+            )
+            raise ValueError(msg)
+
+        expected_bands = self.slc_stack.shape[0] - self.start_idx
+        if self.phase_stack.shape[0] != expected_bands:
+            msg = (
+                "Phase stack must include one phase layer for each corrected SLC band: "
+                f"got {self.phase_stack.shape[0]}, expected {expected_bands}"
+            )
+            raise ValueError(msg)
+
+    @property
+    def shape(self) -> tuple[int, int, int]:
+        return self.slc_stack.shape
+
+    @property
+    def ndim(self) -> int:
+        return 3
+
+    @property
+    def dtype(self) -> np.dtype:
+        return self.slc_stack.dtype
+
+    def __len__(self) -> int:
+        return self.shape[0]
+
+    def __getitem__(self, key: tuple[Index, ...], /) -> np.ndarray:
+        bands, rows, cols = _unpack_3d_slices(key)
+        slc_block = self.slc_stack[bands, rows, cols]
+
+        if isinstance(bands, int):
+            if bands < self.start_idx:
+                return np.asarray(slc_block)
+            phase_idx = bands - self.start_idx
+            phase = self.phase_stack[phase_idx, rows, cols]
+            return np.asarray(slc_block) * np.exp(
+                1j * self.phase_sign * np.asarray(phase)
+            )
+
+        if bands is ...:
+            bands = slice(None)
+        band_idxs = np.arange(self.shape[0])[bands]
+        if np.isscalar(band_idxs):
+            band_idxs = np.array([band_idxs])
+
+        # Apply only to non-compressed / real SLC indices at or after start_idx.
+        to_correct = band_idxs >= self.start_idx
+        if not np.any(to_correct):
+            return np.asarray(slc_block)
+
+        out = np.asarray(slc_block).copy()
+        phase_band_idxs = band_idxs[to_correct] - self.start_idx
+        phase = np.stack(
+            [
+                np.asarray(self.phase_stack[int(phase_idx), rows, cols])
+                for phase_idx in phase_band_idxs
+            ],
+            axis=0,
+        )
+        out[to_correct] *= np.exp(1j * self.phase_sign * phase)
+        return out
 
 
 def _parse_vrt_file(vrt_file):

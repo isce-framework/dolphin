@@ -13,6 +13,7 @@ from dolphin.io._readers import (
     EagerLoader,
     HDF5Reader,
     HDF5StackReader,
+    PhaseCorrectedStackReader,
     RasterReader,
     RasterStackReader,
     VRTStack,
@@ -354,6 +355,92 @@ def test_read_stack_nc(vrt_stack_nc, slc_stack):
     loaded = ds.ReadAsArray()
     npt.assert_array_almost_equal(loaded, slc_stack)
     npt.assert_array_almost_equal(vrt_stack_nc.read_stack(), slc_stack)
+
+
+def test_phase_corrected_stack_reader(tmp_path, slc_file_list, slc_stack):
+    slc_vrt = VRTStack(slc_file_list, outfile=tmp_path / "slcs.vrt")
+
+    # Uniform pi/2 phase correction, so output should be input * 1j.
+    phase_files = []
+    for i in range(slc_stack.shape[0]):
+        phase_file = tmp_path / f"phase_{i}.tif"
+        phase = np.full(slc_stack.shape[-2:], np.pi / 2, dtype=np.float32)
+        with pytest.warns(NotGeoreferencedWarning):
+            with rio.open(
+                phase_file,
+                "w",
+                driver="GTiff",
+                width=phase.shape[1],
+                height=phase.shape[0],
+                count=1,
+                dtype=phase.dtype,
+            ) as dst:
+                dst.write(phase, 1)
+        phase_files.append(phase_file)
+
+    phase_vrt = VRTStack(phase_files, outfile=tmp_path / "phase.vrt")
+    corrected = PhaseCorrectedStackReader(slc_vrt, phase_vrt)
+
+    got = corrected[:, :, :]
+    expected = slc_stack * np.exp(1j * (np.pi / 2))
+    npt.assert_allclose(got, expected, rtol=1e-6, atol=1e-6)
+
+
+def test_phase_corrected_stack_reader_start_idx(tmp_path, slc_file_list, slc_stack):
+    slc_vrt = VRTStack(slc_file_list, outfile=tmp_path / "slcs_partial.vrt")
+
+    start_idx = 1
+    phase_files = []
+    for i in range(slc_stack.shape[0] - start_idx):
+        phase_file = tmp_path / f"phase_partial_{i}.tif"
+        phase = np.full(slc_stack.shape[-2:], np.pi, dtype=np.float32)
+        with pytest.warns(NotGeoreferencedWarning):
+            with rio.open(
+                phase_file,
+                "w",
+                driver="GTiff",
+                width=phase.shape[1],
+                height=phase.shape[0],
+                count=1,
+                dtype=phase.dtype,
+            ) as dst:
+                dst.write(phase, 1)
+        phase_files.append(phase_file)
+
+    phase_vrt = VRTStack(phase_files, outfile=tmp_path / "phase_partial.vrt")
+    corrected = PhaseCorrectedStackReader(slc_vrt, phase_vrt, start_idx=start_idx)
+
+    got = corrected[:, :, :]
+    expected = slc_stack.copy()
+    expected[start_idx:] *= np.exp(1j * np.pi)
+    npt.assert_allclose(got, expected, rtol=1e-6, atol=1e-6)
+
+
+def test_phase_corrected_stack_reader_phase_sign(tmp_path, slc_file_list, slc_stack):
+    slc_vrt = VRTStack(slc_file_list, outfile=tmp_path / "slcs_sign.vrt")
+    phase_files = []
+    for i in range(slc_stack.shape[0]):
+        phase_file = tmp_path / f"phase_sign_{i}.tif"
+        phase = np.full(slc_stack.shape[-2:], np.pi / 3, dtype=np.float32)
+        with pytest.warns(NotGeoreferencedWarning):
+            with rio.open(
+                phase_file,
+                "w",
+                driver="GTiff",
+                width=phase.shape[1],
+                height=phase.shape[0],
+                count=1,
+                dtype=phase.dtype,
+            ) as dst:
+                dst.write(phase, 1)
+        phase_files.append(phase_file)
+
+    phase_vrt = VRTStack(phase_files, outfile=tmp_path / "phase_sign.vrt")
+    corrected = PhaseCorrectedStackReader(slc_vrt, phase_vrt, phase_sign=-1)
+
+    got = corrected[:, :, :]
+    expected = slc_stack * np.exp(-1j * (np.pi / 3))
+    npt.assert_allclose(got, expected, rtol=1e-6, atol=1e-6)
 
 
 def test_read_stack_1_file(tmp_path, slc_file_list):
