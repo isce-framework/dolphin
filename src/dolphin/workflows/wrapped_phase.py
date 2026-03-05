@@ -434,7 +434,8 @@ def _maybe_generate_gamma_sim_orb(
 
     if all_complete:
         logger.info(
-            "Found %d complete GAMMA sim_orb files, skipping create_offset/phase_sim_orb",
+            "Found %d complete GAMMA sim_orb files, skipping"
+            " create_offset/phase_sim_orb",
             len(sim_orb_vrts),
         )
         return sim_orb_vrts

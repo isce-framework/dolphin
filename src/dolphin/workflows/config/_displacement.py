@@ -238,8 +238,8 @@ class DisplacementWorkflow(WorkflowBase):
             phase_files = [Path(f) for f in self.flat_earth_phase_file_list]
             if len(phase_files) != len(sorted_slcs):
                 msg = (
-                    "flat_earth_phase_file_list must have same length as cslc_file_list."
-                    f" Got {len(phase_files)} and {len(sorted_slcs)}"
+                    "flat_earth_phase_file_list must have same length as"
+                    f" cslc_file_list. Got {len(phase_files)} and {len(sorted_slcs)}"
                 )
                 raise ValueError(msg)
 

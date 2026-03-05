@@ -1028,6 +1028,7 @@ class PhaseCorrectedStackReader(StackReader):
         Bands before `start_idx` are returned unchanged.
     phase_sign : int, optional
         Sign multiplier applied to phase, either +1 or -1.
+
     """
 
     slc_stack: StackReader

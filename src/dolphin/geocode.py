@@ -111,7 +111,9 @@ def geocode_with_gamma_lookup_table(
             creation_options=creation_options,
         )
     except Exception as e:
-        logger.warning("pt2geo lat/lon path unavailable, fallback to lookup mode: %s", e)
+        logger.warning(
+            "pt2geo lat/lon path unavailable, fallback to lookup mode: %s", e
+        )
 
     driver = gdal.GetDriverByName("GTiff")
     out_ds = driver.Create(
@@ -149,17 +151,19 @@ def geocode_with_gamma_lookup_table(
         expected = out_width * out_height
         if lookup_raw.size != expected:
             msg = (
-                f"Lookup size mismatch for {lookup_file}: got {lookup_raw.size} complex samples,"
-                f" expected {expected} from {dem_par_file}"
+                f"Lookup size mismatch for {lookup_file}: got {lookup_raw.size} complex"
+                f" samples, expected {expected} from {dem_par_file}"
             )
             raise ValueError(msg)
         lookup = lookup_raw.reshape(out_height, out_width)
-        x_coords, y_coords, mode_tag, in_bounds_ratio = _extract_best_lookup_coordinates(
-            lookup=lookup,
-            in_width=in_width,
-            in_height=in_height,
-            row_stride=row_stride,
-            col_stride=col_stride,
+        x_coords, y_coords, mode_tag, in_bounds_ratio = (
+            _extract_best_lookup_coordinates(
+                lookup=lookup,
+                in_width=in_width,
+                in_height=in_height,
+                row_stride=row_stride,
+                col_stride=col_stride,
+            )
         )
         logger.info(
             "Fallback lookup decode mode=%s (in-bounds %.1f%%)",
@@ -254,7 +258,10 @@ def _resample_with_geocode_back(
         out = np.fromfile(out_bin, dtype=np.float32)
         expected = out_width * out_height
         if out.size != expected:
-            msg = f"geocode_back output size mismatch: got {out.size}, expected {expected}"
+            msg = (
+                f"geocode_back output size mismatch: got {out.size}, expected"
+                f" {expected}"
+            )
             raise RuntimeError(msg)
         return out.reshape(out_height, out_width)
 
@@ -443,7 +450,10 @@ def _read_gamma_plat_lon(
     raw_be = np.fromfile(plat_lon_file, dtype=np.dtype(">f8"))
     raw_le = np.fromfile(plat_lon_file, dtype=np.dtype("<f8"))
     if raw_be.size != n and raw_le.size != n:
-        msg = f"Unexpected plat_lon size in {plat_lon_file}: {raw_be.size} / {raw_le.size}"
+        msg = (
+            f"Unexpected plat_lon size in {plat_lon_file}: {raw_be.size} /"
+            f" {raw_le.size}"
+        )
         raise ValueError(msg)
 
     def _score(raw: np.ndarray) -> tuple[np.ndarray, float]:
@@ -563,7 +573,9 @@ def _resample_from_lookup(
             & (yi >= 0)
             & (yi < arr.shape[0])
         )
-        out = np.full(out_shape, nodata if nodata is not None else np.nan, dtype=arr.dtype)
+        out = np.full(
+            out_shape, nodata if nodata is not None else np.nan, dtype=arr.dtype
+        )
         out[valid] = arr[yi[valid], xi[valid]]
         return out
 
@@ -602,7 +614,9 @@ def _resample_from_lookup(
     q22 = arr[y1v, x1v]
 
     if nodata is None:
-        corner_ok = np.isfinite(q11) & np.isfinite(q21) & np.isfinite(q12) & np.isfinite(q22)
+        corner_ok = (
+            np.isfinite(q11) & np.isfinite(q21) & np.isfinite(q12) & np.isfinite(q22)
+        )
     else:
         corner_ok = (
             np.isfinite(q11)
@@ -1293,7 +1307,9 @@ def run(
             lat_file, lon_file = _find_lat_lon_files(geometry_dir)
             logger.info("Using lat=%s, lon=%s", lat_file.name, lon_file.name)
         except FileNotFoundError:
-            gamma_lookup_file, gamma_dem_par_file = _find_gamma_lookup_files(geometry_dir)
+            gamma_lookup_file, gamma_dem_par_file = _find_gamma_lookup_files(
+                geometry_dir
+            )
             geometry_mode = "gamma_lookup"
             logger.info(
                 "Using GAMMA lookup=%s, dem_par=%s",
@@ -1304,8 +1320,9 @@ def run(
     if geometry_mode == "latlon":
         if lat_file is None or lon_file is None:
             msg = (
-                "Must provide either --geometry, or both --lat and --lon. "
-                "For GAMMA lookup geocoding, pass --geometry containing lookup_fine/lookup and dem_seg.par."
+                "Must provide either --geometry, or both --lat and --lon. For GAMMA"
+                " lookup geocoding, pass --geometry containing lookup_fine/lookup and"
+                " dem_seg.par."
             )
             raise ValueError(msg)
 
@@ -1334,8 +1351,9 @@ def run(
 
     if geometry_mode == "gamma_lookup" and parsed_strides is None:
         logger.warning(
-            "No strides configured for GAMMA lookup geocoding. "
-            "If inputs are multilooked, pass -c dolphin_config.yaml (or place it under --dolphin-dir)."
+            "No strides configured for GAMMA lookup geocoding. If inputs are"
+            " multilooked, pass -c dolphin_config.yaml (or place it under"
+            " --dolphin-dir)."
         )
 
     # Parse spacing

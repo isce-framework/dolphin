@@ -371,9 +371,9 @@ class TestGammaLookupGeocode:
         # Build a synthetic 1x1 lookup in full-res coordinates for strides=(2, 2).
         stride_y, stride_x = 2, 2
         yy, xx = np.meshgrid(np.arange(in_rows), np.arange(in_cols), indexing="ij")
-        lookup = (xx * stride_x).astype(np.float32) + 1j * (
-            yy * stride_y
-        ).astype(np.float32)
+        lookup = (xx * stride_x).astype(np.float32) + 1j * (yy * stride_y).astype(
+            np.float32
+        )
 
         geometry_dir = tmp_path / "DEM_prep"
         geometry_dir.mkdir()
@@ -406,7 +406,9 @@ class TestGammaLookupGeocode:
         geometry_dir.mkdir()
         yy, xx = np.meshgrid(np.arange(in_rows), np.arange(in_cols), indexing="ij")
         lookup = xx.astype(np.float32) + 1j * yy.astype(np.float32)
-        (geometry_dir / "lookup_fine").write_bytes(lookup.astype(np.complex64).tobytes())
+        (geometry_dir / "lookup_fine").write_bytes(
+            lookup.astype(np.complex64).tobytes()
+        )
         self._write_dem_par(geometry_dir / "dem_seg.par", width=in_cols, nlines=in_rows)
 
         out = tmp_path / "velocity.geo.tif"

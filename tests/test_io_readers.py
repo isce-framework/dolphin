@@ -365,17 +365,16 @@ def test_phase_corrected_stack_reader(tmp_path, slc_file_list, slc_stack):
     for i in range(slc_stack.shape[0]):
         phase_file = tmp_path / f"phase_{i}.tif"
         phase = np.full(slc_stack.shape[-2:], np.pi / 2, dtype=np.float32)
-        with pytest.warns(NotGeoreferencedWarning):
-            with rio.open(
-                phase_file,
-                "w",
-                driver="GTiff",
-                width=phase.shape[1],
-                height=phase.shape[0],
-                count=1,
-                dtype=phase.dtype,
-            ) as dst:
-                dst.write(phase, 1)
+        with pytest.warns(NotGeoreferencedWarning), rio.open(
+            phase_file,
+            "w",
+            driver="GTiff",
+            width=phase.shape[1],
+            height=phase.shape[0],
+            count=1,
+            dtype=phase.dtype,
+        ) as dst:
+            dst.write(phase, 1)
         phase_files.append(phase_file)
 
     phase_vrt = VRTStack(phase_files, outfile=tmp_path / "phase.vrt")
@@ -394,17 +393,16 @@ def test_phase_corrected_stack_reader_start_idx(tmp_path, slc_file_list, slc_sta
     for i in range(slc_stack.shape[0] - start_idx):
         phase_file = tmp_path / f"phase_partial_{i}.tif"
         phase = np.full(slc_stack.shape[-2:], np.pi, dtype=np.float32)
-        with pytest.warns(NotGeoreferencedWarning):
-            with rio.open(
-                phase_file,
-                "w",
-                driver="GTiff",
-                width=phase.shape[1],
-                height=phase.shape[0],
-                count=1,
-                dtype=phase.dtype,
-            ) as dst:
-                dst.write(phase, 1)
+        with pytest.warns(NotGeoreferencedWarning), rio.open(
+            phase_file,
+            "w",
+            driver="GTiff",
+            width=phase.shape[1],
+            height=phase.shape[0],
+            count=1,
+            dtype=phase.dtype,
+        ) as dst:
+            dst.write(phase, 1)
         phase_files.append(phase_file)
 
     phase_vrt = VRTStack(phase_files, outfile=tmp_path / "phase_partial.vrt")
@@ -422,17 +420,16 @@ def test_phase_corrected_stack_reader_phase_sign(tmp_path, slc_file_list, slc_st
     for i in range(slc_stack.shape[0]):
         phase_file = tmp_path / f"phase_sign_{i}.tif"
         phase = np.full(slc_stack.shape[-2:], np.pi / 3, dtype=np.float32)
-        with pytest.warns(NotGeoreferencedWarning):
-            with rio.open(
-                phase_file,
-                "w",
-                driver="GTiff",
-                width=phase.shape[1],
-                height=phase.shape[0],
-                count=1,
-                dtype=phase.dtype,
-            ) as dst:
-                dst.write(phase, 1)
+        with pytest.warns(NotGeoreferencedWarning), rio.open(
+            phase_file,
+            "w",
+            driver="GTiff",
+            width=phase.shape[1],
+            height=phase.shape[0],
+            count=1,
+            dtype=phase.dtype,
+        ) as dst:
+            dst.write(phase, 1)
         phase_files.append(phase_file)
 
     phase_vrt = VRTStack(phase_files, outfile=tmp_path / "phase_sign.vrt")

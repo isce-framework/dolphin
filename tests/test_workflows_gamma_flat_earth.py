@@ -10,9 +10,7 @@ def _write_gamma_inputs(tmp_path: Path) -> list[Path]:
         slc.write_bytes(b"\x00" * 16)
         par = tmp_path / f"{d}.rslc.par"
         par.write_text(
-            "range_samples: 2\n"
-            "azimuth_lines: 2\n"
-            "image_format: SCOMPLEX\n",
+            "range_samples: 2\nazimuth_lines: 2\nimage_format: SCOMPLEX\n",
             encoding="utf-8",
         )
         vrt = tmp_path / f"{d}.rslc.vrt"
@@ -20,8 +18,13 @@ def _write_gamma_inputs(tmp_path: Path) -> list[Path]:
             "\n".join(
                 [
                     '<VRTDataset rasterXSize="2" rasterYSize="2">',
-                    '  <VRTRasterBand dataType="CInt16" band="1" subClass="VRTRawRasterBand">',
-                    '    <SourceFilename relativeToVRT="1">' + slc.name + "</SourceFilename>",
+                    (
+                        '  <VRTRasterBand dataType="CInt16" band="1"'
+                        ' subClass="VRTRawRasterBand">'
+                    ),
+                    '    <SourceFilename relativeToVRT="1">'
+                    + slc.name
+                    + "</SourceFilename>",
                     "    <ImageOffset>0</ImageOffset>",
                     "    <PixelOffset>4</PixelOffset>",
                     "    <LineOffset>8</LineOffset>",
