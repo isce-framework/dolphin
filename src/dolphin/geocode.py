@@ -1221,6 +1221,8 @@ def run(
                 "Path to dolphin_config.yaml. Reads"
                 " output_options.strides to determine the decimation factor"
                 " of input files relative to the lat/lon geolocation files."
+                " In bulk mode (-d), if omitted and <dolphin-dir>/dolphin_config.yaml"
+                " exists, it is used automatically."
             ),
         ),
     ] = None,
@@ -1249,7 +1251,11 @@ def run(
     --------
     Bulk geocode a dolphin work directory:
 
-        dolphin geocode -d ./dolphin_output -g geometry/ -c dolphin_config.yaml
+        dolphin geocode -d ./dolphin_output -g geometry/
+
+    Equivalent explicit form (recommended when running from another directory):
+
+        dolphin geocode -d ./dolphin_output -g geometry/ -c ./dolphin_output/dolphin_config.yaml
 
     Single file with geometry directory:
 
@@ -1309,6 +1315,12 @@ def run(
         assert lon_file.exists(), f"Lon file not found: {lon_file}"
 
     # Read strides from dolphin config
+    if config is None and dolphin_dir is not None:
+        auto_cfg = Path(dolphin_dir) / "dolphin_config.yaml"
+        if auto_cfg.exists():
+            config = auto_cfg
+            logger.info("Auto-using config from dolphin_dir: %s", config)
+
     parsed_strides: tuple[int, int] | None = None
     if config is not None:
         from dolphin.workflows.config import DisplacementWorkflow
@@ -1319,6 +1331,12 @@ def run(
         if sy != 1 or sx != 1:
             parsed_strides = (sy, sx)
             logger.info("Using strides from config: (%d, %d)", sy, sx)
+
+    if geometry_mode == "gamma_lookup" and parsed_strides is None:
+        logger.warning(
+            "No strides configured for GAMMA lookup geocoding. "
+            "If inputs are multilooked, pass -c dolphin_config.yaml (or place it under --dolphin-dir)."
+        )
 
     # Parse spacing
     parsed_spacing: tuple[float, float] | None = None
