@@ -1,0 +1,85 @@
+# Based off of scikit-image .github/workflows/benchmarks.yml
+# and tqdm .github/workflows/check.yml#L54C1-L54C1
+name: Benchmark
+
+on:
+  pull_request:
+    types: [labeled]
+  workflow_dispatch:
+
+jobs:
+  benchmark:
+    if: contains(github.event.label.name, 'benchmark') || github.event_name == 'workflow_dispatch'
+    name: Linux
+    runs-on: ubuntu-latest
+
+    steps:
+      # We need the full repo to avoid this issue
+      # https://github.com/actions/checkout/issues/23
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup environment
+        uses: mamba-org/setup-micromamba@v2
+        with:
+          environment-file: requirements.txt
+          environment-name: dolphin
+          condarc: |
+            channels:
+              - conda-forge
+              - nodefaults
+          create-args: >-
+            python=3.11
+            asv>=0.6
+
+      - name: Record machine info
+        shell: bash -l {0}
+        run: |
+          asv machine --yes
+      # https://github.com/tqdm/tqdm/blob/4c956c20b83be4312460fc0c4812eeb3fef5e7df/.github/workflows/check.yml#L26
+      - name: Restore previous results
+        uses: actions/cache@v5
+        with:
+          path: .asv
+          key: asv-${{ runner.os }}
+          restore-keys: |
+            asv-
+
+      - name: Run benchmarks
+        shell: bash -l {0}
+        id: benchmark
+        env:
+          OPENBLAS_NUM_THREADS: 1
+          MKL_NUM_THREADS: 1
+          OMP_NUM_THREADS: 1
+        run: |
+          set -x
+
+          echo "Baseline:  ${{ github.event.pull_request.base.sha }} (${{ github.event.pull_request.base.label }})"
+          echo "Contender: ${GITHUB_SHA} (${{ github.event.pull_request.head.label }})"
+
+          # Run benchmarks for current commit against base
+          ASV_OPTIONS="--split --show-stderr"
+          asv continuous $ASV_OPTIONS ${{ github.event.pull_request.base.sha }} ${GITHUB_SHA} \
+              | sed "/Traceback \|failed$/ s/^/::error::/" \
+              | tee benchmarks.log
+
+          # Report and export results for subsequent steps
+          if grep "Traceback \|failed" benchmarks.log > /dev/null ; then
+              exit 1
+          fi
+
+      - name: Add instructions to artifact
+        if: always()
+        run: cp benchmarks/README_CI.md benchmarks.log .asv/results/
+
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: asv-benchmark-results-${{ runner.os }}
+          path: .asv/results
+
+# For now, we're just uploading the artifact
+# If we want to publish to github pages, may want this:
+# https://github.com/tqdm/tqdm/blob/4c956c20b83be4312460fc0c4812eeb3fef5e7df/.github/workflows/check.yml#L54C1-L54C1

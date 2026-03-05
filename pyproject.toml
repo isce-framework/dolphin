@@ -1,0 +1,138 @@
+[build-system]
+requires = ["setuptools>=64.0", "setuptools_scm[toml]>=6.2"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dolphin"
+description = "Workflows for generating surface displacement maps using InSAR"
+readme = { file = "README.md", content-type = "text/markdown" }
+requires-python = ">=3.10"
+
+classifiers = [
+  "Development Status :: 2 - Pre-Alpha",
+  "Intended Audience :: Science/Research",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Operating System :: OS Independent",
+]
+license = { file = "LICENSE.txt" }
+
+# The version will be written into a version.py upon install, auto-generated
+# see section: setuptools_scm
+# https://setuptools.pypa.io/en/latest/userguide/pyproject_config.html#dynamic-metadata
+# dependencies will be read from text files
+dynamic = ["version", "dependencies", "optional-dependencies"]
+
+[project.urls]
+Homepage = "https://github.com/isce-framework/dolphin"
+"Bug Tracker" = "https://github.com/isce-framework/dolphin/issues"
+
+# Entry points for the command line interface
+[project.scripts]
+dolphin = "dolphin.cli:main"
+
+[tool.setuptools.dynamic]
+dependencies = { file = ["requirements.txt"] }
+
+# extra requirements: `pip install dolphin[docs]` or `pip install .[docs]`
+[tool.setuptools.dynamic.optional-dependencies.docs]
+file = ["docs/requirements.txt"]
+[tool.setuptools.dynamic.optional-dependencies.test]
+file = ["tests/requirements.txt"]
+
+[tool.setuptools_scm]
+# https://github.com/pypa/setuptools_scm#configuration-parameters
+write_to = "src/dolphin/_version.py"
+# https://github.com/pypa/setuptools_scm#version-number-construction
+version_scheme = "no-guess-dev" # Will not guess the next version
+
+[tool.ruff]
+src = ["src"]       # For known-first-party imports
+unsafe-fixes = true
+
+[tool.ruff.lint]
+select = [
+  "A",   # flake8-builtins
+  "ARG", # flake8-unused-arguments
+  "B",   # flake8-bugbear
+  "C4",  # flake8-comprehensions
+  "D",   # pydocstyle
+  "E",   # pycodestyle (errors)
+  "W",   # pycodestyle (warnings)
+  # "EM",  # flake8-errmsg
+  "EXE",    # flake8-executable
+  "F",      # Pyflakes
+  "I",      # isort
+  "ISC",    # flake8-implicit-str-concat
+  "N",      # pep8-naming
+  "NPY201", # numpy 2.0 depgrcations
+  "PGH",    # pygrep-hooks
+  "PIE",    # flake8-pie
+  "PL",     # Pylint
+  # "PT",  # flake8-pytest-style
+  "PTH", # flake8-use-pathlib
+  "PYI", # flake8-pyi
+  "RUF", # Ruff-specific rules
+  "SIM", # flake8-simplify
+  "TRY", # tryceratops
+  # "UP",  # pyupgrade  <- not working with Pydantic lower python versions
+  "YTT", # flake8-2020
+]
+
+ignore = [
+  "D100",    # Missing docstring in public module
+  "D104",    # Missing docstring in public package
+  "D105",    # Missing docstring in magic method
+  "D203",    # 1 blank line required before class docstring
+  "D213",    # Multi-line docstring summary should start at the second line
+  "N803",    # Argument name should be lowercase
+  "N806",    # Variable _ in function should be lowercase
+  "PIE796",  # Non-unique values are redundant and likely a mistake.
+  "PLR",     # Pylint Refactor
+  "PTH123",  # `open()` should be replaced by `Path.open()`
+  "PTH207",  # "Replace `glob` with `Path.glob` or `Path.rglob`
+  "ISC001",  # The following rules may cause conflicts when used with the formatter
+  "TRY003",  # Avoid specifying long messages outside the exception
+  "F722",    # Syntax error in forward annotation
+  "PLC0415", # `import` should be at the top-level
+]
+
+exclude = ["scripts"]
+
+[tool.ruff.lint.per-file-ignores]
+"**/__init__.py" = ["F401", "F403"]
+"tests/**" = ["D", "N", "PTH"]
+"benchmarks/**" = ["D", "N", "PTH", "RUF", "ARG002"]
+"docs/mdx_bib.py" = ["ALL"]                          # ignore the vendored code
+
+[tool.ruff.lint.flake8-unused-arguments]
+# Whether to allow unused variadic arguments, like *args and **kwargs.
+ignore-variadic-names = true
+
+
+[tool.black]
+preview = true
+
+[tool.mypy]
+python_version = "3.10"
+ignore_missing_imports = true
+plugins = ["pydantic.mypy"]
+
+
+[tool.pytest.ini_options]
+doctest_optionflags = "NORMALIZE_WHITESPACE NUMBER"
+addopts = " --cov=dolphin --doctest-modules --randomly-seed=1234 --ignore=scripts --ignore=benchmarks --ignore=docs --ignore=data"
+filterwarnings = [
+  "error",
+  # DeprecationWarning thrown in pkg_resources for older numba versions and llvmlite
+  "ignore:.*pkg_resources.*",
+  # remove after https://github.com/conda-forge/h5py-feedstock/issues/122 is solved:
+  "ignore:h5py is running against HDF5.*:UserWarning",
+  # DeprecationWarning: ast.Str
+  "ignore:ast.Str is deprecated.*:DeprecationWarning",
+  # ResourceWarning from unclosed temp files in third-party code (Python 3.13+)
+  "ignore::pytest.PytestUnraisableExceptionWarning",
+]

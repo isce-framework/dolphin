@@ -1,0 +1,14 @@
+# spurt>=0.1.1
+asv
+black
+boto3
+moto[server,s3]
+pooch
+pre-commit
+pytest
+pytest-cov
+pytest-randomly
+pytest-xdist
+shapely
+snaphu>=0.4.1
+xarray

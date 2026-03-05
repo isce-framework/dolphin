@@ -1,0 +1,69 @@
+site_name: Documentation for dolphin
+repo_url: https://github.com/isce-framework/dolphin
+
+theme:
+  name: "material"
+  palette:
+    # https://squidfunk.github.io/mkdocs-material/setup/changing-the-colors/#primary-color
+    primary: "cyan"
+  favicon: img/favicon.ico
+  logo: img/apple-touch-icon.png
+  highlightjs: true
+
+
+plugins:
+- search
+# plugin suggestions from here: https://mkdocstrings.github.io/recipes/
+- autorefs
+- gen-files:
+    scripts:
+    - docs/gen_ref_pages.py
+# https://github.com/oprypin/mkdocs-literate-nav
+- literate-nav:
+    nav_file: summary.md
+# https://mkdocstrings.github.io/python/usage/
+- mkdocstrings:
+    handlers:
+      python:
+        paths: [src]
+        options:
+          docstring_style: numpy
+          members_order: alphabetical # source
+        import:
+        - https://docs.scipy.org/doc/scipy/objects.inv  # scipy doc objects
+- mkdocs-jupyter:
+    include: ["docs/notebooks/*.ipynb"]
+    ignore: ["docs/notebooks/data/*"]
+
+markdown_extensions:
+  - pymdownx.arithmatex:
+      generic: true
+  - pymdownx.snippets:
+      check_paths: true
+  - footnotes
+  - docs.mdx_bib:
+      bibtex_file: docs/references.bib
+      order: 'unsorted'
+
+extra_javascript:
+  - javascripts/mathjax.js
+  - https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js
+
+
+watch:
+- src/
+
+nav:
+- index.md
+- getting-started.md
+- overview.md
+- tutorials.md
+# - Tutorials:
+#   - Notebook page: notebooks/walkthrough-basic.ipynb
+#   # - Notebook page2: notebooks/walkthrough-basic.html
+- how-to-guides.md
+- faq.md
+# https://mkdocstrings.github.io/recipes/#generate-a-literate-navigation-file
+# trailing slash: that mkdocs-literate-nav knows a summary.md file is in that folder.
+- developer-setup.md
+- Code Reference: reference/

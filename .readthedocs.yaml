@@ -1,0 +1,24 @@
+# .readthedocs.yaml
+# Read the Docs configuration file
+# See https://docs.readthedocs.io/en/stable/config-file/v2.html for details
+version: 2
+
+mkdocs:
+  configuration: mkdocs.yml
+
+# Conda is causing "excessive memory usage"
+# https://docs.readthedocs.io/en/stable/guides/conda.html#making-builds-faster-with-mamba
+build:
+  os: "ubuntu-20.04"
+  tools:
+    python: "mambaforge-4.10"
+
+conda:
+  environment: conda-env.yml
+
+python:
+  install:
+    - method: pip
+      path: .
+      extra_requirements:
+        - docs

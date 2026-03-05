@@ -1,0 +1,849 @@
+from __future__ import annotations
+
+import datetime
+import logging
+import shutil
+import subprocess
+import time
+import xml.etree.ElementTree as ET
+from dataclasses import dataclass
+from pathlib import Path
+from typing import NamedTuple, Optional, Sequence, cast
+
+from opera_utils import get_dates, make_nodata_mask
+
+from dolphin import Bbox, Filename, interferogram, masking, ps
+from dolphin._log import log_runtime, setup_logging
+from dolphin.io import PhaseCorrectedStackReader, VRTStack
+from dolphin.utils import get_nearest_date_idx
+from dolphin.workflows import UnwrapMethod
+
+from . import InterferogramNetwork, sequential
+from .config import DisplacementWorkflow
+
+logger = logging.getLogger("dolphin")
+
+
+class WrappedPhaseOutput(NamedTuple):
+    """Output files of the wrapped_phase workflow.
+
+    Attributes
+    ----------
+    ifg_file_list : list[Path]
+        list of Paths to virtual interferograms created.
+    crlb_files : list[Path]
+        Paths to the output Cramer Rao Lower Bound (CRLB) files.
+    closure_phase_files : list[Path]
+        Paths to the output closure phase files.
+    comp_slc_file_list : list[Path]
+        Paths to the compressed SLC files created from each ministack.
+    temp_coh_files : list[Path]
+        Paths to temporal coherence files created.
+        In the case of a single phase linking step, this is from one phase linking step.
+        In the case of sequential phase linking, this from each ministack, and one
+        average of all ministacks.
+    ps_looked_file : Path
+        The multilooked boolean persistent scatterer file.
+    amp_disp_looked_file : Path
+        The multilooked amplitude dispersion file.
+    shp_count_files : list[Path]
+        Paths to the created SHP counts files.
+        In the case of a single phase linking step, this is from one phase linking step.
+        In the case of sequential phase linking, this from each ministack, and one
+        average of all ministacks.
+    similarity_files : list[Path]
+        Paths to phase similarity files.
+        In the case of a single phase linking step, this is from one phase linking step.
+        In the case of sequential phase linking, this from each ministack, and one
+        average of all ministacks.
+
+    """
+
+    ifg_file_list: list[Path]
+    crlb_files: list[Path]
+    closure_phase_files: list[Path]
+    comp_slc_file_list: list[Path]
+    temp_coh_files: list[Path]
+    ps_looked_file: Path
+    amp_disp_looked_file: Path
+    shp_count_files: list[Path]
+    similarity_files: list[Path]
+
+
+@log_runtime
+def run(
+    cfg: DisplacementWorkflow,
+    debug: bool = False,
+    max_workers: int = 1,
+    tqdm_kwargs=None,
+) -> WrappedPhaseOutput:
+    """Run the displacement workflow on a stack of SLCs.
+
+    Parameters
+    ----------
+    cfg : DisplacementWorkflow
+        [`DisplacementWorkflow`][dolphin.workflows.config.DisplacementWorkflow] object
+        for controlling the workflow.
+    debug : bool, optional
+        Enable debug logging, by default False.
+    max_workers : int, optional
+        Number of workers to use to process blocks during phase linking, by default 1.
+    tqdm_kwargs : dict, optional
+        dict of arguments to pass to `tqdm` (e.g. `position=n` for n parallel bars)
+        See https://tqdm.github.io/docs/tqdm/#tqdm-objects for all options.
+
+    Returns
+    -------
+    WrappedPhaseOutput
+        [`WrappedPhaseOutput`][dolphin.workflows.wrapped_phase.WrappedPhaseOutput]
+        object containing the output files of the wrapped phase workflow.
+
+    """
+    t0 = time.perf_counter()
+    setup_logging(debug=debug, filename=cfg.log_file)
+    if tqdm_kwargs is None:
+        tqdm_kwargs = {}
+    work_dir = cfg.work_directory
+    logger.info("Running wrapped phase estimation in %s", work_dir)
+
+    input_file_list = cfg.cslc_file_list
+    phase_file_list = cfg.flat_earth_phase_file_list
+    if not phase_file_list and cfg.auto_gamma_flat_earth:
+        phase_file_list = _maybe_generate_gamma_sim_orb(
+            input_file_list=input_file_list,
+            date_fmt=cfg.input_options.cslc_date_fmt,
+            hgt_file=cfg.gamma_hgt_file,
+            reference_date=cfg.gamma_flat_earth_reference_date,
+            work_directory=cfg.work_directory,
+            scratch_dir=cfg.gamma_flat_earth_scratch_dir,
+        )
+
+    # #############################################
+    # Make a VRT pointing to the input SLC files
+    # #############################################
+    subdataset = cfg.input_options.subdataset
+    vrt_stack = VRTStack(
+        input_file_list,
+        subdataset=subdataset,
+        outfile=cfg.work_directory / "slc_stack.vrt",
+    )
+
+    phase_vrt_stack: Optional[VRTStack] = None
+    corrected_reader = vrt_stack
+    if phase_file_list:
+        phase_vrt_stack = VRTStack(
+            phase_file_list,
+            # Flat-earth phase rasters are typically plain rasters/VRTs.
+            # Do not force the SLC subdataset setting onto this stack.
+            subdataset=None,
+            outfile=cfg.work_directory / "flat_earth_phase_stack.vrt",
+        )
+        corrected_reader = PhaseCorrectedStackReader(
+            vrt_stack, phase_vrt_stack, phase_sign=cfg.gamma_phase_sign
+        )
+
+    # Mark any files beginning with "compressed" as compressed
+    is_compressed = ["compressed" in str(f).lower() for f in input_file_list]
+
+    non_compressed_slcs = [
+        f
+        for f, is_comp in zip(input_file_list, is_compressed, strict=False)
+        if not is_comp
+    ]
+    layover_shadow_mask = (
+        cfg.layover_shadow_mask_files[0] if cfg.layover_shadow_mask_files else None
+    )
+    # Create a mask file from input bounding polygons and/or specified output bounds
+    mask_filename = _get_mask(
+        output_dir=cfg.work_directory,
+        output_bounds=cfg.output_options.bounds,
+        output_bounds_wkt=cfg.output_options.bounds_wkt,
+        output_bounds_epsg=cfg.output_options.bounds_epsg,
+        like_filename=vrt_stack.outfile,
+        layover_shadow_mask=layover_shadow_mask,
+        cslc_file_list=non_compressed_slcs,
+        subdataset=subdataset,
+    )
+
+    nodata_mask = masking.load_mask_as_numpy(mask_filename) if mask_filename else None
+    # ###############
+    # PS selection
+    # ###############
+    ps_output = cfg.ps_options._output_file
+    ps_output.parent.mkdir(parents=True, exist_ok=True)
+    if ps_output.exists():
+        logger.info(f"Skipping making existing PS file {ps_output}")
+    else:
+        logger.info(f"Creating persistent scatterer file {ps_output}")
+        try:
+            existing_amp: Optional[Path] = cfg.amplitude_mean_files[0]
+            existing_disp: Optional[Path] = cfg.amplitude_dispersion_files[0]
+        except IndexError:
+            existing_amp = existing_disp = None
+
+        kwargs = tqdm_kwargs | {"desc": f"PS ({ps_output.parent})"}
+        ps.create_ps(
+            reader=corrected_reader,
+            like_filename=vrt_stack.outfile,
+            output_file=ps_output,
+            output_amp_mean_file=cfg.ps_options._amp_mean_file,
+            output_amp_dispersion_file=cfg.ps_options._amp_dispersion_file,
+            amp_dispersion_threshold=cfg.ps_options.amp_dispersion_threshold,
+            existing_amp_dispersion_file=existing_disp,
+            nodata_mask=nodata_mask,
+            existing_amp_mean_file=existing_amp,
+            block_shape=cfg.worker_settings.block_shape,
+            **kwargs,
+        )
+
+    # Save a looked version of the PS mask too
+    strides_dict = cfg.output_options.strides.model_dump()
+    ps_looked_file, amp_disp_looked_file = ps.multilook_ps_files(
+        strides=strides_dict,
+        ps_mask_file=cfg.ps_options._output_file,
+        amp_dispersion_file=cfg.ps_options._amp_dispersion_file,
+    )
+
+    # #########################
+    # phase linking/EVD step
+    # #########################
+    pl_path = cfg.phase_linking._directory
+    pl_path.mkdir(parents=True, exist_ok=True)
+
+    input_dates = _get_input_dates(
+        input_file_list, is_compressed, cfg.input_options.cslc_date_fmt
+    )
+
+    extra_reference_date = cfg.output_options.extra_reference_date
+    if extra_reference_date:
+        new_compressed_slc_reference_idx = get_nearest_date_idx(
+            [date_tup[0] for date_tup in input_dates], extra_reference_date
+        )
+    else:
+        new_compressed_slc_reference_idx = None
+
+    phase_linked_slcs = sorted(pl_path.glob("2*.tif"))
+    if len(phase_linked_slcs) > 0:
+        logger.info(f"Skipping EVD step, {len(phase_linked_slcs)} files already exist")
+        comp_slc_list = sorted(pl_path.glob("compressed*tif"))
+        temp_coh_files = sorted(pl_path.glob("temporal_coherence*tif"))
+        shp_count_files = sorted(pl_path.glob("shp_count*tif"))
+        similarity_files = sorted(pl_path.glob("*similarity*tif"))
+        crlb_files = sorted(pl_path.rglob("crlb*tif"))
+        closure_phase_files = sorted(pl_path.rglob("closure_phase*tif"))
+    else:
+        logger.info(f"Running sequential EMI step in {pl_path}")
+        kwargs = tqdm_kwargs | {"desc": f"Phase linking ({pl_path})"}
+
+        # Figure out if we should compute phase similarity based on single-ref,
+        # or using nearest-3 interferograms
+        is_single_ref = _is_single_reference_network(
+            cfg.interferogram_network, cfg.unwrap_options.unwrap_method
+        )
+        similarity_nearest_n = None if is_single_ref else 3
+
+        # TODO: Need a good way to store the nslc attribute in the PS file...
+        # If we pre-compute it from some big stack, we need to use that for SHP
+        # finding, not use the size of `slc_vrt_file`
+        shp_nslc = None
+        (
+            phase_linked_slcs,
+            crlb_files,
+            closure_phase_files,
+            comp_slc_list,
+            temp_coh_files,
+            shp_count_files,
+            similarity_files,
+        ) = sequential.run_wrapped_phase_sequential(
+            slc_vrt_stack=vrt_stack,
+            phase_vrt_stack=phase_vrt_stack,
+            phase_sign=cfg.gamma_phase_sign,
+            output_folder=pl_path,
+            ministack_size=cfg.phase_linking.ministack_size,
+            output_reference_idx=cfg.phase_linking.output_reference_idx,
+            new_compressed_reference_idx=new_compressed_slc_reference_idx,
+            half_window=cfg.phase_linking.half_window.model_dump(),
+            strides=strides_dict,
+            use_evd=cfg.phase_linking.use_evd,
+            beta=cfg.phase_linking.beta,
+            zero_correlation_threshold=cfg.phase_linking.zero_correlation_threshold,
+            mask_file=mask_filename,
+            ps_mask_file=ps_output,
+            amp_mean_file=cfg.ps_options._amp_mean_file,
+            amp_dispersion_file=cfg.ps_options._amp_dispersion_file,
+            shp_method=cfg.phase_linking.shp_method,
+            shp_alpha=cfg.phase_linking.shp_alpha,
+            shp_nslc=shp_nslc,
+            baseline_lag=cfg.phase_linking.baseline_lag,
+            compressed_slc_plan=cfg.phase_linking.compressed_slc_plan,
+            max_num_compressed=cfg.phase_linking.max_num_compressed,
+            similarity_nearest_n=similarity_nearest_n,
+            cslc_date_fmt=cfg.input_options.cslc_date_fmt,
+            write_crlb=cfg.phase_linking.write_crlb,
+            write_closure_phase=cfg.phase_linking.write_closure_phase,
+            block_shape=cfg.worker_settings.block_shape,
+            max_workers=max_workers,
+            **kwargs,
+        )
+    # Dump the used options for JSON parsing
+    logger.info(
+        "wrapped_phase complete",
+        extra={
+            "elapsed": time.perf_counter() - t0,
+            "phase_linking_options": cfg.phase_linking.model_dump(mode="json"),
+        },
+    )
+
+    # ###################################################
+    # Form interferograms from estimated wrapped phase
+    # ###################################################
+
+    ifg_network = cfg.interferogram_network
+    existing_ifgs = list(ifg_network._directory.glob("*.int.vrt"))
+    if len(existing_ifgs) > 0:
+        logger.info(f"Skipping interferogram step, {len(existing_ifgs)} exists")
+        return WrappedPhaseOutput(
+            existing_ifgs,
+            crlb_files,
+            closure_phase_files,
+            comp_slc_list,
+            temp_coh_files,
+            ps_looked_file,
+            amp_disp_looked_file,
+            shp_count_files,
+            similarity_files,
+        )
+
+    logger.info(f"Creating virtual interferograms from {len(phase_linked_slcs)} files")
+    num_ccslc = sum(is_compressed)
+    ref_idx = cfg.phase_linking.output_reference_idx or max(0, num_ccslc - 1)
+
+    def base_phase_date(filename):
+        """Get the base phase of either real of compressed slcs."""
+        return get_dates(filename, fmt=cfg.input_options.cslc_date_fmt)[0]
+
+    reference_date = [base_phase_date(f) for f in input_file_list][ref_idx]
+
+    # TODO: remove this bad back to get around spurt's required input
+    # Reading direct nearest-3 ifgs is not working due to some slicing problem
+    # so we need to just give it single reference ifgs, all referenced to the beginning
+    # of the stack
+    # For spurt / networks of unwrapping, we ignore this this "changeover" date
+    # It will get applied in the `timeseries/` step
+    is_using_spurt = cfg.unwrap_options.unwrap_method == UnwrapMethod.SPURT
+    # Same thing for nearest-N interferograms: we just form then normally, then
+    # do a final, post-timeseries re-reference.
+    is_using_short_baseline_ifgs = cfg.interferogram_network.max_bandwidth is not None
+
+    if is_using_spurt or is_using_short_baseline_ifgs:
+        extra_reference_date = None
+    else:
+        extra_reference_date = cfg.output_options.extra_reference_date
+
+    ifg_file_list: list[Path] = []
+    ifg_file_list = create_ifgs(
+        interferogram_network=ifg_network,
+        phase_linked_slcs=phase_linked_slcs,
+        contained_compressed_slcs=any(is_compressed),
+        reference_date=reference_date,
+        extra_reference_date=extra_reference_date,
+        file_date_fmt=cfg.input_options.cslc_date_fmt,
+    )
+    return WrappedPhaseOutput(
+        ifg_file_list,
+        crlb_files,
+        closure_phase_files,
+        comp_slc_list,
+        temp_coh_files,
+        ps_looked_file,
+        amp_disp_looked_file,
+        shp_count_files,
+        similarity_files,
+    )
+
+
+@dataclass
+class _GammaInput:
+    date_str: str
+    slc_bin: Path
+    slc_par: Path
+
+
+def _maybe_generate_gamma_sim_orb(
+    *,
+    input_file_list: Sequence[Path],
+    date_fmt: str,
+    hgt_file: Path | None,
+    reference_date: str | None,
+    work_directory: Path,
+    scratch_dir: Path | None,
+) -> list[Path]:
+    gamma_inputs = _parse_gamma_slc_inputs(input_file_list, date_fmt)
+    if not gamma_inputs:
+        logger.info("Inputs do not look like GAMMA RSLC VRTs, skipping auto sim_orb")
+        return []
+
+    if hgt_file is None:
+        msg = (
+            "Detected GAMMA SLC inputs, but `gamma_hgt_file` was not provided. "
+            "Set `gamma_hgt_file` or disable `auto_gamma_flat_earth`."
+        )
+        raise ValueError(msg)
+    if not hgt_file.exists():
+        raise FileNotFoundError(hgt_file)
+
+    for cmd in ("create_offset", "phase_sim_orb"):
+        if shutil.which(cmd) is None:
+            msg = f"Required GAMMA command not found in PATH: {cmd}"
+            raise RuntimeError(msg)
+
+    scratch = scratch_dir or (work_directory / "gamma_flat_earth")
+    scratch.mkdir(parents=True, exist_ok=True)
+    log_file = scratch / "gamma_flat_earth.log"
+
+    dates = [gi.date_str for gi in gamma_inputs]
+    ref_date = reference_date or dates[0]
+    if ref_date not in dates:
+        msg = f"Requested gamma_flat_earth_reference_date {ref_date} not in inputs"
+        raise ValueError(msg)
+
+    ref_idx = dates.index(ref_date)
+    ref_par = gamma_inputs[ref_idx].slc_par
+    xsize, ysize = _read_gamma_par_size(ref_par)
+    expected_nbytes = xsize * ysize * 4
+
+    # Fast path: if all simulated phase files already exist with expected size,
+    # skip running GAMMA commands and only ensure VRT sidecars are present.
+    sim_orb_vrts: list[Path] = []
+    all_complete = True
+    for gi in gamma_inputs:
+        sim_orb = scratch / f"{ref_date}_{gi.date_str}.sim_orb"
+        sim_orb_vrt = sim_orb.with_suffix(".sim_orb.vrt")
+        if not _is_complete_binary_file(sim_orb, expected_nbytes):
+            all_complete = False
+            break
+        _write_gamma_raw_vrt(
+            vrt_path=sim_orb_vrt,
+            bin_file=sim_orb,
+            xsize=xsize,
+            ysize=ysize,
+            gdal_dtype="Float32",
+            pixel_bytes=4,
+        )
+        sim_orb_vrts.append(sim_orb_vrt)
+
+    if all_complete:
+        logger.info(
+            "Found %d complete GAMMA sim_orb files, skipping create_offset/phase_sim_orb",
+            len(sim_orb_vrts),
+        )
+        return sim_orb_vrts
+
+    for gi in gamma_inputs:
+        off_par = scratch / f"{ref_date}_{gi.date_str}.off"
+        sim_orb = scratch / f"{ref_date}_{gi.date_str}.sim_orb"
+        sim_orb_vrt = sim_orb.with_suffix(".sim_orb.vrt")
+
+        create_offset_cmd = [
+            "create_offset",
+            str(ref_par),
+            str(gi.slc_par),
+            str(off_par),
+            "1",
+            "1",
+            "1",
+            "0",
+        ]
+        phase_sim_orb_cmd = [
+            "phase_sim_orb",
+            str(ref_par),
+            str(gi.slc_par),
+            str(off_par),
+            str(hgt_file),
+            str(sim_orb),
+            str(ref_par),
+            "-",
+            "-",
+            "1",
+            "1",
+        ]
+
+        with log_file.open("a", encoding="utf-8") as fid:
+            if _is_complete_binary_file(sim_orb, expected_nbytes):
+                fid.write(f"[skip] {sim_orb} exists and is complete\n")
+            else:
+                fid.write("[cmd] " + " ".join(create_offset_cmd) + "\n")
+                subprocess.run(create_offset_cmd, check=True, stdout=fid, stderr=fid)
+                fid.write("[cmd] " + " ".join(phase_sim_orb_cmd) + "\n")
+                subprocess.run(phase_sim_orb_cmd, check=True, stdout=fid, stderr=fid)
+
+        if not _is_complete_binary_file(sim_orb, expected_nbytes):
+            msg = f"GAMMA did not produce expected sim_orb file: {sim_orb}"
+            raise RuntimeError(msg)
+
+        _write_gamma_raw_vrt(
+            vrt_path=sim_orb_vrt,
+            bin_file=sim_orb,
+            xsize=xsize,
+            ysize=ysize,
+            gdal_dtype="Float32",
+            pixel_bytes=4,
+        )
+        sim_orb_vrts.append(sim_orb_vrt)
+
+    logger.info("Auto-generated %d GAMMA sim_orb files", len(sim_orb_vrts))
+    return sim_orb_vrts
+
+
+def _is_complete_binary_file(path: Path, expected_nbytes: int) -> bool:
+    if not path.exists():
+        return False
+    return path.stat().st_size >= expected_nbytes
+
+
+def _parse_gamma_slc_inputs(
+    input_file_list: Sequence[Path], date_fmt: str
+) -> list[_GammaInput]:
+    out: list[_GammaInput] = []
+    for f in input_file_list:
+        if f.suffix.lower() != ".vrt":
+            return []
+        date_match = get_dates(f, fmt=date_fmt)
+        if not date_match:
+            return []
+        src = _get_single_vrt_source_filename(f)
+        if src is None:
+            return []
+        if src.suffix.lower() not in {".rslc", ".slc"}:
+            return []
+        par = Path(str(src) + ".par")
+        if not par.exists():
+            return []
+        out.append(
+            _GammaInput(
+                date_str=date_match[0].strftime("%Y%m%d"),
+                slc_bin=src,
+                slc_par=par,
+            )
+        )
+    return out
+
+
+def _get_single_vrt_source_filename(vrt_file: Path) -> Path | None:
+    try:
+        tree = ET.parse(vrt_file)
+    except ET.ParseError:
+        return None
+    root = tree.getroot()
+    node = root.find(".//SourceFilename")
+    if node is None or node.text is None:
+        return None
+    src = Path(node.text)
+    if src.is_absolute():
+        return src
+    return (vrt_file.parent / src).resolve(strict=False)
+
+
+def _read_gamma_par_size(par_file: Path) -> tuple[int, int]:
+    vals: dict[str, str] = {}
+    for line in par_file.read_text().splitlines():
+        if ":" not in line:
+            continue
+        key, value = line.split(":", maxsplit=1)
+        vals[key.strip()] = value.strip()
+    return int(vals["range_samples"]), int(vals["azimuth_lines"])
+
+
+def _write_gamma_raw_vrt(
+    *,
+    vrt_path: Path,
+    bin_file: Path,
+    xsize: int,
+    ysize: int,
+    gdal_dtype: str,
+    pixel_bytes: int,
+) -> None:
+    line_bytes = pixel_bytes * xsize
+    with vrt_path.open("w", encoding="utf-8") as f:
+        f.write(f'<VRTDataset rasterXSize="{xsize}" rasterYSize="{ysize}">\n')
+        f.write(
+            f'  <VRTRasterBand dataType="{gdal_dtype}" band="1"'
+            ' subClass="VRTRawRasterBand">\n    <SourceFilename'
+            f' relativeToVRT="1">{bin_file.name}</SourceFilename>\n   '
+            " <ImageOffset>0</ImageOffset>\n   "
+            f" <PixelOffset>{pixel_bytes}</PixelOffset>\n   "
+            f" <LineOffset>{line_bytes}</LineOffset>\n   "
+            " <ByteOrder>MSB</ByteOrder>\n  </VRTRasterBand>\n</VRTDataset>\n"
+        )
+
+
+def create_ifgs(
+    interferogram_network: InterferogramNetwork,
+    phase_linked_slcs: Sequence[Path],
+    contained_compressed_slcs: bool,
+    reference_date: datetime.datetime,
+    extra_reference_date: datetime.datetime | None = None,
+    dry_run: bool = False,
+    file_date_fmt: str = "%Y%m%d",
+) -> list[Path]:
+    """Create the list of interferograms for the `phase_linked_slcs`.
+
+    Parameters
+    ----------
+    interferogram_network : InterferogramNetwork
+        Parameters to determine which ifgs to form.
+    phase_linked_slcs : Sequence[Path]
+        Paths to phase linked SLCs.
+    contained_compressed_slcs : bool
+        Flag indicating that the inputs to phase linking contained compressed SLCs.
+        Needed because the network must be handled differently if we started with
+        compressed SLCs.
+    reference_date : datetime.datetime
+        Date/datetime of the "base phase" for the `phase_linked_slcs`
+    extra_reference_date : datetime.datetime, optional
+        If provided, makes another set of interferograms referenced to this
+        for all dates later than it.
+    dry_run : bool
+        Flag indicating that the ifgs should not be written to disk.
+        Default = False (ifgs will be created).
+    file_date_fmt : str, optional
+        The format string to use when parsing the dates from the file names.
+        Default is "%Y%m%d".
+
+    Returns
+    -------
+    list[Path]
+        List of output VRTInterferograms
+
+    Raises
+    ------
+    ValueError
+        If invalid parameters are passed which lead to 0 interferograms being formed
+    NotImplementedError
+        Currently raised for max-temporal-baseline networks when
+        `contained_compressed_slcs` is True
+
+    """
+    ifg_dir = interferogram_network._directory
+    if not dry_run:
+        ifg_dir.mkdir(parents=True, exist_ok=True)
+
+    ifg_file_list: list[Path] = []
+
+    secondary_dates = [get_dates(f, fmt=file_date_fmt)[0] for f in phase_linked_slcs]
+    # TODO: if we manually set an ifg network (i.e. not rely on spurt),
+    # we may still want to just pass it right to `Network`
+    if not contained_compressed_slcs and extra_reference_date is None:
+        # When no compressed SLCs/extra reference were passed in to the config,
+        # we can directly pass options to `Network` and get the ifg list
+        network = interferogram.Network(
+            slc_list=phase_linked_slcs,
+            reference_idx=interferogram_network.reference_idx,
+            max_bandwidth=interferogram_network.max_bandwidth,
+            max_temporal_baseline=interferogram_network.max_temporal_baseline,
+            indexes=interferogram_network.indexes,
+            outdir=ifg_dir,
+            write=not dry_run,
+            verify_slcs=not dry_run,
+        )
+        if len(network.ifg_list) == 0:
+            msg = "No interferograms were created"
+            raise ValueError(msg)
+        ifg_file_list = [ifg.path for ifg in network.ifg_list]  # type: ignore[misc]
+        assert all(p is not None for p in ifg_file_list)
+
+        return ifg_file_list
+
+    # When we started with compressed SLCs, we need to do some extra work to get the
+    # interferograms we want.
+    # The total SLC phases we have to work with are
+    # 1. reference date (might be before any dates in the filenames)
+    # 2. the secondary of all phase-linked SLCs (which are the names of the files)
+    if extra_reference_date is None:
+        # To get the ifgs from the reference date to secondary(conj), this means
+        # a `.conj()` on the phase-linked SLCs (currently `day1.conj() * day2`)
+        single_ref_ifgs = [
+            interferogram.convert_pl_to_ifg(
+                f, reference_date=reference_date, output_dir=ifg_dir, dry_run=dry_run
+            )
+            for f in phase_linked_slcs
+        ]
+    else:
+        manual_reference_idx = get_nearest_date_idx(
+            secondary_dates, extra_reference_date
+        )
+        # The first part simply takes a `.conj()` of the phase linking outputs
+        single_ref_ifgs = [
+            interferogram.convert_pl_to_ifg(
+                f,
+                reference_date=reference_date,  # this is the `phase_linking.output_idx`
+                output_dir=ifg_dir,
+                dry_run=dry_run,
+            )
+            for f in phase_linked_slcs[: manual_reference_idx + 1]
+        ]
+        # the second part now uses the "extra" date as the ifg reference
+        extra_ref_file = phase_linked_slcs[manual_reference_idx]
+        for f in phase_linked_slcs[manual_reference_idx + 1 :]:
+            v = interferogram.VRTInterferogram(
+                ref_slc=extra_ref_file,
+                sec_slc=f,
+                outdir=ifg_dir,
+                write=not dry_run,
+                verify_slcs=not dry_run,
+            )
+            single_ref_ifgs.append(v.path)  # type: ignore[arg-type]
+
+    if interferogram_network.reference_idx == 0:
+        ifg_file_list.extend(single_ref_ifgs)
+
+    # For other networks, we have to combine other ones formed from the `Network`
+    # Say we had inputs like:
+    #  compressed_1_2_3 , slc_4, slc_5, slc_6
+    # the compressed one is referenced to "1"
+    # There will be 3 PL outputs for days 4, 5, 6, referenced to day "1":
+    # (1, 4), (1, 5), (1, 6)
+    # If we requested max-bw-2 interferograms, we want
+    # (1, 4), (1, 5), (4, 5), (4, 6), (5, 6)
+    # (the same as though we had normal SLCs (1, 4, 5, 6) )
+    if interferogram_network.indexes:
+        # TODO: if there are any (0, X) indexes, we need to pull from `single_ref_ifgs`
+        # ifgs_ref_date = single_ref_ifgs[:...]
+        network = interferogram.Network(
+            slc_list=phase_linked_slcs,
+            indexes=interferogram_network.indexes,
+            outdir=ifg_dir,
+            # Manually specify the dates, which come from the names of phase_linked_slcs
+            dates=secondary_dates,
+            write=not dry_run,
+            verify_slcs=not dry_run,
+        )
+        # Using `cast` to assert that the paths are not None
+        if len(network.ifg_list) == 0:
+            msg = "No interferograms were created"
+            raise ValueError(msg)
+        ifg_file_list = cast(list[Path], [ifg.path for ifg in network.ifg_list])
+        assert all(p is not None for p in ifg_file_list)
+
+    if interferogram_network.max_bandwidth is not None:
+        max_b = interferogram_network.max_bandwidth
+        # Max bandwidth is easier: take the first `max_b` from `phase_linked_slcs`
+        # (which are the (ref_date, ...) interferograms),...
+        ifgs_ref_date = single_ref_ifgs[:max_b]
+        # ...then combine it with the results from the `Network`
+        network_rest = interferogram.Network(
+            slc_list=phase_linked_slcs,
+            max_bandwidth=max_b,
+            indexes=interferogram_network.indexes,
+            outdir=ifg_dir,
+            # Manually specify the dates, which come from the names of phase_linked_slcs
+            dates=secondary_dates,
+            write=not dry_run,
+            verify_slcs=not dry_run,
+        )
+        # Using `cast` to assert that the paths are not None
+        ifgs_others = cast(list[Path], [ifg.path for ifg in network_rest.ifg_list])
+        ifg_file_list.extend(ifgs_ref_date + ifgs_others)
+
+    if interferogram_network.max_temporal_baseline is not None:
+        # Other types: TODO
+        msg = (
+            "max-temporal-baseline networks not yet supported when "
+            " starting with compressed SLCs"
+        )
+        raise NotImplementedError(msg)
+
+    # Dedupe, in case different options made the same ifg
+    requested_ifgs = set(ifg_file_list)
+    # remove ones we aren't using (in the case of a single index)
+    written_ifgs = set(ifg_dir.glob("*.int*"))
+    for p in written_ifgs - requested_ifgs:
+        p.unlink()
+
+    if len(set(get_dates(ifg_file_list[0], fmt=file_date_fmt))) == 1:
+        same_date_ifg = ifg_file_list.pop(0)
+        same_date_ifg.unlink()
+    return ifg_file_list
+
+
+def _get_input_dates(
+    input_file_list: Sequence[Path], is_compressed: Sequence[bool], date_fmt: str
+) -> list[list[datetime.datetime]]:
+    input_dates = [get_dates(f, fmt=date_fmt) for f in input_file_list]
+    # For any that aren't compressed, take the first date.
+    # this is because the official product name of OPERA/Sentinel1 has both
+    # "acquisition_date" ... "generation_date" in the filename
+    # For compressed, we want the first 3 dates: (base phase, start, end)
+    # TODO: this is a bit hacky, perhaps we can make this some input option
+    # so that the user can specify how to get dates from their files (or even
+    # directly pass in dates?)
+    return [
+        dates[:1] if not is_comp else dates[:3]
+        for dates, is_comp in zip(input_dates, is_compressed, strict=False)
+    ]
+
+
+def _get_mask(
+    output_dir: Path,
+    output_bounds: Bbox | tuple[float, float, float, float] | None,
+    output_bounds_wkt: str | None,
+    output_bounds_epsg: int | None,
+    like_filename: Filename,
+    layover_shadow_mask: Filename | None,
+    cslc_file_list: Sequence[Filename],
+    subdataset: str | None = None,
+) -> Path | None:
+    # Make the nodata mask from the polygons, if we're using OPERA CSLCs
+    mask_files: list[Path] = []
+    try:
+        nodata_mask_file = output_dir / "nodata_mask.tif"
+        make_nodata_mask(
+            opera_file_list=cslc_file_list,
+            out_file=nodata_mask_file,
+            buffer_pixels=800,
+            dset_name=subdataset,
+        )
+        mask_files.append(nodata_mask_file)
+    except Exception as e:
+        logger.warning(f"Could not make nodata mask: {e}")
+        nodata_mask_file = None
+
+    # Also mask outside the area of interest if we've specified a small bounds
+    if output_bounds is not None or output_bounds_wkt is not None:
+        if output_bounds_epsg is None:
+            raise ValueError("Must supply output_bounds_epsg for bounds")
+        # Make a mask just from the bounds
+        bounds_mask_filename = output_dir / "bounds_mask.tif"
+        masking.create_bounds_mask(
+            bounds=output_bounds,
+            bounds_wkt=output_bounds_wkt,
+            bounds_epsg=output_bounds_epsg,
+            output_filename=bounds_mask_filename,
+            like_filename=like_filename,
+        )
+        mask_files.append(bounds_mask_filename)
+
+    if layover_shadow_mask is not None:
+        mask_files.append(Path(layover_shadow_mask))
+
+    if not mask_files:
+        return None
+
+    combined_mask_filename = output_dir / "combined_mask.tif"
+    if not combined_mask_filename.exists():
+        masking.combine_mask_files(
+            mask_files=mask_files,
+            output_file=combined_mask_filename,
+            output_convention=masking.MaskConvention.ZERO_IS_NODATA,
+        )
+    return combined_mask_filename
+
+
+def _is_single_reference_network(
+    ifg_network: InterferogramNetwork, unwrap_method: UnwrapMethod
+):
+    return (
+        unwrap_method != UnwrapMethod.SPURT
+        and ifg_network.max_bandwidth is None
+        and ifg_network.max_temporal_baseline is None
+    )

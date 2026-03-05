@@ -1,0 +1,42 @@
+ci:
+  autofix_prs: true
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: "v6.0.0"
+    hooks:
+      # https://github.com/pre-commit/pre-commit-hooks/issues/718
+      # - id: check-added-large-files  # Fails with git v1.8.3
+      - id: check-case-conflict
+      - id: check-docstring-first
+      - id: check-merge-conflict
+      - id: check-yaml
+        args: [--allow-multiple-documents]
+      - id: debug-statements
+      - id: end-of-file-fixer
+      - id: file-contents-sorter
+        files: (requirements.txt)$
+      - id: mixed-line-ending
+      - id: trailing-whitespace
+
+  - repo: https://github.com/psf/black-pre-commit-mirror
+    rev: "26.1.0"
+    hooks:
+      - id: black
+        args: [--preview, --enable-unstable-feature, string_processing]
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.2
+    hooks:
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix, --show-fixes]
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: "v1.19.1"
+    hooks:
+      - id: mypy
+        additional_dependencies:
+        - types-setuptools
+        - types-requests
+        - "pydantic>=2.4"
+        - types-markdown

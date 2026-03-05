@@ -1,0 +1,13 @@
+**/__pycache__/*
+.mypy_cache/*
+.asv
+build/
+data/
+tests/data/*
+docs/notebooks/*
+dist/
+.nox/
+paper/
+
+.pixi
+.venv

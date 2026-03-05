@@ -1,0 +1,571 @@
+from __future__ import annotations
+
+import logging
+import math
+from enum import IntEnum
+from functools import partial
+from typing import NamedTuple, Optional
+
+import jax.numpy as jnp
+import numpy as np
+from jax import Array, jit, lax
+from jax.scipy.linalg import cho_factor, cho_solve
+from jax.typing import ArrayLike
+
+from dolphin._types import HalfWindow, Strides
+from dolphin.utils import take_looks
+
+from . import covariance, crlb, metrics
+from ._closure_phase import compute_nearest_closure_phases_batch
+from ._eigenvalues import eigh_largest_stack, eigh_smallest_stack
+from ._ps_filling import fill_ps_pixels
+
+logger = logging.getLogger("dolphin")
+
+
+DEFAULT_STRIDES = Strides(1, 1)
+
+
+class PhaseLinkRuntimeError(Exception):
+    """Exception raised while running the MLE solver."""
+
+
+class EstimatorType(IntEnum):
+    """Type of estimator used for phase linking."""
+
+    EVD = 0
+    EMI = 1
+
+
+class PhaseLinkOutput(NamedTuple):
+    """Output of the MLE solver."""
+
+    cpx_phase: np.ndarray
+    """Estimated linked phase."""
+
+    temp_coh: np.ndarray
+    """Temporal coherence of the optimization.
+    A goodness of fit parameter from 0 to 1 at each pixel.
+    """
+
+    shp_counts: np.ndarray
+    """Number of neighbor pixels used in adaptive multilooking."""
+
+    eigenvalues: np.ndarray
+    """The smallest (largest) eigenvalue resulting from EMI (EVD)."""
+
+    estimator: np.ndarray  # dtype: np.int8
+    """The estimator type used for phase linking at each pixel."""
+
+    crlb_std_dev: np.ndarray
+    """The CRLB standard deviation at each pixel."""
+
+    closure_phases: np.ndarray
+    """The closure phases at each pixel, for N-2 images."""
+
+
+def run_phase_linking(
+    slc_stack: ArrayLike,
+    half_window: HalfWindow,
+    strides: Strides = DEFAULT_STRIDES,
+    use_evd: bool = False,
+    beta: float = 0.0,
+    zero_correlation_threshold: float = 0.0,
+    reference_idx: int = 0,
+    nodata_mask: ArrayLike | None = None,
+    mask_input_ps: bool = False,
+    ps_mask: ArrayLike | None = None,
+    use_max_ps: bool = True,
+    neighbor_arrays: ArrayLike | None = None,
+    avg_mag: ArrayLike | None = None,
+    use_slc_amp: bool = False,
+    baseline_lag: Optional[int] = None,
+    first_real_slc_idx: int = 0,
+    compute_crlb: bool = True,
+) -> PhaseLinkOutput:
+    """Estimate the linked phase for a stack of SLCs.
+
+    If passing a `ps_mask`, will combine the PS phases with the
+    estimated DS phases.
+
+    Parameters
+    ----------
+    slc_stack : ArrayLike
+        The SLC stack, with shape (n_images, n_rows, n_cols)
+    half_window : HalfWindow, or tuple[int, int]
+        A (named) tuple of (y, x) sizes for the half window.
+        The full window size is 2 * half_window + 1 for x, y.
+    strides : tuple[int, int], optional
+        The (y, x) strides (in pixels) to use for the sliding window.
+        By default (1, 1)
+    use_evd : bool, default = False
+        Use eigenvalue decomposition on the covariance matrix instead of
+        the EMI algorithm.
+    beta : float, optional
+        The regularization parameter, by default 0 (no regularization).
+    zero_correlation_threshold : float, optional
+        Snap correlation values in the coherence matrix below this value to 0.
+        Default is 0 (no clipping).
+    reference_idx : int, optional
+        The index of the (non compressed) reference SLC, by default 0
+    nodata_mask : ArrayLike, optional
+        A mask of bad/nodata pixels to ignore when estimating the covariance.
+        Pixels with `True` (or 1) are ignored, by default None
+        If None, all pixels are used, by default None.
+    mask_input_ps : bool
+        If True, pixels labeled as PS will get set to NaN during phase linking to
+        avoid summing their phase. Default of False means that the SHP algorithm
+        will decide if a pixel should be included, regardless of its PS label.
+    ps_mask : ArrayLike, optional
+        A mask of pixels marking persistent scatterers (PS) to
+        skip when multilooking.
+        Pixels with `True` (or 1) are PS and will be ignored
+        (combined with `nodata_mask`).
+        The phase from these pixels will be inserted back
+        into the final estimate directly from `slc_stack`.
+    use_max_ps : bool, optional
+        Whether to use the maximum PS phase for the first pixel, or average all
+        PS within the look window.
+        By default True.
+    neighbor_arrays : ArrayLike, optional
+        The neighbor arrays to use for SHP, shape = (n_rows, n_cols, *window_shape).
+        If None, a rectangular window is used. By default None.
+    avg_mag : ArrayLike, optional
+        The average magnitude of the SLC stack, used to to find the brightest
+        PS pixels to fill within each look window.
+        If None, the average magnitude will be computed from `slc_stack`.
+    use_slc_amp : bool, optional
+        Whether to use the SLC amplitude when outputting the MLE estimate,
+        or to set the SLC amplitude to 1.0. By default False.
+    baseline_lag : int, optional, default=None
+        lag for temporal baseline to do short temporal baseline inversion (STBAS)
+    first_real_slc_idx : int, optional, default = 0
+        The index of the first real SLC in the stack.
+        This is only used for the CRLB computation.
+        By default 0.
+    compute_crlb : bool, optional
+        Whether to compute the CRLB, by default True
+
+    Returns
+    -------
+    PhaseLinkOutput:
+        A Named tuple with results from phase linking.
+
+    """
+    _, rows, cols = slc_stack.shape
+    # Common pre-processing for both CPU and GPU versions:
+
+    # Mask nodata pixels if given
+    if nodata_mask is None:
+        nodata_mask = np.zeros((rows, cols), dtype=bool)
+    else:
+        nodata_mask = nodata_mask.astype(bool)
+
+    # Track the PS pixels, if given, and remove them from the stack
+    # This will prevent the large amplitude PS pixels from dominating
+    # the covariance estimation.
+    if ps_mask is None:
+        ps_mask = np.zeros((rows, cols), dtype=bool)
+    else:
+        ps_mask = ps_mask.astype(bool)
+    _raise_if_all_nan(slc_stack)
+
+    # Make sure we also are ignoring pixels which are nans for all SLCs
+    if nodata_mask.shape != (rows, cols) or ps_mask.shape != (rows, cols):
+        msg = (
+            f"nodata_mask.shape={nodata_mask.shape}, ps_mask.shape={ps_mask.shape},"
+            f" but != SLC (rows, cols) {rows, cols}"
+        )
+        raise ValueError(msg)
+    # for any area that has nans in the SLC stack, mark it as nodata
+    nodata_mask |= np.any(np.isnan(slc_stack), axis=0)
+    # Make sure the PS mask didn't have extra burst borders that are nodata here
+    ps_mask[nodata_mask] = False
+
+    # Make a copy, and set the masked pixels to np.nan
+    slc_stack_masked = slc_stack.copy()
+    if mask_input_ps:
+        ignore_mask = np.logical_or.reduce((nodata_mask, ps_mask))
+        slc_stack_masked[:, ignore_mask] = np.nan
+    else:
+        slc_stack_masked[:, nodata_mask] = np.nan
+
+    cpl_out = run_cpl(
+        slc_stack=slc_stack_masked,
+        half_window=half_window,
+        strides=strides,
+        use_evd=use_evd,
+        beta=beta,
+        zero_correlation_threshold=zero_correlation_threshold,
+        reference_idx=reference_idx,
+        neighbor_arrays=neighbor_arrays,
+        baseline_lag=baseline_lag,
+        first_real_slc_idx=first_real_slc_idx,
+        compute_crlb=compute_crlb,
+    )
+
+    # Get the smaller, looked versions of the masks
+    # We zero out nodata if all pixels within the window had nodata
+    mask_looked = take_looks(nodata_mask, *strides, func_type="all")
+
+    # Convert from jax array back to np
+    temp_coh = np.array(cpl_out.temp_coh)
+
+    # Set as unit-magnitude
+    cpx_phase = np.exp(1j * np.angle(cpl_out.cpx_phase))
+    # Fill in the PS pixels from the original SLC stack, if it was given
+    if np.any(ps_mask):
+        fill_ps_pixels(
+            cpx_phase,
+            temp_coh,
+            slc_stack,
+            ps_mask,
+            strides,
+            avg_mag,
+            reference_idx,
+            use_max_ps=use_max_ps,
+        )
+
+    if use_slc_amp:
+        # use the amplitude from the original SLCs
+        # account for the strides when grabbing original data
+        # we need to match `io.compute_out_shape` here
+        slcs_decimated = decimate(slc_stack, strides)
+        cpx_phase = np.exp(1j * np.angle(cpx_phase)) * np.abs(slcs_decimated)
+
+    # Finally, ensure the nodata regions are 0
+    cpx_phase[:, mask_looked] = np.nan
+    temp_coh[mask_looked] = np.nan
+
+    return PhaseLinkOutput(
+        cpx_phase=cpx_phase,
+        temp_coh=temp_coh,
+        shp_counts=np.asarray(cpl_out.shp_counts),
+        # Convert the rest to numpy for writing
+        eigenvalues=np.asarray(cpl_out.eigenvalues),
+        estimator=np.asarray(cpl_out.estimator),
+        crlb_std_dev=np.array(cpl_out.crlb_std_dev),
+        closure_phases=np.asarray(cpl_out.closure_phases),
+    )
+
+
+def run_cpl(
+    slc_stack: np.ndarray,
+    half_window: HalfWindow,
+    strides: Strides,
+    use_evd: bool = False,
+    beta: float = 0,
+    zero_correlation_threshold: float = 0.0,
+    reference_idx: int = 0,
+    neighbor_arrays: Optional[np.ndarray] = None,
+    baseline_lag: Optional[int] = None,
+    first_real_slc_idx: int = 0,
+    compute_crlb: bool = True,
+) -> PhaseLinkOutput:
+    """Run the Combined Phase Linking (CPL) algorithm.
+
+    Estimates a coherence matrix for each SLC pixel, then
+    runs the EMI/EVD solver.
+
+    Parameters
+    ----------
+    slc_stack : np.ndarray
+        The SLC stack, with shape (n_slc, n_rows, n_cols)
+    half_window : HalfWindow, or tuple[int, int]
+        A (named) tuple of (y, x) sizes for the half window.
+        The full window size is 2 * half_window + 1 for x, y.
+    strides : tuple[int, int], optional
+        The (y, x) strides (in pixels) to use for the sliding window.
+        By default (1, 1)
+    use_evd : bool, default = False
+        Use eigenvalue decomposition on the covariance matrix instead of
+        the EMI algorithm.
+    beta : float, optional
+        The regularization parameter, by default 0 (no regularization).
+    zero_correlation_threshold : float, optional
+        Snap correlation values in the coherence matrix below this value to 0.
+        Default is 0 (no clipping).
+    reference_idx : int, optional
+        The index of the (non compressed) reference SLC, by default 0
+    use_slc_amp : bool, optional
+        Whether to use the SLC amplitude when outputting the MLE estimate,
+        or to set the SLC amplitude to 1.0. By default False.
+    neighbor_arrays : np.ndarray, optional
+        The neighbor arrays to use for SHP, shape = (n_rows, n_cols, *window_shape).
+        If None, a rectangular window is used. By default None.
+    baseline_lag : int, optional, default=None
+        StBAS parameter to include only nearest-N interferograms for phase linking.
+        A `baseline_lag` of `n` will only include the closest `n` interferograms.
+        `baseline_line` must be positive.
+    first_real_slc_idx : int, optional, default = 0
+        The index of the first real SLC in the stack.
+        This is only used for the CRLB computation.
+        By default 0.
+    compute_crlb : bool, optional
+        Whether to compute the CRLB, by default True
+
+    Returns
+    -------
+    cpx_phase : Array
+        Optimized SLC phase, shape same as `slc_stack` unless Strides are requested.
+    temp_coh : Array
+        Temporal coherence of the optimization.
+        A goodness of fit parameter from 0 to 1 at each pixel.
+        shape = (out_rows, out_cols)
+    eigenvalues : Array
+        The eigenvalues of the coherence matrices.
+        If `use_evd` is True, these are the largest eigenvalues;
+        Otherwise, for EMI they are the smallest.
+        shape = (out_rows, out_cols)
+    estimator : Array
+        The estimator used at each pixel.
+        0 = EVD, 1 = EMI
+        shape = (out_rows, out_cols)
+
+    """
+    C_arrays = covariance.estimate_stack_covariance(
+        slc_stack,
+        half_window,
+        strides,
+        neighbor_arrays=neighbor_arrays,
+    )
+    ns = slc_stack.shape[0]
+    if baseline_lag:
+        u_rows, u_cols = jnp.triu_indices(ns, baseline_lag)
+        l_rows, l_cols = jnp.tril_indices(ns, -baseline_lag)
+        C_arrays = C_arrays.at[:, :, u_rows, u_cols].set(0.0 + 0j)
+        C_arrays = C_arrays.at[:, :, l_rows, l_cols].set(0.0 + 0j)
+
+    closure_phases = compute_nearest_closure_phases_batch(C_arrays)
+    # For a more conservative uncertainty estimate, use a smaller number of looks
+    # rather than `num_looks = (2 * half_window[0] + 1) * (2 * half_window[1] + 1)`
+    num_looks = math.sqrt(half_window[0] * half_window[1])
+
+    reference_idx = ns + reference_idx if reference_idx < 0 else reference_idx
+    cpx_phase, eigenvalues, estimator, crlb_std_dev = process_coherence_matrices(
+        C_arrays,
+        use_evd=use_evd,
+        beta=beta,
+        zero_correlation_threshold=zero_correlation_threshold,
+        reference_idx=reference_idx,
+        num_looks=num_looks,
+        first_real_slc_idx=first_real_slc_idx,
+        compute_crlb=compute_crlb,
+    )
+    # Get the temporal coherence
+    temp_coh = metrics.estimate_temp_coh(cpx_phase, C_arrays)
+
+    # Reshape the (rows, cols, nslcs) output to be same as input stack
+    cpx_phase_reshaped = jnp.moveaxis(cpx_phase, -1, 0)
+    crlb_std_dev_reshaped = jnp.moveaxis(crlb_std_dev, -1, 0)
+
+    # Get the SHP counts for each pixel (if not using Rect window)
+    if neighbor_arrays is None:
+        shp_counts = jnp.zeros(temp_coh.shape, dtype=np.int16)
+    else:
+        shp_counts = jnp.sum(neighbor_arrays, axis=(-2, -1))
+
+    return PhaseLinkOutput(
+        cpx_phase=cpx_phase_reshaped,
+        temp_coh=temp_coh,
+        shp_counts=shp_counts,
+        eigenvalues=eigenvalues,
+        estimator=estimator,
+        crlb_std_dev=crlb_std_dev_reshaped,
+        closure_phases=closure_phases,
+    )
+
+
+@partial(
+    jit,
+    static_argnames=(
+        "use_evd",
+        "beta",
+        "reference_idx",
+        "num_looks",
+        "first_real_slc_idx",
+        "compute_crlb",
+    ),
+)
+def process_coherence_matrices(
+    C_arrays,
+    use_evd: bool = False,
+    beta: float = 0.0,
+    zero_correlation_threshold: float = 0.0,
+    reference_idx: int = 0,
+    num_looks: int = 1,
+    first_real_slc_idx: int = 0,
+    compute_crlb: bool = True,
+) -> tuple[Array, Array, Array, Array]:
+    """Estimate the linked phase for a stack of coherence matrices.
+
+    This function is used after coherence estimation to estimate the
+    optimized SLC phase.
+
+    Parameters
+    ----------
+    C_arrays : ndarray, shape = (rows, cols, nslc, nslc)
+        The sample coherence matrix at each pixel
+        (e.g. from [dolphin.phase_link.covariance.estimate_stack_covariance][])
+    use_evd : bool, default = False
+        Use eigenvalue decomposition on the covariance matrix instead of
+        the EMI algorithm of [@Ansari2018EfficientPhaseEstimation].
+    beta : float, optional
+        The regularization parameter for inverting Gamma = |C|
+        The regularization is applied as (1 - beta) * Gamma + beta * I
+        Default is 0 (no regularization).
+    zero_correlation_threshold : float, optional
+        Snap correlation values in the coherence matrix below this value to 0.
+        Default is 0 (no clipping).
+    reference_idx : int, optional
+        The index of the reference acquisition, by default 0
+        All outputs are multiplied by the conjugate of the data at this index.
+    num_looks : int, optional
+        The number of looks used to form the input correlation data, used
+        during CRLB computation.
+    first_real_slc_idx : int, optional, default = 0
+        The index of the first real SLC in the stack.
+        This is only used for the CRLB computation.
+        By default 0.
+    compute_crlb : bool, optional
+        Whether to compute the CRLB
+        Default is True.
+
+    Returns
+    -------
+    eig_vecs : ndarray[float32], shape = (rows, cols, nslc)
+        The phase resulting from the optimization at each output pixel.
+        Shape is same as input slcs unless Strides > (1, 1)
+    eig_vals : ndarray[float], shape = (rows, cols)
+        The smallest (largest) eigenvalue as solved by EMI (EVD).
+    estimator : Array
+        The estimator used at each pixel.
+        0 = EVD, 1 = EMI
+    crlb_std_dev : ndarray[float32], shape = (rows, cols, nslc)
+        The CRLB standard deviation at each pixel.
+
+    """
+    rows, cols, n, _ = C_arrays.shape
+
+    evd_eig_vals, evd_eig_vecs = eigh_largest_stack(C_arrays * jnp.abs(C_arrays))
+
+    Gamma = jnp.abs(C_arrays)
+
+    # Identity used for regularization and for solving
+    Id = jnp.eye(n, dtype=Gamma.dtype)
+    # repeat the identity matrix for each pixel
+    Id = jnp.broadcast_to(Id, (rows, cols, n, n))
+
+    if beta > 0:
+        # Perform regularization
+        Gamma = (1 - beta) * Gamma + beta * Id
+    # Assume correlation below `zero_correlation_threshold` is 0
+    Gamma = jnp.where(Gamma < zero_correlation_threshold, 0, Gamma)
+
+    # Attempt to invert Gamma
+    gamma_jitter = 1e-6
+    cho, is_lower = cho_factor(Gamma + gamma_jitter * Id)
+
+    # Check: If it fails the cholesky factor, it's close to singular and
+    # we should just fall back to EVD
+    # Use the already- factored |Gamma|^-1, solving Ax = I gives the inverse
+    Gamma_inv = cho_solve((cho, is_lower), Id)
+    if use_evd:
+        # EVD
+        eig_vals, eig_vecs = evd_eig_vals, evd_eig_vecs
+        estimator = jnp.zeros(eig_vals.shape, dtype=bool)
+    else:
+        # EMI
+        # estimate the wrapped phase based on the EMI paper
+        # *smallest* eigenvalue decomposition of the (|Gamma|^-1  *  C) matrix
+        # We're looking for the lambda nearest to 1. So shift by 0.99
+        # Also, use the evd vectors as iteration starting point:
+        mu = 0.99
+        emi_eig_vals, emi_eig_vecs = eigh_smallest_stack(Gamma_inv * C_arrays, mu)
+        # From the EMI paper, normalize the eigenvectors to have norm sqrt(n)
+        emi_eig_vecs = (
+            jnp.sqrt(n)
+            * emi_eig_vecs
+            / jnp.linalg.norm(emi_eig_vecs, axis=-1, keepdims=True)
+        )
+        # is the output is the inverse of the eigenvectors? or inverse conj?
+
+        # Use https://jax.readthedocs.io/en/latest/_autosummary/jax.lax.select.html
+        # Note that `if` would fail the jit tracing
+        # https://jax.readthedocs.io/en/latest/notebooks/Common_Gotchas_in_JAX.html#cond
+        inv_has_nans = jnp.any(jnp.isnan(Gamma_inv), axis=(-1, -2))
+
+        # Must broadcast the 2D boolean array so it's the same size as the outputs
+        inv_has_nans_3d = jnp.tile(inv_has_nans[:, :, None], (1, 1, n))
+
+        # For EVD, or places where inverting |Gamma| failed: fall back to computing EVD
+        eig_vecs = lax.select(
+            inv_has_nans_3d,
+            # Run this on True: EVD, since we failed to invert:
+            evd_eig_vecs,
+            # Otherwise, on False, we're fine to use EMI
+            emi_eig_vecs,
+        )
+
+        eig_vals = lax.select(inv_has_nans, evd_eig_vals, emi_eig_vals)
+        # Make array of ints to indicate which estimator was used for each pixel
+        # 0 means EVD, 1 mean EMI
+        evd_used = jnp.zeros(emi_eig_vals.shape, dtype=jnp.int8)
+        emi_used = jnp.ones(emi_eig_vals.shape, dtype=jnp.int8)
+        estimator = lax.select(inv_has_nans, evd_used, emi_used)
+
+    # Compute CRLB for each pixel
+    if compute_crlb:
+        # Build X once and do the inverse-free CRLB from X
+        X = crlb._build_fisher_from_abs_gamma(Gamma, Gamma_inv, num_looks)
+        crlb_std_dev = crlb._crlb_from_x(X, max(first_real_slc_idx - 1, 0), 0, 1e-6)
+
+    else:
+        crlb_std_dev = jnp.zeros(C_arrays.shape[:-1], dtype=jnp.float32)
+
+    # Now the shape of eig_vecs is (rows, cols, nslc)
+    # at pixel (r, c), eig_vecs[r, c] is the largest (smallest) eigenvector if
+    # we picked EVD (EMI)
+    # The phase estimate on the reference day will be size (rows, cols)
+    ref = eig_vecs[:, :, reference_idx]
+    # Make sure each still has 3 dims, then reference all phases to `ref`
+    evd_estimate = eig_vecs * jnp.exp(-1j * jnp.angle(ref[:, :, None]))
+
+    return evd_estimate, eig_vals, estimator.astype("uint8"), crlb_std_dev
+
+
+def decimate(arr: ArrayLike, strides: Strides) -> Array:
+    """Decimate an array by strides in the x and y directions.
+
+    Output will match [`io.compute_out_shape`][dolphin.io.compute_out_shape]
+
+    Parameters
+    ----------
+    arr : ArrayLike
+        2D or 3D array to decimate.
+    strides : dict[str, int]
+        The strides in the x and y directions.
+
+    Returns
+    -------
+    ArrayLike
+        The decimated array.
+
+    """
+    ys, xs = strides
+    rows, cols = arr.shape[-2:]
+    start_r = ys // 2
+    start_c = xs // 2
+    end_r = (rows // ys) * ys + 1
+    end_c = (cols // xs) * xs + 1
+    return arr[..., start_r:end_r:ys, start_c:end_c:xs]
+
+
+def _raise_if_all_nan(slc_stack: np.ndarray):
+    """Check for all NaNs in each SLC of the stack."""
+    nans = np.isnan(slc_stack)
+    # Check that there are no SLCS which are all nans:
+    bad_slc_idxs = np.where(np.all(nans, axis=(1, 2)))[0]
+    if bad_slc_idxs.size > 0:
+        msg = f"slc_stack[{bad_slc_idxs}] out of {len(slc_stack)} are all NaNs."
+        raise PhaseLinkRuntimeError(msg)
