@@ -187,7 +187,10 @@ def prepare_geometry(
             cur_files = [format_nc_filename(f, ds_name=ds_path) for f in geo_files]
 
             if ds_name not in "layover_shadow_mask":
-                options = (*DEFAULT_TIFF_OPTIONS, "NBITS=16")
+                from dolphin.io._core import _can_use_nbits16
+
+                nbits_opt = ("NBITS=16",) if _can_use_nbits16() else ()
+                options = (*DEFAULT_TIFF_OPTIONS, *nbits_opt)
             else:
                 options = DEFAULT_TIFF_OPTIONS
             stitching.merge_images(
