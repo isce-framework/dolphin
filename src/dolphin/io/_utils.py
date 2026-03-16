@@ -233,7 +233,7 @@ def repack_rasters(
     )
 
 
-def round_mantissa(z: np.ndarray, keep_bits: int = 10, chunk_rows: int = 512) -> None:
+def round_mantissa(z: np.ndarray, keep_bits: int = 10, chunk_rows: int = 1024) -> None:
     """Zero out mantissa bits of elements of array in place.
 
     Drops a specified number of bits from the floating point mantissa,
