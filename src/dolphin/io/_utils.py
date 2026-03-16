@@ -248,6 +248,9 @@ def round_mantissa(z: np.ndarray, keep_bits: int = 10, chunk_rows: int = 1024) -
         Lower numbers will truncate the mantissa more and enable
         more compression.
         Default is 10.
+    chunk_rows : int
+        Number of rows to process at a time to limit memory usage.
+        Default is 1024.
 
     References
     ----------
