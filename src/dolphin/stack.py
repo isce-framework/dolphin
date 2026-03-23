@@ -96,17 +96,18 @@ class BaseStack(BaseModel):
 
         The "last" compressed SLC is the one with the most recent end date.
         """
-        # Extract (start_date, end_date) for compressed SLCs with 3+ dates
+        # Extract (reference_date, start_date, end_date) for
+        # compressed SLCs with 3+ dates
         compressed_ranges = [
-            (dates[1], dates[2])
+            (dates[0], dates[1], dates[2])
             for dates, is_comp in zip(self.dates, self.is_compressed, strict=False)
             if is_comp and len(dates) >= 3
         ]
         if not compressed_ranges:
             return
 
-        # Get the range with the most recent end date
-        start_date, end_date = max(compressed_ranges, key=lambda x: x[1])
+        # Get the most recent compressed SLC by end date
+        ref_date, start_date, end_date = max(compressed_ranges, key=lambda x: x[2])
 
         # Get all real SLC dates
         real_slc_dates = [
@@ -115,13 +116,14 @@ class BaseStack(BaseModel):
             if not is_comp
         ]
 
-        # Check for overlaps
-        overlapping = [d for d in real_slc_dates if start_date <= d <= end_date]
+        # Check for overlaps with the reference date only
+        overlapping = [d for d in real_slc_dates if d == ref_date]
         if overlapping:
             msg = (
-                f"SLC date {overlapping[0]} overlaps with compressed SLC date range "
-                f"[{start_date}, {end_date}]. Real SLCs cannot have dates within "
-                "the date range of the most recent compressed SLC."
+                f"SLC date {overlapping[0]} overlaps with compressed SLC reference date"
+                f" {ref_date} (date range [{start_date}, {end_date}]). Real SLCs cannot"
+                " have the same date as the reference date of the most recent"
+                " compressed SLC."
             )
             raise ValueError(msg)
 
