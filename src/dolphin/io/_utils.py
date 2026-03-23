@@ -233,7 +233,7 @@ def repack_rasters(
     )
 
 
-def round_mantissa(z: np.ndarray, keep_bits: int = 10) -> None:
+def round_mantissa(z: np.ndarray, keep_bits: int = 10, chunk_rows: int = 1024) -> None:
     """Zero out mantissa bits of elements of array in place.
 
     Drops a specified number of bits from the floating point mantissa,
@@ -248,6 +248,9 @@ def round_mantissa(z: np.ndarray, keep_bits: int = 10) -> None:
         Lower numbers will truncate the mantissa more and enable
         more compression.
         Default is 10.
+    chunk_rows : int
+        Number of rows to process at a time to limit memory usage.
+        Default is 1024.
 
     References
     ----------
@@ -261,8 +264,8 @@ def round_mantissa(z: np.ndarray, keep_bits: int = 10) -> None:
     }
     # recurse for complex data
     if np.iscomplexobj(z):
-        round_mantissa(z.real, keep_bits)
-        round_mantissa(z.imag, keep_bits)
+        round_mantissa(z.real, keep_bits, chunk_rows)
+        round_mantissa(z.imag, keep_bits, chunk_rows)
         return
 
     if not z.dtype.kind == "f" or z.dtype.itemsize > 8:
@@ -276,9 +279,10 @@ def round_mantissa(z: np.ndarray, keep_bits: int = 10) -> None:
         return z
     if keep_bits > bits:
         raise ValueError("keep_bits too large for given dtype")
-    b = z.view(a_int_dtype)
     maskbits = bits - keep_bits
     mask = (all_set >> maskbits) << maskbits
     half_quantum1 = (1 << (maskbits - 1)) - 1
-    b += ((b >> maskbits) & 1) + half_quantum1
-    b &= mask
+    for i in range(0, z.shape[0], chunk_rows):
+        b = z[i : i + chunk_rows].view(a_int_dtype)
+        b += ((b >> maskbits) & 1) + half_quantum1
+        b &= mask
