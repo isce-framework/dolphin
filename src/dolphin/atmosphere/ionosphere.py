@@ -88,12 +88,12 @@ def estimate_ionospheric_delay(
     # Read the incidence angle
     if "los_east" in geom_files:
         # ISCE3 geocoded products
-        los_east = io.load_gdal(geom_files["los_east"])
-        los_north = io.load_gdal(geom_files["los_north"])
+        los_east = io.load_gdal(geom_files["los_east"]).astype(np.float32)
+        los_north = io.load_gdal(geom_files["los_north"]).astype(np.float32)
         inc_angle = np.arccos(np.sqrt(1 - los_east**2 - los_north**2)) * 180 / np.pi
     else:
         # ISCE2 radar coordinate
-        inc_angle = io.load_gdal(geom_files["incidence_angle"])
+        inc_angle = io.load_gdal(geom_files["incidence_angle"]).astype(np.float32)
 
     iono_inc_angle = incidence_angle_ground_to_iono(inc_angle)
 
