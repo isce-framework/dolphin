@@ -28,7 +28,7 @@ from ._constants import (
 from ._snaphu_py import grow_conncomp_snaphu, unwrap_snaphu_py
 from ._tophu import multiscale_unwrap
 from ._unwrap_3d import unwrap_spurt
-from ._utils import create_combined_mask, set_nodata_values
+from ._utils import create_combined_mask, get_convex_hull_mask, set_nodata_values
 from ._whirlwind import unwrap_whirlwind
 
 logger = logging.getLogger("dolphin")
@@ -385,6 +385,15 @@ def unwrap(
             sim = io.load_gdal(similarity_filename, masked=True).filled(0)
             coherent_pixel_mask &= sim >= sim_cutoff
 
+        # Get only the convex hull of these good pixels
+        # This saves time by avoiding edges that will never get unwrapped well anyway
+        hull = get_convex_hull_mask(
+            coherent_pixel_mask, buffer_pixels=preproc_options.max_radius
+        )
+        # Skip pixels which are outside the hull
+        weights = coherent_pixel_mask.copy()
+        # We skip pixels with weight = 1 and transfer over the input data
+        weights[~hull] = 1
         logger.info(f"Interpolating {pre_interp_ifg_filename} -> {interp_ifg_filename}")
         modified_ifg = interpolate(
             ifg=pre_interp_ifg,
