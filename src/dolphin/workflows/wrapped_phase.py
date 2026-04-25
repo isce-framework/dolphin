@@ -400,6 +400,7 @@ def create_ifgs(
             outdir=ifg_dir,
             write=not dry_run,
             verify_slcs=not dry_run,
+            date_format=file_date_fmt,
         )
         if len(network.ifg_list) == 0:
             msg = "No interferograms were created"
@@ -419,7 +420,11 @@ def create_ifgs(
         # a `.conj()` on the phase-linked SLCs (currently `day1.conj() * day2`)
         single_ref_ifgs = [
             interferogram.convert_pl_to_ifg(
-                f, reference_date=reference_date, output_dir=ifg_dir, dry_run=dry_run
+                f,
+                reference_date=reference_date,
+                output_dir=ifg_dir,
+                dry_run=dry_run,
+                date_format=file_date_fmt,
             )
             for f in phase_linked_slcs
         ]
@@ -434,6 +439,7 @@ def create_ifgs(
                 reference_date=reference_date,  # this is the `phase_linking.output_idx`
                 output_dir=ifg_dir,
                 dry_run=dry_run,
+                date_format=file_date_fmt,
             )
             for f in phase_linked_slcs[: manual_reference_idx + 1]
         ]
@@ -446,6 +452,7 @@ def create_ifgs(
                 outdir=ifg_dir,
                 write=not dry_run,
                 verify_slcs=not dry_run,
+                date_format=file_date_fmt,
             )
             single_ref_ifgs.append(v.path)  # type: ignore[arg-type]
 
@@ -472,6 +479,7 @@ def create_ifgs(
             dates=secondary_dates,
             write=not dry_run,
             verify_slcs=not dry_run,
+            date_format=file_date_fmt,
         )
         # Using `cast` to assert that the paths are not None
         if len(network.ifg_list) == 0:
@@ -495,6 +503,7 @@ def create_ifgs(
             dates=secondary_dates,
             write=not dry_run,
             verify_slcs=not dry_run,
+            date_format=file_date_fmt,
         )
         # Using `cast` to assert that the paths are not None
         ifgs_others = cast(list[Path], [ifg.path for ifg in network_rest.ifg_list])
