@@ -262,6 +262,7 @@ def run(
         nlooks=nlooks,
         unwrap_options=cfg.unwrap_options,
         mask_file=cfg.mask_file,
+        file_date_fmt=cfg.input_options.cslc_date_fmt,
     )
 
     # ##############################################
