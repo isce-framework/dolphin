@@ -295,6 +295,7 @@ def run(
             wavelength=cfg.input_options.wavelength,
             add_overviews=cfg.output_options.add_overviews,
             extra_reference_date=cfg.output_options.extra_reference_date,
+            file_date_fmt=cfg.input_options.cslc_date_fmt,
         )
 
     else:

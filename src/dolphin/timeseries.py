@@ -215,6 +215,7 @@ def run(
             wavelength=wavelength,
             method=method,
             bad_pixel_mask=bad_pixel_mask,
+            file_date_fmt=file_date_fmt,
         )
         if extra_reference_date is None:
             final_ts_paths = inverted_phase_paths
@@ -309,7 +310,7 @@ def _redo_reference(
         # To create the interferogram (r, r+1), we subtract
         # (1, r) from (1, r+1)
         cur_img = inverted_phase_paths[idx]
-        new_stem = format_dates(ref_date, secondary_dates[idx])
+        new_stem = format_dates(ref_date, secondary_dates[idx], fmt=file_date_fmt)
         cur_output_name = extra_out_dir / f"{new_stem}.tif"
         cur = io.load_gdal(cur_img, masked=True)
         new_out = cur - ref
@@ -1046,10 +1047,12 @@ def invert_unw_network(
     suffix = ".tif"
     # Create the `n_sar_dates - 1` output files (skipping the 0 reference raster)
     out_paths = [
-        Path(output_dir) / f"{format_dates(ref_date, d)}{suffix}" for d in sar_dates[1:]
+        Path(output_dir) / f"{format_dates(ref_date, d, fmt=file_date_fmt)}{suffix}"
+        for d in sar_dates[1:]
     ]
     out_residuals_paths = [
-        Path(output_dir) / f"residuals_{format_dates(ref_date, d)}{suffix}"
+        Path(output_dir)
+        / f"residuals_{format_dates(ref_date, d, fmt=file_date_fmt)}{suffix}"
         for d in sar_dates[1:]
     ]
     if all(p.exists() for p in out_paths):
@@ -1585,7 +1588,7 @@ def create_nonzero_conncomp_counts(
 
     # Create output paths for each date
     suffix = "_valid_count.tif"
-    out_paths = [output_dir / f"{d.strftime('%Y%m%d')}{suffix}" for d in sar_dates]
+    out_paths = [output_dir / f"{d.strftime(file_date_fmt)}{suffix}" for d in sar_dates]
 
     if all(p.exists() for p in out_paths):
         logger.info("All output files exist, skipping counting")
