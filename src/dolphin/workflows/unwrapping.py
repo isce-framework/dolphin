@@ -27,6 +27,7 @@ def run(
     similarity_filename: Path | str | None = None,
     mask_file: Path | str | None = None,
     add_overviews: bool = True,
+    file_date_fmt: str = "%Y%m%d",
 ) -> tuple[list[Path], list[Path]]:
     """Run the displacement workflow on a stack of SLCs.
 
@@ -51,6 +52,10 @@ def run(
     add_overviews : bool, default = True
         If True, creates overviews of the unwrapped phase and connected component
         labels.
+    file_date_fmt : str, optional
+        The strftime format used to parse acquisition dates from input
+        filenames and to write the date portion of output filenames.
+        Default is "%Y%m%d".
 
     Returns
     -------
@@ -92,6 +97,7 @@ def run(
         similarity_filename=similarity_filename,
         mask_filename=output_mask,
         scratchdir=unwrap_scratchdir,
+        file_date_fmt=file_date_fmt,
     )
 
     if add_overviews:
