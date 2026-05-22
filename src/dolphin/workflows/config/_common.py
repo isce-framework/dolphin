@@ -314,6 +314,23 @@ class InputOptions(BaseModel, extra="forbid"):
             " and sensor is not recognized, outputs remain in radians."
         ),
     )
+    azimuth_blocks: int = Field(
+        1,
+        description=(
+            "When the input does not match OPERA-burst naming (e.g. NISAR), split"
+            " each input frame into this many azimuth blocks and process each block"
+            " as a synthetic burst. Default 1 = no splitting."
+        ),
+        ge=1,
+    )
+    halo_rows: Optional[int] = Field(
+        None,
+        description=(
+            "Halo (input rows) on each side of an azimuth block. Default:"
+            " max(half_window_y, similarity_search_radius * stride_y,"
+            " (corr_window_y // 2) * stride_y) + 5."
+        ),
+    )
 
 
 class Strides(BaseModel, extra="forbid"):
