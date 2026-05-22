@@ -9,7 +9,7 @@ from typing import Mapping, Sequence
 
 from opera_utils import group_by_date
 
-from dolphin._types import Filename
+from dolphin._types import Bbox, Filename
 
 from .config import DisplacementWorkflow
 
@@ -23,6 +23,7 @@ def _create_burst_cfg(
     grouped_amp_mean_files: dict[str, list[Path]],
     grouped_amp_dispersion_files: dict[str, list[Path]],
     grouped_layover_shadow_mask_files: dict[str, list[Path]],
+    bounds: tuple[Bbox, int] | None = None,
 ) -> DisplacementWorkflow:
     cfg_temp_dict = cfg.model_dump(exclude={"cslc_file_list"})
 
@@ -35,6 +36,16 @@ def _create_burst_cfg(
     cfg_temp_dict["layover_shadow_mask_files"] = grouped_layover_shadow_mask_files[
         burst_id
     ]
+
+    # When splitting a single frame into synthetic "bursts" (NISAR
+    # block-as-burst via _block_split.split_frame_into_blocks), apply this
+    # block's spatial bounds. Real OPERA-burst runs pass bounds=None and
+    # inherit whatever the top-level cfg had.
+    if bounds is not None:
+        bbox, epsg = bounds
+        cfg_temp_dict["output_options"]["bounds"] = list(bbox)
+        cfg_temp_dict["output_options"]["bounds_epsg"] = epsg
+
     return DisplacementWorkflow(**cfg_temp_dict)
 
 
