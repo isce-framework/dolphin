@@ -5,6 +5,7 @@ import logging
 
 # import contextlib
 import multiprocessing as mp
+import os
 from collections import defaultdict
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
@@ -175,6 +176,14 @@ def run(
     utils.set_num_threads(cfg.worker_settings.threads_per_worker)
 
     grouped = _prepare_grouped_inputs(cfg)
+    num_parallel = min(
+        cfg.worker_settings.n_parallel_bursts, len(grouped.grouped_slc_files)
+    )
+    if not grouped.is_opera_burst_mode and num_parallel > 1:
+        # Multiple workers read the same NISAR GSLC (HDF5) files at different
+        # spatial extents. Disable HDF5 file locking to prevent hangs on
+        # NFS/Lustre filesystems where concurrent readers would otherwise block.
+        os.environ.setdefault("HDF5_USE_FILE_LOCKING", "FALSE")
     grouped_slc_files = grouped.grouped_slc_files
     block_bounds = grouped.block_bounds
     grouped_amp_dispersion_files = grouped.grouped_amp_dispersion_files
@@ -221,7 +230,6 @@ def run(
     # Try running several bursts in parallel...
     # Use the Dummy one if not going parallel, as debugging is much simpler
     num_workers = cfg.worker_settings.n_parallel_bursts
-    num_parallel = min(num_workers, len(grouped_slc_files))
     Executor = (
         ProcessPoolExecutor if num_parallel > 1 else utils.DummyProcessPoolExecutor
     )
