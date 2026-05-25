@@ -251,6 +251,18 @@ def format_nc_filename(filename: Filename, ds_name: Optional[str] = None) -> str
     If `filename` is already formatted, or if `filename` is not an HDF5/NetCDF
     file (based on the file extension), it is returned unchanged.
 
+    The driver prefix is chosen by filename:
+
+    - ``.nc``  → ``NETCDF:"file":"//ds"``
+    - ``.h5`` whose granule prefix is ``NISAR_`` → ``HDF5:"file":"//ds"``
+      (NISAR raw HDF5; no CF metadata, and GDAL's NETCDF driver refuses
+      it with "No such file or directory")
+    - every other ``.h5`` → ``NETCDF:"file":"//ds"``
+      (OPERA CSLCs, COMPASS CSLCs + static_layers, etc. ship CF-1.8-
+      compliant HDF5 and depend on the NETCDF driver to read the grid
+      mapping; the bare HDF5 driver opens the data but reports an
+      identity geotransform)
+
     Parameters
     ----------
     filename : str or PathLike
@@ -282,7 +294,12 @@ def format_nc_filename(filename: Filename, ds_name: Optional[str] = None) -> str
         msg = "Must provide dataset name for HDF5/NetCDF files"
         raise ValueError(msg)
 
-    return f'NETCDF:"{filename}":"//{ds_name.lstrip("/")}"'
+    basename = Path(fname_clean).name.upper()
+    if fname_clean.endswith(".h5") and basename.startswith("NISAR_"):
+        driver = "HDF5"
+    else:
+        driver = "NETCDF"
+    return f'{driver}:"{filename}":"//{ds_name.lstrip("/")}"'
 
 
 def copy_projection(src_file: Filename, dst_file: Filename) -> None:
