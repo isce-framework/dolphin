@@ -6,6 +6,8 @@ import dataclasses
 import itertools
 from pathlib import Path
 
+import h5py
+import numpy as np
 import pytest
 from osgeo import gdal, osr
 
@@ -13,6 +15,7 @@ from dolphin._types import Bbox
 from dolphin.workflows._block_split import (
     BlockBounds,
     _min_halo_rows,
+    _read_grid_metadata,
     crop_to_central,
     split_frame_into_blocks,
 )
@@ -168,3 +171,62 @@ def test_block_bounds_dataclass_immutable():
     )
     with pytest.raises(dataclasses.FrozenInstanceError):
         bb.epsg = 32610  # type: ignore[misc]
+
+
+def _make_nisar_h5(path: Path, *, nx: int = 100, ny: int = 200, epsg: int = 32637):
+    """Build a minimal NISAR-shaped HDF5 with the projection + coord datasets.
+
+    Mirrors the layout dolphin reads: ``/science/LSAR/GSLC/grids/frequencyA/{HH,
+    projection, xCoordinates, yCoordinates, x/yCoordinateSpacing}``.
+    """
+    dx, dy = 10.0, -5.0
+    x0, y0 = 500000.0, 1500000.0
+    with h5py.File(path, "w") as f:
+        g = f.create_group("/science/LSAR/GSLC/grids/frequencyA")
+        hh = g.create_dataset("HH", shape=(ny, nx), dtype=np.complex64)
+        hh.attrs["grid_mapping"] = np.bytes_(b"projection")
+        g.create_dataset("projection", data=np.uint32(epsg))
+        g.create_dataset(
+            "xCoordinates", data=x0 + dx * np.arange(nx) + dx / 2.0, dtype="float64"
+        )
+        g.create_dataset(
+            "yCoordinates", data=y0 + dy * np.arange(ny) + dy / 2.0, dtype="float64"
+        )
+        g.create_dataset("xCoordinateSpacing", data=dx)
+        g.create_dataset("yCoordinateSpacing", data=dy)
+
+
+def test_nisar_metadata_read_via_h5py(tmp_path):
+    fn = tmp_path / "NISAR_L2_PR_GSLC_001_X_20250101_001.h5"
+    _make_nisar_h5(fn, nx=100, ny=200, epsg=32637)
+    cfg = DisplacementWorkflow(
+        cslc_file_list=[fn],
+        work_directory=tmp_path,
+        input_options={"subdataset": "/science/LSAR/GSLC/grids/frequencyA/HH"},
+    )
+    nx, ny, gt, epsg = _read_grid_metadata(cfg)
+    assert (nx, ny, epsg) == (100, 200, 32637)
+    # cell-center -> UL-edge anchoring
+    assert gt[0] == 500000.0
+    assert gt[1] == 10.0
+    assert gt[3] == 1500000.0  # y0 = y_coord_0 - dy/2 = (y0 + dy/2) - dy/2
+    assert gt[5] == -5.0
+
+
+def test_nisar_split_uses_h5py_path(tmp_path):
+    fn = tmp_path / "NISAR_L2_PR_GSLC_001_X_20250101_001.h5"
+    _make_nisar_h5(fn, nx=100, ny=6000, epsg=32637)
+    cfg = DisplacementWorkflow(
+        cslc_file_list=[fn],
+        work_directory=tmp_path,
+        input_options={"subdataset": "/science/LSAR/GSLC/grids/frequencyA/HH"},
+        phase_linking={"half_window": {"y": DEFAULT_HALF_WINDOW_Y, "x": 11}},
+        output_options={"strides": {"y": DEFAULT_STRIDE_Y, "x": 5}},
+    )
+    blocks = split_frame_into_blocks(cfg, num_blocks=3)
+    assert len(blocks) == 3
+    assert all(bb.epsg == 32637 for bb in blocks.values())
+    # Centrals tile, reads overlap
+    centrals = [blocks[f"block_{i:02d}"].central_bounds for i in range(3)]
+    for prev, cur in itertools.pairwise(centrals):
+        assert prev.bottom == cur.top

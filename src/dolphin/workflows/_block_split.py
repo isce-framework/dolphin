@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING
 
 from dolphin import io
@@ -71,6 +72,12 @@ class BlockBounds:
     epsg: int
 
 
+def _is_nisar_h5(filename: Filename) -> bool:
+    """Detect NISAR raw HDF5 by filename prefix (matches `format_nc_filename`)."""
+    s = str(filename)
+    return s.endswith(".h5") and Path(s).name.upper().startswith("NISAR_")
+
+
 def _gdal_path_for(cfg: DisplacementWorkflow) -> str:
     """Build the GDAL-compatible URI for the first input file in `cfg`.
 
@@ -79,6 +86,90 @@ def _gdal_path_for(cfg: DisplacementWorkflow) -> str:
     GDAL-readable rasters all resolve correctly.
     """
     return io.format_nc_filename(cfg.cslc_file_list[0], cfg.input_options.subdataset)
+
+
+def _read_nisar_grid_metadata(
+    filename: Filename, subdataset: str
+) -> tuple[int, int, tuple[float, ...], int]:
+    """Read NISAR grid metadata via h5py.
+
+    NISAR's GSLC files store the projection in a sibling ``projection``
+    dataset and grid coordinates in ``xCoordinates`` / ``yCoordinates``
+    (cell centers) inside the same group as the polarization dataset.
+    GDAL's HDF5 driver doesn't expose any of this — it returns an identity
+    geotransform — so the only reliable path is to read it directly.
+
+    Returns ``(nx, ny, geotransform, epsg)``.
+    """
+    import h5py
+
+    grid_path = str(PurePosixPath(subdataset).parent)
+    with h5py.File(str(filename), "r") as f:
+        # Honor the CF-style ``grid_mapping`` attribute if present; fall back
+        # to the conventional ``projection`` name.
+        dset = f[subdataset]
+        proj_name = dset.attrs.get("grid_mapping", "projection")
+        if isinstance(proj_name, bytes):
+            proj_name = proj_name.decode()
+        proj_raw = f[f"{grid_path}/{proj_name}"][()]
+        epsg = int(proj_raw.decode()) if isinstance(proj_raw, bytes) else int(proj_raw)
+        x_coords = f[f"{grid_path}/xCoordinates"][:]
+        y_coords = f[f"{grid_path}/yCoordinates"][:]
+        dx = float(f[f"{grid_path}/xCoordinateSpacing"][()])
+        dy = float(f[f"{grid_path}/yCoordinateSpacing"][()])
+    # NISAR coords are cell centers; geotransform anchors at the upper-left
+    # cell *edge*, so back off half a pixel. dy is negative in standard
+    # north-up NISAR grids, so subtracting dy/2 raises ymax above the first
+    # row's center.
+    gt = (
+        float(x_coords[0]) - dx / 2.0,
+        dx,
+        0.0,
+        float(y_coords[0]) - dy / 2.0,
+        0.0,
+        dy,
+    )
+    nx, ny = len(x_coords), len(y_coords)
+    return nx, ny, gt, epsg
+
+
+def _read_grid_metadata(
+    cfg: DisplacementWorkflow,
+) -> tuple[int, int, tuple[float, ...], int]:
+    """Return ``(nx, ny, geotransform, epsg)`` for the first input file.
+
+    NISAR raw HDF5: bypass GDAL and read from the grid group via h5py.
+    Everything else (.tif, OPERA CSLC .h5, .nc): route through dolphin.io
+    GDAL helpers and ``format_nc_filename``.
+    """
+    first = cfg.cslc_file_list[0]
+    if _is_nisar_h5(first):
+        # ``input_options.subdataset`` is required by the pydantic validator
+        # whenever any input is an .h5/.nc, so this assert is for mypy.
+        subdataset = cfg.input_options.subdataset
+        assert subdataset is not None
+        return _read_nisar_grid_metadata(first, subdataset)
+
+    gdal_path = _gdal_path_for(cfg)
+    try:
+        crs = io.get_raster_crs(gdal_path)
+        epsg = crs.to_epsg()
+    except Exception as e:
+        msg = (
+            f"Could not read a usable EPSG from {gdal_path}; azimuth-block"
+            " splitting needs a geocoded input. Pass num_blocks=1 to skip,"
+            " or geocode the input frames first."
+        )
+        raise RuntimeError(msg) from e
+    if epsg is None:
+        msg = (
+            f"Input {gdal_path} has a projection but no EPSG authority code;"
+            " azimuth-block splitting needs an EPSG. Reproject the input first."
+        )
+        raise RuntimeError(msg)
+    nx, ny = io.get_raster_xysize(gdal_path)
+    gt = tuple(io.get_raster_gt(gdal_path))
+    return nx, ny, gt, epsg
 
 
 def _min_halo_rows(cfg: DisplacementWorkflow) -> int:
@@ -154,26 +245,7 @@ def split_frame_into_blocks(
     """
     halo = halo_rows if halo_rows is not None else _min_halo_rows(cfg)
 
-    gdal_path = _gdal_path_for(cfg)
-    try:
-        crs = io.get_raster_crs(gdal_path)
-        epsg = crs.to_epsg()
-    except Exception as e:
-        msg = (
-            f"Could not read a usable EPSG from {gdal_path}; azimuth-block"
-            " splitting needs a geocoded input. Pass num_blocks=1 to skip,"
-            " or geocode the input frames first."
-        )
-        raise RuntimeError(msg) from e
-    if epsg is None:
-        msg = (
-            f"Input {gdal_path} has a projection but no EPSG authority code;"
-            " azimuth-block splitting needs an EPSG. Reproject the input first."
-        )
-        raise RuntimeError(msg)
-
-    nx, ny = io.get_raster_xysize(gdal_path)
-    gt = io.get_raster_gt(gdal_path)
+    nx, ny, gt, epsg = _read_grid_metadata(cfg)
     xmin, ymax = gt[0], gt[3]
     px_x, px_y = gt[1], abs(gt[5])
     xmax = xmin + nx * px_x
