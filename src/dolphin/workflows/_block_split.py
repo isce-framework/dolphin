@@ -25,7 +25,6 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING
 
 from dolphin import io
@@ -72,85 +71,25 @@ class BlockBounds:
     epsg: int
 
 
-def _is_nisar_h5(filename: Filename) -> bool:
-    """Detect NISAR raw HDF5 by filename prefix (matches `format_nc_filename`)."""
-    s = str(filename)
-    return s.endswith(".h5") and Path(s).name.upper().startswith("NISAR_")
-
-
-def _gdal_path_for(cfg: DisplacementWorkflow) -> str:
-    """Build the GDAL-compatible URI for the first input file in `cfg`.
-
-    Uses ``dolphin.io.format_nc_filename`` so NISAR raw HDF5 (HDF5: driver),
-    OPERA CSLCs and other CF-compliant HDF5s (NETCDF: driver), and plain
-    GDAL-readable rasters all resolve correctly.
-    """
-    return io.format_nc_filename(cfg.cslc_file_list[0], cfg.input_options.subdataset)
-
-
-def _read_nisar_grid_metadata(
-    filename: Filename, subdataset: str
-) -> tuple[int, int, tuple[float, ...], int]:
-    """Read NISAR grid metadata via h5py.
-
-    NISAR's GSLC files store the projection in a sibling ``projection``
-    dataset and grid coordinates in ``xCoordinates`` / ``yCoordinates``
-    (cell centers) inside the same group as the polarization dataset.
-    GDAL's HDF5 driver doesn't expose any of this — it returns an identity
-    geotransform — so the only reliable path is to read it directly.
-
-    Returns ``(nx, ny, geotransform, epsg)``.
-    """
-    import h5py
-
-    grid_path = str(PurePosixPath(subdataset).parent)
-    with h5py.File(str(filename), "r") as f:
-        # Honor the CF-style ``grid_mapping`` attribute if present; fall back
-        # to the conventional ``projection`` name.
-        dset = f[subdataset]
-        proj_name = dset.attrs.get("grid_mapping", "projection")
-        if isinstance(proj_name, bytes):
-            proj_name = proj_name.decode()
-        proj_raw = f[f"{grid_path}/{proj_name}"][()]
-        epsg = int(proj_raw.decode()) if isinstance(proj_raw, bytes) else int(proj_raw)
-        x_coords = f[f"{grid_path}/xCoordinates"][:]
-        y_coords = f[f"{grid_path}/yCoordinates"][:]
-        dx = float(f[f"{grid_path}/xCoordinateSpacing"][()])
-        dy = float(f[f"{grid_path}/yCoordinateSpacing"][()])
-    # NISAR coords are cell centers; geotransform anchors at the upper-left
-    # cell *edge*, so back off half a pixel. dy is negative in standard
-    # north-up NISAR grids, so subtracting dy/2 raises ymax above the first
-    # row's center.
-    gt = (
-        float(x_coords[0]) - dx / 2.0,
-        dx,
-        0.0,
-        float(y_coords[0]) - dy / 2.0,
-        0.0,
-        dy,
-    )
-    nx, ny = len(x_coords), len(y_coords)
-    return nx, ny, gt, epsg
-
-
 def _read_grid_metadata(
     cfg: DisplacementWorkflow,
 ) -> tuple[int, int, tuple[float, ...], int]:
     """Return ``(nx, ny, geotransform, epsg)`` for the first input file.
 
-    NISAR raw HDF5: bypass GDAL and read from the grid group via h5py.
-    Everything else (.tif, OPERA CSLC .h5, .nc): route through dolphin.io
-    GDAL helpers and ``format_nc_filename``.
+    NISAR raw HDF5 reads via h5py because GDAL's HDF5 driver doesn't
+    expose the CF grid_mapping; everything else routes through the
+    ``dolphin.io`` GDAL helpers.
     """
     first = cfg.cslc_file_list[0]
-    if _is_nisar_h5(first):
+    if io._core._is_nisar_h5(first):
         # ``input_options.subdataset`` is required by the pydantic validator
-        # whenever any input is an .h5/.nc, so this assert is for mypy.
+        # for any .h5/.nc; assert is for mypy.
         subdataset = cfg.input_options.subdataset
         assert subdataset is not None
-        return _read_nisar_grid_metadata(first, subdataset)
+        nx, ny, gt, epsg, _ = io._core.read_nisar_grid_metadata(first, subdataset)
+        return nx, ny, gt, epsg
 
-    gdal_path = _gdal_path_for(cfg)
+    gdal_path = io.format_nc_filename(first, cfg.input_options.subdataset)
     try:
         crs = io.get_raster_crs(gdal_path)
         epsg = crs.to_epsg()

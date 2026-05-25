@@ -230,3 +230,34 @@ def test_nisar_split_uses_h5py_path(tmp_path):
     centrals = [blocks[f"block_{i:02d}"].central_bounds for i in range(3)]
     for prev, cur in itertools.pairwise(centrals):
         assert prev.bottom == cur.top
+
+
+def test_vrtstack_patches_nisar_metadata(tmp_path):
+    """``VRTStack`` must expose real CRS+GT for NISAR.
+
+    Regression test for the all-zero ``bounds_mask`` failure that fired
+    when the azimuth-block splitter set ``output_options.bounds`` on a
+    NISAR run: GDAL's HDF5 driver returns identity geotransform + empty
+    projection, so rasterizing a real-world polygon onto the VRT
+    produced an empty mask and ``masking.MaskingError`` downstream.
+    """
+    from dolphin.io import VRTStack
+
+    fn = tmp_path / "NISAR_L2_PR_GSLC_001_X_20250101_001.h5"
+    _make_nisar_h5(fn, nx=50, ny=100, epsg=32637)
+    vrt = VRTStack(
+        [fn],
+        outfile=tmp_path / "stack.vrt",
+        subdataset="/science/LSAR/GSLC/grids/frequencyA/HH",
+        sort_files=False,
+        skip_size_check=True,
+    )
+    # Patched from h5py — NOT GDAL's identity / empty
+    assert vrt.gt != (0.0, 1.0, 0.0, 0.0, 0.0, 1.0)
+    assert vrt.gt[1] == 10.0  # dx
+    assert vrt.gt[5] == -5.0  # dy
+    assert "UTM zone 37N" in vrt.proj
+    # And the .vrt on disk carries the same patched metadata
+    ds = gdal.Open(str(tmp_path / "stack.vrt"))
+    assert ds.GetGeoTransform() == vrt.gt
+    assert "UTM zone 37N" in ds.GetProjection()

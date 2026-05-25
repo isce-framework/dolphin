@@ -819,6 +819,27 @@ class VRTStack(StackReader):
         self.proj = ds.GetProjection()
         self.srs = ds.GetSpatialRef()
         ds = bnd1 = None
+
+        # GDAL's HDF5 driver doesn't read NISAR's CF grid_mapping, so the
+        # metadata above is identity GT + empty projection. Anything that
+        # rasterizes a real-world polygon onto this VRT (bounds_mask,
+        # nodata_mask, stitching crop) then silently produces an all-zero
+        # result. Patch from h5py for the NISAR case before writing the VRT.
+        if (
+            self.subdataset
+            and io._core._is_nisar_h5(self.file_list[0])
+            and self.gt == (0.0, 1.0, 0.0, 0.0, 0.0, 1.0)
+            and not self.proj
+        ):
+            from osgeo import osr
+
+            _, _, gt, _, wkt = io._core.read_nisar_grid_metadata(
+                self.file_list[0], self.subdataset
+            )
+            self.gt = gt
+            self.proj = wkt
+            self.srs = osr.SpatialReference()
+            self.srs.ImportFromWkt(wkt)
         # Save the subset info
 
         self.xoff, self.yoff = 0, 0
