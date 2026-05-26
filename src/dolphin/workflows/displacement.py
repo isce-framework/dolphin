@@ -288,18 +288,21 @@ def run(
             # and the stitcher doesn't have to pick a winner in the halo
             # overlap. comp_slcs stay full-extent — they feed back into this
             # block's next ministack and need to match its read bounds.
+            # crop_to_central may change a path's extension (.vrt -> .tif),
+            # so substitute the returned paths back in.
             bb = block_bounds.get(burst)
             if bb is not None and bb.read_bounds != bb.central_bounds:
-                for f in (
-                    list(cur_ifg_list)
-                    + list(cur_crlb_files)
-                    + list(cur_closure_phase_files)
-                    + list(temp_coh_files)
-                    + list(shp_count_files)
-                    + list(similarity_files)
-                    + [ps_file, amp_disp_file]
-                ):
-                    crop_to_central(f, bb.central_bounds)
+                cb = bb.central_bounds
+                cur_ifg_list = [crop_to_central(f, cb) for f in cur_ifg_list]
+                cur_crlb_files = [crop_to_central(f, cb) for f in cur_crlb_files]
+                cur_closure_phase_files = [
+                    crop_to_central(f, cb) for f in cur_closure_phase_files
+                ]
+                temp_coh_files = [crop_to_central(f, cb) for f in temp_coh_files]
+                shp_count_files = [crop_to_central(f, cb) for f in shp_count_files]
+                similarity_files = [crop_to_central(f, cb) for f in similarity_files]
+                ps_file = crop_to_central(ps_file, cb)
+                amp_disp_file = crop_to_central(amp_disp_file, cb)
 
             ifg_file_list.extend(cur_ifg_list)
             crlb_files.extend(cur_crlb_files)

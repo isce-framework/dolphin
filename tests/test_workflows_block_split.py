@@ -151,16 +151,46 @@ def test_crop_to_central_replaces_in_place(dated_geotiff, tmp_path):
     # Copy frame to a sibling, then crop in-place
     target = tmp_path / "to_crop.tif"
     gdal.Translate(str(target), str(dated_geotiff))
-    crop_to_central(target, bb.central_bounds)
+    out = crop_to_central(target, bb.central_bounds)
 
+    assert out == target  # TIF input → same path returned
     ds = gdal.Open(str(target))
     expected_ny = round((bb.central_bounds.top - bb.central_bounds.bottom) / 30)
     assert ds.RasterYSize == expected_ny
     assert ds.RasterXSize == 1000  # x extent unchanged
-    # Same path retained
-    assert target.exists()
     # No stray .cropped sibling
     assert not (tmp_path / "to_crop.cropped.tif").exists()
+
+
+def test_crop_to_central_materializes_vrt(dated_geotiff, tmp_path):
+    """Cropping a .vrt materializes to a sibling .tif; original .vrt is removed.
+
+    Regression test for ``RuntimeError: Recursion detected`` from gdal_merge:
+    ``gdal.Translate`` on a ``.vrt`` input emits a VRT whose
+    ``<SourceFilename>`` is the input path, so renaming it back over the
+    source produces a self-referential VRT.
+    """
+    cfg = _make_cfg(dated_geotiff, tmp_path)
+    blocks = split_frame_into_blocks(cfg, num_blocks=3)
+    bb = blocks["block_01"]
+
+    # Build a VRT that points at the source GeoTIFF (mirrors how dolphin's
+    # virtual interferograms are structured).
+    vrt = tmp_path / "to_crop.vrt"
+    gdal.Translate(str(vrt), str(dated_geotiff), format="VRT")
+
+    out = crop_to_central(vrt, bb.central_bounds)
+
+    # Materialized to a sibling .tif at a new path
+    assert out == tmp_path / "to_crop.tif"
+    assert out.exists()
+    assert not vrt.exists()  # original .vrt removed
+
+    # And the output is openable as a non-recursive GTiff at the central extent
+    ds = gdal.Open(str(out))
+    assert ds.GetDriver().ShortName == "GTiff"
+    expected_ny = round((bb.central_bounds.top - bb.central_bounds.bottom) / 30)
+    assert ds.RasterYSize == expected_ny
 
 
 def test_block_bounds_dataclass_immutable():

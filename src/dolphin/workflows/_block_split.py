@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from dolphin import io
@@ -244,36 +245,55 @@ def split_frame_into_blocks(
     return blocks
 
 
-def crop_to_central(filename: Filename, central_bounds: Bbox) -> None:
-    """Crop a raster in place to ``central_bounds``.
+def crop_to_central(filename: Filename, central_bounds: Bbox) -> Path:
+    """Crop a raster to ``central_bounds`` and return the path of the result.
 
     Used post-phase-linking on each block's stitching-bound outputs so
     adjacent blocks have disjoint extents.
 
+    Always materializes to GTiff. For ``.tif`` inputs the result replaces
+    the original at the same path; for ``.vrt`` inputs the result is a
+    sibling ``.tif`` and the original ``.vrt`` is removed. Materializing
+    is necessary because ``gdal.Translate(out.vrt, src.vrt, projWin=...)``
+    writes a VRT whose ``<SourceFilename>`` is the input path — renaming
+    that output back over the source produces a self-referential VRT that
+    gdal_merge later rejects with "Recursion detected".
+
     Parameters
     ----------
     filename
-        Path to the raster. Driver is preserved (e.g. GTiff, VRT).
+        Path to the raster (``.tif`` or ``.vrt``).
     central_bounds
         Bbox in the raster's CRS.
 
-    """
-    from pathlib import Path
+    Returns
+    -------
+    Path
+        Path of the cropped raster. May differ from ``filename`` when the
+        input was a ``.vrt`` (extension becomes ``.tif``); callers should
+        substitute this back into their file lists.
 
+    """
     from osgeo import gdal
 
     gdal.UseExceptions()
     src = Path(filename)
-    # Use a sibling temp path that keeps the same extension so GDAL infers
-    # the same driver. Insert ``.cropped`` before the extension.
-    tmp = src.with_name(src.stem + ".cropped" + src.suffix)
-    # projWin order: (ulx, uly, lrx, lry)
     proj_win = (
         central_bounds.left,
         central_bounds.top,
         central_bounds.right,
         central_bounds.bottom,
     )
-    gdal.Translate(str(tmp), str(src), projWin=proj_win)
+    if src.suffix == ".tif":
+        # In-place rewrite via sibling temp; same path returned.
+        tmp = src.with_name(src.stem + ".cropped.tif")
+        gdal.Translate(str(tmp), str(src), projWin=proj_win, format="GTiff")
+        src.unlink()
+        tmp.rename(src)
+        return src
+    # VRT (or other virtual) input: materialize to a sibling .tif. The
+    # original is removed so there's no stale duplicate on disk.
+    dst = src.with_suffix(".tif")
+    gdal.Translate(str(dst), str(src), projWin=proj_win, format="GTiff")
     src.unlink()
-    tmp.rename(src)
+    return dst
