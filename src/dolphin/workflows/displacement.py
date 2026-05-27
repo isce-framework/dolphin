@@ -17,7 +17,6 @@ from tqdm.auto import tqdm
 
 from dolphin import __version__, timeseries, utils
 from dolphin._log import log_runtime, setup_logging
-from dolphin._types import Bbox
 from dolphin.timeseries import ReferencePoint
 
 from . import stitching_bursts, unwrapping, wrapped_phase
@@ -87,91 +86,6 @@ def _prepare_grouped_inputs(cfg: DisplacementWorkflow) -> _GroupedInputs:
     try:
         grouped_slc_files = group_by_burst(cfg.cslc_file_list)
         block_bounds: dict[str, BlockBounds] = {}
-    except ValueError as e:
-        if "Could not parse burst id" not in str(e):
-            raise
-        # Non-OPERA-burst inputs (e.g. NISAR full-frame GSLCs).
-        is_opera_burst_mode = False
-        if cfg.input_options.azimuth_blocks > 1:
-            # Split the single frame into N synthetic "bursts" for parallelism.
-            block_bounds = split_frame_into_blocks(
-                cfg,
-                num_blocks=cfg.input_options.azimuth_blocks,
-                halo_rows=cfg.input_options.halo_rows,
-            )
-            grouped_slc_files = dict.fromkeys(block_bounds, cfg.cslc_file_list)
-        else:
-            # Full-frame run: a single "burst" containing all inputs.
-            grouped_slc_files = {"phase_linking": cfg.cslc_file_list}
-            block_bounds = {}
-
-    def _group_or_broadcast(
-        files: list[Path] | None,
-    ) -> dict[str, list[Path]]:
-        if not files:
-            return defaultdict(list)
-        if is_opera_burst_mode:
-            return group_by_burst(files)
-        return {key: list(files) for key in grouped_slc_files}
-
-    return _GroupedInputs(
-        is_opera_burst_mode=is_opera_burst_mode,
-        grouped_slc_files=grouped_slc_files,
-        block_bounds=block_bounds,
-        grouped_amp_dispersion_files=_group_or_broadcast(
-            cfg.amplitude_dispersion_files
-        ),
-        grouped_amp_mean_files=_group_or_broadcast(cfg.amplitude_mean_files),
-        grouped_layover_shadow_mask_files=_group_or_broadcast(
-            cfg.layover_shadow_mask_files
-        ),
-    )
-
-
-@dataclass
-class _GroupedInputs:
-    """Per-burst input file groupings + per-block bounds.
-
-    Built once at the top of :func:`run` by :func:`_prepare_grouped_inputs`.
-    Each ``grouped_*`` dict maps a burst id — either a real OPERA burst id
-    (``"t087_185678_iw2"``) or a synthetic NISAR block id
-    (``"block_00"`` / ``"phase_linking"``) — to that unit's file list.
-
-    ``block_bounds`` is non-empty only when NISAR-style inputs were split
-    into multiple azimuth blocks via ``cfg.input_options.azimuth_blocks``.
-    """
-
-    is_opera_burst_mode: bool
-    grouped_slc_files: dict[str, list[Path]]
-    block_bounds: dict[str, tuple[Bbox, int]]
-    grouped_amp_dispersion_files: dict[str, list[Path]]
-    grouped_amp_mean_files: dict[str, list[Path]]
-    grouped_layover_shadow_mask_files: dict[str, list[Path]]
-
-
-def _prepare_grouped_inputs(cfg: DisplacementWorkflow) -> _GroupedInputs:
-    """Detect input mode and group all file lists into per-burst dicts.
-
-    Tries OPERA's ``group_by_burst`` first. If the CSLC filenames don't carry
-    OPERA burst ids (e.g. NISAR GSLCs), falls back to one of two non-OPERA
-    paths:
-
-    1. ``azimuth_blocks > 1`` — splits the single frame into N synthetic
-       blocks via :func:`split_frame_into_blocks`. Each block reuses the full
-       CSLC list and gets per-block ``output_options.bounds`` (returned in
-       ``block_bounds``).
-    2. ``azimuth_blocks == 1`` — keeps the full frame as a single "burst"
-       under the key ``"phase_linking"``, no bounds.
-
-    Optional file lists (amp_disp, amp_mean, layover_shadow) are grouped by
-    burst in OPERA mode or broadcast to every key in non-OPERA mode. The
-    bounds mask inside ``wrapped_phase._get_mask`` clips them per block
-    automatically when bounds are set.
-    """
-    is_opera_burst_mode = True
-    try:
-        grouped_slc_files = group_by_burst(cfg.cslc_file_list)
-        block_bounds: dict[str, tuple[Bbox, int]] = {}
     except ValueError as e:
         if "Could not parse burst id" not in str(e):
             raise
