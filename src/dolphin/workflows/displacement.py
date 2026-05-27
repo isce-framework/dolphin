@@ -10,6 +10,7 @@ from collections import defaultdict
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from opera_utils import group_by_burst
 from tqdm.auto import tqdm
@@ -20,11 +21,111 @@ from dolphin._types import Bbox
 from dolphin.timeseries import ReferencePoint
 
 from . import stitching_bursts, unwrapping, wrapped_phase
-from ._block_split import split_frame_into_blocks
+from ._block_split import BlockBounds, crop_to_central, split_frame_into_blocks
 from ._utils import _create_burst_cfg, _remove_dir_if_empty
 from .config import DisplacementWorkflow
 
 logger = logging.getLogger("dolphin")
+
+
+def _worker_init(tqdm_lock: Any, disable_hdf5_locking: bool) -> None:
+    """Initialize a wrapped-phase ProcessPoolExecutor worker process.
+
+    Sets the shared tqdm lock and, when ``disable_hdf5_locking`` is True,
+    disables HDF5 file locking in this child process. The HDF5 env var only
+    matters for the worker that opens the files, so setting it here keeps
+    the parent process's env clean (libraries imported in the parent that
+    cached the env value at import time won't be surprised by a mutated
+    parent env).
+    """
+    tqdm.set_lock(tqdm_lock)
+    if disable_hdf5_locking:
+        os.environ["HDF5_USE_FILE_LOCKING"] = "FALSE"
+
+
+@dataclass
+class _GroupedInputs:
+    """Per-burst input file groupings + per-block bounds.
+
+    Built once at the top of :func:`run` by :func:`_prepare_grouped_inputs`.
+    Each ``grouped_*`` dict maps a burst id — either a real OPERA burst id
+    (``"t087_185678_iw2"``) or a synthetic NISAR block id
+    (``"block_00"`` / ``"phase_linking"``) — to that unit's file list.
+
+    ``block_bounds`` is non-empty only when NISAR-style inputs were split
+    into multiple azimuth blocks via ``cfg.input_options.azimuth_blocks``.
+    """
+
+    is_opera_burst_mode: bool
+    grouped_slc_files: dict[str, list[Path]]
+    block_bounds: dict[str, BlockBounds]
+    grouped_amp_dispersion_files: dict[str, list[Path]]
+    grouped_amp_mean_files: dict[str, list[Path]]
+    grouped_layover_shadow_mask_files: dict[str, list[Path]]
+
+
+def _prepare_grouped_inputs(cfg: DisplacementWorkflow) -> _GroupedInputs:
+    """Detect input mode and group all file lists into per-burst dicts.
+
+    Tries OPERA's ``group_by_burst`` first. If the CSLC filenames don't carry
+    OPERA burst ids (e.g. NISAR GSLCs), falls back to one of two non-OPERA
+    paths:
+
+    1. ``azimuth_blocks > 1`` — splits the single frame into N synthetic
+       blocks via :func:`split_frame_into_blocks`. Each block reuses the full
+       CSLC list and gets per-block ``output_options.bounds`` (returned in
+       ``block_bounds``).
+    2. ``azimuth_blocks == 1`` — keeps the full frame as a single "burst"
+       under the key ``"phase_linking"``, no bounds.
+
+    Optional file lists (amp_disp, amp_mean, layover_shadow) are grouped by
+    burst in OPERA mode or broadcast to every key in non-OPERA mode. The
+    bounds mask inside ``wrapped_phase._get_mask`` clips them per block
+    automatically when bounds are set.
+    """
+    is_opera_burst_mode = True
+    try:
+        grouped_slc_files = group_by_burst(cfg.cslc_file_list)
+        block_bounds: dict[str, BlockBounds] = {}
+    except ValueError as e:
+        if "Could not parse burst id" not in str(e):
+            raise
+        # Non-OPERA-burst inputs (e.g. NISAR full-frame GSLCs).
+        is_opera_burst_mode = False
+        if cfg.input_options.azimuth_blocks > 1:
+            # Split the single frame into N synthetic "bursts" for parallelism.
+            block_bounds = split_frame_into_blocks(
+                cfg,
+                num_blocks=cfg.input_options.azimuth_blocks,
+                halo_rows=cfg.input_options.halo_rows,
+            )
+            grouped_slc_files = dict.fromkeys(block_bounds, cfg.cslc_file_list)
+        else:
+            # Full-frame run: a single "burst" containing all inputs.
+            grouped_slc_files = {"phase_linking": cfg.cslc_file_list}
+            block_bounds = {}
+
+    def _group_or_broadcast(
+        files: list[Path] | None,
+    ) -> dict[str, list[Path]]:
+        if not files:
+            return defaultdict(list)
+        if is_opera_burst_mode:
+            return group_by_burst(files)
+        return {key: list(files) for key in grouped_slc_files}
+
+    return _GroupedInputs(
+        is_opera_burst_mode=is_opera_burst_mode,
+        grouped_slc_files=grouped_slc_files,
+        block_bounds=block_bounds,
+        grouped_amp_dispersion_files=_group_or_broadcast(
+            cfg.amplitude_dispersion_files
+        ),
+        grouped_amp_mean_files=_group_or_broadcast(cfg.amplitude_mean_files),
+        grouped_layover_shadow_mask_files=_group_or_broadcast(
+            cfg.layover_shadow_mask_files
+        ),
+    )
 
 
 @dataclass
@@ -152,6 +253,7 @@ class OutputPaths:
 def run(
     cfg: DisplacementWorkflow,
     debug: bool = False,
+    raise_on_empty: bool = True,
 ) -> OutputPaths:
     """Run the displacement workflow on a stack of SLCs.
 
@@ -162,6 +264,11 @@ def run(
         for controlling the workflow.
     debug : bool, optional
         Enable debug logging, by default False.
+    raise_on_empty : bool
+        If True, raises a `MaskingError` on the creation of a mask file with
+        no valid pixels.
+        Otherwise, raises a warning.
+        Default is True.
 
     """
     if cfg.log_file is None:
@@ -179,11 +286,6 @@ def run(
     num_parallel = min(
         cfg.worker_settings.n_parallel_bursts, len(grouped.grouped_slc_files)
     )
-    if not grouped.is_opera_burst_mode and num_parallel > 1:
-        # Multiple workers read the same NISAR GSLC (HDF5) files at different
-        # spatial extents. Disable HDF5 file locking to prevent hangs on
-        # NFS/Lustre filesystems where concurrent readers would otherwise block.
-        os.environ.setdefault("HDF5_USE_FILE_LOCKING", "FALSE")
     grouped_slc_files = grouped.grouped_slc_files
     block_bounds = grouped.block_bounds
     grouped_amp_dispersion_files = grouped.grouped_amp_dispersion_files
@@ -229,18 +331,22 @@ def run(
     # Now for each burst, run the wrapped phase estimation
     # Try running several bursts in parallel...
     # Use the Dummy one if not going parallel, as debugging is much simpler
-    num_workers = cfg.worker_settings.n_parallel_bursts
     Executor = (
         ProcessPoolExecutor if num_parallel > 1 else utils.DummyProcessPoolExecutor
     )
-    workers_per_burst = num_workers // num_parallel
+    workers_per_burst = cfg.worker_settings.n_parallel_bursts // num_parallel
     ctx = mp.get_context("spawn")
     tqdm.set_lock(ctx.RLock())
+    # When azimuth-block-as-burst is active and we have >1 parallel worker,
+    # multiple processes read the same NISAR HDF5 files at different spatial
+    # extents. Disable HDF5 file locking in each worker (not the parent) so
+    # concurrent readers don't block on NFS/Lustre flock.
+    needs_hdf5_unlock = not grouped.is_opera_burst_mode and num_parallel > 1
     with Executor(
-        max_workers=num_workers,
+        max_workers=cfg.worker_settings.n_parallel_bursts,
         mp_context=ctx,
-        initializer=tqdm.set_lock,
-        initargs=(tqdm.get_lock(),),
+        initializer=_worker_init,
+        initargs=(tqdm.get_lock(), needs_hdf5_unlock),
     ) as exc:
         fut_to_burst = {
             exc.submit(
@@ -248,6 +354,7 @@ def run(
                 burst_cfg,
                 debug=debug,
                 max_workers=workers_per_burst,
+                raise_on_empty=raise_on_empty,
                 tqdm_kwargs={
                     "position": i,
                 },
@@ -267,6 +374,29 @@ def run(
                 shp_count_files,
                 similarity_files,
             ) = wrapped_phase_output
+
+            # If this burst is a synthetic azimuth block, the per-block outputs
+            # cover central rows + a halo. Crop the stitching-bound rasters
+            # down to central_bounds so adjacent blocks have disjoint extents
+            # and the stitcher doesn't have to pick a winner in the halo
+            # overlap. comp_slcs stay full-extent — they feed back into this
+            # block's next ministack and need to match its read bounds.
+            # crop_to_central may change a path's extension (.vrt -> .tif),
+            # so substitute the returned paths back in.
+            bb = block_bounds.get(burst)
+            if bb is not None and bb.read_bounds != bb.central_bounds:
+                cb = bb.central_bounds
+                cur_ifg_list = [crop_to_central(f, cb) for f in cur_ifg_list]
+                cur_crlb_files = [crop_to_central(f, cb) for f in cur_crlb_files]
+                cur_closure_phase_files = [
+                    crop_to_central(f, cb) for f in cur_closure_phase_files
+                ]
+                temp_coh_files = [crop_to_central(f, cb) for f in temp_coh_files]
+                shp_count_files = [crop_to_central(f, cb) for f in shp_count_files]
+                similarity_files = [crop_to_central(f, cb) for f in similarity_files]
+                ps_file = crop_to_central(ps_file, cb)
+                amp_disp_file = crop_to_central(amp_disp_file, cb)
+
             ifg_file_list.extend(cur_ifg_list)
             crlb_files.extend(cur_crlb_files)
             closure_phase_files.extend(cur_closure_phase_files)

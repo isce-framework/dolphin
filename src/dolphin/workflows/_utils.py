@@ -5,13 +5,16 @@ import datetime
 import logging
 from collections import defaultdict
 from pathlib import Path
-from typing import Mapping, Sequence
+from typing import TYPE_CHECKING, Mapping, Sequence
 
 from opera_utils import group_by_date
 
 from dolphin._types import Bbox, Filename
 
 from .config import DisplacementWorkflow
+
+if TYPE_CHECKING:
+    from ._block_split import BlockBounds
 
 logger = logging.getLogger("dolphin")
 
@@ -23,7 +26,7 @@ def _create_burst_cfg(
     grouped_amp_mean_files: dict[str, list[Path]],
     grouped_amp_dispersion_files: dict[str, list[Path]],
     grouped_layover_shadow_mask_files: dict[str, list[Path]],
-    bounds: tuple[Bbox, int] | None = None,
+    bounds: "BlockBounds | None" = None,
 ) -> DisplacementWorkflow:
     cfg_temp_dict = cfg.model_dump(exclude={"cslc_file_list"})
 
@@ -39,12 +42,14 @@ def _create_burst_cfg(
 
     # When splitting a single frame into synthetic "bursts" (NISAR
     # block-as-burst via _block_split.split_frame_into_blocks), apply this
-    # block's spatial bounds. Real OPERA-burst runs pass bounds=None and
-    # inherit whatever the top-level cfg had.
+    # block's read bounds. ``OutputOptions._check_and_convert_bounds`` rejects
+    # having both ``bounds`` and ``bounds_wkt`` set, so clear any top-level
+    # ``bounds_wkt`` here — the block bounds derived from the input frame are
+    # narrower than any top-level WKT could be.
     if bounds is not None:
-        bbox, epsg = bounds
-        cfg_temp_dict["output_options"]["bounds"] = list(bbox)
-        cfg_temp_dict["output_options"]["bounds_epsg"] = epsg
+        cfg_temp_dict["output_options"]["bounds"] = list(bounds.read_bounds)
+        cfg_temp_dict["output_options"]["bounds_epsg"] = bounds.epsg
+        cfg_temp_dict["output_options"]["bounds_wkt"] = None
 
     return DisplacementWorkflow(**cfg_temp_dict)
 

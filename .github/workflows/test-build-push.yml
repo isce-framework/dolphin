@@ -33,7 +33,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
       - name: Setup environment
-        uses: mamba-org/setup-micromamba@v2
+        uses: mamba-org/setup-micromamba@v3
         with:
           environment-file: conda-env.yml
           environment-name: dolphin-env

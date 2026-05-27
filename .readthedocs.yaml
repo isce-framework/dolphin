@@ -9,7 +9,7 @@ mkdocs:
 # Conda is causing "excessive memory usage"
 # https://docs.readthedocs.io/en/stable/guides/conda.html#making-builds-faster-with-mamba
 build:
-  os: "ubuntu-20.04"
+  os: "ubuntu-24.04"
   tools:
     python: "mambaforge-4.10"
 
