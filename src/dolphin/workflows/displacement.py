@@ -167,6 +167,7 @@ class OutputPaths:
 def run(
     cfg: DisplacementWorkflow,
     debug: bool = False,
+    raise_on_empty: bool = True,
 ) -> OutputPaths:
     """Run the displacement workflow on a stack of SLCs.
 
@@ -177,6 +178,11 @@ def run(
         for controlling the workflow.
     debug : bool, optional
         Enable debug logging, by default False.
+    raise_on_empty : bool
+        If True, raises a `MaskingError` on the creation of a mask file with
+        no valid pixels.
+        Otherwise, raises a warning.
+        Default is True.
 
     """
     if cfg.log_file is None:
@@ -262,6 +268,7 @@ def run(
                 burst_cfg,
                 debug=debug,
                 max_workers=workers_per_burst,
+                raise_on_empty=raise_on_empty,
                 tqdm_kwargs={
                     "position": i,
                 },
