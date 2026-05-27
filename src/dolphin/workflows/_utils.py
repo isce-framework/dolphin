@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Mapping, Sequence
 
 from opera_utils import group_by_date
 
-from dolphin._types import Filename
+from dolphin._types import Bbox, Filename
 
 from .config import DisplacementWorkflow
 
