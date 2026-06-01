@@ -308,10 +308,57 @@ def _is_nisar_h5(filename: Filename) -> bool:
     return s.endswith(".h5") and Path(s).name.upper().startswith("NISAR_")
 
 
+# def read_nisar_grid_metadata(
+#     filename: Filename, subdataset: str
+# ) -> tuple[int, int, tuple[float, ...], int, str]:
+#     """Read NISAR GSLC grid metadata via h5py.
+
+#     NISAR's GSLC files store the projection in a sibling ``projection``
+#     dataset and grid coordinates in ``xCoordinates`` / ``yCoordinates``
+#     (cell centers) inside the same group as the polarization dataset.
+#     GDAL's HDF5 driver doesn't expose any of this — it returns an
+#     identity geotransform and empty projection — so the only reliable
+#     path is to read it directly.
+
+#     Honors the data dataset's ``grid_mapping`` attribute when present;
+#     falls back to the conventional ``projection`` dataset name.
+
+#     Returns ``(nx, ny, geotransform, epsg, projection_wkt)``.
+#     """
+#     from pathlib import PurePosixPath
+
+#     from osgeo import osr
+
+#     grid_path = str(PurePosixPath(subdataset).parent)
+#     with h5py.File(str(filename), "r") as f:
+#         dset = f[subdataset]
+#         proj_name = dset.attrs.get("grid_mapping", "projection")
+#         if isinstance(proj_name, bytes):
+#             proj_name = proj_name.decode()
+#         proj_raw = f[f"{grid_path}/{proj_name}"][()]
+#         epsg = int(proj_raw.decode()) if isinstance(proj_raw, bytes) else int(proj_raw)
+#         x_coords = f[f"{grid_path}/xCoordinates"][:]
+#         y_coords = f[f"{grid_path}/yCoordinates"][:]
+#         dx = float(f[f"{grid_path}/xCoordinateSpacing"][()])
+#         dy = float(f[f"{grid_path}/yCoordinateSpacing"][()])
+#     # Cell-center coords -> upper-left edge: back off half a pixel.
+#     gt = (
+#         float(x_coords[0]) - dx / 2.0,
+#         dx,
+#         0.0,
+#         float(y_coords[0]) - dy / 2.0,
+#         0.0,
+#         dy,
+#     )
+#     srs = osr.SpatialReference()
+#     srs.ImportFromEPSG(epsg)
+#     return len(x_coords), len(y_coords), gt, epsg, srs.ExportToWkt()
+
+
 def read_nisar_grid_metadata(
     filename: Filename, subdataset: str
 ) -> tuple[int, int, tuple[float, ...], int, str]:
-    """Read NISAR GSLC grid metadata via h5py.
+    """Read NISAR GSLC grid metadata via h5py (local) or earthaccess+h5netcdf (remote).
 
     NISAR's GSLC files store the projection in a sibling ``projection``
     dataset and grid coordinates in ``xCoordinates`` / ``yCoordinates``
@@ -327,21 +374,70 @@ def read_nisar_grid_metadata(
     """
     from pathlib import PurePosixPath
 
+    import earthaccess
+    import xarray as xr
+
+    file_str = str(filename)
+    is_remote = file_str.startswith(("http://", "https://", "s3://"))
+    grid_path = str(PurePosixPath(subdataset).parent)
     from osgeo import osr
 
-    grid_path = str(PurePosixPath(subdataset).parent)
-    with h5py.File(str(filename), "r") as f:
-        dset = f[subdataset]
-        proj_name = dset.attrs.get("grid_mapping", "projection")
-        if isinstance(proj_name, bytes):
-            proj_name = proj_name.decode()
-        proj_raw = f[f"{grid_path}/{proj_name}"][()]
-        epsg = int(proj_raw.decode()) if isinstance(proj_raw, bytes) else int(proj_raw)
-        x_coords = f[f"{grid_path}/xCoordinates"][:]
-        y_coords = f[f"{grid_path}/yCoordinates"][:]
-        dx = float(f[f"{grid_path}/xCoordinateSpacing"][()])
-        dy = float(f[f"{grid_path}/yCoordinateSpacing"][()])
-    # Cell-center coords -> upper-left edge: back off half a pixel.
+    if is_remote:
+        # 1. Handle Remote Streaming via Earthaccess
+        # Switch to HTTPS if an S3 link sneaks in outside of us-west-2
+        if file_str.startswith("s3://"):
+            raise ValueError(
+                "Direct S3 links are not supported out-of-region. Please pass the HTTPS URL equivalent."
+            )
+
+        # Open file pointer wrapper using ASF provider credentials
+        file_objs = earthaccess.open([file_str], provider="ASF")
+        f_pointer = file_objs[0]
+
+        # Use xarray with h5netcdf backend to lazily read group metadata
+        with xr.open_dataset(
+            f_pointer, group=grid_path, engine="h5netcdf", phony_dims="access"
+        ) as ds:
+            # Xarray group datasets expose dataset attributes via .attrs
+            # We open the subdataset path leaf name to get its specific attributes
+            leaf_name = PurePosixPath(subdataset).name
+
+            # h5netcdf exposes attributes directly as strings/numbers (no byte decoding needed)
+            with xr.open_dataset(
+                f_pointer, engine="h5netcdf", phony_dims="access"
+            ) as root_ds:
+                dset_attrs = root_ds[subdataset].attrs
+                proj_name = dset_attrs.get("grid_mapping", "projection")
+
+            # Fetch projection EPSG
+            epsg_raw = ds[proj_name].values
+            epsg = (
+                int(epsg_raw.decode()) if isinstance(epsg_raw, bytes) else int(epsg_raw)
+            )
+
+            # Extract coordinate vectors and spacings
+            x_coords = ds["xCoordinates"].values
+            y_coords = ds["yCoordinates"].values
+            dx = float(ds["xCoordinateSpacing"].values)
+            dy = float(ds["yCoordinateSpacing"].values)
+
+    else:
+        # 2. Traditional Local File Path (Original Logic)
+        with h5py.File(file_str, "r") as f:
+            dset = f[subdataset]
+            proj_name = dset.attrs.get("grid_mapping", "projection")
+            if isinstance(proj_name, bytes):
+                proj_name = proj_name.decode()
+            proj_raw = f[f"{grid_path}/{proj_name}"][()]
+            epsg = (
+                int(proj_raw.decode()) if isinstance(proj_raw, bytes) else int(proj_raw)
+            )
+            x_coords = f[f"{grid_path}/xCoordinates"][:]
+            y_coords = f[f"{grid_path}/yCoordinates"][:]
+            dx = float(f[f"{grid_path}/xCoordinateSpacing"][()])
+            dy = float(f[f"{grid_path}/yCoordinateSpacing"][()])
+
+    # 3. GeoTransform Calculation (Identical for both local and remote)
     gt = (
         float(x_coords[0]) - dx / 2.0,
         dx,
