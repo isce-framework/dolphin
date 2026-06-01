@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Annotated, Any, Optional
 
 import tyro
-from opera_utils import get_burst_id, get_dates, sort_files_by_date
+from opera_utils import get_burst_id, get_dates, is_remote_url, sort_files_by_date
 from pydantic import (
     BaseModel,
     ConfigDict,
@@ -199,8 +199,11 @@ class DisplacementWorkflow(WorkflowBase):
 
         # Ensure outputs from workflow steps are within work directory.
         if not self.keep_paths_relative:
-            # Resolve all CSLC paths:
-            self.cslc_file_list = [p.resolve(strict=False) for p in self.cslc_file_list]
+            # Resolve all CSLC paths (skip remote URLs like https://, s3://):
+            self.cslc_file_list = [
+                p if is_remote_url(p) else p.resolve(strict=False)
+                for p in self.cslc_file_list
+            ]
 
         work_dir = self.work_directory
         # For each workflow step that has an output folder, move it inside
