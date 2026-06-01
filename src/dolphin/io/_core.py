@@ -251,6 +251,18 @@ def format_nc_filename(filename: Filename, ds_name: Optional[str] = None) -> str
     If `filename` is already formatted, or if `filename` is not an HDF5/NetCDF
     file (based on the file extension), it is returned unchanged.
 
+    The driver prefix is chosen by filename:
+
+    - ``.nc``  → ``NETCDF:"file":"//ds"``
+    - ``.h5`` whose granule prefix is ``NISAR_`` → ``HDF5:"file":"//ds"``
+      (NISAR raw HDF5; no CF metadata, and GDAL's NETCDF driver refuses
+      it with "No such file or directory")
+    - every other ``.h5`` → ``NETCDF:"file":"//ds"``
+      (OPERA CSLCs, COMPASS CSLCs + static_layers, etc. ship CF-1.8-
+      compliant HDF5 and depend on the NETCDF driver to read the grid
+      mapping; the bare HDF5 driver opens the data but reports an
+      identity geotransform)
+
     Parameters
     ----------
     filename : str or PathLike
@@ -282,7 +294,65 @@ def format_nc_filename(filename: Filename, ds_name: Optional[str] = None) -> str
         msg = "Must provide dataset name for HDF5/NetCDF files"
         raise ValueError(msg)
 
-    return f'NETCDF:"{filename}":"//{ds_name.lstrip("/")}"'
+    basename = Path(fname_clean).name.upper()
+    if fname_clean.endswith(".h5") and basename.startswith("NISAR_"):
+        driver = "HDF5"
+    else:
+        driver = "NETCDF"
+    return f'{driver}:"{filename}":"//{ds_name.lstrip("/")}"'
+
+
+def _is_nisar_h5(filename: Filename) -> bool:
+    """Detect NISAR raw HDF5 by filename prefix (matches `format_nc_filename`)."""
+    s = str(filename)
+    return s.endswith(".h5") and Path(s).name.upper().startswith("NISAR_")
+
+
+def read_nisar_grid_metadata(
+    filename: Filename, subdataset: str
+) -> tuple[int, int, tuple[float, ...], int, str]:
+    """Read NISAR GSLC grid metadata via h5py.
+
+    NISAR's GSLC files store the projection in a sibling ``projection``
+    dataset and grid coordinates in ``xCoordinates`` / ``yCoordinates``
+    (cell centers) inside the same group as the polarization dataset.
+    GDAL's HDF5 driver doesn't expose any of this — it returns an
+    identity geotransform and empty projection — so the only reliable
+    path is to read it directly.
+
+    Honors the data dataset's ``grid_mapping`` attribute when present;
+    falls back to the conventional ``projection`` dataset name.
+
+    Returns ``(nx, ny, geotransform, epsg, projection_wkt)``.
+    """
+    from pathlib import PurePosixPath
+
+    from osgeo import osr
+
+    grid_path = str(PurePosixPath(subdataset).parent)
+    with h5py.File(str(filename), "r") as f:
+        dset = f[subdataset]
+        proj_name = dset.attrs.get("grid_mapping", "projection")
+        if isinstance(proj_name, bytes):
+            proj_name = proj_name.decode()
+        proj_raw = f[f"{grid_path}/{proj_name}"][()]
+        epsg = int(proj_raw.decode()) if isinstance(proj_raw, bytes) else int(proj_raw)
+        x_coords = f[f"{grid_path}/xCoordinates"][:]
+        y_coords = f[f"{grid_path}/yCoordinates"][:]
+        dx = float(f[f"{grid_path}/xCoordinateSpacing"][()])
+        dy = float(f[f"{grid_path}/yCoordinateSpacing"][()])
+    # Cell-center coords -> upper-left edge: back off half a pixel.
+    gt = (
+        float(x_coords[0]) - dx / 2.0,
+        dx,
+        0.0,
+        float(y_coords[0]) - dy / 2.0,
+        0.0,
+        dy,
+    )
+    srs = osr.SpatialReference()
+    srs.ImportFromEPSG(epsg)
+    return len(x_coords), len(y_coords), gt, epsg, srs.ExportToWkt()
 
 
 def copy_projection(src_file: Filename, dst_file: Filename) -> None:
