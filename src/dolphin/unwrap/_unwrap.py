@@ -55,6 +55,7 @@ def run(
     scratchdir: PathOrStr | None = None,
     delete_intermediate: bool = True,
     overwrite: bool = False,
+    file_date_fmt: str = "%Y%m%d",
 ) -> tuple[list[Path], list[Path]]:
     """Run snaphu on all interferograms in a directory.
 
@@ -94,6 +95,10 @@ def run(
         Must specify `scratchdir` for this option to be used.
     overwrite : bool, optional, default = False
         Overwrite existing unwrapped files.
+    file_date_fmt : str, optional
+        The strftime format used to parse acquisition dates from input
+        filenames and to write the date portion of output filenames.
+        Default is "%Y%m%d".
 
     Returns
     -------
@@ -129,6 +134,7 @@ def run(
             mask_filename=mask_filename,
             options=unwrap_options.spurt_options,
             scratchdir=scratchdir,
+            file_date_fmt=file_date_fmt,
         )
         for f in unw_paths:
             io.set_raster_units(f, "radians")
