@@ -372,70 +372,41 @@ def read_nisar_grid_metadata(
 
     Returns ``(nx, ny, geotransform, epsg, projection_wkt)``.
     """
+    import re
     from pathlib import PurePosixPath
 
-    import earthaccess
-    import xarray as xr
+    from opera_utils import is_remote_url
+    from opera_utils._remote import open_h5 as open_remote_h5
 
     file_str = str(filename)
-    is_remote = file_str.startswith(("http://", "https://", "s3://"))
+    # Normalize malformed URLs missing one slash (e.g., https:/ -> https://)
+    file_str = re.sub(r"^(https?|s3):/(?!/)", r"\1://", file_str)
     grid_path = str(PurePosixPath(subdataset).parent)
     from osgeo import osr
 
-    if is_remote:
-        # 1. Handle Remote Streaming via Earthaccess
-        # Switch to HTTPS if an S3 link sneaks in outside of us-west-2
+    if is_remote_url(file_str):
         if file_str.startswith("s3://"):
             raise ValueError(
-                "Direct S3 links are not supported out-of-region. Please pass the HTTPS URL equivalent."
+                "Direct S3 links are not supported out-of-region."
+                " Please pass the HTTPS URL equivalent."
             )
-
-        # Open file pointer wrapper using ASF provider credentials
-        file_objs = earthaccess.open([file_str], provider="ASF")
-        f_pointer = file_objs[0]
-
-        # Use xarray with h5netcdf backend to lazily read group metadata
-        with xr.open_dataset(
-            f_pointer, group=grid_path, engine="h5netcdf", phony_dims="access"
-        ) as ds:
-            # Xarray group datasets expose dataset attributes via .attrs
-            # We open the subdataset path leaf name to get its specific attributes
-            leaf_name = PurePosixPath(subdataset).name
-
-            # h5netcdf exposes attributes directly as strings/numbers (no byte decoding needed)
-            with xr.open_dataset(
-                f_pointer, engine="h5netcdf", phony_dims="access"
-            ) as root_ds:
-                dset_attrs = root_ds[subdataset].attrs
-                proj_name = dset_attrs.get("grid_mapping", "projection")
-
-            # Fetch projection EPSG
-            epsg_raw = ds[proj_name].values
-            epsg = (
-                int(epsg_raw.decode()) if isinstance(epsg_raw, bytes) else int(epsg_raw)
-            )
-
-            # Extract coordinate vectors and spacings
-            x_coords = ds["xCoordinates"].values
-            y_coords = ds["yCoordinates"].values
-            dx = float(ds["xCoordinateSpacing"].values)
-            dy = float(ds["yCoordinateSpacing"].values)
-
+        h5_open = open_remote_h5(file_str)
     else:
-        # 2. Traditional Local File Path (Original Logic)
-        with h5py.File(file_str, "r") as f:
-            dset = f[subdataset]
-            proj_name = dset.attrs.get("grid_mapping", "projection")
-            if isinstance(proj_name, bytes):
-                proj_name = proj_name.decode()
-            proj_raw = f[f"{grid_path}/{proj_name}"][()]
-            epsg = (
-                int(proj_raw.decode()) if isinstance(proj_raw, bytes) else int(proj_raw)
-            )
-            x_coords = f[f"{grid_path}/xCoordinates"][:]
-            y_coords = f[f"{grid_path}/yCoordinates"][:]
-            dx = float(f[f"{grid_path}/xCoordinateSpacing"][()])
-            dy = float(f[f"{grid_path}/yCoordinateSpacing"][()])
+        h5_open = h5py.File(file_str, "r")
+
+    with h5_open as f:
+        dset = f[subdataset]
+        proj_name = dset.attrs.get("grid_mapping", "projection")
+        if isinstance(proj_name, bytes):
+            proj_name = proj_name.decode()
+        proj_raw = f[f"{grid_path}/{proj_name}"][()]
+        epsg = (
+            int(proj_raw.decode()) if isinstance(proj_raw, bytes) else int(proj_raw)
+        )
+        x_coords = f[f"{grid_path}/xCoordinates"][:]
+        y_coords = f[f"{grid_path}/yCoordinates"][:]
+        dx = float(f[f"{grid_path}/xCoordinateSpacing"][()])
+        dy = float(f[f"{grid_path}/yCoordinateSpacing"][()])
 
     # 3. GeoTransform Calculation (Identical for both local and remote)
     gt = (

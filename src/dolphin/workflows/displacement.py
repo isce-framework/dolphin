@@ -82,14 +82,35 @@ def _prepare_grouped_inputs(cfg: DisplacementWorkflow) -> _GroupedInputs:
     bounds mask inside ``wrapped_phase._get_mask`` clips them per block
     automatically when bounds are set.
     """
+    import re
+
+    def _normalize_url(path: Path) -> Path:
+        # Fix malformed URLs missing one slash (e.g., https:/foo -> https://foo).
+        path_str = str(path)
+        fixed = re.sub(r"^(https?|s3):/(?!/)", r"\1://", path_str)
+        return Path(fixed) if fixed != path_str else path
+
+    cfg.cslc_file_list = [_normalize_url(p) for p in cfg.cslc_file_list]
+    if cfg.amplitude_dispersion_files:
+        cfg.amplitude_dispersion_files = [
+            _normalize_url(p) for p in cfg.amplitude_dispersion_files
+        ]
+    if cfg.amplitude_mean_files:
+        cfg.amplitude_mean_files = [_normalize_url(p) for p in cfg.amplitude_mean_files]
+    if cfg.layover_shadow_mask_files:
+        cfg.layover_shadow_mask_files = [
+            _normalize_url(p) for p in cfg.layover_shadow_mask_files
+        ]
+
     is_opera_burst_mode = True
     try:
         grouped_slc_files = group_by_burst(cfg.cslc_file_list)
         block_bounds: dict[str, BlockBounds] = {}
     except ValueError as e:
-        if "Could not parse burst id" not in str(e):
-            raise
-        # Non-OPERA-burst inputs (e.g. NISAR full-frame GSLCs).
+        # Could not parse burst id or other ValueError - fall back to non-OPERA mode
+        logger.warning(
+            f"Unable to parse OPERA bursts ({e}), falling back to non-OPERA mode"
+        )
         is_opera_burst_mode = False
         if cfg.input_options.azimuth_blocks > 1:
             # Split the single frame into N synthetic "bursts" for parallelism.
@@ -209,7 +230,7 @@ def run(
     # ######################################
     # 1. Burst-wise Wrapped phase estimation
     # ######################################
-    logger.info(f"Found SLC files from {len(grouped_slc_files)} bursts")
+    logger.info(f"Found SLC files from {len(grouped_slc_files)} bursts/blocks")
     wrapped_phase_cfgs = [
         (
             burst,  # Include the burst for logging purposes

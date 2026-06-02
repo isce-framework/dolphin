@@ -79,6 +79,8 @@ def _get_path_from_gdal_str(name: Filename) -> Path:
 
 def _resolve_gdal_path(gdal_str: Filename) -> Filename:
     """Resolve the file portion of a gdal-openable string to an absolute path."""
+    from opera_utils import is_remote_url
+
     s_clean = str(gdal_str).lstrip('"').lstrip("'").rstrip('"').rstrip("'")
     prefixes = ["DERIVED_SUBDATASET", "NETCDF", "HDF"]
     is_gdal_str = any(s_clean.upper().startswith(pre) for pre in prefixes)
@@ -86,6 +88,9 @@ def _resolve_gdal_path(gdal_str: Filename) -> Filename:
 
     # strip quotes to add back in after
     file_part = file_part.strip('"').strip("'")
+    # Skip remote URLs — Path.resolve() would prepend the cwd to them.
+    if is_remote_url(file_part):
+        return gdal_str
     file_part_resolved = Path(file_part).resolve()
     resolved = s_clean.replace(file_part, str(file_part_resolved))
     return Path(resolved) if not is_gdal_str else resolved

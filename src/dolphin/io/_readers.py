@@ -21,7 +21,7 @@ import numpy as np
 import rasterio as rio
 import rasterio.windows
 from numpy.typing import ArrayLike
-from opera_utils import get_dates, sort_files_by_date
+from opera_utils import get_dates, is_remote_url, sort_files_by_date
 from osgeo import gdal
 from tqdm.auto import trange
 
@@ -781,9 +781,19 @@ class VRTStack(StackReader):
         if any(str(f).startswith("s3://") for f in file_list):
             files = [S3Path(str(f)) for f in file_list]
         elif use_abs_path:
-            files = [utils._resolve_gdal_path(p) for p in file_list]
+            # Skip resolving remote URLs (https://, http://) — Path.resolve()
+            # would prepend the cwd to them.
+            files = [
+                p if is_remote_url(p) else utils._resolve_gdal_path(p)
+                for p in file_list
+            ]
         else:
             files = list(file_list)
+
+        # Sanitize remote URLs: Path() collapses `https://` to `https:/`,
+        # which GDAL's HDF5 driver cannot resolve. Restore the missing slash.
+        files = [_sanitize_remote_url(f) for f in files]
+
         # Extract the date/datetimes from the filenames
         dates = [get_dates(f, fmt=file_date_fmt) for f in file_list]
         if sort_files:
@@ -1073,6 +1083,22 @@ def _parse_vrt_file(vrt_file):
             filepaths.append(name)
 
     return filepaths, sds
+
+
+def _sanitize_remote_url(file: Filename) -> Filename:
+    """Restore the missing slash on URLs that Path() has collapsed.
+
+    ``Path("https://foo")`` round-trips to ``"https:/foo"`` because pathlib
+    collapses consecutive slashes. Return the URL as a plain string so the
+    double slash is preserved (wrapping it back in Path would collapse again).
+    """
+    import re
+
+    s = str(file)
+    fixed = re.sub(r"^(https?|s3):/(?!/)", r"\1://", s)
+    if fixed == s and not is_remote_url(s):
+        return file
+    return fixed
 
 
 def _assert_images_same_size(files):
