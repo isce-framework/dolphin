@@ -171,10 +171,7 @@ class PhaseLinkingOptions(BaseModel, extra="forbid"):
 
 
 class InterferogramNetwork(BaseModel, extra="forbid"):
-    """Options to determine the type of network for interferogram formation.
-
-    If no parameters passed, uses single-reference network with `reference_idx=0`.
-    """
+    """Options to determine the type of network for interferogram formation."""
 
     _directory: Path = PrivateAttr(Path("interferograms"))
 
