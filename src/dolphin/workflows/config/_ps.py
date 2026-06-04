@@ -4,6 +4,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from opera_utils import is_remote_url
 from pydantic import ConfigDict, Field, field_validator
 
 from ._common import (
@@ -62,8 +63,11 @@ class PsWorkflow(WorkflowBase):
         super().model_post_init(context)
         # Ensure outputs from workflow steps are within work directory.
         if not self.keep_paths_relative:
-            # Resolve all CSLC paths:
-            self.cslc_file_list = [p.resolve(strict=False) for p in self.cslc_file_list]
+            # Resolve all CSLC paths (skip remote URLs like https://, s3://):
+            self.cslc_file_list = [
+                p if is_remote_url(p) else p.resolve(strict=False)
+                for p in self.cslc_file_list
+            ]
 
         work_dir = self.work_directory
         # move the folders inside the work directory

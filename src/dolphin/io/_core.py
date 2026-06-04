@@ -311,7 +311,9 @@ def _is_nisar_h5(filename: Filename) -> bool:
 def read_nisar_grid_metadata(
     filename: Filename, subdataset: str
 ) -> tuple[int, int, tuple[float, ...], int, str]:
-    """Read NISAR GSLC grid metadata via h5py.
+    """Read NISAR GSLC grid metadata via h5py (local) or.
+
+    earthaccess+h5netcdf (remote).
 
     NISAR's GSLC files store the projection in a sibling ``projection``
     dataset and grid coordinates in ``xCoordinates`` / ``yCoordinates``
@@ -325,12 +327,29 @@ def read_nisar_grid_metadata(
 
     Returns ``(nx, ny, geotransform, epsg, projection_wkt)``.
     """
+    import re
     from pathlib import PurePosixPath
 
+    from opera_utils import is_remote_url
+    from opera_utils._remote import open_h5 as open_remote_h5
+
+    file_str = str(filename)
+    # Normalize malformed URLs missing one slash (e.g., https:/ -> https://)
+    file_str = re.sub(r"^(https?|s3):/(?!/)", r"\1://", file_str)
+    grid_path = str(PurePosixPath(subdataset).parent)
     from osgeo import osr
 
-    grid_path = str(PurePosixPath(subdataset).parent)
-    with h5py.File(str(filename), "r") as f:
+    if is_remote_url(file_str):
+        if file_str.startswith("s3://"):
+            raise ValueError(
+                "Direct S3 links are not supported out-of-region."
+                " Please pass the HTTPS URL equivalent."
+            )
+        h5_open = open_remote_h5(file_str)
+    else:
+        h5_open = h5py.File(file_str, "r")
+
+    with h5_open as f:
         dset = f[subdataset]
         proj_name = dset.attrs.get("grid_mapping", "projection")
         if isinstance(proj_name, bytes):
@@ -341,7 +360,8 @@ def read_nisar_grid_metadata(
         y_coords = f[f"{grid_path}/yCoordinates"][:]
         dx = float(f[f"{grid_path}/xCoordinateSpacing"][()])
         dy = float(f[f"{grid_path}/yCoordinateSpacing"][()])
-    # Cell-center coords -> upper-left edge: back off half a pixel.
+
+    # 3. GeoTransform Calculation (Identical for both local and remote)
     gt = (
         float(x_coords[0]) - dx / 2.0,
         dx,

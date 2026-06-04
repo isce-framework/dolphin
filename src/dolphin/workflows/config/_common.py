@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Annotated, Any, Literal, Optional
 
 import tyro
+from opera_utils import is_remote_url
 from pydantic import (
     BaseModel,
     ConfigDict,
@@ -537,8 +538,12 @@ def _read_file_list_or_glob(cls, value):  # noqa: ARG001
             filenames = [Path(f) for f in v_path.read_text().splitlines()]
 
             # If given as relative paths, make them relative to the text file
+            # Skip this for remote URLs (https://, http://, s3://)
             parent = v_path.parent
-            return [parent / f if not f.is_absolute() else f for f in filenames]
+            return [
+                parent / f if (not f.is_absolute() and not is_remote_url(f)) else f
+                for f in filenames
+            ]
         else:
             msg = f"Input file list {v_path} does not exist or is not a file."
             raise ValueError(msg)
