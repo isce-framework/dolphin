@@ -13,7 +13,6 @@ dependencies:
   - jax>=0.4.19
   - numba>=0.56
   - numpy>=1.23
-  - opera-utils>=0.25.7
   - pydantic>=2.1
   - pyproj>=3.3
   - rasterio>=1.3
@@ -23,3 +22,5 @@ dependencies:
   - tqdm>=4.60
   - typing_extensions>=3.10
   - tyro>=0.9.20
+  - pip:
+    - git+https://github.com/opera-adt/opera-utils.git@main
