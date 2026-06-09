@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import itertools
 import logging
+import os
 import shutil
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -38,6 +39,36 @@ __all__ = ["run", "unwrap"]
 DEFAULT_OPTIONS = UnwrapOptions()
 
 PathOrStr = Path | str
+
+
+def _resolve_n_parallel_jobs(unwrap_options: UnwrapOptions) -> int:
+    """Resolve the ``n_parallel_jobs = -1`` sentinel to a concrete value.
+
+    For whirlwind, default to ``max(1, cpu_count // 4)`` because ww's
+    MCF Amdahl-saturates around 4 threads per IG — running multiple
+    concurrent unwraps sharing a larger pool gives ~2x wall-clock
+    speedup over sequential. For snaphu/spurt (which already
+    parallelise internally) default to ``1``.
+    """
+    n = unwrap_options.n_parallel_jobs
+    if n >= 1:
+        return n
+    if unwrap_options.unwrap_method == UnwrapMethod.WHIRLWIND:
+        return max(1, (os.cpu_count() or 1) // 4)
+    return 1
+
+
+def _propagate_whirlwind_thread_settings(unwrap_options: UnwrapOptions) -> None:
+    """Set ``WHIRLWIND_NUM_THREADS`` so the lazy ww import picks it up.
+
+    Uses ``os.environ.setdefault`` so an externally-set env var (e.g.
+    SLURM, ``taskset``) wins. The rayon pool is *shared* across all
+    concurrent ww unwraps in this process — see
+    :class:`WhirlwindOptions`.
+    """
+    n = unwrap_options.whirlwind_options.num_threads
+    if n is not None:
+        os.environ.setdefault("WHIRLWIND_NUM_THREADS", str(n))
 
 
 def run(
@@ -160,7 +191,9 @@ def run(
     else:
         scratch_dirs = itertools.repeat(scratchdir)  # type: ignore[assignment]
     # This keeps it from spawning a new process for a single job.
-    max_jobs = unwrap_options.n_parallel_jobs
+    max_jobs = _resolve_n_parallel_jobs(unwrap_options)
+    if unwrap_options.unwrap_method == UnwrapMethod.WHIRLWIND:
+        _propagate_whirlwind_thread_settings(unwrap_options)
 
     Executor = ThreadPoolExecutor if max_jobs > 1 else DummyProcessPoolExecutor
     with Executor(max_workers=max_jobs) as exc:
@@ -435,6 +468,7 @@ def unwrap(
             scratchdir=scratchdir,
         )
     elif unwrap_method == UnwrapMethod.WHIRLWIND:
+        ww_opts = unwrap_options.whirlwind_options
         unw_path, conncomp_path = unwrap_whirlwind(
             unwrapper_ifg_filename,
             corr_filename,
@@ -444,7 +478,17 @@ def unwrap(
             zero_where_masked=unwrap_options.zero_where_masked,
             unw_nodata=unw_nodata,
             ccl_nodata=ccl_nodata,
-            scratchdir=scratchdir,
+            interpolate=ww_opts.interpolate,
+            interp_cutoff=ww_opts.interp_cutoff,
+            interp_num_neighbors=ww_opts.interp_num_neighbors,
+            interp_max_radius=ww_opts.interp_max_radius,
+            interp_min_radius=ww_opts.interp_min_radius,
+            interp_alpha=ww_opts.interp_alpha,
+            cost_threshold=ww_opts.cost_threshold,
+            conncomp_sigma=ww_opts.conncomp_sigma,
+            conncomp_cycle_prob=ww_opts.conncomp_cycle_prob,
+            min_size_px=ww_opts.min_size_px,
+            max_ncomps=ww_opts.max_ncomps,
         )
     elif (unwrap_method == UnwrapMethod.ICU) or (unwrap_method == UnwrapMethod.PHASS):
         tophu_opts = unwrap_options.tophu_options
