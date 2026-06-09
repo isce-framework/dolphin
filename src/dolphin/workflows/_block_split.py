@@ -365,7 +365,7 @@ def stitch_compressed_slcs(
     from osgeo import gdal
     from tqdm.contrib.concurrent import thread_map
 
-    from dolphin import stitching, utils
+    from dolphin import io, utils
 
     gdal.UseExceptions()
     output_dir = Path(output_dir)
@@ -386,25 +386,34 @@ def stitch_compressed_slcs(
                 cropped.append(crop_to_central(src, bb.central_bounds))
 
     # Group the cropped per-block files by their (ref, start, end) date tuple
-    # and mosaic each group onto the union grid -- which is exactly the full
-    # frame, since the central bounds tile it. ``target_aligned_pixels=False``
-    # is essential: the compressed SLCs must stay on the *input frame grid*
-    # (so the next batch reads consistent pixels); the default would snap the
-    # frame origin to a global pixel multiple and shift the grid. ``nearest``
-    # avoids interpolating the complex phasors across the aligned seams.
+    # and mosaic each group. The blocks share one frame grid + projection and,
+    # after the central crop, tile the frame disjointly -- so this is a pure
+    # "drop each tile at its offset" mosaic with no warp, blend, or resample.
+    # ``gdal.BuildVRT`` does that virtually (instant, C-level) and a single
+    # ``gdal.Translate`` materializes it; that is far cheaper than
+    # ``stitching.merge_images`` here, which spawns ``gdal_merge.py`` and adds
+    # a bilinear clip pass meant for the general (reprojecting, overlapping)
+    # burst case. ``vrtnodata=0`` matches the compressed-SLC nodata.
     grouped = group_by_date(cropped, file_date_fmt=file_date_fmt)
 
     def _merge_one(item: tuple[tuple, list[Path]]) -> Path:
         dates, files = item
-        outfile = output_dir / f"compressed_{utils.format_dates(*dates)}.tif"
-        stitching.merge_images(
-            sorted(files),
-            outfile=outfile,
-            target_aligned_pixels=False,
-            out_nodata=0,
-            resample_alg="nearest",
-            overwrite=True,
+        date_str = utils.format_dates(*dates)
+        vrt_path = output_dir / f"compressed_{date_str}.vrt"
+        outfile = output_dir / f"compressed_{date_str}.tif"
+        gdal.BuildVRT(
+            str(vrt_path),
+            [str(f) for f in sorted(files)],
+            VRTNodata=0,
         )
+        gdal.Translate(
+            str(outfile),
+            str(vrt_path),
+            format="GTiff",
+            noData=0,
+            creationOptions=list(io.DEFAULT_TIFF_OPTIONS),
+        )
+        vrt_path.unlink(missing_ok=True)
         return outfile
 
     stitched = thread_map(
