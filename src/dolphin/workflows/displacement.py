@@ -20,7 +20,12 @@ from dolphin._log import log_runtime, setup_logging
 from dolphin.timeseries import ReferencePoint
 
 from . import stitching_bursts, unwrapping, wrapped_phase
-from ._block_split import BlockBounds, crop_to_central, split_frame_into_blocks
+from ._block_split import (
+    BlockBounds,
+    crop_to_central,
+    split_frame_into_blocks,
+    stitch_compressed_slcs,
+)
 from ._utils import _create_burst_cfg, _remove_dir_if_empty
 from .config import DisplacementWorkflow
 
@@ -341,6 +346,22 @@ def run(
             amp_dispersion_file_list.append(amp_disp_file)
             shp_count_file_list.extend(shp_count_files)
             similarity_file_list.extend(similarity_files)
+
+    # When the frame was split into azimuth blocks, the per-block compressed
+    # SLCs overlap in their halos and there is one file per block per date.
+    # Mosaic them (like the interferograms) into a single frame-sized
+    # compressed SLC per date, so the output product and the next batch's
+    # inputs see one clean file. Gated on azimuth_blocks > 1, so the
+    # Sentinel-1 / OPERA-burst path is unchanged.
+    if cfg.input_options.azimuth_blocks > 1 and comp_slc_dict:
+        logger.info("Stitching per-azimuth-block compressed SLCs into frame mosaics")
+        comp_slc_dict = stitch_compressed_slcs(
+            comp_slc_dict=comp_slc_dict,
+            block_bounds=block_bounds,
+            output_dir=cfg.work_directory / "compressed_slcs",
+            file_date_fmt=cfg.input_options.cslc_date_fmt,
+            num_workers=cfg.worker_settings.n_parallel_bursts,
+        )
 
     # ###################################
     # 2. Stitch burst-wise interferograms
