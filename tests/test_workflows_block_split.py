@@ -18,6 +18,7 @@ from dolphin.workflows._block_split import (
     _read_grid_metadata,
     crop_to_central,
     split_frame_into_blocks,
+    stitch_compressed_slcs,
 )
 from dolphin.workflows.config import DisplacementWorkflow
 
@@ -291,3 +292,155 @@ def test_vrtstack_patches_nisar_metadata(tmp_path):
     ds = gdal.Open(str(tmp_path / "stack.vrt"))
     assert ds.GetGeoTransform() == vrt.gt
     assert "UTM zone 37N" in ds.GetProjection()
+
+
+# ---------------------------------------------------------------------------
+# stitch_compressed_slcs
+# ---------------------------------------------------------------------------
+
+_STITCH_PX = 30.0
+_STITCH_ORIGIN_X = 500000.0
+_STITCH_ORIGIN_Y = 4000000.0
+_STITCH_EPSG = 32610
+
+
+def _make_comp_slc(
+    path: Path,
+    bbox: Bbox,
+    *,
+    central_value: complex,
+    halo_value: complex,
+    halo_rows_top: int,
+    halo_rows_bottom: int,
+) -> None:
+    """Write a 2-band CFloat32 compressed-SLC-like raster on the frame grid.
+
+    Rows inside the halo margins are filled with ``halo_value`` (a sentinel)
+    so a test can detect whether the (edge-degraded) halo wrongly won the
+    mosaic overlap; central rows get ``central_value``.
+    """
+    nx = round((bbox.right - bbox.left) / _STITCH_PX)
+    ny = round((bbox.top - bbox.bottom) / _STITCH_PX)
+    arr = np.full((ny, nx), central_value, dtype=np.complex64)
+    if halo_rows_top:
+        arr[:halo_rows_top, :] = halo_value
+    if halo_rows_bottom:
+        arr[ny - halo_rows_bottom :, :] = halo_value
+
+    drv = gdal.GetDriverByName("GTiff")
+    ds = drv.Create(str(path), nx, ny, 2, gdal.GDT_CFloat32)
+    ds.SetGeoTransform((bbox.left, _STITCH_PX, 0.0, bbox.top, 0.0, -_STITCH_PX))
+    srs = osr.SpatialReference()
+    srs.ImportFromEPSG(_STITCH_EPSG)
+    ds.SetProjection(srs.ExportToWkt())
+    for b in (1, 2):
+        ds.GetRasterBand(b).WriteArray(arr)
+    ds = None
+
+
+def _bbox_for_rows(rs: int, re: int, nx: int) -> Bbox:
+    """Bbox for input rows ``[rs, re)`` on the shared frame grid."""
+    left = _STITCH_ORIGIN_X
+    right = _STITCH_ORIGIN_X + nx * _STITCH_PX
+    top = _STITCH_ORIGIN_Y - rs * _STITCH_PX
+    bottom = _STITCH_ORIGIN_Y - re * _STITCH_PX
+    return Bbox(left, bottom, right, top)
+
+
+def test_stitch_compressed_slcs_mosaics_central_regions(tmp_path):
+    """Per-block comp SLCs are cropped to central bounds and merged frame-sized.
+
+    Two azimuth blocks share a 40-row frame split at row 20 with a 4-row halo.
+    Each block's compressed SLC covers its read bounds (central + halo) with a
+    sentinel value in the halo rows. After stitching, the halo must be gone and
+    the frame must be tiled by each block's *central* data.
+    """
+    nx, ny = 8, 40
+    split_row = 20
+    halo = 4
+    # block_00: central rows [0, 20), read rows [0, 24)  -> bottom halo only
+    b00_central = _bbox_for_rows(0, split_row, nx)
+    b00_read = _bbox_for_rows(0, split_row + halo, nx)
+    # block_01: central rows [20, 40), read rows [16, 40) -> top halo only
+    b01_central = _bbox_for_rows(split_row, ny, nx)
+    b01_read = _bbox_for_rows(split_row - halo, ny, nx)
+
+    block_bounds = {
+        "block_00": BlockBounds(b00_read, b00_central, _STITCH_EPSG),
+        "block_01": BlockBounds(b01_read, b01_central, _STITCH_EPSG),
+    }
+
+    name = "compressed_20200101_20200101_20200113.tif"
+    halo_sentinel = 99 + 0j
+    pl_dir = tmp_path / "phase_linking"
+    (pl_dir / "block_00").mkdir(parents=True)
+    (pl_dir / "block_01").mkdir(parents=True)
+    f00 = pl_dir / "block_00" / name
+    f01 = pl_dir / "block_01" / name
+    _make_comp_slc(
+        f00,
+        b00_read,
+        central_value=1 + 0j,
+        halo_value=halo_sentinel,
+        halo_rows_top=0,
+        halo_rows_bottom=halo,
+    )
+    _make_comp_slc(
+        f01,
+        b01_read,
+        central_value=2 + 0j,
+        halo_value=halo_sentinel,
+        halo_rows_top=halo,
+        halo_rows_bottom=0,
+    )
+
+    out_dir = tmp_path / "compressed_slcs"
+    new_dict = stitch_compressed_slcs(
+        comp_slc_dict={"block_00": [f00], "block_01": [f01]},
+        block_bounds=block_bounds,
+        output_dir=out_dir,
+        file_date_fmt="%Y%m%d",
+    )
+
+    # One frame-sized file under a single synthetic key, original name preserved.
+    assert list(new_dict) == ["compressed_slc"]
+    (stitched,) = new_dict["compressed_slc"]
+    assert stitched.name == name
+    assert stitched.parent == out_dir
+
+    ds = gdal.Open(str(stitched))
+    assert ds.RasterCount == 2
+    assert (ds.RasterXSize, ds.RasterYSize) == (nx, ny)
+    arr = ds.GetRasterBand(1).ReadAsArray()
+    ds = None
+
+    # Halo sentinel must be gone, and each half tiled by its block's central data.
+    assert not np.any(arr == halo_sentinel)
+    assert np.all(arr[:split_row, :] == 1)
+    assert np.all(arr[split_row:, :] == 2)
+
+
+def test_stitch_compressed_slcs_no_halo_passthrough(tmp_path):
+    """A block whose read_bounds == central_bounds is merged uncropped."""
+    nx, ny = 8, 20
+    full = _bbox_for_rows(0, ny, nx)
+    block_bounds = {"block_00": BlockBounds(full, full, _STITCH_EPSG)}
+    name = "compressed_20200101_20200101_20200113.tif"
+    f00 = tmp_path / "block_00" / name
+    f00.parent.mkdir()
+    _make_comp_slc(
+        f00, full, central_value=1 + 0j, halo_value=0j, halo_rows_top=0,
+        halo_rows_bottom=0,
+    )
+
+    out_dir = tmp_path / "compressed_slcs"
+    new_dict = stitch_compressed_slcs(
+        comp_slc_dict={"block_00": [f00]},
+        block_bounds=block_bounds,
+        output_dir=out_dir,
+        file_date_fmt="%Y%m%d",
+    )
+    (stitched,) = new_dict["compressed_slc"]
+    ds = gdal.Open(str(stitched))
+    assert (ds.RasterXSize, ds.RasterYSize) == (nx, ny)
+    ds = None
