@@ -429,7 +429,11 @@ def test_stitch_compressed_slcs_no_halo_passthrough(tmp_path):
     f00 = tmp_path / "block_00" / name
     f00.parent.mkdir()
     _make_comp_slc(
-        f00, full, central_value=1 + 0j, halo_value=0j, halo_rows_top=0,
+        f00,
+        full,
+        central_value=1 + 0j,
+        halo_value=0j,
+        halo_rows_top=0,
         halo_rows_bottom=0,
     )
 
