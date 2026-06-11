@@ -367,6 +367,23 @@ def stitch_compressed_slcs(
 
     from dolphin import io, utils
 
+    def _already_cropped(
+        path: Path, central_bounds, rtol: float = 0.0, atol: float = 1e-6
+    ) -> bool:
+        """True if ``path`` already has the extent of ``central_bounds``."""  # noqa: D401
+        from math import isclose
+
+        from dolphin import io
+
+        try:
+            current = io.get_raster_bounds(path)  # (left, bottom, right, top)
+        except Exception:
+            return False
+        return all(
+            isclose(a, b, rel_tol=rtol, abs_tol=atol)
+            for a, b in zip(current, tuple(central_bounds), strict=False)
+        )
+
     gdal.UseExceptions()
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -381,6 +398,9 @@ def stitch_compressed_slcs(
             src = Path(comp_slc_file)
             if bb is None or bb.read_bounds == bb.central_bounds:
                 # No halo to strip -- merge the file as-is.
+                cropped.append(src)
+            elif _already_cropped(src, bb.central_bounds):
+                # A prior run already cropped this block in place.
                 cropped.append(src)
             else:
                 cropped.append(crop_to_central(src, bb.central_bounds))
@@ -401,6 +421,8 @@ def stitch_compressed_slcs(
         date_str = utils.format_dates(*dates)
         vrt_path = output_dir / f"compressed_{date_str}.vrt"
         outfile = output_dir / f"compressed_{date_str}.tif"
+        if outfile.exists():
+            return outfile
         gdal.BuildVRT(
             str(vrt_path),
             [str(f) for f in sorted(files)],
