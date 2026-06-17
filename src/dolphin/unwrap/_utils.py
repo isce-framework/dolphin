@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
+import numpy as np
 import rasterio as rio
 
 from dolphin import io
@@ -149,3 +150,43 @@ def _zero_from_mask(
             like_filename=corr_filename,
         )
     return zeroed_ifg_file, zeroed_corr_file
+
+
+def get_convex_hull_mask(good_mask: np.ndarray, buffer_pixels: int = 0) -> np.ndarray:
+    """Get a boolean image of the convex hull of `True` points in `good_mask`."""
+    import numpy as np
+    from scipy.ndimage import binary_dilation
+    from scipy.spatial import ConvexHull
+
+    hull = ConvexHull(np.stack(np.where(good_mask)).T)
+    # Step 1: Create a grid of all coordinates in the image.
+    grid_rows, grid_cols = np.indices(good_mask.shape)
+
+    # Step 2: Reshape the grid into a list of (row, col) points.
+    # This (N*M, 2) array represents every pixel in the image.
+    all_coords = np.vstack((grid_rows.ravel(), grid_cols.ravel())).T
+
+    # Step 3: Use the hull's equations to find points inside.
+    # The hull is defined by a set of planes. For a point `x` to be inside the hull,
+    # it must satisfy `A @ x.T + b <= 0` for all planes.
+    # The `hull.equations` attribute stores `A` (plane normals) and `b` (offsets).
+    # We can perform this check for all coordinates at once with vectorized operations.
+
+    # `A` contains the normal vectors of the hull's planes.
+    A = hull.equations[:, :2]
+    # `b` contains the offsets of the hull's planes.
+    b = hull.equations[:, 2]
+
+    # Step 4: Perform the check for all coordinates.
+    # `A @ all_coords.T` finds the dot product for all points with all plane normals
+    # We add the offset `b` and check if the result is non-positive.
+    # `np.all(..., axis=0)` ensures the condition is met for ALL planes for each point.
+    # use a small tolerance (1e-6) to account for floating-point inaccuracies.
+    is_inside_hull_flat = np.all(A @ all_coords.T + b[:, np.newaxis] <= 1e-6, axis=0)
+
+    hull_mask = is_inside_hull_flat.reshape(good_mask.shape)
+    if buffer_pixels:
+        hull_mask = binary_dilation(
+            hull_mask, structure=np.ones((3, 3)), iterations=buffer_pixels
+        )
+    return hull_mask
