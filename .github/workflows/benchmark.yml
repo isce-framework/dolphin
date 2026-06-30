@@ -16,7 +16,7 @@ jobs:
     steps:
       # We need the full repo to avoid this issue
       # https://github.com/actions/checkout/issues/23
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -39,7 +39,7 @@ jobs:
           asv machine --yes
       # https://github.com/tqdm/tqdm/blob/4c956c20b83be4312460fc0c4812eeb3fef5e7df/.github/workflows/check.yml#L26
       - name: Restore previous results
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: .asv
           key: asv-${{ runner.os }}
