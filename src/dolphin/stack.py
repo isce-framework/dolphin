@@ -547,6 +547,7 @@ class MiniStackPlanner(BaseStack):
                 output_reference_idx=output_reference_idx,
                 compressed_reference_idx=compressed_reference_idx,
                 output_folder=cur_output_folder,
+                file_date_fmt=self.file_date_fmt,
             )
 
             output_ministacks.append(cur_ministack)

@@ -36,6 +36,7 @@ def unwrap_spurt(
     options: SpurtOptions = DEFAULT_OPTIONS,
     scratchdir: PathOrStr | None = None,
     num_retries: int = 3,
+    file_date_fmt: str = "%Y%m%d",
 ) -> tuple[list[Path], list[Path]]:
     """Perform 3D unwrapping using `spurt` via subprocess call."""
     # NOTE: we are working around spurt currently wanting "temporal_coherence.tif",
@@ -86,6 +87,8 @@ def unwrap_spurt(
         str(scratch_path / "emcf_tmp"),
         "-c",
         str(0.5),  # arbitrary, since we are passing a 0/1 file anyway
+        "--date-fmt",
+        file_date_fmt,
     ]
     if not options.general_settings.use_tiles:
         cmd.append("--singletile")
@@ -157,7 +160,9 @@ def unwrap_spurt(
     )
 
     if options.run_ambiguity_interpolation:
-        filled_masked_unw_regions(unw_filenames, ifg_filenames)
+        filled_masked_unw_regions(
+            unw_filenames, ifg_filenames, file_date_fmt=file_date_fmt
+        )
     return unw_filenames, conncomp_filenames
 
 
