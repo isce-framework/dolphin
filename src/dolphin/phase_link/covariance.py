@@ -113,26 +113,55 @@ def coh_mat_single(
 ) -> Array:
     """Given (n_slc, n_samps) SLC samples, get the (nslc, nslc) coherence matrix.
 
-    Note this requires `slc_samples` to be transposed from `coh_mat_single`.
+    Supports both boolean masks (for GLRT/KS adaptive methods) and float weights
+    (for Gaussian multilooking).
+
+    Parameters
+    ----------
+    slc_samples : ArrayLike
+        SLC samples with shape (n_slc, n_samples).
+    neighbor_mask : ArrayLike, optional
+        Either a boolean mask or float weights with shape (n_samples,).
+        For boolean: True means include the sample.
+        For float: values are weights (should be non-negative).
+
+    Returns
+    -------
+    Array
+        Coherence matrix with shape (n_slc, n_slc).
+
     """
     _nslc, nsamps = slc_samples.shape
 
     if neighbor_mask is None:
         neighbor_mask = jnp.ones(nsamps, dtype=jnp.bool_)
-    valid_samples_mask = ~jnp.isnan(slc_samples)
-    combined_mask = valid_samples_mask & neighbor_mask[None, :]
 
-    # Mask the slc samples
+    valid_samples_mask = ~jnp.isnan(slc_samples)
+
+    # Handle boolean mask (GLRT/KS) vs float weights (Gaussian)
+    # For boolean: use masking (zero out non-neighbors)
+    # For float: use weighted samples with sqrt(weights) for proper weighted coherence
     # note that it's not possible to change the size based on the mask
     # https://jax.readthedocs.io/en/latest/notebooks/Common_Gotchas_in_JAX.html#dynamic-shapes
-    masked_slc = jnp.where(combined_mask, slc_samples, 0)
+
+    # Convert neighbor_mask to float weights for unified handling
+    # Boolean True -> 1.0, False -> 0.0; float stays as-is
+    weights = jnp.asarray(neighbor_mask, dtype=jnp.float32)
+
+    # Zero out invalid samples and apply sqrt(weights) for proper weighted coherence
+    # C_ij = sum(w * z_i * conj(z_j)) / sqrt(sum(w * |z_i|^2) * sum(w * |z_j|^2))
+    # Using sqrt(w) on samples gives the correct weighted formula
+    sample_weights = jnp.where(valid_samples_mask, weights[None, :], 0.0)
+    weighted_slc = slc_samples * jnp.sqrt(sample_weights)
+    # Zero out invalid samples
+    weighted_slc = jnp.where(valid_samples_mask, weighted_slc, 0.0)
 
     # Compute cross-correlation
-    numer = jnp.dot(masked_slc, jnp.conj(masked_slc.T))
+    numer = jnp.dot(weighted_slc, jnp.conj(weighted_slc.T))
 
     # Compute amplitudes so we normalize the covariance to a coherence matrix
     # a1 is shape (nslc,)
-    amp_vec = jnp.sum(jnp.abs(masked_slc) ** 2, axis=1)
+    amp_vec = jnp.sum(jnp.abs(weighted_slc) ** 2, axis=1)
     # Form outer product of amplitudes for each slc
     power_mat = amp_vec[:, None] * amp_vec[None, :]
     amp_mat = jnp.sqrt(power_mat)
