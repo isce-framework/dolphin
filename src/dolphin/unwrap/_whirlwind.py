@@ -37,13 +37,8 @@ def unwrap_whirlwind(
     interp_max_radius: int = 51,
     interp_min_radius: int = 0,
     interp_alpha: float = 0.75,
-    conncomp_algorithm: str = "snaphu",
     conncomp_min_coherence: float | str | None = None,
     conncomp_reliability: float = 0.5,
-    conncomp_thicken: bool = True,
-    cost_threshold: int = 50,
-    conncomp_sigma: Optional[float] = None,
-    conncomp_cycle_prob: Optional[float] = None,
     min_size_px: int = 100,
     max_ncomps: int = 1024,
     bridge: bool = True,
@@ -85,29 +80,16 @@ def unwrap_whirlwind(
 interp_alpha
         Spiral interpolation parameters; see ``whirlwind.unwrap``. Only used
         when ``interpolate`` is True.
-    conncomp_algorithm : {"snaphu", "linear"}, optional
-        Connected-component grow algorithm. Default "snaphu".
     conncomp_min_coherence : float or {"auto"} or None, optional
-        Coherence floor for the default "snaphu" component labels. None (the
-        default) uses ``conncomp_reliability``; "auto" uses ww's looks-aware
-        floor; a float in [0, 1] sets it explicitly. Default None.
+        Coherence floor for the component labels. None (the default) uses
+        ``conncomp_reliability``; "auto" uses ww's looks-aware floor; a float
+        in [0, 1] sets it explicitly. Default None.
     conncomp_reliability : float, optional
-        Conservativeness of the "snaphu" component grow, in inverse-variance
-        units: an edge becomes a component boundary when a one-cycle ambiguity
-        flip across it costs no more than this. 0.5 is about a coherence-0.1
-        floor; 0 labels nearly every unwrapped pixel. Used only when
+        Conservativeness of the component grow, in inverse-variance units: an
+        edge becomes a component boundary when a one-cycle ambiguity flip
+        across it costs no more than this. 0.5 is about a coherence-0.1 floor;
+        0 labels nearly every unwrapped pixel. Used only when
         ``conncomp_min_coherence`` is None. Default 0.5.
-    conncomp_thicken : bool, optional
-        SNAPHU ``ThickenCosts`` behavior for the "snaphu" component grow:
-        smooth each edge's cut strength laterally before cutting, so a
-        one-pixel reliable bridge through a wide unreliable region no longer
-        connects the two sides. Default True.
-    cost_threshold : int, optional
-        Connected-component boundary threshold for the "linear" grow. Default 50.
-    conncomp_sigma, conncomp_cycle_prob : float, optional
-        Set ``cost_threshold`` from a Gaussian-equivalent noise level or a
-        target per-edge one-cycle probability; see ``whirlwind.unwrap`` for
-        precedence. Default None.
     min_size_px : int, optional
         Discard connected components smaller than this many pixels. Default 100.
     max_ncomps : int, optional
@@ -171,6 +153,9 @@ interp_alpha
         # default phase solver is the verified single-tile linear MCF (ww-orig
         # parity + adaptive PD/SSP fallback);  Goldstein is off by default
         # (pass goldstein_alpha>0 to enable; under evaluation upstream).
+        # Components always come from ww's SNAPHU-style grow with ThickenCosts
+        # on, as production SNAPHU does. Pinned rather than left to ww's
+        # defaults so a change upstream cannot silently alter dolphin's labels.
         unw, conncomp_arr = ww.unwrap(
             igram_arr,
             corr_arr,
@@ -182,13 +167,10 @@ interp_alpha
             interp_max_radius=interp_max_radius,
             interp_min_radius=interp_min_radius,
             interp_alpha=interp_alpha,
-            conncomp_algorithm=conncomp_algorithm,
+            conncomp_algorithm="snaphu",
+            conncomp_thicken=True,
             conncomp_min_coherence=conncomp_min_coherence,
             conncomp_reliability=conncomp_reliability,
-            conncomp_thicken=conncomp_thicken,
-            cost_threshold=cost_threshold,
-            conncomp_sigma=conncomp_sigma,
-            conncomp_cycle_prob=conncomp_cycle_prob,
             min_size_px=min_size_px,
             max_ncomps=max_ncomps,
             bridge=bridge,

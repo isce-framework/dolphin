@@ -200,28 +200,23 @@ class WhirlwindOptions(BaseModel, extra="forbid"):
         gt=0.0,
     )
 
-    # --- Connected-component cost / quality knobs ----------------------------
-    conncomp_algorithm: Literal["snaphu", "linear"] = Field(
-        default="snaphu",
-        description=(
-            "Connected-component grow algorithm. ``'snaphu'`` uses the default"
-            " ambiguity-wiggle reliability grow; ``'linear'`` uses the older"
-            " coherence-cost grow."
-        ),
-    )
+    # --- Connected-component quality knobs -----------------------------------
+    # Components are always grown by ww's SNAPHU-style ambiguity-wiggle
+    # algorithm, with ThickenCosts on, as production SNAPHU does. ww's older
+    # coherence-cost grow is deliberately not exposed.
     conncomp_min_coherence: float | Literal["auto"] | None = Field(
         default=None,
         description=(
-            "For the ``'snaphu'`` grow, label pixels below this coherence as"
-            " background. ``None`` (default) disables the floor and uses"
-            " ``conncomp_reliability``; ``'auto'`` uses ww's looks-aware floor;"
-            " a float in [0, 1] sets it explicitly."
+            "Label pixels below this coherence as background. ``None`` (the"
+            " default) disables the floor and uses ``conncomp_reliability``;"
+            " ``'auto'`` uses ww's looks-aware floor; a float in [0, 1] sets it"
+            " explicitly."
         ),
     )
     conncomp_reliability: float = Field(
         default=0.5,
         description=(
-            "Conservativeness of the ``'snaphu'`` grow, in inverse-variance"
+            "Conservativeness of the component grow, in inverse-variance"
             " (``1 / sigma2``) units: an edge becomes a component boundary when"
             " a one-cycle ambiguity flip across it costs no more than this. The"
             " default 0.5 is about a coherence-0.1 floor, dropping decorrelated"
@@ -231,42 +226,31 @@ class WhirlwindOptions(BaseModel, extra="forbid"):
         ),
         ge=0.0,
     )
-    conncomp_thicken: bool = Field(
-        default=True,
-        description=(
-            "SNAPHU ``ThickenCosts`` behavior for the ``'snaphu'`` grow: smooth"
-            " each edge's cut strength laterally before cutting, so a one-pixel"
-            " reliable bridge through a wide unreliable region no longer"
-            " connects the two sides. Production SNAPHU always thickens."
-        ),
-    )
-    # The remaining cost knobs apply only to the legacy `linear` grow. If more
-    # than one is set, whirlwind resolves precedence as
-    # sigma > cycle_prob > cost_threshold.
+    # These three tune ww's older coherence-cost labeling, which dolphin no
+    # longer selects, so they do not affect the components that come back.
+    # Kept so existing configs that set them still load.
     cost_threshold: int = Field(
         default=50,
         description=(
-            "For the ``'linear'`` grow, the component-boundary threshold in raw"
-            " cost units. Larger makes more boundaries and smaller components."
+            "Unused. Component-boundary threshold, in raw cost units, for ww's"
+            " legacy coherence-cost labeling, which dolphin does not use."
         ),
         ge=0,
     )
     conncomp_sigma: float | None = Field(
         default=None,
         description=(
-            "For the ``'linear'`` grow, set ``cost_threshold`` from a"
-            " Gaussian-equivalent noise level (~3.5 reproduces the default 50)."
-            " Higher is stricter. Takes precedence over ``cost_threshold`` and"
-            " ``conncomp_cycle_prob``."
+            "Unused. Sets ``cost_threshold`` from a Gaussian-equivalent noise"
+            " level, for ww's legacy coherence-cost labeling."
         ),
         gt=0.0,
     )
     conncomp_cycle_prob: float | None = Field(
         default=None,
         description=(
-            "For the ``'linear'`` grow, set ``cost_threshold`` from a target"
-            " per-edge one-cycle-correction probability (~2.4e-4 matches the"
-            " default). Lower is stricter; ``conncomp_sigma`` takes precedence."
+            "Unused. Sets ``cost_threshold`` from a target per-edge"
+            " one-cycle-correction probability, for ww's legacy"
+            " coherence-cost labeling."
         ),
         gt=0.0,
         lt=1.0,

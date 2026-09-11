@@ -363,10 +363,8 @@ class TestWhirlwind:
         unwrap_options = UnwrapOptions(
             unwrap_method="whirlwind",
             whirlwind_options=WhirlwindOptions(
-                conncomp_algorithm="snaphu",
                 conncomp_min_coherence=None,
                 conncomp_reliability=2.0,
-                conncomp_thicken=False,
                 connect_gaps=True,
                 connect_gaps_max_px=50,
             ),
@@ -380,7 +378,9 @@ class TestWhirlwind:
         )
         assert out_path.exists()
         assert conncomp_path.exists()
+        # Always the SNAPHU-style grow, thickened, regardless of config.
         assert received_kwargs["conncomp_algorithm"] == "snaphu"
+        assert received_kwargs["conncomp_thicken"] is True
         assert received_kwargs["conncomp_min_coherence"] is None
         assert received_kwargs["conncomp_reliability"] == 2.0
         assert received_kwargs["connect_gaps"] is True
