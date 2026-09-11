@@ -328,6 +328,13 @@ def unwrap(
     """
     unwrap_method = unwrap_options.unwrap_method
     preproc_options = unwrap_options.preprocess_options
+    # whirlwind applies Goldstein filtering and PS interpolation internally (fast
+    # Rust). Running dolphin's slower Python pre-process on the same ifg would
+    # double-apply, so for whirlwind we skip it here and route the request through
+    # ww's own knobs in the dispatch below instead.
+    _ww_handles_preproc = unwrap_method == UnwrapMethod.WHIRLWIND
+    run_goldstein = unwrap_options.run_goldstein and not _ww_handles_preproc
+    run_interpolation = unwrap_options.run_interpolation and not _ww_handles_preproc
     if scratchdir is None:
         # Let the unwrappers handle the scratch if we don't specify.
         delete_scratch = False
@@ -352,7 +359,7 @@ def unwrap(
     name_change = "."
 
     ifg = io.load_gdal(ifg_filename, masked=True)
-    if unwrap_options.run_goldstein:
+    if run_goldstein:
         suf = Path(unw_filename).suffix
         if suf == ".tif":
             driver = "GTiff"
@@ -384,7 +391,7 @@ def unwrap(
         unwrapper_ifg_filename = filt_ifg_filename
         unwrapper_unw_filename = filt_unw_filename
 
-    if unwrap_options.run_interpolation:
+    if run_interpolation:
         suf = Path(ifg_filename).suffix
         if suf == ".tif":
             driver = "GTiff"
@@ -469,6 +476,15 @@ def unwrap(
         )
     elif unwrap_method == UnwrapMethod.WHIRLWIND:
         ww_opts = unwrap_options.whirlwind_options
+        # Route dolphin's pre-process request through ww's internal versions
+        # (skipped above for whirlwind). `run_goldstein` supplies alpha from the
+        # shared `preprocess_options` and takes precedence over ww's own knob.
+        ww_interpolate = ww_opts.interpolate or unwrap_options.run_interpolation
+        ww_goldstein_alpha = (
+            preproc_options.alpha
+            if unwrap_options.run_goldstein
+            else ww_opts.goldstein_alpha
+        )
         unw_path, conncomp_path = unwrap_whirlwind(
             unwrapper_ifg_filename,
             corr_filename,
@@ -478,17 +494,21 @@ def unwrap(
             zero_where_masked=unwrap_options.zero_where_masked,
             unw_nodata=unw_nodata,
             ccl_nodata=ccl_nodata,
-            interpolate=ww_opts.interpolate,
+            interpolate=ww_interpolate,
             interp_cutoff=ww_opts.interp_cutoff,
             interp_num_neighbors=ww_opts.interp_num_neighbors,
             interp_max_radius=ww_opts.interp_max_radius,
             interp_min_radius=ww_opts.interp_min_radius,
             interp_alpha=ww_opts.interp_alpha,
-            cost_threshold=ww_opts.cost_threshold,
-            conncomp_sigma=ww_opts.conncomp_sigma,
-            conncomp_cycle_prob=ww_opts.conncomp_cycle_prob,
+            conncomp_min_coherence=ww_opts.conncomp_min_coherence,
+            conncomp_reliability=ww_opts.conncomp_reliability,
             min_size_px=ww_opts.min_size_px,
             max_ncomps=ww_opts.max_ncomps,
+            bridge=ww_opts.bridge,
+            connect_gaps=ww_opts.connect_gaps,
+            connect_gaps_max_px=ww_opts.connect_gaps_max_px,
+            goldstein_alpha=ww_goldstein_alpha,
+            goldstein_psize=ww_opts.goldstein_psize,
         )
     elif (unwrap_method == UnwrapMethod.ICU) or (unwrap_method == UnwrapMethod.PHASS):
         tophu_opts = unwrap_options.tophu_options
@@ -517,7 +537,7 @@ def unwrap(
 
     # Transfer ambiguity numbers from filtered/interpolated unwrapped interferogram
     # back to original interferogram
-    if unwrap_options.run_goldstein or unwrap_options.run_interpolation:
+    if run_goldstein or run_interpolation:
         logger.info(
             "Transferring ambiguity numbers from filtered/interpolated"
             f" ifg {unwrapper_unw_filename}"
