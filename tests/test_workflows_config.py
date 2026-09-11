@@ -103,6 +103,19 @@ def test_unwrap_options_defaults():
     assert tophu_opts.downsample_factor == (1, 1)
     assert tophu_opts.ntiles == (1, 1)
     assert tophu_opts.cost == "smooth"
+    ww_opts = opts.whirlwind_options
+    assert ww_opts.conncomp_algorithm == "snaphu"
+    assert ww_opts.conncomp_min_coherence is None
+    assert ww_opts.conncomp_reliability == 0.5
+    assert ww_opts.conncomp_thicken is True
+    assert ww_opts.connect_gaps is False
+    assert ww_opts.connect_gaps_max_px == 300
+
+
+@pytest.mark.parametrize("value", [-0.1, 1.1])
+def test_whirlwind_conncomp_min_coherence_bounds(value):
+    with pytest.raises(pydantic.ValidationError):
+        config.WhirlwindOptions(conncomp_min_coherence=value)
 
 
 def test_outputs_defaults():
