@@ -16,6 +16,7 @@ from opera_utils import get_dates
 from scipy import ndimage
 
 from dolphin import io
+from dolphin._integer_ambiguities import _round_ambiguities
 from dolphin._overviews import ImageType, create_overviews
 from dolphin._types import ReferencePoint
 from dolphin.stitching import _get_matching_raster
@@ -1465,7 +1466,7 @@ def least_absolute_deviations(
         The over-relaxation parameter (typical values are between 1.0 and 1.8)
         By default 1.0.
     max_iter : int, optional
-        The maximum number of iterations, by default 15.
+        The maximum number of iterations, by default 20.
 
     Returns
     -------
@@ -1510,15 +1511,19 @@ def least_absolute_deviations(
 
 
 @jit
-def invert_stack_l1(A: ArrayLike, dphi: ArrayLike) -> tuple[Array, Array]:
+def invert_stack_l1(
+    A: ArrayLike, dphi: ArrayLike, max_iter: int = 20
+) -> tuple[Array, Array]:
+    """Solve a stack of LAD problems with a fixed ADMM iteration budget."""
     R = jax.scipy.linalg.cholesky(A.T @ A, lower=True)
 
     # vectorize the solve function to work on 2D and 3D arrays
     # We are not vectorizing over the A matrix, only the dphi vector
     # Solve 2d shapes: (nrows, n_ifgs) -> (nrows, n_sar_dates)
-    invert_2d = vmap(
-        least_absolute_deviations, in_axes=(None, 1, None), out_axes=(1, 0)
-    )
+    def solve(A, b, R):
+        return least_absolute_deviations(A, b, R, max_iter=max_iter)
+
+    invert_2d = vmap(solve, in_axes=(None, 1, None), out_axes=(1, 0))
     # Solve 3d shapes: (nrows, ncols, n_ifgs) -> (nrows, ncols, n_sar_dates)
     invert_3d = vmap(invert_2d, in_axes=(None, 2, None), out_axes=(2, 1))
     phase, residuals = invert_3d(A, dphi, R)
@@ -1526,6 +1531,111 @@ def invert_stack_l1(A: ArrayLike, dphi: ArrayLike) -> tuple[Array, Array]:
     # residuals = jnp.sum(residual_vecs, axis=0)
 
     return phase, residuals
+
+
+@jit
+def _invert_stack_l1_integer(A, ambiguities, max_iter):
+    relaxed, _ = invert_stack_l1(A, ambiguities, max_iter=max_iter)
+    round_2d = vmap(_round_ambiguities, in_axes=(None, 1, 1), out_axes=(1, 0))
+    round_3d = vmap(round_2d, in_axes=(None, 2, 2), out_axes=(2, 1))
+    return round_3d(A, ambiguities, relaxed)
+
+
+def invert_stack_l1_integer(
+    A: ArrayLike, ambiguities: ArrayLike, max_iter: int = 20
+) -> tuple[Array, Array]:
+    """Estimate integer date ambiguities using LAD and shared-threshold rounding.
+
+    Parameters
+    ----------
+    A : array_like, shape (M, N)
+        Oriented edge/date incidence matrix of a connected graph, with one
+        reference date column removed. Entries must be -1, 0, or 1.
+    ambiguities : array_like, shape (M, rows, cols)
+        Finite integer edge observations, in cycles (not radians or metres).
+        For per-date wrapped anchors ``theta`` and unwrapped pairs ``u``, these
+        are ``round((u - A @ theta) / (2*pi))``. Before forming them, callers
+        must check phase congruence, sign, grid, and spatial/temporal reference.
+        Independently wrapping each pair is not a per-date anchor.
+    max_iter : int, optional
+        ADMM iterations, by default 20. Rounding does not certify convergence.
+
+    Returns
+    -------
+    offsets : jax.Array, shape (N, rows, cols)
+        Integer-valued floating point cycle offsets. Reconstruct date phases
+        as ``theta + 2*pi*offsets`` to preserve their wrapped anchors.
+    residuals : jax.Array, shape (rows, cols)
+        Sum of absolute edge residuals in cycles, after rounding.
+
+    Raises
+    ------
+    ValueError
+        If the graph is not a connected reduced incidence matrix, observations
+        are missing/nonintegral, or array dimensions/iteration count are invalid.
+
+    Notes
+    -----
+    This opt-in array API leaves the default displacement workflow unchanged.
+    It supports one unweighted graph shared by all pixels. Missing edges must
+    be removed from both arrays, not filled with zero. Split different validity
+    patterns before calling; dates disconnected from the reference are undefined.
+
+    For integer edge observations, the expected LAD objective of
+    ``floor(x + t)`` over a shared uniform ``t`` in [0, 1) equals that of ``x``.
+    Selecting the best threshold therefore cannot increase the relaxed
+    objective (up to floating point precision). An exact relaxed optimum rounds
+    to an integer optimum, but the fixed-iteration ADMM estimate need not be
+    optimal. Temporal consistency cannot identify acquisition-consistent errors
+    or resolve nonunique LAD solutions.
+
+    """
+    if np.ma.is_masked(A) or np.ma.is_masked(ambiguities):
+        raise ValueError("Remove missing observations; masked values are not zeros")
+    A = np.asarray(A)
+    ambiguities = np.asarray(ambiguities)
+    if A.ndim != 2 or min(A.shape) < 1:
+        raise ValueError("A must be a nonempty reduced incidence matrix")
+    if ambiguities.ndim != 3 or ambiguities.shape[0] != A.shape[0]:
+        raise ValueError("ambiguities must have shape (A.shape[0], rows, cols)")
+    if not isinstance(max_iter, (int, np.integer)) or max_iter < 1:
+        raise ValueError("max_iter must be a positive integer")
+    if not np.all(np.isin(A, [-1, 0, 1])):
+        raise ValueError("A must contain only -1, 0, and 1")
+    full = np.column_stack((-A.sum(axis=1), A))
+    if not np.all((full == 1).sum(axis=1) == 1) or not np.all(
+        (full == -1).sum(axis=1) == 1
+    ):
+        raise ValueError("Each row of A must represent one oriented graph edge")
+    # Union-find checks connectivity without a dense factorization on the host.
+    parent = list(range(full.shape[1]))
+
+    def root(node):
+        while parent[node] != node:
+            parent[node] = parent[parent[node]]
+            node = parent[node]
+        return node
+
+    for start, end in zip(
+        np.argmax(full, axis=1), np.argmin(full, axis=1), strict=True
+    ):
+        parent[root(start)] = root(end)
+    if len({root(node) for node in range(len(parent))}) != 1:
+        raise ValueError("Every date must be connected to the removed reference")
+    if not np.all(np.isfinite(ambiguities)) or not np.all(
+        ambiguities == np.rint(ambiguities)
+    ):
+        raise ValueError("ambiguities must be finite integer cycle observations")
+    dtype = np.float64 if jax.config.x64_enabled else np.float32
+    with np.errstate(over="ignore", invalid="ignore"):
+        converted = ambiguities.astype(dtype)
+    if not np.all(np.isfinite(converted)) or not np.all(converted == ambiguities):
+        raise ValueError(
+            "Cycle observations must be exactly representable in JAX dtype"
+        )
+    return _invert_stack_l1_integer(
+        jnp.asarray(A, dtype=dtype), jnp.asarray(converted), max_iter
+    )
 
 
 def create_nonzero_conncomp_counts(
