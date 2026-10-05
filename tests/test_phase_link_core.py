@@ -87,6 +87,28 @@ def test_masked(slc_samples, C_truth):
     npt.assert_array_almost_equal(est_mle, np.angle(est_full[5, 5, :]), decimal=1)
 
 
+@pytest.mark.parametrize("last_compressed_slc_idx", [None, 0, 3])
+def test_crlb_last_compressed_slc_idx(slc_samples, last_compressed_slc_idx):
+    """`last_compressed_slc_idx` picks which date's CRLB std dev is exactly 0.
+
+    This is the replacement for the old `first_real_slc_idx - 1` convention
+    (which only worked when compressed SLCs were a contiguous prefix); `None`
+    (no compressed SLC) must reproduce today's default of referencing index 0.
+    """
+    slc_stack = slc_samples.copy().reshape(NUM_ACQ, 11, 11)
+    C_hat = covariance.estimate_stack_covariance(slc_stack, half_window=HalfWindow(5, 5))
+
+    _, _, _, crlb_std_dev = _core.process_coherence_matrices(
+        C_hat, last_compressed_slc_idx=last_compressed_slc_idx, compute_crlb=True
+    )
+
+    expected_idx = 0 if last_compressed_slc_idx is None else last_compressed_slc_idx
+    npt.assert_array_equal(np.array(crlb_std_dev[..., expected_idx]), 0.0)
+    # Every other date should have a nonzero CRLB std dev.
+    other_idx = (expected_idx + 1) % NUM_ACQ
+    assert np.all(np.array(crlb_std_dev[..., other_idx]) > 0.0)
+
+
 def test_run_phase_linking(slc_samples):
     slc_stack = slc_samples.copy().reshape(NUM_ACQ, 11, 11)
     pl_out = _core.run_phase_linking(

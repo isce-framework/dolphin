@@ -11,7 +11,7 @@ from dolphin.utils import upsample_nearest
 def compress(
     slc_stack: ArrayLike,
     pl_cpx_phase: ArrayLike,
-    first_real_slc_idx: int = 0,
+    is_real_mask: ArrayLike | None = None,
     slc_mean: ArrayLike | None = None,
     reference_idx: int | None = None,
 ):
@@ -24,10 +24,12 @@ def compress(
     pl_cpx_phase : ArrayLike
         The estimated complex phase from phase linking.
         shape  = (nslc, rows // strides.y, cols // strides.x)
-    first_real_slc_idx : int
-        Index within `slc_stack` where the "real" SLCs start.
-        Indexes before this (which are assumed to be already Compressed SLCs) are
-        excluded from the dot product during compression
+    is_real_mask : ArrayLike, optional
+        Boolean mask of shape (nslc,), where `True` marks a "real" (non-compressed)
+        SLC within `slc_stack`. Entries marked `False` (already-Compressed SLCs)
+        are excluded from the dot product during compression, regardless of their
+        position in the stack.
+        If None, all entries are treated as real.
     slc_mean : ArrayLike, optional
         The mean SLC magnitude, shape (rows, cols), to use as output pixel magnitudes.
         If None, the mean is computed from the input SLC stack.
@@ -47,9 +49,14 @@ def compress(
     else:
         pl_referenced = pl_cpx_phase
 
-    # Slice away the compressed layers *after* doing the reference.
-    pl_referenced = pl_referenced[first_real_slc_idx:, :, :]
-    slcs = slc_stack[first_real_slc_idx:]
+    if is_real_mask is None:
+        is_real_mask = np.ones(np.asarray(slc_stack).shape[0], dtype=bool)
+    else:
+        is_real_mask = np.asarray(is_real_mask, dtype=bool)
+
+    # Exclude the already-compressed layers *after* doing the reference.
+    pl_referenced = pl_referenced[is_real_mask, :, :]
+    slcs = slc_stack[is_real_mask]
     # If the output is downsampled, we need to make `pl_cpx_phase` the same shape
     # as the output
     pl_estimate_upsampled = upsample_nearest(pl_referenced, slcs.shape[1:])

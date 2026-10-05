@@ -137,9 +137,25 @@ class BaseStack(BaseModel):
             raise ValueError(msg) from e
 
     @property
+    def is_real_mask(self) -> np.ndarray:
+        """Boolean mask marking the real (non-compressed) SLCs.
+
+        Unlike `first_real_slc_idx`, this is correct even when compressed SLCs
+        are not a contiguous prefix of `file_list`.
+        """
+        return ~np.array(self.is_compressed)
+
+    @property
+    def last_compressed_slc_idx(self) -> Optional[int]:
+        """Index of the most recent (last) compressed SLC, or None if there isn't one."""
+        idxs = np.where(np.array(self.is_compressed))[0]
+        return int(idxs[-1]) if idxs.size else None
+
+    @property
     def real_slc_date_range(self) -> tuple[DateOrDatetime, DateOrDatetime]:
         """Date range of the real SLCs in the ministack."""
-        return (self.dates[self.first_real_slc_idx][0], self.dates[-1][-1])
+        real_idxs = np.where(self.is_real_mask)[0]
+        return (self.dates[real_idxs[0]][0], self.dates[real_idxs[-1]][-1])
 
     @property
     def real_slc_date_range_str(self) -> str:
@@ -487,31 +503,56 @@ class MiniStackPlanner(BaseStack):
             # TODO: will we ever actually need to read the old metadata here?
             compressed_slc_infos.append(CompressedSlcInfo.from_filename(f))
 
-        # Solve each ministack using current chunk (and the previous compressed SLCs)
-        ministack_starts = range(
-            self.first_real_slc_idx, len(self.file_list), ministack_size
-        )
+        # Solve each ministack using current chunk (and the previous compressed SLCs).
+        # Chunk over the *real*-SLC-flagged positions directly (gathering by index,
+        # not a contiguous `range()`/`slice()`) since a compressed SLC can be
+        # interleaved among real SLCs elsewhere in `self.file_list` (e.g.
+        # forward-mode/incremental reprocessing inputs sorted by
+        # `opera_utils.sort_files_by_date`, which has no compressed-first
+        # guarantee). A raw positional slice could otherwise pick up an
+        # interleaved compressed SLC a second time, or come up short on real SLCs.
+        real_idxs = np.where(~np.array(self.is_compressed))[0]
+        real_idx_chunks = [
+            real_idxs[i : i + ministack_size]
+            for i in range(0, len(real_idxs), ministack_size)
+        ]
 
-        for full_stack_idx in ministack_starts:
-            cur_slice = slice(full_stack_idx, full_stack_idx + ministack_size)
-            cur_files = list(self.file_list[cur_slice]).copy()
-            cur_dates = list(self.dates[cur_slice]).copy()
+        for cur_real_idxs in real_idx_chunks:
+            cur_files = [self.file_list[i] for i in cur_real_idxs]
+            cur_dates = [self.dates[i] for i in cur_real_idxs]
+            cur_is_compressed = [False] * len(cur_real_idxs)
 
             # Read compressed*.tif files and if they do not exist use the compressed*.h5
-            comp_slc_files = [c.path for c in compressed_slc_infos]
-            # Add the existing compressed SLC files to the start, but
-            # limit the num comp slcs `max_num_compressed`
-            cur_comp_slc_files = comp_slc_files[-self.max_num_compressed :]
-            combined_files = cur_comp_slc_files + cur_files
+            # Limit the num comp slcs to `max_num_compressed`
+            cur_comp_slc_infos = compressed_slc_infos[-self.max_num_compressed :]
+            num_ccslc = len(cur_comp_slc_infos)
 
-            combined_dates = [
-                c.dates for c in compressed_slc_infos[-self.max_num_compressed :]
-            ] + cur_dates
+            # Chronologically merge the existing compressed SLCs (keyed by their
+            # `reference_date`) with this chunk's real SLCs, instead of blindly
+            # putting all compressed SLCs first. A compressed SLC's reference date
+            # can be later than some real SLC dates also present here, so a plain
+            # prefix-concat would silently mislabel which entries are "real".
+            # `sort()` is stable, so ties keep compressed-before-real (today's
+            # behavior), making this a no-op reordering in the fully-contiguous case.
+            entries = [
+                (c.dates[0], c.path, c.dates, True) for c in cur_comp_slc_infos
+            ] + [
+                (d[0], f, d, is_comp)
+                for f, d, is_comp in zip(
+                    cur_files, cur_dates, cur_is_compressed, strict=False
+                )
+            ]
+            entries.sort(key=lambda e: e[0])
 
-            num_ccslc = len(cur_comp_slc_files)
-            combined_is_compressed = num_ccslc * [True] + list(
-                self.is_compressed[cur_slice]
-            )
+            combined_files = [e[1] for e in entries]
+            combined_dates = [e[2] for e in entries]
+            combined_is_compressed = [e[3] for e in entries]
+
+            # Position of the most recent compressed SLC in the merged list.
+            # Equals `num_ccslc - 1` in the fully-contiguous case (preserving
+            # today's behavior exactly); may differ once interleaved.
+            _comp_idxs = [i for i, c in enumerate(combined_is_compressed) if c]
+            last_ccslc_idx = _comp_idxs[-1] if _comp_idxs else None
 
             # Make the current ministack output folder using the start/end dates
             new_date_str = format_dates(
@@ -523,9 +564,13 @@ class MiniStackPlanner(BaseStack):
                 compressed_reference_idx = compressed_idx
             elif self.compressed_slc_plan == CompressedSlcPlan.ALWAYS_FIRST:
                 # Here, CompSLCs have same base phase, but different "residual" added on
-                compressed_reference_idx = max(0, num_ccslc - 1)
+                compressed_reference_idx = (
+                    last_ccslc_idx if last_ccslc_idx is not None else 0
+                )
             elif self.compressed_slc_plan == CompressedSlcPlan.LAST_PER_MINISTACK:
                 # Here, CompSLCs have same base phase, but different "residual" added on
+                # `-1` means "chronologically last entry", which stays correct
+                # after sorting by date.
                 compressed_reference_idx = -1
 
             # Set the `output_reference_idx`, used for making interferograms
@@ -538,7 +583,9 @@ class MiniStackPlanner(BaseStack):
                 # looking like single-reference, relative to day 1
                 # For `LAST_PER_MINISTACK`, the interferograms are formed
                 # which are the shortest possible temporal baseline for the given inputs
-                output_reference_idx = max(0, num_ccslc - 1)
+                output_reference_idx = (
+                    last_ccslc_idx if last_ccslc_idx is not None else 0
+                )
 
             cur_ministack = MiniStackInfo(
                 file_list=combined_files,
