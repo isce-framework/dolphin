@@ -37,7 +37,6 @@ __all__ = [
     "copy_projection",
     "format_nc_filename",
     "get_raster_bounds",
-    "get_raster_bounds",
     "get_raster_chunk_size",
     "get_raster_crs",
     "get_raster_description",
