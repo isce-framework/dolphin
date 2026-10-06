@@ -135,4 +135,6 @@ filterwarnings = [
   "ignore:ast.Str is deprecated.*:DeprecationWarning",
   # ResourceWarning from unclosed temp files in third-party code (Python 3.13+)
   "ignore::pytest.PytestUnraisableExceptionWarning",
+  # NumPy 2.5 deprecates `arr.shape = ...`, which osgeo_utils.gdal_calc still uses
+  "ignore:Setting the shape on a NumPy array has been deprecated.*:DeprecationWarning",
 ]
