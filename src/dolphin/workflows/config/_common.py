@@ -217,6 +217,22 @@ class InterferogramNetwork(BaseModel, extra="forbid"):
             " network."
         ),
     )
+    compressed_reference_anchor: bool = Field(
+        False,
+        description=(
+            "With `include_compressed_reference`: keep exactly ONE interferogram"
+            " from the compressed SLC's reference epoch at every run -- to the"
+            " earliest in-window date after it, which is the shortest baseline"
+            " available and so the most coherent of the epoch's pairs. That is the"
+            " minimum needed to make the epoch a node of the unwrapped network,"
+            " which is what lets a product be referenced to it instead of to the"
+            " previous acquisition. Historical achieves the same with"
+            " `single_ref_ifgs[:max_bandwidth]` and reaches the remaining dates"
+            " through the real-real network; one edge suffices for connectivity."
+            " At the second-to-last position it is the same pair the default rule"
+            " keeps."
+        ),
+    )
 
 
 class TimeseriesOptions(BaseModel, extra="forbid"):

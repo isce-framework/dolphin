@@ -508,6 +508,7 @@ def create_ifgs(
                     reference_date,
                     secondary_dates,
                     single_ref_ifgs,
+                    anchor=interferogram_network.compressed_reference_anchor,
                 )
             )
 
@@ -646,6 +647,7 @@ def compressed_reference_ifgs(
     reference_date: datetime.datetime,
     secondary_dates: Sequence[datetime.datetime],
     single_ref_ifgs: Sequence[Path],
+    anchor: bool = False,
 ) -> list[Path]:
     """The one (reference epoch -> newest date) ifg a manual network needs.
 
@@ -675,6 +677,13 @@ def compressed_reference_ifgs(
     real pairs) and pull the inversion toward the weaker observations. Where the
     product's interval is already an ordinary real-to-real edge, the network
     needs no help.
+
+    With ``anchor=True`` one pair is kept at *every* position instead: the
+    epoch to the earliest in-window date after it, its shortest baseline. That
+    makes the epoch a node of the unwrapped network at every run, which a
+    product referenced to the compressed epoch (rather than to the previous
+    acquisition) requires. At the second-to-last position it is the same pair
+    as the default rule.
     """
     flat = [i for pair in indexes for i in pair]
     if not flat or any(i >= 0 for i in flat):
@@ -682,6 +691,16 @@ def compressed_reference_ifgs(
     ref = _as_date(reference_date)
     dates = [_as_date(d) for d in secondary_dates]
     all_dates = sorted({*dates, ref})
+    if anchor:
+        # One edge, the shortest baseline the epoch has: to the earliest
+        # in-window date after it. Never reach outside the window the indexes
+        # address, or the node enters the inversion with only its own edge.
+        window = all_dates[-max(abs(i) for i in flat) :]
+        later = [d for d in dates if d > ref and d in window]
+        if not later:
+            return []
+        first = min(later)
+        return [p for d, p in zip(dates, single_ref_ifgs, strict=True) if d == first]
     # Only when the reference is what the product will be referenced to.
     if len(all_dates) < 2 or all_dates[-2] != ref:
         return []

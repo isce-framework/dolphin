@@ -117,3 +117,51 @@ def test_create_ifgs_keeps_the_reference_ifg_only_when_asked(tmp_path, include):
 
 def test_the_default_leaves_existing_networks_alone():
     assert InterferogramNetwork(indexes=NEAREST_4).include_compressed_reference is False
+
+
+# --- minimal anchor: one edge, always -------------------------------------
+
+
+@pytest.mark.parametrize("position", [1, 2, 3, 5, 9])
+def test_anchor_keeps_exactly_one_edge_at_every_position(position):
+    all_dates = _dates(20)
+    ref = all_dates[-(position + 1)]
+    dates = [d for d in all_dates if d != ref]
+    got = compressed_reference_ifgs(NEAREST_4, ref, dates, _ifgs(ref, dates), anchor=True)
+    assert len(got) == 1, (position, got)
+
+
+def test_anchor_picks_the_shortest_baseline_pair():
+    """The epoch's most coherent pair is to the earliest in-window date after
+    it; pairing to the newest would be the longest baseline available."""
+    all_dates = _dates(20)
+    ref = all_dates[-4]  # position 3: inside NEAREST_4's window
+    dates = [d for d in all_dates if d != ref]
+    got = compressed_reference_ifgs(NEAREST_4, ref, dates, _ifgs(ref, dates), anchor=True)
+    assert got == _ifgs(ref, [all_dates[-3]])
+
+
+def test_anchor_matches_the_default_pair_at_the_second_to_last_position():
+    all_dates = _dates(20)
+    ref = all_dates[-2]
+    dates = [d for d in all_dates if d != ref]
+    ifgs = _ifgs(ref, dates)
+    assert compressed_reference_ifgs(NEAREST_4, ref, dates, ifgs, anchor=True) == (
+        compressed_reference_ifgs(NEAREST_4, ref, dates, ifgs)
+    )
+
+
+def test_anchor_off_adds_nothing_away_from_the_second_to_last_position():
+    all_dates = _dates(20)
+    ref = all_dates[-4]
+    dates = [d for d in all_dates if d != ref]
+    assert compressed_reference_ifgs(NEAREST_4, ref, dates, _ifgs(ref, dates)) == []
+
+
+def test_anchor_is_an_interferogram_network_option():
+    net = InterferogramNetwork(
+        indexes=NEAREST_4, include_compressed_reference=True,
+        compressed_reference_anchor=True,
+    )
+    assert net.compressed_reference_anchor is True
+    assert InterferogramNetwork(indexes=NEAREST_4).compressed_reference_anchor is False
