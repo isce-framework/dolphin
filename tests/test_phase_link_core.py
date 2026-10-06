@@ -96,7 +96,9 @@ def test_crlb_last_compressed_slc_idx(slc_samples, last_compressed_slc_idx):
     (no compressed SLC) must reproduce today's default of referencing index 0.
     """
     slc_stack = slc_samples.copy().reshape(NUM_ACQ, 11, 11)
-    C_hat = covariance.estimate_stack_covariance(slc_stack, half_window=HalfWindow(5, 5))
+    C_hat = covariance.estimate_stack_covariance(
+        slc_stack, half_window=HalfWindow(5, 5)
+    )
 
     _, _, _, crlb_std_dev = _core.process_coherence_matrices(
         C_hat, last_compressed_slc_idx=last_compressed_slc_idx, compute_crlb=True

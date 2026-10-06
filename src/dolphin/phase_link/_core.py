@@ -524,9 +524,7 @@ def process_coherence_matrices(
     if compute_crlb:
         # Build X once and do the inverse-free CRLB from X
         X = crlb._build_fisher_from_abs_gamma(Gamma, Gamma_inv, num_looks)
-        crlb_ref_idx = (
-            0 if last_compressed_slc_idx is None else last_compressed_slc_idx
-        )
+        crlb_ref_idx = 0 if last_compressed_slc_idx is None else last_compressed_slc_idx
         crlb_std_dev = crlb._crlb_from_x(X, crlb_ref_idx, 0, 1e-6)
 
     else:

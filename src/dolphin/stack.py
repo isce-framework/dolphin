@@ -147,7 +147,10 @@ class BaseStack(BaseModel):
 
     @property
     def last_compressed_slc_idx(self) -> Optional[int]:
-        """Index of the most recent (last) compressed SLC, or None if there isn't one."""
+        """Index of the most recent (last) compressed SLC.
+
+        or None if there isn't one.
+        """
         idxs = np.where(np.array(self.is_compressed))[0]
         return int(idxs[-1]) if idxs.size else None
 
@@ -525,7 +528,7 @@ class MiniStackPlanner(BaseStack):
             # Read compressed*.tif files and if they do not exist use the compressed*.h5
             # Limit the num comp slcs to `max_num_compressed`
             cur_comp_slc_infos = compressed_slc_infos[-self.max_num_compressed :]
-            num_ccslc = len(cur_comp_slc_infos)
+            # num_ccslc = len(cur_comp_slc_infos)
 
             # Chronologically merge the existing compressed SLCs (keyed by their
             # `reference_date`) with this chunk's real SLCs, instead of blindly
