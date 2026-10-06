@@ -299,7 +299,13 @@ def run(
         """Get the base phase of either real of compressed slcs."""
         return get_dates(filename, fmt=cfg.input_options.cslc_date_fmt)[0]
 
-    reference_date = [base_phase_date(f) for f in input_file_list][ref_idx]
+    # `ref_idx` counts compressed SLCs first, as the ministack does, not the
+    # date-sorted input list.
+    _compressed = [f for f, c in zip(input_file_list, is_compressed, strict=False) if c]
+    if _compressed and ref_idx < len(_compressed):
+        reference_date = base_phase_date(_compressed[ref_idx])
+    else:
+        reference_date = [base_phase_date(f) for f in input_file_list][ref_idx]
 
     # TODO: remove this bad back to get around spurt's required input
     # Reading direct nearest-3 ifgs is not working due to some slicing problem
@@ -486,6 +492,18 @@ def create_ifgs(
             raise ValueError(msg)
         ifg_file_list = cast(list[Path], [ifg.path for ifg in network.ifg_list])
         assert all(p is not None for p in ifg_file_list)
+        # The manual indexes only address real dates; add the pairs that start
+        # at the compressed SLC's reference epoch.
+        if contained_compressed_slcs and extra_reference_date is None:
+            ifg_file_list.extend(
+                compressed_reference_ifgs(
+                    interferogram_network.indexes,
+                    reference_date,
+                    secondary_dates,
+                    single_ref_ifgs,
+                    anchor=interferogram_network.compressed_reference_anchor,
+                )
+            )
 
     if interferogram_network.max_bandwidth is not None:
         max_b = interferogram_network.max_bandwidth
@@ -611,3 +629,42 @@ def _is_single_reference_network(
         and ifg_network.max_bandwidth is None
         and ifg_network.max_temporal_baseline is None
     )
+
+
+def _as_date(d) -> datetime.date:
+    return d.date() if isinstance(d, datetime.datetime) else d
+
+
+def compressed_reference_ifgs(
+    indexes: Sequence[tuple[int, int]],
+    reference_date: datetime.datetime,
+    secondary_dates: Sequence[datetime.datetime],
+    single_ref_ifgs: Sequence[Path],
+    anchor: bool = False,
+) -> list[Path]:
+    """Interferograms from the compressed reference epoch for a manual network.
+
+    ``single_ref_ifgs[i]`` is the (reference -> ``secondary_dates[i]``) pair.
+    By default, return the pair to the newest date only when the reference is
+    the second-to-last date, since otherwise the newest interval has no
+    interferogram. With ``anchor``, return the pair to the earliest in-window
+    date after the reference at every run. Only negative indexes are handled.
+    """
+    flat = [i for pair in indexes for i in pair]
+    if not flat or any(i >= 0 for i in flat):
+        return []
+    ref = _as_date(reference_date)
+    dates = [_as_date(d) for d in secondary_dates]
+    all_dates = sorted({*dates, ref})
+    if anchor:
+        # Shortest baseline, and inside the window the indexes address.
+        window = all_dates[-max(abs(i) for i in flat) :]
+        later = [d for d in dates if d > ref and d in window]
+        if not later:
+            return []
+        first = min(later)
+        return [p for d, p in zip(dates, single_ref_ifgs, strict=True) if d == first]
+    if len(all_dates) < 2 or all_dates[-2] != ref:
+        return []
+    newest = all_dates[-1]
+    return [p for d, p in zip(dates, single_ref_ifgs, strict=True) if d == newest]
