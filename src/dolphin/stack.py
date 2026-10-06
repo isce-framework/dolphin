@@ -488,17 +488,8 @@ class MiniStackPlanner(BaseStack):
             compressed_slc_infos.append(CompressedSlcInfo.from_filename(f))
 
         # Solve each ministack using current chunk (and the previous compressed SLCs).
-        #
-        # Chunk the REAL SLCs by their flag, not by position. Slicing from
-        # `first_real_slc_idx` to the end assumes every compressed SLC sits in a
-        # contiguous block at the front of the date-sorted list. That holds when
-        # each one's reference precedes all the real dates, but not when a
-        # compressed SLC is referenced to a date among them -- which DISP-S1's
-        # forward mode permits (its 1002 check compares against the NEWEST real
-        # date). Such a file falls inside the slice as well as being prepended
-        # below, so it entered the ministack twice: two identical columns in the
-        # covariance, and a phase-linked output named for the real acquisition
-        # it had displaced.
+        # Chunk real SLCs by flag, not position: a compressed SLC whose reference
+        # falls among the real dates would otherwise be stacked twice.
         real_positions = [i for i, c in enumerate(self.is_compressed) if not c]
         if not real_positions:
             msg = "No real SLCs to plan a ministack from"
@@ -521,7 +512,6 @@ class MiniStackPlanner(BaseStack):
             ] + cur_dates
 
             num_ccslc = len(cur_comp_slc_files)
-            # `cur_files` is now real by construction.
             combined_is_compressed = num_ccslc * [True] + len(cur_files) * [False]
 
             # Make the current ministack output folder using the start/end dates

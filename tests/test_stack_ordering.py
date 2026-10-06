@@ -1,17 +1,4 @@
-"""Compressed SLCs lead the ministack; the real files are chosen by their flag.
-
-`MiniStackPlanner.plan` used to take the real files as
-``file_list[first_real_slc_idx:]``, which assumes every compressed SLC sits in
-a contiguous block at the front of the date-sorted list. That holds whenever a
-compressed SLC's reference precedes all the real dates -- historical mode, and
-any sequential run -- but not when one is referenced to a date among them,
-which DISP-S1's forward mode permits (its 1002 check compares the reference
-against the NEWEST real date, not the earliest).
-
-Such a file then fell inside the slice as well as being prepended: it entered
-the ministack twice, as two identical columns in the covariance and as a
-phase-linked output named for the real acquisition it had displaced.
-"""
+"""A compressed SLC referenced to a date among the reals is stacked once."""
 
 from datetime import datetime, timedelta
 
@@ -47,8 +34,7 @@ def _plan(files, size=100, **kw):
 
 
 def test_historical_shape_is_unchanged():
-    """Compressed SLCs before every real date: the ordinary case, and the one
-    that must keep working exactly as it did."""
+    """Compressed SLCs before every real date."""
     files = [_comp(-30), _comp(-20), *(_real(i) for i in range(15))]
     (ms,) = _plan(files)
     assert [str(f) for f in ms.file_list] == files
@@ -57,8 +43,7 @@ def test_historical_shape_is_unchanged():
 
 
 def test_an_interleaved_compressed_slc_is_not_duplicated():
-    """Forward mode: the newest compressed SLC is referenced to a date among
-    the reals, and 1001 has removed that date's real image."""
+    """Newest compressed SLC referenced to a date among the reals."""
     files = [_comp(-30), *(_real(i) for i in range(10)),
              _comp(10), *(_real(i) for i in range(11, 15))]
     files.sort(key=lambda f: f.split("_")[-1])          # as dolphin sorts them

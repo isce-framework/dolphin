@@ -199,38 +199,13 @@ class InterferogramNetwork(BaseModel, extra="forbid"):
             " interferograms to form."
         ),
     )
-    include_compressed_reference: bool = Field(
-        False,
-        description=(
-            "With a manual-index network and compressed SLC inputs: also keep the"
-            " one interferogram from the compressed SLC's reference epoch to the"
-            " newest date, in the single case where that epoch is the"
-            " second-to-last date among all the inputs. A manual network"
-            " addresses the real dates only, so in that case the interval the"
-            " product reports has no interferogram spanning it, and the real"
-            " image for the epoch cannot stand in -- a real SLC may not share"
-            " the reference date.\n\n"
-            "Only that case. Keeping the pairs at shallower positions too was"
-            " measured and was worse wherever the product's interval is already"
-            " an ordinary real-to-real edge: those pairs reach back into the"
-            " compressed epoch and are the least coherent observations in the"
-            " network."
-        ),
-    )
     compressed_reference_anchor: bool = Field(
         False,
         description=(
-            "With `include_compressed_reference`: keep exactly ONE interferogram"
-            " from the compressed SLC's reference epoch at every run -- to the"
-            " earliest in-window date after it, which is the shortest baseline"
-            " available and so the most coherent of the epoch's pairs. That is the"
-            " minimum needed to make the epoch a node of the unwrapped network,"
-            " which is what lets a product be referenced to it instead of to the"
-            " previous acquisition. Historical achieves the same with"
-            " `single_ref_ifgs[:max_bandwidth]` and reaches the remaining dates"
-            " through the real-real network; one edge suffices for connectivity."
-            " At the second-to-last position it is the same pair the default rule"
-            " keeps."
+            "Manual-index networks with compressed SLCs: at every run, add one"
+            " interferogram from the compressed SLC's reference epoch to the"
+            " earliest in-window date after it, so the epoch is a node of the"
+            " unwrapped network and outputs can stay referenced to it."
         ),
     )
 

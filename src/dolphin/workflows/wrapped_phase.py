@@ -299,12 +299,8 @@ def run(
         """Get the base phase of either real of compressed slcs."""
         return get_dates(filename, fmt=cfg.input_options.cslc_date_fmt)[0]
 
-    # `ref_idx` indexes the MINISTACK, where the planner puts every compressed
-    # SLC first. Applying it to the date-sorted input list gives a different
-    # file whenever a compressed SLC sorts among the real dates, which is legal
-    # in forward mode -- the label then names a real date and every ifg built
-    # from it is misnamed. Index the compressed files in the same order the
-    # ministack holds them.
+    # `ref_idx` counts compressed SLCs first, as the ministack does, not the
+    # date-sorted input list.
     _compressed = [f for f, c in zip(input_file_list, is_compressed) if c]
     if _compressed and ref_idx < len(_compressed):
         reference_date = base_phase_date(_compressed[ref_idx])
@@ -496,12 +492,9 @@ def create_ifgs(
             raise ValueError(msg)
         ifg_file_list = cast(list[Path], [ifg.path for ifg in network.ifg_list])
         assert all(p is not None for p in ifg_file_list)
-        # single_ref_ifgs maps 1:1 onto phase_linked_slcs only without an extra
-        # reference date, which forward mode never sets.
-        if (
-            interferogram_network.include_compressed_reference
-            and extra_reference_date is None
-        ):
+        # The manual indexes only address real dates; add the pairs that start
+        # at the compressed SLC's reference epoch.
+        if contained_compressed_slcs and extra_reference_date is None:
             ifg_file_list.extend(
                 compressed_reference_ifgs(
                     interferogram_network.indexes,
@@ -649,41 +642,13 @@ def compressed_reference_ifgs(
     single_ref_ifgs: Sequence[Path],
     anchor: bool = False,
 ) -> list[Path]:
-    """The one (reference epoch -> newest date) ifg a manual network needs.
+    """Interferograms from the compressed reference epoch for a manual network.
 
-    A manual-index network addresses the phase-linked (real-date) list only, so
-    the compressed SLC's reference epoch is never one of its nodes. That matters
-    in exactly one case: when the epoch is the **second-to-last** date among all
-    the inputs, real and compressed. DISP-S1's forward mode re-references its
-    product to that date, so the product then reports an interval no
-    interferogram spans -- and its real image cannot stand in, because a real
-    SLC may not share the reference date. On F11116 those products came out at
-    36 / 9 / 10 % unconnected against ~2 % for every other dry-weather interval.
-
-    The pair is already on disk: every phase-linked output is referenced to the
-    reference epoch, so ``single_ref_ifgs[i]`` *is* (reference ->
-    ``secondary_dates[i]``). This keeps the one whose secondary is the newest
-    date. Only negative (count-from-the-end) indexes are understood; anything
-    else returns nothing rather than guessing at what network was meant.
-
-    Deliberately narrow. An earlier version kept every in-window pair after the
-    reference, on the reasoning that the epoch is independent of later dates and
-    the pairs cost nothing to keep. Measured on F11116, that made the runs it
-    was not written for *worse*: at three acquisitions past the reference it
-    added three edges to a ten-edge network and moved the product from 1.7 % to
-    2.5 % unconnected and 2.94 mm to 3.74 mm against historical, because those
-    long-baseline pairs into the compressed epoch carry lower coherence
-    (0.693 / 0.664 / 0.644 against 0.729 / 0.681 / 0.672 for the equivalent
-    real pairs) and pull the inversion toward the weaker observations. Where the
-    product's interval is already an ordinary real-to-real edge, the network
-    needs no help.
-
-    With ``anchor=True`` one pair is kept at *every* position instead: the
-    epoch to the earliest in-window date after it, its shortest baseline. That
-    makes the epoch a node of the unwrapped network at every run, which a
-    product referenced to the compressed epoch (rather than to the previous
-    acquisition) requires. At the second-to-last position it is the same pair
-    as the default rule.
+    ``single_ref_ifgs[i]`` is the (reference -> ``secondary_dates[i]``) pair.
+    By default, return the pair to the newest date only when the reference is
+    the second-to-last date, since otherwise the newest interval has no
+    interferogram. With ``anchor``, return the pair to the earliest in-window
+    date after the reference at every run. Only negative indexes are handled.
     """
     flat = [i for pair in indexes for i in pair]
     if not flat or any(i >= 0 for i in flat):
@@ -692,21 +657,14 @@ def compressed_reference_ifgs(
     dates = [_as_date(d) for d in secondary_dates]
     all_dates = sorted({*dates, ref})
     if anchor:
-        # One edge, the shortest baseline the epoch has: to the earliest
-        # in-window date after it. Never reach outside the window the indexes
-        # address, or the node enters the inversion with only its own edge.
+        # Shortest baseline, and inside the window the indexes address.
         window = all_dates[-max(abs(i) for i in flat) :]
         later = [d for d in dates if d > ref and d in window]
         if not later:
             return []
         first = min(later)
         return [p for d, p in zip(dates, single_ref_ifgs, strict=True) if d == first]
-    # Only when the reference is what the product will be referenced to.
     if len(all_dates) < 2 or all_dates[-2] != ref:
         return []
     newest = all_dates[-1]
-    return [
-        p
-        for d, p in zip(dates, single_ref_ifgs, strict=True)
-        if d == newest
-    ]
+    return [p for d, p in zip(dates, single_ref_ifgs, strict=True) if d == newest]
