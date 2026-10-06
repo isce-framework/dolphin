@@ -22,13 +22,19 @@ def _comp(ref_i: int, start_i: int = 0) -> str:
 def _plan(files, size=100, **kw):
     is_comp = ["compressed" in f for f in files]
     dates = []
-    for f, c in zip(files, is_comp):
-        parts = [p for p in f.replace(".h5", "").split("_") if p.isdigit() and len(p) == 8]
+    for f, _c in zip(files, is_comp, strict=False):
+        parts = [
+            p for p in f.replace(".h5", "").split("_") if p.isdigit() and len(p) == 8
+        ]
         dates.append([datetime.strptime(p, "%Y%m%d") for p in parts])
     planner = MiniStackPlanner(
-        file_list=files, dates=dates, is_compressed=is_comp,
-        output_folder="out", max_num_compressed=kw.pop("max_num_compressed", 100),
-        compressed_slc_plan=kw.pop("plan", CompressedSlcPlan.LAST_PER_MINISTACK), **kw,
+        file_list=files,
+        dates=dates,
+        is_compressed=is_comp,
+        output_folder="out",
+        max_num_compressed=kw.pop("max_num_compressed", 100),
+        compressed_slc_plan=kw.pop("plan", CompressedSlcPlan.LAST_PER_MINISTACK),
+        **kw,
     )
     return planner.plan(size)
 
@@ -44,9 +50,13 @@ def test_historical_shape_is_unchanged():
 
 def test_an_interleaved_compressed_slc_is_not_duplicated():
     """Newest compressed SLC referenced to a date among the reals."""
-    files = [_comp(-30), *(_real(i) for i in range(10)),
-             _comp(10), *(_real(i) for i in range(11, 15))]
-    files.sort(key=lambda f: f.split("_")[-1])          # as dolphin sorts them
+    files = [
+        _comp(-30),
+        *(_real(i) for i in range(10)),
+        _comp(10),
+        *(_real(i) for i in range(11, 15)),
+    ]
+    files.sort(key=lambda f: f.split("_")[-1])  # as dolphin sorts them
     (ms,) = _plan(files)
     names = [str(f) for f in ms.file_list]
     assert len(names) == len(set(names)), "no input may enter the stack twice"
@@ -57,8 +67,12 @@ def test_an_interleaved_compressed_slc_is_not_duplicated():
 
 
 def test_the_reference_index_lands_on_the_newest_compressed():
-    files = [_comp(-30), *(_real(i) for i in range(10)), _comp(10),
-             *(_real(i) for i in range(11, 15))]
+    files = [
+        _comp(-30),
+        *(_real(i) for i in range(10)),
+        _comp(10),
+        *(_real(i) for i in range(11, 15)),
+    ]
     files.sort(key=lambda f: f.split("_")[-1])
     (ms,) = _plan(files, output_reference_idx=1)
     ref = str(ms.file_list[ms.output_reference_idx])

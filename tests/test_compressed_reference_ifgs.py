@@ -8,8 +8,18 @@ import pytest
 from dolphin.workflows.config import InterferogramNetwork
 from dolphin.workflows.wrapped_phase import compressed_reference_ifgs, create_ifgs
 
-NEAREST_4 = [(-2, -1), (-3, -1), (-4, -1), (-3, -2), (-4, -2), (-4, -3),
-             (-5, -1), (-5, -2), (-5, -3), (-5, -4)]
+NEAREST_4 = [
+    (-2, -1),
+    (-3, -1),
+    (-4, -1),
+    (-3, -2),
+    (-4, -2),
+    (-4, -3),
+    (-5, -1),
+    (-5, -2),
+    (-5, -3),
+    (-5, -4),
+]
 D0 = datetime(2019, 8, 13)
 
 
@@ -108,7 +118,9 @@ def test_anchor_keeps_exactly_one_edge_at_every_position(position):
     all_dates = _dates(20)
     ref = all_dates[-(position + 1)]
     dates = [d for d in all_dates if d != ref]
-    got = compressed_reference_ifgs(NEAREST_4, ref, dates, _ifgs(ref, dates), anchor=True)
+    got = compressed_reference_ifgs(
+        NEAREST_4, ref, dates, _ifgs(ref, dates), anchor=True
+    )
     assert len(got) == 1, (position, got)
 
 
@@ -116,7 +128,9 @@ def test_anchor_picks_the_shortest_baseline_pair():
     all_dates = _dates(20)
     ref = all_dates[-4]  # position 3: inside NEAREST_4's window
     dates = [d for d in all_dates if d != ref]
-    got = compressed_reference_ifgs(NEAREST_4, ref, dates, _ifgs(ref, dates), anchor=True)
+    got = compressed_reference_ifgs(
+        NEAREST_4, ref, dates, _ifgs(ref, dates), anchor=True
+    )
     assert got == _ifgs(ref, [all_dates[-3]])
 
 

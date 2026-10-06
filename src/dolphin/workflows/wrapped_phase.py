@@ -301,7 +301,7 @@ def run(
 
     # `ref_idx` counts compressed SLCs first, as the ministack does, not the
     # date-sorted input list.
-    _compressed = [f for f, c in zip(input_file_list, is_compressed) if c]
+    _compressed = [f for f, c in zip(input_file_list, is_compressed, strict=False) if c]
     if _compressed and ref_idx < len(_compressed):
         reference_date = base_phase_date(_compressed[ref_idx])
     else:
