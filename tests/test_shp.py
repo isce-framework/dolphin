@@ -6,6 +6,7 @@ from dolphin import shp
 from dolphin.phase_link import simulate
 from dolphin.shp import ShpMethod
 from dolphin.shp._common import remove_unconnected
+from dolphin.shp._gaussian import estimate_neighbors as gaussian_estimate_neighbors
 
 simulate._seed(1234)
 
@@ -268,3 +269,85 @@ def test_remove_unconnected():
     expected[2, 2] = expected[3, 3] = True
     remove_unconnected(data, inplace=True)
     assert np.all(data == expected)
+
+
+# Tests for Gaussian multilooking
+
+
+def test_shp_gaussian_smoketest():
+    """Basic smoke test for Gaussian multilooking."""
+    shape = (5, 50, 50)
+    slcs = 20 * (np.random.rand(*shape) + 1j * np.random.rand(*shape))
+    amp_stack = np.abs(slcs)
+    mean = np.mean(amp_stack, axis=0)
+
+    # Make sure no errors
+    weights = shp.estimate_neighbors(
+        mean=mean,
+        halfwin_rowcol=(3, 5),
+        nslc=slcs.shape[0],
+        alpha=0.05,
+        method=ShpMethod.GAUSSIAN,
+    )
+
+    # Check that weights are returned (not None like RECT)
+    assert weights is not None
+    # Check shape: (out_rows, out_cols, window_rows, window_cols)
+    assert weights.shape == (50, 50, 7, 11)
+    # Check weights are float, not boolean
+    assert weights.dtype != np.bool_
+
+
+def test_shp_gaussian_weights_properties():
+    """Test that Gaussian weights have correct properties."""
+    halfwin_rowcol = (5, 5)
+    input_shape = (11, 11)
+
+    weights = gaussian_estimate_neighbors(
+        halfwin_rowcol=halfwin_rowcol,
+        input_shape=input_shape,
+        strides=(1, 1),
+    )
+
+    # Check shape
+    assert weights.shape == (11, 11, 11, 11)
+
+    # All weights should be non-negative
+    assert np.all(weights >= 0)
+
+    # Center pixel (self) should have weight 0
+    window = weights[5, 5]
+    assert window[5, 5] == 0
+
+    # Weights should sum to 1 (normalized)
+    assert np.isclose(np.sum(window), 1.0)
+
+    # Weights should decrease from center
+    # Check that corners are smaller than near-center pixels
+    assert window[4, 5] > window[0, 0]
+    assert window[5, 4] > window[0, 0]
+
+    # Should be symmetric
+    assert np.isclose(window[4, 5], window[6, 5])
+    assert np.isclose(window[5, 4], window[5, 6])
+    assert np.isclose(window[0, 0], window[10, 10])
+
+
+def test_shp_gaussian_with_strides():
+    """Test Gaussian weights with strides."""
+    halfwin_rowcol = (3, 3)
+    input_shape = (20, 20)
+    strides = (2, 2)
+
+    weights = gaussian_estimate_neighbors(
+        halfwin_rowcol=halfwin_rowcol,
+        input_shape=input_shape,
+        strides=strides,
+    )
+
+    # Output shape should be reduced by strides
+    assert weights.shape == (10, 10, 7, 7)
+
+    # All output pixels should have the same weights (Gaussian is position-invariant)
+    assert np.allclose(weights[0, 0], weights[5, 5])
+    assert np.allclose(weights[0, 0], weights[9, 9])

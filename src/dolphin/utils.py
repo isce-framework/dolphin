@@ -223,7 +223,7 @@ def take_looks(arr, row_looks, col_looks, func_type="nansum", edge_strategy="cut
             func_type=func_type,
             edge_strategy=edge_strategy,
         )
-        if arr.mask.ndim == np.ma.nomask:
+        if arr.mask is np.ma.nomask:
             looked_mask = arr.mask
         else:
             looked_mask = take_looks(

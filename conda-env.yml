@@ -16,6 +16,8 @@ dependencies:
   - pydantic>=2.1
   - pyproj>=3.3
   - rasterio>=1.3
+  # opera-utils imports rich at module scope but does not yet declare it.
+  - rich
   - ruamel.yaml>=0.15
   - scipy>=1.12 # "scipy 0.16+ is required for linear algebra", numba. 1.9 is the oldest version working with jax=0.4.19
   - threadpoolctl>=3.0

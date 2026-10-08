@@ -774,6 +774,7 @@ def convert_pl_to_ifg(
     reference_date: DateOrDatetime,
     output_dir: Filename,
     dry_run: bool = False,
+    date_format: str = io.DEFAULT_DATETIME_FORMAT,
 ) -> Path:
     """Convert a phase-linked SLC to an interferogram by conjugating the phase.
 
@@ -793,6 +794,11 @@ def convert_pl_to_ifg(
         Default = False (the ifgs will be created/written to disk.)
         `dry_run=True` is used to plan out which ifgs will be formed
         before actually running the workflow.
+    date_format : str, optional
+        ``strptime``-compatible format used both to parse the date from
+        ``phase_linked_slc`` and to format the output filename. Must match
+        the format of the input filename so the time-of-day component is
+        preserved when callers use formats like ``"%Y%m%d%H%M%S"``.
 
     Returns
     -------
@@ -802,8 +808,8 @@ def convert_pl_to_ifg(
     """
     # The phase_linked_slc will be named with the secondary date.
     # Make the output from that, plus the given reference date
-    secondary_date = get_dates(phase_linked_slc)[-1]
-    date_str = utils.format_date_pair(reference_date, secondary_date)
+    secondary_date = get_dates(phase_linked_slc, fmt=date_format)[-1]
+    date_str = utils.format_date_pair(reference_date, secondary_date, fmt=date_format)
     out_name = Path(output_dir) / f"{date_str}.int.vrt"
     if dry_run:
         return out_name
