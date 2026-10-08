@@ -37,11 +37,15 @@ def unwrap_whirlwind(
     interp_max_radius: int = 51,
     interp_min_radius: int = 0,
     interp_alpha: float = 0.75,
-    cost_threshold: int = 50,
-    conncomp_sigma: Optional[float] = None,
-    conncomp_cycle_prob: Optional[float] = None,
+    conncomp_min_coherence: float | str | None = None,
+    conncomp_reliability: float = 0.5,
     min_size_px: int = 100,
     max_ncomps: int = 1024,
+    bridge: bool = True,
+    connect_gaps: bool = False,
+    connect_gaps_max_px: int = 300,
+    goldstein_alpha: float = 0.0,
+    goldstein_psize: int = 64,
 ) -> tuple[Path, Path]:
     """Unwrap an interferogram and grow conncomps using whirlwind.
 
@@ -76,16 +80,39 @@ def unwrap_whirlwind(
 interp_alpha
         Spiral interpolation parameters; see ``whirlwind.unwrap``. Only used
         when ``interpolate`` is True.
-    cost_threshold : int, optional
-        Connected-component boundary threshold in raw cost units. Default 50.
-    conncomp_sigma, conncomp_cycle_prob : float, optional
-        Set ``cost_threshold`` from a Gaussian-equivalent noise level or a
-        target per-edge one-cycle probability; see ``whirlwind.unwrap`` for
-        precedence. Default None.
+    conncomp_min_coherence : float or {"auto"} or None, optional
+        Coherence floor for the component labels. None (the default) uses
+        ``conncomp_reliability``; "auto" uses ww's looks-aware floor; a float
+        in [0, 1] sets it explicitly. Default None.
+    conncomp_reliability : float, optional
+        Conservativeness of the component grow, in inverse-variance units: an
+        edge becomes a component boundary when a one-cycle ambiguity flip
+        across it costs no more than this. 0.5 is about a coherence-0.1 floor;
+        0 labels nearly every unwrapped pixel. Used only when
+        ``conncomp_min_coherence`` is None. Default 0.5.
     min_size_px : int, optional
         Discard connected components smaller than this many pixels. Default 100.
     max_ncomps : int, optional
         Maximum number of connected components to keep. Default 1024.
+    bridge : bool, optional
+        Bridge disjoint connected components across low-coherence gaps so they
+        share a consistent integer cycle. Default True.
+    connect_gaps : bool, optional
+        Draw phase paths across bounded runs of invalid pixels before
+        unwrapping, then drop those synthetic pixels from both outputs. The
+        paths let the solver pick a relative 2pi level between regions that
+        would otherwise be solved independently, which is what levels the
+        NISAR sub-swaths. Unlike ``interpolate``, it extrapolates the phase
+        slope on each side of a gap, so a winding estimate survives the
+        crossing. Default False.
+    connect_gaps_max_px : int, optional
+        Widest invalid run, in pixels, that ``connect_gaps`` will cross.
+        Default 300.
+    goldstein_alpha : float, optional
+        Strength of ww's internal Goldstein pre-filter. 0 disables it.
+        Default 0.0.
+    goldstein_psize : int, optional
+        FFT patch size for ww's internal Goldstein filter. Default 64.
 
     Returns
     -------
@@ -126,6 +153,9 @@ interp_alpha
         # default phase solver is the verified single-tile linear MCF (ww-orig
         # parity + adaptive PD/SSP fallback);  Goldstein is off by default
         # (pass goldstein_alpha>0 to enable; under evaluation upstream).
+        # Components always come from ww's SNAPHU-style grow with ThickenCosts
+        # on, as production SNAPHU does. Pinned rather than left to ww's
+        # defaults so a change upstream cannot silently alter dolphin's labels.
         unw, conncomp_arr = ww.unwrap(
             igram_arr,
             corr_arr,
@@ -137,11 +167,17 @@ interp_alpha
             interp_max_radius=interp_max_radius,
             interp_min_radius=interp_min_radius,
             interp_alpha=interp_alpha,
-            cost_threshold=cost_threshold,
-            conncomp_sigma=conncomp_sigma,
-            conncomp_cycle_prob=conncomp_cycle_prob,
+            conncomp_algorithm="snaphu",
+            conncomp_thicken=True,
+            conncomp_min_coherence=conncomp_min_coherence,
+            conncomp_reliability=conncomp_reliability,
             min_size_px=min_size_px,
             max_ncomps=max_ncomps,
+            bridge=bridge,
+            connect_gaps=connect_gaps,
+            connect_gaps_max_px=connect_gaps_max_px,
+            goldstein_alpha=goldstein_alpha,
+            goldstein_psize=goldstein_psize,
         )
 
         logger.info("Writing unwrapped phase to raster file")

@@ -6,7 +6,13 @@ import pytest
 
 import dolphin.unwrap
 from dolphin import io
-from dolphin.workflows import SpurtOptions, TophuOptions, UnwrapMethod, UnwrapOptions
+from dolphin.workflows import (
+    SpurtOptions,
+    TophuOptions,
+    UnwrapMethod,
+    UnwrapOptions,
+    WhirlwindOptions,
+)
 
 TOPHU_INSTALLED = importlib.util.find_spec("tophu") is not None
 SPURT_INSTALLED = importlib.util.find_spec("spurt") is not None
@@ -339,10 +345,30 @@ class TestSpurt:
 
 @pytest.mark.skipif(not WHIRLWIND_INSTALLED, reason="whirlwind package not installed")
 class TestWhirlwind:
-    def test_unwrap_whirlwind(self, tmp_path, raster_100_by_200, corr_raster):
-        unw_filename = tmp_path / "whirlwind-unwrapped.unw.tif"
+    def test_unwrap_whirlwind(
+        self, tmp_path, raster_100_by_200, corr_raster, monkeypatch
+    ):
+        import whirlwind as ww
 
-        unwrap_options = UnwrapOptions(unwrap_method="whirlwind")
+        unw_filename = tmp_path / "whirlwind-unwrapped.unw.tif"
+        received_kwargs = {}
+        original_unwrap = ww.unwrap
+
+        def _capture_kwargs(*args, **kwargs):
+            received_kwargs.update(kwargs)
+            return original_unwrap(*args, **kwargs)
+
+        monkeypatch.setattr(ww, "unwrap", _capture_kwargs)
+
+        unwrap_options = UnwrapOptions(
+            unwrap_method="whirlwind",
+            whirlwind_options=WhirlwindOptions(
+                conncomp_min_coherence=None,
+                conncomp_reliability=2.0,
+                connect_gaps=True,
+                connect_gaps_max_px=50,
+            ),
+        )
         out_path, conncomp_path = dolphin.unwrap.unwrap(
             ifg_filename=raster_100_by_200,
             corr_filename=corr_raster,
@@ -352,3 +378,11 @@ class TestWhirlwind:
         )
         assert out_path.exists()
         assert conncomp_path.exists()
+        # Always the SNAPHU-style grow, thickened, regardless of config.
+        assert received_kwargs["conncomp_algorithm"] == "snaphu"
+        assert received_kwargs["conncomp_thicken"] is True
+        assert received_kwargs["conncomp_min_coherence"] is None
+        assert received_kwargs["conncomp_reliability"] == 2.0
+        assert received_kwargs["connect_gaps"] is True
+        assert received_kwargs["connect_gaps_max_px"] == 50
+        assert "solve_min_coherence" not in received_kwargs

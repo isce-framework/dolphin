@@ -200,35 +200,57 @@ class WhirlwindOptions(BaseModel, extra="forbid"):
         gt=0.0,
     )
 
-    # --- Connected-component cost / quality knobs ----------------------------
-    # An edge becomes a component boundary when its statistical cost is
-    # <= cost_threshold. Prefer the physical knobs (sigma / cycle_prob / coh
-    # floor) over tuning cost_threshold directly; if more than one is set,
-    # whirlwind resolves precedence as sigma > cycle_prob > cost_threshold.
+    # --- Connected-component quality knobs -----------------------------------
+    # Components are always grown by ww's SNAPHU-style ambiguity-wiggle
+    # algorithm, with ThickenCosts on, as production SNAPHU does. ww's older
+    # coherence-cost grow is deliberately not exposed.
+    conncomp_min_coherence: float | Literal["auto"] | None = Field(
+        default=None,
+        description=(
+            "Label pixels below this coherence as background. ``None`` (the"
+            " default) disables the floor and uses ``conncomp_reliability``;"
+            " ``'auto'`` uses ww's looks-aware floor; a float in [0, 1] sets it"
+            " explicitly."
+        ),
+    )
+    conncomp_reliability: float = Field(
+        default=0.5,
+        description=(
+            "Conservativeness of the component grow, in inverse-variance"
+            " (``1 / sigma2``) units: an edge becomes a component boundary when"
+            " a one-cycle ambiguity flip across it costs no more than this. The"
+            " default 0.5 is about a coherence-0.1 floor, dropping decorrelated"
+            " water and near-noise while keeping real low-coherence land. 0"
+            " labels nearly every unwrapped pixel. Used only when"
+            " ``conncomp_min_coherence`` is ``None``."
+        ),
+        ge=0.0,
+    )
+    # These three tune ww's older coherence-cost labeling, which dolphin no
+    # longer selects, so they do not affect the components that come back.
+    # Kept so existing configs that set them still load.
     cost_threshold: int = Field(
         default=50,
         description=(
-            "Connected-component boundary threshold in raw cost units. Larger"
-            " makes more boundaries and smaller, safer components."
+            "Unused. Component-boundary threshold, in raw cost units, for ww's"
+            " legacy coherence-cost labeling, which dolphin does not use."
         ),
         ge=0,
     )
     conncomp_sigma: float | None = Field(
         default=None,
         description=(
-            "Set ``cost_threshold`` from a Gaussian-equivalent noise level"
-            " (~3.5 reproduces the default 50). Higher is stricter (more"
-            " boundaries). Takes precedence over ``cost_threshold`` and"
-            " ``conncomp_cycle_prob``."
+            "Unused. Sets ``cost_threshold`` from a Gaussian-equivalent noise"
+            " level, for ww's legacy coherence-cost labeling."
         ),
         gt=0.0,
     )
     conncomp_cycle_prob: float | None = Field(
         default=None,
         description=(
-            "Set ``cost_threshold`` from a target per-edge one-cycle-correction"
-            " probability (~2.4e-4 matches the default). Lower is stricter."
-            " Overridden by ``conncomp_sigma`` if both are set."
+            "Unused. Sets ``cost_threshold`` from a target per-edge"
+            " one-cycle-correction probability, for ww's legacy"
+            " coherence-cost labeling."
         ),
         gt=0.0,
         lt=1.0,
@@ -241,6 +263,67 @@ class WhirlwindOptions(BaseModel, extra="forbid"):
     max_ncomps: int = Field(
         default=1024,
         description="Maximum number of connected components to keep (largest first).",
+        ge=1,
+    )
+
+    # --- Phase-solve / component knobs ---------------------------------------
+    bridge: bool = Field(
+        default=True,
+        description=(
+            "Bridge disjoint connected components across low-coherence gaps so"
+            " they share a consistent integer cycle. Disable to keep components"
+            " fully independent."
+        ),
+    )
+    connect_gaps: bool = Field(
+        default=False,
+        description=(
+            "Draw phase paths across bounded runs of invalid pixels before"
+            " unwrapping, then drop those synthetic pixels from both outputs."
+            " The paths let the solver pick a relative 2pi level between"
+            " regions that would otherwise be solved independently, which is"
+            " what levels the NISAR sub-swaths. Unlike ``interpolate``, it"
+            " extrapolates the phase slope on each side of a gap, so a winding"
+            " estimate survives the crossing."
+        ),
+    )
+    connect_gaps_max_px: int = Field(
+        default=300,
+        description=(
+            "Widest run of invalid pixels, in pixels, that ``connect_gaps``"
+            " will cross. This is a geometric width limit only; it does not"
+            " distinguish why the pixels are invalid."
+        ),
+        ge=1,
+    )
+
+    @field_validator("conncomp_min_coherence")
+    @classmethod
+    def _validate_conncomp_min_coherence(
+        cls, value: float | Literal["auto"] | None
+    ) -> float | Literal["auto"] | None:
+        if isinstance(value, float) and not 0.0 <= value <= 1.0:
+            raise ValueError("conncomp_min_coherence must be between 0 and 1")
+        return value
+
+    # --- Internal Goldstein pre-filter ---------------------------------------
+    # ww applies Goldstein filtering internally (fast Rust). For whirlwind,
+    # dolphin routes its ``run_goldstein`` request here instead of running the
+    # slower Python pre-process (see unwrap/_unwrap.py), so there is no
+    # double-filtering. ``run_goldstein`` (using ``preprocess_options.alpha``)
+    # takes precedence over ``goldstein_alpha`` when both are set.
+    goldstein_alpha: float = Field(
+        default=0.0,
+        description=(
+            "Goldstein filter strength for ww's internal pre-filter. 0 disables"
+            " it. Ignored when ``UnwrapOptions.run_goldstein`` is set (that path"
+            " supplies alpha from ``preprocess_options.alpha``)."
+        ),
+        ge=0.0,
+    )
+    goldstein_psize: int = Field(
+        default=64,
+        description="FFT patch size for ww's internal Goldstein filter.",
         ge=1,
     )
 
