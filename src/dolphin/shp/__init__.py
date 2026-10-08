@@ -9,7 +9,7 @@ from numpy.typing import ArrayLike
 from dolphin import Strides
 from dolphin.workflows import ShpMethod
 
-from . import _glrt, _ks
+from . import _gaussian, _glrt, _ks
 
 logger = logging.getLogger("dolphin")
 
@@ -28,6 +28,7 @@ def estimate_neighbors(
     is_sorted: bool = False,
     method: ShpMethod = ShpMethod.GLRT,
     prune_disconnected: bool = False,
+    input_shape: Optional[tuple[int, int]] = None,
 ) -> np.ndarray:
     """Estimate the statistically similar neighbors of each pixel.
 
@@ -58,17 +59,23 @@ def estimate_neighbors(
         If True, keeps only SHPs that are 8-connected to the current pixel.
         Otherwise, any pixel within the window may be considered an SHP, even
         if it is not directly connected.
+    input_shape : tuple[int, int], optional
+        Shape of the input image (rows, cols). Required for GAUSSIAN method
+        if mean/var/amp_stack are not provided.
 
     Returns
     -------
     Optional[np.ndarray]
         Array of estimated statistically similar neighbors.
+        For GLRT/KS methods, this is a boolean array.
+        For GAUSSIAN method, this is a float array of weights.
 
     Raises
     ------
     ValueError
         - nslc is not provided for GLRT method
         - amp_stack is not provided for the KS method.
+        - input_shape cannot be inferred for GAUSSIAN method.
         - `method` not a valid `ShpMethod`
 
     """
@@ -108,6 +115,24 @@ def estimate_neighbors(
             strides=strides,
             alpha=alpha,
             is_sorted=is_sorted,
+        )
+    elif method.lower() == ShpMethod.GAUSSIAN:
+        logger.debug("Using Gaussian weighting for multilooking")
+        # Infer input_shape if not provided
+        if input_shape is None:
+            if mean is not None:
+                input_shape = np.asarray(mean).shape
+            elif var is not None:
+                input_shape = np.asarray(var).shape
+            elif amp_stack is not None:
+                input_shape = np.asarray(amp_stack).shape[1:]
+            else:
+                msg = "input_shape must be provided for GAUSSIAN method"
+                raise ValueError(msg)
+        neighbor_arrays = _gaussian.estimate_neighbors(
+            halfwin_rowcol=halfwin_rowcol,
+            input_shape=input_shape,
+            strides=tuple(strides),
         )
     else:
         msg = f"SHP method {method} is not implemented"

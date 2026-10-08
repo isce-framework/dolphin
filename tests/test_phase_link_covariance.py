@@ -152,3 +152,81 @@ def test_estimate_stack_covariance_neighbors_masked(slcs):
 
     C_neighbors = covariance.coh_mat_single(slc_samples, neighbor_mask=neighbor_mask)
     npt.assert_allclose(C_nan, C_neighbors)
+
+
+def test_coh_mat_single_float_weights(slcs):
+    """Test that float weights work correctly for Gaussian multilooking."""
+    num_slc, _rows, cols = slcs.shape
+    slc_samples = slcs.reshape(num_slc, -1)
+    nsamps = slc_samples.shape[1]
+
+    # Test 1: uniform weights should give same result as no weights
+    uniform_weights = np.ones(nsamps, dtype=np.float32) / nsamps
+    C_uniform = covariance.coh_mat_single(slc_samples, neighbor_mask=uniform_weights)
+
+    # With all True boolean mask
+    bool_mask = np.ones(nsamps, dtype=np.bool_)
+    C_bool = covariance.coh_mat_single(slc_samples, neighbor_mask=bool_mask)
+
+    # The results should be similar (coherence is normalized)
+    npt.assert_allclose(C_uniform, C_bool, rtol=1e-5)
+
+    # Test 2: zero weight on some pixels should reduce their influence
+    # Create weights that zero out the first row
+    weights_partial = np.ones(nsamps, dtype=np.float32)
+    weights_partial[:cols] = 0  # Zero out first row
+    weights_partial = weights_partial / weights_partial.sum()
+
+    C_partial = covariance.coh_mat_single(slc_samples, neighbor_mask=weights_partial)
+
+    # Create equivalent boolean mask
+    bool_partial = np.ones(nsamps, dtype=np.bool_)
+    bool_partial[:cols] = False
+
+    C_bool_partial = covariance.coh_mat_single(slc_samples, neighbor_mask=bool_partial)
+
+    # Results should be similar when weights are 0 or 1
+    npt.assert_allclose(C_partial, C_bool_partial, rtol=1e-5)
+
+
+def test_estimate_stack_covariance_gaussian_weights():
+    """Test covariance estimation with Gaussian weights."""
+    from dolphin.shp._gaussian import estimate_neighbors as gaussian_estimate_neighbors
+
+    # Create a simple test stack
+    nslc, rows, cols = 5, 20, 20
+    slc_stack = np.random.rand(nslc, rows, cols) + 1j * np.random.rand(nslc, rows, cols)
+    slc_stack = slc_stack.astype(np.complex64)
+
+    half_window = HalfWindow(x=3, y=3)
+    strides = Strides(x=1, y=1)
+
+    # Get Gaussian weights
+    gaussian_weights = gaussian_estimate_neighbors(
+        halfwin_rowcol=(half_window.y, half_window.x),
+        input_shape=(rows, cols),
+        strides=(strides.y, strides.x),
+    )
+
+    # Compute covariance with Gaussian weights
+    C_gaussian = covariance.estimate_stack_covariance(
+        slc_stack,
+        half_window=half_window,
+        strides=strides,
+        neighbor_arrays=gaussian_weights,
+    )
+
+    # Check output shape
+    assert C_gaussian.shape == (rows, cols, nslc, nslc)
+
+    # Check that diagonal is 1 (coherence with self)
+    for r in range(rows):
+        for c in range(cols):
+            diag = np.diag(C_gaussian[r, c])
+            npt.assert_allclose(np.abs(diag), 1.0, rtol=1e-5)
+
+    # Check Hermitian symmetry
+    for r in range(rows):
+        for c in range(cols):
+            C = C_gaussian[r, c]
+            npt.assert_allclose(C, C.conj().T, rtol=1e-5)

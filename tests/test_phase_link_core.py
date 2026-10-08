@@ -6,6 +6,7 @@ import pytest
 
 from dolphin._types import HalfWindow, Strides
 from dolphin.phase_link import _core, covariance, simulate
+from dolphin.shp._gaussian import estimate_neighbors as gaussian_estimate_neighbors
 from dolphin.utils import gpu_is_available
 
 GPU_AVAILABLE = gpu_is_available() and os.environ.get("NUMBA_DISABLE_JIT") != "1"
@@ -181,3 +182,62 @@ def test_run_phase_linking_ps_fill(slc_samples, use_max_ps, strides):
     )
 
     assert pl_out.temp_coh[out_idx, out_idx] == 1
+
+
+def test_run_phase_linking_gaussian_vs_rect(C_truth):
+    """Test that Gaussian multilooking gives similar results to RECT for synthetic data.
+
+    For homogeneous synthetic data (all from same distribution), Gaussian and RECT
+    should give similar phase estimates since both methods use the full window
+    (just with different weighting).
+    """
+    C, truth = C_truth
+    ns = 11 * 11
+    slc_samples = simulate.simulate_neighborhood_stack(C, ns)
+    slc_stack = slc_samples.reshape(NUM_ACQ, 11, 11)
+
+    half_window = HalfWindow(x=5, y=5)
+    strides = Strides(x=1, y=1)
+
+    # Run phase linking with RECT (no neighbor_arrays = uniform weighting)
+    pl_out_rect = _core.run_phase_linking(
+        slc_stack,
+        half_window=half_window,
+        strides=strides,
+        neighbor_arrays=None,  # RECT method
+    )
+
+    # Run phase linking with Gaussian weights
+    gaussian_weights = gaussian_estimate_neighbors(
+        halfwin_rowcol=(half_window.y, half_window.x),
+        input_shape=(11, 11),
+        strides=(strides.y, strides.x),
+    )
+    pl_out_gaussian = _core.run_phase_linking(
+        slc_stack,
+        half_window=half_window,
+        strides=strides,
+        neighbor_arrays=np.array(gaussian_weights),
+    )
+
+    # Both methods should recover the truth reasonably well
+    # Compare at the center pixel (full window available)
+    rect_phase = np.angle(pl_out_rect.cpx_phase[:, 5, 5])
+    gaussian_phase = np.angle(pl_out_gaussian.cpx_phase[:, 5, 5])
+
+    # Check both methods are close to truth
+    err_deg_threshold = 15  # degrees
+    assert np.degrees(simulate.rmse(truth, rect_phase)) < err_deg_threshold
+    assert np.degrees(simulate.rmse(truth, gaussian_phase)) < err_deg_threshold
+
+    # Gaussian and RECT should give similar results for homogeneous data
+    # Allow some tolerance since weighting differs
+    phase_diff = np.angle(np.exp(1j * (rect_phase - gaussian_phase)))
+    assert np.degrees(np.std(phase_diff)) < err_deg_threshold
+
+    # Temporal coherence should be similar
+    npt.assert_allclose(
+        pl_out_rect.temp_coh[5, 5],
+        pl_out_gaussian.temp_coh[5, 5],
+        atol=0.1,
+    )

@@ -49,7 +49,12 @@ class PhaseLinkOutput(NamedTuple):
     """
 
     shp_counts: np.ndarray
-    """Number of neighbor pixels used in adaptive multilooking."""
+    """Number of effective looks used in multilooking.
+
+    For boolean SHP methods (GLRT, KS), this is the count of neighbor pixels.
+    For float weights (Gaussian), this is the effective number of looks (ENL)
+    via Kish's formula: ENL = (sum(w))^2 / sum(w^2).
+    """
 
     eigenvalues: np.ndarray
     """The smallest (largest) eigenvalue resulting from EMI (EVD)."""
@@ -362,8 +367,14 @@ def run_cpl(
     # Get the SHP counts for each pixel (if not using Rect window)
     if neighbor_arrays is None:
         shp_counts = jnp.zeros(temp_coh.shape, dtype=np.int16)
-    else:
+    elif neighbor_arrays.dtype == np.bool_:
         shp_counts = jnp.sum(neighbor_arrays, axis=(-2, -1))
+    else:
+        # For float weights (e.g. Gaussian), compute effective number of looks
+        # ENL = (sum(w))^2 / sum(w^2)  (Kish, 1965, Survey Sampling)
+        w_sum = jnp.sum(neighbor_arrays, axis=(-2, -1))
+        w_sq_sum = jnp.sum(neighbor_arrays**2, axis=(-2, -1))
+        shp_counts = jnp.round(w_sum**2 / w_sq_sum).astype(jnp.int16)
 
     return PhaseLinkOutput(
         cpx_phase=cpx_phase_reshaped,
