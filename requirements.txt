@@ -2,7 +2,7 @@
 h5py>=3.6
 jax>=0.4.19
 numba>=0.56
-numpy>=1.23
+numpy>=1.23,<2.5  # gdal_calc.py uses a numpy.shape= assignment deprecated in 2.5; fixed upstream (OSGeo/gdal#15127) but not yet in a GDAL release. Remove cap once GDAL ships that fix.
 opera-utils>=0.25.7
 pydantic>=2.1
 pyproj>=3.3
