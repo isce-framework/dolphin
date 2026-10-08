@@ -41,3 +41,29 @@ def test_compression(slc_samples, strides):
     )
     assert np.isnan(np.abs(comp_slc)[valid_rows:, :]).all()
     assert np.isnan(np.abs(comp_slc)[:, valid_cols:]).all()
+
+
+def test_compression_with_non_contiguous_is_real_mask(slc_samples):
+    """`is_real_mask` must exclude compressed entries regardless of position.
+
+    Regression test for the old `first_real_slc_idx` scalar-boundary slicing,
+    which could only express "exclude a contiguous prefix".
+    """
+    slc_stack = slc_samples.reshape(10, 11, 11)
+    pl_out = _core.run_cpl(slc_stack, HalfWindow(x=3, y=3), Strides(x=1, y=1))
+
+    # Non-contiguous: indices 1 and 3 are "already compressed", not a prefix.
+    is_real_mask = np.array(
+        [True, False, True, False, True, True, True, True, True, True]
+    )
+
+    comp_slc = _compress.compress(
+        slc_stack=slc_stack, pl_cpx_phase=pl_out.cpx_phase, is_real_mask=is_real_mask
+    )
+
+    # Equivalent to manually pre-filtering both inputs by the same mask.
+    expected = _compress.compress(
+        slc_stack=slc_stack[is_real_mask],
+        pl_cpx_phase=pl_out.cpx_phase[is_real_mask],
+    )
+    npt.assert_array_almost_equal(comp_slc, expected)
