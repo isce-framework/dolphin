@@ -110,7 +110,7 @@ def merge_by_date(
 
     for dates, cur_images in grouped_images.items():
         logger.info(f"{dates}: Stitching {len(cur_images)} images.")
-        date_str = utils.format_dates(*dates)
+        date_str = utils.format_dates(*dates, fmt=file_date_fmt)
         # If we passed files where different dates have different prefixes,
         # we need to use the common prefix before the first date token
         # e.g. if we have "temporal_coherence_<dates>,...
