@@ -312,3 +312,104 @@ def test_compressed_plans_last_per_ministack(
     compslcs = [m.get_compressed_slc_info() for m in ministacks]
     assert len(compslcs) == 1
     assert compslcs[0].reference_date == slc_date_list[ms_size - 1]
+
+
+def test_real_slc_date_range_with_trailing_compressed(tmp_path):
+    """`real_slc_date_range` must ignore a compressed SLC even at the end.
+
+    Regression test: the end of the range used to be read as `self.dates[-1][-1]`,
+    which is wrong if the chronologically-last entry happens to be a compressed SLC.
+    """
+    comp_ref = datetime(2021, 12, 31)  # distinct from the real SLC dates
+    day1, day2 = datetime(2022, 1, 1), datetime(2022, 1, 2)
+    comp_end = datetime(2022, 1, 5)  # later than any real SLC in this ministack
+    m = MiniStackInfo(
+        file_list=["real1.tif", "real2.tif", "compressed_fake.tif"],
+        dates=[[day1], [day2], (comp_ref, comp_ref, comp_end)],
+        is_compressed=[False, False, True],
+        output_folder=tmp_path,
+    )
+    assert m.real_slc_date_range == (day1, day2)
+
+
+def test_ministack_planner_interleaved_compressed(tmp_path):
+    """A pre-existing compressed SLC can land in the middle of real SLC dates.
+
+    This happens in forward-mode/incremental-reprocessing inputs, since
+    `opera_utils.sort_files_by_date` has no compressed-first guarantee: a
+    compressed SLC's `reference_date` can be chronologically between two real
+    SLC dates also being planned in the same call. The merge must place it
+    there (not blindly first), and `last_compressed_slc_idx`/
+    `compressed_reference_idx`/`output_reference_idx` must point at its actual
+    position.
+    """
+    day1, day2, day3, day4 = (
+        datetime(2022, 1, 1),
+        datetime(2022, 1, 2),
+        datetime(2022, 1, 3),
+        datetime(2022, 1, 4),
+    )
+    comp_info = CompressedSlcInfo(
+        reference_date=day3,
+        start_date=day1,
+        end_date=day3,
+        output_folder=tmp_path,
+    )
+
+    ministack_planner = MiniStackPlanner(
+        file_list=[comp_info.path, "real_day2.tif", "real_day4.tif"],
+        dates=[comp_info.dates, [day2], [day4]],
+        is_compressed=[True, False, False],
+        output_folder=tmp_path,
+    )
+    # ministack_size == len(file_list): single-ministack mode (see
+    # `test_compressed_idx_setting`/`test_compressed_plans_last_per_ministack`
+    # for the same pattern), so the "multi-batch" guard doesn't apply.
+    (ministack,) = ministack_planner.plan(3)
+
+    # Chronological merge: day2 (real) < day3 (compressed) < day4 (real) --
+    # the compressed SLC is NOT a contiguous prefix.
+    assert ministack.is_compressed == [False, True, False]
+    assert ministack.last_compressed_slc_idx == 1
+
+    # Default (ALWAYS_FIRST) plan: reference the most recent compressed SLC,
+    # found by position, not by `num_ccslc - 1`.
+    assert ministack.compressed_reference_idx == 1
+    assert ministack.compressed_reference_date == day3
+    assert ministack.output_reference_idx == 1
+    assert ministack.output_reference_date == day3
+
+    # Excluding the pre-existing compressed SLC when building the new one must
+    # still work regardless of its (now non-prefix) position.
+    new_ccslc = ministack.get_compressed_slc_info()
+    assert new_ccslc.real_slc_dates == [day2, day4]
+    assert new_ccslc.compressed_slc_file_list == [comp_info.path]
+
+
+def test_ministack_planner_interleaved_last_per_ministack(tmp_path):
+    """`LAST_PER_MINISTACK`'s `-1` stays correct after chronological sorting."""
+    day2, day3, day4 = (
+        datetime(2022, 1, 2),
+        datetime(2022, 1, 3),
+        datetime(2022, 1, 4),
+    )
+    comp_info = CompressedSlcInfo(
+        reference_date=day3,
+        start_date=day2,
+        end_date=day3,
+        output_folder=tmp_path,
+    )
+
+    ministack_planner = MiniStackPlanner(
+        file_list=[comp_info.path, "real_day2.tif", "real_day4.tif"],
+        dates=[comp_info.dates, [day2], [day4]],
+        is_compressed=[True, False, False],
+        output_folder=tmp_path,
+        compressed_slc_plan="last_per_ministack",
+    )
+    (ministack,) = ministack_planner.plan(3)
+
+    assert ministack.is_compressed == [False, True, False]
+    # `-1` means "chronologically last entry" -- still the real day4 SLC.
+    assert ministack.compressed_reference_idx == -1
+    assert ministack.compressed_reference_date == day4

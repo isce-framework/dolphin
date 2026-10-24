@@ -96,13 +96,16 @@ def run_wrapped_phase_single(
     xhalf, yhalf = half_window["x"], half_window["y"]
 
     # If we were passed any compressed SLCs in `input_slc_files`,
-    # then we want that index for when we create new compressed SLCs.
-    # We skip the old compressed SLCs to create new ones
-    first_real_slc_idx = ministack.first_real_slc_idx
+    # then we want a mask for when we create new compressed SLCs.
+    # We skip the old compressed SLCs to create new ones.
+    # (A boolean mask, rather than a single boundary index, since a compressed
+    # SLC is not guaranteed to be a contiguous prefix of `input_slc_files`.)
+    is_real_mask = ministack.is_real_mask
+    num_real = int(is_real_mask.sum())
 
     msg = (
-        f"Processing {len(input_slc_files) - first_real_slc_idx} SLCs +"
-        f" {first_real_slc_idx} compressed SLCs. "
+        f"Processing {num_real} SLCs +"
+        f" {len(input_slc_files) - num_real} compressed SLCs. "
     )
     logger.info(msg)
 
@@ -259,7 +262,7 @@ def run_wrapped_phase_single(
                 neighbor_arrays=neighbor_arrays,
                 baseline_lag=baseline_lag,
                 avg_mag=amp_mean[in_rows, in_cols] if amp_mean is not None else None,
-                first_real_slc_idx=ministack.first_real_slc_idx,
+                last_compressed_slc_idx=ministack.last_compressed_slc_idx,
                 compute_crlb=write_crlb,
             )
         except PhaseLinkRuntimeError as e:
@@ -282,27 +285,25 @@ def run_wrapped_phase_single(
 
         # Compress the ministack using only the non-compressed SLCs
         # Get the mean to set as pixel magnitudes
-        abs_stack = np.abs(cur_data[first_real_slc_idx:, in_trim_rows, in_trim_cols])
+        abs_stack = np.abs(cur_data[is_real_mask][:, in_trim_rows, in_trim_cols])
         cur_data_mean, cur_amp_dispersion, _ = calc_ps_block(abs_stack)
         cur_comp_slc = compress(
             # Get the inner portion of the full-res SLC data
             cur_data[:, in_trim_rows, in_trim_cols],
             pl_output.cpx_phase[:, out_trim_rows, out_trim_cols],
-            first_real_slc_idx=first_real_slc_idx,
+            is_real_mask=is_real_mask,
             slc_mean=cur_data_mean,
             reference_idx=ministack.compressed_reference_idx,
         )
 
         # Save each of the MLE estimates (ignoring those corresponding to
         # compressed SLCs indexes)
-        assert len(pl_output.cpx_phase[first_real_slc_idx:]) == len(
-            phase_linked_slc_files
-        )
+        assert num_real == len(phase_linked_slc_files)
         # ### Save results ###
         with write_lock:
             # ### Save results ###
             for img, f in zip(
-                pl_output.cpx_phase[first_real_slc_idx:, out_trim_rows, out_trim_cols],
+                pl_output.cpx_phase[is_real_mask][:, out_trim_rows, out_trim_cols],
                 phase_linked_slc_files,
                 strict=True,
             ):
@@ -310,8 +311,8 @@ def run_wrapped_phase_single(
 
             if write_crlb:
                 for img, f in zip(
-                    pl_output.crlb_std_dev[
-                        first_real_slc_idx:, out_trim_rows, out_trim_cols
+                    pl_output.crlb_std_dev[is_real_mask][
+                        :, out_trim_rows, out_trim_cols
                     ],
                     phase_linked_crlb_files,
                     strict=True,
@@ -491,17 +492,26 @@ def _get_amp_mean_variance(
     return None, None
 
 
+def _real_date_str_list(ministack: MiniStackInfo) -> list[str]:
+    """Get the date strings for only the real (non-compressed) SLCs."""
+    return [
+        d
+        for d, is_real in zip(
+            ministack.get_date_str_list(), ministack.is_real_mask, strict=True
+        )
+        if is_real
+    ]
+
+
 def _name_slcs(ministack: MiniStackInfo) -> list[str]:
     """Generate SLC filenames for the ministack."""
-    start_idx = ministack.first_real_slc_idx
-    date_strs = ministack.get_date_str_list()[start_idx:]
+    date_strs = _real_date_str_list(ministack)
     return [f"{Path(d).stem}.slc.tif" for d in date_strs]
 
 
 def _name_crlbs(ministack: MiniStackInfo) -> list[str]:
     """Generate CRLB filenames for the ministack."""
-    start_idx = ministack.first_real_slc_idx
-    date_strs = ministack.get_date_str_list()[start_idx:]
+    date_strs = _real_date_str_list(ministack)
     return [f"crlb_{Path(d).stem}.tif" for d in date_strs]
 
 
