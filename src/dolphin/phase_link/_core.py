@@ -85,7 +85,7 @@ def run_phase_linking(
     avg_mag: ArrayLike | None = None,
     use_slc_amp: bool = False,
     baseline_lag: Optional[int] = None,
-    last_compressed_slc_idx: Optional[int] = None,
+    first_real_slc_idx: int = 0,
     compute_crlb: bool = True,
 ) -> PhaseLinkOutput:
     """Estimate the linked phase for a stack of SLCs.
@@ -144,12 +144,10 @@ def run_phase_linking(
         or to set the SLC amplitude to 1.0. By default False.
     baseline_lag : int, optional, default=None
         lag for temporal baseline to do short temporal baseline inversion (STBAS)
-    last_compressed_slc_idx : int, optional, default = None
-        The index of the most recent (last) compressed SLC in the stack.
-        This is only used for the CRLB computation, to pick which date's phase
-        to treat as the fixed/known reference (0 variance) when inverting the
-        Fisher Information Matrix. If None (no compressed SLC in the stack),
-        the first date (index 0) is used.
+    first_real_slc_idx : int, optional, default = 0
+        The index of the first real SLC in the stack.
+        This is only used for the CRLB computation.
+        By default 0.
     compute_crlb : bool, optional
         Whether to compute the CRLB, by default True
 
@@ -207,7 +205,7 @@ def run_phase_linking(
         reference_idx=reference_idx,
         neighbor_arrays=neighbor_arrays,
         baseline_lag=baseline_lag,
-        last_compressed_slc_idx=last_compressed_slc_idx,
+        first_real_slc_idx=first_real_slc_idx,
         compute_crlb=compute_crlb,
     )
 
@@ -266,7 +264,7 @@ def run_cpl(
     reference_idx: int = 0,
     neighbor_arrays: Optional[np.ndarray] = None,
     baseline_lag: Optional[int] = None,
-    last_compressed_slc_idx: Optional[int] = None,
+    first_real_slc_idx: int = 0,
     compute_crlb: bool = True,
 ) -> PhaseLinkOutput:
     """Run the Combined Phase Linking (CPL) algorithm.
@@ -304,12 +302,10 @@ def run_cpl(
         StBAS parameter to include only nearest-N interferograms for phase linking.
         A `baseline_lag` of `n` will only include the closest `n` interferograms.
         `baseline_line` must be positive.
-    last_compressed_slc_idx : int, optional, default = None
-        The index of the most recent (last) compressed SLC in the stack.
-        This is only used for the CRLB computation, to pick which date's phase
-        to treat as the fixed/known reference (0 variance) when inverting the
-        Fisher Information Matrix. If None (no compressed SLC in the stack),
-        the first date (index 0) is used.
+    first_real_slc_idx : int, optional, default = 0
+        The index of the first real SLC in the stack.
+        This is only used for the CRLB computation.
+        By default 0.
     compute_crlb : bool, optional
         Whether to compute the CRLB, by default True
 
@@ -358,7 +354,7 @@ def run_cpl(
         zero_correlation_threshold=zero_correlation_threshold,
         reference_idx=reference_idx,
         num_looks=num_looks,
-        last_compressed_slc_idx=last_compressed_slc_idx,
+        first_real_slc_idx=first_real_slc_idx,
         compute_crlb=compute_crlb,
     )
     # Get the temporal coherence
@@ -398,7 +394,7 @@ def run_cpl(
         "beta",
         "reference_idx",
         "num_looks",
-        "last_compressed_slc_idx",
+        "first_real_slc_idx",
         "compute_crlb",
     ),
 )
@@ -409,7 +405,7 @@ def process_coherence_matrices(
     zero_correlation_threshold: float = 0.0,
     reference_idx: int = 0,
     num_looks: int = 1,
-    last_compressed_slc_idx: Optional[int] = None,
+    first_real_slc_idx: int = 0,
     compute_crlb: bool = True,
 ) -> tuple[Array, Array, Array, Array]:
     """Estimate the linked phase for a stack of coherence matrices.
@@ -438,12 +434,10 @@ def process_coherence_matrices(
     num_looks : int, optional
         The number of looks used to form the input correlation data, used
         during CRLB computation.
-    last_compressed_slc_idx : int, optional, default = None
-        The index of the most recent (last) compressed SLC in the stack.
-        This is only used for the CRLB computation, to pick which date's phase
-        to treat as the fixed/known reference (0 variance) when inverting the
-        Fisher Information Matrix. If None (no compressed SLC in the stack),
-        the first date (index 0) is used.
+    first_real_slc_idx : int, optional, default = 0
+        The index of the first real SLC in the stack.
+        This is only used for the CRLB computation.
+        By default 0.
     compute_crlb : bool, optional
         Whether to compute the CRLB
         Default is True.
@@ -535,8 +529,7 @@ def process_coherence_matrices(
     if compute_crlb:
         # Build X once and do the inverse-free CRLB from X
         X = crlb._build_fisher_from_abs_gamma(Gamma, Gamma_inv, num_looks)
-        crlb_ref_idx = 0 if last_compressed_slc_idx is None else last_compressed_slc_idx
-        crlb_std_dev = crlb._crlb_from_x(X, crlb_ref_idx, 0, 1e-6)
+        crlb_std_dev = crlb._crlb_from_x(X, max(first_real_slc_idx - 1, 0), 0, 1e-6)
 
     else:
         crlb_std_dev = jnp.zeros(C_arrays.shape[:-1], dtype=jnp.float32)
