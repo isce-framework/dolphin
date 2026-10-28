@@ -41,7 +41,7 @@ class PhaseLinkOutput(NamedTuple):
     """Output of the MLE solver."""
 
     cpx_phase: np.ndarray
-    """Estimated linked phase."""
+    """Estimated linked phase; NaN where no estimate or PS fill is available."""
 
     temp_coh: np.ndarray
     """Temporal coherence of the optimization.
@@ -359,6 +359,13 @@ def run_cpl(
     )
     # Get the temporal coherence
     temp_coh = metrics.estimate_temp_coh(cpx_phase, C_arrays)
+
+    # An unsupported acquisition has a zero diagonal. Without this mask the
+    # solver can return zero phase and unit temporal coherence for an empty window.
+    no_support = jnp.any(jnp.diagonal(C_arrays, axis1=-2, axis2=-1) == 0, axis=-1)
+    cpx_phase = jnp.where(no_support[..., None], jnp.nan, cpx_phase)
+    crlb_std_dev = jnp.where(no_support[..., None], jnp.nan, crlb_std_dev)
+    temp_coh = jnp.where(no_support, jnp.nan, temp_coh)
 
     # Reshape the (rows, cols, nslcs) output to be same as input stack
     cpx_phase_reshaped = jnp.moveaxis(cpx_phase, -1, 0)
