@@ -286,7 +286,7 @@ class StridedBlockManager:
     def _get_out_nodata_size(self, direction: str) -> int:
         half_win = getattr(self.half_window, direction)
         stride = getattr(self.strides, direction)
-        return round(half_win / stride)
+        return (half_win + stride // 2) // stride
 
     @property
     def output_shape(self) -> tuple[int, int]:
