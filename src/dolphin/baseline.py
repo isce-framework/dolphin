@@ -14,12 +14,15 @@ def compute(
     llh: ArrayLike,
     ref_pos: ArrayLike,
     sec_pos: ArrayLike,
-    ref_range: float,
-    sec_range: float,
+    ref_range: float,  # noqa: ARG001  kept for callers, see docstring
+    sec_range: float,  # noqa: ARG001
     ref_vel: ArrayLike,
     ell: isce3.core.Ellipsoid,
 ):
     """Compute the perpendicular baseline at a given geographic position.
+
+    The baseline component perpendicular to the reference line of sight,
+    |B x l| for the unit look vector l, so it stays accurate as it goes to zero.
 
     Parameters
     ----------
@@ -31,9 +34,10 @@ def compute(
     sec_pos : ArrayLike
         Secondary position vector (x, y, z) in ECEF coordinates.
     ref_range : float
-        Range from the reference satellite to the target.
+        Range from the reference satellite to the target. Unused, kept so
+        existing callers (disp-s1) keep working.
     sec_range : float
-        Range from the secondary satellite to the target.
+        Range from the secondary satellite to the target. Unused, as above.
     ref_vel : ArrayLike
         Velocity vector (vx, vy, vz) of the reference satellite in ECEF coordinates.
     ell : isce3.core.Ellipsoid
@@ -45,21 +49,18 @@ def compute(
         Perpendicular baseline, in meters.
 
     """
-    # Difference in position between the two passes
-    baseline = np.linalg.norm(sec_pos - ref_pos)
+    target_xyz = np.ravel(ell.lon_lat_to_xyz(llh))
+    baseline_vec = np.ravel(sec_pos) - np.ravel(ref_pos)
 
-    # Compute angle between LOS vector and baseline vector
-    # via the law of cosines
-    cos_theta = (ref_range**2 + baseline**2 - sec_range**2) / (2 * ref_range * baseline)
+    # Unit look vector, reference satellite to target
+    look = target_xyz - np.ravel(ref_pos)
+    look /= np.linalg.norm(look)
 
-    sin_theta = np.sqrt(1 - cos_theta**2)
-    perp = baseline * sin_theta
-    # parallel_baseline = baseline * cosine_theta
+    # Not the law of cosines on the two ranges: it cancels as B_perp -> 0, gives
+    # |cos| > 1 (NaN) there, and is biased when sec_pos no longer matches its range
+    perp = np.linalg.norm(np.cross(baseline_vec, look))
 
-    target_xyz = ell.lon_lat_to_xyz(llh)
-    direction = np.sign(
-        np.dot(np.cross(target_xyz - ref_pos, sec_pos - ref_pos), ref_vel)
-    )
+    direction = np.sign(np.dot(np.cross(look, baseline_vec), np.ravel(ref_vel)))
 
     return direction * perp
 
