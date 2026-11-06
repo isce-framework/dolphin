@@ -14,15 +14,12 @@ def compute(
     llh: ArrayLike,
     ref_pos: ArrayLike,
     sec_pos: ArrayLike,
-    ref_range: float,  # noqa: ARG001  kept for callers, see docstring
+    ref_range: float,  # noqa: ARG001
     sec_range: float,  # noqa: ARG001
     ref_vel: ArrayLike,
     ell: isce3.core.Ellipsoid,
 ):
     """Compute the perpendicular baseline at a given geographic position.
-
-    The baseline component perpendicular to the reference line of sight,
-    |B x l| for the unit look vector l, so it stays accurate as it goes to zero.
 
     Parameters
     ----------
@@ -34,10 +31,9 @@ def compute(
     sec_pos : ArrayLike
         Secondary position vector (x, y, z) in ECEF coordinates.
     ref_range : float
-        Range from the reference satellite to the target. Unused, kept so
-        existing callers (disp-s1) keep working.
+        Range from the reference satellite to the target. Unused.
     sec_range : float
-        Range from the secondary satellite to the target. Unused, as above.
+        Range from the secondary satellite to the target. Unused.
     ref_vel : ArrayLike
         Velocity vector (vx, vy, vz) of the reference satellite in ECEF coordinates.
     ell : isce3.core.Ellipsoid
@@ -56,8 +52,6 @@ def compute(
     look = target_xyz - np.ravel(ref_pos)
     look /= np.linalg.norm(look)
 
-    # Not the law of cosines on the two ranges: it cancels as B_perp -> 0, gives
-    # |cos| > 1 (NaN) there, and is biased when sec_pos no longer matches its range
     perp = np.linalg.norm(np.cross(baseline_vec, look))
 
     direction = np.sign(np.dot(np.cross(look, baseline_vec), np.ravel(ref_vel)))

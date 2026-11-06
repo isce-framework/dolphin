@@ -48,7 +48,6 @@ def test_baseline_compute(cslc_files):
 @pytest.mark.parametrize("b_par", [100.0, 1000.0])
 @pytest.mark.parametrize("b_perp", [10.0, 1.0, 0.1, 0.01, 0.0])
 def test_compute_near_zero_perpendicular_baseline(b_par, b_perp):
-    # Nearly parallel to the look, where the law of cosines gave NaN or a bias
     ell, llh, ref_pos, ref_vel, look, across = _geometry()
     sec_pos = ref_pos + b_par * look + b_perp * across
     ranges = _ranges(llh, ell, ref_pos, sec_pos)
