@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import logging
 import math
-import os
 import re
 import subprocess
 import tempfile
 from collections.abc import Mapping
 from datetime import datetime
 from os import fspath
+from os.path import commonpath
 from pathlib import Path
 from typing import Iterable, Optional, Sequence
 
@@ -730,7 +730,7 @@ def _common_prefix_before_first_date(files: Sequence[Path], file_date_fmt: str) 
         candidates.append(stem[: m.start()] if m else stem)
     if not candidates:
         return ""
-    prefix = os.path.commonprefix(candidates)
+    prefix = commonpath(candidates)
     # tidy trailing separators; preserve '_' if it already exists
     prefix = re.sub(r"[-.\s]+$", "", prefix)
     return prefix
