@@ -31,6 +31,7 @@ def fill_ps_pixels(
     ----------
     cpx_phase : ndarray, shape = (nslc, rows, cols)
         The complex valued-MLE estimate of the phase.
+        PS pixels retain its magnitude, or use unit magnitude where it is NaN.
     temp_coh : ndarray, shape = (rows, cols)
         The temporal coherence of the estimate.
     slc_stack : ArrayLike
@@ -75,7 +76,7 @@ def fill_ps_pixels(
         ref = np.exp(-1j * np.angle(slc_stack[reference_idx][slc_r_idxs, slc_c_idxs]))
         for i in range(len(slc_stack)):
             slc_phase = np.angle(slc_stack[i][slc_r_idxs, slc_c_idxs])
-            cur_amp = np.abs(cpx_phase[i][ps_mask_looked])
+            cur_amp = _amp_or_one(cpx_phase[i][ps_mask_looked])
             new_value = np.exp(1j * slc_phase) * ref
             cpx_phase[i][ps_mask_looked] = cur_amp * new_value
 
@@ -88,12 +89,18 @@ def fill_ps_pixels(
         ps_phases = np.angle(avg_ps[:, ps_mask_looked])
 
         # Set the angle only, don't change magnitude
-        cpx_phase[:, ps_mask_looked] = np.abs(cpx_phase[:, ps_mask_looked]) * np.exp(
-            1j * ps_phases
-        )
+        cpx_phase[:, ps_mask_looked] = _amp_or_one(
+            cpx_phase[:, ps_mask_looked]
+        ) * np.exp(1j * ps_phases)
 
     # Force PS pixels to have high temporal coherence
     temp_coh[ps_mask_looked] = 1
+
+
+def _amp_or_one(cpx: np.ndarray) -> np.ndarray:
+    """Return unit magnitude where the estimate is NaN."""
+    amp = np.abs(cpx)
+    return np.where(np.isnan(amp), 1.0, amp)
 
 
 def _get_avg_ps(

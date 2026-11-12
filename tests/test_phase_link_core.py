@@ -4,6 +4,7 @@ import numpy as np
 import numpy.testing as npt
 import pytest
 
+from dolphin import shp
 from dolphin._types import HalfWindow, Strides
 from dolphin.phase_link import _core, covariance, simulate
 from dolphin.shp._gaussian import estimate_neighbors as gaussian_estimate_neighbors
@@ -140,6 +141,78 @@ def test_run_phase_linking_with_shift(slc_samples):
 
     assert np.all(~np.isnan(pl_out.cpx_phase[:, 1:-1, :]))
     assert np.all(~np.isnan(pl_out.temp_coh[1:-1, :]))
+
+
+@pytest.mark.parametrize("with_ps", [False, True])
+@pytest.mark.parametrize("use_max_ps", [False, True])
+def test_run_phase_linking_no_shp_neighbors_at_edge(slc_samples, with_ps, use_max_ps):
+    """Mark an unsupported burst edge as nodata unless a PS fills it."""
+    slc_stack = slc_samples.copy().reshape(NUM_ACQ, 11, 11)
+    strides = Strides(3, 3)
+    # The first 3x3 looked cell keeps only its corner pixel: not all nodata, so the
+    # looked nodata mask keeps it, but its center pixel (1, 1) is nodata
+    nodata_mask = np.zeros((11, 11), dtype=bool)
+    nodata_mask[:3, :3] = True
+    nodata_mask[0, 0] = False
+    slc_stack[:, nodata_mask] = np.nan
+    ps_mask = np.zeros((11, 11), dtype=bool)
+    ps_mask[0, 0] = with_ps
+
+    amp = np.abs(slc_stack)
+    neighbor_arrays = shp.estimate_neighbors(
+        halfwin_rowcol=(5, 5),
+        alpha=0.001,
+        strides=strides,
+        mean=np.mean(amp, axis=0),
+        var=np.var(amp, axis=0),
+        nslc=NUM_ACQ,
+    )
+    assert not neighbor_arrays[0, 0].any()
+
+    pl_out = _core.run_phase_linking(
+        slc_stack,
+        half_window=HalfWindow(5, 5),
+        strides=strides,
+        ps_mask=ps_mask,
+        use_max_ps=use_max_ps,
+        neighbor_arrays=neighbor_arrays,
+    )
+    if with_ps:
+        ps_phase = slc_stack[:, 0, 0] * slc_stack[0, 0, 0].conj()
+        npt.assert_array_almost_equal(
+            np.angle(ps_phase), np.angle(pl_out.cpx_phase[:, 0, 0])
+        )
+        npt.assert_allclose(np.abs(pl_out.cpx_phase[:, 0, 0]), 1, atol=1e-6)
+        assert pl_out.temp_coh[0, 0] == 1
+    else:
+        assert np.isnan(pl_out.cpx_phase[:, 0, 0]).all()
+        assert np.isnan(pl_out.temp_coh[0, 0])
+        assert np.isnan(pl_out.crlb_std_dev[:, 0, 0]).all()
+    # The fully covered cells are unaffected
+    assert np.isfinite(pl_out.cpx_phase[:, 1:, 1:]).all()
+    assert np.isfinite(pl_out.temp_coh[1:, 1:]).all()
+
+
+def test_run_cpl_missing_acquisition_and_valid_zero_phase():
+    """Keep supported zero phase while rejecting a zero-power acquisition."""
+    slc_stack = np.ones((4, 5, 5), dtype=np.complex64)
+    slc_stack[1, 2, 2] = 0
+    neighbors = np.zeros((5, 5, 3, 3), dtype=bool)
+    neighbors[:, :, 1, 1] = True
+
+    result = _core.run_cpl(
+        slc_stack,
+        half_window=HalfWindow(1, 1),
+        strides=Strides(1, 1),
+        neighbor_arrays=neighbors,
+        compute_crlb=False,
+    )
+
+    assert np.isnan(result.cpx_phase[:, 2, 2]).all()
+    assert np.isnan(result.temp_coh[2, 2])
+    assert np.isnan(result.crlb_std_dev[:, 2, 2]).all()
+    npt.assert_allclose(result.cpx_phase[:, 1, 1], 1, atol=1e-6)
+    npt.assert_allclose(result.temp_coh[1, 1], 1, atol=1e-6)
 
 
 @pytest.mark.parametrize("strides", [1, 2, 3, 4, 5])
