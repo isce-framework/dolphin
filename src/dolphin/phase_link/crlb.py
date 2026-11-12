@@ -184,9 +184,10 @@ def _crlb_from_x(
     # Σ = inverse of FIM
     if fim_jitter != 0.0:
         FIM = FIM + fim_jitter * eyeN1
-    # jnp.linalg.solve reads a batched square RHS as matrices; scipy-style
-    # `solve` warns about that ambiguity from jax 0.10.
-    Sigma = jnp.linalg.solve(FIM, eyeN1)
+    # Use `inv` directly (rather than `solve(FIM, eyeN1, ...)`) since passing an
+    # identity matrix as the RHS to request a full inverse hits an ambiguous
+    # batched-solve code path in jax's `cho_solve` that triggers a FutureWarning.
+    Sigma = jnp.linalg.inv(FIM)
     sig = jnp.sqrt(jnp.diagonal(Sigma, axis1=-2, axis2=-1))
     return jnp.insert(sig, reference_idx, 0.0, axis=-1)
 
@@ -240,7 +241,8 @@ def compute_crlb_jax(
     abs_G_safe = abs_G + gamma_jitter * eyeNb
     abs_G_safe = jnp.where(is_zero_block, eyeNb, abs_G_safe)
 
-    abs_G_inv = jnp.linalg.solve(abs_G_safe, eyeNb)
+    # `inv` instead of `solve(abs_G_safe, eyeNb, ...)`; see note in `_crlb_from_x`.
+    abs_G_inv = jnp.linalg.inv(abs_G_safe)
 
     # Build X once and do the inverse-free CRLB from X
     X = _build_fisher_from_abs_gamma(abs_G, abs_G_inv, num_looks)

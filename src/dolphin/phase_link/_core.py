@@ -41,7 +41,7 @@ class PhaseLinkOutput(NamedTuple):
     """Output of the MLE solver."""
 
     cpx_phase: np.ndarray
-    """Estimated linked phase."""
+    """Estimated linked phase; NaN where no estimate or PS fill is available."""
 
     temp_coh: np.ndarray
     """Temporal coherence of the optimization.
@@ -49,7 +49,12 @@ class PhaseLinkOutput(NamedTuple):
     """
 
     shp_counts: np.ndarray
-    """Number of neighbor pixels used in adaptive multilooking."""
+    """Number of effective looks used in multilooking.
+
+    For boolean SHP methods (GLRT, KS), this is the count of neighbor pixels.
+    For float weights (Gaussian), this is the effective number of looks (ENL)
+    via Kish's formula: ENL = (sum(w))^2 / sum(w^2).
+    """
 
     eigenvalues: np.ndarray
     """The smallest (largest) eigenvalue resulting from EMI (EVD)."""
@@ -355,6 +360,13 @@ def run_cpl(
     # Get the temporal coherence
     temp_coh = metrics.estimate_temp_coh(cpx_phase, C_arrays)
 
+    # An unsupported acquisition has a zero diagonal. Without this mask the
+    # solver can return zero phase and unit temporal coherence for an empty window.
+    no_support = jnp.any(jnp.diagonal(C_arrays, axis1=-2, axis2=-1) == 0, axis=-1)
+    cpx_phase = jnp.where(no_support[..., None], jnp.nan, cpx_phase)
+    crlb_std_dev = jnp.where(no_support[..., None], jnp.nan, crlb_std_dev)
+    temp_coh = jnp.where(no_support, jnp.nan, temp_coh)
+
     # Reshape the (rows, cols, nslcs) output to be same as input stack
     cpx_phase_reshaped = jnp.moveaxis(cpx_phase, -1, 0)
     crlb_std_dev_reshaped = jnp.moveaxis(crlb_std_dev, -1, 0)
@@ -362,8 +374,14 @@ def run_cpl(
     # Get the SHP counts for each pixel (if not using Rect window)
     if neighbor_arrays is None:
         shp_counts = jnp.zeros(temp_coh.shape, dtype=np.int16)
-    else:
+    elif neighbor_arrays.dtype == np.bool_:
         shp_counts = jnp.sum(neighbor_arrays, axis=(-2, -1))
+    else:
+        # For float weights (e.g. Gaussian), compute effective number of looks
+        # ENL = (sum(w))^2 / sum(w^2)  (Kish, 1965, Survey Sampling)
+        w_sum = jnp.sum(neighbor_arrays, axis=(-2, -1))
+        w_sq_sum = jnp.sum(neighbor_arrays**2, axis=(-2, -1))
+        shp_counts = jnp.round(w_sum**2 / w_sq_sum).astype(jnp.int16)
 
     return PhaseLinkOutput(
         cpx_phase=cpx_phase_reshaped,

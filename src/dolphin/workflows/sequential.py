@@ -77,6 +77,12 @@ def run_wrapped_phase_sequential(
         max_num_compressed=max_num_compressed,
         output_reference_idx=output_reference_idx,
         compressed_slc_plan=compressed_slc_plan,
+        # Propagate the caller's date format so phase-linked SLC and CRLB
+        # filenames preserve any time-of-day component. Without this, output
+        # filenames are written with the default ``%Y%m%d`` and ``create_ifgs``
+        # later fails to extract dates when ``cslc_date_fmt`` includes hours
+        # (e.g. ``%Y%m%d%H%M%S`` for non-SSO cadences with same-day repeats).
+        file_date_fmt=cslc_date_fmt,
     )
     ministacks = ministack_planner.plan(
         ministack_size, compressed_idx=new_compressed_reference_idx

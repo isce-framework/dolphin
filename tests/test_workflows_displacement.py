@@ -285,6 +285,65 @@ def test_displacement_run_extra_reference_date(
         log_file.unlink()
 
 
+def test_displacement_run_preserves_time_of_day_in_filenames(
+    opera_slc_files_official: list[Path], tmpdir
+):
+    """Datetime ``cslc_date_fmt`` must propagate to all output filenames.
+
+    Regression test covering three independent propagation points:
+    - ``MiniStackPlanner`` -> ``MiniStackInfo.file_date_fmt`` (PL SLC names),
+    - ``create_ifgs`` -> ``convert_pl_to_ifg(..., date_format=...)``
+      (per-burst ifg VRT names),
+    - ``stitching.merge_by_date`` formatting the grouped dates with
+      ``file_date_fmt`` (stitched ifg names).
+
+    Without all three, a caller using ``cslc_date_fmt="%Y%m%dT%H%M%S"`` ends up
+    with output filenames stripped to ``%Y%m%d``, which then breaks downstream
+    date extraction (e.g. same-day repeats collide).
+    """
+    # ``opera_slc_files_official`` fixture uses ``datetime(2022, 1, 1, 1, 2, 3)``
+    # as the base, incremented by one day per acquisition. So every real-SLC
+    # filename should embed ``T010203`` once propagation works end-to-end.
+    time_token = "T010203"
+    with tmpdir.as_cwd():
+        cfg = config.DisplacementWorkflow(
+            cslc_file_list=opera_slc_files_official,
+            input_options={
+                "subdataset": "/data/VV",
+                "cslc_date_fmt": "%Y%m%dT%H%M%S",
+            },
+            interferogram_network={"reference_idx": 0},
+            phase_linking={"ministack_size": 500},
+            unwrap_options={"run_unwrap": False},
+        )
+        paths = displacement.run(cfg)
+
+        # Per-burst phase-linked SLCs (named by ``MiniStackInfo.get_date_str_list``)
+        # and per-burst ifgs (named by ``convert_pl_to_ifg``) must keep the
+        # time-of-day component end-to-end through ``create_ifgs``.
+        burst_dir = next(iter(paths.comp_slc_dict.values()))[0].parent.parent
+        pl_slcs = list((burst_dir / "linked_phase").glob("*.slc.tif"))
+        assert len(pl_slcs) > 0
+        for p in pl_slcs:
+            assert time_token in p.stem, f"Missing datetime in PL SLC {p.name}"
+
+        burst_ifgs = list((burst_dir / "interferograms").glob("*.int.*"))
+        assert len(burst_ifgs) > 0
+        for p in burst_ifgs:
+            assert (
+                p.stem.count(time_token) == 2
+            ), f"Expected datetime preserved in both dates of {p.name}"
+
+        # Stitched (cross-burst) ifgs must also keep the time-of-day in both
+        # the reference and secondary date tokens.
+        assert len(paths.stitched_ifg_paths) > 0
+        for p in paths.stitched_ifg_paths:
+            assert p.exists()
+            assert (
+                p.stem.count(time_token) == 2
+            ), f"Expected datetime preserved in both dates of {p.name}"
+
+
 def test_displacement_run_different_epsg(opera_slc_files: list[Path], tmpdir):
     with tmpdir.as_cwd():
         cfg = config.DisplacementWorkflow(
