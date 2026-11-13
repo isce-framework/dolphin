@@ -238,9 +238,17 @@ class TestFakeProcess:
     @pytest.mark.parametrize("in_shape", [(100, 200), (101, 201)])
     @pytest.mark.parametrize(
         "half_window",
-        [HalfWindow(x=1, y=1), HalfWindow(x=3, y=1), HalfWindow(x=3, y=3)],
+        [
+            HalfWindow(x=1, y=1),
+            HalfWindow(x=3, y=1),
+            HalfWindow(x=3, y=3),
+            HalfWindow(x=5, y=5),
+        ],
     )
-    @pytest.mark.parametrize("strides", [Strides(1, 1), Strides(1, 3), Strides(3, 3)])
+    @pytest.mark.parametrize(
+        "strides",
+        [Strides(1, 1), Strides(2, 2), Strides(1, 3), Strides(3, 3)],
+    )
     @pytest.mark.parametrize("block_shape", [(15, 15), (20, 30), (17, 27)])
     def test_block_manager_fake_process(
         self, in_shape, half_window, strides, block_shape
