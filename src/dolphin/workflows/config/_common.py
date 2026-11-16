@@ -199,6 +199,15 @@ class InterferogramNetwork(BaseModel, extra="forbid"):
             " interferograms to form."
         ),
     )
+    compressed_reference_anchor: bool = Field(
+        False,
+        description=(
+            "Manual-index networks with compressed SLCs: at every run, add one"
+            " interferogram from the compressed SLC's reference epoch to the"
+            " earliest in-window date after it, so the epoch is a node of the"
+            " unwrapped network and outputs can stay referenced to it."
+        ),
+    )
 
 
 class TimeseriesOptions(BaseModel, extra="forbid"):
