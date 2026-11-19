@@ -10,7 +10,6 @@ from osgeo import gdal
 from dolphin import io, shp
 from dolphin._types import HalfWindow, Strides
 from dolphin.phase_link import _core, covariance, simulate
-from dolphin.stack import MiniStackPlanner
 from dolphin.workflows import sequential
 
 # Shared for all tests
@@ -131,7 +130,7 @@ class ShpBenchmark:
 
     def time_estimate_neighbors(self):
         shp.estimate_neighbors(
-            halfwin_rowcol=(HALF_WINDOW["y"], HALF_WINDOW["x"]),
+            halfwin_rowcol=(HALF_WINDOW.y, HALF_WINDOW.x),
             alpha=0.001,
             strides=STRIDES,
             mean=self.amp_mean,
@@ -193,24 +192,18 @@ class SingleMinistackBenchmark:
         ), f"No SLC files found: {list(Path('slcs').glob('*'))}"
         self.dates = [get_dates(f) for f in self.slc_file_list]
 
-        io.VRTStack(self.slc_file_list, outfile=Path("pl") / "stack.vrt")
+        self.vrt_stack = io.VRTStack(self.slc_file_list, outfile=v_file)
         self.v_file = v_file
 
     def time_single_ministack(self):
-        ministack_planner = MiniStackPlanner(
-            file_list=self.slc_file_list,
-            dates=self.dates,
-            is_compressed=[False] * len(self.slc_file_list),
-            output_folder=Path("pl"),
-        )
         # We're using "sequential", but just making it one ministack
         ministack_size = len(self.slc_file_list)
         sequential.run_wrapped_phase_sequential(
-            slc_vrt_file=self.v_file,
-            ministack_planner=ministack_planner,
+            slc_vrt_stack=self.vrt_stack,
+            output_folder=Path("pl"),
             ministack_size=ministack_size,
-            half_window=HALF_WINDOW,
-            strides=STRIDES,
+            half_window=HALF_WINDOW_DICT,
+            strides=STRIDES_DICT,
             block_shape=(512, 512),
             # use_evd=cfg.phase_linking.use_evd,
             # n_workers=cfg.worker_settings.n_workers,
